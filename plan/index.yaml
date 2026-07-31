@@ -13606,6 +13606,23 @@ plan_index:
         - "every milestone_criteria row maps to a done child packet or an operator-approved waiver recorded here"
         - "the three reference projects each publish locally with https, friendly names, zero IPs"
       events:
+        - type: note
+          ts: "2026-07-31T00:00Z"
+          agent_id: "linux-immutable-fable5-npu-bringup-20260731T0000Z"
+          host: linux_immutable
+          summary: >
+            MECHANISM DEPENDENCY (do not build a second optional-container
+            system). The later_rungs "SCIENTIFIC / BIOLOGY TECH / STORAGE
+            catalog entries" MUST land on the new optional-component-registry
+            packet (order 542) — capability-gated presence, tri-state
+            SkippedNotApplicable satisfier, registry-driven liveness + teardown
+            in crates/tillandsias-headless/src/container_deps.rs. That registry
+            was filed 2026-07-31 as the enabler for the optional NPU inference
+            container (order 543) and is the same mechanism the catalog's
+            curated optional images need. ensure_service_catalog
+            (container_deps.rs:230) is currently a stub delegating to forge
+            launch — it becomes a real registry consumer. See
+            plan/issues/npu-container-citizenship-e2e-2026-07-29.md §7.
         - type: progress
           ts: "2026-07-15T06:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260715T0530Z"
@@ -23763,6 +23780,26 @@ plan_index:
           host: forge
           summary: >
             CLOSED. Implemented structured hardware capability probe (accel_probe module) per spec:accel-capability-probe (PROBE-1..8). Emits capabilities.json carrying schema_version=1, legacy_tier string derived from effective_inference_tier(), devices, engines, measurements, and host metadata. Vendor-resolved NPU enumeration (AMD XDNA, Intel NPU, unknown), DRM/Vulkan GPU enumeration, CPU flags and topology, and battery presence. Marked NPU usable:false with unusable_reason:engine-missing per PROBE-3. Enforced macOS Metal container isolation (host-native only). Added unit tests asserting document generation, roundtrip serialization, NPU resolution, and macOS Metal isolation. Verified falsifiability by seeding regression. cargo test passed. litmus:accel-capability-probe-contract-shape 100% PASS.
+        - type: note
+          ts: "2026-07-31T00:00Z"
+          agent_id: "linux-immutable-fable5-npu-bringup-20260731T0000Z"
+          host: linux_immutable
+          summary: >
+            VERIFICATION GAP flagged by live NPU bring-up
+            (plan/issues/npu-container-citizenship-e2e-2026-07-29.md; packet is
+            DONE — do not reopen, file a follow-up slice if the gap is real).
+            The shipped capabilities.json records devices/engines/measurements/
+            host-metadata/battery, but the three fields that gate REAL-WORLD NPU
+            usability on this host were not called out in the close event and
+            must be confirmed present: (1) the memlock limit (an 8 MiB cap
+            blocks XRT GEM-BO mmap — NPU is unusable until raised via limits.d
+            or the nolock shim), (2) the /dev/accel device-node mode+group (0660
+            root:render degrades unprivileged-container detection per
+            lemonade-sdk#2742; this host is 0666), (3) fw_version (floor
+            1.1.0.0; this host 1.1.2.64). NPU `usable` should be
+            mature-engine-present AND (memlock_ok OR memlock-remediable). If any
+            field is absent, file a probe-augmentation child before order 543
+            relies on the usable-gate.
     - packet_id: npu-device-passthrough
       order: 481
       desired_release: v0.5
@@ -23789,7 +23826,29 @@ plan_index:
         no permission errors in logs). Complements 408/410's GPU CDI work;
         consider a Tillandsias-generated CDI spec for accel nodes as the
         stretch goal.
-
+      events:
+        - type: rescoped
+          ts: "2026-07-31T00:00Z"
+          agent_id: "linux-immutable-fable5-npu-bringup-20260731T0000Z"
+          host: linux_immutable
+          summary: >
+            RETARGET by live evidence (plan/issues/npu-container-citizenship-e2e-2026-07-29.md):
+            plumb the OPTIONAL npu-inference container (order 543), not flags on
+            the ollama container. VERIFIED minimal flag set on this host (plain
+            rootless podman): `--device /dev/accel/accel0 --security-opt
+            label=disable` — nothing else. CORRECTIONS to the original outcome:
+            (1) `--ulimit memlock=-1:-1` is a DECOY — rootless podman silently
+            clamps it to the 8 MiB host hard cap; the real fix is either an
+            operator `limits.d` memlock raise + re-login or a baked-in
+            LD_PRELOAD nolock.so shim (DMA-correct: amdxdna pins GEM BO pages
+            in-kernel). (2) `--security-opt label=disable` IS REQUIRED on plain
+            podman (/dev/accel/accel0 is SELinux generic device_t; AVC getattr
+            denied without it); --group-add keep-groups is irrelevant. (3) This
+            host's 0666 device node means the 0660 root:render group-degradation
+            path will NOT reproduce here — needs a synthetic fixture. (4) Assert
+            the arg VECTOR (sibling order 528), never line-distance. (5) The
+            USER 1000:1000 + --userns=keep-id path hits lemonade-sdk#2742's
+            /dev/accel detection regression — cover it in the litmus.
     - packet_id: llama-server-engine-slot
       order: 482
       desired_release: v0.5
@@ -24056,7 +24115,32 @@ plan_index:
         supersedes the in-VM llama.cpp option there if the sidecar lane
         proves out. Multi-cycle: protocol, proxy route, first lane, second
         lane are separable checkpoints.
-
+      events:
+        - type: rescoped
+          ts: "2026-07-31T00:00Z"
+          agent_id: "linux-immutable-fable5-npu-bringup-20260731T0000Z"
+          host: linux_immutable
+          summary: >
+            DESCOPE + LICENSE-GATE UPDATE (plan/issues/npu-container-citizenship-e2e-2026-07-29.md).
+            DESCOPE: the Linux XDNA2 lane moves OUT of this sidecar packet into
+            the new npu-inference-container packet (order 543) — proven to work
+            as an enclave CONTAINER citizen on this host (plain rootless podman,
+            offline on --internal, sibling-reachable by name). This packet keeps
+            macOS Metal/MLX, Windows, and Intel-NPU-if-host-lockstep as the
+            genuine sidecar lanes; its registration protocol + proxy route
+            deliverables are unchanged and still needed for macOS. LICENSE HARD
+            GATE RESOLVED (not cleared): "ROCm-FastFlowLM" is a one-way hourly
+            MIRROR of FastFlowLM/FastFlowLM into the ROCm org (GitHub API
+            fork:false, parent:null), NOT an AMD-relicensed fork; AMD acqui-
+            hired the devs 2026-07-17 but the promised v1.0.0 handover has NOT
+            shipped (latest v0.9.46). NPU kernels remain CLOSED (copyright
+            FastFlowLM Inc.); the only formal binary license
+            (assets/superseded/LICENSE_BINARY.txt §3(c)) FORBIDS redistribution
+            without written permission; the shipped tarball has ZERO license
+            files. VERDICT: USE on-device OK, but never vendor/bundle — provision
+            the sha256-pinned official release at build time (order 521's
+            integrity mechanism). Lemonade Server is clean Apache-2.0. Re-read
+            the license at the v1.0.0 ROCm handover.
     - packet_id: inference-policy-router
       order: 484
       desired_release: v0.5
@@ -24155,6 +24239,29 @@ plan_index:
             heterogeneous inference routing executable rather than trace-only.
           next_checkpoint: "Claim 484b; keep the parent ready until every child has passing evidence."
           lease_intent: "release"
+        - type: note
+          ts: "2026-07-31T00:00Z"
+          agent_id: "linux-immutable-fable5-npu-bringup-20260731T0000Z"
+          host: linux_immutable
+          summary: >
+            NPU PLACEMENT + CONCURRENT-SCHEDULER DIRECTION (evidence:
+            plan/issues/npu-container-citizenship-e2e-2026-07-29.md; operator
+            directive 2026-07-31). Add the optional npu-inference container
+            (order 543) endpoint as a routable placement, and use THIS host as
+            the first serialized capability+signal fixture. ROUTING DATUM
+            (measured, qwen3:0.6b on Ryzen AI 5 340): CPU 101.6 t/s and iGPU
+            Vulkan 107.5 t/s BOTH beat NPU ~90 t/s with ~10x lower TTFT — so
+            small interactive requests must NOT default to the NPU. NEW SCOPE
+            from the operator: the fat-GPU desktop ALSO carries an NPU, so 484
+            must evolve from a single-device selector into a CONCURRENT multi-
+            device scheduler — the NPU runs background/sustained/expert-warm
+            work IN PARALLEL with the GPU's interactive/quality lane (its ~5-15W
+            envelope, throttle-proof throughput). This makes the NPU the natural
+            home for the always-warm expert lane, dissolving the GPU-VRAM
+            pressure flagged by orders 522/527 (coordinate with order 544 and
+            the 484d preemption/residency child). Fold as a fixture + routing
+            seed into 484a's table and 484d's residency child; do not reopen the
+            landed foundation.
 
     - packet_id: inference-policy-router/data-pure-route
       order: 484a
@@ -26323,3 +26430,234 @@ plan_index:
             pushed to linux-next, unblocking future launches until the CLI drifts
             again. This packet captures the permanent fix so meta-orchestration
             merges generated opsx dirt as normal cycle input instead of refusing.
+
+    - packet_id: npu-container-citizenship-e2e
+      order: 541
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Research: XDNA2 NPU inference proven e2e on this host — toolboxes, containers, and the container-citizenship verdict"
+      status: done
+      kind: research
+      deliverable: plan/issues/npu-container-citizenship-e2e-2026-07-29.md
+      depends_on: [heterogeneous-inference-landscape-research]
+      pickup_role: linux
+      capability_tags: [inference, research, npu, amd-xdna, containers, enclave, linux]
+      estimated_hours: 0
+      outcome: >
+        Completed 2026-07-29 (operator-directed wave: 4 research + 2 toolbox-
+        install + 1 container-probe agents, cross-verified; installs + probe ran
+        on the live target host yoga = AMD Ryzen AI 5 340 XDNA2, Fedora
+        Silverblue 44, kernel 7.1.4). Filed 2026-07-31 above the sibling 519-540
+        inference/experts burndown; §10 of the deliverable maps every overlap.
+        Headlines: (1) real NPU LLM inference works end-to-end TODAY in both
+        lanes — FastFlowLM v0.9.46 standalone and Lemonade Server 11.5.0
+        (Apache-2.0) wrapping FLM — hard engagement evidence (xdna_mailbox IRQ
+        deltas, runtime_status D3->D0, telemetry), ~90-99 tok/s decode on
+        qwen3:0.6b, TTFT ~0.48s; (2) CONTAINER-CITIZEN, not sidecar, for the
+        Linux XDNA2 lane — reproduced in plain rootless podman with just
+        `--device /dev/accel/accel0 --security-opt label=disable` + an in-image
+        LD_PRELOAD memlock shim, serving fully OFFLINE on a --internal enclave
+        network reachable by a sibling container by name (reverses order 478 for
+        Linux XDNA2; retained for macOS/WSL2); (3) FastFlowLM license gate NOT
+        cleared — ROCm/FastFlowLM is a MIRROR (fork:false) not an AMD-relicensed
+        fork, NPU kernels stay closed with no redistribution grant -> download
+        at provision time sha256-pinned (17edb4a5...d056ff), never vendor;
+        Lemonade is clean Apache-2.0; (4) two host constraints: 8 MiB memlock
+        cap (root limits.d OR nolock shim) and SELinux label=disable for
+        /dev/accel; (5) empirical routing: at 0.6B the NPU (~90 t/s) is BEATEN
+        by CPU (101.6) and iGPU Vulkan (107.5) — NPU is the power/sustained
+        lane, not the fast path; (6) NO ollama rebase; (7) operator directive
+        2026-07-31: the fat-GPU desktop ALSO has an NPU, so the NPU is a
+        CONCURRENT background/sustained co-processor beside the big GPU on every
+        NPU host, not a laptop-only fallback — order 484 becomes a concurrent
+        multi-device scheduler and the NPU becomes the natural always-warm
+        expert lane (dissolving the GPU-VRAM pressure sibling orders 522/527
+        flag). Consumers: orders 479-484 amended; orders 542-544 filed
+        (optional-component-registry, npu-inference-container,
+        experts-engine-neutrality). Integrates with sibling 519 (model-lifecycle
+        MCP), 520 (rocm-never-fetched corroborated), 521 (payload integrity =
+        the NPU fetch mechanism), 525 (enclave-CA-not-trusted footgun), 527/522
+        (keep-alive VRAM problem 544 dissolves), 528 (arg-vector litmus). Full
+        evidence, license quotes, repo seams, shim source, Containerfiles, and
+        the §10 integration map in the deliverable.
+
+    - packet_id: optional-component-registry
+      order: 542
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: optional/dynamic components in the typestate dependency graph (capability-gated presence, tri-state satisfier, registry-driven liveness/teardown)"
+      status: ready
+      kind: implementation
+      deliverable: container_deps.rs optional-component support (tri-state Satisfier outcome + capability-gated node declarations + registry-driven LivenessProbe/teardown + Inference promoted into the model) + drift litmus extension
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [rust, container-graph, orchestration, architecture, linux]
+      estimated_hours: 12
+      blocks: [npu-inference-container]
+      outcome: >
+        The structural enabler for hardware-gated optional containers (NPU now,
+        enclave-service-catalog SCIENTIFIC/R images later). Today
+        crates/tillandsias-headless/src/container_deps.rs cannot express
+        optional/dynamic components: Service (:27) is a static Copy enum and
+        DEPS (:67) a const table so every node exists on every host; Satisfier
+        (:244) is binary Result<(),String> with no "not applicable"; Inference
+        is not even in the graph (launched ad hoc by
+        ensure_shared_git_and_inference_for_launch at main.rs:10808 AFTER the
+        Up<ForgeLaunchReady> witness); remove_shared_stack_containers
+        (main.rs:4548) and LivenessProbe::run_check (container_deps.rs:363,
+        hardcoded [Vault,Proxy]) are disjoint hardcoded lists. This packet adds:
+        (1) a tri-state satisfier outcome (Satisfied / SkippedNotApplicable /
+        Failed) so ensure_with brings up a target whose optional prerequisite is
+        legitimately absent without faking success; (2) capability-gated node
+        declarations merged into the acyclic/topo check (a predicate over the
+        order-480 capabilities.json, e.g. "exists iff a usable /dev/accel");
+        (3) LivenessProbe and teardown driven by the (static + dynamic) registry
+        instead of hardcoded lists, never resurrecting a component whose
+        capability gate went stale; (4) Inference itself promoted into the model
+        or a registry the launch path consults. Extend the exhaustiveness drift
+        litmus (container_deps.rs:574 lineage) so adding an optional container
+        without a declaration fails loud. Rust only (tlatoani_hard_no_python).
+        See plan/issues/npu-container-citizenship-e2e-2026-07-29.md §7 and the
+        enclave-service-catalog R9 note (same mechanism).
+      exit_criteria:
+        - "Satisfier returns a tri-state; ensure_with treats SkippedNotApplicable as success-without-bringup, proven by a unit test with an absent optional prerequisite"
+        - "an optional node's presence is decided by a capability predicate over capabilities.json (host with /dev/accel includes it; host without excludes it) — both shapes unit-tested"
+        - "LivenessProbe managed set and remove_shared_stack_containers are derived from the registry, not hardcoded lists"
+        - "the drift litmus fails when an optional container is added without a graph declaration"
+
+    - packet_id: npu-inference-container
+      order: 543
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: optional capability-gated tillandsias-npu-inference container (AMD XDNA2) on the enclave network"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: images/npu-inference/ (FLM/Lemonade engine, FIRST_RUN self-install, nolock shim fallback) + build_npu_inference_run_args + enclave alias/NO_PROXY/allowlist/provider deltas + presence-and-absence litmus
+      depends_on: [heterogeneous-inference-specs, accel-capability-probe, optional-component-registry]
+      pickup_role: linux
+      capability_tags: [inference, npu, amd-xdna, podman, containers, enclave, linux, forge]
+      estimated_hours: 16
+      outcome: >
+        Proven end-to-end on the operator's ideal host 2026-07-29 (findings:
+        plan/issues/npu-container-citizenship-e2e-2026-07-29.md): a capability-
+        gated OPTIONAL container that joins the enclave network with alias
+        npu-inference when the probe reports a usable XDNA2 NPU, exposing an
+        OpenAI-compatible endpoint to forge agents, and is ABSENT with zero
+        footprint otherwise. This is the Linux XDNA2 lane descoped OUT of order
+        483's sidecar packet — plain rootless podman ran real NPU inference with
+        just `--device /dev/accel/accel0 --security-opt label=disable`, fully
+        offline on a --internal network, reachable by a sibling container by
+        name. Worth gating ON for fat GPU+NPU desktops too, as the concurrent
+        background/expert-warm lane beside the big GPU (research headline 7).
+        Engine: Lemonade Server (Apache-2.0) wrapping FastFlowLM for the NPU
+        lane (also gives Vulkan/CPU fallback in one server); FLM binaries are
+        FETCHED at build/provision time (sha256-pinned official release through
+        the Squid proxy using sibling order 521's integrity mechanism) — NEVER
+        vendored (no redistribution grant; see order 483 license record). The
+        model/engine fetch MUST assert enclave-CA trust, not infer it (sibling
+        order 525's Go-TLS swallow footgun); FLM uses libcurl and honours
+        CURL_CA_BUNDLE=/etc/tillandsias/ca.crt (order-486 pattern, mirror
+        images/inference/entrypoint.sh:55-128 FIRST_RUN). Integration seams
+        (HEAD 6ee743ac; grep symbols, lines drift): build_npu_inference_run_args
+        sibling of build_inference_run_args (main.rs:~3248) with arg-VECTOR
+        assertions per sibling order 528 (never line-distance);
+        ENCLAVE_NO_PROXY_BASE (main.rs:~1022) MUST gain the alias or requests
+        hairpin through Squid and TCP_DENIED; launch in
+        ensure_shared_git_and_inference_for_launch (main.rs:~10808);
+        parameterize wait_for_inference_ready (main.rs:~3015, currently pins
+        ollama /api/version) on (container, /v1/models); teardown in
+        remove_shared_stack_containers (main.rs:~4548); asset-root map + build-
+        image.sh case arm; agent discovery via a probe-driven TILLANDSIAS_NPU_
+        HOST in container_profile.rs + an opencode provider entry; allowlist
+        deltas in images/proxy/allowlist.txt (.hf.co for HF Xet CDN,
+        .lemonade-server.ai; verify .fastflowlm.com). Memlock: bake the DMA-
+        correct nolock LD_PRELOAD shim as the locked-down-host fallback AND
+        surface an installer "raise memlock" provisioning step (order 480 gate).
+        Container footguns baked into the image: XDG_RUNTIME_DIR set (lemond),
+        libgomp+libdrm+readline+libcurl+libstdc+++libuuid installed (else FLM
+        model discovery fails silently), small --stop-timeout (FLM ignores
+        SIGTERM), LEMONADE_API_KEY when bound beyond the internal network.
+        Multi-cycle: image+FIRST_RUN, run-args+gate wiring, discovery+allowlist,
+        presence/absence litmus are separable checkpoints.
+      exit_criteria:
+        - "on a usable-NPU host the container starts, joins the enclave net as npu-inference, and a forge-side agent gets a real NPU completion via the OpenAI /v1 endpoint (NPU engagement proven by runtime_status + xdna_mailbox IRQ delta)"
+        - "on a host with no usable NPU the container is absent with zero footprint and the stack launches normally (absence litmus)"
+        - "no FLM binary is committed to the repo; the image fetches the sha256-pinned official release at build/provision time (order 521 integrity mechanism) with asserted enclave-CA trust (order 525)"
+        - "memlock is handled: installer provisioning step present AND the nolock shim works as unprivileged fallback"
+        - "requests to npu-inference do not traverse Squid (alias in ENCLAVE_NO_PROXY_BASE); model-download domains are in the allowlist"
+
+    - packet_id: experts-engine-neutrality
+      order: 544
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Spec rider: make the experts pipeline engine-neutral (shim upstream = /v1 slot endpoint; request-time stuffing; embeddings pinned; NPU-hosted expert-warm lane)"
+      status: ready
+      kind: spec
+      deliverable: rider on the order 393 decision + orders 394/395 spec/impl notes + exit gate that the experts ground-truth harness passes with the default slot swapped
+      depends_on: [heterogeneous-inference-specs]
+      pickup_role: linux
+      capability_tags: [inference, experts, openspec, architecture, engine-slots]
+      estimated_hours: 4
+      outcome: >
+        The experts-construction decision (order 393, signed 2026-07-17) leans
+        on two ollama-proprietary mechanics that do not survive an engine change
+        or an NPU slot (analysis: plan/issues/npu-container-citizenship-e2e-2026-07-29.md
+        §7). Both are absorbable WITHOUT re-deciding order 393: (1) Modelfile
+        stuffing ('ollama create ...-expert') has no FLM/llama-server analogue —
+        move the stuffing from create-time to REQUEST-time, i.e. the already-
+        decided in-container OpenAI-compatible shim (decision §3) prepends
+        methodology.yaml as a system message; identical semantics on any /v1
+        engine, ollama-create dependency deleted. (2) keep_alive eviction
+        (OLLAMA_KEEP_ALIVE=24h) — this is EXACTLY sibling order 527's bug
+        (24h keep-alive pins expert models in VRAM after teardown) and sibling
+        order 522's RAM-vs-VRAM slot mismatch; 544 GENERALIZES their fix:
+        residency becomes a per-slot capability owned by order 484's policy
+        router (whose NEG rules forbid idle residency on battery), and on fat
+        GPU+NPU hosts the always-warm expert lane is placed on the NPU so it
+        stops competing for GPU VRAM at all (research headline 7). Riders: the
+        shim's upstream is the engine-slot /v1 endpoint (NEVER ollama-native
+        /api), exercised through sibling order 519's model-lifecycle MCP surface;
+        embeddings for the GraphRAG-lite plan expert (today ollama /api/embed)
+        must PIN to a CPU/GPU-capable slot because FLM is chat-only; expert
+        queries are interactive/TTFT-class so the router routes them to the
+        primary slot, not the NPU, EXCEPT the warm-keeping/residency which the
+        NPU owns. The deterministic layers (compiled YAML plan-graph engine,
+        order 398) are engine-independent and unaffected. Small spec/doc change;
+        no re-litigation of order 393; coordinate with 519/522/527 owners.
+      exit_criteria:
+        - "the experts pipeline contains no 'ollama create' step; methodology stuffing happens at request-time via the shim"
+        - "the shim upstream is the engine-slot /v1 endpoint; embeddings are pinned to a CPU/GPU-capable slot"
+        - "keep-alive/residency is a per-slot capability (not OLLAMA_KEEP_ALIVE literal), reconciled with orders 522/527"
+        - "the experts ground-truth harness (order 394 lineage) passes unmodified with the default engine slot swapped ollama<->llama-server"
+
+    - packet_id: no-python-policy-violation-on-linux-next
+      order: 545
+      desired_release: v0.5
+      title: "Fix: tlatoani_hard_no_python breach on linux-next — check-plan-schema-divergence.sh + project-info.sh use python3 -c"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/no-python-policy-violation-on-linux-next-2026-07-31.md + rewrites in an approved language + green check-no-python-scripts.sh
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, policy, no-python, ci-gate, scripts, forge]
+      estimated_hours: 4
+      outcome: >
+        Captured 2026-07-31 by the NPU bring-up cycle (incidental — the no-python
+        enforcement checker fails on linux-next HEAD @ 6ee743ac). Three committed
+        python3 -c call sites breach runtime_language_policy.tlatoani_hard_no_python
+        (methodology.yaml): scripts/check-plan-schema-divergence.sh:19 (from
+        order 440's status-vocabulary normalization) and
+        images/default/config-overlay/mcp/project-info.sh:324,375 (shipped in the
+        forge image = runtime python, the exact forbidden case). The very checker
+        meant to enforce the policy (scripts/check-no-python-scripts.sh) now exits
+        non-zero on the mainline, so every host's ./build.sh --check / no-python
+        gate goes red for unrelated reasons, masking real regressions. Rewrite
+        both in an approved language (Rust, or POSIX shell dispatching an existing
+        binary/Rust tool); do NOT use base64-encoded script injection to smuggle
+        it past the checker (separate CRITICAL policy). Full detail + smallest
+        next action in the deliverable.
+      exit_criteria:
+        - "scripts/check-no-python-scripts.sh exits 0 on linux-next"
+        - "no python3/python invocation remains in scripts/ or images/default/config-overlay/"
+        - "the base64-injection checker stays green (no decode-to-exec workaround)"

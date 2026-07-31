@@ -1,5 +1,63 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-31T20:17Z (linux_immutable — XDNA2 NPU e2e bring-up folded into v0.5 inference redesign)
+
+- **Host**: `yoga` = AMD Ryzen AI 5 340 (Krackan/XDNA2 NPU) + Radeon 840M,
+  Fedora Silverblue 44, kernel 7.1.4, immutable. **The operator's declared
+  ideal end-user runtime tier.** Branch `linux-next`. Credential guard
+  `ok:gh-keyring`. Reset onto origin/linux-next `6ee743ac` and re-applied fresh
+  (two prior rebase attempts hit the moving 519-540 sibling frontier).
+- **What ran** (2026-07-29): operator-directed research wave via a Workflow —
+  4 research + 2 toolbox-install + 1 container-probe agents (0 errors).
+  Installed toolboxes `rocm-fastflowlm` (FLM v0.9.46) and `lemonade` (Lemonade
+  Server 11.5.0, Apache-2.0), **proved real NPU LLM inference end-to-end**, and
+  reproduced it in **plain rootless podman** offline on a `--internal` enclave
+  network reachable by a sibling container by name.
+- **Headline findings** (deliverable: `plan/issues/npu-container-citizenship-e2e-2026-07-29.md`):
+  1. NPU inference works today: ~90-99 tok/s decode on qwen3:0.6b, TTFT ~0.48s,
+     hard evidence (xdna_mailbox IRQ deltas, runtime_status D3->D0).
+  2. **CONTAINER-CITIZEN, not sidecar, for Linux XDNA2** (reverses order 478 for
+     this lane; macOS/WSL2 stay sidecar) — flags `--device /dev/accel/accel0
+     --security-opt label=disable` + in-image memlock shim.
+  3. FastFlowLM license gate NOT cleared — ROCm/FastFlowLM is a MIRROR not an
+     AMD fork; closed kernels, no redistribution grant → provision-time
+     sha256-pinned download, never vendor. Lemonade is clean Apache-2.0.
+  4. Constraints: 8 MiB memlock cap (root limits.d OR nolock shim) + SELinux
+     `label=disable` for /dev/accel.
+  5. Routing datum: at 0.6B, NPU (~90 t/s) is beaten by CPU (101.6) and Vulkan
+     (107.5) — NPU is the power/sustained lane, not the fast path.
+  6. **NEW (operator 2026-07-31): the fat-GPU desktop ALSO has an NPU** → the
+     NPU is a CONCURRENT background/expert-warm co-processor beside the big GPU
+     on every NPU host, not laptop-only. Order 484 becomes a concurrent
+     multi-device scheduler; the NPU becomes the always-warm expert lane,
+     dissolving the GPU-VRAM pressure sibling orders 522/527 flag.
+- **Integration with sibling 519-540** (§10 of the deliverable): 520
+  (rocm-never-fetched) CORROBORATED — Vulkan is the GPU lane here, not ROCm;
+  521 (payload integrity) is the mechanism the NPU fetch reuses; 525 (enclave-CA
+  not trusted) is a footgun the NPU downloader must dodge; 522/527 (keep-alive
+  VRAM) are the problems order 544 dissolves; 519 (model-lifecycle MCP) is the
+  control surface; 528 (arg-vector litmus) applies to the NPU run-args;
+  e4fa379e restored llama-server, unblocking the /v1 slot 544 targets.
+- **Plan changes**: filed research packet **541** (`npu-container-citizenship-e2e`,
+  done). Amended orders **481, 483, 484** (events) with the container/license/
+  routing reversals + concurrent-scheduler direction; flagged a probe
+  verification gap on done-**480** (memlock/device-mode/fw capture). Filed three
+  new v0.5 packets: **542** `optional-component-registry` (typestate-graph
+  enabler for capability-gated optional containers — NPU now, SCIENTIFIC/R
+  later), **543** `npu-inference-container` (optional XDNA2 enclave container),
+  **544** `experts-engine-neutrality` (request-time stuffing + /v1 upstream +
+  NPU-hosted expert-warm lane). Cross-linked enclave-service-catalog milestone
+  (353) to reuse the registry.
+- **Verification**: `plan/index.yaml` YAML parse PASS.
+- **Host deliverables kept**: toolboxes `rocm-fastflowlm` + `lemonade` (models
+  cached), probe images `tillandsias-scratch/npu-{flm,lemonade}:probe`
+  (LOCAL-ONLY, never push — FLM redistribution gate).
+- **Next**: linux host claims **542** (`optional-component-registry`) first — it
+  blocks **543**. Then **543** (npu-inference-container) and **544**
+  (experts-engine-neutrality, coordinate with 519/522/527 owners). Operator
+  decision pending on memlock provisioning (installer limits.d step vs
+  shim-only) — recorded in packet 543.
+
 ## Cycle 2026-07-31T14:34Z (forge — opsx launch-sync: refuse → operator-directed merge → order 540 filed)
 
 - **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`). Credential guard
