@@ -26120,6 +26120,13 @@ plan_index:
         - "folder trust is scoped to the forge checkout path only"
         - "litmus asserts the seed for each harness and turns red if a harness's state file drifts"
 
+      events:
+        - type: progress
+          ts: "2026-07-31T00:35:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            SEVERITY REFINED BY EVIDENCE, and it is better news than filed. The packet says onboarding blocks 'every delegated session'. That is not what the record shows: four separate in-forge sessions this week (antigravity, codex, opencode/BigPickle, and a Claude sibling) were launched with 'tillandsias . --<harness> --prompt <text>' and ALL of them reached work, claimed packets, committed and pushed. So the non-interactive dispatch path evidently gets past the wizard today. The operator's report is therefore most likely scoped to the INTERACTIVE launch — a human attaching to a lane gets the theme picker and the trust disclaimer — which is exactly the path they are trying to stop using. That reframes the packet from 'automation is blocked' to 'the interactive path costs the operator two dialogs per launch, and the non-interactive path is unverified as to WHY it works'. Both still need fixing, but the second is the dangerous one: if the wizard is being skipped incidentally (TTY detection, a flag, a default) rather than deliberately, a harness update can start blocking automated dispatch with no warning and no test to catch it. ARCHITECTURE ESTABLISHED for the fix: harness binaries are NOT in the image — they are installed per-launch into persistent caches (curl installers for opencode/claude, npm -g under NPM_CONFIG_PREFIX for codex/openspec; lib-common.sh:1755-1800). Harness CONFIG lives under $HOME in the lane, which dies with the container, so the wizard re-runs by construction on every ephemeral launch. The seeding mechanism already exists and should be reused rather than invented: images/default/config-overlay/ is baked into the image and materialised to $HOME/.config-overlay, so per-harness onboarding state belongs there with the entrypoint placing it before harness exec.
     - packet_id: v06-automation-milestone
       order: 537
       desired_release: v0.6
