@@ -17,5 +17,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L42](../../../images/default/entrypoint-terminal.sh#L42)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [images/default/lib-common.sh#L448](../../../images/default/lib-common.sh#L448)
-- [images/default/lib-common.sh#L600](../../../images/default/lib-common.sh#L600)
-- [images/default/lib-common.sh#L636](../../../images/default/lib-common.sh#L636)
+- [images/default/lib-common.sh#L602](../../../images/default/lib-common.sh#L602)
+- [images/default/lib-common.sh#L638](../../../images/default/lib-common.sh#L638)

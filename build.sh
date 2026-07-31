@@ -656,7 +656,14 @@ _prepare_ci_full_install_inputs() {
     [[ "$FLAG_INSTALL" == true ]] || return 0
 
     _step "Preparing trace indexes and staged guest binaries for full install CI..."
-    _bump_build_version
+    # DELIBERATELY NO _bump_build_version here. This is the meta-orchestration
+    # cycle's own build path, and litmus:meta-orchestration-dirty-tree-safety
+    # (order 495) requires it to leave tracked RELEASE state untouched: a cycle
+    # must exit with a clean worktree, and a monotonically-increasing counter
+    # never converges to a value a second cycle would agree on the way a
+    # regenerated trace index does. Developer dispatches still bump — that is
+    # methodology/versioning.yaml's increment_rule — but the cycle's internal
+    # build must not.
     _regenerate_trace_indexes
 
     if [[ ! -x "$SCRIPT_DIR/scripts/build-guest-binaries.sh" ]]; then

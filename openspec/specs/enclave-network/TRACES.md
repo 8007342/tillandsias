@@ -34,7 +34,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/Containerfile#L189](../../../images/default/Containerfile#L189)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [images/default/lib-common.sh#L448](../../../images/default/lib-common.sh#L448)
-- [images/default/lib-common.sh#L636](../../../images/default/lib-common.sh#L636)
+- [images/default/lib-common.sh#L638](../../../images/default/lib-common.sh#L638)
 - [scripts/diagnose-proxy.sh#L2](../../../scripts/diagnose-proxy.sh#L2)
 - [scripts/orchestrate-enclave.sh#L2](../../../scripts/orchestrate-enclave.sh#L2)
 - [scripts/orchestrate-enclave.sh#L15](../../../scripts/orchestrate-enclave.sh#L15)
