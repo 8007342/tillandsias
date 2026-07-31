@@ -26145,6 +26145,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-07-31T01:45:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            CORRECTION — my previous event on this packet was WRONG, and the real blocker is bigger than onboarding. I wrote that 'four in-forge sessions this week (antigravity, codex, opencode, claude) were launched with --prompt and ALL reached work', concluding that non-interactive dispatch already gets past the wizard. Two of those four could not have been launched that way. crates/tillandsias-headless/src/main.rs:11427-11435 REFUSES the flag outright for any non-Codex lane: 'A non-interactive prompt is only honored by the Codex lane today (codex exec "<prompt>"); other agent CLIs ignore it. Fail loud rather than silently drop it' — returning the error 'does not support --prompt (non-interactive prompting is Codex-only today); use --codex --prompt or --opencode --prompt'. My successful delegations were --opencode and --codex, which ARE supported. The operator's Claude and Antigravity sessions were launched INTERACTIVELY with prompts pasted by hand — which is precisely why they hit the theme picker and the trust disclaimer, and precisely the copy-pasting the operator wants to stop. So the causal chain is: no headless prompt path for claude/agy -> operator forced into the interactive TUI -> interactive TUI runs the first-run wizard. Onboarding is the SYMPTOM; the missing headless lane is the cause. Filed as 539. Additional facts from the research fan-out, all cited and verified: (a) approvals bypass IS already wired for all three harnesses (codex --dangerously-bypass-approvals-and-sandbox, claude and agy --dangerously-skip-permissions, all forge-gated) so approvals are NOT the gap; (b) $HOME in a lane is ephemeral by construction — ContainerSpec defaults remove:true which emits --rm (container_spec.rs:111,275) — so any harness state written there dies every launch; (c) only three surfaces survive: the per-project named volume at /home/forge/.cache/tillandsias-project, image-baked content, and the read-only overlay at /home/forge/.config-overlay; (d) apply_opencode_config_overlay (lib-common.sh:2517) is the established idempotent entrypoint-time materialisation pattern to copy; (e) update-config.sh:20-22 already carries an EMPIRICALLY DERIVED Codex trust shape — [projects."<abs path>"] trust_level = "trusted" in $HOME/.codex/config.toml, correctly path-scoped — but it is host-side and never runs inside a forge; (f) DANGER for the seeder: per-worker delegation moves CODEX_HOME/XDG_DATA_HOME/XDG_STATE_HOME per instance (main.rs:4343-4377) while XDG_CONFIG_HOME is deliberately NOT isolated, so a seed at a fixed path is orphaned for every delegated worker — the order-430 'written where the tool never reads' class; (g) Claude has NO per-worker state isolation at all, so two concurrent Claude workers share a config home; (h) a prompted launch claims NO TTY (main.rs:11055-11066 only calls .interactive().tty() when there is no prompt), so the headless failure mode is a wizard with no controlling terminal — hang, crash or silent degrade, and WHICH is still unobserved.
+        - type: progress
           ts: "2026-07-31T00:35:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260731"
           host: linux_mutable
@@ -26224,3 +26230,51 @@ plan_index:
         - "a cold forge image runs the OpenCode vendor installer to completion with no 'command not found'"
         - "a litmus asserts the tool dependencies the vendor installers actually invoke are present in the image, and turns red when one is removed"
         - "a failed harness refresh is surfaced somewhere an agent or operator will actually see, not only in the lifecycle log"
+
+    - packet_id: headless-prompting-claude-and-antigravity
+      order: 539
+      desired_release: v0.5
+      release_target: v06-automation-milestone
+      title: "Claude and Antigravity have NO headless prompt path, so every delegated session on those lanes must be driven by hand"
+      status: ready
+      kind: implementation
+      deliverable: headless prompt lanes for the claude and antigravity entrypoints + launcher support + a litmus proving an unattended dispatch reaches work on each
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, harness, automation, delegation, claude, antigravity]
+      estimated_hours: 6
+      outcome: >
+        THIS is the reason the operator is copy-pasting prompts, and order 536
+        (onboarding wizards) is its symptom rather than its cause.
+        crates/tillandsias-headless/src/main.rs:11427-11435 refuses the flag for
+        any non-Codex lane, deliberately and loudly: "A non-interactive prompt is
+        only honored by the Codex lane today (codex exec \"<prompt>\"); other
+        agent CLIs ignore it. Fail loud rather than silently drop it so an
+        operator/e2e harness learns the lane it targeted does not yet support
+        headless prompting." The error names the workaround: use --codex --prompt
+        or --opencode --prompt.
+        So there are exactly two headless lanes today. Anyone wanting Claude or
+        Antigravity to do work must launch the interactive TUI and paste — which
+        then runs each harness's first-run wizard (theme picker, "I trust this
+        folder"), because an interactive launch is the only launch available.
+        Fixing 536 alone would not remove a single paste.
+        The Codex lane shows the shape to follow: the launcher exports the prompt
+        as TILLANDSIAS_CODEX_PROMPT (main.rs:11161) and the entrypoint branches on
+        it to run `codex exec ... "$TILLANDSIAS_CODEX_PROMPT"` instead of the TUI
+        (entrypoint-forge-codex.sh:149-164). Both harnesses already have their
+        approvals bypass wired (--dangerously-skip-permissions, forge-gated), so
+        approvals are not the gap.
+        Two hazards the implementer must handle rather than discover: a prompted
+        launch claims NO TTY (main.rs:11055-11066 only calls .interactive().tty()
+        when there is no prompt), so the non-interactive path must be verified to
+        neither hang nor silently degrade without a controlling terminal; and
+        Claude has NO per-worker state isolation in forge_worker_state_env
+        (main.rs:4343-4377, which emits CODEX_HOME and XDG_DATA/STATE_HOME but
+        nothing for Claude), so two concurrent Claude workers would share a config
+        home — sequential-only until that is closed.
+      exit_criteria:
+        - "`tillandsias . --claude --prompt <text>` and `--antigravity --prompt <text>` each reach work unattended and produce a result, with no TTY and no interactive input"
+        - "the result is retrievable by the dispatcher in the same structured way the Codex lane's is, not scraped from a transcript"
+        - "a lane that genuinely cannot support headless prompting still FAILS LOUD rather than silently dropping the prompt (preserve the existing main.rs:11427 contract for anything still unsupported)"
+        - "litmus dispatches each supported lane headlessly and asserts work happened, and turns red if a lane regresses to interactive-only"
+        - "concurrent-worker safety is either proven for Claude or explicitly gated to sequential with a named reason"
