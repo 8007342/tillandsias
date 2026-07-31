@@ -26846,6 +26846,31 @@ plan_index:
         - "with no GPU endpoint set, spec_answer returns retrieval-only cited chunks and verify passes (fail-soft, no regression)"
         - "with a stub /v1, the returned envelope's citations/freshness are byte-identical and only the prose differs; confidence=retrieved"
         - "verify-answer passes on the post-synthesis envelope (every cited span still resolves)"
+      events:
+        - type: progress
+          ts: "2026-08-01T00:15Z"
+          agent_id: "linux-immutable-fable5-548-impl-20260801T0015Z"
+          host: linux_immutable
+          summary: >
+            spec_answer MCP tool IMPLEMENTED in
+            images/default/config-overlay/mcp/forge-plan.sh (tool def in
+            tools/list + tools/call case + spec_answer_envelope()): embed query
+            via TILLANDSIAS_EMBED_ENDPOINT -> spec-retrieve (order 547) ->
+            synthesize via TILLANDSIAS_SPEC_EXPERT_ENDPOINT (instructs the model
+            to echo section keys) -> spec-envelope -> emit; fail-soft to a cited
+            retrieval-only digest when synthesis is unreachable OR when the
+            synthesized prose grounds in no key (so good retrieval still yields a
+            verifiable answer), and to a typed unsupported envelope when the index
+            or endpoint is absent. PROVEN locally against the on-host index +
+            lemonade: MCP tools/list advertises spec_answer (10 tools total);
+            tools/call spec_answer returned confidence=retrieved with 6 citations
+            and independent `tillandsias-plan verify-answer` = "ok: envelope
+            verified — 6 citation(s) resolve, confidence=Retrieved". bash -n
+            clean; no python; base64 checker green. REMAINING (this packet's
+            multi-cycle tail): build the RAG index at forge launch + wire
+            TILLANDSIAS_EMBED/SPEC_EXPERT_ENDPOINT to the enclave inference
+            (orders 549/552), and the two-branch litmus. The tool is engine-
+            agnostic — point the endpoint at the NPU or GPU slot the router picks.
 
     - packet_id: fat-spec-expert-gpu-slot
       order: 549
@@ -26997,3 +27022,157 @@ plan_index:
         - "litmus:expert-groundtruth-harness passes"
         - "the grader is unchanged; only the committed query-set fixture was reconciled"
         - "a deliberately-wrong expected value still turns a case red (falsifiability preserved)"
+
+    - packet_id: harness-mcp-expert-validation
+      order: 554
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "MILESTONE: every harness reports the expert MCP servers online at launch and can call them (per-harness validation)"
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      deliverable: plan/index.yaml (criteria holder; per-harness children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags: [milestone, harness-validation, mcp, experts, forge]
+      estimated_hours: 0
+      outcome: >
+        Operator directive 2026-07-31: the local-expert MCP servers (forge-plan
+        with plan_answer/methodology_ask/spec_answer, project-info) must be ONLINE
+        at forge launch for EVERY harness and REPORTED as available to the running
+        harness (OpenCode has an MCP panel — easiest to eyeball). And plain
+        meta-orchestration run INSIDE a given harness must pick up THAT harness's
+        validation packet, not random unrelated work. Routing selector: the forge
+        exposes its active harness as $TILLANDSIAS_AGENT
+        (crates/tillandsias-core/src/config.rs:37). This milestone holds the
+        per-harness validation children (556 opencode, 557 claude, 558 codex) and
+        the selection enabler (555). Each child, run in its own harness forge,
+        confirms: (a) the harness discovers/report the forge-plan + project-info
+        MCP servers; (b) plan_answer + methodology_ask return verified cited
+        envelopes (verify-answer passes); (c) spec_answer is advertised and
+        returns a verified envelope OR a typed unsupported when the RAG index /
+        endpoint is not yet wired (orders 543/549/552).
+      milestone_criteria:
+        selection_enabler:
+          - "order 555: advance-work-from-plan prefers a harness-validation packet whose harness tag matches $TILLANDSIAS_AGENT"
+        per_harness:
+          - "order 556: OpenCode forge — MCP panel lists the expert servers; expert tools callable + verified"
+          - "order 557: Claude forge — expert MCP servers discovered + callable + verified"
+          - "order 558: Codex forge — expert MCP servers discovered + callable + verified"
+      exit_criteria:
+        - "each per-harness child is done with a dated report; the selection enabler is green"
+
+    - packet_id: harness-affinity-worker-selection
+      order: 555
+      desired_release: v0.5
+      release_target: harness-mcp-expert-validation
+      title: "Impl: worker selection prefers the harness-validation packet matching $TILLANDSIAS_AGENT (so a forge picks its own tests)"
+      status: ready
+      kind: implementation
+      deliverable: advance-work-from-plan / meta-orchestration selection rule + capability-tag convention (harness-validation + <harness>) + a shape check
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, worker-selection, harness-validation, meta-orchestration, plan]
+      estimated_hours: 4
+      outcome: >
+        The routing enabler for the operator's "run plain meta-orchestration in a
+        harness and it picks its own tests" ask. When a forge cycle runs
+        ($TILLANDSIAS_HOST_KIND=forge) and $TILLANDSIAS_AGENT is set
+        (opencode|claude|codex|antigravity|gemini), worker selection MUST prefer a
+        ready packet carrying capability_tags [harness-validation, <that
+        harness>] over the general backlog — so an OpenCode forge claims the
+        OpenCode validation packet, not a random Windows packet. Convention: a
+        harness-validation packet tags [harness-validation, <harness>]; the
+        selector reads $TILLANDSIAS_AGENT and filters. Falls back to normal
+        selection when no matching harness-validation packet is ready (never
+        idle). Document in methodology/distributed-work.yaml worker_agent_protocol
+        and pin with a shape check.
+      exit_criteria:
+        - "a forge with TILLANDSIAS_AGENT=opencode selects the [harness-validation, opencode] packet when ready, proven by a fixture"
+        - "with no matching ready harness-validation packet, selection falls back to the normal backlog (never idle)"
+        - "the rule is documented in methodology/distributed-work.yaml and pinned by a shape check"
+
+    - packet_id: opencode-mcp-expert-validation
+      order: 556
+      desired_release: v0.5
+      release_target: harness-mcp-expert-validation
+      title: "Validate: OpenCode forge reports the expert MCP servers online + calls plan/methodology/spec experts (verified)"
+      status: ready
+      kind: validation
+      multi_cycle: true
+      deliverable: plan/issues/opencode-mcp-expert-validation-<DATE>.md with the MCP-panel evidence + tool-call transcripts + verify-answer results
+      depends_on: []
+      pickup_role: forge
+      capability_tags: [forge, harness-validation, opencode, mcp, experts]
+      estimated_hours: 3
+      outcome: >
+        CLAIM THIS ONLY IN AN OPENCODE FORGE ($TILLANDSIAS_AGENT=opencode). The
+        easiest harness to eyeball — OpenCode renders an MCP-servers panel.
+        Validate end to end: (1) OpenCode's MCP panel lists the forge-plan and
+        project-info servers as connected/online at launch; (2) call plan_answer
+        ("status of a real packet") and methodology_ask ("may a forge cycle drain
+        two packets?") — both return the cited envelope and
+        `tillandsias-plan verify-answer` passes on each; (3) spec_answer is
+        advertised in the panel and returns either a verified retrieved envelope
+        (if the RAG index + TILLANDSIAS_EMBED/SPEC_EXPERT_ENDPOINT are wired) or a
+        typed confidence=unsupported naming the missing prerequisite (orders
+        543/549/552) — never a crash, never a guess. File the panel screenshot/
+        transcript + the verify results. This packet is what plain
+        meta-orchestration in an OpenCode forge should pick up (via order 555).
+      exit_criteria:
+        - "the OpenCode MCP panel shows forge-plan + project-info online at launch (evidence captured)"
+        - "plan_answer and methodology_ask return verified cited envelopes (verify-answer passes)"
+        - "spec_answer is advertised and returns a verified envelope OR a typed unsupported (not a crash)"
+
+    - packet_id: claude-mcp-expert-validation
+      order: 557
+      desired_release: v0.5
+      release_target: harness-mcp-expert-validation
+      title: "Validate: Claude forge discovers the expert MCP servers + calls plan/methodology/spec experts (verified)"
+      status: ready
+      kind: validation
+      multi_cycle: true
+      deliverable: plan/issues/claude-mcp-expert-validation-<DATE>.md with MCP-discovery evidence + tool-call transcripts + verify-answer results
+      depends_on: []
+      pickup_role: forge
+      capability_tags: [forge, harness-validation, claude, mcp, experts]
+      estimated_hours: 3
+      outcome: >
+        CLAIM THIS ONLY IN A CLAUDE FORGE ($TILLANDSIAS_AGENT=claude). Claude Code
+        reports MCP servers via /mcp (not a graphical panel), so evidence is the
+        /mcp listing + tool-call transcripts. Same validation set as order 556:
+        forge-plan + project-info discovered at launch; plan_answer +
+        methodology_ask return verified cited envelopes; spec_answer advertised +
+        returns verified-or-typed-unsupported. Note any Claude-specific MCP
+        config-overlay differences (config path, discovery timing). This is what
+        plain meta-orchestration in a Claude forge should pick up (via order 555).
+      exit_criteria:
+        - "the Claude /mcp listing shows the expert MCP servers at launch (evidence captured)"
+        - "plan_answer and methodology_ask return verified cited envelopes"
+        - "spec_answer is advertised and returns a verified envelope OR a typed unsupported"
+
+    - packet_id: codex-mcp-expert-validation
+      order: 558
+      desired_release: v0.5
+      release_target: harness-mcp-expert-validation
+      title: "Validate: Codex forge discovers the expert MCP servers + calls plan/methodology/spec experts (verified)"
+      status: ready
+      kind: validation
+      multi_cycle: true
+      deliverable: plan/issues/codex-mcp-expert-validation-<DATE>.md with MCP-discovery evidence + tool-call transcripts + verify-answer results
+      depends_on: []
+      pickup_role: forge
+      capability_tags: [forge, harness-validation, codex, mcp, experts]
+      estimated_hours: 3
+      outcome: >
+        CLAIM THIS ONLY IN A CODEX FORGE ($TILLANDSIAS_AGENT=codex). Codex reads
+        MCP servers from its config-overlay; evidence is its MCP listing + tool
+        transcripts. Same validation set as order 556: forge-plan + project-info
+        discovered at launch; plan_answer + methodology_ask verified; spec_answer
+        advertised + verified-or-typed-unsupported. Note Codex-specific
+        config-overlay differences. This is what plain meta-orchestration in a
+        Codex forge should pick up (via order 555).
+      exit_criteria:
+        - "the Codex MCP listing shows the expert MCP servers at launch (evidence captured)"
+        - "plan_answer and methodology_ask return verified cited envelopes"
+        - "spec_answer is advertised and returns a verified envelope OR a typed unsupported"

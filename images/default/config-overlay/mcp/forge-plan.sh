@@ -344,6 +344,96 @@ methodology_envelope() {
     fi
 }
 
+# ORDER 548. The FAT spec expert: RAG over the whole-spec corpus (openspec/specs
+# + cheatsheets + methodology). The compiled binary does the network-free
+# chunk/retrieve/envelope (order 547); embedding + synthesis are curl over /v1.
+# Fail-soft on EVERY missing prerequisite: this tool must be VISIBLE in the MCP
+# panel (so the harness knows the capability exists) and return a typed
+# `unsupported` envelope — never a crash, never a guess — when the index or an
+# endpoint is absent. The GPU fat model / NPU fallback is a config choice: point
+# TILLANDSIAS_SPEC_EXPERT_ENDPOINT at whichever /v1 the policy router selected.
+SPEC_INDEX_DIR="${FORGE_SPEC_INDEX_DIR:-$FORGE_EXPERTS_STATE_DIR/spec-index}"
+spec_answer_envelope() {
+    local question="$1"
+    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+    local embed_ep="${TILLANDSIAS_EMBED_ENDPOINT:-}"
+    local synth_ep="${TILLANDSIAS_SPEC_EXPERT_ENDPOINT:-$embed_ep}"
+    local embed_model="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text-v1-GGUF}"
+    local synth_model="${TILLANDSIAS_SPEC_EXPERT_MODEL:-}"
+    if [ -z "$question" ]; then
+        unsupported_envelope "no question was supplied"
+        return 0
+    fi
+    if [ -z "$PLAN_BIN" ]; then
+        unsupported_envelope "the spec expert needs the tillandsias-plan binary (spec-retrieve/spec-envelope) — experts state: $(experts_state_line)"
+        return 0
+    fi
+    if [ ! -s "$SPEC_INDEX_DIR/chunks.jsonl" ] || [ ! -s "$SPEC_INDEX_DIR/vectors.jsonl" ]; then
+        unsupported_envelope "the spec RAG index is not built at ${SPEC_INDEX_DIR} (need chunks.jsonl + vectors.jsonl). Build it: tillandsias-plan spec-index --root <repo> --out ${SPEC_INDEX_DIR}, then embed each chunk's text via ${embed_ep:-\$TILLANDSIAS_EMBED_ENDPOINT}/embeddings into vectors.jsonl (order 552 does this at launch/commit)."
+        return 0
+    fi
+    if [ -z "$embed_ep" ]; then
+        unsupported_envelope "no embedding endpoint — set TILLANDSIAS_EMBED_ENDPOINT to a /v1 base that serves ${embed_model}"
+        return 0
+    fi
+    local work qv top synth env
+    work="$(mktemp -d "${TMPDIR:-/tmp}/spec-answer.XXXXXX")"
+    qv="$work/query-vec.json"; top="$work/top.json"; synth="$work/synth.txt"; env="$work/env.json"
+    # 1) embed the query (fail-soft)
+    if ! curl -fsS "$embed_ep/embeddings" -H 'Content-Type: application/json' \
+        -d "$(jq -nc --arg m "$embed_model" --arg q "$question" '{model:$m, input:$q}')" 2>/dev/null \
+        | jq -c '.data[0].embedding' > "$qv" 2>/dev/null || [ ! -s "$qv" ]; then
+        rm -rf "$work"
+        unsupported_envelope "the embedding endpoint ${embed_ep} did not answer for model ${embed_model} — the spec expert cannot retrieve"
+        return 0
+    fi
+    # 2) retrieve (network-free)
+    if ! "$PLAN_BIN" spec-retrieve --index-dir "$SPEC_INDEX_DIR" --query-vec "$qv" --k 6 > "$top" 2>/dev/null || [ ! -s "$top" ]; then
+        rm -rf "$work"
+        unsupported_envelope "spec-retrieve produced no candidates from ${SPEC_INDEX_DIR}"
+        return 0
+    fi
+    # 3) synthesize over the cited spans; instruct the model to echo the keys so
+    #    the citations survive verify(). Fail-soft to a retrieval-only answer.
+    local ctx keys sys payload ok=0
+    ctx="$(jq -r '.[] | "=== \(.key) (\(.path)) ===\n\(.text)\n"' "$top")"
+    keys="$(jq -r '.[].key' "$top" | paste -sd '; ')"
+    sys="You are the Tillandsias spec expert. Answer the question using ONLY the retrieved spec sections below. Be concise. Then on a FINAL line write 'Sources:' followed by the exact section names you used, comma-separated, copied verbatim from: ${keys}.
+
+${ctx}"
+    if [ -n "$synth_ep" ]; then
+        payload="$(jq -nc --arg m "$synth_model" --arg s "$sys" --arg u "$question" \
+            '{messages:[{role:"system",content:$s},{role:"user",content:$u}], max_tokens:320, temperature:0.2} + (if $m=="" then {} else {model:$m} end)')"
+        if curl -fsS "$synth_ep/chat/completions" -H 'Content-Type: application/json' -d "$payload" 2>/dev/null \
+            | jq -r '.choices[0].message.content // empty' > "$synth" 2>/dev/null && [ -s "$synth" ]; then
+            ok=1
+        fi
+    fi
+    # cited retrieval-only digest: keys present by construction, so it always
+    # verifies with ZERO model tokens — the fail-soft floor.
+    retrieval_only() {
+        jq -r '.[] | "- \(.key) [\(.path):\(.line_start)-\(.line_end)]"' "$top" > "$synth"
+        { echo; echo "Sources: $keys"; } >> "$synth"
+    }
+    [ "$ok" = 1 ] || retrieval_only
+    # 4) build a VERIFIED envelope (keeps only citations the answer used). If the
+    #    synthesized prose grounded in NO key (small model paraphrased away the
+    #    section names), the envelope comes back unsupported — fall back to the
+    #    cited digest so good retrieval still yields a verifiable cited answer,
+    #    rather than refusing a question we actually found spec sections for.
+    "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" > "$env" 2>/dev/null || true
+    if [ "$ok" = 1 ] && { [ ! -s "$env" ] || [ "$(jq -r '.confidence // "unsupported"' "$env" 2>/dev/null)" = "unsupported" ]; }; then
+        retrieval_only
+        "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" > "$env" 2>/dev/null || true
+    fi
+    if [ -s "$env" ]; then
+        cat "$env"
+    else
+        unsupported_envelope "spec-envelope could not build a verifiable answer from the retrieved chunks"
+    fi
+    rm -rf "$work"
+}
+
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
     method=$(echo "$line" | jq -r '.method // empty')
@@ -363,7 +453,8 @@ while IFS= read -r line; do
                 {"name":"plan_burndown","description":"List all children of a milestone/release-target with their statuses","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_answer","description":"Answer a plan question as the CITED envelope {answer, citations[], freshness, confidence}. Every citation carries a repo-relative path and a line range whose span contains the packet it is offered as evidence for; verify with `tillandsias-plan verify-answer`. An answer with zero citations is returned as confidence=unsupported — the expert refuses rather than guesses.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"what is blocked by 394b\", \"everything downstream of 394\", \"what is ready for linux\", \"status of 394a\""}},"required":["question"]}},
                 {"name":"methodology_path","description":"METHODOLOGY EXPERT (L0). Look up a YAML path in methodology.yaml and methodology/**/*.yaml and return the matched block plus a resolvable file:line, in the same CITED envelope as plan_answer. Query by full dotted path (methodology.runtime_language_policy.tlatoani_hard_no_python.rule), by path suffix (forge_cycle_budget.rule), or with * wildcards. An unknown path returns confidence=unsupported with zero citations — never the nearest key, never a guess.","inputSchema":{"type":"object","properties":{"path":{"type":"string","description":"e.g. \"forge_cycle_budget.rule\", \"bar_raise_governance.authority\", \"multi_host_development.pull_merge_cadence.pre_push_gate.rule\""}},"required":["path"]}},
-                {"name":"methodology_ask","description":"METHODOLOGY EXPERT (L0). Route a canonical discipline question to its YAML path and answer it in the CITED envelope. Deterministic routing only: a question matching no route, or two routes, is refused as confidence=unsupported and the refusal lists the routed forms so you can re-ask methodology_path directly.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"may a forge cycle drain two packets?\", \"may I embed a script in base64?\", \"who may raise the scan bar?\", \"what happens to a dead mechanism with a live intent?\", \"which branch does macOS checkpoint to?\""}},"required":["question"]}}
+                {"name":"methodology_ask","description":"METHODOLOGY EXPERT (L0). Route a canonical discipline question to its YAML path and answer it in the CITED envelope. Deterministic routing only: a question matching no route, or two routes, is refused as confidence=unsupported and the refusal lists the routed forms so you can re-ask methodology_path directly.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"may a forge cycle drain two packets?\", \"may I embed a script in base64?\", \"who may raise the scan bar?\", \"what happens to a dead mechanism with a live intent?\", \"which branch does macOS checkpoint to?\""}},"required":["question"]}},
+                {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}}
             ]}}'
             ;;
         "tools/call")
@@ -412,6 +503,12 @@ while IFS= read -r line; do
                 "methodology_ask")
                     question=$(echo "$args" | jq -r '.question // ""')
                     result=$(methodology_envelope "methodology-ask" "$question")
+                    ;;
+                "spec_answer")
+                    # Order 548. RAG over the whole-spec corpus; envelope on every
+                    # path (fail-soft to unsupported), same contract as plan_answer.
+                    question=$(echo "$args" | jq -r '.question // ""')
+                    result=$(spec_answer_envelope "$question")
                     ;;
                 *)
                     # An unhandled tool name is a PROTOCOL error, not a successful
