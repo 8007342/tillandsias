@@ -26007,13 +26007,20 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Two forge launch lanes bypass the base-branch verdict entirely (host-mount clone, terminal entrypoint)"
-      status: ready
+      status: claimed
       kind: bug
       deliverable: convergence + verdict on the host-mount lane, startup context on the terminal lane, litmus covering both
       depends_on: [forge-expert-fresh-launch-source-gap]
       pickup_role: linux
       capability_tags: [forge, lifecycle, git, observability, litmus]
       estimated_hours: 3
+      events:
+        - type: claim
+          ts: "2026-07-31T07:24:31Z"
+          agent_id: "forge-tillandsias-codex-20260731T072431Z"
+          host: linux
+          lease_id: "forge-base-verdict-uncovered-lanes-534"
+          expires_at: "2026-07-31T11:24:31Z"
       outcome: >
         Split from order 531 after its fix was proven end-to-end on the standard
         launch path. Two lanes still get no base-branch statement at all, so the
