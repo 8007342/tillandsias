@@ -101,7 +101,14 @@ critical_path:
     # A rule an agent cannot look up is prose. This asserts the compiled
     # methodology engine resolves it with a citation, not merely that the YAML
     # contains the words.
-    command: "out=$(./target/release/tillandsias-plan methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.sh' && echo 'ok: methodology rule queryable'"
+    # Resolve the binary the way every other consumer does, instead of assuming
+    # a host layout. Hardcoding ./target/release/tillandsias-plan made this step
+    # pass on the coordinator's host and FAIL inside a forge, where the expert
+    # binary is installed to $HOME/.local/bin by ensure_forge_experts and
+    # target/ may not exist at all. Caught by a delegated in-forge Codex run on
+    # 2026-07-31 — the same "verified where it was written" class this litmus's
+    # own packet is about.
+    command: "bin=''; for c in ./target/release/tillandsias-plan \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do [ -x \"$c\" ] && { bin=\"$c\"; break; }; done; [ -n \"$bin\" ] || { echo 'SKIP: no tillandsias-plan binary on this host'; exit 0; }; out=$(\"$bin\" methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.sh' && echo 'ok: methodology rule queryable'"
     timeout_ms: 20000
     expected_behavior: "ok: methodology rule queryable"
 

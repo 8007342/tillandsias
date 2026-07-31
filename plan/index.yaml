@@ -26172,3 +26172,39 @@ plan_index:
         - "a delegated harness session is seeded with its prompt and reaches work with zero interactive input (order 536)"
         - "every delegated result is verified before it is believed — an agent's self-report is never the closure"
         - "zeroclaw remains untouched: order 403 still pending and Tlatoani-gated at the end of this milestone"
+
+    - packet_id: forge-image-missing-which-breaks-opencode-install
+      order: 538
+      desired_release: v0.5
+      title: "`which` is absent from the forge image, so the OpenCode vendor installer fails and the lane falls back to a cached binary"
+      status: ready
+      kind: bug
+      deliverable: "which(1) in the base image + a litmus asserting the vendor installers hard dependencies are present"
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, images, harness, opencode, toolchain]
+      estimated_hours: 2
+      outcome: >
+        Surfaced 2026-07-31 by a delegated in-forge Codex launch, in its own
+        lifecycle log:
+          [lifecycle] harness | opencode refresh FAILED auth contract — rolling back to last-good
+          [lifecycle] harness | opencode curl-install FAILED, no cached binary:
+            /tmp/opencode-install.XXXX: line 223: which: command not found
+        Verified directly against the cold image: `command -v which` is empty and
+        `rpm -q which` reports the package is not installed.
+        images/default/Containerfile.base installs a deliberately curated tool
+        set (coreutils, findutils, grep, sed, gawk...) and `which` is simply not
+        on it — reasonable, since `command -v` is the correct POSIX idiom and
+        nothing WE ship needs `which`. But the OpenCode vendor installer is not
+        ours and depends on it, so every launch fails its curl-install and falls
+        back to whatever binary is cached. On a cold cache there is no fallback
+        and the lane has no OpenCode at all.
+        This is fail-soft by design, which is exactly why it went unnoticed: the
+        launch continues, the agent still starts, and the only evidence is one
+        lifecycle line nobody reads. The harness silently stops being refreshed.
+        Fix is one package, but the LESSON is the litmus: we depend on third-party
+        installers whose requirements we do not control and do not test.
+      exit_criteria:
+        - "a cold forge image runs the OpenCode vendor installer to completion with no 'command not found'"
+        - "a litmus asserts the tool dependencies the vendor installers actually invoke are present in the image, and turns red when one is removed"
+        - "a failed harness refresh is surfaced somewhere an agent or operator will actually see, not only in the lifecycle log"
