@@ -26040,7 +26040,7 @@ plan_index:
       order: 535
       desired_release: v0.5
       title: "Every local build now bumps VERSION, which invalidates image alias tags and makes the tray rebuild on next launch"
-      status: ready
+      status: obsoleted
       kind: enhancement
       deliverable: decouple image identity from the version alias (or make alias re-tag cheap and explicit) + evidence of launch cost
       depends_on: []
@@ -26072,3 +26072,10 @@ plan_index:
         - "a VERSION bump alone does not cause the tray to run an image BUILD when a content-identical image already exists"
         - "the launch cost after a build is measured before and after, on this host, and recorded"
         - "the build counter still increments on every build-producing dispatch (methodology/versioning.yaml increment_rule unchanged)"
+      events:
+        - type: progress
+          ts: "2026-07-30T11:40:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260730"
+          host: linux_mutable
+          summary: >
+            OBSOLETED — the premise was wrong and the operator corrected it. I filed this on the assumption that a VERSION bump forces meaningful per-image work on the next launch. It does not, for two independent reasons I should have checked before filing. (1) The image identity is already SOURCE-derived, exactly as specced: scripts/hash-image-sources.sh walks the image's source dir and folds path+content sha256 per file, sorted, into one digest — VERSION is NOT an input. So a bump cannot change an image's content hash; it only leaves the human alias :v<VERSION> pointing at nothing yet. (2) openspec/specs/containerfile-staleness already governs when a rebuild is legitimate: 'Runtime image builds MUST compare the current runtime image source digest with the digest stored after the last successful build ... and MUST NOT rely on repository file mtimes.' Rebuild-on-digest-change is the designed behaviour, and the project's ephemerality and idempotency principles make a triggered rebuild correct rather than costly. MEASURED, since I claimed cost without measuring: rebuilding the git image with UNCHANGED sources and a missing version alias took 9.8s wall for a 552 MB image and re-tagged to :v0.4.260730.2 — a source-hash cache hit and alias re-tag, not a rebuild. My 'per-image work that scales with image count' framing overstated a ~9s idempotent re-tag into a design problem. No defect here; the exit criteria are withdrawn. The build counter stays automatic (methodology/versioning.yaml increment_rule), which was the real and long-unimplemented rule.
