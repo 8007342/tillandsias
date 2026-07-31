@@ -26007,7 +26007,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Two forge launch lanes bypass the base-branch verdict entirely (host-mount clone, terminal entrypoint)"
-      status: claimed
+      status: completed
       kind: bug
       deliverable: convergence + verdict on the host-mount lane, startup context on the terminal lane, litmus covering both
       depends_on: [forge-expert-fresh-launch-source-gap]
@@ -26021,6 +26021,22 @@ plan_index:
           host: linux
           lease_id: "forge-base-verdict-uncovered-lanes-534"
           expires_at: "2026-07-31T11:24:31Z"
+        - type: completed
+          ts: "2026-07-31T07:31:33Z"
+          agent_id: "forge-tillandsias-codex-20260731T072431Z"
+          host: linux
+          lease_id: "forge-base-verdict-uncovered-lanes-534"
+          commit_sha: "0c050fb3"
+          evidence_refs:
+            - "images/default/lib-common.sh: host-mount path now runs checkout_forge_seed_branch before returning"
+            - "images/default/entrypoint-terminal.sh: terminal injects startup context after project discovery"
+            - "openspec/litmus-tests/litmus-forge-expert-base-guard-shape.yaml: 15/15 focused steps pass"
+            - "/tmp/order534-litmus-fixed.log"
+            - "falsifiability: both bypasses seeded red independently; source SHA-256 restored byte-identically"
+          verification_notes:
+            - "./build.sh --check passed before implementation push"
+            - "./build.sh --ci exposed unrelated existing failures; /tmp/litmus-pre-build.log was absent because the Podman PATH gate aborted before litmus execution"
+            - "./scripts/generate-traces.sh --check reported 22 pre-existing stale indexes; this packet added or moved no @trace annotations"
       outcome: >
         Split from order 531 after its fix was proven end-to-end on the standard
         launch path. Two lanes still get no base-branch statement at all, so the
