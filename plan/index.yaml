@@ -26278,3 +26278,48 @@ plan_index:
         - "a lane that genuinely cannot support headless prompting still FAILS LOUD rather than silently dropping the prompt (preserve the existing main.rs:11427 contract for anything still unsupported)"
         - "litmus dispatches each supported lane headlessly and asserts work happened, and turns red if a lane regresses to interactive-only"
         - "concurrent-worker safety is either proven for Claude or explicitly gated to sequential with a named reason"
+
+    - packet_id: forge-opsx-skill-sync-dirties-checkout
+      order: 540
+      desired_release: v0.5
+      title: "Meta-orchestration must MERGE launch-generated opsx/openspec skill syncs instead of refusing the cycle as dirty-start"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md
+      depends_on: []
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [forge, meta-orchestration, dirty-worktree, openspec, skills, boundary-noise]
+      estimated_hours: 4
+      outcome: >
+        The forge image's openspec CLI regenerates the 22 tracked opsx/openspec
+        command/skill paths into the checkout at every launch. When the image's
+        CLI templates drift from the committed ones, those 22 paths come back
+        dirty and in-forge meta-orchestration refuses with
+        blocked: dirty-start-worktree — every cycle, until an operator
+        intervenes. opsx updates at its own cadence, so this recurs.
+        Operator decision 2026-07-31: the opsx sync is INTENDED, committable,
+        and a NORMAL part of meta-orchestration. The cycle must detect the
+        deterministic launch artifact and merge it (commit + push a chore(opsx)
+        sync) rather than refuse, while the dirty-start refusal stays fail-closed
+        for any genuinely dirty operator/sibling tree. Immediate unblock landed
+        as linux-next e87705ec (the 22-file sync); this packet makes that
+        behavior automatic so future CLI drift cannot wedge the loop.
+      exit_criteria:
+        - "a helper script returns a falsifiable verdict when the ONLY dirty paths are the generated opsx/openspec set (ok:) vs anything else (non-opsx:)"
+        - "full meta-orchestration on a checkout whose only dirt is a simulated newer openspec CLI regeneration does NOT refuse; it commits and pushes a chore(opsx): sync on the canonical branch and completes the cycle"
+        - "the dirty-start fixture with any non-opsx path still fails closed byte-identically (order 489 litmus stays green)"
+      events:
+        - type: progress
+          ts: "2026-07-31T14:45:00Z"
+          agent_id: "forge-metaorch-20260731"
+          host: forge
+          branch: linux-next
+          checkpoint_commit: e87705ec
+          summary: >
+            Incident filed after a forge launch regenerated the 22 opsx/openspec
+            paths and the cycle refused dirty-start. Operator classified the sync
+            as intended/committable; the files were committed (e87705ec) and
+            pushed to linux-next, unblocking future launches until the CLI drifts
+            again. This packet captures the permanent fix so meta-orchestration
+            merges generated opsx dirt as normal cycle input instead of refusing.
