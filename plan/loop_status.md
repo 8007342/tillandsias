@@ -1,5 +1,43 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-31T22:40Z (linux_immutable — beginner experts PROVEN on the NPU; v0.5 drain)
+
+- **Host**: `yoga` (XDNA2), branch `linux-next`. Guards green (credential
+  `ok:gh-keyring`, branch `ok:branch-linux-next`, forge-expert-base
+  `ok:expert-base-ready`). Boundary snapshotted clean. Sibling heads:
+  main=7a593409, linux-next=959eeeba, windows-next=e4102a80, osx-next=89cade75.
+- **Drain (operator-directed)**: prove beginner experts can run on the NPU and
+  chart the path to serving them at forge launch.
+- **PoC — SUCCESS** (plan/issues/npu-experts-poc-2026-07-31.md): two beginner
+  experts answered on the XDNA2 NPU via Lemonade/FLM qwen3-0.6b with request-time
+  corpus stuffing (order-544 mechanism, NO ollama-create):
+  - **plan expert** (focused corpus): FULLY CORRECT cited answer —
+    "optional-component-registry (542, ready) blocks npu-inference-container (543)".
+  - **methodology expert** (16KB methodology.yaml): branch fact right, buried
+    pre-push rule softened → first-party proof of the core rule: **deterministic
+    retrieval must NARROW the corpus; the NPU only synthesizes prose from cited
+    facts**. NPU prefill ~1950 t/s, decode ~52 t/s, KV occupancy ~15%,
+    engagement proven (xdna IRQ deltas +3794/+364, runtime_status active).
+    Clean teardown (NPU suspended, port free).
+- **Wiring map** (subagent, cited): experts are 100% compiled/deterministic today
+  (forge-plan.sh → tillandsias-plan binary; self-verifying citation Envelope in
+  answer.rs); the order-393 §3 LLM shim was never built; OLLAMA_KEEP_ALIVE=24h
+  lives at main.rs:3319 (522/527 defect); ensure_forge_experts + the
+  experts_state launch line (lib-common.sh:3327) are where an NPU expert
+  registers.
+- **Plan changes**: added a PoC-evidence event to order **544**; filed order
+  **546** `npu-beginner-experts-serving` (impl, ready, depends 543+544) — a
+  fail-soft `synthesize_prose()` in forge-plan.sh that rephrases the compiled
+  cited Envelope via the enclave NPU /v1, copying citations verbatim so
+  verify/grade litmus still pass, plus discovery (TILLANDSIAS_NPU_ENDPOINT) and
+  a peer `experts_npu_state` launch line. Two-branch litmus (endpoint-unset =
+  byte-identical to today; stub = citations preserved, only prose differs).
+- **Verification**: plan/index.yaml YAML parse PASS; orders 546 unique; no
+  python introduced; base64 checker green.
+- **Next**: 542 (optional-component-registry) → 543 (npu-inference-container) →
+  546 (NPU experts serving, methodology expert first). Pre-existing mainline
+  break order 545 (python policy) still open for a linux host.
+
 ## Cycle 2026-07-31T20:17Z (linux_immutable — XDNA2 NPU e2e bring-up folded into v0.5 inference redesign)
 
 - **Host**: `yoga` = AMD Ryzen AI 5 340 (Krackan/XDNA2 NPU) + Radeon 840M,

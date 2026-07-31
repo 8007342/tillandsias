@@ -26630,6 +26630,31 @@ plan_index:
         - "the shim upstream is the engine-slot /v1 endpoint; embeddings are pinned to a CPU/GPU-capable slot"
         - "keep-alive/residency is a per-slot capability (not OLLAMA_KEEP_ALIVE literal), reconciled with orders 522/527"
         - "the experts ground-truth harness (order 394 lineage) passes unmodified with the default engine slot swapped ollama<->llama-server"
+      events:
+        - type: progress
+          ts: "2026-07-31T22:40Z"
+          agent_id: "linux-immutable-fable5-npu-experts-20260731T2240Z"
+          host: linux_immutable
+          summary: >
+            PoC evidence (plan/issues/npu-experts-poc-2026-07-31.md): request-time
+            corpus stuffing WORKS on the NPU today — two beginner experts
+            (methodology + plan) answered on the XDNA2 NPU via Lemonade/FLM
+            qwen3-0.6b with {system:corpus,user:question}, NO ollama-create. The
+            plan expert gave a fully-correct cited answer from a focused corpus;
+            the methodology expert softened a buried rule in a 16KB corpus —
+            first-party proof of THE core design rule: deterministic retrieval
+            must NARROW the corpus, the NPU only SYNTHESIZES prose from the
+            cited facts (never retrieves from a large corpus). NPU prefill
+            ~1950 t/s, decode ~52 t/s, KV occupancy ~15%. The concrete impl
+            slice is filed as order 546 (npu-beginner-experts-serving): a
+            fail-soft synthesize_prose() in forge-plan.sh that rephrases the
+            compiled binary's cited Envelope via the enclave NPU /v1 endpoint,
+            copying citations/confidence verbatim so verify/grade litmus still
+            pass. Also confirmed this cycle: OLLAMA_KEEP_ALIVE=24h lives at
+            crates/tillandsias-headless/src/main.rs:3319 (the 522/527 defect
+            this packet demotes to a per-slot capability); the order-393 §3 shim
+            was never built (prose only); methodology.rs:12-20 records the L0
+            compiled path superseded Modelfile stuffing.
 
     - packet_id: no-python-policy-violation-on-linux-next
       order: 545
@@ -26661,3 +26686,66 @@ plan_index:
         - "scripts/check-no-python-scripts.sh exits 0 on linux-next"
         - "no python3/python invocation remains in scripts/ or images/default/config-overlay/"
         - "the base64-injection checker stays green (no decode-to-exec workaround)"
+
+    - packet_id: npu-beginner-experts-serving
+      order: 546
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Impl: NPU-synthesized beginner experts at forge launch (fail-soft synthesize_prose over the compiled cited envelope)"
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: fail-soft synthesize_prose() in forge-plan.sh + TILLANDSIAS_NPU_ENDPOINT discovery (container_profile.rs + opencode config.json) + experts_npu launch-state line + two-branch litmus
+      depends_on: [npu-inference-container, experts-engine-neutrality]
+      pickup_role: linux
+      capability_tags: [inference, npu, experts, mcp, forge, rust, containers, enclave]
+      estimated_hours: 10
+      outcome: >
+        PROVEN as a PoC this cycle (plan/issues/npu-experts-poc-2026-07-31.md):
+        beginner experts answer on the XDNA2 NPU via request-time corpus
+        stuffing, grounded in the compiled binary's cited facts. This packet
+        makes it a real, fail-soft, launch-available feature WITHOUT touching
+        the network-free compiled crate. Architecture (validated by the PoC +
+        the 2026-07-31 wiring map): the compiled tillandsias-plan binary does
+        RETRIEVAL (self-verifying Envelope {answer, citations[], freshness,
+        confidence}; answer.rs:196-379); a small NPU model only SYNTHESIZES
+        prose FROM the cited facts — never retrieves from a large corpus (the
+        PoC's methodology expert softened a buried rule in a 16KB corpus; the
+        plan expert nailed a focused one). Concrete seams (HEAD 959eeeba; grep
+        symbols, lines drift):
+        (a) RETRIEVAL — NO CHANGE. Keep crates/tillandsias-plan network-free
+        (its falsifiability/verify story depends on it); the synthesis boundary
+        is OUTSIDE the crate.
+        (b) SYNTHESIS — add a fail-soft synthesize_prose() in
+        images/default/config-overlay/mcp/forge-plan.sh, invoked from
+        methodology_envelope (after the envelope validates, ~line 340) and later
+        plan_answer_envelope (~line 275), ONLY when TILLANDSIAS_NPU_ENDPOINT is
+        set AND confidence != unsupported: POST the cited spans to
+        $TILLANDSIAS_NPU_ENDPOINT/v1/chat/completions with a "rephrase ONLY from
+        these cited facts" system prompt, replace ONLY the Envelope.answer,
+        copy citations/freshness/confidence VERBATIM; on ANY curl/parse failure
+        return the original envelope unchanged (fail-soft, no regression, no
+        prettified unsupported refusals).
+        (c) DISCOVERY — add TILLANDSIAS_NPU_ENDPOINT as a ProfileEnvVar in
+        crates/tillandsias-core/src/container_profile.rs peer to OLLAMA_HOST
+        (~:384) pointing at the order-543 npu-inference container's enclave /v1,
+        and an NPU provider block in
+        images/default/config-overlay/opencode/config.json peer to ollama
+        (~:18-38).
+        (d) LAUNCH-STATE — write a peer experts_npu state (same closed grammar
+        ready|building(<n>s)|degraded(<reason>) as lib-common.sh:907-920) and
+        emit a peer line beside **Experts** in inject_startup_context
+        (lib-common.sh:~3327) so experts_npu_state=ready appears at forge
+        launch, discoverable like experts_state/inference_state.
+        Start with the METHODOLOGY expert (its Envelope carries verbatim rule
+        blocks, so synthesis is a pure low-risk rephrase). Multi-cycle: synthesis
+        seam + litmus, discovery wiring, launch-state line, then extend to
+        plan_answer are separable checkpoints. Also fixes the corpus-stuffing
+        accuracy lever the PoC found: narrow the corpus via retrieval BEFORE
+        stuffing (the Envelope's cited spans, not whole files).
+      exit_criteria:
+        - "with TILLANDSIAS_NPU_ENDPOINT unset, methodology_ask output is byte-identical to today (fail-soft, no regression) — litmus branch 1"
+        - "with TILLANDSIAS_NPU_ENDPOINT pointed at a stub /v1, the returned envelope's citations/freshness/confidence are byte-identical and only answer prose differs — litmus branch 2"
+        - "tillandsias-plan verify-answer / the grade litmus still pass on the post-synthesized envelope (citations still resolve)"
+        - "experts_npu_state=ready (or degraded(<reason>)) appears in the forge launch-state context when a usable NPU + endpoint are present"
+        - "no LLM call is added to crates/tillandsias-plan (the compiled crate stays network-free)"
