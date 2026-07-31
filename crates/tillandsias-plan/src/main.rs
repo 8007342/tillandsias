@@ -6,7 +6,7 @@
 //! @trace spec:spec-traceability
 
 use std::path::{Path, PathBuf};
-use tillandsias_plan::{Ledger, Schema, answer, edit, groundtruth, methodology};
+use tillandsias_plan::{Ledger, Schema, answer, edit, groundtruth, methodology, spec};
 
 fn usage() -> ! {
     eprintln!(
@@ -362,6 +362,72 @@ fn report(
     failed
 }
 
+// ── order 547 index I/O helpers (JSONL / JSON, dependency-only serde_json) ───
+
+fn read_chunks(path: &Path) -> Vec<spec::Chunk> {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error: read {}: {e}", path.display());
+        std::process::exit(1);
+    });
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<spec::Chunk>(line) {
+            Ok(c) => out.push(c),
+            Err(e) => {
+                eprintln!("error: {}:{}: not a chunk record: {e}", path.display(), n + 1);
+                std::process::exit(1);
+            }
+        }
+    }
+    out
+}
+
+fn read_chunks_array(path: &Path) -> Vec<spec::Chunk> {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error: read {}: {e}", path.display());
+        std::process::exit(1);
+    });
+    serde_json::from_str::<Vec<spec::Chunk>>(&text).unwrap_or_else(|e| {
+        eprintln!("error: {} is not a JSON array of chunks: {e}", path.display());
+        std::process::exit(1);
+    })
+}
+
+fn read_vectors(path: &Path) -> Vec<Vec<f32>> {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error: read {}: {e}", path.display());
+        std::process::exit(1);
+    });
+    let mut out = Vec::new();
+    for (n, line) in text.lines().enumerate() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<Vec<f32>>(line) {
+            Ok(v) => out.push(v),
+            Err(e) => {
+                eprintln!("error: {}:{}: not a float vector: {e}", path.display(), n + 1);
+                std::process::exit(1);
+            }
+        }
+    }
+    out
+}
+
+fn read_query_vec(path: &Path) -> Vec<f32> {
+    let text = std::fs::read_to_string(path).unwrap_or_else(|e| {
+        eprintln!("error: read {}: {e}", path.display());
+        std::process::exit(1);
+    });
+    serde_json::from_str::<Vec<f32>>(text.trim()).unwrap_or_else(|e| {
+        eprintln!("error: {} is not a JSON float array: {e}", path.display());
+        std::process::exit(1);
+    })
+}
+
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut index = PathBuf::from("plan/index.yaml");
@@ -495,6 +561,156 @@ fn main() {
         // root IS the checkout, so citations resolve against `root`.
         emit_verified_envelope(envelope, &root);
         return;
+    }
+
+    // ORDER 547. The whole-spec RAG corpus (openspec/specs + cheatsheets +
+    // methodology) is a DIFFERENT corpus from the plan ledger, so — like
+    // `methodology` — these run before (and independently of) the ledger load.
+    // The crate stays network-free: `spec-index` chunks, `spec-retrieve` does
+    // cosine top-k over caller-supplied embeddings, `spec-envelope` builds a
+    // verifiable answer envelope. Embedding + synthesis are the caller's shell
+    // job over `/v1`.
+    if args[0].starts_with("spec-") {
+        let mut root = root_for(&index);
+        let mut out: Option<PathBuf> = None;
+        let mut index_dir: Option<PathBuf> = None;
+        let mut query_vec: Option<PathBuf> = None;
+        let mut chunks_json: Option<PathBuf> = None;
+        let mut answer_file: Option<PathBuf> = None;
+        let mut k = 8usize;
+        let mut i = 1;
+        while i < args.len() {
+            match args[i].as_str() {
+                "--root" => {
+                    i += 1;
+                    if let Some(r) = args.get(i) {
+                        root = PathBuf::from(r);
+                    }
+                }
+                "--out" => {
+                    i += 1;
+                    out = args.get(i).map(PathBuf::from);
+                }
+                "--index-dir" => {
+                    i += 1;
+                    index_dir = args.get(i).map(PathBuf::from);
+                }
+                "--query-vec" => {
+                    i += 1;
+                    query_vec = args.get(i).map(PathBuf::from);
+                }
+                "--chunks-json" => {
+                    i += 1;
+                    chunks_json = args.get(i).map(PathBuf::from);
+                }
+                "--answer-file" => {
+                    i += 1;
+                    answer_file = args.get(i).map(PathBuf::from);
+                }
+                "--k" => {
+                    i += 1;
+                    if let Some(v) = args.get(i) {
+                        k = v.parse().unwrap_or(8);
+                    }
+                }
+                other => {
+                    eprintln!("error: unknown flag for {}: {other}", args[0]);
+                    std::process::exit(2);
+                }
+            }
+            i += 1;
+        }
+
+        match args[0].as_str() {
+            "spec-index" => {
+                let Some(out_dir) = out else {
+                    eprintln!("error: spec-index requires --out <dir>");
+                    std::process::exit(2);
+                };
+                if let Err(e) = std::fs::create_dir_all(&out_dir) {
+                    eprintln!("error: cannot create {}: {e}", out_dir.display());
+                    std::process::exit(1);
+                }
+                let chunks = spec::chunk_corpus(&root);
+                let chunks_path = out_dir.join("chunks.jsonl");
+                let mut body = String::new();
+                for c in &chunks {
+                    match serde_json::to_string(c) {
+                        Ok(line) => {
+                            body.push_str(&line);
+                            body.push('\n');
+                        }
+                        Err(e) => {
+                            eprintln!("error: serialize chunk {}: {e}", c.id);
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                if let Err(e) = std::fs::write(&chunks_path, body) {
+                    eprintln!("error: write {}: {e}", chunks_path.display());
+                    std::process::exit(1);
+                }
+                println!(
+                    "spec-index: {} chunks -> {}",
+                    chunks.len(),
+                    chunks_path.display()
+                );
+                return;
+            }
+            "spec-retrieve" => {
+                let Some(dir) = index_dir else {
+                    eprintln!("error: spec-retrieve requires --index-dir <dir>");
+                    std::process::exit(2);
+                };
+                let Some(qv) = query_vec else {
+                    eprintln!("error: spec-retrieve requires --query-vec <file>");
+                    std::process::exit(2);
+                };
+                let chunks = read_chunks(&dir.join("chunks.jsonl"));
+                let vectors = read_vectors(&dir.join("vectors.jsonl"));
+                if chunks.len() != vectors.len() {
+                    eprintln!(
+                        "error: index is inconsistent — {} chunks but {} vectors (re-run spec-index + embed)",
+                        chunks.len(),
+                        vectors.len()
+                    );
+                    std::process::exit(1);
+                }
+                let query = read_query_vec(&qv);
+                let top = spec::top_k(&query, &vectors, k);
+                let selected: Vec<&spec::Chunk> = top.iter().map(|(idx, _)| &chunks[*idx]).collect();
+                match serde_json::to_string_pretty(&selected) {
+                    Ok(s) => println!("{s}"),
+                    Err(e) => {
+                        eprintln!("error: serialize retrieval result: {e}");
+                        std::process::exit(1);
+                    }
+                }
+                return;
+            }
+            "spec-envelope" => {
+                let Some(cj) = chunks_json else {
+                    eprintln!("error: spec-envelope requires --chunks-json <file>");
+                    std::process::exit(2);
+                };
+                let chunks = read_chunks_array(&cj);
+                let answer = match &answer_file {
+                    Some(f) => std::fs::read_to_string(f).unwrap_or_default(),
+                    None => {
+                        let mut buf = String::new();
+                        let _ = std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf);
+                        buf
+                    }
+                };
+                let envelope = spec::build_envelope(answer.trim(), &chunks, &root);
+                emit_verified_envelope(envelope, &root);
+                return;
+            }
+            other => {
+                eprintln!("error: unknown spec subcommand '{other}'");
+                std::process::exit(2);
+            }
+        }
     }
 
     let ledger = match Ledger::load(&index) {

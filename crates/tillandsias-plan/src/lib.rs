@@ -25,6 +25,10 @@ pub mod answer;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
 pub mod methodology;
+/// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,
+/// cosine retrieval, verifiable envelope construction). Embedding and synthesis
+/// happen outside the crate; see `spec.rs`.
+pub mod spec;
 
 pub struct Ledger {
     /// Raw packet mappings in file order (open-world: everything survives).

@@ -1,5 +1,36 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-07-31T23:45Z (linux_immutable — order 547 IMPLEMENTED + spec RAG expert proven e2e)
+
+- **Host**: `yoga` (XDNA2 + Radeon 840M), branch `linux-next`. Operator
+  directive: implement 547 + deps so the experts are actually usable; MCP servers
+  online at forge launch + reported to the harness; full build + live test;
+  per-harness testing packets; forge-agent validation.
+- **547 DONE (implemented + proven)**: new `crates/tillandsias-plan/src/spec.rs`
+  (network-free) + main.rs dispatch for `spec-index` / `spec-retrieve` /
+  `spec-envelope`. 6 unit tests pass, `cargo build --release -p tillandsias-plan`
+  clean. Full pipeline proven on-host (plan/issues/spec-experts-live-2026-07-31.md):
+  spec-index over the LIVE corpus = 10,113 chunks; embed (nomic) -> spec-retrieve
+  ranked enclave-network + subdomain-routing specs top -> synthesize (qwen3-0.6b-
+  FLM) -> spec-envelope -> independent `verify-answer` = "ok: 2 citation(s)
+  resolve, confidence=Retrieved". The falsifiable contract survives local
+  synthesis; the crate adds NO network dependency.
+- **548 in progress**: the serving logic is proven as a script; the remaining
+  work is folding it into forge-plan.sh as the `spec_answer` MCP tool + endpoint
+  discovery + launch-state registration.
+- **Captured (pre-existing mainline RED, order 553)**: the expert ground-truth
+  harness fails on linux-next HEAD — the committed query set
+  (openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml) drifted from
+  the ledger (order 440 changed 394a etc. done->completed without updating the
+  fixture). Orthogonal to 547; filed for the experts/394 owner. (Same class as
+  order 545 no-python breach.)
+- **Verification**: plan/index.yaml YAML parse PASS; order 553 unique; 547 tests
+  green; crate builds. NOTE: `cargo test -p tillandsias-plan` overall is RED only
+  due to the pre-existing groundtruth drift (order 553), NOT this change.
+- **Next (this cycle continues)**: MCP integration (548 -> forge-plan.sh +
+  OpenCode config), full local build + non-destructive forge launch (protect the
+  NPU toolboxes), per-harness testing packets, forge-agent validation.
+
 ## Cycle 2026-07-31T23:10Z (linux_immutable — GPU fat RAG spec expert designed + PROVEN; tiered expert system)
 
 - **Host**: `yoga` (XDNA2 NPU + Radeon 840M iGPU), branch `linux-next`, guards

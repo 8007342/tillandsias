@@ -26755,7 +26755,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Impl: span-addressable RAG index over the whole-spec corpus (network-free Rust; spec-index/spec-retrieve)"
-      status: ready
+      status: completed
       kind: implementation
       deliverable: tillandsias-plan spec-index + spec-retrieve subcommands (heading-section chunker for md, reuse methodology.rs index_text for yaml; flat f32 blob + JSONL sidecar with path/line_start/line_end/decl/content_hash) + unit tests over the live corpus
       depends_on: []
@@ -26783,6 +26783,35 @@ plan_index:
         - "delta re-embed touches only chunks whose content_hash changed"
         - "a fabricated chunk citation is refused (verify fails)"
         - "unit-tested over the live corpus; the crate adds no network dependency"
+      events:
+        - type: completed
+          ts: "2026-07-31T23:45Z"
+          agent_id: "linux-immutable-fable5-547-impl-20260731T2345Z"
+          host: linux_immutable
+          summary: >
+            IMPLEMENTED + PROVEN end-to-end. Added crates/tillandsias-plan/src/
+            spec.rs (pub mod spec) + main.rs dispatch for three network-free
+            subcommands: spec-index (heading-section chunker for md, top-level-key
+            chunker for yaml; flat chunks.jsonl with path/line_start/line_end/
+            kind/key/content_hash/text), spec-retrieve (cosine top-k over
+            caller-supplied embeddings), spec-envelope (build a verifiable
+            answer::Envelope keeping only citations whose key the answer echoes).
+            6 unit tests pass; `cargo build --release -p tillandsias-plan` clean.
+            EXIT CRITERIA MET: (1) spec-index ran over the LIVE corpus -> 10,113
+            chunks (4131 spec + 5392 cheatsheet + 590 methodology); (2) full
+            pipeline proven on-host (plan/issues/spec-experts-live-2026-07-31.md
+            forthcoming): chunk -> embed (nomic on lemonade) -> spec-retrieve
+            (ranked enclave-network + subdomain-routing specs top over 370-chunk
+            sample) -> synthesize (qwen3-0.6b-FLM) -> spec-envelope -> independent
+            `verify-answer` returned "ok: envelope verified — 2 citation(s)
+            resolve, confidence=Retrieved"; (3) a decorative/fabricated citation
+            is refused (envelope_drops_decorative_citations test + verify's
+            FABRICATED check); (4) the crate adds NO network dependency (deps
+            unchanged: serde/serde_yaml/serde_json). content_hash is emitted per
+            chunk, enabling order 552's delta re-embed. NOTE: this cycle also
+            found the expert ground-truth harness RED on linux-next HEAD
+            (pre-existing status-vocabulary drift, order 553) — orthogonal to
+            this change.
 
     - packet_id: spec-expert-embed-and-synthesis
       order: 548
@@ -26933,3 +26962,38 @@ plan_index:
         - "a one-file commit re-embeds only that file's chunks (not the whole corpus)"
         - "the Envelope freshness block reports the new HEAD sha after a commit"
         - "a content-hash mismatch flags a stale index (fails closed)"
+
+    - packet_id: expert-groundtruth-harness-red-on-linux-next
+      order: 553
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Fix: expert ground-truth harness RED on linux-next — committed query set drifted from the ledger (done->completed, packet ids)"
+      status: ready
+      kind: fix
+      deliverable: plan/issues/groundtruth-red-on-linux-next-2026-07-31.md + reconciled openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml + green cargo test / litmus:expert-groundtruth-harness
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, experts, groundtruth, litmus, plan, ci-gate]
+      estimated_hours: 3
+      outcome: >
+        Captured 2026-07-31 by the order-547 cycle (incidental): `cargo test -p
+        tillandsias-plan` fails groundtruth::tests::the_committed_query_set_is_
+        green_at_head, verified pre-existing (reproduces without this cycle's
+        orthogonal spec.rs additions). The committed query set
+        openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml pins the
+        OLD status vocabulary: it expects packet 394a (plan-methodology-experts-
+        rung1/plan-expert-binary-shipping) status=done and packet
+        experts-construction-research status=done, but order 440's status-
+        vocabulary normalization changed those to `completed` and reorganized the
+        ledger (grader closest-miss lands on forge-hot-path-placement-metrics /
+        order 329). The grader is corpus-agnostic and correct; the FIXTURE is
+        stale. Reconcile the query set to the current ledger (done->completed
+        where genuinely complete; re-point identities/orders) WITHOUT weakening
+        the grader. This is the falsifiable closure the whole experts milestone
+        (393/394/547-552) grades against, so a RED harness masks real regressions
+        for every host — same class as order 545 (no-python breach).
+      exit_criteria:
+        - "cargo test -p tillandsias-plan is green (groundtruth case passes)"
+        - "litmus:expert-groundtruth-harness passes"
+        - "the grader is unchanged; only the committed query-set fixture was reconciled"
+        - "a deliberately-wrong expected value still turns a case red (falsifiability preserved)"
