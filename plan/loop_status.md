@@ -1,5 +1,34 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-01T00:15Z (linux_immutable — spec_answer MCP tool live + harness testing packets + full build in flight)
+
+- **Host**: `yoga`, branch `linux-next` (b7963f5c..2030b3cc pushed). Continues the
+  order-547/548 experts work.
+- **548 spec_answer MCP tool LIVE**: forge-plan.sh now advertises `spec_answer`
+  and answers it — proven locally (MCP tools/list shows 10 tools incl.
+  spec_answer; tools/call spec_answer -> confidence=retrieved, 6 citations,
+  independent verify-answer "ok". Fail-soft to a cited retrieval-only digest when
+  synthesis is unreachable or ungrounded; typed unsupported when index/endpoint
+  absent. Engine-agnostic (point TILLANDSIAS_SPEC_EXPERT_ENDPOINT at the NPU or
+  GPU slot). So OpenCode's MCP panel will show all three experts (plan_answer,
+  methodology_ask, spec_answer) at forge launch.
+- **Harness testing packets filed (operator ask)**: 554 milestone
+  harness-mcp-expert-validation + 555 harness-affinity-worker-selection
+  (selection prefers the [harness-validation, <harness>] packet matching
+  $TILLANDSIAS_AGENT so a forge picks ITS own tests, not random work) + per-
+  harness validation 556 opencode / 557 claude / 558 codex.
+- **Full build IN FLIGHT**: `./build.sh --install` running (background,
+  TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 to protect the NPU toolboxes/images). On
+  completion: launch a forge (non-destructive), eyeball the OpenCode MCP panel
+  for the expert servers, and dispatch forge agents to run the 556 validation
+  from within the forge.
+- **Carried**: order 553 (groundtruth harness RED, pre-existing) still open —
+  makes `./build.sh --ci-full`'s test gate red, which is why the artifact build
+  uses `--install` (no test gate). Sibling already closed order 545 (no-python).
+- **Next**: forge launch + OpenCode MCP-panel live verify + forge-agent
+  validation (556); then wire the launch-time RAG index build + enclave endpoint
+  (549/552) so spec_answer retrieves in-enclave, not just fail-soft.
+
 ## Cycle 2026-07-31T23:45Z (linux_immutable — order 547 IMPLEMENTED + spec RAG expert proven e2e)
 
 - **Host**: `yoga` (XDNA2 + Radeon 840M), branch `linux-next`. Operator
