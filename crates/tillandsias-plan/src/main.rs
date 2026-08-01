@@ -377,7 +377,11 @@ fn read_chunks(path: &Path) -> Vec<spec::Chunk> {
         match serde_json::from_str::<spec::Chunk>(line) {
             Ok(c) => out.push(c),
             Err(e) => {
-                eprintln!("error: {}:{}: not a chunk record: {e}", path.display(), n + 1);
+                eprintln!(
+                    "error: {}:{}: not a chunk record: {e}",
+                    path.display(),
+                    n + 1
+                );
                 std::process::exit(1);
             }
         }
@@ -391,7 +395,10 @@ fn read_chunks_array(path: &Path) -> Vec<spec::Chunk> {
         std::process::exit(1);
     });
     serde_json::from_str::<Vec<spec::Chunk>>(&text).unwrap_or_else(|e| {
-        eprintln!("error: {} is not a JSON array of chunks: {e}", path.display());
+        eprintln!(
+            "error: {} is not a JSON array of chunks: {e}",
+            path.display()
+        );
         std::process::exit(1);
     })
 }
@@ -409,7 +416,11 @@ fn read_vectors(path: &Path) -> Vec<Vec<f32>> {
         match serde_json::from_str::<Vec<f32>>(line) {
             Ok(v) => out.push(v),
             Err(e) => {
-                eprintln!("error: {}:{}: not a float vector: {e}", path.display(), n + 1);
+                eprintln!(
+                    "error: {}:{}: not a float vector: {e}",
+                    path.display(),
+                    n + 1
+                );
                 std::process::exit(1);
             }
         }
@@ -678,7 +689,8 @@ fn main() {
                 }
                 let query = read_query_vec(&qv);
                 let top = spec::top_k(&query, &vectors, k);
-                let selected: Vec<&spec::Chunk> = top.iter().map(|(idx, _)| &chunks[*idx]).collect();
+                let selected: Vec<&spec::Chunk> =
+                    top.iter().map(|(idx, _)| &chunks[*idx]).collect();
                 match serde_json::to_string_pretty(&selected) {
                     Ok(s) => println!("{s}"),
                     Err(e) => {

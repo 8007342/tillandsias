@@ -199,7 +199,15 @@ pub fn chunk_yaml(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
         if let Some(k) = lines.iter().find(|l| !l.trim().is_empty()) {
             let key = distinctive_key(k.trim());
             let mut chunks = Vec::new();
-            push_chunk(&mut chunks, rel_path, kind, 1, lines.len().max(1), &key, &lines);
+            push_chunk(
+                &mut chunks,
+                rel_path,
+                kind,
+                1,
+                lines.len().max(1),
+                &key,
+                &lines,
+            );
             return chunks;
         }
         return Vec::new();
@@ -243,7 +251,11 @@ fn top_level_key_name(line: &str) -> String {
 /// span it is drawn from.
 fn distinctive_key(raw: &str) -> String {
     let cleaned = raw.trim_start_matches(['#', '-', ' ', '\t']).trim();
-    let cleaned = if cleaned.is_empty() { raw.trim() } else { cleaned };
+    let cleaned = if cleaned.is_empty() {
+        raw.trim()
+    } else {
+        cleaned
+    };
     cleaned.chars().take(80).collect()
 }
 
@@ -367,9 +379,14 @@ mod tests {
 
     #[test]
     fn markdown_chunk_keys_are_in_their_span() {
-        let text = "preamble line\n\n## Purpose\nbody a\nbody b\n\n## Egress allowlist\ndeny by default\n";
+        let text =
+            "preamble line\n\n## Purpose\nbody a\nbody b\n\n## Egress allowlist\ndeny by default\n";
         let chunks = chunk_markdown("openspec/specs/x/spec.md", "spec", text);
-        assert!(chunks.len() >= 3, "preamble + 2 headings, got {}", chunks.len());
+        assert!(
+            chunks.len() >= 3,
+            "preamble + 2 headings, got {}",
+            chunks.len()
+        );
         for c in &chunks {
             let lines: Vec<&str> = text.lines().collect();
             let span = lines[c.line_start - 1..c.line_end].join("\n");
@@ -402,8 +419,8 @@ mod tests {
     fn cosine_ranks_the_aligned_vector_first() {
         let q = vec![1.0f32, 0.0, 0.0];
         let vecs = vec![
-            vec![0.0f32, 1.0, 0.0], // orthogonal
-            vec![0.9f32, 0.1, 0.0], // aligned
+            vec![0.0f32, 1.0, 0.0],  // orthogonal
+            vec![0.9f32, 0.1, 0.0],  // aligned
             vec![-1.0f32, 0.0, 0.0], // opposite
         ];
         let top = top_k(&q, &vecs, 2);
@@ -433,7 +450,11 @@ mod tests {
         let env = build_envelope("something unrelated", &chunks, Path::new("."));
         assert_eq!(env.confidence(), Confidence::Unsupported);
         // Answer mentions the key -> one retrieved citation.
-        let env2 = build_envelope("The Egress allowlist denies by default.", &chunks, Path::new("."));
+        let env2 = build_envelope(
+            "The Egress allowlist denies by default.",
+            &chunks,
+            Path::new("."),
+        );
         assert_eq!(env2.confidence(), Confidence::Retrieved);
         assert_eq!(env2.citations().len(), 1);
     }
@@ -441,11 +462,33 @@ mod tests {
     #[test]
     fn retrieval_only_answer_contains_every_key() {
         let chunks = vec![
-            Chunk { id: 0, path: "a.md".into(), line_start: 1, line_end: 1, kind: "spec".into(), key: "Alpha".into(), content_hash: "0".into(), text: "Alpha".into() },
-            Chunk { id: 1, path: "b.md".into(), line_start: 1, line_end: 1, kind: "spec".into(), key: "Beta".into(), content_hash: "0".into(), text: "Beta".into() },
+            Chunk {
+                id: 0,
+                path: "a.md".into(),
+                line_start: 1,
+                line_end: 1,
+                kind: "spec".into(),
+                key: "Alpha".into(),
+                content_hash: "0".into(),
+                text: "Alpha".into(),
+            },
+            Chunk {
+                id: 1,
+                path: "b.md".into(),
+                line_start: 1,
+                line_end: 1,
+                kind: "spec".into(),
+                key: "Beta".into(),
+                content_hash: "0".into(),
+                text: "Beta".into(),
+            },
         ];
         let ans = retrieval_only_answer(&chunks);
         let env = build_envelope(&ans, &chunks, Path::new("."));
-        assert_eq!(env.citations().len(), 2, "retrieval-only keeps all citations");
+        assert_eq!(
+            env.citations().len(),
+            2,
+            "retrieval-only keeps all citations"
+        );
     }
 }
