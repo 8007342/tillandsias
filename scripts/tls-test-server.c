@@ -3,7 +3,7 @@
  * Handles git smart HTTP for info/refs endpoints.
  * Usage: tls-test-server <docroot> <cert> <key> <port>
  * Prints READY to stdout when listening; serves until SIGTERM/SIGINT. */
-// freshness: auditor=linux-tlatoani-opencode-20260717T0920Z date=2026-07-17 verdict=updated scope=broken-by-construction SIGTERM handler (signal()/SA_RESTART) re-audited after gate-wedge fix 32ee1786
+// freshness: auditor=forge-opencode-metaorch-20260801 date=2026-08-01 verdict=refreshed scope=re-validated for litmus:forge-runtime-ca-trust: both branches still live-tested (file serve via curl/node fetch, git smart HTTP advertise-refs via git ls-remote); loopback-only bind + shell-built upload-pack command in popen() are accepted fixture tradeoffs; unchecked SSL_CTX cert/key return codes and OpenSSL-3.x deprecated init/cleanup APIs are harmless and link fine
 #include <arpa/inet.h>
 #include <signal.h>
 #include <stdio.h>

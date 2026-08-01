@@ -80,6 +80,23 @@ misleading ENV-FAIL on the groundtruth litmus. The "next forge run will be bette
 ruby present (or fallback replaced), tillandsias-policy reachable from scripts, and the
 podman preflight not false-positive on payload text / absent-podman forges.
 
+### 4. `/tmp` tmpfs fills at launch — `cargo test` fails with spurious `No space left on device`
+
+- **Addendum, 2026-08-01 (forge cycle 06:56Z)**: `/tmp` is a 256M tmpfs and was 100%
+  full (0 bytes free) at cycle start. The 8 opencode install artifacts
+  (`/tmp/opencode_install_*`, ~127M + ~126M) plus a node compile cache left nothing.
+  `cargo test -p tillandsias-plan` then FAILED 8 tests — every failure
+  `Os { code: 28, kind: StorageFull }` — because the crate's tests write fixtures to
+  `$TMPDIR`. The failures are environmental, not code, but they present exactly like
+  test defects: a future agent re-reads the code instead of re-running the test. The
+  meta-orchestration boundary snapshot also failed on the same full device until
+  TMPDIR was redirected to the overlay.
+- Workaround this cycle: `TMPDIR=/home/forge/.mo-scratch/tmp cargo test …` (all 71+4
+  green). Fix candidates for the base image / launcher: (a) install opencode/its
+  artifacts under a directory on the overlay (or purge `/tmp/opencode_install_*` after
+  a successful install), (b) launch opencode with a non-tmpfs TMPDIR, (c) provision a
+  per-launch writable scratch dir on the overlay and export TMPDIR in the launch env.
+
 ## Smallest next action
 
 Split into three ready packets (orders 560-562) with named verifiable closures, then

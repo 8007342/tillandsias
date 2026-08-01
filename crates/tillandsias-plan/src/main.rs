@@ -34,64 +34,66 @@ fn capability_tokens() -> Vec<&'static str> {
         .collect()
 }
 
-const USAGE: &str = "usage: tillandsias-plan [--index <path>] <command>\n\
-         commands:\n\
-           capabilities              ORDER 569. Print this binary's subcommand capability set,\n\
-                                     one token per line on stdout and nothing else. The set is\n\
-                                     embedded at COMPILE time, so it describes the sources this\n\
-                                     artifact was built from. A binary WITHOUT this subcommand\n\
-                                     predates order 569 and its capabilities are unknowable —\n\
-                                     that absence is itself the stale-binary signal the forge\n\
-                                     wrapper branches on.\n\
-           check                     integrity + schema validation (exit 1 on violations)\n\
-           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n\
-                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n\
-                                     'next free order' yourself: that reads a ledger snapshot\n\
-                                     which is stale the moment another host commits, so\n\
-                                     concurrent filers pick the SAME number. The minted token\n\
-                                     is PERMANENT — never renumber it. A prefix shared by two\n\
-                                     packets is normal. See methodology/distributed-work.yaml\n\
-                                     -> order_id_allocation.\n\
-           status <id|order>         one packet's status line\n\
-           blocked-by <id|order>     packets directly blocked by X\n\
-           blocked-closure <id|order> everything transitively downstream of X\n\
-           ready [role]              ready packets (optionally for a pickup role)\n\
-           burndown <milestone>      release-target children with statuses\n\
-           answer <question...>      the CITED answer envelope as JSON (order 394b)\n\
-           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n\
-                                     does not resolve or its span does not contain the claim\n\
-           methodology [--root D] [--file S] <yaml.path>\n\
-                                     ORDER 394c. YAML path query over methodology.yaml and\n\
-                                     methodology/**/*.yaml. Prints the 394b envelope: the\n\
-                                     matched block plus a resolvable file:line. An unknown\n\
-                                     path is confidence=unsupported, never a guess.\n\
-           methodology-ask [--root D] [--file S] <question...>\n\
-                                     route a canonical discipline question to its YAML path,\n\
-                                     then answer it. Unrouted questions are unsupported.\n\
-           methodology-index [--root D]\n\
-                                     every indexed path with its file:line (the query surface)\n\
-           append-event <id|order> <type> <summary> --ts <ISO> [--agent A] [--host H]\n\
-                                     append an event, VALIDATED before flush (refuses a broken ledger)\n\
-           grade [--root D] [--case ID] [--envelope F|-] [--list-engines] [SET.yaml ...]\n\
-                                     ORDER 394d. Grade the experts against the COMMITTED ground\n\
-                                     truth. Defaults to openspec/litmus-tests/groundtruth/\n\
-                                     expert-groundtruth-rung1.yaml; pass more query sets (or a\n\
-                                     glob) to grade further corpora with the same harness.\n\
-                                     --envelope grades ONE case against an envelope captured\n\
-                                     elsewhere (e.g. off the MCP server). Exit 1 = graded RED,\n\
-                                     exit 2 = the harness could not run at all.\n\
-           spec-index --out <dir> [--root D]\n\
-                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n\
-           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n\
-                                     network-free cosine top-k over caller-supplied embeddings\n\
-           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n\
-                                     build a VERIFIED envelope keeping only the citations the\n\
-                                     answer actually used\n\
-           fragments                 report the append-only plan/index.d/ overlay: which\n\
-                                     fragments are live, which are malformed, and whether\n\
-                                     compaction is eligible\n\
-           compact                   fold every fragment into the base ledger and delete\n\
-                                     exactly the ones folded (refuses a lossy rewrite)";
+const USAGE: &str = concat!(
+    "usage: tillandsias-plan [--index <path>] <command>\n",
+    "         commands:\n",
+    "           capabilities              ORDER 569. Print this binary's subcommand capability set,\n",
+    "                                     one token per line on stdout and nothing else. The set is\n",
+    "                                     embedded at COMPILE time, so it describes the sources this\n",
+    "                                     artifact was built from. A binary WITHOUT this subcommand\n",
+    "                                     predates order 569 and its capabilities are unknowable —\n",
+    "                                     that absence is itself the stale-binary signal the forge\n",
+    "                                     wrapper branches on.\n",
+    "           check                     integrity + schema validation (exit 1 on violations)\n",
+    "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
+    "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
+    "                                     'next free order' yourself: that reads a ledger snapshot\n",
+    "                                     which is stale the moment another host commits, so\n",
+    "                                     concurrent filers pick the SAME number. The minted token\n",
+    "                                     is PERMANENT — never renumber it. A prefix shared by two\n",
+    "                                     packets is normal. See methodology/distributed-work.yaml\n",
+    "                                     -> order_id_allocation.\n",
+    "           status <id|order>         one packet's status line\n",
+    "           blocked-by <id|order>     packets directly blocked by X\n",
+    "           blocked-closure <id|order> everything transitively downstream of X\n",
+    "           ready [role]              ready packets (optionally for a pickup role)\n",
+    "           burndown <milestone>      release-target children with statuses\n",
+    "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
+    "           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n",
+    "                                     does not resolve or its span does not contain the claim\n",
+    "           methodology [--root D] [--file S] <yaml.path>\n",
+    "                                     ORDER 394c. YAML path query over methodology.yaml and\n",
+    "                                     methodology/**/*.yaml. Prints the 394b envelope: the\n",
+    "                                     matched block plus a resolvable file:line. An unknown\n",
+    "                                     path is confidence=unsupported, never a guess.\n",
+    "           methodology-ask [--root D] [--file S] <question...>\n",
+    "                                     route a canonical discipline question to its YAML path,\n",
+    "                                     then answer it. Unrouted questions are unsupported.\n",
+    "           methodology-index [--root D]\n",
+    "                                     every indexed path with its file:line (the query surface)\n",
+    "           append-event <id|order> <type> <summary> --ts <ISO> [--agent A] [--host H]\n",
+    "                                     append an event, VALIDATED before flush (refuses a broken ledger)\n",
+    "           grade [--root D] [--case ID] [--envelope F|-] [--list-engines] [SET.yaml ...]\n",
+    "                                     ORDER 394d. Grade the experts against the COMMITTED ground\n",
+    "                                     truth. Defaults to openspec/litmus-tests/groundtruth/\n",
+    "                                     expert-groundtruth-rung1.yaml; pass more query sets (or a\n",
+    "                                     glob) to grade further corpora with the same harness.\n",
+    "                                     --envelope grades ONE case against an envelope captured\n",
+    "                                     elsewhere (e.g. off the MCP server). Exit 1 = graded RED,\n",
+    "                                     exit 2 = the harness could not run at all.\n",
+    "           spec-index --out <dir> [--root D]\n",
+    "                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n",
+    "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
+    "                                     network-free cosine top-k over caller-supplied embeddings\n",
+    "           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n",
+    "                                     build a VERIFIED envelope keeping only the citations the\n",
+    "                                     answer actually used\n",
+    "           fragments                 report the append-only plan/index.d/ overlay: which\n",
+    "                                     fragments are live, which are malformed, and whether\n",
+    "                                     compaction is eligible\n",
+    "           compact                   fold every fragment into the base ledger and delete\n",
+    "                                     exactly the ones folded (refuses a lossy rewrite)"
+);
 
 fn usage() -> ! {
     eprintln!("{USAGE}");

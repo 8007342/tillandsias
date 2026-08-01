@@ -1,5 +1,45 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-01T06:56Z (forge/opencode — packet 583-2bpw DONE; CRDT overlay LWW/event gap found and shaped as 585-v2fa)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next` (clean startup at origin/linux-next 0c71c4e1). Guards all green:
+  credential `ok:forge-git-mirror`, branch `ok:branch-linux-next`,
+  expert-base `ok:expert-base-ready`. E2E preflight `skip:no-podman-binary`
+  (forge has no podman by design). `/tmp` tmpfs was 100% full (opencode install
+  artifacts) — boundary snapshot and first `cargo test` run failed with
+  `No space left on device`; reran with `TMPDIR` on the overlay.
+- **order 583-2bpw (cli-usage-text-loses-column-alignment) DONE**: the USAGE
+  const used backslash line-continuations whose `\` strips the following line's
+  leading whitespace, rendering every command flush-left. Rewrote as `concat!()`
+  of `\n`-terminated literals preserving the authored 11-space command indent and
+  column-38 description alignment. No entry lost/reworded (byte-identical text),
+  verified by running the binary and by `cargo test -p tillandsias-plan`
+  (71 lib + 4 bin green). `./build.sh --check` green (fmt/typecheck/clippy x2).
+  Completion recorded in a fragment (20260801t0705z) pending 585-v2fa (see below
+  — the overlay cannot yet mark a fragment-only packet completed).
+- **NEW DEFECT found and shaped as order 585-v2fa**: `fragments.rs::fold()`
+  applies the LWW `status:` register and `events:` appends to the base clone
+  BEFORE `append_packets` adds fragment-only packets, so no fragment-filed packet
+  can ever change status or receive an appended event — every packet filed via
+  the overlay (all of 582-584) is frozen at its filing status. Reproduced with
+  the compiled CLI on a synthetic ledger (base packet LWW works, fragment-only
+  packet LWW silently dropped; `check` still reports `ok` — silent loss).
+  Finding: plan/issues/fragment-overlay-lww-and-events-lost-on-fragment-packets-2026-08-01.md
+  (order 585-v2fa, ready). Suggested fix: swap fold()'s last two statements.
+  This blocks closing every fragment-filed packet, including 583-2bpw.
+- **Freshness audit (order 372)**: audited `scripts/tls-test-server.c` (top
+  stalest, 15d) → verdict **refreshed**; re-validated both branches are live-
+  tested by litmus:forge-runtime-ca-trust (file serve via curl/node, git smart
+  HTTP advertise-refs via `git ls-remote`); stamp updated to 2026-08-01.
+- **Capture**: appended addendum #4 to plan/issues/forge-tool-availability-gaps-2026-08-01.md —
+  the full `/tmp` tmpfs broke `cargo test` with spurious StorageFull failures and
+  the boundary snapshot; fix candidates for the base image/launcher recorded.
+- **Next**: 585-v2fa (fold-order swap — unblocks all fragment packet lifecycle);
+  569 (capability honesty); 570 (TILLANDSIAS_AGENT); 583-2bpw completion then
+  finalizes once 585-v2fa lands; 568 pending fresh-image Claude /mcp evidence;
+  558 (codex); 549/552 (spec index).
+
 ## Cycle 2026-08-01T01:30Z (forge/claude — order 557 validation run; experts DEGRADED-then-healed; 568-570 filed)
 
 - **Host**: `forge` (claude harness, Fable 5), branch `linux-next` (worktree from
