@@ -201,11 +201,22 @@ critical_path:
 
   - step: "NO-PYTHON: the envelope path never INVOKES python"
     # Matches an interpreter at a command position — start of line, or after
-    # whitespace/pipe/`(`/`!` — so a real `python3 -c` or `| python -` fires
-    # while forge-plan.sh's existing prose ('preferred over grep/python',
-    # where `/` precedes the word) does not. Seeded and confirmed red before
-    # this was committed.
-    command: "grep -rqiE '(^|[[:space:]|(!])(python[0-9.]*|pip[0-9.]*)[[:space:]]' crates/tillandsias-plan/src/answer.rs crates/tillandsias-plan/src/lib.rs crates/tillandsias-plan/src/main.rs images/default/config-overlay/mcp/forge-plan.sh && { echo 'FAIL: python invocation on the envelope path'; exit 1; }; grep -q 'serde_json' crates/tillandsias-plan/Cargo.toml && echo 'ok: no-python'"
+    # whitespace/pipe/`(`/`!` — so a real `python3 -c` or `| python -` fires.
+    #
+    # COMMENT LINES ARE STRIPPED FIRST, and that is load-bearing rather than
+    # lenient. This step fired on 2026-08-01 against a `#` comment reading
+    # "(python json.loads ...)" that DESCRIBED the defect a fix had just
+    # removed — prose about python, not an invocation of it. A guard that
+    # cannot tell those apart blocks correct work, and its real cost is what it
+    # teaches: an agent facing a red build over a comment reaches for the guard
+    # rather than for the code. This is the third comment-self-match in one day
+    # (methodology.rs's `std::process::` note, build.sh's `_bump_build_version`
+    # note), so the pattern is stripped at source instead of being worked around
+    # a fourth time.
+    #
+    # A COMMENTED-OUT invocation is correctly not an invocation. What must still
+    # fire is real code, and the falsifiability check below proves it does.
+    command: "for f in crates/tillandsias-plan/src/answer.rs crates/tillandsias-plan/src/lib.rs crates/tillandsias-plan/src/main.rs images/default/config-overlay/mcp/forge-plan.sh; do sed -E 's@^[[:space:]]*(#|//|///|//!).*$@@' \"$f\"; done | grep -qiE '(^|[[:space:]|(!\"'\"'\"'=])(python[0-9.]*|pip[0-9.]*)([[:space:]\"'\"'\"']|$)' && { echo 'FAIL: python invocation on the envelope path'; exit 1; }; grep -q 'serde_json' crates/tillandsias-plan/Cargo.toml && echo 'ok: no-python'"
     timeout_ms: 10000
     expected_behavior: "ok: no-python"
 
