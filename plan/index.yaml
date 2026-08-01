@@ -27347,7 +27347,7 @@ plan_index:
       order: 561
       desired_release: v0.5
       title: "Fix: tillandsias-policy / tillandsias-podman-cli not discoverable — scripts assume target/debug/… but CARGO_TARGET_DIR is redirected in the forge"
-      status: ready
+      status: claimed
       kind: fix
       deliverable: CARGO_TARGET_DIR-aware binary resolution for the scripts that exec target/debug/tillandsias-policy (check-no-python-scripts.sh, check-cheatsheet-sources.sh, audit-cheatsheet-sources.sh, check-cheatsheet-tiers.sh, test-pre-receive-yaml-gate.sh, distill-forge-diagnostics.sh, fetch-cheatsheet-source.sh, regenerate-cheatsheet-index.sh) + scripts/tillandsias-podman, or an install-to-$HOME/.local/bin first-run step + a forge-verifiable closure
       depends_on: []
@@ -27380,6 +27380,12 @@ plan_index:
           host: forge
           summary: >
             Reproduced during the 557 run: cargo build -p tillandsias-plan --release lands in the redirected CARGO_TARGET_DIR (~/.cache/tillandsias-project/cargo/target), so forge-plan.sh's <root>/target/release fallback probe misses fresh builds exactly as this packet describes.
+        - type: claim
+          ts: "2026-08-01T04:42:24Z"
+          agent_id: "forge-google-antigravity-gemini3.6flash-20260801T044224Z"
+          host: forge
+          lease_id: "forge-antigravity-20260801T044224Z"
+          expires_at: "2026-08-01T08:42:24Z"
     - packet_id: litmus-podman-preflight-forge-false-positive
       order: 562
       desired_release: v0.5
