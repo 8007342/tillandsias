@@ -59,7 +59,22 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
-SINCE_REF="${1:-}"
+
+# --experts-only prints just the expert blocks and skips the plan/repo/verdict
+# work. Those blocks shell out to `tillandsias-plan check` and
+# `generate-traces.sh --check`, which are real scans over the whole repo and take
+# seconds; the expert numbers are pure arithmetic over one log. Worth having as
+# its own mode rather than a test-only affordance: "how are the experts doing
+# right now" is the question asked most often, and it should not cost a repo
+# scan.
+EXPERTS_ONLY=false
+SINCE_REF=""
+for arg in "$@"; do
+    case "$arg" in
+        --experts-only) EXPERTS_ONLY=true ;;
+        *) [ -z "$SINCE_REF" ] && SINCE_REF="$arg" ;;
+    esac
+done
 
 # ── experts ─────────────────────────────────────────────────────────────────
 calls=0
@@ -104,6 +119,10 @@ fi
 printf 'experts: calls=%s answered=%s unsupported=%s degraded=%s errors=%s answer_rate=%s tools=%s source=%s\n' \
     "$calls" "$answered" "$unsupported" "$degraded" "$errors" "$answer_rate" "$tools" "$source_state"
 printf 'experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)\n'
+
+if [ "$EXPERTS_ONLY" = true ]; then
+    exit 0
+fi
 
 # ── plan ────────────────────────────────────────────────────────────────────
 packets="-"; ready="-"; blocked="-"; pending="-"

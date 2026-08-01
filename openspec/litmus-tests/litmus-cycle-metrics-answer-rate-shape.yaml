@@ -1,0 +1,92 @@
+# @trace spec:methodology-accountability
+# @trace order:568
+#
+# Pins the ONE property that makes the expert metrics worth reporting: the
+# answer-rate denominator, and the anti-gaming rule behind it.
+#
+# THE FAILURE THIS PREVENTS. `answer_rate = answered / (answered + unsupported)`
+# deliberately EXCLUDES `degraded` (the expert could not run at all) and `error`
+# (protocol). Folding degraded in would be an easy, well-intentioned edit — it
+# makes the rate look better during infrastructure trouble — and it would
+# recreate order 531 exactly: every plan_answer returned unsupported because the
+# forge was seeded from a pre-expert branch, while `experts: ready` was reported
+# truthfully and every health signal read green. A quality ratio that absorbs
+# infrastructure failure cannot distinguish "the artifact is wrong" from "the
+# questions were hard", which is the whole reason 531 stayed hidden.
+#
+# It also pins that `answered` requires CITATIONS. That is what makes the metric
+# ungameable: an agent can call a tool a thousand times and not move the rate,
+# because citations come from the compiled expert resolving a real packet or YAML
+# path. A change letting `answered` be reached without citations converts a
+# quality signal into a volume signal — the same defect that would make XP
+# grindable in packet 567.
+#
+# Behavioural, not grep-only: the reporter is executed against seeded logs so a
+# rewrite that keeps the words and changes the arithmetic still turns red.
+name: litmus:cycle-metrics-answer-rate-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Execute scripts/cycle-metrics.sh against seeded telemetry and assert the
+  answer-rate denominator excludes degraded and error, that the order-531
+  signature gets its own verdict, that the reporter never fails the cycle it
+  measures, and that substitution stays honestly unknown.
+severity: high
+size: instant
+
+preconditions:
+  - repository root contains scripts/cycle-metrics.sh
+  - shell utilities (grep, sed, mktemp) are available in PATH
+
+critical_path:
+  - step: "the reporter is executable and emits the pinned experts grammar"
+    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *calls=*answered=*unsupported=*degraded=*errors=*answer_rate=*) echo 'ok: experts grammar intact' ;; *) echo \"observed=$out\"; echo 'fail: experts grammar' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: experts grammar intact"
+
+  - step: "answer_rate EXCLUDES degraded from its denominator (order 531 must not be absorbed as a hard question)"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=100%*) echo 'ok: degraded excluded' ;; *) echo \"observed=$out expected answer_rate=100% (1 answered, 0 unsupported, 3 degraded)\"; echo 'fail: degraded folded into the denominator' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: degraded excluded"
+
+  - step: "answer_rate EXCLUDES protocol errors from its denominator"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"error\"}\\n{\"tool\":\"a\",\"outcome\":\"error\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=100%*) echo 'ok: errors excluded' ;; *) echo \"observed=$out expected answer_rate=100%\"; echo 'fail: errors folded into the denominator' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: errors excluded"
+
+  - step: "a genuine refusal DOES count against the rate (the metric must still be able to say 'useless')"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"answered\"}\\n{\"tool\":\"a\",\"outcome\":\"unsupported\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; case \"$out\" in *answer_rate=50%*) echo 'ok: refusals counted' ;; *) echo \"observed=$out expected answer_rate=50%\"; echo 'fail: refusals not counted — the metric can no longer report uselessness' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: refusals counted"
+
+  - step: "the order-531 signature (expert ran every time, answered nothing) is reported, not silently averaged away"
+    command: "grep -Fq 'expert-answered-nothing-check-base-branch' scripts/cycle-metrics.sh && echo 'ok: 531 signature has a verdict'"
+    timeout_ms: 5000
+    expected_behavior: "ok: 531 signature has a verdict"
+
+  - step: "substitution stays honestly unknown (it needs the harness tool log; an estimate would fake it)"
+    command: "L=$(mktemp); : > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts_substitution:'); rm -f $L; case \"$out\" in *unknown*) echo 'ok: substitution unknown' ;; *) echo \"observed=$out\"; echo 'fail: substitution must stay unknown, never estimated' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: substitution unknown"
+
+  - step: "the reporter never fails the cycle it measures (verdict carries judgement, not exit status)"
+    command: "L=$(mktemp); printf '{\"tool\":\"a\",\"outcome\":\"degraded\"}\\n' > $L; TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only >/dev/null 2>&1; rc=$?; rm -f $L; if [ $rc -eq 0 ]; then echo 'ok: reporter exits 0'; else echo \"observed rc=$rc expected 0\"; echo 'fail: a metrics reporter must not fail the cycle it measures'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: reporter exits 0"
+
+  - step: "the anti-gaming rule is stated in the methodology, not only in the script"
+    command: "grep -Fq 'anti_gaming_rule' methodology/agent-observability.yaml && grep -Fq 'CITATIONS' methodology/agent-observability.yaml && echo 'ok: anti-gaming rule recorded'"
+    timeout_ms: 5000
+    expected_behavior: "ok: anti-gaming rule recorded"
+
+  - step: "telemetry at the MCP chokepoint is fail-soft (a metric may not break the surface it measures)"
+    command: "grep -Fq 'record_expert_call' images/default/config-overlay/mcp/forge-plan.sh && grep -Fq '|| true' images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: telemetry fail-soft'"
+    timeout_ms: 5000
+    expected_behavior: "ok: telemetry fail-soft"
+
+failure_modes:
+  - "degraded folded into the answer-rate denominator, making a wrong artifact look like a hard question (order 531 recurrence)"
+  - "answered reachable without citations, converting a quality signal into a gameable volume signal"
+  - "substitution reported as an estimated number instead of unknown"
+  - "the reporter exits non-zero and fails the cycle it was measuring"
+  - "telemetry failure propagating into an expert tool call"

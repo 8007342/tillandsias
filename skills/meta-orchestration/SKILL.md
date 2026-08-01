@@ -458,6 +458,37 @@ Only `linux_mutable` performs global coordination:
 5. After a release succeeds, ensure the plan records the new latest release so
    immutable Linux hosts know to run curl-install e2e.
 
+## Cycle Metrics (report before the handoff)
+
+Run `scripts/cycle-metrics.sh [<since-ref>]` and include its output verbatim in
+the final handoff. It emits one `key=value` line per block — branch on those,
+never on prose.
+
+The two lines worth reading first:
+
+- **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called
+  two hundred times that refuses two hundred times is heavily used and
+  completely useless, and a call counter reports that as healthy adoption. That
+  is not hypothetical: order 531 had every `plan_answer` returning
+  `confidence=unsupported` (the forge was seeded from a pre-expert branch) while
+  launch state truthfully reported `experts: ready`.
+- **`verdict`** — the single fact to look at first. `attention:` is not a
+  failure; it is the cycle naming its own weakest point.
+  `attention:expert-answered-nothing-check-base-branch` is the order-531
+  signature and means the ARTIFACT is wrong, not that the questions were hard.
+
+Two rules about these numbers:
+
+- **Never report a metric the tooling did not produce.** `experts_substitution`
+  reads `unknown` because it needs the agent harness's tool log, which is not in
+  this repo. Leave it unknown. An estimated number makes an unmeasured thing
+  look measured, which is worse than reporting nothing.
+- **Never propose making expert metrics reward activity.** `answered` is
+  reachable only via citations the compiled expert emits when it resolved a real
+  packet or path, so calling tools more cannot raise the rate. A change that
+  lets `answered` be reached without citations converts a quality signal into a
+  volume signal and must be refused on that ground.
+
 ## Finalization
 
 Before exit:

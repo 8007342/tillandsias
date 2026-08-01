@@ -556,6 +556,7 @@ specs:
   - litmus:no-duplicate-rust-item-defs
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
+  - litmus:cycle-metrics-answer-rate-shape
   - litmus:idiomatic-layers-doctrine-shape
   - litmus:large-packet-eligibility-doctrine-shape
   - litmus:version-release-and-forge-selfservice-shape

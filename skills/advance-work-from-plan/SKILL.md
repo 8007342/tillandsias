@@ -220,6 +220,13 @@ status `ready`. The packet closes only when every agent named in
 `verification_required` has emitted passing `verified-by` events
 (`methodology/distributed-work.yaml` → `long_running_packets`).
 
+0.  **Cycle Metrics**: Run `scripts/cycle-metrics.sh` and include its output in
+    your completion report. Read `verdict` first — it names the cycle's weakest
+    point. `attention:expert-answered-nothing-check-base-branch` means the
+    expert ARTIFACT is wrong (order 531), not that the questions were hard;
+    check the base branch before trusting any expert answer from this cycle.
+    Report `experts_substitution` as `unknown` — it is not derivable in-repo and
+    must never be estimated.
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Emit Completed Event**: Update the task's YAML block:
     -   Append a `completed` event to `events:` listing all commit SHAs and validation log paths.
