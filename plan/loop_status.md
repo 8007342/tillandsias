@@ -1,5 +1,32 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-01T06:11Z-07:10Z (linux_mutable — order 568 checkpoint; local-build RED captured; published v0.4.260728.2 PASS)
+
+- **Host**: `macuahuitl`, branch `linux-next`; credential/branch guards green,
+  startup boundary clean. Sibling branches were already ancestors of linux-next
+  (windows ahead=0, osx ahead=0), so coordination required no merge.
+- **Order 568 checkpoint (`c46502c8`)**: Claude forges now merge a baked
+  four-server MCP manifest into restored `~/.claude.json` atomically, preserving
+  OAuth/project/custom-server state. Focused discoverability 8/8 and build check
+  pass. Packet remains in_progress for live fresh-image Claude `/mcp` and native
+  `plan_answer` evidence.
+- **Local-build E2E gate 1 FAIL (`0c71c4e1`)**: destructive reset correctly not
+  reached. Filed 584-2qq2 (trace regeneration now follows rather than precedes
+  all CI gates; focused quick litmus RED) and 584-e8pe (launch-marker lifecycle
+  test fails only in the full tray suite and passes alone).
+- **Published daily v0.4.260728.2 PASS**: checksum/version match, full Podman
+  reset to empty, pristine init/Vault bootstrap, proxy-alive assertion, and
+  in-forge meta-orchestration all passed. Forge pushed `a0eb8111` (583-2bpw
+  implementation plus 585-v2fa fragment-overlay lifecycle defect). Report:
+  plan/issues/smoke-e2e-findings-v0.4.260728.2-2026-08-01.md.
+- **Non-fatal capture**: 586-5yc7 (release smoke inherited the litmus Podman
+  PATH shim) and 586-i6j7 (straggler probe leaked a benign vanished-/proc race).
+- **Freshness**: `scripts/run-litmus-test.sh` refreshed after focused runner
+  self-tests passed 6/6; forge peer refreshed `scripts/tls-test-server.c`.
+- **Next**: 585-v2fa unblocks lifecycle updates for every fragment-filed packet;
+  584-2qq2 restores full local CI; order 568 then needs a fresh Claude forge
+  validation before completion.
+
 ## Cycle 2026-08-01T06:56Z (forge/opencode — packet 583-2bpw DONE; CRDT overlay LWW/event gap found and shaped as 585-v2fa)
 
 - **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch

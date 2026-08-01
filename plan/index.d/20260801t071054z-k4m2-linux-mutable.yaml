@@ -1,0 +1,55 @@
+packets:
+  - packet_id: release-smoke-must-not-inherit-litmus-podman-shim
+    order: 586-5yc7
+    title: "Sanitize release-smoke Podman discovery so it exercises the host runtime"
+    status: ready
+    kind: fix
+    desired_release: v0.5
+    owner_host: linux
+    pickup_role: linux
+    capability_tags: [testing, release, podman, harness]
+    deliverable: plan/issues/smoke-e2e-findings-v0.4.260728.2-2026-08-01.md
+    depends_on: []
+    outcome: >
+      Published-release smoke commands resolve the host Podman binary rather
+      than a prior litmus runner's PATH shim, preserving clean-room fidelity.
+    exit_criteria:
+      - "release smoke records /usr/bin/podman or another non-target host runtime"
+      - "the litmus runner retains its hermetic shim for litmus child processes"
+      - "a focused fixture proves a contaminated parent PATH is sanitized"
+    events:
+      - type: filed
+        ts: '2026-08-01T07:10:54Z'
+        agent_id: linux-macuahuitl-opencode-20260801T0611Z
+        host: linux_mutable
+        summary: >
+          v0.4.260728.2 smoke passed, but install and cold init both selected
+          target/litmus-runtime/bin/podman from the invoking environment.
+
+  - packet_id: teardown-straggler-probe-proc-exit-race
+    order: 586-i6j7
+    title: "Suppress benign proc-disappearance races in the teardown straggler probe"
+    status: ready
+    kind: optimization
+    desired_release: v0.5
+    owner_host: linux
+    pickup_role: linux
+    capability_tags: [testing, process-lifecycle, shell, observability]
+    deliverable: plan/issues/smoke-e2e-findings-v0.4.260728.2-2026-08-01.md
+    depends_on: []
+    outcome: >
+      A process exiting between proc enumeration and cmdline read is treated as
+      an expected race without stderr noise, while real zombies and orphans
+      still fail the probe.
+    exit_criteria:
+      - "a disappearing /proc/<pid>/cmdline fixture emits no shell diagnostic"
+      - "zombie and orphan positive fixtures still exit non-zero"
+      - "the clean verdict grammar remains unchanged"
+    events:
+      - type: filed
+        ts: '2026-08-01T07:10:54Z'
+        agent_id: linux-macuahuitl-opencode-20260801T0611Z
+        host: linux_mutable
+        summary: >
+          The post-reset probe returned clean but leaked a No-such-file
+          diagnostic when the inspected tillandsias process exited mid-read.
