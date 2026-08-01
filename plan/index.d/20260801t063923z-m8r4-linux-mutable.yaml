@@ -1,0 +1,58 @@
+packets:
+  - packet_id: build-trace-regeneration-before-gate-regression
+    order: 584-2qq2
+    title: "Restore trace-index regeneration before every CI-bearing build dispatch"
+    status: ready
+    kind: fix
+    desired_release: v0.5
+    owner_host: linux
+    pickup_role: linux
+    capability_tags: [build, ci, litmus, traceability]
+    deliverable: plan/issues/smoke-e2e-findings-local-build-linux-2026-08-01.md
+    depends_on: []
+    outcome: >
+      Gate-bearing build modes regenerate deterministic tracked trace indexes
+      exactly once before entering local-ci, preserving order 495's clean
+      post-build forge boundary.
+    exit_criteria:
+      - "litmus:build-trace-index-dispatch-coverage passes all six steps"
+      - "--ci-full --install, --ci --install, and --release fixtures each emit traces,gate in that order"
+      - "TILLANDSIAS_SKIP_TRACE_INDEX=1 remains an explicit non-mutating override"
+    events:
+      - type: filed
+        ts: '2026-08-01T06:39:23Z'
+        agent_id: linux-macuahuitl-opencode-20260801T0611Z
+        host: linux_mutable
+        summary: >
+          Local-build E2E gate 1 reproduced the failure for every CI-bearing
+          dispatch; focused clickable-trace-index quick litmus is deterministically
+          red at step 4 (2 suites pass, 1 fails).
+
+  - packet_id: shared-stack-launch-marker-suite-race-regression
+    order: 584-e8pe
+    title: "Make the shared-stack launch-marker lifecycle test hermetic in the full tray suite"
+    status: ready
+    kind: fix
+    desired_release: v0.5
+    owner_host: linux
+    pickup_role: linux
+    capability_tags: [rust, testing, concurrency, lifecycle]
+    deliverable: plan/issues/smoke-e2e-findings-local-build-linux-2026-08-01.md
+    depends_on: []
+    outcome: >
+      Launch-marker teardown semantics are tested without process-global state,
+      cross-test markers, or timing races, so the full tray-feature suite and
+      isolated execution agree.
+    exit_criteria:
+      - "the full tillandsias-headless tray-feature suite passes the launch-marker test"
+      - "the test passes under repeated shuffled or concurrent execution"
+      - "fixture cleanup proves no marker or lock state survives the test"
+    events:
+      - type: filed
+        ts: '2026-08-01T06:39:23Z'
+        agent_id: linux-macuahuitl-opencode-20260801T0611Z
+        host: linux_mutable
+        summary: >
+          The 388-test tray run failed after 680 seconds at the dropped-marker
+          assertion while 385 tests passed; the exact test passes immediately
+          alone with --features tray. This recurs after the 2026-07-24 shared-flock repair.
