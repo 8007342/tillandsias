@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260801
+events:
+  - packet_id: brew-attestation-verification-always-fails-and-stalls-forge-startup
+    event:
+      type: note
+      ts: "2026-08-01T23:10:00Z"
+      agent_id: linux-mutable-macuahuitl-opus5-20260801
+      host: linux_mutable
+      summary: >
+        SECOND INDEPENDENT SIGHTING, and it now has a measured cost in CI. The
+        v0.4.260801.5 build passed pre-build 229/229 and installed cleanly, then
+        failed post-build litmus:opencode-prompt-e2e-shape step 3 with
+        FORGE_EXIT=125 and the probe verdict "dead_crashed / probe_error past
+        soft budget" — the liveness probe gave up on a forge that had not
+        finished starting.
+        That matches this packet's measurement exactly: attestation verification
+        fails on EVERY formula and burns a 1/3/9/27/81s ladder each time (121s per
+        formula, never succeeding), and on 2026-08-01 the forge lane had still not
+        started after three minutes and ten retries. The e2e's earlier run failed
+        differently — "HEAD unchanged after 120s" — which is the same stall
+        observed through a different assertion.
+        RULED OUT this cycle, so the next reader does not re-investigate: the
+        forge IMAGE is healthy (it starts, and /usr/local/lib/tillandsias/ carries
+        lib-common.sh, lib-expert-capability.sh and lib-inference-state.sh), and
+        the network path is open (proxy allowlist covers .github.com; squid logs
+        show CONNECT github.com:443 answering TCP_TUNNEL/200 with zero denials
+        throughout the retry storm). The credential is present and non-empty.
+        CONSEQUENCE FOR PRIORITY: this is no longer only a startup-latency
+        annoyance. It is failing the post-build e2e gate, which is the gate that
+        proves an agent can actually do work in a forge — so it now blocks the
+        signal, not just the clock. Worth raising above its filed estimate.
+        Still fix the root cause rather than the symptom: attestation is a
+        supply-chain control, and neither disabling it nor widening the probe
+        budget is a repair.

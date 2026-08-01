@@ -17,7 +17,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
 - [images/default/Containerfile#L2](../../../images/default/Containerfile#L2)
 - [images/default/Containerfile#L113](../../../images/default/Containerfile#L113)
-- [images/default/Containerfile#L190](../../../images/default/Containerfile#L190)
+- [images/default/Containerfile#L194](../../../images/default/Containerfile#L194)
 - [images/default/Containerfile.base#L3](../../../images/default/Containerfile.base#L3)
 - [images/default/entrypoint-forge-claude.sh#L69](../../../images/default/entrypoint-forge-claude.sh#L69)
 - [images/default/entrypoint-forge-opencode.sh#L70](../../../images/default/entrypoint-forge-opencode.sh#L70)
