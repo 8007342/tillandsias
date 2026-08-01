@@ -465,6 +465,7 @@ specs:
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
   - litmus:inference-tier-probe-shape
+  - litmus:inference-gpu-device-args
   - litmus:inference-engine-slot-boundary-shape
   - litmus:inference-model-preload-policy
   - litmus:inference-model-warm-timing

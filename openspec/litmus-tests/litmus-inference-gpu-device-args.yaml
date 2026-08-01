@@ -1,0 +1,78 @@
+# @trace spec:inference-container
+# @trace order:392b
+#
+# The closure litmus order 392b names in its exit criteria and that did not
+# exist. Pins the tier -> podman device-arg mapping as a DRY RUN: no GPU, no CDI
+# spec, and no podman required, so a CPU-only CI host still catches a regression
+# in what a GPU host would be handed.
+#
+# Three of 392b's five exit criteria were already met by order 392's
+# implementation; what was missing was the guard that keeps them met. Without it
+# the mapping is protected only by unit tests inside one function, and the
+# arguments are what actually decide whether this workstation's RTX A5000 is
+# reachable from the inference container at all.
+#
+# THE SUBTLE ONE — step 5. build_inference_run_args emits
+# TILLANDSIAS_INFERENCE_TIER TWICE whenever hardware truth and deliverability
+# disagree: first the hardware tier, then the effective tier (a gpu-cuda host
+# with no CDI spec is downgraded to cpu). Both land on the command line, so which
+# value the container sees depends entirely on podman applying LAST-WINS to a
+# repeated --env key. That is correct today and completely implicit: a future
+# refactor that reorders these two extends, or that hoists the first emission
+# below the second, silently promises agents a GPU podman cannot deliver — the
+# exact failure order 392 introduced the downgrade to prevent. So the ORDER is
+# pinned, not just the presence.
+name: litmus:inference-gpu-device-args
+spec: inference-container
+phase: pre-build
+description: >
+  Assert each inference tier maps to its expected podman device arguments
+  (gpu-cuda -> nvidia.com/gpu=all behind the CDI gate, gpu-rocm -> /dev/kfd +
+  /dev/dri, cpu -> none), that a GPU without a deliverable CDI spec degrades
+  loudly instead of silently, and that the effective tier is emitted after the
+  hardware tier so podman's last-wins resolution yields the deliverable verdict.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - cargo toolchain available for the behavioural steps
+  - no GPU, CDI spec, or podman runtime is required
+
+critical_path:
+  - step: "gpu-cuda injects the NVIDIA CDI device, and ONLY behind the deliverability gate"
+    command: "awk '/\"gpu-cuda\" =>/,/^        \\}/' crates/tillandsias-headless/src/main.rs | grep -Fq 'nvidia.com/gpu=all' && awk '/\"gpu-cuda\" =>/,/^        \\}/' crates/tillandsias-headless/src/main.rs | grep -Fq 'if nvidia_cdi_available()' && echo 'ok: cuda device gated on cdi'"
+    timeout_ms: 5000
+    expected_behavior: "ok: cuda device gated on cdi"
+
+  - step: "a GPU with no deliverable CDI spec degrades LOUDLY, never silently to CPU"
+    command: "awk '/\"gpu-cuda\" =>/,/^        \\}/' crates/tillandsias-headless/src/main.rs | grep -Fq 'eprintln!' && awk '/\"gpu-cuda\" =>/,/^        \\}/' crates/tillandsias-headless/src/main.rs | grep -Fq 'nvidia-ctk cdi generate' && echo 'ok: cdi absence is loud with a remedy'"
+    timeout_ms: 5000
+    expected_behavior: "ok: cdi absence is loud with a remedy"
+
+  - step: "gpu-rocm injects BOTH /dev/kfd and /dev/dri (either alone leaves ROCm non-functional)"
+    command: "blk=$(awk '/\"gpu-rocm\" =>/,/^        \\}/' crates/tillandsias-headless/src/main.rs); echo \"$blk\" | grep -Fq '/dev/kfd' && echo \"$blk\" | grep -Fq '/dev/dri' && echo 'ok: rocm devices complete'"
+    timeout_ms: 5000
+    expected_behavior: "ok: rocm devices complete"
+
+  - step: "the cpu tier injects NO device argument (the catch-all arm stays empty)"
+    command: "grep -A2 -F '\"gpu-rocm\" =>' crates/tillandsias-headless/src/main.rs >/dev/null; if awk '/^        _ => \\{\\}$/{f=1} END{exit !f}' crates/tillandsias-headless/src/main.rs; then echo 'ok: cpu injects nothing'; else echo 'fail: the non-GPU tier arm is no longer empty — a CPU host may now receive device args'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: cpu injects nothing"
+
+  - step: "the EFFECTIVE tier is emitted after the hardware tier, so podman last-wins yields deliverability"
+    command: "f=crates/tillandsias-headless/src/main.rs; hw=$(grep -nF 'format!(\"TILLANDSIAS_INFERENCE_TIER={tier}\")' $f | head -1 | cut -d: -f1); ef=$(grep -nF 'format!(\"TILLANDSIAS_INFERENCE_TIER={effective_tier}\")' $f | head -1 | cut -d: -f1); if [ -n \"$hw\" ] && [ -n \"$ef\" ] && [ \"$ef\" -gt \"$hw\" ]; then echo 'ok: effective tier emitted last'; else echo \"hardware_tier_line=$hw effective_tier_line=$ef\"; echo 'fail: the effective tier must be emitted AFTER the hardware tier — podman resolves a repeated --env last-wins, so reversing these promises agents a GPU podman cannot deliver'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: effective tier emitted last"
+
+  - step: "behavioural: the tier/CDI gate and the flag-before-image invariant hold under cargo test"
+    command: "cargo test -p tillandsias-headless --bins inference_run_args 2>&1 | grep -E 'test result: ok' >/dev/null && echo 'ok: inference run-arg seams green'"
+    timeout_ms: 300000
+    expected_behavior: "ok: inference run-arg seams green"
+
+failure_modes:
+  - "gpu-cuda injects the CDI device without checking nvidia_cdi_available(), so podman fails 'CDI device not found' on a GPU host with no spec"
+  - "the CDI-absent branch stops warning, so a GPU host silently runs CPU-only inference and nobody can tell why"
+  - "gpu-rocm loses /dev/kfd or /dev/dri, leaving ROCm present-but-unusable"
+  - "the catch-all arm gains device args, handing devices to a CPU-only host"
+  - "the two TILLANDSIAS_INFERENCE_TIER emissions are reordered, so the container is told the HARDWARE tier and agents are promised a GPU podman cannot deliver"

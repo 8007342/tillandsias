@@ -16055,6 +16055,12 @@ plan_index:
         - "litmus:inference-gpu-device-args matches each tier's expected podman args (dry-run, no actual GPU required)"
 
       events:
+        - type: note
+          ts: "2026-08-01T03:10:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            RESIDUAL (b) CLOSED 2026-08-01: litmus:inference-gpu-device-args now exists and is bound to spec:inference-container. Six steps, dry-run — no GPU, no CDI spec, no podman required — so a CPU-only CI host catches a regression in what a GPU host would be handed. Pins: gpu-cuda injects nvidia.com/gpu=all ONLY behind nvidia_cdi_available(); a GPU with no deliverable CDI spec degrades LOUDLY with a remedy rather than silently to CPU; gpu-rocm injects BOTH /dev/kfd and /dev/dri (either alone leaves ROCm non-functional); the catch-all arm stays empty so a CPU host receives no device args; and step 6 executes the existing unit seams. THE STEP WORTH KNOWING ABOUT IS 5: build_inference_run_args emits TILLANDSIAS_INFERENCE_TIER TWICE whenever hardware truth and deliverability disagree — first the hardware tier, then the effective one — so which value the container actually sees depends entirely on podman resolving a repeated --env LAST-WINS. That is correct today and completely implicit; a refactor reordering the two extends would silently promise agents a GPU podman cannot deliver, which is the exact failure order 392 added the downgrade to prevent. The ORDER is now pinned, not just the presence. RESIDUAL (a), the host-class-keyed tier matrix, is substantially overtaken by this cycle: order 480 accel_probe is now WIRED (commit 39b559ca) and emits capabilities.json plus a per-host accel envelope carrying device class, vendor, usability and the container lane per device. That IS the host-class capability surface the matrix was meant to provide, derived from probing rather than from a checked-in TOML — which also sidesteps the adversarial-review failure recorded on 2026-07-29 (moving remedy text into TOML would have turned the source-window assertion RED). Re-scope or close (a) against the envelope rather than reviving the TOML design.
         - type: progress
           ts: "2026-07-29T21:45:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260729"
@@ -27824,6 +27830,13 @@ plan_index:
         - "the misnamed test is either made true or renamed to what it actually asserts; a name may not claim an untested property"
         - "the same seam is checked for the LLM provider keys, not only the github token"
 
+      events:
+        - type: note
+          ts: "2026-08-01T03:00:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            RUNTIME EVIDENCE 2026-08-01, verified on a LIVE lane rather than from source — this is the R0 assertion order 390 recommended. `podman inspect tillandsias-tillandsias-forge-maintenance --format {{.Config.Env}}` shows HOMEBREW_GITHUB_API_TOKEN present with a 93-character value. The credential is therefore readable from the container config on the host, exactly as the source reading predicted, and the exposure is confirmed where it RUNS rather than where it was written. This upgrades the finding from source-derived to runtime-verified and gives 569 its reproduction one-liner.
     - packet_id: container-profile-module-has-no-consumers
       order: 577
       desired_release: v0.5
@@ -27972,3 +27985,55 @@ plan_index:
         - "no code path leaves a private key readable beyond its owning service; diagnostics either do not change modes or restore them"
         - "the real access requirement for squid is established and met with the narrowest mode that works, not with 644"
         - "a litmus asserts the mode of every private key the enclave writes, so a future diagnostic cannot silently widen one"
+
+    - packet_id: brew-attestation-verification-always-fails-and-stalls-forge-startup
+      order: 574
+      desired_release: v0.5
+      title: "Brew attestation verification fails on every formula and burns a 121s retry ladder each time, stalling forge startup"
+      status: ready
+      kind: fix
+      deliverable: images/default/brew-shim-exec.sh + root-cause finding + a startup-latency litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, brew, startup-latency, credentials, e2e]
+      estimated_hours: 4
+      outcome: >
+        OBSERVED LIVE 2026-08-01 on this workstation during a real
+        `tillandsias --bash` launch, not reconstructed from source.
+        images/default/brew-shim-exec.sh:49 deliberately sets
+        HOMEBREW_VERIFY_ATTESTATIONS=1. Every formula install then prints
+        "Verifying attestation for <formula>" followed by "Failed to verify
+        attestation. Retrying in 1s / 3s / 9s / 27s / 81s" — a 121-second ladder
+        PER FORMULA, and it never succeeds. Two formulae had already entered the
+        ladder before the forge lane finished starting.
+        THREE FACTS THAT TOGETHER NARROW THE CAUSE, each verified:
+        (1) The credential is present and non-empty — podman inspect on the live
+        lane shows HOMEBREW_GITHUB_API_TOKEN with a 93-character value. So this
+        is NOT a missing-token failure.
+        (2) The network path is NOT blocked. The proxy allowlist covers
+        .github.com (images/proxy/allowlist.txt:57, with :125 noting api.github.com
+        is covered), and squid's live log shows repeated CONNECT github.com:443
+        answering TCP_TUNNEL/200 with zero denials during the retry storm.
+        (3) It fails anyway, every time.
+        CONSEQUENCE FOR THE OPERATOR'S OWN QUESTION: the Tlatoani asked what is
+        lost by removing HOMEBREW_GITHUB_API_TOKEN. For attestation verification
+        specifically the measured answer is NOTHING — the token is present and
+        attestation still fails 100% of the time. That does not settle order 435
+        (the token may serve authenticated ghcr.io bottle pulls, which is a
+        separate function and appears to be working), but it removes attestation
+        from the list of things the credential is buying. Feed this into 435.
+        LIKELY BLAST RADIUS BEYOND LATENCY: the e2e litmus:opencode-prompt-e2e-shape
+        failed this same run at "verify local HEAD advanced since smoke start"
+        after 120s. A per-formula 121s stall in the maintenance lane is a
+        plausible cause and should be checked before that e2e is treated as an
+        agent-behaviour failure.
+        Root-cause it properly rather than disabling the check: attestation
+        verification is a supply-chain control, and turning it off to make a
+        warning stop is the wrong repair. If it genuinely cannot work in this
+        posture, that must be a recorded, reasoned deviation — not a silent flag
+        flip.
+      exit_criteria:
+        - "the actual failure reason is captured (brew/gh emit it beneath the retry banner) and stated, not guessed"
+        - "either attestation verification works, or its disablement is a recorded deviation with the supply-chain consequence stated explicitly"
+        - "no formula install can burn an unbounded retry ladder during forge startup; the bound is asserted by a litmus"
+        - "order 435 is updated with the measured finding that the token does not currently buy working attestation"
