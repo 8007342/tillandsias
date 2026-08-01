@@ -27251,6 +27251,12 @@ plan_index:
           host: forge
           summary: >
             Validation executed in a live Claude forge (Fable 5 harness). Criterion 1 FAIL: nine discovery surfaces probed, no Claude MCP registration exists (shaped as order 568). Criterion 2 PASS with caveats: as-found all three answer tools degraded to unsupported because the launch-built expert binary was compiled from the main checkout (pre-394b; hash-proven; shaped as order 569 with wrapper strict-JSON + stdout-diagnostics fixes); after rebuilding from linux-next (12.79s) plan_answer=exact/83 cites and methodology_ask=exact/1 cite, both verify-answer green, exercised over raw stdio. Criterion 3 PASS: spec_answer typed unsupported naming the unbuilt spec-index (549/552), matching 556. TILLANDSIAS_AGENT verified unset (order 565; blocks 555 routing). Cost evidence for the milestone: expert lane ~80x cheaper and ~5x faster than naive ledger browsing for a cloud agent; deterministic CLI 30ms/$0. Report: plan/issues/claude-mcp-expert-validation-2026-08-01.md. Packet stays open pending 563.
+        - type: progress
+          ts: "2026-08-01T04:50:00Z"
+          agent_id: "forge-google-antigravity-gemini3.6flash-20260801"
+          host: forge
+          summary: >
+            Benchmarked forge-plan.sh and project-info.sh local MCP servers via JSON-RPC stdio. Latencies confirmed sub-100ms: plan_ready (52ms), plan_status (52ms), plan_check (49ms), plan_burndown (51ms), plan_answer (57ms), methodology_ask (53ms), git_status (24ms), read_file (21ms), search_code (66ms), plan_query (86ms). Rebuilt tillandsias-plan with full 394b subcommands (answer, methodology-ask, verify-answer); re-tested plan_answer and methodology_ask over forge-plan.sh, returning 100% verified confidence=exact envelopes with source_commit attribution matching latest linux-next HEAD. Report: plan/issues/mcp-server-performance-and-discoverability-audit-2026-08-01.md.
     - packet_id: codex-mcp-expert-validation
       order: 558
       desired_release: v0.5
