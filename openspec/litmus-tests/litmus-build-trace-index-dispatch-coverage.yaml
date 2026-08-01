@@ -12,6 +12,20 @@
 # newly added build-producing dispatch that forgets the regeneration call turns
 # this test red.
 #
+# THE COUNTER MEASURES REGENERATIONS, NOT INVOCATIONS. _regenerate_trace_indexes
+# calls generate-traces.sh twice on purpose: once with --check to learn whether
+# the tracked indexes were ALREADY stale before this build touched them, and once
+# to actually regenerate. That probe exists because swallowing the signal made
+# three agents in one day ship a @trace change without its index refresh and left
+# the next agent failing litmus:local-ci-self-clean-evidence for dirt it did not
+# create (build.sh, _regenerate_trace_indexes comment).
+#
+# A read-only --check is not a regeneration, so the stub must not count it —
+# otherwise this test reports "2" for a dispatch that regenerated exactly once
+# and reads as a dispatch-coverage defect. Counting raw invocations would also
+# forbid ever probing before acting, which is the opposite of what the ordering
+# discipline below wants.
+#
 # Ordering is pinned too. Order 495 (litmus:local-ci-self-clean-evidence)
 # established that tracked generated evidence must never be refreshed between a
 # clean CI gate and the post-build forge gate's dirty-start guard, so the fixture
@@ -31,7 +45,7 @@ preconditions:
 
 critical_path:
   - step: "build a stubbed build.sh sandbox that counts generate-traces.sh invocations"
-    command: "set -e; S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; rm -rf $S; mkdir -p $S/scripts $S/bin $S/target/debug; cp build.sh $S/build.sh; : > $S/scripts/with-tillandsias-builder.sh; : > $S/scripts/with-wsl2-builder.sh; printf 'require_podman() { return 0; }\\npodman_runtime_health_probe() { return 1; }\\n' > $S/scripts/common.sh; for s in setup-podman-registries.sh build-guest-binaries.sh generate-evidence-bundle.sh; do printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/$s; chmod +x $S/scripts/$s; done; printf '#!/bin/sh\\necho traces >> $TRACE_LOG\\n' > $S/scripts/generate-traces.sh; printf '#!/bin/sh\\necho gate >> $TRACE_LOG\\n' > $S/scripts/local-ci.sh; printf '#!/bin/sh\\necho litmus >> $TRACE_LOG\\n' > $S/scripts/run-litmus-test.sh; printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/tillandsias-podman; chmod +x $S/scripts/generate-traces.sh $S/scripts/local-ci.sh $S/scripts/run-litmus-test.sh $S/scripts/tillandsias-podman; for t in cargo rustc rustfmt clippy-driver gcc pkg-config file; do printf '#!/bin/sh\\nexit 0\\n' > $S/bin/$t; chmod +x $S/bin/$t; done; printf '#!/bin/sh\\necho x86_64-unknown-linux-musl\\n' > $S/bin/rustup; chmod +x $S/bin/rustup; printf '#!/bin/sh\\nexit 0\\n' > $S/target/debug/tillandsias; chmod +x $S/target/debug/tillandsias; echo ok:sandbox-ready"
+    command: "set -e; S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; rm -rf $S; mkdir -p $S/scripts $S/bin $S/target/debug; cp build.sh $S/build.sh; : > $S/scripts/with-tillandsias-builder.sh; : > $S/scripts/with-wsl2-builder.sh; printf 'require_podman() { return 0; }\\npodman_runtime_health_probe() { return 1; }\\n' > $S/scripts/common.sh; for s in setup-podman-registries.sh build-guest-binaries.sh generate-evidence-bundle.sh; do printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/$s; chmod +x $S/scripts/$s; done; printf '#!/bin/sh\\ncase \"$1\" in --check) exit 0 ;; esac\\necho traces >> $TRACE_LOG\\n' > $S/scripts/generate-traces.sh; printf '#!/bin/sh\\necho gate >> $TRACE_LOG\\n' > $S/scripts/local-ci.sh; printf '#!/bin/sh\\necho litmus >> $TRACE_LOG\\n' > $S/scripts/run-litmus-test.sh; printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/tillandsias-podman; chmod +x $S/scripts/generate-traces.sh $S/scripts/local-ci.sh $S/scripts/run-litmus-test.sh $S/scripts/tillandsias-podman; for t in cargo rustc rustfmt clippy-driver gcc pkg-config file; do printf '#!/bin/sh\\nexit 0\\n' > $S/bin/$t; chmod +x $S/bin/$t; done; printf '#!/bin/sh\\necho x86_64-unknown-linux-musl\\n' > $S/bin/rustup; chmod +x $S/bin/rustup; printf '#!/bin/sh\\nexit 0\\n' > $S/target/debug/tillandsias; chmod +x $S/target/debug/tillandsias; echo ok:sandbox-ready"
     success_pattern: "^ok:sandbox-ready$"
     timeout_ms: 20000
 

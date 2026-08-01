@@ -81,9 +81,21 @@ pub fn capabilities_cache_path() -> PathBuf {
     if let Ok(dir) = std::env::var("TILLANDSIAS_CACHE_DIR") {
         return PathBuf::from(dir).join("capabilities.json");
     }
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".cache")
+    // NEVER fall back to "." — that resolves against the CURRENT WORKING
+    // DIRECTORY, which during `cargo test` and every build dispatch is the
+    // tracked checkout. This module had no caller until now, so the fallback was
+    // unreachable and harmless; adding the first one made a HOME-less
+    // environment write crates/tillandsias-headless/.cache/tillandsias/
+    // capabilities.json into the source tree, which order 495 forbids outright
+    // (generated evidence in the worktree fails the forge dirty-start guard for
+    // whoever runs next, not for whoever caused it).
+    //
+    // A cache is by definition discardable, so the temp dir is the correct home
+    // for one with nowhere else to live.
+    let base = std::env::var("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    base.join(".cache")
         .join("tillandsias")
         .join("capabilities.json")
 }
@@ -752,6 +764,27 @@ mod tests {
             ],
             "every field must survive a hostile name: {env}"
         );
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn cache_path_never_resolves_into_the_working_directory() {
+        // Order 495: generated evidence must never land in the tracked checkout.
+        // With no HOME the old fallback was ".", so a build or `cargo test`
+        // wrote capabilities.json into the crate directory — dirt the NEXT
+        // agent's forge dirty-start guard refuses, for a file they did not
+        // create. Absolute-and-not-under-CWD is the property that matters.
+        let path = capabilities_cache_path();
+        assert!(
+            path.is_absolute(),
+            "cache path must be absolute, got {path:?}"
+        );
+        if let Ok(cwd) = std::env::current_dir() {
+            assert!(
+                !path.starts_with(&cwd) || cwd == Path::new("/"),
+                "cache path {path:?} must not resolve inside the working directory {cwd:?}"
+            );
+        }
     }
 
     #[test]

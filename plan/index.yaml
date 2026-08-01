@@ -12158,11 +12158,17 @@ plan_index:
         - "if adopted: one lane migrated behind a flag with fetch/push parity fixture, then daemon --enable=receive-pack removed"
       events:
         - type: note
+          ts: "2026-08-01T02:00:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            RESEARCH COMPLETE — decision record ready for the Tlatoani signature at plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md. D1-D12 recorded, each with rationale and rejected alternative, each VERIFIED against the shipped Vault image (v1.18.5) and a live non-root sshd rather than asserted from docs: CA key generated inside Vault and never exported (GET config/ca returns only the public key); AUTHORIZATION CARRIED IN THE PRINCIPAL (til:forge-push:<project>) with identity in the key fingerprint, forced by an empirical constraint — Vault allowed_users does not glob, accepts no per-request key_id, and does not substitute serial_number/token_metadata in key_id_format; certs carry zero extensions plus force-command and source-address, so a stolen cert can only run the receive wrapper from inside the enclave; a per-lane ssh-agent sidecar gives the forge a SIGNING ORACLE and never key material; 30-minute lane certs renewed at T-10, 24h host certs; revocation by KRL because Vault publishes no CRL; host certificates, with TOFU treated as a defect. In-flight expiry was tested directly: a 45s command completed under a 20s cert, so a push already in flight finishes and only the NEXT connection fails. FOUR QUESTIONS NEED THE OPERATOR SIGNATURE: (Q1) the forge is NOT credential-free today — does 451 close that or merely note it; (Q2) sidecar per lane or one per project running N agents; (Q3) CA rotation cadence and who may trigger an emergency rotation; (Q4) confirm git:// remains the anonymous FETCH path. THREE CORRECTIONS TO THIS PACKET OWN ASSUMPTIONS, all verified: the forge-zero-credential invariant is ALREADY FALSE (main.rs injects the real GitHub token into every lane, visible to podman inspect; the vault spec has already been amended to the weaker no-broad-Vault-token form) — that is Q1, and orders 435/576; the mirror has NO fast-forward denial and the config that would add it sits in the fresh-init branch, so it would never reach an existing volume (filed 579); and Vault audit device writes to a container-layer directory, so the third attribution channel does not survive destroy-and-recreate. Also corrected: the mesh packets are 563/564/565, not 560/561/562 as an earlier event on this packet stated. UNRETIRED RISK, stated rather than buried: sshd non-root inside the alpine mirror under --read-only and --cap-drop=ALL was proven on the HOST, not in the mirror image (openssh-server is not installed there); the design hands 451 the exact reproduction recipe to run before building on it.
+        - type: note
           ts: "2026-07-31T18:30:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260731"
           host: linux_mutable
           summary: >
-            TLATOANI DECISION RECORDED 2026-07-31: SSH, and as an SSH CERTIFICATE AUTHORITY rather than authorized_keys. Operator rationale, which reaches well past this packet: transparent SSH credentials would let agents run inference and containers on ANY host with a logged-in Tillandsias, so this is rung one of a fleet identity plane and must be built to industry standard with rotating certs from the start. The git:// accept-the-risk branch remains off the table (operator 2026-07-19). CA rather than authorized_keys because authorized_keys cannot rotate without touching every node and cannot express 'this principal, for this purpose, for ten minutes' — both of which the mesh case requires; building the CA now means the mesh later issues DIFFERENT PRINCIPALS FROM THE SAME CA instead of inventing a second scheme. CONSTRAINT VERIFIED 2026-07-31: Vault's ssh-client-signer engine is NOT mounted today — only the KV path is in use — so standing that engine up is part of this packet's design work. SCOPE HELD: this packet stays forge->mirror push with per-forge identity and push attribution. The mesh half the operator described (node discovery, uptime affinity, cross-node compute, Cloudflare production posture) is filed separately as 560/561/562 under the v0.6 milestone so a 4h research packet is not silently inflated into a fleet architecture. Long-range context for all of them: plan/issues/operator-vision-ai-cloud-region-2026-07-31.md. STILL REQUIRED before 451 may proceed: the signed decision record this packet produces — the transport is chosen, the per-forge credential-issuance design is not yet written.
+            TLATOANI DECISION RECORDED 2026-07-31: SSH, and as an SSH CERTIFICATE AUTHORITY rather than authorized_keys. Operator rationale, which reaches well past this packet: transparent SSH credentials would let agents run inference and containers on ANY host with a logged-in Tillandsias, so this is rung one of a fleet identity plane and must be built to industry standard with rotating certs from the start. The git:// accept-the-risk branch remains off the table (operator 2026-07-19). CA rather than authorized_keys because authorized_keys cannot rotate without touching every node and cannot express 'this principal, for this purpose, for ten minutes' — both of which the mesh case requires; building the CA now means the mesh later issues DIFFERENT PRINCIPALS FROM THE SAME CA instead of inventing a second scheme. CONSTRAINT VERIFIED 2026-07-31: Vault's ssh-client-signer engine is NOT mounted today — only the KV path is in use — so standing that engine up is part of this packet's design work. SCOPE HELD: this packet stays forge->mirror push with per-forge identity and push attribution. The mesh half the operator described (node discovery, uptime affinity, cross-node compute, Cloudflare production posture) is filed separately as 563/564/565 under the v0.6 milestone so a 4h research packet is not silently inflated into a fleet architecture. Long-range context for all of them: plan/issues/operator-vision-ai-cloud-region-2026-07-31.md. STILL REQUIRED before 451 may proceed: the signed decision record this packet produces — the transport is chosen, the per-forge credential-issuance design is not yet written.
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
@@ -15789,6 +15795,12 @@ plan_index:
         - "temporary-elevated-token flow for promotions/releases, integrated with vault policy (forge-zero-credential invariant preserved)"
         - "decision record; cross-reference order 319 (mirror credential) to avoid overlap"
       events:
+        - type: note
+          ts: "2026-08-01T02:02:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            RESEARCH COMPLETE — decision record ready for signature at plan/issues/github-app-fine-grained-interaction-research-2026-07-31.md (962 lines). RECOMMENDATION: ADOPT a private GitHub App as the machine identity for Tillandsias own repo operations, and REJECT it as the fix for HOMEBREW_GITHUB_API_TOKEN — those are two problems, and conflating them yields a design worse than either fix alone. Staged in four rungs: R0 record and enforce the existing deviation; R1 App identity plus key custody; R2 mirror push via broker; R3 elevated promotion/release gated on order 389. DEFER webhooks entirely in favour of outbound conditional polling, since the production posture is deliberately network-isolated. THE CONSTRAINT THAT SHAPES EVERYTHING: the ability to sign an App JWT IS App-level authority, because a JWT is unscoped and anyone who can sign can mint any installation token. So signing capability cannot be distributed per-caller as a privilege ladder — exactly one process holds it and that process IS the policy decision point. Recommended custody: Vault Transit, sign-only, non-exportable, BYOK-imported (GitHub own key-vault guidance; Transit is not currently enabled here). VERIFIED IN-REPO, not merely read about: the zero-credential invariant is NOT ENFORCED WHERE IT RUNS — litmus:credential-isolation runs against a FAKE podman backend and asserts nothing about a real lane; litmus:forge-offline-profile-shape greps container_profile.rs, a module with NO production consumers (filed 577); litmus:environment-isolation inspects the IMAGE env with no launch args, so every injected variable is structurally invisible to it; and NO TEST ANYWHERE inspects a launched lane env. litmus:forge-secret-capability-contract budgets the known deviation at <=2 lines but its matcher cannot see the GitHub token at all. The unit test github_token_injected_as_env_host_side_never_argv asserts the injection EXISTS — it pins the deviation rather than guarding against it — and its never-argv claim is false, since ContainerSpec::build_run_args emits --env KEY=VALUE (filed 576). The token is LIVE, not dormant: the enclave is --internal but every lane gets http_proxy and the proxy allowlist permits .github.com. promote-stable.sh evidence gate is forgeable by the agents it constrains (filed 578). ORDER 435 GAINS A FOURTH OPTION: proxy-mediated capability, where the broker attaches Authorization so the lane holds capability rather than credential — honest cost is that squid currently splices APIs and this needs api.github.com bumped, a deliberate TLS-interception posture change. SEVEN QUESTIONS NEED OPERATOR SIGN-OFF (7.4), the sharpest being who owns the App (personal vs new org, which determines whether the identity outlives one person), whether single-node Vault Transit is acceptable custody for a key whose compromise is persistent authentication as the App (if not, take the fine-grained-PAT fallback rather than build a weak App), and whether elevated minting requires human presence — where the vision encrypted-OK-button fits but the flagship node is headless. THE 319 BOUNDARY: 319 owns the credential CHANNEL for one consumer (mirror upstream push, EC1/EC2 already satisfied by order 424) and its EC3 is a DECISION, so 319 can close on the operator signature without R1-R3 being implemented; 390 owns the App itself — identity, key custody, minting authority, permission model, elevated flow, webhook posture. Anti-absorption rule: helper-protocol or mirror-push-path changes are 319; what-identity-mints and what-it-may-do are 390; HOMEBREW_GITHUB_API_TOKEN is NEITHER — it is order 435.
         - type: filed
           ts: "2026-07-16T18:55:00Z"
           agent_id: "linux-tlatoani-claude-20260716T0725Z"
@@ -27717,3 +27729,246 @@ plan_index:
             Filed from the order-557 run (var verified unset in-container; launch-path
             gap located at tray/mod.rs spec builder). Blocks 555 harness-affinity
             routing; see plan/issues/claude-mcp-expert-validation-2026-08-01.md 5C.
+
+    - packet_id: expert-usage-telemetry-and-cycle-metrics
+      order: 575
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Cycle metrics: expert usage telemetry at the MCP chokepoint + a cycle-end report proving experts are USED and USEFUL"
+      status: in_progress
+      kind: implementation
+      deliverable: images/default/config-overlay/mcp/forge-plan.sh (record_expert_call) + scripts/cycle-metrics.sh + methodology + skills
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [experts, metrics, observability, mcp, methodology]
+      estimated_hours: 4
+      outcome: >
+        OPERATOR REQUEST 2026-07-31: a meta-orchestration cycle should end by
+        displaying metrics — tool usage, success and efficiency rates — and,
+        specifically, metrics proving the experts are both USED and USEFUL.
+        Those are two questions and one counter answers neither. USED is volume:
+        easy to measure, easy to game, and silent about value. USEFUL is quality:
+        an expert called two hundred times that REFUSES two hundred times is
+        heavily used and completely useless. Order 531 was exactly that in the
+        wild — every plan_answer returned confidence=unsupported because the
+        forge was seeded from a pre-expert branch, while launch state truthfully
+        reported `experts: ready` and every health signal read green. A call
+        counter would have shown healthy adoption throughout.
+        So the headline metric is ANSWER RATE = answered / (answered +
+        unsupported), recorded per call at the ONE MCP chokepoint every tool call
+        already passes through. ANTI-GAMING, and this property must survive
+        future edits: `answered` is reachable only when the expert returns
+        CITATIONS, which the compiled binary emits only when it resolved a real
+        packet or YAML path — so calling a tool more cannot raise the rate, only
+        answering more can. `degraded` (the expert could not run) is excluded
+        from the denominator deliberately: folding infrastructure failure into a
+        quality ratio is what let 531 hide.
+        HONEST LIMIT, recorded rather than faked: SUBSTITUTION — "did the agent
+        query the expert INSTEAD of grepping the ledger?" — is the metric that
+        would best prove adoption, and it needs the AGENT HARNESS's tool log,
+        which is not in this repo. Reported as `unknown`, never estimated.
+      exit_criteria:
+        - "one JSONL record per expert call at the MCP chokepoint, fail-soft (telemetry may never break the surface it measures)"
+        - "scripts/cycle-metrics.sh emits the pinned grammar and exits 0 whenever the report was produced; the VERDICT carries judgement, not the exit code"
+        - "the order-531 signature (expert ran every time, answered nothing) produces its own named verdict"
+        - "methodology states the metric definitions AND the anti-gaming rule; the meta-orchestration + advance-work-from-plan skills display the report at cycle end"
+        - "a litmus pins the answer-rate denominator so a future edit cannot quietly fold degraded into it"
+      events:
+        - type: filed
+          ts: "2026-08-01T01:40:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: "Filed from the operator's cycle-metrics request. Telemetry + reporter landed in this cycle; methodology/skills wiring and the litmus follow."
+
+    - packet_id: forge-env-credentials-land-in-podman-argv
+      order: 576
+      desired_release: v0.5
+      title: "SECURITY: every forge credential is passed as `--env KEY=<secret>`, so the raw value is an argv element of podman run"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-podman/src/container_spec.rs + crates/tillandsias-headless/src/main.rs + a litmus asserting a launched lane's argv
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [security, credentials, podman, forge, contested-practice]
+      estimated_hours: 5
+      outcome: >
+        VERIFIED 2026-07-31 by reading both ends, not by inference.
+        crates/tillandsias-podman/src/container_spec.rs:330-333 builds env as
+        `args.push("--env"); args.push(format!("{key}={value}"))`, so EVERY value
+        passed through ContainerSpec::env lands verbatim on the podman run
+        command line. crates/tillandsias-headless/src/main.rs:11348 injects
+        `spec.env("HOMEBREW_GITHUB_API_TOKEN", &gh_token)` through exactly that
+        seam, and the LLM provider keys use the same seam, so the blast radius is
+        every forge credential rather than one token.
+        Consequence: the secret is readable from /proc/<pid>/cmdline for the
+        lifetime of the launch, and is retained in the container config that
+        `podman inspect` prints. On Linux that surface is the HOST.
+        THE TEST THAT SHOULD HAVE CAUGHT THIS ASSERTS THE OPPOSITE OF ITS OWN
+        NAME. `github_token_injected_as_env_host_side_never_argv`
+        (main.rs:13924) greps the SOURCE for the presence of the .env() call. It
+        pins that the injection exists; it never inspects argv, so the phrase
+        "never argv" in its name is unverified and, as of this packet, false. A
+        test whose name asserts a security property it does not test is worse
+        than no test: it retires the question.
+        Podman supports `--env KEY` (no value), which passes the variable through
+        from the LAUNCHER's own environment and keeps the secret off argv
+        entirely. That is the likely fix, and it must be applied at the
+        ContainerSpec seam so every caller inherits it rather than one token
+        being special-cased.
+        Found while researching order 390; the credential-channel half belongs to
+        390/319/435 and is deliberately NOT in this packet's scope. This packet
+        is the transport defect alone.
+      exit_criteria:
+        - "no credential value appears in the argv of any podman invocation, enforced at the ContainerSpec seam so every caller inherits it"
+        - "a litmus inspects a LAUNCHED lane (podman inspect / /proc cmdline), not the source text — the source-grep test is what missed this"
+        - "the misnamed test is either made true or renamed to what it actually asserts; a name may not claim an untested property"
+        - "the same seam is checked for the LLM provider keys, not only the github token"
+
+    - packet_id: container-profile-module-has-no-consumers
+      order: 577
+      desired_release: v0.5
+      title: "container_profile.rs is an unwired module whose litmus greps it as if it were the enforcement point"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-core/src/container_profile.rs wiring or removal + litmus rebinding
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [security, forge, litmus, dead-code, verification]
+      estimated_hours: 4
+      outcome: >
+        VERIFIED 2026-07-31: the only references to `container_profile` outside
+        the module itself are `pub mod container_profile;`
+        (crates/tillandsias-core/src/lib.rs:4) and two COMMENTS in preflight.rs
+        (:492, :495) that merely cite it as the place canonical strings came
+        from. It has no functional consumer.
+        litmus:forge-offline-profile-shape greps that module as though it were
+        the offline-profile enforcement point, so the strongest source gate over
+        the forge's offline posture is asserting facts about code that never
+        runs.
+        This is the SAME FAILURE CLASS as order 480's accel_probe, found in the
+        same cycle and fixed in commit 39b559ca: a module implemented,
+        unit-tested, bound to a litmus, and never called. The methodology already
+        names it — "verified where it was written is not verified where it runs"
+        — which makes a third instance a signal that the naming alone is not
+        preventing it. Consider whether the litmus framework should be able to
+        require a REACHABILITY assertion for any spec whose litmus greps a Rust
+        module, so binding a test to dead code is a structural error rather than
+        a thing a reviewer must notice.
+        Decide deliberately between wiring it and deleting it. Deleting is a
+        legitimate outcome; leaving it while a litmus cites it is not.
+      exit_criteria:
+        - "container_profile is either wired to a real call path or removed, with the choice justified"
+        - "litmus:forge-offline-profile-shape is rebound to whatever actually enforces the offline profile at runtime"
+        - "a general guard is evaluated: can the litmus framework refuse to bind a test to a module with no consumers?"
+
+    - packet_id: promotion-evidence-gate-is-forgeable-by-its-own-agents
+      order: 578
+      desired_release: v0.5
+      title: "promote-stable.sh's release evidence gate greps plan/ for a PASS string that the agents it constrains write every cycle"
+      status: ready
+      kind: fix
+      deliverable: scripts/promote-stable.sh + evidence provenance design
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [security, release, ci, evidence, contested-practice]
+      estimated_hours: 5
+      outcome: >
+        VERIFIED 2026-07-31: scripts/promote-stable.sh:42 gates promotion on
+        `grep -rIlE "(e2e|smoke).*(PASS|pass).*<version>|<version>.*(e2e|smoke).*(PASS|pass)"`
+        over plan/. Agents commit to plan/ on every cycle, so the artifact that
+        AUTHORIZES a release is writable by the party the gate exists to
+        constrain — a sentence in any plan file matching that pattern satisfies
+        it. The gate is self-certifying, and it does not distinguish a real test
+        result from prose that happens to contain the word PASS near a version
+        number.
+        This sits squarely under the methodology's own doctrine that a guard only
+        an attentive agent honors is a suggestion rather than a constraint: here
+        even an attentive agent cannot honor it, because nothing distinguishes
+        genuine evidence from a matching string.
+        Evidence must carry PROVENANCE the producer cannot forge — a signed or
+        content-addressed artifact emitted by the test runner itself, checked by
+        identity rather than by regex over a directory the agents own. Integrates
+        with the order-389 evidence-gating ladder; found while researching 390,
+        which names it as that ladder's sharpest integration point.
+      exit_criteria:
+        - "promotion evidence is produced by the TEST RUNNER and verified by provenance, not by a regex over an agent-writable directory"
+        - "a forged plan/ file matching the old pattern is proven NOT to satisfy the new gate (seeded-regression evidence)"
+        - "the relationship to order 389's evidence ladder is stated so the two do not build separate mechanisms"
+
+    - packet_id: mirror-repo-config-hardening-never-reaches-existing-volumes
+      order: 579
+      desired_release: v0.5
+      title: "Mirror repo config is set only inside the fresh-init branch, so any hardening silently skips every existing volume"
+      status: ready
+      kind: fix
+      deliverable: images/git/entrypoint.sh + a litmus that upgrades an EXISTING volume
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, security, upgrade-path, idempotency]
+      estimated_hours: 3
+      outcome: >
+        VERIFIED 2026-07-31 by reading images/git/entrypoint.sh:129-139.
+        `receive.denyNonFastforwards false` and `receive.denyDeletes false` are
+        set inside `if [ ! -d "$PROJECT_REPO" ]` — the branch that runs ONLY when
+        the bare repo does not yet exist. The bare repo lives on a NAMED PODMAN
+        VOLUME that deliberately survives container restarts, so on every
+        subsequent start the config block is skipped entirely and the repo keeps
+        whatever configuration it was born with.
+        Today the values are permissive, so nothing is currently broken. The
+        DEFECT IS STRUCTURAL AND IT BITES THE NEXT CHANGE: order 322's SSH CA
+        design calls for `denyNonFastForwards` / `denyDeletes` / `fsckObjects` to
+        be turned ON as the mirror's transport-level write gate. Placed where the
+        existing lines are, that hardening would apply to freshly created mirrors
+        only and silently NOT apply to every mirror already on disk — including
+        this host's. The gate would pass in a clean test environment and be
+        absent in production, which is this project's named recurring failure
+        class ("verified where it was written is not verified where it runs")
+        arriving through the upgrade path rather than through dead code.
+        The header directly above the block already claims the section is
+        "Idempotent: re-running on each container start only re-creates files
+        that don't exist yet" — true of file creation, false of CONFIGURATION,
+        and the conflation is what hides this.
+        Found while researching order 322. Fix the placement BEFORE 451
+        implements the write gate, or 451 ships a gate that does not engage.
+      exit_criteria:
+        - "repo configuration is applied on EVERY start, separated from one-time repo creation"
+        - "a litmus starts the mirror against a PRE-EXISTING volume and asserts the config is present — the fresh-volume path is what already passes"
+        - "order 322/451's intended write gate is proven to engage on an already-initialized mirror"
+
+    - packet_id: diagnostics-chmod-644-the-enclave-ca-private-key
+      order: 580
+      desired_release: v0.5
+      title: "SECURITY: diagnostic paths chmod 644 the enclave CA private key and leave it world-readable"
+      status: ready
+      kind: fix
+      deliverable: scripts/diagnose-proxy.sh + crates/tillandsias-macos-tray/src/diagnose.rs + a litmus on key modes
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [security, credentials, tls, diagnostics, contested-practice]
+      estimated_hours: 3
+      outcome: >
+        VERIFIED 2026-07-31 across all four call sites.
+        images/proxy/entrypoint.sh:43 correctly does `chmod 600
+        /etc/squid/certs/intermediate.key`, and scripts/run-forge-project.sh:76
+        re-tightens to 600. But the DIAGNOSTIC paths widen it and do not restore
+        it: scripts/diagnose-proxy.sh:40 runs `chmod 644` over BOTH
+        intermediate.crt and intermediate.key, and
+        crates/tillandsias-macos-tray/src/diagnose.rs:900 and :1023 each run
+        `chmod 644 /tmp/tillandsias-ca/intermediate.key || true`.
+        The file is the ENCLAVE CA's private key. Whoever holds it can mint a
+        certificate for any host the enclave trusts, which is the whole
+        interception posture. Running a diagnostic must not be the act that makes
+        it world-readable, and the `|| true` means the widening is best-effort
+        while the tightening is absent entirely — the failure is asymmetric in
+        the wrong direction.
+        It also sits in /tmp, and the widening is applied on EVERY diagnostic
+        call rather than once, so the state is sticky: nothing later narrows it.
+        Order 322's design explicitly names this as the live precedent it refuses
+        to follow when siting the SSH CA key, which is how it was found.
+        Establish whether squid genuinely needs group/other read (it runs as its
+        own user, so a group-read 640 with correct ownership is the likely
+        answer) rather than restoring 644 under a different justification.
+      exit_criteria:
+        - "no code path leaves a private key readable beyond its owning service; diagnostics either do not change modes or restore them"
+        - "the real access requirement for squid is established and met with the narrowest mode that works, not with 644"
+        - "a litmus asserts the mode of every private key the enclave writes, so a future diagnostic cannot silently widen one"

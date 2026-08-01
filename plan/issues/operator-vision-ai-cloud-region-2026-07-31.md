@@ -75,7 +75,7 @@ consumers, not new work:
 
 **Entirely unfiled as of 2026-07-31: the multi-node half.** Nothing in the ledger
 covers node discovery, uptime affinity, cross-node authorization, or an identity
-plane spanning hosts. Filed as 560–562 by this cycle.
+plane spanning hosts. Filed as 563–565 by this cycle (560–562 were taken concurrently by the sibling host for forge tooling fixes).
 
 ## Why the SSH decision matters more than it looked
 

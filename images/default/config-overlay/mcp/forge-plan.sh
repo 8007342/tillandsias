@@ -39,6 +39,77 @@ FORGE_EXPERTS_STATE_DIR="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts
 # pinned structurally by litmus:forge-plan-expert-build-shape.
 PLAN_BIN_CANONICAL="$HOME/.local/bin/tillandsias-plan"
 
+# ── Expert usage telemetry (order 575) ──────────────────────────────────────
+#
+# One JSONL line per expert call, so a cycle can report whether the experts were
+# USED and whether they were USEFUL — two different questions that a single
+# "expert calls" counter cannot separate.
+#
+# WHY THE OUTCOME FIELD IS THE LOAD-BEARING ONE: an expert called two hundred
+# times that refuses two hundred times is heavily used and completely useless,
+# and a bare call count reports that as success. Order 531 was exactly this
+# shape in the wild — the expert answered `confidence=unsupported` for every
+# query because the forge was seeded from a pre-expert branch, while every
+# health signal read green. So the ratio that matters is answered / (answered +
+# unsupported), and it is recorded per call rather than derived later.
+#
+# THIS COUNTER CANNOT REWARD ACTIVITY. `answered` is only reachable when the
+# expert returns citations, which the binary emits only when it resolved a real
+# packet or YAML path. Calling the tool more cannot raise the ratio; only
+# answering more can.
+#
+# Fail-soft by construction: telemetry must never break a tool call, so every
+# write is best-effort and the whole function is guarded. A metric that can take
+# down the surface it measures is worse than no metric.
+EXPERT_USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
+
+# record_expert_call <tool> <result-text> <unknown-flag>
+# Outcome vocabulary (CLOSED SET):
+#   answered     — a cited envelope, or a non-envelope tool that produced output
+#   unsupported  — the expert REFUSED (confidence=unsupported): no citations
+#   degraded     — the expert could not run at all (binary missing / not built)
+#   error        — protocol error (unknown tool)
+record_expert_call() {
+    _rec_tool="$1"
+    _rec_result="${2:-}"
+    _rec_unknown="${3:-0}"
+    _rec_outcome="answered"
+    _rec_conf="-"
+    _rec_cites=0
+
+    if [ "$_rec_unknown" = "1" ]; then
+        _rec_outcome="error"
+    else
+        # Envelope tools carry a confidence field; the others do not. Parse only
+        # when it is actually JSON, so a plain-text status line is never
+        # misread as a refusal.
+        _rec_conf="$(printf '%s' "$_rec_result" | jq -r '.confidence // "-"' 2>/dev/null || echo '-')"
+        _rec_cites="$(printf '%s' "$_rec_result" | jq -r '(.citations // []) | length' 2>/dev/null || echo 0)"
+        case "$_rec_conf" in
+            unsupported)
+                _rec_outcome="unsupported"
+                # Distinguish "the expert ran and refused" from "the expert
+                # could not run": both surface as unsupported to the caller,
+                # but only the first is a retrieval quality signal. Conflating
+                # them makes a broken build look like a hard question.
+                case "$_rec_result" in
+                    *"experts state:"* | *"binary"*) _rec_outcome="degraded" ;;
+                esac
+                ;;
+        esac
+    fi
+
+    # Best-effort append. `|| true` on the whole chain: a full tmpfs, a
+    # read-only path, or absent jq must not fail the tool call.
+    {
+        printf '{"ts":"%s","tool":"%s","outcome":"%s","confidence":"%s","citations":%s}\n' \
+            "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
+            "$_rec_tool" "$_rec_outcome" "$_rec_conf" "${_rec_cites:-0}" \
+            >>"$EXPERT_USAGE_LOG"
+    } 2>/dev/null || true
+    return 0
+}
+
 # Detect the plan index — prefer TILLANDSIAS_PLAN_INDEX, fall back to
 # the canonical repo plan/index.yaml.
 resolve_plan_index() {
@@ -529,6 +600,10 @@ while IFS= read -r line; do
                     unknown_tool=1
                     ;;
             esac
+            # Order 568: the single chokepoint every tool call passes through,
+            # so usage is recorded in ONE place rather than at nine call sites
+            # that could each drift.
+            record_expert_call "$tool" "${result:-}" "${unknown_tool:-0}"
             if [ "${unknown_tool:-0}" = "1" ]; then
                 unknown_tool=0
                 escaped=$(echo "Unknown tool: $tool" | jq -Rs .)

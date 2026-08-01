@@ -9,5 +9,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-policy/src/main.rs#L5269](../../../crates/tillandsias-policy/src/main.rs#L5269)
 - [scripts/claude-delegate.sh#L3](../../../scripts/claude-delegate.sh#L3)
 - [scripts/claude-mcp.sh#L3](../../../scripts/claude-mcp.sh#L3)
+- [scripts/cycle-metrics.sh#L2](../../../scripts/cycle-metrics.sh#L2)
 - [scripts/validate-traces.sh#L16](../../../scripts/validate-traces.sh#L16)
 - [scripts/validate-traces.sh#L217](../../../scripts/validate-traces.sh#L217)
