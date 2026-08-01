@@ -214,6 +214,38 @@ fn root_for(index: &Path) -> PathBuf {
     candidate.canonicalize().unwrap_or(candidate)
 }
 
+/// Print one line, exiting cleanly if the reader has gone away.
+///
+/// WHY THIS IS NOT `println!`. Rust's `println!` PANICS on a write error, so
+/// piping any list-producing command into `head` — which every agent and every
+/// shell wrapper does constantly — closes the pipe and makes this binary abort
+/// with exit 101 and a backtrace note on stderr:
+///
+///     thread 'main' panicked at library/std/src/io/stdio.rs
+///     failed printing to stdout: Broken pipe (os error 32)
+///
+/// That is a correctness problem, not an aesthetic one. `forge-plan.sh` runs
+/// under `set -euo pipefail`, and order 456 already recorded a case where a
+/// non-zero exit from this binary killed the MCP server mid-session. A tool
+/// whose output is routinely piped must treat a closed reader the way every
+/// other unix tool does: stop writing and exit successfully.
+///
+/// Resetting SIGPIPE to SIG_DFL is the conventional fix, but it needs `libc`,
+/// and this crate carries exactly three dependencies on purpose. Handling the
+/// error costs nothing and keeps that promise.
+fn emit(text: &str) {
+    use std::io::Write;
+    let mut out = std::io::stdout().lock();
+    if let Err(e) = writeln!(out, "{text}") {
+        if e.kind() == std::io::ErrorKind::BrokenPipe {
+            // The reader closed early (`| head`). Nothing is wrong.
+            std::process::exit(0);
+        }
+        eprintln!("error: write to stdout: {e}");
+        std::process::exit(1);
+    }
+}
+
 fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
     let id = ledger.id_of(p);
     let order = p
@@ -571,7 +603,7 @@ fn main() {
     // manifest", which is its own named state rather than a guess.
     if args[0] == "capabilities" {
         for token in capability_tokens() {
-            println!("{token}");
+            emit(token);
         }
         return;
     }
@@ -885,10 +917,10 @@ fn main() {
             let d = tillandsias_plan::fragments::drift(&index);
             println!("{}", d.verdict());
             for f in tillandsias_plan::fragments::load_all(&index) {
-                println!("fragment: {}", f.name);
+                emit(&format!("fragment: {}", f.name));
             }
             for bad in tillandsias_plan::fragments::malformed(&index) {
-                println!("malformed: {}", bad.display());
+                emit(&format!("malformed: {}", bad.display()));
             }
         }
         "compact" => {
@@ -1075,7 +1107,7 @@ fn main() {
             match tillandsias_plan::allocate::mint_batch(&ledger, prefix, count) {
                 Ok(tokens) => {
                     for t in tokens {
-                        println!("{t}");
+                        emit(t.as_str());
                     }
                 }
                 Err(e) => {
@@ -1139,12 +1171,12 @@ fn main() {
                 ledger.blocked_by_closure(reference)
             };
             for p in packets {
-                println!("{}", line(&ledger, p));
+                emit(&line(&ledger, p));
             }
         }
         "ready" => {
             for p in ledger.ready(args.get(1).map(String::as_str)) {
-                println!("{}", line(&ledger, p));
+                emit(&line(&ledger, p));
             }
         }
         "burndown" => {
@@ -1153,7 +1185,7 @@ fn main() {
             };
             warn_if_unresolved(&ledger, reference);
             for p in ledger.milestone_children(reference) {
-                println!("{}", line(&ledger, p));
+                emit(&line(&ledger, p));
             }
         }
         "answer" => {

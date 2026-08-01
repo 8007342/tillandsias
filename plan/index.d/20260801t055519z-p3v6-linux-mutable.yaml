@@ -1,0 +1,98 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260801
+packets:
+  - packet_id: cli-usage-text-loses-column-alignment
+    order: 583-2bpw
+    desired_release: v0.5
+    title: "tillandsias-plan usage text prints flush-left: Rust line-continuations strip the following line's indentation"
+    status: ready
+    kind: fix
+    deliverable: crates/tillandsias-plan/src/main.rs USAGE const
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [cli, ux, rust, cosmetic]
+    estimated_hours: 1
+    outcome: >
+      Reported by the order-569 agent 2026-08-01. Every entry under 'commands:'
+      prints flush-left instead of in aligned columns, because a Rust string
+      literal's backslash line-continuation strips the FOLLOWING line's leading
+      whitespace. Pre-existing and structural rather than newly introduced, but
+      now conspicuous: the usage text has grown to roughly twenty commands, and
+      several carry multi-line explanations that are unreadable unaligned.
+      This is the CLI's front door for every agent that types the command wrong,
+      so legibility is not purely cosmetic — an unreadable usage block sends an
+      agent to read source instead. Fix by using a raw string or explicit \n
+      concatenation that preserves intended indentation.
+    exit_criteria:
+      - "usage output is column-aligned as authored, verified by running the binary rather than by reading the literal"
+      - "no command entry is lost or reworded in the process"
+
+  - packet_id: litmus-container-steps-flake-under-build-contention
+    order: 583-zgaz
+    desired_release: v0.5
+    title: "Container-launching litmus steps time out under concurrent build load, reddening CI for environmental reasons"
+    status: ready
+    kind: bug
+    deliverable: timeout policy or contention gate for container-launching litmus steps
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [litmus, ci, flake, containers, resilience]
+    estimated_hours: 3
+    outcome: >
+      OBSERVED 2026-08-01: litmus:forge-standard-gitconfig-path step 1 ("Git
+      resolves the injected config from its standard global path", 30s timeout)
+      TIMED OUT during ./build.sh --ci-full --install while a cargo build and a
+      running observatorium container competed for the host. Run standalone
+      immediately afterwards, the same litmus passed all four steps. So the
+      failure was CONTENTION, not a defect — but it failed the gate and blocked
+      an install, which is indistinguishable from a real failure to whoever reads
+      the summary.
+      This is the second flake found in one day (the other was a genuine test bug
+      — a birthday-collision assertion — and was fixed at source). Distinguishing
+      them cost real time each way, which is the actual damage: a flaky gate
+      teaches agents to re-run rather than to read.
+      DO NOT simply widen the timeout. That is the "relax the guard" move this
+      project refuses; a step that needs 30s of exclusive host time is making an
+      assumption about the machine, and the fix is to make that assumption
+      explicit — serialize container-launching steps, detect contention and skip
+      with a NAMED reason (the runner already has a skip vocabulary), or give
+      such steps a declared resource requirement.
+      A skip with a named reason is honest; a timeout reported as a failure is
+      not.
+    exit_criteria:
+      - "container-launching litmus steps either run without contention or SKIP with a named reason — never fail for lack of host resources"
+      - "the distinction between 'timed out' and 'asserted false' is visible in the CI summary, not only in the log"
+      - "reproduced under deliberate load before and after, so the fix is shown to work rather than assumed"
+
+  - packet_id: capability-manifest-must-list-new-subcommands
+    order: 583-dv9n
+    desired_release: v0.5
+    title: "Adding a plan subcommand without adding it to capabilities.txt makes the MCP wrapper silently refuse to route to it"
+    status: ready
+    kind: fix
+    deliverable: crates/tillandsias-plan/capabilities.txt guard + litmus
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [experts, mcp, capability, drift]
+    estimated_hours: 2
+    outcome: >
+      Noted by the order-569 agent as a deliberate one-directional property, and
+      recorded here so it is a known trade rather than a surprise. The
+      manifest-to-dispatch direction IS enforced behaviourally (every declared
+      token is invoked, with a negative control proving the check can fail).
+      Dispatch-to-manifest is NOT: a subcommand that exists but is undeclared
+      makes the expert UNDER-report itself, which is fail-safe by design.
+      The cost is a silent one. A new subcommand omitted from capabilities.txt
+      works fine from the CLI and is simply never routed to by the MCP wrapper,
+      so it appears missing to every agent inside a forge while appearing present
+      to anyone testing on the host. That is the "verified where it was written
+      is not verified where it runs" shape, arriving through a data file.
+      Fail-safe is the right default and should NOT be inverted. What is missing
+      is a cheap warning: a check that lists dispatch arms absent from the
+      manifest and reports them, without gating. Verify against the current tree
+      first — 'fragments' and 'compact' were added the same day and may already
+      be undeclared.
+    exit_criteria:
+      - "an undeclared dispatch arm is reported (warning, not gate) so the omission is visible before it reaches a forge"
+      - "the fail-safe direction is preserved: under-declaring must never break the wrapper"
+      - "the current tree is audited and any undeclared subcommand is either declared or justified"
