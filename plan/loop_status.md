@@ -1,5 +1,42 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-01T01:30Z (forge/claude — order 557 validation run; experts DEGRADED-then-healed; 568-570 filed)
+
+- **Host**: `forge` (claude harness, Fable 5), branch `linux-next` (worktree from
+  origin/linux-next 1c76d655). Startup checkout was a `main` snapshot with the 22
+  launch-regenerated opsx paths dirty — merged as `chore(opsx)` per the order-540
+  operator decision (this container's openspec CLI is a NEWER generation than
+  e87705ec: store selection, allowed-tools frontmatter). Guards: credential
+  `ok:forge-git-mirror`, branch guard blocked main → all committable work on the
+  linux-next worktree.
+- **order 557 (claude-mcp-expert-validation) drained one cycle**: criterion 1
+  FAIL — Claude Code has NO MCP discovery surface in the forge (nine surfaces
+  probed; opencode's registration has no Claude equivalent) → **order 568** filed
+  with three mechanism options. Criteria 2-3: as-found, all three answer tools
+  returned degraded unsupported envelopes because the launch-built expert binary
+  came from the main checkout (pre-394b; plan-source-hash replication proves it)
+  → **order 569** (capability honesty: stale-binary detection, strict JSON-RPC
+  framing — the wrapper un-escapes control chars, breaking strict clients —
+  stdout diagnostics). After a 12.79s rebuild from linux-next: plan_answer
+  exact/83 cites, methodology_ask exact/1 cite, verify-answer green; spec_answer
+  honest typed-unsupported (549/552). Report:
+  plan/issues/claude-mcp-expert-validation-2026-08-01.md.
+- **TILLANDSIAS_AGENT is unset in live forges** — the tray/mod.rs launch spec
+  never sets it; 555's routing selector has no signal → **order 570** filed
+  (555 evented).
+- **Cost/velocity evidence (operator ask)**: plan question via naive full-ledger
+  Read ≈ $4.18 / ~50s on Fable 5; one MCP expert call ≈ $0.05 / ~11s; the
+  deterministic CLI ≈ $0 / 30ms. Expert lane ~80x cheaper, ~5x faster, and
+  mechanically auditable (cited envelopes) — re-confirms 393's "cited retrieval
+  surface, not a model" from inside a Claude forge.
+- **Hygiene**: last order-440 status straggler fixed (npu-container-citizenship-e2e
+  done→completed; schema-drift advisories now zero); freshness audit (order 372)
+  refreshed scripts/check-cheatsheet-staleness.sh (ran clean); 561 reproduced live
+  (CARGO_TARGET_DIR redirect defeats the wrapper's target/release fallback).
+- **Next**: 568 (Claude MCP registration — unblocks 557 completion); 569
+  (capability honesty); 570 (TILLANDSIAS_AGENT) then 555; 558 (codex validation);
+  549/552 (spec index) for spec_answer's happy path.
+
 ## Cycle 2026-08-01T00:26Z (forge — order 553 groundtruth reconciliation DONE + forge tool-gap packets filed)
 
 - **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge), branch `linux-next` (created from

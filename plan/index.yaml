@@ -26448,7 +26448,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Research: XDNA2 NPU inference proven e2e on this host — toolboxes, containers, and the container-citizenship verdict"
-      status: done
+      status: completed
       kind: research
       deliverable: plan/issues/npu-container-citizenship-e2e-2026-07-29.md
       depends_on: [heterogeneous-inference-landscape-research]
@@ -26493,6 +26493,13 @@ plan_index:
         evidence, license quotes, repo seams, shim source, Containerfiles, and
         the §10 integration map in the deliverable.
 
+      events:
+        - type: progress
+          ts: "2026-08-01T01:10:00Z"
+          agent_id: "forge-claude-fable-metaorch-20260801"
+          host: forge
+          summary: >
+            Ledger hygiene: status 'done' -> 'completed', clearing the last order-440 vocabulary straggler flagged by plan check's schema-drift advisory. Edited via claim-ledger-node lease; check now reports zero schema-drift advisories.
     - packet_id: optional-component-registry
       order: 542
       desired_release: v0.5
@@ -27129,6 +27136,13 @@ plan_index:
         - "with no matching ready harness-validation packet, selection falls back to the normal backlog (never idle)"
         - "the rule is documented in methodology/distributed-work.yaml and pinned by a shape check"
 
+      events:
+        - type: progress
+          ts: "2026-08-01T01:28:30Z"
+          agent_id: "forge-claude-fable-metaorch-20260801"
+          host: forge
+          summary: >
+            Blocker found by the 557 run: TILLANDSIAS_AGENT is unset in live forges - the tray/mod.rs launch spec never sets it (profile machinery exists but only unit tests consume it). Filed as order 570; this packet's selector has no signal until it lands.
     - packet_id: opencode-mcp-expert-validation
       order: 556
       desired_release: v0.5
@@ -27212,6 +27226,13 @@ plan_index:
         - "plan_answer and methodology_ask return verified cited envelopes"
         - "spec_answer is advertised and returns a verified envelope OR a typed unsupported"
 
+      events:
+        - type: progress
+          ts: "2026-08-01T01:28:00Z"
+          agent_id: "forge-claude-fable-metaorch-20260801"
+          host: forge
+          summary: >
+            Validation executed in a live Claude forge (Fable 5 harness). Criterion 1 FAIL: nine discovery surfaces probed, no Claude MCP registration exists (shaped as order 568). Criterion 2 PASS with caveats: as-found all three answer tools degraded to unsupported because the launch-built expert binary was compiled from the main checkout (pre-394b; hash-proven; shaped as order 569 with wrapper strict-JSON + stdout-diagnostics fixes); after rebuilding from linux-next (12.79s) plan_answer=exact/83 cites and methodology_ask=exact/1 cite, both verify-answer green, exercised over raw stdio. Criterion 3 PASS: spec_answer typed unsupported naming the unbuilt spec-index (549/552), matching 556. TILLANDSIAS_AGENT verified unset (order 565; blocks 555 routing). Cost evidence for the milestone: expert lane ~80x cheaper and ~5x faster than naive ledger browsing for a cloud agent; deterministic CLI 30ms/$0. Report: plan/issues/claude-mcp-expert-validation-2026-08-01.md. Packet stays open pending 563.
     - packet_id: codex-mcp-expert-validation
       order: 558
       desired_release: v0.5
@@ -27334,6 +27355,13 @@ plan_index:
         - "tillandsias-policy validate-yaml <file> is reachable from a forge (on PATH or via a resolution-aware wrapper)"
         - "a litmus/probe asserts the resolution (forge + non-forge env)"
 
+      events:
+        - type: progress
+          ts: "2026-08-01T01:29:00Z"
+          agent_id: "forge-claude-fable-metaorch-20260801"
+          host: forge
+          summary: >
+            Reproduced during the 557 run: cargo build -p tillandsias-plan --release lands in the redirected CARGO_TARGET_DIR (~/.cache/tillandsias-project/cargo/target), so forge-plan.sh's <root>/target/release fallback probe misses fresh builds exactly as this packet describes.
     - packet_id: litmus-podman-preflight-forge-false-positive
       order: 562
       desired_release: v0.5
@@ -27565,3 +27593,127 @@ plan_index:
         - "NOT YET SCOPED. Before any implementation packet is cut, an operator-signed decision record must fix: what a level maps to in policy terms, whether levels can be lost when a constraint regresses, and token-loss recovery for a non-technical user"
         - "any resulting design keeps XP constraint-derived, never activity-derived"
         - "the headless (no-human-present) node has a defined behaviour that is not 'block forever'"
+    - packet_id: claude-mcp-config-registration
+      order: 568
+      desired_release: v0.5
+      release_target: harness-mcp-expert-validation
+      title: "Claude forge: register the expert MCP servers so Claude Code discovers them at launch (criterion 1 of 557)"
+      status: ready
+      kind: implementation
+      deliverable: images/default (Claude-side MCP registration) + discoverability litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, claude, mcp, experts, discoverability]
+      estimated_hours: 3
+      outcome: >
+        Order-557 validation (plan/issues/claude-mcp-expert-validation-2026-08-01.md)
+        proved a live Claude forge exposes NO MCP discovery surface: no repo .mcp.json
+        (either branch), ~/.claude.json has no top-level mcpServers and an empty
+        project mcpServers, no settings/managed/plugin/--mcp-config path. opencode
+        gets the four servers via Containerfile:105-120 bake + lib-common.sh
+        apply_opencode_config_overlay() (line 2523); entrypoint-forge-claude.sh has no
+        equivalent. Candidate mechanisms, tradeoffs recorded in the report: (A) commit
+        a repo-root .mcp.json with degrade-gracefully wrapper commands (largest blast
+        radius - every clone on every host sees the servers); (B) forge-only
+        apply_claude_config_overlay() merging a baked mcpServers manifest into
+        ~/.claude.json at entrypoint (mirrors the opencode pattern, zero blast radius,
+        second copy of the registration list); (C) exec claude with --mcp-config
+        pointing at a baked manifest (cleanest state story; only entrypoint-launched
+        sessions covered). Implementer picks B or C unless the operator wants A's
+        every-host reach.
+      exit_criteria:
+        - a fresh Claude forge lists forge-plan + project-info in /mcp with zero out-of-band setup
+        - plan_answer callable as a native MCP tool from the Claude session (not raw stdio)
+        - non-forge hosts see no broken-server noise (mechanism B/C) or wrappers fail clean (mechanism A)
+      events:
+        - type: filed
+          ts: '2026-08-01T01:25:00Z'
+          agent_id: forge-claude-fable-metaorch-20260801
+          host: forge
+          summary: >
+            Filed from the order-557 validation run in a live Claude forge; nine
+            discovery surfaces probed, all absent. Evidence and mechanism tradeoffs:
+            plan/issues/claude-mcp-expert-validation-2026-08-01.md section 1.
+    - packet_id: forge-experts-capability-honesty
+      order: 569
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Expert lane capability honesty: stale-binary detection, strict JSON-RPC framing, diagnostics off stdout"
+      status: ready
+      kind: fix
+      deliverable: images/default/lib-common.sh + config-overlay/mcp/forge-plan.sh + crates/tillandsias-plan (CLI exit/stream discipline) + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, experts, mcp, resilience, linux]
+      estimated_hours: 4
+      outcome: >
+        Order-557 validation found three related honesty gaps in the expert serving
+        chain (plan/issues/claude-mcp-expert-validation-2026-08-01.md sections 2-3,
+        5B): (1) a forge whose mounted checkout is main builds a pre-394b expert at
+        launch and stamps /dev/shm state=ready - "ready" means the build finished,
+        not that the binary can answer; all three answer tools then degrade to
+        unsupported while plan-source-hash proves the stale source (hash replication
+        confirmed byte-exact). The stale binary compounds this by printing usage and
+        EXITING 0 on unknown subcommands, so the wrapper cannot distinguish
+        incapability from success without shape-sniffing. (2) forge-plan.sh's
+        JSON-RPC framing un-escapes the binary's strictly-valid string escapes into
+        raw control bytes - a strict JSON parser (a real MCP client) rejects the
+        frame; reproduced with python json.loads strict vs strict=False. (3) CLI
+        diagnostics (e.g. the methodology/provenance.yaml duplicate-key warning on
+        main) print to stdout ahead of the envelope, corrupting the machine-readable
+        stream; verify-answer refuses the result. Fix: state file carries a
+        capability/subcommand-set stamp checked by the wrapper (degraded(stale-binary)
+        instead of unsupported), unknown subcommand exits non-zero, warnings to
+        stderr, framing escapes control characters; pin each with a litmus.
+      exit_criteria:
+        - a main-checkout forge reports degraded(stale-binary:<missing-subcommands>) rather than state=ready + unsupported envelopes
+        - tillandsias-plan exits non-zero with usage on stderr for unknown subcommands; diagnostics never precede the envelope on stdout
+        - forge-plan.sh tools/call responses parse under a strict JSON parser (litmus pins a control-character envelope round-trip)
+      events:
+        - type: filed
+          ts: '2026-08-01T01:25:00Z'
+          agent_id: forge-claude-fable-metaorch-20260801
+          host: forge
+          summary: >
+            Filed from the order-557 run: stale pre-394b binary served degraded
+            envelopes with state=ready (hash-proven main-checkout build); wrapper
+            framing broke strict JSON; stdout warnings corrupted envelopes. Post-fix
+            re-probe with a linux-next binary (12.79s build) returned exact cited
+            envelopes, verify-answer green - the lane heals once capability is real.
+    - packet_id: forge-launch-sets-tillandsias-agent
+      order: 570
+      desired_release: v0.5
+      release_target: harness-mcp-expert-validation
+      title: "Forge launch path must actually set TILLANDSIAS_AGENT (555's routing selector has no signal in live forges)"
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-headless (forge launch spec env) + litmus asserting the var inside a launched forge
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, launch, harness-validation, rust]
+      estimated_hours: 2
+      outcome: >
+        Order-554/555 route per-harness work via $TILLANDSIAS_AGENT
+        (tillandsias-core config.rs SelectedAgent::as_env_str, values
+        claude|opencode|opencode-web), and container_profile.rs declares the
+        ProfileEnvVar - but only unit tests consume that machinery. The real launch
+        path (tillandsias-headless tray/mod.rs ~1760-1822) builds the podman spec by
+        hand and never sets the var: verified unset in a live Claude forge
+        (entrypoint-forge-claude.sh exports only TILLANDSIAS_AGENT_NAME, an
+        attribution string). Deprecated entrypoint.sh and agent-profile.sh carry
+        divergent fallbacks, so every harness currently resolves to a default rather
+        than its own identity. Wire SelectedAgent::as_env_str() into the launch spec
+        env (or route through the profile machinery) so 555's harness-affinity
+        selection and 557/558's CLAIM-ONLY-IN-<harness> guards have a real signal.
+      exit_criteria:
+        - a launched claude forge has TILLANDSIAS_AGENT=claude (opencode/opencode-web analogous); litmus asserts it in-container
+        - order 555 can read the var instead of a fallback chain; divergent entrypoint fallbacks removed or aligned
+      events:
+        - type: filed
+          ts: '2026-08-01T01:25:00Z'
+          agent_id: forge-claude-fable-metaorch-20260801
+          host: forge
+          summary: >
+            Filed from the order-557 run (var verified unset in-container; launch-path
+            gap located at tray/mod.rs spec builder). Blocks 555 harness-affinity
+            routing; see plan/issues/claude-mcp-expert-validation-2026-08-01.md 5C.

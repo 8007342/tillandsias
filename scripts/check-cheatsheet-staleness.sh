@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer
-# freshness: auditor=forge-tillandsias-codex-20260730T1903Z date=2026-07-30 verdict=updated scope=fixed option-order parsing and documented bold Last-updated extraction
+# freshness: auditor=forge-claude-fable-metaorch-20260801 date=2026-08-01 verdict=refreshed scope=re-ran clean in claude forge (exit 0, all cheatsheets <=90d); option parsing and bold Last-updated extraction confirmed sound
 # Check for stale cheatsheets older than 90 days.
 # Usage: ./check-cheatsheet-staleness.sh [--days 90] [--check-urls]
 #
