@@ -125,6 +125,10 @@ COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instruct
 COPY config-overlay/opencode/config.json /home/forge/.config-overlay/opencode/config.json
 COPY config-overlay/opencode/tui.json /home/forge/.config-overlay/opencode/tui.json
 COPY config-overlay/mcp/ /home/forge/.config-overlay/mcp/
+# @trace spec:forge-environment-discoverability, order:568
+# Claude keeps OAuth and project state in ~/.claude.json, so its entrypoint
+# merges this forge-only MCP manifest rather than replacing that file.
+COPY config-overlay/claude/mcp.json /home/forge/.config-overlay/claude/mcp.json
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish

@@ -27634,7 +27634,7 @@ plan_index:
       desired_release: v0.5
       release_target: harness-mcp-expert-validation
       title: "Claude forge: register the expert MCP servers so Claude Code discovers them at launch (criterion 1 of 557)"
-      status: ready
+      status: in_progress
       kind: implementation
       deliverable: images/default (Claude-side MCP registration) + discoverability litmus
       depends_on: []
@@ -27670,6 +27670,20 @@ plan_index:
             Filed from the order-557 validation run in a live Claude forge; nine
             discovery surfaces probed, all absent. Evidence and mechanism tradeoffs:
             plan/issues/claude-mcp-expert-validation-2026-08-01.md section 1.
+        - type: progress
+          ts: '2026-08-01T06:18:00Z'
+          agent_id: linux-macuahuitl-opencode-20260801T0611Z
+          host: linux_mutable
+          summary: >
+            Implemented mechanism B: a forge-only Claude MCP manifest is baked
+            into the config overlay and merged atomically into ~/.claude.json
+            after OAuth restoration. The merge preserves auth, project state,
+            and custom MCP servers while registering git-tools, project-info,
+            host-browser, and forge-plan. Focused discoverability litmus passed
+            8/8 suites (the modified test passed all 10 steps), shell/JSON/YAML
+            parsing passed, and ./build.sh --check passed. Packet remains
+            in_progress pending fresh-image Claude /mcp and native plan_answer
+            evidence for the two live exit criteria.
     - packet_id: forge-experts-capability-honesty
       order: 569
       desired_release: v0.5

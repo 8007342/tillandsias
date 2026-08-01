@@ -2543,6 +2543,45 @@ apply_opencode_config_overlay() {
     fi
 }
 
+# ── Claude config overlay ───────────────────────────────────
+# @trace spec:forge-environment-discoverability, order:568
+# Claude stores credentials, project state, and MCP registration in one file.
+# Merge only the forge MCP servers so restoring OAuth state remains lossless.
+apply_claude_config_overlay() {
+    local overlay_root="${TILLANDSIAS_CONFIG_OVERLAY_ROOT:-/home/forge/.config-overlay}"
+    local overlay_cfg="$overlay_root/claude/mcp.json"
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+
+    [ -f "$overlay_cfg" ] || return 0
+    if ! jq -e 'type == "object" and (.mcpServers | type == "object")' \
+        "$overlay_cfg" >/dev/null 2>&1; then
+        trace_lifecycle "config" "claude MCP overlay invalid; existing config preserved"
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ]; then
+        if ! jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1 \
+            || ! jq -s '.[0] * {mcpServers: ((.[0].mcpServers // {}) * .[1].mcpServers)}' \
+                "$user_cfg" "$overlay_cfg" >"$tmp"; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "claude config invalid; existing file preserved"
+            return 1
+        fi
+    else
+        cp "$overlay_cfg" "$tmp" || {
+            rm -f "$tmp"
+            return 1
+        }
+    fi
+
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude MCP overlay applied"
+}
+
 # ── Hot-path population ─────────────────────────────────────
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:cheatsheets-license-tiered
 # @cheatsheet runtime/cheatsheet-crdt-overrides.md
