@@ -1,0 +1,21 @@
+# @trace spec:default-image, spec:forge-as-only-runtime
+# Litmus: CARGO_TARGET_DIR-aware binary discoverability for tillandsias-policy and tillandsias-podman.
+name: litmus:forge-policy-binary-discoverability
+spec: default-image
+phase: pre-build
+description: >
+  Pin CARGO_TARGET_DIR-aware binary resolution across script wrappers:
+  verify scripts/check-no-python-scripts.sh and scripts/tillandsias-policy
+  succeed cleanly when CARGO_TARGET_DIR is redirected outside the repo root.
+severity: high
+size: instant
+
+preconditions:
+  - scripts/check-no-python-scripts.sh exists
+  - scripts/tillandsias-policy exists
+
+critical_path:
+  - step: "check-no-python-scripts and tillandsias-policy discover binary with redirected CARGO_TARGET_DIR"
+    command: "scripts/test-forge-policy-binary-discoverability.sh"
+    timeout_ms: 120000
+    expected_behavior: "ok: forge-policy-binary-discoverability PASS"

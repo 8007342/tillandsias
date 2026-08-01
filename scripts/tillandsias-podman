@@ -2,7 +2,15 @@
 # Thin compatibility facade; orchestration belongs to the Rust CLI.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-if [[ -x "$ROOT/target/debug/tillandsias-podman-cli" ]]; then
-    exec "$ROOT/target/debug/tillandsias-podman-cli" "$@"
+PODMAN_CLI_BIN="$ROOT/target/debug/tillandsias-podman-cli"
+if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
+        [[ -x "$CARGO_TARGET_DIR/debug/tillandsias-podman-cli" ]] && PODMAN_CLI_BIN="$CARGO_TARGET_DIR/debug/tillandsias-podman-cli"
+    else
+        [[ -x "$ROOT/$CARGO_TARGET_DIR/debug/tillandsias-podman-cli" ]] && PODMAN_CLI_BIN="$ROOT/$CARGO_TARGET_DIR/debug/tillandsias-podman-cli"
+    fi
+fi
+if [[ -x "$PODMAN_CLI_BIN" ]]; then
+    exec "$PODMAN_CLI_BIN" "$@"
 fi
 exec cargo run --quiet -p tillandsias-podman-cli -- "$@"

@@ -21,7 +21,15 @@ trap 'rm -rf "$TMPDIR_WORK"' EXIT
 cargo build --quiet --manifest-path "$PROJECT_ROOT/Cargo.toml" -p tillandsias-policy
 BIN_DIR="$TMPDIR_WORK/bin"
 mkdir -p "$BIN_DIR"
-ln -s "$PROJECT_ROOT/target/debug/tillandsias-policy" "$BIN_DIR/tillandsias-policy"
+POLICY_BIN="$PROJECT_ROOT/target/debug/tillandsias-policy"
+if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
+        [[ -x "$CARGO_TARGET_DIR/debug/tillandsias-policy" ]] && POLICY_BIN="$CARGO_TARGET_DIR/debug/tillandsias-policy"
+    else
+        [[ -x "$PROJECT_ROOT/$CARGO_TARGET_DIR/debug/tillandsias-policy" ]] && POLICY_BIN="$PROJECT_ROOT/$CARGO_TARGET_DIR/debug/tillandsias-policy"
+    fi
+fi
+ln -s "$POLICY_BIN" "$BIN_DIR/tillandsias-policy"
 export PATH="$BIN_DIR:$PATH"
 
 BARE="$TMPDIR_WORK/test-mirror.git"

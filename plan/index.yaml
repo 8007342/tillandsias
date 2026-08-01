@@ -27347,7 +27347,7 @@ plan_index:
       order: 561
       desired_release: v0.5
       title: "Fix: tillandsias-policy / tillandsias-podman-cli not discoverable — scripts assume target/debug/… but CARGO_TARGET_DIR is redirected in the forge"
-      status: claimed
+      status: completed
       kind: fix
       deliverable: CARGO_TARGET_DIR-aware binary resolution for the scripts that exec target/debug/tillandsias-policy (check-no-python-scripts.sh, check-cheatsheet-sources.sh, audit-cheatsheet-sources.sh, check-cheatsheet-tiers.sh, test-pre-receive-yaml-gate.sh, distill-forge-diagnostics.sh, fetch-cheatsheet-source.sh, regenerate-cheatsheet-index.sh) + scripts/tillandsias-podman, or an install-to-$HOME/.local/bin first-run step + a forge-verifiable closure
       depends_on: []
@@ -27386,6 +27386,12 @@ plan_index:
           host: forge
           lease_id: "forge-antigravity-20260801T044224Z"
           expires_at: "2026-08-01T08:42:24Z"
+        - type: completed
+          ts: "2026-08-01T04:44:40Z"
+          agent_id: "forge-google-antigravity-gemini3.6flash-20260801T044224Z"
+          host: forge
+          summary: >
+            All 3 exit criteria closed: (1) updated all 9 policy/podman scripts to resolve target binaries from CARGO_TARGET_DIR when set; (2) created scripts/tillandsias-policy facade wrapper script so tillandsias-policy validate-yaml is directly reachable in forges; (3) created scripts/test-forge-policy-binary-discoverability.sh and litmus-forge-policy-binary-discoverability.yaml which verify clean PASS under redirected CARGO_TARGET_DIR.
     - packet_id: litmus-podman-preflight-forge-false-positive
       order: 562
       desired_release: v0.5
