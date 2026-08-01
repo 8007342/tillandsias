@@ -575,14 +575,57 @@ pub mod edit {
     /// [`validate_candidate`] returns no violations.
     pub fn append_event(raw: &str, target_id: &str, event_block: &str) -> Result<String, String> {
         let mut lines: Vec<String> = raw.lines().map(String::from).collect();
-        let want = format!("- packet_id: {target_id}");
-        let start = lines
+
+        // Locate packets by LIST-ITEM BOUNDARY, not by assuming `packet_id` is
+        // the item's first key.
+        //
+        // Both of the original locators keyed off the literal "- packet_id:",
+        // which is only how an item renders when `packet_id` happens to be its
+        // FIRST key. 19 of the ledger's 479 packets are written `- order: N`
+        // with `packet_id` on the following line, and for those:
+        //
+        //   1. the START search failed, so `append-event` reported
+        //      "packet_id '<id>' not found" for a packet that plainly exists and
+        //      that `status <id>` resolves fine — a misleading message hiding a
+        //      read/write asymmetry, and one that silently made ~4% of the ledger
+        //      unable to receive evidence at all;
+        //
+        //   2. worse, the END search skipped those items as span boundaries. A
+        //      packet_id-first packet followed by an order-first one therefore
+        //      got a span running PAST its own end, so an event could be inserted
+        //      into the NEXT packet's `events:` block — silent cross-packet
+        //      corruption, in the one code path whose entire purpose is to make
+        //      hand-edit corruption impossible.
+        //
+        // Item boundaries are unambiguous at this indentation, so use them.
+        let is_item = |l: &str| l.starts_with("    - ");
+        let item_starts: Vec<usize> = (0..lines.len()).filter(|&i| is_item(&lines[i])).collect();
+
+        let want_key = format!("packet_id: {target_id}");
+        let start = *item_starts
             .iter()
-            .position(|l| l.trim() == want)
+            .find(|&&s| {
+                let e = item_starts
+                    .iter()
+                    .copied()
+                    .find(|&x| x > s)
+                    .unwrap_or(lines.len());
+                // A key line reads "packet_id: x" normally, but "- packet_id: x"
+                // when it is the item's FIRST key. Strip the list marker so both
+                // shapes compare equal — matching only one of them is precisely
+                // how this function came to serve 460 packets and silently refuse
+                // the other 19.
+                (s..e).any(|i| {
+                    let t = lines[i].trim();
+                    t == want_key || t.strip_prefix("- ") == Some(want_key.as_str())
+                })
+            })
             .ok_or_else(|| format!("packet_id '{target_id}' not found"))?;
-        // The packet span ends at the next top-level packet list item or EOF.
-        let end = (start + 1..lines.len())
-            .find(|&i| lines[i].starts_with("    - packet_id:"))
+        // The packet span ends at the next list item of ANY shape, or EOF.
+        let end = item_starts
+            .iter()
+            .copied()
+            .find(|&x| x > start)
             .unwrap_or(lines.len());
         let block: Vec<String> = event_block.lines().map(String::from).collect();
         if block.is_empty() {
@@ -1084,5 +1127,61 @@ steps:
             violations.iter().any(|s| s.contains("does-not-exist")),
             "a dangling live reference must be a violation: {violations:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod append_event_shape_tests {
+    use super::edit;
+
+    /// The ledger writes packets in TWO shapes — `- packet_id: x` and
+    /// `- order: N` with packet_id on the next line — and the writer must serve
+    /// both. It served only the first for as long as append-event existed: 19 of
+    /// 479 packets were unreachable, reporting "packet_id '<id>' not found" for
+    /// packets that `status <id>` resolved fine.
+    #[test]
+    fn append_event_reaches_both_packet_shapes_and_respects_item_boundaries() {
+        let raw = "\
+plan_index:
+  steps:
+    - packet_id: alpha
+      order: 1
+      title: first
+      events:
+        - type: filed
+    - order: 2
+      packet_id: beta
+      title: second
+    - packet_id: gamma
+      order: 3
+      title: third
+      events:
+        - type: filed
+";
+        let block = "        - type: progress\n          summary: probe\n";
+
+        // packet_id-first: the historically working shape.
+        let a = edit::append_event(raw, "alpha", block).expect("alpha must resolve");
+        assert!(a.contains("summary: probe"), "alpha did not receive the event");
+
+        // order-first: the shape that silently could not receive evidence.
+        let b = edit::append_event(raw, "beta", block).expect("beta must resolve");
+        assert!(b.contains("summary: probe"), "beta did not receive the event");
+
+        // And the event must land in BETA, not leak into gamma. The old span-end
+        // search skipped order-first items as boundaries, so a packet could get a
+        // span running past its own end and write into the NEXT packet's events
+        // block — silent cross-packet corruption in the one path whose purpose is
+        // to make hand-edit corruption impossible.
+        let beta_at = b.find("packet_id: beta").expect("beta present");
+        let gamma_at = b.find("packet_id: gamma").expect("gamma present");
+        let probe_at = b.find("summary: probe").expect("probe present");
+        assert!(
+            probe_at > beta_at && probe_at < gamma_at,
+            "the event landed outside beta's span (beta@{beta_at} probe@{probe_at} gamma@{gamma_at})"
+        );
+
+        // A genuinely absent id must still fail loud.
+        assert!(edit::append_event(raw, "nonexistent", block).is_err());
     }
 }
