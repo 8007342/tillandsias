@@ -273,6 +273,28 @@ things that make you slower"). File it as a dated issue in `plan/issues/`,
 classified as one of: `research/`, `exploration/`, `enhancement/`, or
 `optimization/`. An unfiled finding is a lost finding and a contract violation.
 
+### Filing a packet: mint its order, never pick one
+
+```bash
+tillandsias-plan next-order          # -> 581-k3f9
+```
+
+**Never compute "the next free order" yourself.** That number comes from a
+ledger snapshot which is stale the moment another host commits, so two hosts
+filing in the same window pick the SAME number deterministically. It happened
+twice on 2026-07-31 (560–562, then 568–570), and six collisions sit at HEAD.
+
+The minted token is **permanent**. Do not renumber it later, and do not ask a
+coordinator to "normalize" it — order tokens leak into code comments, `@trace
+order:` headers, and commit messages, and a pushed commit message can never be
+corrected. Two hosts landing on prefix `575` produce `575-k3f9` and `575-m2p1`:
+both correct, both permanent, nothing to reconcile. A shared prefix is normal.
+
+Cite `packet_id` in anything durable — depends_on, specs, methodology, commit
+messages. It is the identity and is unique by construction; the order token is a
+human convenience. Canonical: `methodology/distributed-work.yaml` →
+`order_id_allocation`.
+
 ### Reduce: smaller, simpler, verifiable packets
 
 Filing is only the intake half. Each recurring cycle then *reduces* open

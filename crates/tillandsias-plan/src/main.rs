@@ -13,6 +13,14 @@ fn usage() -> ! {
         "usage: tillandsias-plan [--index <path>] <command>\n\
          commands:\n\
            check                     integrity + schema validation (exit 1 on violations)\n\
+           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n\
+                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n\
+                                     'next free order' yourself: that reads a ledger snapshot\n\
+                                     which is stale the moment another host commits, so\n\
+                                     concurrent filers pick the SAME number. The minted token\n\
+                                     is PERMANENT — never renumber it. A prefix shared by two\n\
+                                     packets is normal. See methodology/distributed-work.yaml\n\
+                                     -> order_id_allocation.\n\
            status <id|order>         one packet's status line\n\
            blocked-by <id|order>     packets directly blocked by X\n\
            blocked-closure <id|order> everything transitively downstream of X\n\
@@ -155,10 +163,32 @@ fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
 /// Diagnostic only — stdout and the exit code are untouched.
 fn warn_if_unresolved(ledger: &Ledger, reference: &str) {
     if ledger.resolve(reference).is_none() {
-        eprintln!(
-            "warning: no packet matches '{reference}' — the empty result below means UNRESOLVED, not 'nothing depends on it'"
-        );
+        eprintln!("warning: {}", unresolved_reason(ledger, reference));
+        eprintln!("warning: the empty result below means UNRESOLVED, not 'nothing depends on it'");
     }
+}
+
+/// Why a reference did not resolve, distinguishing the two cases a bare
+/// "no packet matches" conflates.
+///
+/// An AMBIGUOUS order (several packets claim it) is not an unknown reference —
+/// the order exists, it just does not identify one packet. Reporting that as
+/// "no packet matches" tells an agent there is no such work, which is false and
+/// is exactly the false-negative class order 516 removed from this surface.
+/// Naming the claimants also gives the caller the packet_ids to use instead,
+/// which are unique by construction.
+fn unresolved_reason(ledger: &Ledger, reference: &str) -> String {
+    let claimants = ledger.ambiguous_claimants(reference);
+    if claimants.is_empty() {
+        return format!("no packet matches '{reference}'");
+    }
+    format!(
+        "'{}' is claimed by {} packets and identifies none of them: {}. \
+         Reference one by packet_id — packet_ids are unique, order numbers are not.",
+        reference,
+        claimants.len(),
+        claimants.join(", ")
+    )
 }
 
 /// ORDER 394d — `grade`. Returns the PROCESS EXIT CODE, kept distinct on
@@ -740,6 +770,44 @@ fn main() {
     let schema = Schema::load(&schema_path).unwrap_or_else(|_| Schema::minimal());
 
     match args[0].as_str() {
+        "next-order" => {
+            // Mint a collision-free order token for a NEW packet.
+            //
+            // Replaces "read the ledger, add one" — which is computed from a
+            // snapshot that goes stale the moment another host commits, and so
+            // makes two hosts filing in the same window pick the SAME number
+            // deterministically. That happened twice in one session.
+            //
+            // Prints ONE token on stdout and nothing else, so it composes:
+            //   order: $(tillandsias-plan next-order)
+            // args[0] is the subcommand; the optional prefix operand is args[1],
+            // matching every sibling command in this dispatch.
+            let prefix = match args.get(1) {
+                None => None,
+                Some(a) => match a.parse::<u64>() {
+                    Ok(n) => Some(n),
+                    // A non-numeric operand is a MISTAKE, not "use the default".
+                    // Silently ignoring it would mint a token under a different
+                    // prefix than the caller asked for and print it as if it had
+                    // complied — the caller would only find out when the token
+                    // did not sort where they expected.
+                    Err(_) => {
+                        eprintln!(
+                            "error: prefix must be a number, got '{a}' \
+                             (omit it to continue from the highest existing prefix)"
+                        );
+                        std::process::exit(2);
+                    }
+                },
+            };
+            match tillandsias_plan::allocate::mint(&ledger, prefix) {
+                Ok(token) => println!("{token}"),
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
         "check" => {
             // INVARIANT CORE (ids + references) hard-gates: a live dangling
             // reference means the graph is a lie. SCHEMA drift (status enum,
@@ -772,7 +840,7 @@ fn main() {
             match ledger.resolve(reference) {
                 Some(p) => println!("{}", line(&ledger, p)),
                 None => {
-                    eprintln!("error: no packet matches '{reference}'");
+                    eprintln!("error: {}", unresolved_reason(&ledger, reference));
                     std::process::exit(1);
                 }
             }
@@ -871,7 +939,7 @@ fn main() {
                 std::process::exit(2);
             };
             let Some(target) = ledger.resolve(reference).map(|p| ledger.id_of(p)) else {
-                eprintln!("error: no packet matches '{reference}'");
+                eprintln!("error: {}", unresolved_reason(&ledger, reference));
                 std::process::exit(1);
             };
             let block = edit::event_block(etype, &ts, &agent, &host, summary);

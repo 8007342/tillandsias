@@ -748,7 +748,84 @@ distributed_work:
       ephemeral-rebuild-from-checkout model (forge-hot-cold-split). Mirrored in
       /advance-work-from-plan (forge selection) + /meta-orchestration.
 
+  order_id_allocation:
+    decided_by: "The Tlatoāni, 2026-08-01"
+    supersedes: order_number_assignment
+    design_record: "plan/issues/work-order-id-collision-free-design-2026-08-01.md"
+    problem: >
+      The 2026-07-14 rule below was correct about identity (packet_id is
+      authoritative) and wrong about allocation. It routed every non-coordinator
+      filing through `order: provisional` and had the coordinator assign the
+      final integer at integration — which is RENUMBERING, the very thing the
+      same rule names as the reference debt it eliminates. Its own remediation
+      clause concedes this: it requires stale references to be updated "in the
+      same commit", which cannot reach commit messages already pushed.
+      It also did not hold. Two linux hosts (mutable + immutable) both read as
+      "the coordinator", so on 2026-07-31 they collided TWICE in one session
+      (560-562, then 568-570) minting integers directly. Six collisions sit at
+      HEAD undetected (160, 196, 197, 201, 224, 294).
+    rule: >
+      Order tokens are SELF-ALLOCATED and PERMANENT. Mint one with
+      `tillandsias-plan next-order [prefix]`, which emits `<seq>-<suffix>` (e.g.
+      `575-k3f9`): a numeric prefix continuing the existing sequence, and a
+      4-character random suffix from an alphabet with visually ambiguous symbols
+      removed. No host asks another host for a number, and NO TOKEN IS EVER
+      RENORMALIZED after allocation.
+    why_no_normalization: >
+      The suffix is a permanent part of the identifier, not a staging device
+      discarded at acceptance. Order tokens leak into code comments, `@trace
+      order:` headers (30 in the tree), and COMMIT MESSAGES — and a pushed commit
+      message can never be corrected. Any scheme permitting a rename after a
+      reference exists reintroduces exactly the cost being removed. Two hosts
+      that both pick prefix 575 produce `575-k3f9` and `575-m2p1`: two distinct,
+      permanent, correct identifiers that need no reconciliation.
+    the_prefix_is_not_authoritative: >
+      `<seq>` exists for rough chronology and human readability only. Several
+      packets sharing a prefix is NORMAL, not a defect, and the prefix alone does
+      not resolve — `plan_status 575` is a miss, `plan_status 575-k3f9` is a hit.
+      Sequence carries no meaning the ledger depends on: as the operator put it,
+      "we don't need for work orders to be fully numerically sequential, only
+      unique, and we have order given their commit numbers and timestamps".
+    ordering_source: >
+      Chronology comes from `events[].ts` and git history. Both are HONESTLY
+      APPROXIMATE — git history is a partial order until branches merge, and
+      timestamps come from host clocks across four platform branches. Adequate
+      for sorting and for "what happened around then"; MUST NOT be relied on
+      where a strict total order is required. Nothing in the ledger requires one.
+    mediator_role: >
+      A mediator/orchestrator gates ACCEPTANCE, never identity: shaping quality,
+      status, release targeting, duplicate-intent detection. If a packet's ID
+      were provisional until a mediator ruled, coordination would be back on the
+      critical path — which is what made the superseded rule fail. A concurrently
+      filed packet is valid and addressable IMMEDIATELY; whether it is ready to
+      claim is the mediator's call.
+    migration: >
+      PURELY ADDITIVE. Existing integer orders stay valid identifiers forever —
+      `322` resolves exactly as before. Renumbering 497 packets into the new
+      scheme would be this design's own failure mode applied at maximum scale.
+      Only the six existing collisions need one-time disposal, and since their
+      packet_ids are already unique, nulling the order may be the right repair.
+    enforcement: >
+      `tillandsias-plan check` WARNS on any duplicate order token, naming every
+      claimant (it previously reported "ids unique" over six collisions because
+      it validated packet_id and never looked at `order`). Both order indexes
+      drop ambiguous tokens, so a duplicated order is an honest miss that names
+      its claimants rather than a confident answer picking one arbitrarily.
+    reference_discipline: >
+      Durable cross-references — depends_on, split_into, specs, methodology,
+      commit messages, cheatsheets — SHOULD cite `packet_id`. It is the identity,
+      it is unique by construction, and it never needed any of this machinery.
+      Order tokens are a human-facing convenience.
+
   order_number_assignment:
+    status: SUPERSEDED by order_id_allocation (2026-08-01)
+    retained_for: >
+      Provenance. Its identity claim (packet_id is the only authoritative
+      reference) survives verbatim in the successor; its ALLOCATION mechanism —
+      provisional ids plus coordinator-assigned integers — is retired because
+      the assignment step is renumbering, and renumbering is the cost. Packets
+      still carrying `order: provisional` and a `provisional_id` remain valid;
+      `provisional_id` stays a permanent alias exactly as this rule promised.
     decided_by: "The Tlatoāni, 2026-07-14"
     problem: >
       Sibling hosts filing packets concurrently mint colliding integer

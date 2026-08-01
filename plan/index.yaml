@@ -28055,3 +28055,83 @@ plan_index:
         - "either attestation verification works, or its disablement is a recorded deviation with the supply-chain consequence stated explicitly"
         - "no formula install can burn an unbounded retry ladder during forge startup; the bound is asserted by a litmus"
         - "order 435 is updated with the measured finding that the token does not currently buy working attestation"
+
+    - packet_id: order-id-allocation-adoption-and-collision-disposal
+      order: 581-h99t
+      desired_release: v0.5
+      title: "Adopt minted order tokens across filing surfaces; dispose of the six grandfathered collisions"
+      status: ready
+      kind: implementation
+      deliverable: plan/index.yaml disposal + tillandsias-policy plan-orders awareness of suffixed tokens
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [plan, tooling, ledger, concurrency, methodology]
+      estimated_hours: 3
+      outcome: >
+        Follow-on to the collision-free ID work landed 2026-08-01
+        (plan/issues/work-order-id-collision-free-design-2026-08-01.md). The
+        allocator, the honest-refusal fix, the check warning, the methodology rule
+        (distributed_work.order_id_allocation) and both filing skills are DONE.
+        This packet is the residue.
+        (a) DISPOSE OF THE SIX GRANDFATHERED COLLISIONS — 160, 196, 197, 201, 224,
+        294. Every member is completed, so tillandsias-policy plan-orders
+        grandfathers them and they are harmless to that gate. They are NOT
+        harmless to retrieval: each is unaddressable by order, and since this
+        cycle a lookup of one of those numbers refuses rather than answering
+        arbitrarily. Their packet_ids are already unique, so the cheapest correct
+        repair is probably to null the order on all but one member of each group
+        rather than mint fresh tokens for completed work. Decide deliberately and
+        record the reasoning.
+        (b) TEACH tillandsias-policy plan-orders ABOUT SUFFIXED TOKENS. It groups
+        by the raw order value, so two tokens sharing a prefix but differing in
+        suffix are already distinct and already pass — correct, but by accident
+        rather than by design. It must state that a shared PREFIX is legal, so
+        nobody later "fixes" it into a prefix-uniqueness check, which would
+        forbid the entire scheme.
+        (c) AUDIT THE 28 PROVISIONAL PACKETS. The superseded rule created them
+        expecting a coordinator assignment that mostly never came. Under the new
+        scheme each can mint a permanent token, or stay provisional if genuinely
+        unshaped — but the sentinel should mean "unshaped", not "waiting for a
+        coordinator who is not coming".
+      exit_criteria:
+        - "no live packet is unaddressable by its order token; the disposal choice for completed collisions is recorded with its reasoning"
+        - "plan-orders explicitly documents that a shared prefix is legal, so the suffix scheme cannot be 'fixed' away"
+        - "every remaining provisional packet is either minted a token or justified as genuinely unshaped"
+
+    - packet_id: concurrent-ledger-append-without-manual-merges
+      order: 581-jf7g
+      desired_release: v0.6
+      title: "Research: two hosts appending to the ledger without a manual merge — the half collision-free IDs do not solve"
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on: [order-id-allocation-adoption-and-collision-disposal]
+      pickup_role: linux
+      capability_tags: [plan, git, concurrency, research, ledger]
+      estimated_hours: 5
+      outcome: >
+        The operator asked for concurrent packet creation "without triggering
+        manual merges every time". Collision-free IDs removed the SEMANTIC half —
+        no renumbering, no reference chasing, no "which 568 did you mean". The
+        MECHANICAL half remains: two hosts appending to the end of one
+        plan/index.yaml still produce a git text conflict, resolved by hand on
+        2026-08-01 (keep both sides, drop three markers).
+        Two candidates, neither chosen, each with a stated cost.
+        (1) A union merge driver on plan/index.yaml via .gitattributes. Cheap,
+        and makes append-only conflicts auto-resolve. RISK: union merge
+        DUPLICATES lines when the same region is edited on both sides, and events
+        are appended into existing packets constantly, so it would eventually
+        yield a malformed or double-evented ledger. Only safe if the plan check
+        and a YAML parse run on every merge and are trusted to catch it — verify
+        that empirically before adopting, do not assume it.
+        (2) One file per packet under plan/packets/, with the index derived.
+        Structurally removes the conflict: two hosts filing concurrently touch
+        different files. Larger change, and note that plan/steps/ is a LEGACY
+        markdown format the plan crate does not read, so it is not a head start.
+        Judge both against the real failure, which is not that merges happen but
+        that a HUMAN must adjudicate them. A conflict a machine resolves
+        correctly and verifiably is acceptable; one requiring judgement is not.
+      exit_criteria:
+        - "the union-merge risk is settled EMPIRICALLY — construct a concurrent event-append on one packet and show what union actually produces"
+        - "a recommendation with its migration cost, or a reasoned decision to keep manual resolution"
+        - "whichever is chosen, a malformed ledger cannot reach a push undetected"

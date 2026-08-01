@@ -35,8 +35,10 @@ pub struct Ledger {
     pub packets: Vec<Value>,
     /// packet_id -> index into `packets`.
     by_id: BTreeMap<String, usize>,
-    /// order number -> packet_id (orders can be "provisional"; only
-    /// numeric orders index here).
+    /// Integer order -> packet_id. Only numeric orders index here (a
+    /// `provisional` or suffixed token is not a `u64`), and only UNAMBIGUOUS
+    /// ones — see `by_order_token` for why, and `allocate` for the scheme that
+    /// stops new collisions being created.
     by_order: BTreeMap<u64, String>,
     /// Normalized order TOKEN -> packet_id. Order 516: child orders are
     /// written `394a` / `392b`, which YAML parses as STRINGS, so
@@ -46,12 +48,18 @@ pub struct Ledger {
     /// `"394"` resolves too) and is consulted only AFTER the integer path,
     /// leaving numeric lookup byte-identical.
     ///
-    /// UNIQUE TOKENS ONLY. 26 live packets carry the SENTINEL
-    /// `order: provisional` (and a handful of integer orders are
-    /// double-booked); mapping an ambiguous token to whichever packet
-    /// happened to be parsed last would answer a query with an arbitrary
+    /// UNIQUE TOKENS ONLY. 28 live packets carry the SENTINEL
+    /// `order: provisional`, and six integer orders are double-booked
+    /// (160, 196, 197, 201, 224, 294); mapping an ambiguous token to whichever
+    /// packet happened to be parsed last would answer a query with an arbitrary
     /// packet, which is a worse lie than the honest miss this packet was
     /// filed to fix. Ambiguous tokens are dropped and stay unresolvable.
+    ///
+    /// `by_order` NOW APPLIES THE SAME POLICY. It did not originally, and since
+    /// `resolve` consults the integer path first, this refusal was unreachable
+    /// for exactly the collisions that exist in practice — the crate did the
+    /// very thing this comment calls a worse lie. Callers turn the resulting
+    /// miss into a useful message with [`Ledger::ambiguous_claimants`].
     by_order_token: BTreeMap<String, String>,
     /// packet_ids that have been ARCHIVED (completed and moved to
     /// plan/archive/). A depends_on pointing at an archived packet is a
@@ -141,7 +149,23 @@ impl Ledger {
         let mut packets = Vec::new();
         collect_packets(&doc, &mut packets);
         let mut by_id = BTreeMap::new();
-        let mut by_order = BTreeMap::new();
+        // order -> (packet_id, how many packets claim it). COUNTED, then
+        // filtered, exactly like `by_order_token` below.
+        //
+        // This index used to be a bare `by_order.insert(order, id)`, i.e.
+        // last-write-wins with no ambiguity detection — while its sibling
+        // `by_order_token` carefully counted claims and dropped ambiguous ones,
+        // for a reason stated in that field's own doc comment: answering with
+        // "whichever packet happened to be parsed last would answer a query with
+        // an arbitrary packet, which is a worse lie than the honest miss".
+        //
+        // Because `resolve()` consults the INTEGER path first, that honest
+        // refusal was unreachable for exactly the collisions that actually
+        // exist. `status 160` returned one confident answer while two other
+        // packets equally claimed order 160, and nothing said so. The policy was
+        // implemented on one index and not the other, so the crate did the very
+        // thing its comment calls a worse lie.
+        let mut order_claims: BTreeMap<u64, (String, usize)> = BTreeMap::new();
         // token -> (packet_id, how many packets claim it). Count first, then
         // keep only the unambiguous ones (see `by_order_token`).
         let mut token_claims: BTreeMap<String, (String, usize)> = BTreeMap::new();
@@ -149,7 +173,10 @@ impl Ledger {
             if let Some(id) = str_field(p, "packet_id") {
                 by_id.insert(id.to_string(), idx);
                 if let Some(order) = p.get("order").and_then(Value::as_u64) {
-                    by_order.insert(order, id.to_string());
+                    order_claims
+                        .entry(order)
+                        .and_modify(|(_, n)| *n += 1)
+                        .or_insert((id.to_string(), 1));
                 }
                 if let Some(token) = p.get("order").and_then(order_token) {
                     token_claims
@@ -159,6 +186,11 @@ impl Ledger {
                 }
             }
         }
+        let by_order: BTreeMap<u64, String> = order_claims
+            .into_iter()
+            .filter(|(_, (_, n))| *n == 1)
+            .map(|(order, (id, _))| (order, id))
+            .collect();
         let by_order_token: BTreeMap<String, String> = token_claims
             .into_iter()
             .filter(|(_, (_, n))| *n == 1)
@@ -202,6 +234,38 @@ impl Ledger {
         self.by_id.contains_key(reference) || self.archived_ids.contains(reference)
     }
 
+    /// Every packet claiming `reference` as its order, when more than one does.
+    ///
+    /// Exists so an ambiguous lookup can FAIL INFORMATIVELY. Dropping ambiguous
+    /// orders from the indexes is right — answering `status 160` with one of
+    /// three packets is a lie — but the resulting miss would otherwise read as
+    /// "no such work", which is equally false and is the precise failure mode
+    /// order 516 was filed to remove from this surface. The order exists; it
+    /// just does not identify a single packet, and the caller needs to be told
+    /// which packet_ids to disambiguate between.
+    ///
+    /// Returns an empty vec for an unambiguous or absent reference, so callers
+    /// can branch on `is_empty()` to distinguish "genuinely unknown" from
+    /// "known but ambiguous".
+    pub fn ambiguous_claimants(&self, reference: &str) -> Vec<String> {
+        let wanted = normalize_order_token(reference);
+        let mut ids: Vec<String> = self
+            .packets
+            .iter()
+            .filter(|p| {
+                p.get("order")
+                    .and_then(order_token)
+                    .is_some_and(|t| t == wanted)
+            })
+            .filter_map(|p| str_field(p, "packet_id").map(str::to_string))
+            .collect();
+        if ids.len() < 2 {
+            return Vec::new();
+        }
+        ids.sort();
+        ids
+    }
+
     /// Resolve a user-facing reference: a packet_id, a bare order number, or
     /// an alphanumeric child-order token (`394a`, `392b`).
     ///
@@ -212,10 +276,12 @@ impl Ledger {
     /// answered "no packet matches" — a FALSE NEGATIVE that reads as "no such
     /// work", the worst possible failure for a retrieval surface.
     ///
-    /// The three lookups are ordered id -> integer order -> order token, and
-    /// the integer path is untouched, so every numeric reference resolves to
-    /// byte-identically the same packet as before; the token path can only
-    /// turn a former `None` into a hit.
+    /// The three lookups are ordered id -> integer order -> order token. Both
+    /// order paths now drop AMBIGUOUS claims, so a reference shared by several
+    /// packets is an honest miss rather than an arbitrary hit; use
+    /// [`Self::ambiguous_claimants`] to explain such a miss instead of reporting
+    /// a bare "no packet matches", which would be false — the order exists, it
+    /// just does not identify one packet.
     pub fn resolve(&self, reference: &str) -> Option<&Value> {
         if let Some(&idx) = self.by_id.get(reference) {
             return Some(&self.packets[idx]);
@@ -322,6 +388,47 @@ impl Ledger {
             };
             if !seen.insert(id.to_string()) {
                 report.violations.push(format!("duplicate packet_id: {id}"));
+            }
+        }
+
+        // Order tokens must be unique too, and until now nothing checked.
+        //
+        // `check` reported "ok: N packets, ids unique, live references sound"
+        // over a ledger carrying SIX double-booked orders (160, 196, 197, 201,
+        // 224, 294) because it validated packet_id and never looked at `order`.
+        // A guard that cannot see the defect it exists to prevent is this
+        // project's own named anti-pattern, and this one had been blind since
+        // the field was introduced.
+        //
+        // WARNING, NOT VIOLATION — deliberately. Six collisions already exist at
+        // HEAD; promoting them straight to violations would fail `check` on a
+        // clean checkout and block every cycle on unrelated historical debt.
+        // The warning names them so they are visible and disposable, and the
+        // gate tightens once they are resolved (see
+        // plan/issues/work-order-id-collision-free-design-2026-08-01.md §4 and
+        // packet duplicate-order-numbers-are-silently-unaddressable).
+        //
+        // The `provisional` SENTINEL is exempt: it is explicitly a
+        // not-yet-assigned marker carried by 28 packets, so many packets sharing
+        // it is its intended use, not a collision.
+        let mut order_claims: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        for p in &self.packets {
+            if let Some(token) = p.get("order").and_then(order_token)
+                && token != "provisional"
+                && let Some(id) = str_field(p, "packet_id")
+            {
+                order_claims.entry(token).or_default().push(id.to_string());
+            }
+        }
+        for (token, ids) in &order_claims {
+            if ids.len() > 1 {
+                report.warnings.push(format!(
+                    "duplicate order '{}' claimed by {} packets ({}) — \
+                     unaddressable by order; reference these by packet_id",
+                    token,
+                    ids.len(),
+                    ids.join(", ")
+                ));
             }
         }
         for p in &self.packets {
@@ -563,6 +670,117 @@ impl Schema {
 /// can never reach disk. This retires the order-263 broken-ledger class (the
 /// duplicate-key / glued-packet corruption that keeps biting hand edits) BY
 /// CONSTRUCTION for every edit routed through the tool.
+/// Collision-free order-token allocation for concurrent filing.
+///
+/// THE PROBLEM THIS REPLACES. "Next free order" is computed from a ledger
+/// SNAPSHOT that is stale the moment another host commits, so two hosts filing
+/// in the same window deterministically pick the same number. It happened twice
+/// in one session (560-562, then 568-570), and six collisions already sit at
+/// HEAD unnoticed.
+///
+/// Renumbering after the fact is the expensive half: order numbers leak into
+/// code comments, `@trace order:` headers (30 in the tree), and COMMIT
+/// MESSAGES, which can never be corrected. So the fix cannot be "detect and
+/// renumber" — it has to be "never collide".
+///
+/// THE SCHEME: `<seq>-<suffix>`, e.g. `575-k3f9`, allocated once and NEVER
+/// normalized. The `<seq>` prefix keeps rough chronology and human familiarity
+/// and is explicitly NON-AUTHORITATIVE — two hosts both picking 575 produce
+/// `575-k3f9` and `575-m2p1`, two distinct permanent identifiers that need no
+/// reconciliation. That is the operator's own criterion ("we don't need work
+/// orders to be fully numerically sequential, only unique") taken to its
+/// conclusion: once sequence is not required, normalization has nothing left to
+/// achieve, and normalization is precisely what costs.
+///
+/// Ordering is not lost — `events[].ts` and git history carry it, as the
+/// operator noted. See `plan/issues/work-order-id-collision-free-design-2026-08-01.md`.
+///
+/// No schema change is needed: `order` already accepts strings (`392a`, `484e`)
+/// and `order_token` already normalizes any scalar.
+pub mod allocate {
+    use super::Ledger;
+    use std::collections::hash_map::RandomState;
+    use std::hash::{BuildHasher, Hasher};
+
+    /// Suffix alphabet, deliberately 32 symbols with the visually ambiguous ones
+    /// removed (`l`/`1`, `o`/`0`). These tokens get read off a terminal, said out
+    /// loud, and retyped into `plan_status`; a suffix that resolves to a
+    /// different packet when misread would reintroduce the ambiguity this whole
+    /// scheme exists to remove.
+    const ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyz23456789";
+
+    /// Suffix length. 32^4 = 1_048_576 values, and the suffix only has to
+    /// separate packets that chose the SAME prefix — realistically two or three
+    /// hosts within the same hour. Four characters keep the token sayable while
+    /// putting the collision probability far below the noise floor, and unlike
+    /// today a full-token collision is DETECTED (see `mint`) rather than
+    /// silently resolved to whichever packet parsed last.
+    const SUFFIX_LEN: usize = 4;
+
+    /// Entropy source. NOT cryptographic and does not need to be: this is a
+    /// disambiguator between cooperating hosts, not a secret. `RandomState` is
+    /// seeded from the OS per process and is available in std, so this adds no
+    /// dependency to a crate that deliberately carries only three.
+    fn random_suffix() -> String {
+        let mut out = String::with_capacity(SUFFIX_LEN);
+        let mut hasher = RandomState::new().build_hasher();
+        hasher.write_usize(SUFFIX_LEN);
+        let mut bits = hasher.finish();
+        for _ in 0..SUFFIX_LEN {
+            out.push(ALPHABET[(bits % ALPHABET.len() as u64) as usize] as char);
+            bits /= ALPHABET.len() as u64;
+            if bits < ALPHABET.len() as u64 {
+                // Refresh from a fresh RandomState rather than reusing depleted
+                // low bits, which would bias the tail of the suffix.
+                let mut h = RandomState::new().build_hasher();
+                h.write_u64(bits);
+                bits = h.finish();
+            }
+        }
+        out
+    }
+
+    /// The highest integer order prefix present, so a freshly minted token sorts
+    /// after everything already filed.
+    ///
+    /// Reads the PREFIX of every token, so `575-k3f9` and `392b` both advance
+    /// the counter — otherwise the first suffixed packet would leave the next
+    /// allocation stuck behind it forever.
+    pub fn highest_prefix(ledger: &Ledger) -> u64 {
+        ledger
+            .packets
+            .iter()
+            .filter_map(|p| p.get("order").and_then(super::order_token))
+            .filter_map(|t| {
+                let digits: String = t.chars().take_while(char::is_ascii_digit).collect();
+                digits.parse::<u64>().ok()
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Mint a collision-free order token.
+    ///
+    /// Retries on the (vanishingly unlikely) case that the minted token is
+    /// already claimed — a real check against the ledger, so the guarantee does
+    /// not rest on probability alone. Gives up after a bounded number of
+    /// attempts rather than looping forever, because an exhausted alphabet is a
+    /// bug worth reporting, not a condition to spin on.
+    pub fn mint(ledger: &Ledger, prefix: Option<u64>) -> Result<String, String> {
+        let seq = prefix.unwrap_or_else(|| highest_prefix(ledger) + 1);
+        for _ in 0..64 {
+            let token = format!("{seq}-{}", random_suffix());
+            if ledger.resolve(&token).is_none() && ledger.ambiguous_claimants(&token).is_empty() {
+                return Ok(token);
+            }
+        }
+        Err(format!(
+            "could not mint an unclaimed order token for prefix {seq} in 64 attempts \
+             — this indicates a bug, not exhaustion"
+        ))
+    }
+}
+
 pub mod edit {
     use super::Ledger;
     use std::collections::BTreeSet;
@@ -1189,5 +1407,204 @@ plan_index:
 
         // A genuinely absent id must still fail loud.
         assert!(edit::append_event(raw, "nonexistent", block).is_err());
+    }
+}
+
+#[cfg(test)]
+mod order_identity_tests {
+    use super::*;
+
+    /// A ledger where two packets claim the same order — the live shape at HEAD
+    /// (160, 196, 197, 201, 224, 294) and the shape two hosts produce when they
+    /// file concurrently.
+    const COLLIDED: &str = "\
+packets:
+    - packet_id: alpha
+      order: 160
+      status: ready
+    - packet_id: beta
+      order: 160
+      status: ready
+    - packet_id: gamma
+      order: 161
+      status: ready
+";
+
+    #[test]
+    fn a_duplicated_order_resolves_to_nothing_rather_than_an_arbitrary_packet() {
+        // THE REGRESSION THIS PINS. `by_order` was a bare insert, so it was
+        // last-write-wins and `status 160` returned ONE confident answer while
+        // another packet equally claimed 160. The sibling index `by_order_token`
+        // already refused such tokens, for the reason stated in its own doc
+        // comment — answering arbitrarily "is a worse lie than the honest miss".
+        // Because resolve() consults the integer path FIRST, that refusal was
+        // unreachable for exactly the collisions that exist in practice.
+        let ledger = Ledger::parse(COLLIDED, BTreeSet::new()).expect("fixture parses");
+        assert!(
+            ledger.resolve("160").is_none(),
+            "an ambiguous order must not resolve to an arbitrary claimant"
+        );
+        assert!(
+            ledger.resolve("161").is_some(),
+            "an unambiguous order must still resolve"
+        );
+        assert!(
+            ledger.resolve("alpha").is_some() && ledger.resolve("beta").is_some(),
+            "packet_id is the identity and must resolve for BOTH colliding packets"
+        );
+    }
+
+    #[test]
+    fn an_ambiguous_miss_can_name_its_claimants() {
+        // A bare "no packet matches" would be false — order 160 exists. The
+        // caller needs the packet_ids to disambiguate between.
+        let ledger = Ledger::parse(COLLIDED, BTreeSet::new()).expect("fixture parses");
+        assert_eq!(
+            ledger.ambiguous_claimants("160"),
+            vec!["alpha".to_string(), "beta".to_string()],
+            "an ambiguous order names every claimant, sorted"
+        );
+        assert!(
+            ledger.ambiguous_claimants("161").is_empty(),
+            "an unambiguous order has no claimants to disambiguate"
+        );
+        assert!(
+            ledger.ambiguous_claimants("9999").is_empty(),
+            "a genuinely unknown reference is not 'ambiguous' — callers branch on this \
+             to tell 'unknown' from 'known but ambiguous'"
+        );
+    }
+
+    #[test]
+    fn check_reports_duplicate_orders_it_previously_could_not_see() {
+        // `check` printed "ok: N packets, ids unique, live references sound" over
+        // six real collisions, because it validated packet_id and never looked at
+        // `order`.
+        let ledger = Ledger::parse(COLLIDED, BTreeSet::new()).expect("fixture parses");
+        let report = ledger.check_integrity(&[]);
+        assert!(
+            report
+                .warnings
+                .iter()
+                .any(|w| w.contains("duplicate order '160'")
+                    && w.contains("alpha")
+                    && w.contains("beta")),
+            "check must name the duplicated order AND its claimants: {:?}",
+            report.warnings
+        );
+        assert!(
+            report.violations.is_empty(),
+            "duplicates are WARNINGS: six already exist at HEAD, and promoting them \
+             to violations would fail check on a clean checkout"
+        );
+    }
+
+    #[test]
+    fn the_provisional_sentinel_is_not_a_collision() {
+        // 28 live packets carry `order: provisional`. Many packets sharing it is
+        // its intended use, so flagging it would bury the real duplicates under
+        // noise from a working feature.
+        let raw = "\
+packets:
+    - packet_id: a
+      order: provisional
+      status: ready
+    - packet_id: b
+      order: provisional
+      status: ready
+";
+        let ledger = Ledger::parse(raw, BTreeSet::new()).expect("fixture parses");
+        let report = ledger.check_integrity(&[]);
+        assert!(
+            !report
+                .warnings
+                .iter()
+                .any(|w| w.contains("duplicate order")),
+            "the provisional sentinel must be exempt: {:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    fn minted_tokens_are_unique_and_do_not_collide_across_hosts_on_one_prefix() {
+        // The concurrent-filing case: two hosts that both computed the same
+        // "next free order" from their own stale snapshot. Under the old scheme
+        // that is a guaranteed collision; under this one it is two distinct,
+        // permanent identifiers needing no reconciliation.
+        let ledger = Ledger::parse(COLLIDED, BTreeSet::new()).expect("fixture parses");
+        let mut seen = BTreeSet::new();
+        for _ in 0..500 {
+            let token = allocate::mint(&ledger, Some(575)).expect("mint succeeds");
+            assert!(
+                token.starts_with("575-"),
+                "an explicit prefix must be honored: {token}"
+            );
+            assert!(
+                seen.insert(token.clone()),
+                "minted a duplicate token: {token}"
+            );
+        }
+    }
+
+    #[test]
+    fn minting_never_reuses_an_order_already_in_the_ledger() {
+        // Probability is not the guarantee — the ledger is checked.
+        let ledger = Ledger::parse(COLLIDED, BTreeSet::new()).expect("fixture parses");
+        for _ in 0..200 {
+            let token = allocate::mint(&ledger, None).expect("mint succeeds");
+            assert!(
+                ledger.resolve(&token).is_none(),
+                "minted a token that already resolves: {token}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_next_prefix_advances_past_suffixed_and_child_orders() {
+        // If highest_prefix only understood bare integers, the FIRST suffixed
+        // packet would leave every later allocation stuck behind it.
+        let raw = "\
+packets:
+    - packet_id: a
+      order: 100
+      status: ready
+    - packet_id: b
+      order: 575-k3f9
+      status: ready
+    - packet_id: c
+      order: 392b
+      status: ready
+";
+        let ledger = Ledger::parse(raw, BTreeSet::new()).expect("fixture parses");
+        assert_eq!(
+            allocate::highest_prefix(&ledger),
+            575,
+            "a suffixed order must advance the counter like any other"
+        );
+    }
+
+    #[test]
+    fn a_suffixed_order_is_addressable_exactly_like_an_integer_one() {
+        // The scheme is worthless if agents cannot look the token up.
+        let raw = "\
+packets:
+    - packet_id: suffixed
+      order: 575-k3f9
+      status: ready
+";
+        let ledger = Ledger::parse(raw, BTreeSet::new()).expect("fixture parses");
+        assert!(
+            ledger.resolve("575-k3f9").is_some(),
+            "a suffixed order must resolve"
+        );
+        assert!(
+            ledger.resolve("575-K3F9").is_some(),
+            "and resolve case-insensitively, like every other order token"
+        );
+        assert!(
+            ledger.resolve("575").is_none(),
+            "the PREFIX alone must not resolve — it is non-authoritative and \
+             several packets may share it"
+        );
     }
 }
