@@ -27097,7 +27097,7 @@ plan_index:
       desired_release: v0.5
       release_target: harness-mcp-expert-validation
       title: "Validate: OpenCode forge reports the expert MCP servers online + calls plan/methodology/spec experts (verified)"
-      status: ready
+      status: completed
       kind: validation
       multi_cycle: true
       deliverable: plan/issues/opencode-mcp-expert-validation-<DATE>.md with the MCP-panel evidence + tool-call transcripts + verify-answer results
@@ -27123,6 +27123,30 @@ plan_index:
         - "the OpenCode MCP panel shows forge-plan + project-info online at launch (evidence captured)"
         - "plan_answer and methodology_ask return verified cited envelopes (verify-answer passes)"
         - "spec_answer is advertised and returns a verified envelope OR a typed unsupported (not a crash)"
+      events:
+        - type: completed
+          ts: "2026-08-01T00:12Z"
+          agent_id: "linux-immutable-fable5-556-validate-20260801T0012Z"
+          host: linux_immutable
+          summary: >
+            VALIDATED in a live OpenCode forge (evidence:
+            plan/issues/forge-launch-live-validation-2026-08-01.md). Built +
+            installed the tray v0.4.260731.1, provisioned the stack, launched
+            `tillandsias --opencode . --prompt <556 validation>`; the forge came
+            up (git/proxy/router/vault healthy) and built the plan expert at
+            launch (experts state=ready). forge-plan.sh tools/list advertises all
+            10 tools INCLUDING spec_answer; in-forge calls: plan_answer
+            confidence=exact/107 citations, methodology_ask confidence=exact/1
+            citation with verify-answer "ok: 1 citation resolves, confidence=
+            Exact", spec_answer present + returns the honest typed unsupported
+            ("spec RAG index not built at /dev/shm/tillandsias-experts/spec-index")
+            — expected until orders 549/552 wire the in-enclave index+endpoint.
+            So MCP servers ONLINE at launch + reported, experts answer verified
+            in-enclave, spec_answer fail-soft (never a crash/guess). NOTE: found
+            + filed order 559 (opencode npm install not idempotent — ENOTEMPTY on
+            a stale temp dir blocked the first launch; fixed by hand, must be made
+            self-healing). The in-forge opencode LLM agent was also dispatched to
+            self-report; this direct-exec evidence stands regardless.
 
     - packet_id: claude-mcp-expert-validation
       order: 557
@@ -27176,3 +27200,41 @@ plan_index:
         - "the Codex MCP listing shows the expert MCP servers at launch (evidence captured)"
         - "plan_answer and methodology_ask return verified cited envelopes"
         - "spec_answer is advertised and returns a verified envelope OR a typed unsupported"
+
+    - packet_id: opencode-npm-install-not-idempotent
+      order: 559
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      title: "Fix: opencode (npm) harness launch install is not idempotent — ENOTEMPTY on a stale temp dir blocks forge launch"
+      status: ready
+      kind: fix
+      deliverable: idempotent npm-harness install in the forge launch path (clear stale .<pkg>-* temp + half-written <pkg> before npm i -g, or install-to-fresh-prefix-and-swap) + a litmus that a pre-seeded stale temp dir no longer blocks install
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, launch, opencode, npm, harness, self-heal]
+      estimated_hours: 4
+      outcome: >
+        Found 2026-08-01 during the live forge launch (evidence:
+        plan/issues/forge-launch-live-validation-2026-08-01.md). The first
+        OpenCode forge launch died before the agent ran: `opencode install FAILED
+        … npm error ENOTEMPTY: directory not empty, rename
+        '…/npm/global/lib/node_modules/opencode-ai' ->
+        '…/.opencode-ai-<rand>'`. A previous interrupted npm global install left
+        BOTH `opencode-ai` and a `.opencode-ai-<rand>` temp dir in the persistent
+        npm cache volume (tillandsias-forge-cache-tillandsias), so npm's
+        atomic-rename install fails on EVERY subsequent launch — the forge never
+        starts the harness (the launch-time retry cannot make progress because
+        the retry hits the same stale state). Worked around by hand this cycle
+        (removed the stale dirs via a root container); the relaunch then installed
+        opencode cleanly and the forge came up + validated (order 556). The fix:
+        the launch-time install must be SELF-HEALING — before `npm i -g <pkg>`,
+        remove any stale `.<pkg>-*` temp dir and a half-written `<pkg>` node_modules
+        dir (or install into a fresh prefix and atomically swap). Applies to every
+        npm-installed harness (opencode; check antigravity/gemini). NOTE: the
+        `tillandsias-inference exit_code=1` seen in the same failed launch was
+        teardown collateral (the failed-lane cleanup removed inference), NOT an
+        inference defect — the v0.4 inference image starts cleanly standalone.
+      exit_criteria:
+        - "a launch with a pre-seeded stale .<pkg>-* temp dir in the npm cache volume installs the harness cleanly (no ENOTEMPTY) — litmus"
+        - "the forge reaches the agent stage on that launch (no early exit)"
+        - "the self-heal covers every npm-installed harness in the launch path"
