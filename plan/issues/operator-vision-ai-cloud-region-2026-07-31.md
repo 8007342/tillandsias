@@ -118,3 +118,85 @@ Recorded so they are not silently decided by whoever implements first:
 Cite it as CONTEXT in packet outcomes when a decision is shaped by the long-range
 goal. Do not cite it as authorization. When any part of it becomes real work, the
 sharpened version belongs in `openspec/specs/` and this file becomes a pointer.
+
+---
+
+## Addendum 2026-07-31: authorization for non-technical users
+
+Operator thinking-out-loud, recorded because it answers the hardest open question
+above (authorization, not authentication) and because the framing is load-bearing
+rather than decorative. Explicitly LONG-TERM: "just plan those for really long
+term, there's lots we need to refine until then."
+
+### The encrypted OK button
+
+Not an identity device — an **approval** device. A hardware token (2FA/USB) the
+user *touches*, producing a cryptographically verifiable "a human said go ahead".
+Paired with a dialog and a short timeout: *"We're about to run a thing on your
+host, it will have long lasting consequences…"*, wording to be designed per case.
+
+Why this is the right shape for the stated user: it does not ask a non-technical
+person to *understand* a risk, only to *be present* for it. That is the one thing
+they can always do correctly.
+
+Three properties worth pinning before anyone builds it:
+
+1. **Bind the signature to the ACTION, not to the session.** The industry
+   primitive here is WebAuthn/FIDO2, which signs a server-supplied challenge. Put
+   a hash of the exact action description in that challenge, and the resulting
+   signature proves the human approved *that specific text* — not merely that a
+   human touched a token while something happened. Without this the obvious attack
+   is bait-and-switch: show a benign dialog, perform a different action, reuse the
+   assertion.
+2. **A short timeout bounds replay**, and the assertion must be single-use.
+3. **The headless case breaks the model and must be designed for.** The vision's
+   own flagship node is an old computer by a router with nobody in front of it. A
+   scheme that requires presence for every consequential action cannot run there.
+   This is precisely where the skill tree earns its keep: unlocked capabilities are
+   *pre-authorized* and need no touch; locked ones require presence. So the two
+   ideas are one mechanism, not two features.
+
+### The skill tree (a dashboard that is not a dashboard)
+
+Operator: "dashboards are scary for users; dashboard is an internal word." The
+user-facing surface is a videogame **skill tree** — a path toward "publish my app"
+that guides through create-a-repo, create-assets, create-use-cases, while hiding
+stories and epics. Users gain **XP** and **LEVEL UP** as their agents commit; enough
+XP unlocks the next policies (e.g. unlocking the "release" skill lets them push web
+apps).
+
+**The load-bearing sentence, verbatim: XP is "user lingo for verifiable
+constraints."** That is not flavour, and it should survive every future
+simplification of this idea:
+
+- It makes the skill tree a **projection of the policy graph**, not a veneer over
+  it. An unlock is a real predicate over satisfied constraints, so the pretty
+  surface and the security model cannot drift apart.
+- It reuses machinery that already exists. `methodology/convergence.yaml` already
+  defines `centicolon_residual` as "remaining named correctness obligations", and
+  the Observatorium already computes and signs it. That residual is the natural XP
+  denominator — progress toward zero residual IS levelling up.
+- **It is the difference between a security model and an exploit.** If XP accrued
+  from activity volume — commits, tasks, time — an agent could grind trivial
+  commits to unlock `release` and deploy to production. Constraint-derived XP
+  cannot be grinded, because the only way to earn it is to satisfy a check that
+  something independent verifies. Any future proposal to make XP "feel more
+  responsive" by rewarding activity is a privilege-escalation path and must be
+  refused on those grounds.
+
+### Where the two ideas join
+
+Levelling up is a **capability grant**. Capability grants are exactly the class of
+event that deserves human presence. So the natural composition is: XP accrues
+automatically from verifiable constraints (no friction, invisible), and the moment
+of *unlock* is where the encrypted OK button appears — once, with a clear
+description of what the user is about to permit, bound into the signed challenge.
+
+That yields low friction (touches are rare and meaningful) with a real audit trail
+(every capability the system holds traces to a human assertion over a specific
+text).
+
+Still unrefined, and deliberately left open: XP legibility without exposing
+epics/stories; what a *level* maps to in policy terms; whether levels can be lost
+when a constraint regresses; and recovery when the token is lost — which for a
+non-technical user is a likelier event than compromise.

@@ -27516,3 +27516,52 @@ plan_index:
         - "a packet whose order is duplicated is reported as unaddressable-by-order rather than appearing healthy"
         - "the concurrent-filing convention prevents two hosts choosing the same next order, demonstrated by a fixture simulating two hosts filing from the same snapshot"
         - "the 14 pre-existing duplicates are either resolved or explicitly tombstoned with a reason"
+
+    - packet_id: human-approval-and-capability-progression-roadmap
+      order: 567
+      desired_release: v0.7
+      title: "ROADMAP (long-horizon, not yet scoped): encrypted-OK-button human approval + skill-tree capability progression for non-technical users"
+      status: pending
+      kind: roadmap
+      deliverable: plan/issues/operator-vision-ai-cloud-region-2026-07-31.md (addendum) — criteria holder only
+      depends_on: [mesh-identity-plane-research]
+      pickup_role: any
+      capability_tags: [roadmap, security, authorization, ux, observatorium, operator-decision]
+      estimated_hours: 0
+      outcome: >
+        Operator direction 2026-07-31, filed at their explicit instruction to "just
+        plan those for really long term — there's lots we need to refine until
+        then". This packet is a PLACEHOLDER carrying the reasoning so it is not
+        reconstructed later from chat; it is NOT scoped work and must not be
+        claimed for implementation. Full context and the design constraints:
+        plan/issues/operator-vision-ai-cloud-region-2026-07-31.md, addendum
+        "authorization for non-technical users".
+        Two ideas that are one mechanism. (1) An ENCRYPTED OK BUTTON — a hardware
+        token the user touches to produce a cryptographically verifiable human
+        "go ahead", paired with a short-timeout dialog. Not identity: approval. It
+        asks a non-technical user only to be PRESENT, never to understand a risk.
+        (2) A SKILL TREE — the user-facing surface replacing a dashboard
+        ("dashboards are scary for users; dashboard is an internal word"), guiding
+        toward "publish my app" while hiding stories and epics, where agents earn XP
+        and levelling up unlocks the next policies.
+        THE LOAD-BEARING CONSTRAINT, to survive every future simplification: XP is
+        the operator's own phrase "user lingo for verifiable constraints". That
+        makes the tree a projection of the POLICY GRAPH rather than a veneer, lets
+        it reuse convergence.yaml's centicolon_residual (already computed and signed
+        by the Observatorium) as the natural denominator, and — critically — is the
+        difference between a security model and an exploit: XP derived from ACTIVITY
+        (commits, time, tasks) could be grinded by an agent making trivial commits
+        until `release` unlocks and it can deploy to production. Any future proposal
+        to make XP feel more responsive by rewarding activity is a
+        privilege-escalation path and must be refused on that ground.
+        Design notes captured for whoever scopes this: the approval signature must
+        bind to the ACTION (a hash of the exact dialog text inside a WebAuthn-style
+        challenge) or bait-and-switch defeats it; assertions must be single-use; and
+        the headless flagship node — an old computer by a router with nobody in
+        front of it — cannot require presence per action, which is exactly why
+        unlocked capabilities must be pre-authorized and only the UNLOCK moment
+        needs a touch.
+      exit_criteria:
+        - "NOT YET SCOPED. Before any implementation packet is cut, an operator-signed decision record must fix: what a level maps to in policy terms, whether levels can be lost when a constraint regresses, and token-loss recovery for a non-technical user"
+        - "any resulting design keeps XP constraint-derived, never activity-derived"
+        - "the headless (no-human-present) node has a defined behaviour that is not 'block forever'"
