@@ -279,7 +279,10 @@ critical_path:
     expected_behavior: "ok: probe-fail-soft"
 
   - step: "NO-PYTHON: the capability probe is POSIX shell + awk only"
-    command: "grep -qiE '(^|[^a-z])python' images/default/lib-expert-capability.sh && exit 1; grep -q 'awk' images/default/lib-expert-capability.sh && sh -n images/default/lib-expert-capability.sh && bash -n images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: no-python-posix-only'"
+    # Comments are stripped before the check: the file's own header says it uses
+    # no python, and a guard that cannot tell a PROHIBITION from a VIOLATION is
+    # not a guard.
+    command: "sed 's/#.*//' images/default/lib-expert-capability.sh | grep -qiE '(^|[^a-z])python' && exit 1; grep -q 'awk' images/default/lib-expert-capability.sh && sh -n images/default/lib-expert-capability.sh && bash -n images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: no-python-posix-only'"
     timeout_ms: 10000
     expected_behavior: "ok: no-python-posix-only"
 

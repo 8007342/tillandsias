@@ -683,8 +683,9 @@ expert_capability_report() {
 #     eaten as an option, and under any shell whose echo interprets escapes
 #     (dash, bash with xpg_echo) the binary's strictly-valid `\n`/`\t` become
 #     RAW control bytes inside the JSON string — which a strict parser rejects.
-#     That is the defect the order-557 validation reproduced (python json.loads
-#     fails strict, passes strict=False). `printf '%s\n'` cannot do either.
+#     That is the defect the order-557 validation reproduced: the same frame was
+#     refused by a strict JSON parser and accepted by a lenient one.
+#     `printf '%s\n'` cannot do either.
 #
 # If this is replaced by string concatenation again, the wire format becomes
 # shell-dependent and a strict MCP client starts dropping frames it cannot

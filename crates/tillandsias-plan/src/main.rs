@@ -1018,9 +1018,24 @@ fn main() {
             //
             // Prints ONE token on stdout and nothing else, so it composes:
             //   order: $(tillandsias-plan next-order)
-            // args[0] is the subcommand; the optional prefix operand is args[1],
-            // matching every sibling command in this dispatch.
-            let prefix = match args.get(1) {
+            // args[0] is the subcommand. The optional prefix is the first
+            // POSITIONAL operand after it — flags and their values must be
+            // skipped, or `next-order --count 5` reads "--count" as the prefix
+            // and refuses a perfectly valid invocation.
+            let positional: Vec<&String> = {
+                let mut out = Vec::new();
+                let mut i = 1usize;
+                while i < args.len() {
+                    if args[i] == "--count" {
+                        i += 2; // the flag and its value
+                        continue;
+                    }
+                    out.push(&args[i]);
+                    i += 1;
+                }
+                out
+            };
+            let prefix = match positional.first() {
                 None => None,
                 Some(a) => match a.parse::<u64>() {
                     Ok(n) => Some(n),
@@ -1038,8 +1053,31 @@ fn main() {
                     }
                 },
             };
-            match tillandsias_plan::allocate::mint(&ledger, prefix) {
-                Ok(token) => println!("{token}"),
+            // `--count N` mints N tokens in ONE invocation, guaranteed distinct
+            // from each other.
+            //
+            // This is the surface that actually needs it. `mint` only knows what
+            // is in the LEDGER, so tokens not yet written back are invisible to
+            // it — and calling `next-order` N times means N separate PROCESSES,
+            // none of which can see the others' draws. Filing a batch of packets
+            // (the common case) is therefore exactly the unprotected shape, and
+            // one invocation is the only place the guarantee can be made.
+            let count = match args.iter().position(|a| a == "--count") {
+                None => 1usize,
+                Some(i) => match args.get(i + 1).and_then(|n| n.parse::<usize>().ok()) {
+                    Some(n) if n >= 1 => n,
+                    _ => {
+                        eprintln!("error: --count requires a positive integer");
+                        std::process::exit(2);
+                    }
+                },
+            };
+            match tillandsias_plan::allocate::mint_batch(&ledger, prefix, count) {
+                Ok(tokens) => {
+                    for t in tokens {
+                        println!("{t}");
+                    }
+                }
                 Err(e) => {
                     eprintln!("error: {e}");
                     std::process::exit(1);

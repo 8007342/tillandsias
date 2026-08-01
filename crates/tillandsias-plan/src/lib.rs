@@ -751,6 +751,7 @@ impl Schema {
 /// and `order_token` already normalizes any scalar.
 pub mod allocate {
     use super::Ledger;
+    use std::collections::BTreeSet;
     use std::collections::hash_map::RandomState;
     use std::hash::{BuildHasher, Hasher};
 
@@ -819,10 +820,42 @@ pub mod allocate {
     /// attempts rather than looping forever, because an exhausted alphabet is a
     /// bug worth reporting, not a condition to spin on.
     pub fn mint(ledger: &Ledger, prefix: Option<u64>) -> Result<String, String> {
+        mint_avoiding(ledger, prefix, &BTreeSet::new())
+    }
+
+    /// Mint a token that collides with neither the LEDGER nor `reserved`.
+    ///
+    /// WHY `reserved` EXISTS. `mint` alone guarantees only that a token is
+    /// unused *in the ledger*. Tokens minted but not yet written back are
+    /// invisible to it, so an agent filing several packets in one pass — the
+    /// common case, and what this author did minting three in a row — could draw
+    /// the same suffix twice and never be told.
+    ///
+    /// The exposure is small but real, and it is bounded by the birthday
+    /// problem rather than by the retry loop: with a 4-character suffix over a
+    /// 32-symbol alphabet there are 32^4 = 1_048_576 values, so N unwritten
+    /// mints collide with probability ≈ N²/2_097_152 — about 0.005% for ten,
+    /// but ~11% for five hundred. Widening the suffix would trade away the
+    /// readability the format exists for; tracking what this process already
+    /// issued costs nothing and removes the failure entirely for a single
+    /// filer.
+    ///
+    /// Cross-host concurrent unwritten mints remain probabilistic, which is the
+    /// design's accepted trade: coordination-free allocation is the whole point,
+    /// and at realistic concurrency the probability is far below the rate at
+    /// which the ledger is committed.
+    pub fn mint_avoiding(
+        ledger: &Ledger,
+        prefix: Option<u64>,
+        reserved: &BTreeSet<String>,
+    ) -> Result<String, String> {
         let seq = prefix.unwrap_or_else(|| highest_prefix(ledger) + 1);
         for _ in 0..64 {
             let token = format!("{seq}-{}", random_suffix());
-            if ledger.resolve(&token).is_none() && ledger.ambiguous_claimants(&token).is_empty() {
+            if !reserved.contains(&token)
+                && ledger.resolve(&token).is_none()
+                && ledger.ambiguous_claimants(&token).is_empty()
+            {
                 return Ok(token);
             }
         }
@@ -830,6 +863,23 @@ pub mod allocate {
             "could not mint an unclaimed order token for prefix {seq} in 64 attempts \
              — this indicates a bug, not exhaustion"
         ))
+    }
+
+    /// Mint `count` tokens guaranteed distinct from each other and from the
+    /// ledger — the shape an agent filing a batch of packets actually needs.
+    pub fn mint_batch(
+        ledger: &Ledger,
+        prefix: Option<u64>,
+        count: usize,
+    ) -> Result<Vec<String>, String> {
+        let mut issued: BTreeSet<String> = BTreeSet::new();
+        let mut out = Vec::with_capacity(count);
+        for _ in 0..count {
+            let token = mint_avoiding(ledger, prefix, &issued)?;
+            issued.insert(token.clone());
+            out.push(token);
+        }
+        Ok(out)
     }
 }
 
@@ -1583,18 +1633,56 @@ packets:
         // "next free order" from their own stale snapshot. Under the old scheme
         // that is a guaranteed collision; under this one it is two distinct,
         // permanent identifiers needing no reconciliation.
+        //
+        // THIS TEST USED TO BE FLAKY, AND THE TEST WAS THE BUG. It drew 500
+        // tokens from `mint` and asserted every one distinct. `mint` guarantees
+        // only that a token is unused IN THE LEDGER — tokens minted and not yet
+        // written back are invisible to it — so 500 unwritten draws is a pure
+        // birthday experiment over 32^4 values and collides ~11% of the time by
+        // construction. It failed 3 runs in 12 and intermittently reddened two
+        // unrelated litmus tests that shell out to `cargo test`.
+        //
+        // Asserting a guarantee the design does not make is worse than not
+        // testing it: the red is real but the diagnosis points at `mint`, which
+        // is behaving exactly as specified. So the batch guarantee now has an
+        // API that actually provides it (`mint_batch`), and this test asserts
+        // the contract `mint` really offers.
         let ledger = Ledger::parse(COLLIDED, BTreeSet::new()).expect("fixture parses");
-        let mut seen = BTreeSet::new();
-        for _ in 0..500 {
+        for _ in 0..200 {
             let token = allocate::mint(&ledger, Some(575)).expect("mint succeeds");
             assert!(
                 token.starts_with("575-"),
                 "an explicit prefix must be honored: {token}"
             );
             assert!(
-                seen.insert(token.clone()),
-                "minted a duplicate token: {token}"
+                ledger.resolve(&token).is_none(),
+                "mint's actual contract: never return a token the LEDGER already \
+                 claims — {token}"
             );
+        }
+    }
+
+    #[test]
+    fn a_minted_batch_is_internally_distinct_which_mint_alone_cannot_promise() {
+        // The realistic failure this closes: one agent filing several packets in
+        // one pass draws several tokens before any of them reach the ledger, so
+        // `mint` cannot see its own earlier draws. Three-in-a-row is the common
+        // case (and what the author of this module did).
+        //
+        // 500 is deliberately far past any real batch — at that size the naive
+        // approach collides ~11% of the time, so this both proves the guarantee
+        // and would catch a regression that quietly dropped the reservation set.
+        let ledger = Ledger::parse(COLLIDED, BTreeSet::new()).expect("fixture parses");
+        let batch = allocate::mint_batch(&ledger, Some(575), 500).expect("batch mints");
+        let unique: BTreeSet<&String> = batch.iter().collect();
+        assert_eq!(
+            unique.len(),
+            batch.len(),
+            "every token in a batch must be distinct from every other"
+        );
+        for t in &batch {
+            assert!(t.starts_with("575-"), "prefix honored: {t}");
+            assert!(ledger.resolve(t).is_none(), "and unused in the ledger: {t}");
         }
     }
 
