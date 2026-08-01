@@ -6,8 +6,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:accel-capability-probe-contract-shape
+  - litmus:accel-envelope-reaches-the-forge
   coverage_ratio: 100
-  last_verified: '2026-07-30'
+  last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
   status: obsolete
   litmus_tests: []

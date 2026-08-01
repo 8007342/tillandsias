@@ -1162,11 +1162,17 @@ plan_index:
 
         // packet_id-first: the historically working shape.
         let a = edit::append_event(raw, "alpha", block).expect("alpha must resolve");
-        assert!(a.contains("summary: probe"), "alpha did not receive the event");
+        assert!(
+            a.contains("summary: probe"),
+            "alpha did not receive the event"
+        );
 
         // order-first: the shape that silently could not receive evidence.
         let b = edit::append_event(raw, "beta", block).expect("beta must resolve");
-        assert!(b.contains("summary: probe"), "beta did not receive the event");
+        assert!(
+            b.contains("summary: probe"),
+            "beta did not receive the event"
+        );
 
         // And the event must land in BETA, not leak into gamma. The old span-end
         // search skipped order-first items as boundaries, so a packet could get a

@@ -169,6 +169,10 @@ fn main() {
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
+    // Order 480 follow-up: make the capability probe observable from the host.
+    // Until this flag existed the probe had no caller at all, so there was no
+    // way to falsify what it reports without reading its source.
+    let capabilities = user_args.iter().any(|a| a == "--capabilities");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
@@ -328,6 +332,7 @@ fn main() {
         "--force",
         "--init",
         "--inference-tier",
+        "--capabilities",
         "--status-check",
         "--github-login",
         "--with-token",
@@ -534,6 +539,28 @@ fn main() {
         // detection surfaces can never drift; the sibling lanes
         // (orders 401/402) grade their guests against it.
         println!("tier:{}", detect_inference_tier());
+        std::process::exit(0);
+    }
+
+    if capabilities {
+        // Order 480 follow-up: the structured probe, made observable.
+        //
+        // Prints the ENVELOPE first — the same single line, in the same pinned
+        // grammar, that every forge receives as TILLANDSIAS_ACCEL_ENVELOPE — so
+        // what an agent is told can be checked against this host from the host
+        // itself. The full document follows for anything the line elides.
+        //
+        // This also refreshes the capabilities.json cache, which nothing else
+        // in the product wrote before the forge env call site existed.
+        let doc = accel_probe::load_or_probe(effective_inference_tier());
+        println!("{}", accel_probe::accel_envelope(&doc));
+        match serde_json::to_string_pretty(&doc) {
+            Ok(json) => println!("{json}"),
+            Err(err) => {
+                eprintln!("error: capability document did not serialize: {err}");
+                std::process::exit(1);
+            }
+        }
         std::process::exit(0);
     }
 
@@ -11104,6 +11131,17 @@ fn build_forge_agent_run_args_with_vault(
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
         .env("TILLANDSIAS_INFERENCE_TIER", effective_inference_tier())
+        // Order 480 follow-up: the tier string alone cannot express "this node
+        // has an NPU but no engine for it" or "this GPU exists but the runtime
+        // cannot hand it to you", which is exactly the two-tier distinction
+        // (workstation GPU vs mobile NPU) agents must route on. The envelope is
+        // the structured probe projected onto ONE line with a closed vocabulary.
+        // Until this call site existed, accel_probe had NO consumer and
+        // capabilities.json was never written on any host.
+        .env(
+            "TILLANDSIAS_ACCEL_ENVELOPE",
+            accel_probe::accel_envelope(&accel_probe::load_or_probe(effective_inference_tier())),
+        )
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")

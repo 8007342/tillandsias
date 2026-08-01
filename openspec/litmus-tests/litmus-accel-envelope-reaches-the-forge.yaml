@@ -1,0 +1,97 @@
+# @trace spec:accel-capability-probe
+#
+# WHY THIS TEST EXISTS — it pins a WIRE, not a contract.
+#
+# litmus:accel-capability-probe-contract-shape pins the SPEC's invariants, and
+# says so explicitly in its own header: "until the probe exists there is no code
+# to pin". Order 480 then implemented the probe, added nine unit tests, and
+# closed at "100% PASS" — while `accel_probe` had NO CONSUMER ANYWHERE in the
+# product. `capabilities.json` was never written on any host, no forge ever
+# received the hardware verdict, and every one of those assertions was true.
+#
+# That is this project's named recurring failure class, stated in
+# methodology.yaml as "verified where it was written is not verified where it
+# runs", in its purest available form: a module whose own tests all pass and
+# whose feature does not exist at runtime. Contract tests cannot catch it,
+# because nothing in the contract is violated by never calling the code.
+#
+# So this test asserts the CALL SITES — the three places the probe has to be
+# reachable from for an agent to ever learn what hardware it has:
+#
+#   1. the forge launch args export TILLANDSIAS_ACCEL_ENVELOPE,
+#   2. the forge startup context renders it,
+#   3. a host-side flag makes it observable, so what agents are told can be
+#      checked against the host that told them.
+#
+# It also pins the two properties that make the envelope trustworthy rather
+# than merely present: usability is decided by the CONTAINER LANE (a device
+# record can carry usable:true together with unusable_reason:cdi-spec-missing,
+# so reading `usable` would advertise a GPU no forge can touch), and an
+# UNEXPORTED envelope renders as a named unknown instead of silently reading as
+# "this node has no accelerator".
+#
+# Pattern: grep -F against source, no build required, so it runs pre-build.
+name: litmus:accel-envelope-reaches-the-forge
+spec: accel-capability-probe
+phase: pre-build
+description: >
+  Pin that the accel capability probe is WIRED, not merely implemented: the
+  forge launch exports TILLANDSIAS_ACCEL_ENVELOPE, the startup context renders
+  it, a host-side --capabilities flag makes it falsifiable, usability is decided
+  by the container lane rather than the usable flag, and an unexported envelope
+  degrades to a named unknown rather than to "no accelerator".
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/accel_probe.rs
+  - workspace contains images/default/lib-common.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "The probe has a consumer: the forge launch exports the envelope"
+    command: "grep -Fq 'TILLANDSIAS_ACCEL_ENVELOPE' crates/tillandsias-headless/src/main.rs && grep -Fq 'accel_probe::accel_envelope' crates/tillandsias-headless/src/main.rs && echo 'ok: probe is wired into forge launch'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe is wired into forge launch"
+
+  - step: "The probe is observable from the host (--capabilities), so agents' claims are checkable"
+    command: "grep -Fq '\"--capabilities\"' crates/tillandsias-headless/src/main.rs && echo 'ok: capabilities flag present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: capabilities flag present"
+
+  - step: "The forge startup context renders the envelope for agents"
+    command: "grep -Fq '_accel_envelope' images/default/lib-common.sh && grep -Fq 'accel_class' images/default/lib-common.sh && echo 'ok: envelope rendered in startup context'"
+    timeout_ms: 3000
+    expected_behavior: "ok: envelope rendered in startup context"
+
+  - step: "Usability is decided by the CONTAINER lane, not the usable flag"
+    command: "grep -Fq 'l == \"container\"' crates/tillandsias-headless/src/accel_probe.rs && echo 'ok: container lane decides usability'"
+    timeout_ms: 3000
+    expected_behavior: "ok: container lane decides usability"
+
+  - step: "An unexported envelope degrades to a NAMED unknown, never to cpu-only"
+    command: "grep -Fq 'envelope-not-exported' images/default/lib-common.sh && echo 'ok: absent envelope is a named state'"
+    timeout_ms: 3000
+    expected_behavior: "ok: absent envelope is a named state"
+
+  - step: "accel_class carries the full closed tier vocabulary"
+    command: "grep -Fq 'workstation-gpu' crates/tillandsias-headless/src/accel_probe.rs && grep -Fq 'mobile-npu' crates/tillandsias-headless/src/accel_probe.rs && grep -Fq 'hybrid-gpu-npu' crates/tillandsias-headless/src/accel_probe.rs && grep -Fq 'cpu-only' crates/tillandsias-headless/src/accel_probe.rs && echo 'ok: tier vocabulary complete'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tier vocabulary complete"
+
+  - step: "The GPU hardware UUID does not travel into forge env or context files"
+    command: "grep -Fq 'nvidia_model_name' crates/tillandsias-headless/src/accel_probe.rs && grep -Fq '(UUID:' crates/tillandsias-headless/src/accel_probe.rs && echo 'ok: uuid stripped from device name'"
+    timeout_ms: 3000
+    expected_behavior: "ok: uuid stripped from device name"
+
+  - step: "No Python (tlatoani_hard_no_python)"
+    command: "! grep -Eq 'python3?' crates/tillandsias-headless/src/accel_probe.rs && echo 'ok: no python'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no python"
+
+failure_modes:
+  - "accel_probe is implemented and unit-tested but never called — the exact order-480 state this test exists to prevent"
+  - "the envelope is exported but the startup context never renders it, so no agent sees it"
+  - "usability reads the `usable` field, advertising a GPU whose container lane is closed"
+  - "an unexported envelope renders as cpu-only, so a GPU host silently reads as having no accelerator"
+  - "the GPU UUID leaks into every forge's environment and on-disk context file"

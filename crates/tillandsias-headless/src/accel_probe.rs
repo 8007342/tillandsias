@@ -277,7 +277,7 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
             gpus.push(DeviceRecord {
                 device_class: "gpu".to_string(),
                 vendor: "nvidia".to_string(),
-                name: first_line.to_string(),
+                name: nvidia_model_name(first_line),
                 device_node: Some("/dev/nvidia0".to_string()),
                 fw_version: None,
                 driver: None,
@@ -469,9 +469,317 @@ fn physical_core_count() -> Option<u32> {
     None
 }
 
+/// Order 480 follow-up: project the capability document into ONE agent-facing
+/// line so a forge can state, at launch, what accelerators this node actually
+/// offers a container.
+///
+/// WHY THIS EXISTS: the probe above was implemented, unit-tested, and closed —
+/// with NO caller anywhere in the product. `capabilities.json` was never written
+/// on any host and nothing reached a forge. That is this project's named
+/// recurring failure class ("verified where it was written is not verified where
+/// it runs") in its purest form: the module's own tests passed while the feature
+/// did not exist at runtime. The envelope is the surface that makes it real.
+///
+/// PINNED GRAMMAR (a closed vocabulary; agents branch on this, never on prose):
+///   accel_class=<workstation-gpu|mobile-npu|hybrid-gpu-npu|cpu-only>
+///   accel_gpu=<usable|present-unusable|none> accel_gpu_name=<slug|->
+///   accel_npu=<usable|present-unusable|none> accel_npu_name=<slug|->
+///   accel_reason=<reason|-> accel_cpu_cores=<n|-> accel_ram_gb=<n|->
+///
+/// `accel_class` is the TWO-TIER ROUTING SIGNAL: this workstation reports
+/// `workstation-gpu`, a mobile host with a working NPU reports `mobile-npu`, and
+/// a host whose accelerator cannot be delivered to a container reports
+/// `cpu-only` with `accel_reason` naming why. An agent picks model size from the
+/// class without probing hardware it cannot see.
+///
+/// USABILITY IS DECIDED BY THE CONTAINER LANE, not by `usable`. A device record
+/// can carry `usable: true` together with `unusable_reason: cdi-spec-missing`
+/// (the NVIDIA-without-CDI case constructs exactly that), so `usable` alone
+/// would report a GPU this forge cannot touch. `lanes` contains `container`
+/// only when the runtime can actually hand the device over, which is precisely
+/// the question an agent inside a forge is asking.
+// @trace spec:accel-capability-probe
+pub fn accel_envelope(doc: &CapabilityDocument) -> String {
+    let pick = |class: &str| -> Option<&DeviceRecord> {
+        // Prefer a container-deliverable device; otherwise report the best
+        // evidence we have, so "present but unusable" never renders as "none".
+        doc.devices
+            .iter()
+            .find(|d| d.device_class == class && d.lanes.iter().any(|l| l == "container"))
+            .or_else(|| doc.devices.iter().find(|d| d.device_class == class))
+    };
+
+    let state = |d: Option<&DeviceRecord>| match d {
+        None => "none",
+        Some(d) if d.lanes.iter().any(|l| l == "container") && d.unusable_reason.is_none() => {
+            "usable"
+        }
+        Some(_) => "present-unusable",
+    };
+
+    let gpu = pick("gpu");
+    let npu = pick("npu");
+    let (gpu_state, npu_state) = (state(gpu), state(npu));
+
+    let class = match (gpu_state, npu_state) {
+        ("usable", "usable") => "hybrid-gpu-npu",
+        ("usable", _) => "workstation-gpu",
+        (_, "usable") => "mobile-npu",
+        _ => "cpu-only",
+    };
+
+    // The first named obstruction, so `cpu-only` is never a bare verdict.
+    let reason = gpu
+        .and_then(|d| d.unusable_reason.as_deref())
+        .or_else(|| npu.and_then(|d| d.unusable_reason.as_deref()))
+        .unwrap_or("-");
+
+    let cpu = doc.devices.iter().find(|d| d.device_class == "cpu");
+    let cores = cpu
+        .and_then(|d| d.cpu_cores.as_ref())
+        .map(|c| c.logical.to_string())
+        .unwrap_or_else(|| "-".to_string());
+    let ram = cpu
+        .and_then(|d| d.system_ram_gb)
+        .map(|g| format!("{g:.0}"))
+        .unwrap_or_else(|| "-".to_string());
+
+    format!(
+        "accel_class={} accel_gpu={} accel_gpu_name={} accel_npu={} accel_npu_name={} \
+         accel_reason={} accel_cpu_cores={} accel_ram_gb={}",
+        class,
+        gpu_state,
+        gpu.map(|d| slug(&d.name))
+            .unwrap_or_else(|| "-".to_string()),
+        npu_state,
+        npu.map(|d| slug(&d.name))
+            .unwrap_or_else(|| "-".to_string()),
+        slug(reason),
+        cores,
+        ram,
+    )
+}
+
+/// Extract the model name from an `nvidia-smi -L` line.
+///
+/// The raw line is `GPU 0: NVIDIA RTX A5000 (UUID: GPU-354dc81c-…)`. Storing it
+/// verbatim was wrong on two counts. It is noisy — the envelope's bounded name
+/// field truncated mid-UUID, so an agent read a mangled identifier instead of a
+/// model. And the UUID is a STABLE HARDWARE IDENTIFIER for this machine, which
+/// the envelope hands to every forge container and writes into an on-disk
+/// context file; a device model is what a consumer needs, so the serial number
+/// has no business travelling with it.
+///
+/// Falls back to the whole line when the shape does not match, so an unexpected
+/// `nvidia-smi` format degrades to "noisy" rather than "empty".
+fn nvidia_model_name(line: &str) -> String {
+    let after_index = line.split_once(": ").map(|(_, rest)| rest).unwrap_or(line);
+    let without_uuid = after_index
+        .split_once(" (UUID:")
+        .map(|(name, _)| name)
+        .unwrap_or(after_index);
+    let trimmed = without_uuid.trim();
+    if trimmed.is_empty() {
+        line.trim().to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+/// Collapse a free-form device name into one whitespace-free token.
+///
+/// The envelope is a space-separated `key=value` line, so a raw device name
+/// ("NVIDIA RTX A5000", or an `nvidia-smi -L` line carrying a UUID in
+/// parentheses) would split into extra fields and silently corrupt every key
+/// after it. Bounded length keeps one long name from dominating the line.
+fn slug(raw: &str) -> String {
+    let mut out: String = raw
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' || c == '-' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    // Collapse runs and trim, so "GPU 0: NVIDIA RTX" does not become
+    // "GPU_0__NVIDIA_RTX" with meaningless doubled separators.
+    while out.contains("__") {
+        out = out.replace("__", "_");
+    }
+    let out = out.trim_matches('_').to_string();
+    if out.is_empty() {
+        return "-".to_string();
+    }
+    out.chars().take(48).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Build a document with exactly the devices a case needs.
+    fn doc_with(devices: Vec<DeviceRecord>) -> CapabilityDocument {
+        CapabilityDocument {
+            schema_version: SCHEMA_VERSION,
+            legacy_tier: "cpu".to_string(),
+            devices,
+            engines: Vec::new(),
+            measurements: Vec::new(),
+            host: HostInfo {
+                is_battery_present: false,
+                kernel_release: "test".to_string(),
+            },
+            timestamp: "1970-01-01T00:00:00Z".to_string(),
+        }
+    }
+
+    fn device(class: &str, name: &str, lanes: &[&str], reason: Option<&str>) -> DeviceRecord {
+        DeviceRecord {
+            device_class: class.to_string(),
+            vendor: "test".to_string(),
+            name: name.to_string(),
+            device_node: None,
+            fw_version: None,
+            driver: None,
+            usable: true,
+            unusable_reason: reason.map(|r| r.to_string()),
+            lanes: lanes.iter().map(|l| l.to_string()).collect(),
+            memory_bandwidth_gbps: None,
+            memory_bandwidth_source: "unknown".to_string(),
+            cpu_flags: None,
+            cpu_cores: None,
+            system_ram_gb: None,
+        }
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn envelope_reports_workstation_gpu_when_the_container_lane_is_open() {
+        let d = doc_with(vec![device(
+            "gpu",
+            "NVIDIA RTX A5000",
+            &["container", "host-native"],
+            None,
+        )]);
+        let env = accel_envelope(&d);
+        assert!(
+            env.contains("accel_class=workstation-gpu"),
+            "a container-deliverable GPU is the workstation tier: {env}"
+        );
+        assert!(env.contains("accel_gpu=usable"), "{env}");
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn envelope_refuses_to_call_a_gpu_usable_when_only_the_host_lane_is_open() {
+        // The NVIDIA-without-CDI record this codebase actually constructs:
+        // usable=true AND unusable_reason=cdi-spec-missing, host-native only.
+        // Reading `usable` would advertise a GPU no forge can touch.
+        let d = doc_with(vec![device(
+            "gpu",
+            "NVIDIA RTX A5000",
+            &["host-native"],
+            Some("cdi-spec-missing"),
+        )]);
+        let env = accel_envelope(&d);
+        assert!(
+            env.contains("accel_class=cpu-only"),
+            "a GPU the container cannot receive must not set a GPU class: {env}"
+        );
+        assert!(env.contains("accel_gpu=present-unusable"), "{env}");
+        assert!(
+            env.contains("accel_reason=cdi-spec-missing"),
+            "cpu-only must never be a bare verdict — name the obstruction: {env}"
+        );
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn envelope_reports_the_mobile_npu_tier_and_the_hybrid_tier() {
+        let npu_only = doc_with(vec![
+            device("npu", "AMD XDNA", &["container"], None),
+            device("gpu", "iGPU", &["host-native"], Some("engine-missing")),
+        ]);
+        assert!(
+            accel_envelope(&npu_only).contains("accel_class=mobile-npu"),
+            "{}",
+            accel_envelope(&npu_only)
+        );
+
+        let both = doc_with(vec![
+            device("npu", "AMD XDNA", &["container"], None),
+            device("gpu", "NVIDIA RTX A5000", &["container"], None),
+        ]);
+        assert!(
+            accel_envelope(&both).contains("accel_class=hybrid-gpu-npu"),
+            "{}",
+            accel_envelope(&both)
+        );
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn envelope_stays_one_parsable_line_even_with_hostile_device_names() {
+        // `nvidia-smi -L` yields names with spaces, colons and parentheses. A
+        // raw name would split the space-separated grammar and corrupt every
+        // key after it.
+        let d = doc_with(vec![device(
+            "gpu",
+            "GPU 0: NVIDIA RTX A5000 (UUID: GPU-dead beef)",
+            &["container"],
+            None,
+        )]);
+        let env = accel_envelope(&d);
+        assert_eq!(env.lines().count(), 1, "envelope must be a single line");
+        let keys: Vec<&str> = env
+            .split(' ')
+            .filter(|f| !f.is_empty())
+            .map(|f| f.split('=').next().unwrap_or(""))
+            .collect();
+        assert_eq!(
+            keys,
+            vec![
+                "accel_class",
+                "accel_gpu",
+                "accel_gpu_name",
+                "accel_npu",
+                "accel_npu_name",
+                "accel_reason",
+                "accel_cpu_cores",
+                "accel_ram_gb",
+            ],
+            "every field must survive a hostile name: {env}"
+        );
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn nvidia_model_name_drops_the_index_prefix_and_the_hardware_uuid() {
+        // Verbatim shape of `nvidia-smi -L` on this workstation.
+        let raw = "GPU 0: NVIDIA RTX A5000 (UUID: GPU-354dc81c-189c-4074-1cb4-6cb1ae80f68b)";
+        assert_eq!(nvidia_model_name(raw), "NVIDIA RTX A5000");
+        assert!(
+            !nvidia_model_name(raw).contains("354dc81c"),
+            "the GPU UUID is a stable hardware identifier and must not travel \
+             into every forge's env and context file"
+        );
+        // An unfamiliar format degrades to noisy, never to empty.
+        assert_eq!(
+            nvidia_model_name("Some Future Format"),
+            "Some Future Format"
+        );
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn envelope_on_a_bare_cpu_host_is_cpu_only_with_no_phantom_devices() {
+        let env = accel_envelope(&doc_with(vec![device("cpu", "CPU", &["container"], None)]));
+        assert!(env.contains("accel_class=cpu-only"), "{env}");
+        assert!(env.contains("accel_gpu=none"), "{env}");
+        assert!(env.contains("accel_npu=none"), "{env}");
+    }
 
     #[test]
     // @trace spec:accel-capability-probe

@@ -3235,6 +3235,21 @@ inject_startup_context() {
             ;;
     esac
 
+    # Order 480 follow-up (accelerator envelope): the host probes its own
+    # hardware and passes the verdict in; the forge cannot see PCI devices, an
+    # NVIDIA driver, or /dev/accel, so it may never attempt this itself.
+    #
+    # An ABSENT variable is not the same fact as "no accelerator", and conflating
+    # them is how a GPU host silently reads as CPU-only. A launcher too old to
+    # export the envelope, or a container started outside the launcher, is
+    # reported as its own named state rather than being answered wrongly.
+    local _accel_envelope
+    if [[ -n "${TILLANDSIAS_ACCEL_ENVELOPE:-}" ]]; then
+        _accel_envelope="$TILLANDSIAS_ACCEL_ENVELOPE"
+    else
+        _accel_envelope="accel_class=unknown accel_gpu=unknown accel_gpu_name=- accel_npu=unknown accel_npu_name=- accel_reason=envelope-not-exported accel_cpu_cores=- accel_ram_gb=-"
+    fi
+
     local branch version agent_name
     branch="$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
 
@@ -3320,6 +3335,10 @@ inject_startup_context() {
 
 - **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
 - **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
+- **Accelerators** — \`${_accel_envelope}\`
+  - This is the HOST's hardware, projected onto a closed vocabulary so you can branch on it without probing devices you cannot see. \`accel_class\` is the one field worth reading first: \`workstation-gpu\` (a discrete GPU is deliverable to this container — larger models are cheap here), \`mobile-npu\` (an NPU is deliverable — prefer small quantized models), \`hybrid-gpu-npu\` (both), or \`cpu-only\`.
+  - \`cpu-only\` is never a bare verdict: when hardware is present but unreachable, \`accel_gpu\`/\`accel_npu\` read \`present-unusable\` and \`accel_reason\` names the obstruction (e.g. \`cdi-spec-missing\` — the GPU exists but the container runtime has no CDI spec to hand it over; \`engine-missing\` — the NPU exists but no runtime targets it yet). Report the reason rather than concluding the node has no accelerator.
+  - \`accel_class\` describes CAPACITY, not readiness. It is independent of \`inference_state\` below: a \`workstation-gpu\` node still reports \`inference_state=not-ready\` until a model is cached.
 - **Inference**: \`http://inference:11434\` (Ollama) — ${_inference_status}, tier: ${TILLANDSIAS_INFERENCE_TIER:-unknown}.
   - Machine-readable (branch on this, do not parse the prose): \`inference_state=${_inference_state} inference_models=${_inference_count} inference_warm=${_inference_warm} inference_reason=${_inference_reason}\`
   - \`inference_state\` is \`ready\` only when the endpoint answers AND at least one model is cached. Otherwise \`not-ready\` with a named \`inference_reason\`: \`no-models\` (endpoint up, nothing cached), \`endpoint-unreachable\`, \`endpoint-timeout\`, \`endpoint-http-error\`, \`probe-tool-missing\`, \`probe-helper-missing\`, or \`probe-error-<n>\`. There is no indeterminate "starting up" state.
