@@ -1,0 +1,84 @@
+# @trace spec:proxy-container
+# @trace spec:default-image
+#
+# Pins the egress and the bound that brew's attestation path depends on.
+#
+# WHAT BROKE. HOMEBREW_VERIFY_ATTESTATIONS=1 makes brew shell out to
+# `gh attestation verify`, which checks a Sigstore bundle against the Rekor
+# transparency log using a trust root fetched from the Sigstore TUF repository.
+# The proxy allowlist covered api.github.com but NOT .sigstore.dev, and the
+# allowlist's own comment asserted attestation needed only api.github.com — so
+# the wrong belief was written down next to the thing it broke.
+#
+# Every `brew install` therefore burned Homebrew's full retry ladder
+# (1+3+9+27+81 = 121 SECONDS per formula) and could never succeed. It stalled
+# forge startup past the liveness budget and failed the post-build e2e gate with
+# FORGE_EXIT=125 "dead_crashed".
+#
+# WHY THE FAILURE WAS INVISIBLE. squid.conf sets `deny_info TCP_RESET`, so a
+# denied CONNECT is logged as TCP_DENIED/200 — a reader grepping for 403 or for
+# a non-200 status sees a clean log and concludes the network is fine. That
+# reasoning error was made during this investigation and is recorded here so the
+# next reader does not repeat it.
+#
+# Two independent things are pinned, deliberately:
+#   1. the EGRESS (the actual fix), and
+#   2. the BOUND on install time, which must hold even if a future attestation
+#      failure has a different cause. A tool install must degrade to "tool
+#      unavailable", never to "the lane appears dead".
+name: litmus:brew-attestation-egress
+spec: proxy-container
+phase: pre-build
+description: >
+  Assert the proxy allowlist reaches Sigstore (without which brew attestation
+  cannot succeed), that the allowlist stays free of squid-fatal subdomain
+  duplicates, and that a brew install is time-bounded so an attestation stall
+  can never take a forge lane down.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/proxy/allowlist.txt and images/default/brew-shim-exec.sh
+  - no network access required
+
+critical_path:
+  - step: "Sigstore is allowlisted — brew attestation cannot verify without it"
+    command: "grep -qE '^\\.sigstore\\.dev$' images/proxy/allowlist.txt && echo 'ok: sigstore allowlisted'"
+    timeout_ms: 5000
+    expected_behavior: "ok: sigstore allowlisted"
+
+  - step: "one entry, not three: squid 6.x treats a subdomain of a listed domain as FATAL"
+    command: "n=$(grep -cE '^\\.(fulcio|rekor|tuf-repo-cdn)\\.sigstore\\.dev$' images/proxy/allowlist.txt); if [ \"$n\" = 0 ]; then echo 'ok: no fatal sigstore subdomains'; else echo \"found $n sigstore subdomain entries — squid will refuse to start\"; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: no fatal sigstore subdomains"
+
+  - step: "the allowlist no longer claims attestation needs only api.github.com"
+    command: "if grep -q 'attestation verification from api.github.com' images/proxy/allowlist.txt; then echo 'the stale claim is back — it is what caused the outage'; else echo 'ok: stale claim removed'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: stale claim removed"
+
+  - step: "a brew install is TIME-BOUNDED so an attestation stall cannot kill the lane"
+    command: "grep -q 'TILLANDSIAS_BREW_INSTALL_TIMEOUT' images/default/brew-shim-exec.sh && grep -q 'timeout' images/default/brew-shim-exec.sh && echo 'ok: install is bounded'"
+    timeout_ms: 5000
+    expected_behavior: "ok: install is bounded"
+
+  - step: "a timeout is reported as its OWN named outcome, not as a generic failure"
+    command: "grep -q 'TIMED OUT after' images/default/brew-shim-exec.sh && echo 'ok: timeout named distinctly'"
+    timeout_ms: 5000
+    expected_behavior: "ok: timeout named distinctly"
+
+  - step: "attestation verification stays REQUIRED — the bound is not a way to disable it"
+    command: "grep -q 'HOMEBREW_VERIFY_ATTESTATIONS=1' images/default/brew-shim-exec.sh && ! grep -q 'HOMEBREW_VERIFY_ATTESTATIONS=0' images/default/brew-shim-exec.sh && echo 'ok: attestation still required'"
+    timeout_ms: 5000
+    expected_behavior: "ok: attestation still required"
+
+  - step: "the shim parses under POSIX sh"
+    command: "sh -n images/default/brew-shim-exec.sh && echo 'ok: posix clean'"
+    timeout_ms: 5000
+    expected_behavior: "ok: posix clean"
+
+failure_modes:
+  - "Sigstore drops out of the allowlist and every brew install silently burns 121s and fails"
+  - "someone adds fulcio/rekor/tuf-repo-cdn as separate entries and squid refuses to start"
+  - "the install loses its time bound, so an attestation stall takes the whole forge lane down again"
+  - "attestation is disabled to stop the warning, trading away bottle provenance"

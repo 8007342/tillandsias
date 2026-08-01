@@ -89,8 +89,33 @@ fi
 
 brew_env
 echo "tillandsias: installing '$FORMULA' in userspace via brew (attested bottle)..." >&2
-if ! "$BREW_PREFIX/bin/brew" install --formula "$FORMULA" >&2; then
-    echo "tillandsias: brew install $FORMULA failed (attestation verification is REQUIRED and may be the cause — that is by design)." >&2
+# BOUND THE INSTALL. Homebrew's attestation path retries 5 times with an
+# exponential backoff of 1+3+9+27+81 = 121 SECONDS PER FORMULA, and exposes no
+# knob to shorten it. On 2026-08-01 that stalled forge startup past the
+# liveness probe's budget and failed the post-build e2e gate with
+# FORGE_EXIT=125 "dead_crashed" — a tool install taking the whole lane down.
+#
+# The specific cause then was egress (Sigstore was not allowlisted, fixed in
+# images/proxy/allowlist.txt), but this bound is deliberately INDEPENDENT of
+# that: any future attestation failure produces the same 121s ladder, and a
+# forge must degrade to "this tool is unavailable" rather than to "the lane
+# appears dead". Defence in depth, not a substitute for the fix.
+#
+# `timeout` returns 124 on expiry; hint_and_exit already tells the agent how to
+# proceed without the tool.
+BREW_INSTALL_TIMEOUT="${TILLANDSIAS_BREW_INSTALL_TIMEOUT:-150}"
+if command -v timeout >/dev/null 2>&1; then
+    set -- timeout "$BREW_INSTALL_TIMEOUT" "$BREW_PREFIX/bin/brew" install --formula "$FORMULA"
+else
+    set -- "$BREW_PREFIX/bin/brew" install --formula "$FORMULA"
+fi
+if ! "$@" >&2; then
+    rc=$?
+    if [ "$rc" = 124 ]; then
+        echo "tillandsias: brew install $FORMULA TIMED OUT after ${BREW_INSTALL_TIMEOUT}s (bounded on purpose — attestation retries alone cost 121s)." >&2
+    else
+        echo "tillandsias: brew install $FORMULA failed (attestation verification is REQUIRED and may be the cause — that is by design)." >&2
+    fi
     hint_and_exit
 fi
 

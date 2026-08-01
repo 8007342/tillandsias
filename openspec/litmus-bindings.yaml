@@ -710,6 +710,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
+  - litmus:brew-attestation-egress
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
   coverage_ratio: 75

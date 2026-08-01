@@ -9,8 +9,35 @@
 
 # --- Package registries ---
 # Homebrew (order 294): formulae.brew.sh API + brew.sh docs; bottles come
-# from ghcr.io and attestation verification from api.github.com (both
-# already covered below).
+# from ghcr.io.
+#
+# ATTESTATION NEEDS SIGSTORE, NOT JUST api.github.com. The previous comment
+# here claimed attestation verification was "from api.github.com (already
+# covered below)", and that belief is exactly why brew was broken for months:
+# HOMEBREW_VERIFY_ATTESTATIONS=1 makes brew shell out to `gh attestation
+# verify`, which checks a SIGSTORE bundle against the Rekor transparency log
+# and a Fulcio-issued certificate, with the trust root fetched from the
+# Sigstore TUF repository. api.github.com serves the attestation METADATA; it
+# cannot verify it.
+#
+# Measured 2026-08-01 through the live proxy from inside a forge image:
+#     api.github.com            -> HTTP 200
+#     github.com                -> HTTP 200
+#     fulcio.sigstore.dev       -> 000   (unreachable)
+#     rekor.sigstore.dev        -> 000   (unreachable)
+#     tuf-repo-cdn.sigstore.dev -> 000   (unreachable)
+# So every `brew install` burned a 1/3/9/27/81s retry ladder — 121s per
+# formula — and could never have succeeded. It stalled forge startup badly
+# enough to fail the post-build e2e gate (FORGE_EXIT=125, "dead_crashed").
+#
+# ONE entry, not three: squid 6.x treats a subdomain of an already-listed
+# domain as a FATAL config error (see the warning above), and .sigstore.dev
+# covers fulcio, rekor and tuf-repo-cdn.
+#
+# This ENABLES a supply-chain control that was silently failing; it does not
+# relax one. The alternative was to disable attestation, which would have
+# traded away bottle provenance to stop a warning.
+.sigstore.dev
 .brew.sh
 .npmjs.org
 .npmjs.com

@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260801
+events:
+  - packet_id: brew-attestation-verification-always-fails-and-stalls-forge-startup
+    event:
+      type: completed
+      ts: "2026-08-01T19:20:00Z"
+      agent_id: linux-mutable-macuahuitl-opus5-20260801
+      host: linux_mutable
+      summary: >
+        ROOT-CAUSED AND FIXED, verified end to end at runtime.
+        CAUSE: HOMEBREW_VERIFY_ATTESTATIONS=1 makes brew shell out to `gh
+        attestation verify`, which checks a Sigstore bundle against the Rekor
+        transparency log using a trust root fetched from the Sigstore TUF
+        repository. images/proxy/allowlist.txt covered api.github.com but NOT
+        .sigstore.dev — 110 entries, zero Sigstore coverage. The credential was
+        never the problem: it was present and non-empty (93 chars) throughout.
+        MEASURED THROUGH THE LIVE PROXY, from inside the forge image, before:
+        api.github.com 200, github.com 200, fulcio/rekor/tuf-repo-cdn all 000.
+        After adding a single `.sigstore.dev` entry and rebuilding: api.github.com
+        200, rekor 200, tuf-repo-cdn 200, and the decisive check
+        `gh attestation trusted-root --verify-only` now prints "Local TUF
+        repository for https://tuf-repo-cdn.sigstore.dev updated and verified".
+        ONE ENTRY, NOT THREE: squid 6.x treats a subdomain of an already-listed
+        domain as a FATAL config error, and .sigstore.dev covers fulcio, rekor
+        and tuf-repo-cdn.
+        THE WRONG BELIEF WAS WRITTEN DOWN NEXT TO THE BUG. The allowlist comment
+        asserted "attestation verification from api.github.com (both already
+        covered below)". api.github.com serves attestation METADATA; it cannot
+        verify it. That comment is corrected in place, and a litmus now fails if
+        the claim returns.
+        TWO CORRECTIONS TO THIS PACKET'S OWN EARLIER EVIDENCE, both mine:
+        (1) I cited "squid's live log shows CONNECT github.com:443 answering
+        TCP_TUNNEL/200 with zero denials during the retry storm" as proof the
+        network was open. That log window covered about eight seconds of
+        unrelated later traffic and contained no attestation requests at all. It
+        was not evidence.
+        (2) Worse, "zero denials" could not have been evidence even in principle:
+        squid.conf:96 sets `deny_info TCP_RESET strict_deny_acl`, so a DENIED
+        CONNECT is logged as TCP_DENIED/200. Grepping for 403 or for a non-200
+        status shows a clean log by construction. Anyone auditing egress on this
+        proxy must grep for TCP_DENIED, never for a status code.
+        ALSO LANDED, deliberately independent of the root cause: the brew install
+        is now time-bounded (TILLANDSIAS_BREW_INSTALL_TIMEOUT, default 150s).
+        Homebrew's ladder is 1+3+9+27+81 = 121s per formula with no knob to
+        shorten it, so ANY future attestation failure reproduces the same stall.
+        A tool install must degrade to "this tool is unavailable", never to "the
+        lane appears dead" — which is what took down the post-build e2e gate with
+        FORGE_EXIT=125. The bound is defence in depth, not a substitute for the
+        fix, and a litmus asserts attestation stays REQUIRED so the bound can
+        never become a way to disable it.
+        NOT DONE, and it should be: nobody has yet captured the actual stderr of
+        a failing attestation. print_stderr:false suppresses STREAMING only —
+        the captured stderr is carried in the exception raised after the retries
+        exhaust, so the reason is recoverable, merely delayed. Do not repeat the
+        claim that the error is "swallowed".
+        RESIDUAL ALTERNATIVES NOT ELIMINATED, so a recurrence is not
+        misdiagnosed: an HTTP 403 (insufficient scope, SAML SSO, secondary rate
+        limit) is NOT in Homebrew's non-retrying dispatch and falls through to
+        InvalidAttestationError, producing an identical 121s signature. So the
+        honest claim is "not token-absent and not the 401 shape", not "provably
+        never credential-shaped".
