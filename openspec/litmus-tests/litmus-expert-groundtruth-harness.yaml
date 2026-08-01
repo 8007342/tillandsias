@@ -112,10 +112,10 @@ critical_path:
     expected_behavior: "ok: wrong-methodology-quote-is-red"
 
   - step: "SEEDED WRONG ANSWER 2: a wrong PACKET STATUS is RED"
-    # The plan half. 394a is `done`; claiming it is `ready` must not grade
+    # The plan half. 394a is `completed`; claiming it is `ready` must not grade
     # green, or the expert could report finished work as available and agents
     # would redo it.
-    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/^          status: done$/          status: ready/' \"$Q\" > /tmp/.litmus-394d-w2.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w2.yaml > /tmp/.litmus-394d-w2.txt 2>&1 && { echo 'FAIL: a WRONG expected packet status was graded GREEN'; exit 1; }; grep -q '^FAIL  plan-status-of-394a' /tmp/.litmus-394d-w2.txt && grep -q 'authority.status' /tmp/.litmus-394d-w2.txt && echo 'ok: wrong-packet-status-is-red'"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); Q=openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml; sed 's/^          status: completed$/          status: ready/' \"$Q\" > /tmp/.litmus-394d-w2.yaml; \"$PB\" grade --root . /tmp/.litmus-394d-w2.yaml > /tmp/.litmus-394d-w2.txt 2>&1 && { echo 'FAIL: a WRONG expected packet status was graded GREEN'; exit 1; }; grep -q '^FAIL  plan-status-of-394a' /tmp/.litmus-394d-w2.txt && grep -q 'authority.status' /tmp/.litmus-394d-w2.txt && echo 'ok: wrong-packet-status-is-red'"
     timeout_ms: 120000
     expected_behavior: "ok: wrong-packet-status-is-red"
 

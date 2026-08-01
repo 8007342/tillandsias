@@ -1,5 +1,38 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-01T00:26Z (forge — order 553 groundtruth reconciliation DONE + forge tool-gap packets filed)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge), branch `linux-next` (created from
+  origin/linux-next a8bf4419, pushes through this cycle's commit). Startup checkout
+  was on `main` with 22 modified `.opencode/` paths; verified those blobs already
+  match origin/linux-next (operator changes were already pushed) — nothing extra to
+  commit; switched to the forge canonical branch.
+- **order 553 DONE (groundtruth harness RED fixed)**: reconciled the stale fixture
+  pins (done->completed for 394a x2 + experts-construction-research 393, matching the
+  order-440 status-vocabulary normalization) and re-pinned the litmus SEEDED WRONG
+  ANSWER 2 seed to `status: completed` (the old `done` seed matched nothing after the
+  fix — a vacuous-green trap). Grader untouched. Evidence: cargo test -p
+  tillandsias-plan green (48 passed, groundtruth 7/7 incl.
+  the_committed_query_set_is_green_at_head + wrong-span falsifiability); `grade` over
+  the committed set 17/17 PASS; seeded wrong-status copy RED on plan-status-of-394a.
+- **Forge tool-gap capture (operator "next forge run will be better")**: filed
+  plan/issues/forge-tool-availability-gaps-2026-08-01.md + promoted orders **560**
+  (ruby absent from the base — sanctioned YAML fallback + archive-plan-packets dead),
+  **561** (tillandsias-policy/tillandsias-podman-cli not discoverable: scripts exec
+  target/debug/… but CARGO_TARGET_DIR is redirected in the forge), **562** (litmus
+  podman preflight ENV-FAILs a forge on a test whose payload merely *mentions* podman
+  — the groundtruth harness's "how do I run podman rootless" query text tripped the
+  trigger, then `command -v podman` found the runner's own shim and the real podman
+  absent in the forge → ENV-FAIL before steps ran; 11 sibling litmuses in the same
+  spec PASSed).
+- **Verification note**: `litmus:expert-groundtruth-harness` could not run its steps
+  in this forge (preflight ENV-FAIL, order 562); the graded-binary steps (cargo test
+  + `grade` + seeded-wrong) were verified directly and are green.
+- **Next**: 559 (opencode npm idempotent install); 560-562 (forge tool availability,
+  filed this cycle); 555 (harness-affinity selection); 549/552 (in-enclave RAG index +
+  endpoint); 553's regression is closed so every host's cargo test / groundtruth
+  litmus is green again.
+
 ## Cycle 2026-08-01T00:20Z (linux_immutable — experts LIVE in a launched forge; build+launch+validate complete)
 
 - **Host**: `yoga`, branch `linux-next` (pushed through c9cf29e0). Completes the

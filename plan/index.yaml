@@ -26999,7 +26999,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Fix: expert ground-truth harness RED on linux-next — committed query set drifted from the ledger (done->completed, packet ids)"
-      status: ready
+      status: completed
       kind: fix
       deliverable: plan/issues/groundtruth-red-on-linux-next-2026-07-31.md + reconciled openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml + green cargo test / litmus:expert-groundtruth-harness
       depends_on: []
@@ -27028,6 +27028,31 @@ plan_index:
         - "litmus:expert-groundtruth-harness passes"
         - "the grader is unchanged; only the committed query-set fixture was reconciled"
         - "a deliberately-wrong expected value still turns a case red (falsifiability preserved)"
+      events:
+        - type: completed
+          ts: "2026-08-01T00:36Z"
+          agent_id: "forge-bigpickle-553-reconcile-20260801T0036Z"
+          host: forge
+          summary: >
+            RECONCILED: the fixture's three stale status pins updated from `done`
+            to `completed` (plan-methodology-experts-rung1/plan-expert-binary-
+            shipping order 394a in the plan-active-release case and the plan-status-
+            of-394a case; experts-construction-research order 393 in the active-
+            release case) to match the order-440 status-vocabulary normalization
+            (ledger now says `completed` for 393/394a/394b/394c/394d; 394e stays
+            in_progress). Grader untouched. litmus:expert-groundtruth-harness
+            SEEDED WRONG ANSWER 2 re-pinned from `status: done` to `status:
+            completed` so its falsification seed still fires (the seed previously
+            matched nothing and would have graded green-vacuously). cargo test -p
+            tillandsias-plan green (48 passed; groundtruth 7/7 incl.
+            the_committed_query_set_is_green_at_head + wrong-span falsifiability).
+            tillandsias-plan grade over the committed set: sets=1 total=17 pass=17
+            fail=0; seeded status-done->ready copy RED on plan-status-of-394a
+            (authority.status=completed). NOTE: full litmus runner hit ENV-FAIL
+            (podman unresponsive probe) BEFORE executing steps — a forge tooling
+            gap filed separately (orders 560-562), not a code regression; the
+            graded-binary steps were verified directly.
+
 
     - packet_id: harness-mcp-expert-validation
       order: 554
@@ -27244,3 +27269,90 @@ plan_index:
         - "a launch with a pre-seeded stale .<pkg>-* temp dir in the npm cache volume installs the harness cleanly (no ENOTEMPTY) — litmus"
         - "the forge reaches the agent stage on that launch (no early exit)"
         - "the self-heal covers every npm-installed harness in the launch path"
+
+    - packet_id: forge-ruby-sanctioned-yaml-validator
+      order: 560
+      desired_release: v0.5
+      title: "Fix: ruby absent in the forge base — sanctioned YAML-validation fallback and plan-archive tooling dead"
+      status: ready
+      kind: fix
+      deliverable: ruby (+ yaml binding) in images/default/Containerfile.base microdnf list OR a first-run install in lib-common.sh OR a rust/shell replacement for the ruby YAML fallback + a launch-time probe (`ruby -ryaml -e 'puts "ok"'`) as the verifiable closure
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, base-image, ruby, yaml, tooling]
+      estimated_hours: 2
+      outcome: >
+        Found 2026-08-01 by the order-553 forge cycle: the meta-orchestration
+        finalization's approved YAML-validation fallback is `ruby -ryaml -e
+        "YAML.load_file(...)"`, but the forge base image (Containerfile.base
+        microdnf list) installs NO ruby at all, so a forge cycle that needs the
+        fallback (tillandsias-policy binary not built) has no tool.
+        scripts/archive-plan-packets.sh likewise execs ruby archive-plan-packets.rb —
+        dead in a forge. Fix: add ruby + the yaml binding to the microdnf list (base
+        image is Fedora-minimal; package `ruby` and `ruby-libs`), or install at
+        first-run, or replace the fallback with a tool that ships in the base.
+        Verifiable closure: a launch-time probe `ruby -ryaml -e 'puts "ok"'` returns
+        0 in a forge, AND a `scripts/validate-yaml.sh`-style check grades the probe.
+      exit_criteria:
+        - "a forge launch-time probe `ruby -ryaml -e 'puts \"ok\"'` returns 0 (ruby + yaml present)"
+        - "scripts/archive-plan-packets.sh reaches the ruby exec (not 'command not found')"
+        - "the sanctioned fallback validator is usable in a forge (documented + probe-pinned)"
+
+    - packet_id: forge-policy-binary-discoverability
+      order: 561
+      desired_release: v0.5
+      title: "Fix: tillandsias-policy / tillandsias-podman-cli not discoverable — scripts assume target/debug/… but CARGO_TARGET_DIR is redirected in the forge"
+      status: ready
+      kind: fix
+      deliverable: CARGO_TARGET_DIR-aware binary resolution for the scripts that exec target/debug/tillandsias-policy (check-no-python-scripts.sh, check-cheatsheet-sources.sh, audit-cheatsheet-sources.sh, check-cheatsheet-tiers.sh, test-pre-receive-yaml-gate.sh, distill-forge-diagnostics.sh, fetch-cheatsheet-source.sh, regenerate-cheatsheet-index.sh) + scripts/tillandsias-podman, or an install-to-$HOME/.local/bin first-run step + a forge-verifiable closure
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, policy, scripts, cargo, discoverability]
+      estimated_hours: 3
+      outcome: >
+        Found 2026-08-01 by the order-553 forge cycle: the approved validator
+        `tillandsias-policy validate-yaml` builds fine in the forge but lands in
+        $CARGO_TARGET_DIR/debug/ (/home/forge/.cache/tillandsias-project/cargo/
+        target/debug/…) while several committed scripts exec `target/debug/
+        tillandsias-policy` relative to the checkout — with CARGO_TARGET_DIR
+        redirected in the forge, that path does not exist and the exec fails with
+        'No such file or directory'. scripts/tillandsias-podman probes
+        target/debug/tillandsias-podman-cli the same way. This is discoverability,
+        not a build gap. Fix: resolve the binary from $CARGO_TARGET_DIR when set
+        (cargo metadata or a shared resolve function), or install the policy binary
+        to $HOME/.local/bin at first-run beside the ensure_forge_experts
+        tillandsias-plan install, and pin with a forge probe running one of the
+        affected scripts from a CARGO_TARGET_DIR-redirected env.
+      exit_criteria:
+        - "scripts/check-no-python-scripts.sh exits clean in a forge with CARGO_TARGET_DIR redirected"
+        - "tillandsias-policy validate-yaml <file> is reachable from a forge (on PATH or via a resolution-aware wrapper)"
+        - "a litmus/probe asserts the resolution (forge + non-forge env)"
+
+    - packet_id: litmus-podman-preflight-forge-false-positive
+      order: 562
+      desired_release: v0.5
+      title: "Fix: litmus runner podman preflight ENV-FAILs a forge on a test whose payload merely mentions podman"
+      status: ready
+      kind: fix
+      deliverable: re-scoped preflight trigger in scripts/run-litmus-test.sh (podman invoked, not merely named; use $REAL_PODMAN_BIN captured pre-shim; skip when the shim's real podman is absent in a forge) + a regression proof that litmus:expert-groundtruth-harness runs its real steps in a forge
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, litmus, podman, preflight, testing]
+      estimated_hours: 2
+      outcome: >
+        Found 2026-08-01 by the order-553 forge cycle: run-litmus-test.sh's
+        environmental preflight (lines ~630-637) greps the whole test FILE for a
+        command line mentioning `podman`. The order-394d groundtruth harness matches
+        only because one step's payload TEXT contains "how do I run podman rootless"
+        — no step invokes podman. Then `command -v podman` succeeds (the runner put a
+        podman shim on PATH at line 139) and `timeout 5 podman ps` delegates to a real
+        podman absent in the forge → ENV-FAIL before any step runs. A green-reconciled
+        fixture reports as ENV-FAIL. Fix: trigger only when a command actually INVOKES
+        podman at a word boundary (run|ps|create|rmi|…), check $REAL_PODMAN_BIN
+        (captured at line 85 before the shim) rather than `command -v podman` (which
+        sees the shim), and treat absent real-podman in a forge as SKIP, not ENV-FAIL —
+        preserving the real intent (catch a STALLED host podman).
+      exit_criteria:
+        - "litmus:expert-groundtruth-harness runs its real steps (not ENV-FAIL) in a forge with no real podman"
+        - "a test whose command genuinely invokes podman still triggers the preflight when podman is stalled (intent preserved)"
+        - "the trigger does not fire on payload/query text that merely contains the word podman"
