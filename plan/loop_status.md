@@ -1,5 +1,39 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-01T00:20Z (linux_immutable — experts LIVE in a launched forge; build+launch+validate complete)
+
+- **Host**: `yoga`, branch `linux-next` (pushed through c9cf29e0). Completes the
+  operator's "implement 547 + deps, MCP online at launch + reported, full build +
+  live test, per-harness testing packets, forge-agent validation" drain.
+- **Full build + non-destructive launch**: `./build.sh --install` -> tray
+  v0.4.260731.1 (musl-static); `tillandsias --debug --init` provisioned the
+  stack; launched an OpenCode forge. ALL non-destructive
+  (TILLANDSIAS_DESTRUCTIVE_RESET_OK=0) — NPU toolboxes (rocm-fastflowlm,
+  lemonade) + Qwen3-4B/nomic models preserved throughout. VERSION build-bump
+  discarded (not committed; order 535).
+- **Experts LIVE in the forge (order 556 DONE)**: forge built the plan expert at
+  launch (experts state=ready); forge-plan.sh advertises all 10 tools incl. the
+  new spec_answer; plan_answer=exact/107 cites, methodology_ask=exact/1 cite,
+  verify-answer "ok"; spec_answer present + honest typed unsupported (RAG index
+  not built = expected, 549/552). Evidence:
+  plan/issues/forge-launch-live-validation-2026-08-01.md.
+- **Forge agent made progress from within**: the in-forge OpenCode LLM agent
+  independently ran the 556 validation, wrote
+  plan/issues/opencode-mcp-expert-validation-2026-08-01.md, PUSHED it (bc2e68a0),
+  and fixed a pre-existing rustfmt drift — "use forge agents to validate + make
+  progress from within" delivered.
+- **Launch bug found + filed (order 559)**: opencode npm harness install is not
+  idempotent (ENOTEMPTY on a stale .opencode-ai-<rand> temp dir blocked the first
+  launch); fixed by hand, must be made self-healing. The inference exit_code=1 in
+  that failed launch was teardown collateral, not a defect.
+- **This session's shipped chain**: 547 (spec RAG index, done) -> 548
+  (spec_answer MCP tool, live) -> 554-558 (harness testing packets, 556 done) ->
+  559 (npm launch bug). Also captured: 553 (groundtruth harness RED, pre-existing).
+- **Next**: 555 (harness-affinity selection) so 557/558 (claude/codex) auto-route;
+  549/552 (in-enclave RAG index + embedding endpoint) so spec_answer retrieves in
+  the forge (already proven against a local endpoint); 559 (idempotent install);
+  553 (groundtruth fixture refresh).
+
 ## Cycle 2026-08-01T00:15Z (linux_immutable — spec_answer MCP tool live + harness testing packets + full build in flight)
 
 - **Host**: `yoga`, branch `linux-next` (b7963f5c..2030b3cc pushed). Continues the
