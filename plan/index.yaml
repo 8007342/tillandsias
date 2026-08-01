@@ -12157,6 +12157,12 @@ plan_index:
         - "per-forge credential-issuance design (Vault-sourced, not readable as a file in the forge) + push attribution mechanism"
         - "if adopted: one lane migrated behind a flag with fetch/push parity fixture, then daemon --enable=receive-pack removed"
       events:
+        - type: note
+          ts: "2026-07-31T18:30:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            TLATOANI DECISION RECORDED 2026-07-31: SSH, and as an SSH CERTIFICATE AUTHORITY rather than authorized_keys. Operator rationale, which reaches well past this packet: transparent SSH credentials would let agents run inference and containers on ANY host with a logged-in Tillandsias, so this is rung one of a fleet identity plane and must be built to industry standard with rotating certs from the start. The git:// accept-the-risk branch remains off the table (operator 2026-07-19). CA rather than authorized_keys because authorized_keys cannot rotate without touching every node and cannot express 'this principal, for this purpose, for ten minutes' — both of which the mesh case requires; building the CA now means the mesh later issues DIFFERENT PRINCIPALS FROM THE SAME CA instead of inventing a second scheme. CONSTRAINT VERIFIED 2026-07-31: Vault's ssh-client-signer engine is NOT mounted today — only the KV path is in use — so standing that engine up is part of this packet's design work. SCOPE HELD: this packet stays forge->mirror push with per-forge identity and push attribution. The mesh half the operator described (node discovery, uptime affinity, cross-node compute, Cloudflare production posture) is filed separately as 560/561/562 under the v0.6 milestone so a 4h research packet is not silently inflated into a fleet architecture. Long-range context for all of them: plan/issues/operator-vision-ai-cloud-region-2026-07-31.md. STILL REQUIRED before 451 may proceed: the signed decision record this packet produces — the transport is chosen, the per-forge credential-issuance design is not yet written.
         - type: filed
           ts: "2026-07-13T04:40:00Z"
           agent_id: "linux-macuahuitl-fable5-20260713T0419Z"
@@ -27356,3 +27362,157 @@ plan_index:
         - "litmus:expert-groundtruth-harness runs its real steps (not ENV-FAIL) in a forge with no real podman"
         - "a test whose command genuinely invokes podman still triggers the preflight when podman is stalled (intent preserved)"
         - "the trigger does not fire on payload/query text that merely contains the word podman"
+    - packet_id: mesh-identity-plane-research
+      order: 563
+      desired_release: v0.6
+      release_target: v06-automation-milestone
+      title: "Research: mesh identity plane — one SSH CA issuing short-lived principals for forge push, cross-node compute, and node join"
+      status: ready
+      kind: research
+      deliverable: plan/issues/mesh-identity-plane-research + a Tlatoani-signable decision record
+      depends_on: [mirror-authenticated-push-transport]
+      pickup_role: linux
+      capability_tags: [security, ssh, vault, mesh, identity, research, operator-decision]
+      estimated_hours: 8
+      outcome: >
+        Context: plan/issues/operator-vision-ai-cloud-region-2026-07-31.md. The
+        operator chose SSH for order 322 precisely because transparent SSH
+        credentials would let agents run inference and containers on ANY host with
+        a logged-in Tillandsias — so 322's per-forge identity is rung one of a
+        fleet identity plane, not a one-off push credential.
+        This packet designs that plane ONCE, so the mesh work issues different
+        principals from the SAME CA instead of growing a second scheme beside it.
+        Scope: principal naming (forge lane, node, user), certificate TTLs and
+        rotation, host-certificate propagation so nodes authenticate each other
+        rather than trusting on first use, revocation, and the Vault
+        ssh-client-signer mount that does not exist today (verified 2026-07-31:
+        only the KV path is mounted).
+        The load-bearing question is NOT authentication. A signed certificate
+        proves WHO. It does not answer WHAT MAY THIS NODE ASK THAT NODE TO DO, and
+        a mesh where any logged-in node can launch containers anywhere is a
+        lateral-movement surface whose target user — explicitly a non-technical
+        one — cannot evaluate it. Authorization must be designed here, not bolted
+        on after the certs work.
+        Also design the blast radius of the CA itself: it becomes the highest-value
+        secret in the system, and its compromise is strictly worse than any token's.
+      exit_criteria:
+        - "one CA design covers forge->mirror push, cross-node compute, and node join, with principal naming and TTLs stated per use"
+        - "an AUTHORIZATION model is specified separately from authentication: what a holder of each principal may request, and what it may not"
+        - "certificate rotation and revocation are designed, including what happens to in-flight work when a cert expires mid-operation"
+        - "CA compromise is analysed with a stated containment story, not deferred"
+        - "a Tlatoani-signable decision record is produced; implementation stays gated behind it"
+
+    - packet_id: node-discovery-and-uptime-affinity
+      order: 564
+      desired_release: v0.6
+      release_target: v06-automation-milestone
+      title: "Research: node discovery + 24/7 uptime affinity — how an agent finds the right Tillandsias to host on"
+      status: ready
+      kind: research
+      deliverable: plan/issues/node-discovery-and-uptime-affinity + decision record
+      depends_on: [mesh-identity-plane-research]
+      pickup_role: linux
+      capability_tags: [mesh, discovery, scheduling, research, containers]
+      estimated_hours: 6
+      outcome: >
+        Context: plan/issues/operator-vision-ai-cloud-region-2026-07-31.md. The
+        headline story is a user logging a Tillandsias into an old computer beside
+        a router, walking away, and later prompting from a laptop: "host
+        myproject.com". The agent must FIND a node with 24/7 uptime affinity and
+        launch there.
+        Nothing in the ledger covers this today (verified 2026-07-31: no mesh,
+        node-affinity, or discovery packet exists). Design: how nodes announce
+        themselves, how "uptime affinity" is MEASURED rather than asserted, what
+        happens when the chosen node disappears mid-serve, and how a brand-new
+        headless box joins without the user performing a security ritual they do
+        not understand.
+        Discovery must not become a trust mechanism. A node that can announce
+        itself must not thereby become trusted — that is the trust-on-first-use
+        failure the CA design (560) exists to avoid, and the two packets must agree
+        on the boundary.
+      exit_criteria:
+        - "node announcement and discovery designed, with the trust boundary explicitly NOT derived from discovery"
+        - "uptime affinity is defined as a measured property with a stated observation window, not a self-reported flag"
+        - "the mid-serve node-disappearance case has a defined behaviour"
+        - "headless first-join requires no security ritual from a non-technical user, or the required interaction is specified and justified"
+
+    - packet_id: production-posture-no-network-tunnel-only
+      order: 565
+      desired_release: v0.6
+      release_target: v06-automation-milestone
+      title: "Research: the production hosting posture — no enclave, NO network access, reachable only through a Cloudflare tunnel"
+      status: ready
+      kind: research
+      deliverable: plan/issues/production-posture-no-network-tunnel-only + decision record
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [security, cloudflare, containers, networking, research]
+      estimated_hours: 6
+      outcome: >
+        Context: plan/issues/operator-vision-ai-cloud-region-2026-07-31.md. The
+        operator draws a deliberate asymmetry: dev.mydomain.com is enclave-hosted so
+        local agents can manipulate it, while production www.myproject.com runs with
+        NO enclave and NO network access, reached only through a native Cloudflare
+        tunnel serving public HTTP with a self-signed certificate for a domain the
+        user owns.
+        The asymmetry is the security property — what agents can touch and what the
+        public can reach are not the same thing — so this packet must pin it rather
+        than let it erode into "production is just dev with a tunnel".
+        The unresolved tension to answer, not defer: a host with no network access
+        cannot be updated through the network. The constraint that makes production
+        safe also makes it unreachable, so the update/patch path must be designed
+        explicitly, including what happens when the running artifact has a
+        vulnerability.
+        Builds on the existing cloudflare cluster (377 login, 378 warp tunnel, 388
+        tunnel TLS in proxy/router, 379 one-prompt public share) rather than
+        restarting it; read those first and state what changes for a no-network
+        production posture.
+      exit_criteria:
+        - "the dev vs production postures are specified as distinct, with the agent-reachability difference enforced by construction rather than convention"
+        - "the tunnel is the ONLY ingress and the only egress path, proven by a test that fails when the container gains general network access"
+        - "the update path for a no-network production host is designed, including the vulnerable-artifact case"
+        - "certificate provenance for a user-owned domain is specified end to end, with no step requiring the user to understand it"
+
+    - packet_id: duplicate-order-numbers-are-silently-unaddressable
+      order: 566
+      desired_release: v0.5
+      title: "`tillandsias-plan check` reports 'ids unique' while 14 packets share duplicated order numbers, making them unaddressable"
+      status: ready
+      kind: bug
+      deliverable: order-uniqueness reporting in check + a concurrent-filing convention that stops the collision at source
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [plan, tooling, rust, concurrency, ledger]
+      estimated_hours: 3
+      outcome: >
+        Found 2026-07-31 by colliding with the immutable sibling: we independently
+        filed packets and BOTH picked orders 560/561/562, because "next free order"
+        is computed from a ledger snapshot that is stale the moment another host
+        commits. Mine were renumbered to 563/564/565.
+        The collision is not the interesting part — the silence is. `check` reports
+        "ok: N packets, ids unique, live references sound" because it validates
+        packet_id uniqueness and never looks at `order`. Fourteen duplicated orders
+        already exist at HEAD: 160 196 197 201 224 246 247 294 392 394 427 429 482
+        484.
+        The consequence is concrete, not theoretical. crates/tillandsias-plan/src/
+        lib.rs's by_order_token deliberately DROPS ambiguous tokens — "mapping an
+        ambiguous token to whichever packet happened to be parsed last would answer
+        a query with an arbitrary packet, which is a worse lie than the honest
+        miss". That choice is right, and it means every one of those 28 packets is
+        UNADDRESSABLE by order: `status 392`, `append-event 392`, and every MCP
+        plan_status/plan_answer call keyed on those orders cannot resolve them,
+        while the ledger reports itself healthy.
+        So agents lose the ability to record evidence on those packets and are told
+        nothing. That is the same class as the append-event bug fixed today, where a
+        write path silently served 460 packets and refused 19.
+        Fix has two halves: make `check` REPORT order duplication (advisory at
+        minimum, since resolving 14 pre-existing ones is its own work), and remove
+        the collision at source — concurrent hosts must not both compute the same
+        "next" order. Options to weigh: host-prefixed or provisional order tokens
+        (the ledger already carries `order: provisional`), or allocating on merge
+        rather than on file.
+      exit_criteria:
+        - "check reports duplicated order tokens with the packet_ids that share them, and does not claim uniqueness it has not verified"
+        - "a packet whose order is duplicated is reported as unaddressable-by-order rather than appearing healthy"
+        - "the concurrent-filing convention prevents two hosts choosing the same next order, demonstrated by a fixture simulating two hosts filing from the same snapshot"
+        - "the 14 pre-existing duplicates are either resolved or explicitly tombstoned with a reason"
