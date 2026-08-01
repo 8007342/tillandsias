@@ -91,7 +91,7 @@ cases:
         - path: plan/index.yaml
           packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
           order: 394a
-          status: done
+          status: completed
         # NOTE: deliberately does NOT assert this packet's status. A query set
         # that pins the MUTABLE status of an in-flight packet goes red on every
         # legitimate ledger update — this case did exactly that the first time
@@ -107,7 +107,7 @@ cases:
           status: in_progress
         - path: plan/index.yaml
           packet_id: experts-construction-research
-          status: done
+          status: completed
       citations_exclude:
         # Not in this milestone. If it shows up, the release-target filter is
         # gone and the burndown is answering with the whole ledger.
@@ -176,7 +176,7 @@ cases:
         - path: plan/index.yaml
           packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
           order: 394a
-          status: done
+          status: completed
           span_contains:
             - "build and install the tillandsias-plan binary at forge launch"
 
@@ -195,7 +195,7 @@ cases:
       citation_kind: plan
       min_citations: 20
       citations_exclude:
-        - status: done
+        - status: completed
         - status: completed
         - status: obsoleted
 

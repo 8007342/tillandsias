@@ -21567,6 +21567,12 @@ plan_index:
         - "plan/index.yaml default_status_values and plan/schema.yaml statuses are identical"
         - "a check fails if the two lists diverge, so this cannot silently recur"
       events:
+        - type: progress
+          ts: "2026-07-31T18:00:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            ORDER 440 LEFT THE GROUND TRUTH RED. The status-vocabulary normalisation migrated done -> completed across 295 packets but did NOT update openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml, which still asserted status: done in four expectations. So groundtruth::tests::the_committed_query_set_is_green_at_head has been failing since 440 landed, and it was one of the two remaining local-ci failures on linux-next. The grader's own diagnostics named the cause exactly — 'closest miss: authority.status = "completed", expected "done"' — so the EXPERTS were answering correctly the whole time and the EXPECTATIONS were stale. That distinction matters for the milestone: a red ground truth is not evidence the experts are broken, but while it is red it is also not evidence they work, and 391's exit criteria are graded by exactly this harness. Fixed the four expectations to the canonical vocabulary; grade is 17/17 pass 0 fail and the test is green. LESSON worth carrying into 398's editor work: a vocabulary migration must update the ASSERTIONS that quote the vocabulary, not only the data. Nothing in the ledger tooling ties them together, so 440's own litmus (check-plan-schema-divergence) compares plan/index.yaml against plan/schema.yaml and is blind to the ground-truth corpus that also encodes status literals.
         - type: filed
           ts: "2026-07-19T09:00:00Z"
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
