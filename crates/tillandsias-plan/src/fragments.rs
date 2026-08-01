@@ -496,20 +496,62 @@ impl Ledger {
     /// server and the expert disagree about what the plan says, the retrieval
     /// surface is worse than useless.
     pub fn load_with_fragments(path: &Path) -> Result<Self, String> {
-        let raw =
-            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-        let base: Value = serde_yaml::from_str(&raw).map_err(|e| format!("parse: {e}"))?;
+        // Load the BASE first and keep its ledger wholesale, so `spans` stay
+        // byte-exact against the real plan/index.yaml.
+        //
+        // THE MISTAKE THIS AVOIDS, found by the order-523 self-verifier the same
+        // day it was written: an earlier version folded base+fragments into one
+        // document, re-SERIALIZED it, and parsed that. Spans were then computed
+        // over the serialized text, whose line numbers correspond to no file on
+        // disk, so EVERY citation — including for packets that had never been
+        // near a fragment — pointed at wrong lines in plan/index.yaml. The
+        // verifier caught it and downgraded the answers, reporting "FABRICATED
+        // citation", which is exactly right and exactly what it exists for. The
+        // net effect was that adding fragments silently disabled the cited-answer
+        // surface, i.e. the expert's entire reason to exist.
+        //
+        // So the base ledger is never rebuilt. Fragment content is layered ON
+        // TOP of it.
+        let mut ledger = Self::load(path)?;
         let fragments = load_all(path);
         if fragments.is_empty() {
-            return Self::load(path);
+            return Ok(ledger);
         }
-        let merged = fold(&base, &fragments);
-        let merged_raw =
-            serde_yaml::to_string(&merged).map_err(|e| format!("serialize merged: {e}"))?;
-        let archived_ids = Self::collect_archived_ids(path);
-        let mut ledger = Self::parse(&merged_raw, archived_ids)
-            .map_err(|e| format!("{} (+{} fragments): {e}", path.display(), fragments.len()))?;
-        ledger.source_path = Some(path.to_path_buf());
+
+        let base_doc: Value = {
+            let raw = std::fs::read_to_string(path)
+                .map_err(|e| format!("read {}: {e}", path.display()))?;
+            serde_yaml::from_str(&raw).map_err(|e| format!("parse: {e}"))?
+        };
+        let merged = fold(&base_doc, &fragments);
+
+        // Replace the packet list with the folded one so queries see everything,
+        // while `spans` and `source_path` remain those of the base parse.
+        let mut folded_packets = Vec::new();
+        crate::collect_packets(&merged, &mut folded_packets);
+        ledger.packets = folded_packets;
+        // The lookup indexes were built over the BASE packet list, so replacing
+        // `packets` without rebuilding them leaves every fragment-only packet
+        // unresolvable — present in the list, invisible to `status`. Rebuild them
+        // over the folded list, preserving the same ambiguity policy the base
+        // parse applies (duplicates are dropped, never resolved arbitrarily).
+        ledger.reindex();
+
+        // CITABILITY IS DELIBERATELY NOT EXTENDED TO FRAGMENT CONTENT.
+        //
+        // A packet that exists only in a fragment has no span in plan/index.yaml,
+        // so `span_of` returns None and the answer engine declines to cite it
+        // rather than inventing a line range. That is the correct trade: the
+        // packet is fully queryable (status / ready / check / blocked-by), and it
+        // becomes citable the moment compaction folds it into the base and it
+        // acquires a real span.
+        //
+        // The alternative — citing the fragment file — is a genuine improvement
+        // and needs per-packet source attribution, which `Ledger` does not carry
+        // (`source_path` is one path for the whole ledger). Tracked by packet
+        // format-preserving-ledger-compaction. Until then, refusing to cite is
+        // honest; a citation that does not resolve is worse than no citation, and
+        // the verifier would reject it anyway.
         Ok(ledger)
     }
 }
@@ -740,5 +782,136 @@ packets:
         let merged = fold(&base(), &[]);
         assert_eq!(packet_ids(&merged), vec!["alpha"]);
         assert_eq!(events_of(&merged, "alpha"), vec!["born"]);
+    }
+}
+
+#[cfg(test)]
+mod overlay_citation_tests {
+    use super::*;
+
+    /// A base ledger with the same 4-space item shape the real one uses, so
+    /// spans are computed exactly as in production.
+    const BASE_FILE: &str = "\
+plan_index:
+  steps:
+    - packet_id: alpha
+      order: 100
+      status: ready
+    - packet_id: beta
+      order: 101
+      status: ready
+";
+
+    fn scratch(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("tilland-overlay-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(d.join("plan/index.yaml"), BASE_FILE).expect("write base");
+        d
+    }
+
+    #[test]
+    fn overlay_preserves_exact_base_spans_so_citations_stay_verifiable() {
+        // THE REGRESSION THIS PINS. An earlier overlay folded base+fragments,
+        // RE-SERIALIZED the result, and parsed that — so spans were line numbers
+        // into a string matching no file on disk. Every citation then pointed at
+        // the wrong lines of plan/index.yaml, including for packets that had
+        // never been near a fragment, and the order-523 verifier correctly
+        // refused them as FABRICATED. Adding fragments silently disabled the
+        // cited-answer surface, which is the expert's entire reason to exist.
+        let d = scratch("spans");
+        let index = d.join("plan/index.yaml");
+
+        let before = Ledger::load(&index).expect("base loads");
+        let span_before = before.span_of("alpha").expect("alpha has a span");
+
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+        )
+        .expect("write fragment");
+
+        let after = Ledger::load_with_fragments(&index).expect("overlay loads");
+        assert_eq!(
+            after.span_of("alpha"),
+            Some(span_before),
+            "adding a fragment must not move an existing packet's span — that span \
+             is a byte-offset into plan/index.yaml and is what makes a citation \
+             verifiable"
+        );
+
+        // And the span must still contain the packet's own id line in the REAL
+        // file, which is the property the verifier actually checks.
+        let raw = std::fs::read_to_string(&index).expect("read base");
+        let lines: Vec<&str> = raw.lines().collect();
+        let (s, e) = span_before;
+        assert!(
+            lines[s - 1..e]
+                .iter()
+                .any(|l| l.contains("packet_id: alpha")),
+            "the cited span must contain the id it is offered as evidence for"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_fragment_only_packet_is_queryable_but_carries_no_fabricated_span() {
+        // Queryable is required — otherwise filing to a fragment loses the work.
+        // A SPAN is deliberately absent: the packet is not in plan/index.yaml, so
+        // any line range would be fiction. It becomes citable once compaction
+        // folds it into the base and it acquires a real span.
+        let d = scratch("frag");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+        )
+        .expect("write fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("overlay loads");
+        assert!(
+            l.resolve("gamma").is_some(),
+            "a fragment-only packet must be queryable by id"
+        );
+        assert!(
+            l.resolve("102").is_some(),
+            "and by its order token, or agents cannot reference it"
+        );
+        assert_eq!(
+            l.span_of("gamma"),
+            None,
+            "a fragment-only packet must have NO span — inventing one produces a \
+             citation that does not resolve, which is worse than no citation"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn overlay_indexes_are_rebuilt_so_base_packets_still_resolve_too() {
+        // Replacing the packet list without rebuilding the lookup indexes left
+        // fragment packets present-but-invisible; rebuilding them incorrectly
+        // could equally lose the base ones. Both must resolve.
+        let d = scratch("both");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+        )
+        .expect("write fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("overlay loads");
+        for id in ["alpha", "beta", "gamma"] {
+            assert!(
+                l.resolve(id).is_some(),
+                "{id} must resolve through the overlay"
+            );
+        }
+        for order in ["100", "101", "102"] {
+            assert!(
+                l.resolve(order).is_some(),
+                "order {order} must resolve through the overlay"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&d);
     }
 }

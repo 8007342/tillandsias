@@ -39,6 +39,115 @@ FORGE_EXPERTS_STATE_DIR="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts
 # pinned structurally by litmus:forge-plan-expert-build-shape.
 PLAN_BIN_CANONICAL="$HOME/.local/bin/tillandsias-plan"
 
+# ── ORDER 569: capability honesty ───────────────────────────────────────────
+#
+# `experts_state=ready` means THE BUILD FINISHED. It has never meant the binary
+# can answer. Order 531/557 ran a forge whose mounted checkout was a pre-expert
+# `main` snapshot: the launch compiled that checkout, installed it, stamped
+# `ready`, and every plan_answer came back confidence=unsupported while every
+# health signal read green. The stale binary compounded it by printing usage on
+# STDOUT and exiting 0 for an unknown subcommand, so this wrapper could not tell
+# incapability from success without sniffing output shape.
+#
+# The fix is to ASK the artifact what it can do (`tillandsias-plan
+# capabilities`, embedded at compile time) and to read what the MOUNTED CHECKOUT
+# would provide straight out of its capabilities.txt — the same file, two
+# readers, so "available now" and "available after a relaunch" cannot drift.
+#
+# The helper lives outside this file so litmus can exercise every branch of the
+# grammar against fixture binaries; see images/default/lib-expert-capability.sh
+# for the pinned line and its closed vocabularies. Probe order: an explicit
+# override, this script's own checkout-relative sibling (host + repo runs), then
+# the image install path.
+EXPERT_CAPABILITY_LIB=""
+for _cap_candidate in \
+    "${TILLANDSIAS_EXPERT_CAPABILITY_LIB:-}" \
+    "${BASH_SOURCE[0]%/*}/../../lib-expert-capability.sh" \
+    "/usr/local/lib/tillandsias/lib-expert-capability.sh"; do
+    if [ -n "$_cap_candidate" ] && [ -r "$_cap_candidate" ]; then
+        EXPERT_CAPABILITY_LIB="$_cap_candidate"
+        break
+    fi
+done
+if [ -n "$EXPERT_CAPABILITY_LIB" ]; then
+    # shellcheck source=/dev/null
+    . "$EXPERT_CAPABILITY_LIB"
+fi
+
+# The checkout whose sources a relaunch would build. Derived from the resolved
+# plan index (…/plan/index.yaml -> …), never assumed: answering "which checkout?"
+# wrongly would report another tree's capability set as this session's future.
+resolve_checkout_root() {
+    _cr_idx="$(resolve_plan_index)"
+    if [ -n "$_cr_idx" ]; then
+        dirname "$(dirname "$_cr_idx")"
+        return 0
+    fi
+    printf '\n'
+}
+
+# expert_capability_refresh — RE-PROBED PER CALL, deliberately.
+#
+# Capability legitimately INCREASES mid-session: ensure_forge_experts builds
+# asynchronously after launch, so a client that connected during the build must
+# see the new capabilities as soon as they land. Caching the first answer would
+# pin the session at `relaunch-required` for a build that finished seconds later
+# — telling the agent to relaunch when waiting was correct.
+expert_capability_refresh() {
+    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+    if command -v tillandsias_expert_capability >/dev/null 2>&1; then
+        tillandsias_expert_capability "$PLAN_BIN" "$(resolve_checkout_root)" || true
+    else
+        # Named, not silent. An absent probe reporting "no skew" would be the
+        # same lie `experts: ready` told.
+        TILLANDSIAS_EXPERT_CAP_NOW="none"
+        TILLANDSIAS_EXPERT_CAP_SKEW="none"
+        TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=none after_relaunch=none skew=none blocked_capabilities=- lost_on_relaunch=- probe=helper-missing"
+    fi
+    return 0
+}
+
+# capability_gap <subcommand> — empty when the running binary can serve it,
+# otherwise a full diagnostic naming the gap, the skew verdict and the action.
+#
+# The subcommand is the one this wrapper is about to exec, so there is no second
+# tool->capability table to drift: the gate reads the same token the call site
+# passes to the binary.
+#
+# Returns 0 ALWAYS. This script runs under `set -e`, where a non-zero return
+# inside `result=$(...)` kills the server mid-request and the client sees a
+# dropped connection instead of the diagnostic. The TEXT is the signal.
+capability_gap() {
+    _cg_sub="$1"
+    expert_capability_refresh
+    case "${TILLANDSIAS_EXPERT_CAP_NOW:-none}" in
+        none)
+            # No binary at all — binary_missing_error / the envelope constructors
+            # already own that path with their own build-step diagnostics.
+            printf ''
+            return 0
+            ;;
+        stale-binary)
+            printf 'degraded(stale-binary:pre-capability-manifest) — the installed tillandsias-plan does not report a capability manifest, so it predates order 569 and its abilities are UNKNOWABLE. It may answer `%s` with a usage dump and exit 0, which is indistinguishable from success. %s %s' \
+                "$_cg_sub" "${TILLANDSIAS_EXPERT_CAPABILITY_LINE:-}" \
+                "$(tillandsias_expert_capability_advice "${TILLANDSIAS_EXPERT_CAP_SKEW:-none}" 2>/dev/null || true)"
+            return 0
+            ;;
+    esac
+    case ",${TILLANDSIAS_EXPERT_CAP_NOW}," in
+        *",${_cg_sub},"*)
+            printf ''
+            ;;
+        *)
+            printf 'degraded(stale-binary:%s) — the installed tillandsias-plan cannot serve `%s`; the binary is STALE relative to the mounted checkout. %s %s' \
+                "${TILLANDSIAS_EXPERT_CAP_BLOCKED:-$_cg_sub}" "$_cg_sub" \
+                "${TILLANDSIAS_EXPERT_CAPABILITY_LINE:-}" \
+                "$(tillandsias_expert_capability_advice "${TILLANDSIAS_EXPERT_CAP_SKEW:-none}" 2>/dev/null || true)"
+            ;;
+    esac
+    return 0
+}
+
 # ── Expert usage telemetry (order 575) ──────────────────────────────────────
 #
 # One JSONL line per expert call, so a cycle can report whether the experts were
@@ -273,6 +382,17 @@ plan_query() {
         echo "ERROR: plan/index.yaml not found (probed \$TILLANDSIAS_PLAN_INDEX, \$HOME/src/tillandsias/plan/index.yaml, \$HOME/tillandsias/plan/index.yaml, /opt/cheatsheets/plan-index.yaml)"
         return 0
     fi
+    # ORDER 569. Refuse BEFORE exec'ing a subcommand this artifact cannot serve.
+    # A pre-569 binary answers an unknown subcommand with a usage dump on stdout
+    # and exit 0, which this wrapper would forward as a successful tool result —
+    # and a model reads a usage dump as an ANSWER. Checking capability first is
+    # what turns that silent wrong-answer into a named, actionable refusal.
+    _gap="$(capability_gap "$cmd")"
+    if [ -n "$_gap" ]; then
+        printf 'ERROR: %s\n' "$_gap"
+        printf '  This never affected your session: expert construction is fail-soft by contract.\n'
+        return 0
+    fi
     "$PLAN_BIN" --index "$PLAN_INDEX" "$cmd" "$@" 2>&1 || true
 }
 
@@ -336,6 +456,15 @@ plan_answer_envelope() {
     fi
     if [ -z "$PLAN_INDEX" ]; then
         unsupported_envelope "no plan/index.yaml was found to answer from (probed \$TILLANDSIAS_PLAN_INDEX, \$HOME/src/tillandsias/plan/index.yaml, \$HOME/tillandsias/plan/index.yaml, /opt/cheatsheets/plan-index.yaml) — experts state: ${state}"
+        return 0
+    fi
+    # ORDER 569. The capability gate is the difference between "the plan has no
+    # answer" and "this ARTIFACT cannot answer". Both used to surface as
+    # confidence=unsupported, and order 531 spent a whole cycle reading the
+    # second as the first.
+    hint="$(capability_gap "answer")"
+    if [ -n "$hint" ]; then
+        unsupported_envelope "the plan expert cannot answer — ${hint}"
         return 0
     fi
     out="$("$PLAN_BIN" --index "$PLAN_INDEX" answer "$question" 2>/dev/null || true)"
@@ -404,6 +533,15 @@ methodology_envelope() {
         unsupported_envelope "no methodology corpus was found to answer from (probed \$TILLANDSIAS_METHODOLOGY_ROOT, the checkout holding \$TILLANDSIAS_PLAN_INDEX, \$HOME/src/tillandsias, \$HOME/tillandsias) — experts state: ${state}"
         return 0
     fi
+    # ORDER 569, same gate as plan_answer: `methodology-ask` did not exist before
+    # 394c, so a cached pre-394c binary answers it with usage. Name that as an
+    # ARTIFACT problem instead of letting it read as "the methodology has no
+    # such rule".
+    _gap="$(capability_gap "$subcommand")"
+    if [ -n "$_gap" ]; then
+        unsupported_envelope "the methodology expert cannot answer — ${_gap}"
+        return 0
+    fi
     out="$("$PLAN_BIN" "$subcommand" --root "$METHODOLOGY_ROOT" "$argument" 2>/dev/null || true)"
     # Anything that is not an envelope (an argument error, or a cached
     # pre-394c binary with no methodology subcommand) is DOWNGRADED, never
@@ -437,6 +575,16 @@ spec_answer_envelope() {
     fi
     if [ -z "$PLAN_BIN" ]; then
         unsupported_envelope "the spec expert needs the tillandsias-plan binary (spec-retrieve/spec-envelope) — experts state: $(experts_state_line)"
+        return 0
+    fi
+    # ORDER 569. spec-retrieve/spec-envelope arrived with order 547; anything
+    # older cannot serve them. Refuse before spending an embedding round-trip on
+    # a binary that will answer with usage.
+    local gap
+    gap="$(capability_gap "spec-retrieve")"
+    [ -n "$gap" ] || gap="$(capability_gap "spec-envelope")"
+    if [ -n "$gap" ]; then
+        unsupported_envelope "the spec expert cannot answer — ${gap}"
         return 0
     fi
     if [ ! -s "$SPEC_INDEX_DIR/chunks.jsonl" ] || [ ! -s "$SPEC_INDEX_DIR/vectors.jsonl" ]; then
@@ -505,17 +653,83 @@ ${ctx}"
     rm -rf "$work"
 }
 
+# ORDER 569. The agent-facing answer to "what can I use now / what would a
+# relaunch give me / am I blocked", as a tool rather than a file an agent has to
+# know to read. Plain text on purpose: it is the pinned machine line plus its
+# one-sentence action, so it is greppable by a script and readable by a model.
+expert_capability_report() {
+    expert_capability_refresh
+    printf '%s\n' "${TILLANDSIAS_EXPERT_CAPABILITY_LINE:-expert_capability: now=none after_relaunch=none skew=none blocked_capabilities=- lost_on_relaunch=- probe=helper-missing}"
+    printf 'experts state: %s\n' "$(experts_state_line)"
+    tillandsias_expert_capability_advice "${TILLANDSIAS_EXPERT_CAP_SKEW:-none}" 2>/dev/null || \
+        printf 'The capability probe helper is not present, so the fields above are placeholders — treat expert capability as UNVERIFIED.\n'
+    return 0
+}
+
+# ── JSON-RPC FRAMING (order 569) ────────────────────────────────────────────
+#
+# Every frame below is BUILT BY jq, never by string concatenation.
+#
+# THE FAILURES THIS CLOSES. The old framing pasted `$id` and `$method` straight
+# into a JSON string literal and emitted the frame with `echo`:
+#
+#   * `"id":"'"$id"'"` re-typed every id as a STRING. Real MCP clients send
+#     numeric ids, and JSON-RPC 2.0 requires the response id to equal the
+#     request id — a client correlating on type sees a reply to a request it
+#     never made. --argjson preserves the id VERBATIM, type included.
+#   * an id or method containing a quote or backslash produced a frame that is
+#     not JSON at all. jq escapes both, so no input can break the envelope.
+#   * `echo` is not a portable byte pipe: a payload of exactly `-n`/`-e` is
+#     eaten as an option, and under any shell whose echo interprets escapes
+#     (dash, bash with xpg_echo) the binary's strictly-valid `\n`/`\t` become
+#     RAW control bytes inside the JSON string — which a strict parser rejects.
+#     That is the defect the order-557 validation reproduced (python json.loads
+#     fails strict, passes strict=False). `printf '%s\n'` cannot do either.
+#
+# If this is replaced by string concatenation again, the wire format becomes
+# shell-dependent and a strict MCP client starts dropping frames it cannot
+# parse — with no error anywhere in this server.
+emit_frame() {
+    printf '%s\n' "$1"
+}
+
+rpc_result_text() {
+    _rr_id="$1"
+    _rr_text="$2"
+    emit_frame "$(jq -cn --argjson id "$_rr_id" --arg text "$_rr_text" \
+        '{jsonrpc:"2.0", id:$id, result:{content:[{type:"text", text:$text}]}}')"
+}
+
+rpc_error() {
+    _re_id="$1"
+    _re_code="$2"
+    _re_msg="$3"
+    emit_frame "$(jq -cn --argjson id "$_re_id" --argjson code "$_re_code" --arg msg "$_re_msg" \
+        '{jsonrpc:"2.0", id:$id, error:{code:$code, message:$msg}}')"
+}
+
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
-    method=$(echo "$line" | jq -r '.method // empty')
-    id=$(echo "$line" | jq -r '.id // empty')
+    # `|| true` on both: a malformed line is a client bug, and letting `set -e`
+    # kill the server over it drops every subsequent request too.
+    method=$(echo "$line" | jq -r '.method // empty' 2>/dev/null || true)
+    id=$(echo "$line" | jq -r '.id // empty' 2>/dev/null || true)
+    # The id with its JSON TYPE intact, for the response frames.
+    id_json=$(printf '%s' "$line" | jq -c '.id // null' 2>/dev/null || true)
+    [ -n "$id_json" ] || id_json='null'
 
     case "$method" in
         "initialize")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"forge-plan","version":"1.0.0"}}}'
+            emit_frame "$(jq -cn --argjson id "$id_json" \
+                '{jsonrpc:"2.0", id:$id, result:{protocolVersion:"2024-11-05", capabilities:{tools:{}}, serverInfo:{name:"forge-plan", version:"1.0.0"}}}')"
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[
+            # The tool table is a literal here (it contains no interpolation, so
+            # it cannot be broken by input) but it is still piped through jq so
+            # the id keeps its type and the frame is emitted as ONE line —
+            # line-delimited JSON-RPC has no other framing.
+            emit_frame "$(jq -c --argjson id "$id_json" '{jsonrpc:"2.0", id:$id, result:{tools:.}}' <<'TOOLS_JSON'
+[
                 {"name":"plan_check","description":"Run integrity + schema validation on the plan ledger (shell: tillandsias-plan check)","inputSchema":{"type":"object","properties":{}}},
                 {"name":"plan_status","description":"Get the status line of a packet by id or order number","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_ready","description":"List ready packets, optionally filtered by pickup role","inputSchema":{"type":"object","properties":{"role":{"type":"string"}}}},
@@ -525,8 +739,11 @@ while IFS= read -r line; do
                 {"name":"plan_answer","description":"Answer a plan question as the CITED envelope {answer, citations[], freshness, confidence}. Every citation carries a repo-relative path and a line range whose span contains the packet it is offered as evidence for; verify with `tillandsias-plan verify-answer`. An answer with zero citations is returned as confidence=unsupported — the expert refuses rather than guesses.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"what is blocked by 394b\", \"everything downstream of 394\", \"what is ready for linux\", \"status of 394a\""}},"required":["question"]}},
                 {"name":"methodology_path","description":"METHODOLOGY EXPERT (L0). Look up a YAML path in methodology.yaml and methodology/**/*.yaml and return the matched block plus a resolvable file:line, in the same CITED envelope as plan_answer. Query by full dotted path (methodology.runtime_language_policy.tlatoani_hard_no_python.rule), by path suffix (forge_cycle_budget.rule), or with * wildcards. An unknown path returns confidence=unsupported with zero citations — never the nearest key, never a guess.","inputSchema":{"type":"object","properties":{"path":{"type":"string","description":"e.g. \"forge_cycle_budget.rule\", \"bar_raise_governance.authority\", \"multi_host_development.pull_merge_cadence.pre_push_gate.rule\""}},"required":["path"]}},
                 {"name":"methodology_ask","description":"METHODOLOGY EXPERT (L0). Route a canonical discipline question to its YAML path and answer it in the CITED envelope. Deterministic routing only: a question matching no route, or two routes, is refused as confidence=unsupported and the refusal lists the routed forms so you can re-ask methodology_path directly.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"may a forge cycle drain two packets?\", \"may I embed a script in base64?\", \"who may raise the scan bar?\", \"what happens to a dead mechanism with a live intent?\", \"which branch does macOS checkpoint to?\""}},"required":["question"]}},
-                {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}}
-            ]}}'
+                {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}},
+                {"name":"expert_capability","description":"ORDER 569. Answer three questions about this session's expert WITHOUT reading source: what can I use RIGHT NOW, what would be available if this forge were RELAUNCHED (i.e. what the mounted checkout's sources provide), and is my current work therefore BLOCKED pending a relaunch. Returns the pinned machine line `expert_capability: now=<csv|none|stale-binary> after_relaunch=<csv|none> skew=<none|pending-build|relaunch-required|relaunch-regresses> blocked_capabilities=<csv|-> lost_on_relaunch=<csv|->` plus the one-sentence action. Read `skew` first: `pending-build` means WAIT AND RETRY (the async launch build will deliver it in this session); `relaunch-required` means retrying is FUTILE and you must relaunch the forge or rebuild by hand. Call this whenever an expert tool returns confidence=unsupported — it distinguishes 'the plan has no answer' from 'this binary cannot answer'.","inputSchema":{"type":"object","properties":{}}}
+]
+TOOLS_JSON
+            )"
             ;;
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
@@ -581,6 +798,13 @@ while IFS= read -r line; do
                     question=$(echo "$args" | jq -r '.question // ""')
                     result=$(spec_answer_envelope "$question")
                     ;;
+                "expert_capability")
+                    # Order 569. Takes no arguments on purpose: the answer is a
+                    # property of THIS session's artifact and THIS forge's
+                    # mounted checkout, and letting a caller parameterise it
+                    # would invite asking about a tree nobody is running.
+                    result=$(expert_capability_report)
+                    ;;
                 *)
                     # An unhandled tool name is a PROTOCOL error, not a successful
                     # answer whose text happens to say "Unknown tool". Returning it
@@ -606,27 +830,25 @@ while IFS= read -r line; do
             record_expert_call "$tool" "${result:-}" "${unknown_tool:-0}"
             if [ "${unknown_tool:-0}" = "1" ]; then
                 unknown_tool=0
-                escaped=$(echo "Unknown tool: $tool" | jq -Rs .)
-                echo '{"jsonrpc":"2.0","id":"'"$id"'","error":{"code":-32601,"message":'"$escaped"'}}'
+                rpc_error "$id_json" -32601 "Unknown tool: $tool"
             else
-                escaped=$(echo "$result" | jq -Rs .)
-                echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
+                rpc_result_text "$id_json" "$result"
             fi
             ;;
         "prompts/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"prompts":[]}}'
+            emit_frame "$(jq -cn --argjson id "$id_json" '{jsonrpc:"2.0", id:$id, result:{prompts:[]}}')"
             ;;
         "resources/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resources":[]}}'
+            emit_frame "$(jq -cn --argjson id "$id_json" '{jsonrpc:"2.0", id:$id, result:{resources:[]}}')"
             ;;
         "resources/templates/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resourceTemplates":[]}}'
+            emit_frame "$(jq -cn --argjson id "$id_json" '{jsonrpc:"2.0", id:$id, result:{resourceTemplates:[]}}')"
             ;;
         "notifications/initialized")
             ;;
         *)
             if [ -n "$id" ]; then
-                echo '{"jsonrpc":"2.0","id":"'"$id"'","error":{"code":-32601,"message":"Method not found: '"$method"'"}}'
+                rpc_error "$id_json" -32601 "Method not found: $method"
             fi
             ;;
     esac

@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260801
+events:
+  - packet_id: expert-usage-telemetry-and-cycle-metrics
+    event:
+      type: note
+      ts: "2026-08-01T06:00:00Z"
+      agent_id: linux-mutable-macuahuitl-opus5-20260801
+      host: linux_mutable
+      summary: >
+        ECONOMIC EVIDENCE FOR EXPERT USEFULNESS, measured independently inside a
+        forge by the Antigravity sibling and recorded here because it answers a
+        question this packet deliberately left open. This packet's answer_rate
+        measures whether the expert RESOLVES what it is asked; it says nothing
+        about whether querying is cheaper than the alternative. Antigravity
+        measured that directly (plan/issues/mcp-server-performance-and-discoverability-audit-2026-08-01.md
+        and the order-557 validation event): the expert lane is roughly 80x
+        cheaper and 5x faster than naive ledger browsing for a cloud agent, with
+        the deterministic CLI at about 30ms and zero token cost, and per-tool
+        latencies of 21-86ms across both MCP servers.
+        That is a THIRD axis beyond used-and-useful, and it is the one that
+        actually motivates adoption: an expert can be well-used and
+        high-answer-rate and still not worth calling if it costs more than
+        reading the file. Here it is three orders of magnitude the other way.
+        NOT folded into answer_rate, deliberately. Cost is a property of the
+        SURFACE, measured once per change, whereas answer_rate is a property of a
+        CYCLE. Averaging them would let a cheap surface mask a useless one, which
+        is the same conflation this packet refused when it excluded `degraded`
+        from the answer-rate denominator.
+  - packet_id: mcp-and-expert-read-paths-use-the-fragment-overlay
+    event:
+      type: note
+      ts: "2026-08-01T06:01:00Z"
+      agent_id: linux-mutable-macuahuitl-opus5-20260801
+      host: linux_mutable
+      summary: >
+        CONCRETE STARTING POINT, verified 2026-08-01: project-info.sh's plan_query
+        reads plan/index.yaml with yq+jq directly, so it now sees only the
+        COMPACTED BASE and silently omits every fragment-only packet. Antigravity
+        measured that same tool at 86.76ms returning 370 matching items, so it is
+        in active use by agents — this is a live divergence, not a latent one.
+        The failure to prevent is two authoritative-looking surfaces disagreeing:
+        plan_answer (overlay-aware, via the compiled CLI) will report a packet
+        that plan_query (base-only) says does not exist, and an agent has no way
+        to tell which is lying.

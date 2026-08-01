@@ -221,6 +221,53 @@ impl Ledger {
         self.spans.get(packet_id).copied()
     }
 
+    /// Rebuild the lookup indexes from the current `packets`, leaving `spans`
+    /// and `source_path` untouched.
+    ///
+    /// Used by the fragment overlay, which replaces the packet list with the
+    /// folded one but must NOT disturb spans — those are byte-offsets into the
+    /// base file and are what make citations verifiable. Rebuilding them from a
+    /// merged in-memory document would produce line numbers matching no file,
+    /// which the order-523 self-verifier correctly reports as a FABRICATED
+    /// citation.
+    ///
+    /// Applies exactly the same ambiguity policy as `parse`: an order claimed by
+    /// more than one packet is DROPPED from both order indexes rather than
+    /// resolved to whichever was seen last.
+    pub(crate) fn reindex(&mut self) {
+        let mut by_id = BTreeMap::new();
+        let mut order_claims: BTreeMap<u64, (String, usize)> = BTreeMap::new();
+        let mut token_claims: BTreeMap<String, (String, usize)> = BTreeMap::new();
+        for (idx, p) in self.packets.iter().enumerate() {
+            if let Some(id) = str_field(p, "packet_id") {
+                by_id.insert(id.to_string(), idx);
+                if let Some(order) = p.get("order").and_then(Value::as_u64) {
+                    order_claims
+                        .entry(order)
+                        .and_modify(|(_, n)| *n += 1)
+                        .or_insert((id.to_string(), 1));
+                }
+                if let Some(token) = p.get("order").and_then(order_token) {
+                    token_claims
+                        .entry(token)
+                        .and_modify(|(_, n)| *n += 1)
+                        .or_insert((id.to_string(), 1));
+                }
+            }
+        }
+        self.by_id = by_id;
+        self.by_order = order_claims
+            .into_iter()
+            .filter(|(_, (_, n))| *n == 1)
+            .map(|(order, (id, _))| (order, id))
+            .collect();
+        self.by_order_token = token_claims
+            .into_iter()
+            .filter(|(_, (_, n))| *n == 1)
+            .map(|(token, (id, _))| (token, id))
+            .collect();
+    }
+
     /// The file this ledger was loaded from, if any. `None` for a ledger
     /// parsed from a string (candidate validation) — such a ledger cannot
     /// produce citations, because there is no path a reader could open.
