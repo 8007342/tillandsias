@@ -27780,6 +27780,12 @@ plan_index:
         - "methodology states the metric definitions AND the anti-gaming rule; the meta-orchestration + advance-work-from-plan skills display the report at cycle end"
         - "a litmus pins the answer-rate denominator so a future edit cannot quietly fold degraded into it"
       events:
+        - type: note
+          ts: "2026-08-01T03:30:00Z"
+          agent_id: "linux-mutable-macuahuitl-opus5-20260731"
+          host: linux_mutable
+          summary: >
+            FIRST REAL RUN 2026-08-01, and it immediately exposed a limitation worth fixing before anyone trusts a number from this. Reported: calls=33 answered=15 unsupported=3 degraded=15 answer_rate=83% verdict=attention:experts-degraded-15-calls-could-not-run. The verdict is correct and useful — 45% of calls could not run at all. But the breakdown (12 plan_answer degraded, 3 methodology_ask degraded, all between 01:37Z and 01:56Z) shows the traffic came from the pre-build LITMUS SUITE exercising the MCP server in fixtures with no plan binary at the canonical path, NOT from an agent doing work. Those degradations are correct and expected for a test fixture. THE LIMITATION: the telemetry has no notion of PROVENANCE, so harness traffic and real agent traffic land in one log and one ratio. A cycle that ran a big litmus suite will show a materially different answer_rate than one that did not, for reasons having nothing to do with how the experts served agents — which is exactly the kind of misreading this metric was designed to prevent, reappearing one layer up. Two candidate fixes, neither implemented yet: tag each record with a provenance field the fixtures set (harness vs agent) and report the two separately, or key the log per session so a cycle reads only its own. Prefer whichever cannot be defeated by a fixture that simply omits the tag — a default of `agent` when unset would let harness traffic masquerade as real usage, so the safe default is the opposite. Until then, read answer_rate as an upper bound on a cycle that ran litmus, and read the DEGRADED count rather than the ratio as the actionable number.
         - type: filed
           ts: "2026-08-01T01:40:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260731"
