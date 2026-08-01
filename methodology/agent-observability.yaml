@@ -225,7 +225,7 @@ agent_observability_protocol:
       Reconstruct current task state from latest event per task_id, sorted by
       Lamport order. Conflicting latest events become blocked until reconciled.
 
-  # ── Cycle metrics (order 568) ─────────────────────────────────────────────
+  # ── Cycle metrics (order 575) ─────────────────────────────────────────────
   #
   # What a meta-orchestration cycle reports about ITSELF when it ends.
   # Producer: scripts/cycle-metrics.sh. Consumers: skills/meta-orchestration
