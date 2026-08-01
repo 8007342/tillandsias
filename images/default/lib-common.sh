@@ -974,12 +974,20 @@ forge_experts_state_line() {
 # _forge_experts_source_hash — content key over the plan crate + lockfile.
 # POSIX only (find | sort | cat | sha256sum). Any failure yields "unknown",
 # which simply forces a rebuild that cargo itself deduplicates.
+#
+# ORDER 569: `capabilities.txt` is in the key alongside the .rs sources. It is
+# compiled INTO the binary via include_str!, so a change to it changes what the
+# expert reports about itself — but it is neither a .rs file nor Cargo.toml, so
+# without this predicate the idempotency fast path below would see an unchanged
+# hash, skip the rebuild, and leave a binary whose advertised capability set no
+# longer matches the checkout. A capability probe that reports a stale answer is
+# worse than no probe, because it is believed.
 _forge_experts_source_hash() {
     local crate_dir="$1" project_dir="$2" out=""
     if command -v sha256sum >/dev/null 2>&1; then
         out="$(
             {
-                find "$crate_dir" -type f \( -name '*.rs' -o -name 'Cargo.toml' \) -print0 2>/dev/null \
+                find "$crate_dir" -type f \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'capabilities.txt' \) -print0 2>/dev/null \
                     | sort -z | xargs -0 cat 2>/dev/null || true
                 cat "$project_dir/Cargo.lock" 2>/dev/null || true
             } | sha256sum 2>/dev/null | cut -d' ' -f1
@@ -3235,6 +3243,42 @@ inject_startup_context() {
             ;;
     esac
 
+    # Order 569 EXTENSION (capability skew). `experts_state=ready` above answers
+    # "did the build finish". It has never answered the question an agent
+    # actually has, which is three questions:
+    #
+    #   what can I use NOW · what would a RELAUNCH give me · am I BLOCKED
+    #
+    # Order 531 is why: a forge seeded from a pre-expert base built that base,
+    # installed it, and stamped `ready` truthfully — while every plan_answer
+    # returned confidence=unsupported. And the inverse matters just as much:
+    # local edits to the expert crate are INVISIBLE to the running binary but
+    # WILL be present on the next forge run, so an agent that cannot see the
+    # difference either abandons work that is one relaunch away or waits forever
+    # for a capability that is never coming.
+    #
+    # The probe lives in lib-expert-capability.sh for the same reason the
+    # inference probe lives in lib-inference-state.sh: this file hard-fails at
+    # source time on the vendor CA bundle, so logic inlined here could only ever
+    # be grep-pinned. litmus:expert-capability-skew-honesty runs that helper
+    # directly against fixture binaries and exercises every branch.
+    local _cap_line _cap_skew _cap_advice
+    local _cap_lib="${BASH_SOURCE[0]%/*}/lib-expert-capability.sh"
+    if [[ -r "$_cap_lib" ]]; then
+        # shellcheck source=lib-expert-capability.sh
+        source "$_cap_lib"
+        tillandsias_expert_capability \
+            "$FORGE_EXPERTS_BIN_DIR/tillandsias-plan" "$project_dir"
+        _cap_line="$TILLANDSIAS_EXPERT_CAPABILITY_LINE"
+        _cap_skew="$TILLANDSIAS_EXPERT_CAP_SKEW"
+        _cap_advice="$(tillandsias_expert_capability_advice "$_cap_skew")"
+    else
+        # A missing helper is its own named fact, not a silent "no skew": an
+        # absent probe reporting `skew=none` would be the same lie as `ready`.
+        _cap_line="expert_capability: now=none after_relaunch=none skew=none blocked_capabilities=- lost_on_relaunch=- probe=helper-missing"
+        _cap_advice="The capability probe (${_cap_lib}) is not present in this image, so the fields above are placeholders — treat expert capability as UNVERIFIED and check \`tillandsias-plan capabilities\` by hand."
+    fi
+
     # Order 480 follow-up (accelerator envelope): the host probes its own
     # hardware and passes the verdict in; the forge cannot see PCI devices, an
     # NVIDIA driver, or /dev/accel, so it may never attempt this itself.
@@ -3345,6 +3389,10 @@ inject_startup_context() {
   - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
 - **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`) instead of grepping \`plan/index.yaml\`.
   - Machine-readable (branch on this, do not parse the prose): \`experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}\`
+  - Machine-readable CAPABILITY SKEW (order 569 — branch on this, do not parse the prose): \`${_cap_line}\`
+  - \`experts_state=ready\` only means THE BUILD FINISHED. It has never meant the binary can answer — a forge seeded from a base without the expert sources builds a pre-expert binary and reports \`ready\` truthfully while every \`plan_answer\` returns \`confidence=unsupported\` (order 531). The line above is the honest one. Read it as three answers: \`now=\` is what you can use in THIS session; \`after_relaunch=\` is what the MOUNTED CHECKOUT would give you on the next forge run (so it already includes your uncommitted edits to the expert crate); \`blocked_capabilities=\` is the direct answer to "is my current work blocked pending a relaunch".
+  - \`skew\` is the field to branch on, and two of its values demand OPPOSITE actions: \`pending-build\` means the build is still running and the capability WILL appear in this session — wait and retry; \`relaunch-required\` means no build will deliver it here, so retrying is FUTILE and you must relaunch the forge (or rebuild by hand). \`relaunch-regresses\` means the running binary has MORE than the checkout and a relaunch would REMOVE capability. \`none\` means nothing is to be gained by waiting or relaunching. \`now=stale-binary\` means a binary is installed but predates the capability manifest, so its abilities are unknowable — treat everything as blocked.
+  - ${_cap_advice}
   - \`experts_state\` is \`ready\` only once \`tillandsias-plan\` is built and installed on PATH. \`building\` carries elapsed seconds and is TRANSIENT — retry the MCP tool. \`degraded\` always names a reason from a closed set: \`no-plan-crate\` (this project has no plan expert — expected off-tillandsias), \`no-checkout\`, \`no-cargo\`, \`build-failed\`, \`build-timeout\`, \`binary-missing\`, \`install-failed\`, \`not-built\`. There is no indeterminate "may still be building" state.
   - Experts are OPTIONAL: the build is backgrounded right after the project clone and never gates this session. Details: \`/tmp/forge-lifecycle.log\`.
 - **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.

@@ -62,6 +62,13 @@ COPY lib-localized-errors.sh /usr/local/lib/tillandsias/lib-localized-errors.sh
 # Sourced by lib-common.sh from its own directory; kept separate so litmus can
 # exercise the state grammar with a stubbed curl outside the image.
 COPY lib-inference-state.sh /usr/local/lib/tillandsias/lib-inference-state.sh
+# @trace order:569 — expert capability skew (now vs after-relaunch vs blocked).
+# Sourced by BOTH lib-common.sh (from its own directory) and the forge-plan MCP
+# wrapper (which cannot source lib-common.sh: that file hard-fails on the vendor
+# CA bundle). If this COPY is dropped, the wrapper falls back to its inline
+# degraded path and every forge reports `probe=helper-missing` instead of a
+# capability verdict.
+COPY lib-expert-capability.sh /usr/local/lib/tillandsias/lib-expert-capability.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh

@@ -273,11 +273,44 @@ things that make you slower"). File it as a dated issue in `plan/issues/`,
 classified as one of: `research/`, `exploration/`, `enhancement/`, or
 `optimization/`. An unfiled finding is a lost finding and a contract violation.
 
+### Ledger compaction (check each cycle; act only when eligible)
+
+```bash
+tillandsias-plan fragments     # -> compaction: eligible=<bool> fragments=N bytes=N malformed=N reason=<name>
+tillandsias-plan compact       # only when eligible=true
+```
+
+`plan/index.yaml` is a compacted BASE; `plan/index.d/*.yaml` are append-only
+fragments that concurrent hosts write freely. Reads fold them transparently, so
+**an uncompacted ledger is slower, never wrong** — compaction is garbage
+collection, not a correctness step. Never let it block filing work.
+
+Two rules, both easy to get wrong:
+
+- **Compaction deletes only the fragments it folded, by name.** Never
+  `rm plan/index.d/*`. A fragment another host wrote while you were compacting
+  has not been folded, and removing it silently destroys their work.
+- **`compact` currently REFUSES on the real ledger, and that is correct.**
+  `serde_yaml` drops comments (there are ~120, including recorded operator
+  decisions) and re-indents items so `append-event` stops finding packets. Do
+  not "fix" the refusal by relaxing the guard; the fix is format-preserving
+  compaction (packet `format-preserving-ledger-compaction`).
+
+If `malformed=N` is non-zero, a fragment did not parse and was SKIPPED — its
+contents are absent from every answer. Treat that as a finding, not noise.
+
 ### Filing a packet: mint its order, never pick one
 
 ```bash
 tillandsias-plan next-order          # -> 581-k3f9
 ```
+
+**Write the packet to a FRAGMENT, not to `plan/index.yaml`.** Create
+`plan/index.d/<utc>-<suffix>-<host>.yaml` with a top-level `packets:` list. Only
+you can have produced that filename, so git never conflicts and no host waits on
+another. Reads fold it in automatically — the packet is queryable immediately.
+Fragments are IMMUTABLE: to change something, write a new fragment, never edit an
+existing one (that is what makes the fold order-independent).
 
 **Never compute "the next free order" yourself.** That number comes from a
 ledger snapshot which is stale the moment another host commits, so two hosts

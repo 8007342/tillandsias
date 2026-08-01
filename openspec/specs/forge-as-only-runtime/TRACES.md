@@ -15,3 +15,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/check-launch-artifacts-untracked.sh#L2](../../../scripts/check-launch-artifacts-untracked.sh#L2)
 - [scripts/distill-forge-diagnostics.sh#L2](../../../scripts/distill-forge-diagnostics.sh#L2)
 - [scripts/forge-diagnostics-annex.sh#L2](../../../scripts/forge-diagnostics-annex.sh#L2)
+- [scripts/test-forge-policy-binary-discoverability.sh#L2](../../../scripts/test-forge-policy-binary-discoverability.sh#L2)

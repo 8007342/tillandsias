@@ -43,6 +43,66 @@ distributed_work:
         why: >
           Two agents racing to update the same item produce two appends
           rather than a write-write conflict.
+        implementation:
+          decided_by: "The Tlatoāni, 2026-08-01"
+          cheatsheet: cheatsheets/concurrent-git/crdt-ledger-fragments.md
+          status: >
+            Reading is IMPLEMENTED and transparent. Compaction is implemented but
+            deliberately FAIL-CLOSED on the real ledger; see the caveat below.
+          history: >
+            This rule was written 2026-05-25 and the implementation contradicted
+            it for over two months: one monolithic plan/index.yaml that every
+            host edits in place, which is the exact write-write conflict the rule
+            forbids. Concurrent filing therefore produced a git conflict a human
+            had to adjudicate — three times in one session on 2026-07-31/08-01.
+          shape: >
+            plan/index.yaml is a COMPACTED BASE. plan/index.d/*.yaml are
+            FRAGMENTS: append-only, immutable once written, named
+            <utc>-<suffix>-<host>.yaml. A read is base ⊕ fold(fragments).
+            Two properties do all the work: one writer per file (a host writes a
+            NEW path only it could have produced, so git never conflicts), and
+            fragments are never edited after writing (which is what makes the
+            fold order-independent).
+          crdt_type_per_field: >
+            packets: a G-SET keyed by packet_id — union is commutative,
+            associative, idempotent. events: a G-SET of events keyed by
+            (packet_id, event identity). status: an LWW-REGISTER resolved by
+            (ts, host). Applying LWW to a LIST would silently discard the loser's
+            entries, which is why events are a set and not a register; that
+            distinction is the whole correctness argument.
+          determinism: >
+            Fragments fold in filename order, and the name is UTC-first so a
+            lexical sort is chronological. Never fold in directory order — the
+            filesystem promises none, and two hosts folding differently would
+            compute different states from identical inputs, presenting as
+            corruption rather than as a sorting bug. The fold is IDEMPOTENT so a
+            compaction that dies halfway is safe to re-run.
+          every_reader_must_use_the_overlay: >
+            A reader that opens plan/index.yaml directly sees only the base and
+            reports a stale ledger WITH TOTAL CONFIDENCE. If the CLI, the MCP
+            server and the expert disagree about what the plan says, an agent
+            cannot tell which surface is lying and both look authoritative. Route
+            every read through tillandsias-plan, or document the reader as
+            base-only with a stated reason.
+          compaction: >
+            Folds fragments into the base and deletes EXACTLY the ones it folded,
+            BY NAME — never a glob. A fragment written by another host while
+            compaction ran has not been folded, and globbing it away silently
+            destroys filed work; that is the classic GC-versus-writer race and
+            the most likely way to lose data in this design. Compaction is
+            OPTIONAL and must never sit on the critical path of filing work: an
+            uncompacted ledger is slower to read, never wrong.
+          caveat_compaction_is_fail_closed: >
+            VERIFIED 2026-08-01: serde_yaml is not format-preserving. It DROPS
+            COMMENTS (plan/index.yaml carries ~120, including ratified operator
+            decisions recorded inline) and re-indents list items to column 0,
+            while edit::append_event locates packets by a literal four-space
+            prefix — so a round-tripped ledger would silently stop accepting
+            events on every packet. Compaction therefore REFUSES on a base with
+            comments or indented items and says so. Do not relax that guard to
+            make the tool run; make compaction format-preserving instead (packet
+            format-preserving-ledger-compaction), reusing the text-level
+            edit module rather than round-tripping YAML.
         exceptions:
           - "Status fields in YAML index files (plan/index.yaml) ARE
             last-writer-wins; this is the trade-off for queryability.

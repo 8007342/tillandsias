@@ -1,0 +1,744 @@
+// @trace methodology/distributed-work.yaml
+// @cheatsheet concurrent-git/crdt-ledger-fragments.md
+//
+//! Conflict-free additive writes to the plan ledger.
+//!
+//! # Why this exists
+//!
+//! `methodology/distributed-work.yaml` → `crdt_principles.append_only_history`
+//! has always required this: *"Plan-ledger files are append-only. Agents add
+//! events to the end of a log section; they do not rewrite earlier entries.
+//! Current state is the fold (left-fold) of the event sequence keyed by stable
+//! ID."* The IMPLEMENTATION was the opposite — one monolithic `plan/index.yaml`
+//! that every host edits in place — so every concurrent filing produced a git
+//! text conflict a human had to adjudicate. That happened three times in one
+//! session on 2026-07-31/08-01.
+//!
+//! Collision-free order IDs removed the SEMANTIC half of that pain (no
+//! renumbering, no reference chasing). This removes the MECHANICAL half: hosts
+//! write NEW files that only they could have named, so git has nothing to merge.
+//!
+//! # The design in one paragraph
+//!
+//! `plan/index.yaml` is a compacted BASE. `plan/index.d/*.yaml` are FRAGMENTS:
+//! append-only, immutable once written, each named
+//! `<utc>-<suffix>-<host>.yaml`. A read is `base ⊕ fold(fragments)`. Compaction
+//! folds fragments into the base and deletes exactly the ones it folded.
+//!
+//! # The three CRDT primitives, and why each field uses the one it does
+//!
+//! * `packets:` — a **G-Set** keyed by `packet_id`. Union is commutative,
+//!   associative and idempotent, so two hosts adding different packets both win
+//!   and adding the same packet twice yields one packet.
+//! * `events:` — a **G-Set of events** keyed by `(packet_id, event identity)`.
+//!   Events are immutable facts; you never edit one, you add another.
+//! * `status:` — an **LWW-Register**. Only one value can survive, so the winner
+//!   is chosen deterministically by `(ts, host)`, never by arrival order.
+//!
+//! Applying LWW to a LIST would silently discard the loser's entries, which is
+//! why events are a set and not a register. That distinction is the whole
+//! correctness argument and must not be blurred.
+//!
+//! # Determinism rules that are easy to break
+//!
+//! Fragments fold in `(ts, filename)` order, never directory order — the
+//! filesystem does not promise an order, and two hosts folding differently would
+//! compute different states from identical inputs, which presents as
+//! corruption rather than as a sorting bug.
+//!
+//! The fold is IDEMPOTENT. Folding a fragment whose contents already reached the
+//! base must be a no-op, or a partially-completed compaction duplicates events.
+
+use crate::Ledger;
+use serde_yaml::{Mapping, Value};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+
+/// Directory holding fragments, as a sibling of the base index.
+///
+/// `plan/index.yaml` → `plan/index.d/`. The `.d` suffix is the long-standing
+/// unix convention for "a directory of things that are logically one file"
+/// (`conf.d`, `cron.d`), which makes the relationship self-describing to anyone
+/// who has administered a unix system.
+pub fn fragment_dir(index: &Path) -> PathBuf {
+    let stem = index
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_else(|| "index".to_string());
+    index
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(format!("{stem}.d"))
+}
+
+/// One fragment file, already parsed.
+#[derive(Debug, Clone)]
+pub struct Fragment {
+    /// Sort key. Taken from the FILENAME rather than the file's own `ts` field,
+    /// so a fragment cannot influence its own fold position by claiming a
+    /// convenient timestamp — the name is fixed at creation and visible in git.
+    pub name: String,
+    pub path: PathBuf,
+    pub doc: Value,
+}
+
+/// Every fragment beside `index`, in deterministic fold order.
+///
+/// Best-effort by design: a missing directory simply means no fragments, and an
+/// unreadable or malformed fragment is SKIPPED rather than failing the load.
+/// The ledger is the surface agents query constantly; one bad fragment must not
+/// make the whole plan unreadable. Malformed fragments are reported separately
+/// by [`malformed`] so they are visible rather than silently ignored.
+pub fn load_all(index: &Path) -> Vec<Fragment> {
+    let dir = fragment_dir(index);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut out: Vec<Fragment> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("yaml"))
+        .filter_map(|p| {
+            let raw = std::fs::read_to_string(&p).ok()?;
+            let doc: Value = serde_yaml::from_str(&raw).ok()?;
+            Some(Fragment {
+                name: p.file_name()?.to_string_lossy().to_string(),
+                path: p,
+                doc,
+            })
+        })
+        .collect();
+    // (name) IS the (ts, suffix, host) tuple — the naming convention puts the
+    // UTC stamp first precisely so a lexical sort is a chronological one.
+    out.sort_by(|a, b| a.name.cmp(&b.name));
+    out
+}
+
+/// Fragment paths that exist but could not be parsed.
+///
+/// Skipping a malformed fragment keeps the ledger readable; skipping it QUIETLY
+/// would lose work with no signal, which is the failure this project refuses on
+/// principle. Callers surface these as warnings.
+pub fn malformed(index: &Path) -> Vec<PathBuf> {
+    let dir = fragment_dir(index);
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut bad: Vec<PathBuf> = entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("yaml"))
+        .filter(|p| {
+            std::fs::read_to_string(p)
+                .ok()
+                .and_then(|raw| serde_yaml::from_str::<Value>(&raw).ok())
+                .is_none()
+        })
+        .collect();
+    bad.sort();
+    bad
+}
+
+/// Stable identity of an event, for idempotent folding.
+///
+/// Two copies of the same event — which a re-applied fragment or a retried
+/// append produces — must collapse to one. Identity is the tuple that a
+/// legitimate duplicate shares and two genuinely different events do not.
+fn event_identity(packet_id: &str, event: &Value) -> String {
+    let f = |k: &str| {
+        event
+            .get(k)
+            .and_then(Value::as_str)
+            .unwrap_or("-")
+            .to_string()
+    };
+    format!(
+        "{packet_id}\u{1}{}\u{1}{}\u{1}{}\u{1}{}",
+        f("type"),
+        f("ts"),
+        f("agent_id"),
+        f("summary")
+    )
+}
+
+/// Apply every fragment to a base document, returning the merged document.
+///
+/// PURE: same inputs always yield the same output, which is what lets any host
+/// compact and get a result every other host agrees with.
+pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
+    let mut merged = base.clone();
+
+    // Identities already present in the base, so re-folding an already-compacted
+    // fragment adds nothing. This is what makes a partially-completed compaction
+    // safe to re-run.
+    let mut seen_events: BTreeSet<String> = BTreeSet::new();
+    let mut base_packets: BTreeSet<String> = BTreeSet::new();
+    {
+        let mut packets = Vec::new();
+        crate::collect_packets(&merged, &mut packets);
+        for p in &packets {
+            if let Some(id) = p.get("packet_id").and_then(Value::as_str) {
+                base_packets.insert(id.to_string());
+                if let Some(evs) = p.get("events").and_then(Value::as_sequence) {
+                    for e in evs {
+                        seen_events.insert(event_identity(id, e));
+                    }
+                }
+            }
+        }
+    }
+
+    // LWW state, resolved across ALL fragments before anything is written, so
+    // the winner does not depend on application order.
+    let mut lww: std::collections::BTreeMap<String, (String, String, Value)> =
+        std::collections::BTreeMap::new();
+
+    let mut new_packets: Vec<Value> = Vec::new();
+    let mut new_events: Vec<(String, Value)> = Vec::new();
+
+    for frag in fragments {
+        // G-Set: new packets. A packet_id already present anywhere WINS from the
+        // base — re-adding is a no-op, never an overwrite, because overwriting
+        // would make the result depend on fold order.
+        if let Some(ps) = frag.doc.get("packets").and_then(Value::as_sequence) {
+            for p in ps {
+                if let Some(id) = p.get("packet_id").and_then(Value::as_str)
+                    && !base_packets.contains(id)
+                    && !new_packets
+                        .iter()
+                        .any(|q| q.get("packet_id").and_then(Value::as_str) == Some(id))
+                {
+                    new_packets.push(p.clone());
+                }
+            }
+        }
+
+        // G-Set: events appended to existing packets.
+        if let Some(evs) = frag.doc.get("events").and_then(Value::as_sequence) {
+            for entry in evs {
+                let Some(pid) = entry.get("packet_id").and_then(Value::as_str) else {
+                    continue;
+                };
+                let Some(event) = entry.get("event") else {
+                    continue;
+                };
+                let ident = event_identity(pid, event);
+                if seen_events.insert(ident) {
+                    new_events.push((pid.to_string(), event.clone()));
+                }
+            }
+        }
+
+        // LWW-Register: scalar field updates, highest (ts, host) wins.
+        if let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) {
+            for u in us {
+                let (Some(pid), Some(field), Some(value)) = (
+                    u.get("packet_id").and_then(Value::as_str),
+                    u.get("field").and_then(Value::as_str),
+                    u.get("value"),
+                ) else {
+                    continue;
+                };
+                let ts = u
+                    .get("ts")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let host = u
+                    .get("host")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let key = format!("{pid}\u{1}{field}");
+                let better = match lww.get(&key) {
+                    None => true,
+                    Some((prev_ts, prev_host, _)) => {
+                        (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                    }
+                };
+                if better {
+                    lww.insert(key, (ts, host, value.clone()));
+                }
+            }
+        }
+    }
+
+    apply_to_packets(&mut merged, &new_events, &lww);
+    append_packets(&mut merged, new_packets);
+    merged
+}
+
+/// Walk the document applying event appends and LWW field wins in place.
+fn apply_to_packets(
+    doc: &mut Value,
+    events: &[(String, Value)],
+    lww: &std::collections::BTreeMap<String, (String, String, Value)>,
+) {
+    match doc {
+        Value::Mapping(m) => {
+            let is_packet = m.contains_key(Value::String("packet_id".into()));
+            if is_packet {
+                let id = m
+                    .get(Value::String("packet_id".into()))
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+
+                for (key, (_, _, value)) in lww {
+                    let mut parts = key.split('\u{1}');
+                    if parts.next() == Some(id.as_str())
+                        && let Some(field) = parts.next()
+                    {
+                        m.insert(Value::String(field.to_string()), value.clone());
+                    }
+                }
+
+                let mine: Vec<&Value> = events
+                    .iter()
+                    .filter(|(pid, _)| *pid == id)
+                    .map(|(_, e)| e)
+                    .collect();
+                if !mine.is_empty() {
+                    let slot = m
+                        .entry(Value::String("events".into()))
+                        .or_insert_with(|| Value::Sequence(Vec::new()));
+                    if let Value::Sequence(seq) = slot {
+                        for e in mine {
+                            seq.push(e.clone());
+                        }
+                    }
+                }
+                return;
+            }
+            for (_, v) in m.iter_mut() {
+                apply_to_packets(v, events, lww);
+            }
+        }
+        Value::Sequence(s) => {
+            for v in s.iter_mut() {
+                apply_to_packets(v, events, lww);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Append brand-new packets to the sequence that already holds packets, so a
+/// merged document has exactly the shape `collect_packets` already walks.
+fn append_packets(doc: &mut Value, new_packets: Vec<Value>) {
+    if new_packets.is_empty() {
+        return;
+    }
+    if let Some(seq) = find_packet_sequence(doc) {
+        seq.extend(new_packets);
+        return;
+    }
+    // No existing packet list (an empty or unusual base): create one rather than
+    // dropping the packets, which would lose filed work silently.
+    if let Value::Mapping(m) = doc {
+        m.insert(
+            Value::String("packets".into()),
+            Value::Sequence(new_packets),
+        );
+    }
+}
+
+fn find_packet_sequence(doc: &mut Value) -> Option<&mut Vec<Value>> {
+    match doc {
+        Value::Sequence(s) => {
+            if s.iter().any(|v| v.get("packet_id").is_some()) {
+                return Some(s);
+            }
+            for v in s.iter_mut() {
+                if let Some(found) = find_packet_sequence(v) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        Value::Mapping(m) => {
+            for (_, v) in m.iter_mut() {
+                if let Some(found) = find_packet_sequence(v) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Build a fragment document from parts. Any empty section is omitted so a
+/// fragment stays readable in a diff.
+pub fn fragment_doc(packets: Vec<Value>, events: Vec<Value>, status: Vec<Value>) -> Value {
+    let mut m = Mapping::new();
+    if !packets.is_empty() {
+        m.insert(Value::String("packets".into()), Value::Sequence(packets));
+    }
+    if !events.is_empty() {
+        m.insert(Value::String("events".into()), Value::Sequence(events));
+    }
+    if !status.is_empty() {
+        m.insert(Value::String("status".into()), Value::Sequence(status));
+    }
+    Value::Mapping(m)
+}
+
+/// Fragment filename: `<utc-compact>-<suffix>-<host>.yaml`.
+///
+/// UTC FIRST so a lexical sort is chronological — the fold depends on it. The
+/// random suffix makes the name collision-free without coordination (the same
+/// reasoning as order-token allocation), and the host makes a stray fragment
+/// traceable to whoever wrote it.
+pub fn fragment_name(utc_compact: &str, suffix: &str, host: &str) -> String {
+    let safe = |s: &str| -> String {
+        s.chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
+            .collect()
+    };
+    format!("{}-{}-{}.yaml", safe(utc_compact), safe(suffix), safe(host))
+}
+
+/// The compaction verdict: the merged base plus exactly which fragments it
+/// consumed.
+///
+/// Returning the NAMES is the whole point. Compaction must delete precisely the
+/// fragments it folded — never a glob — because a fragment written by another
+/// host mid-compaction has not been folded, and removing it would silently
+/// destroy filed work. That is the classic GC-versus-writer race and the single
+/// most likely way to lose data in this design.
+pub struct Compaction {
+    pub merged: Value,
+    pub consumed: Vec<PathBuf>,
+}
+
+/// Fold every fragment into the base and report what was consumed.
+///
+/// Does NOT touch the filesystem — the caller validates the candidate and writes
+/// it. A compaction that emits a malformed base is worse than no compaction, so
+/// the parse/integrity gate belongs between this and the write.
+pub fn compact(base: &Value, index: &Path) -> Compaction {
+    let fragments = load_all(index);
+    let consumed = fragments.iter().map(|f| f.path.clone()).collect();
+    Compaction {
+        merged: fold(base, &fragments),
+        consumed,
+    }
+}
+
+/// Drift signals that make compaction eligible, for the meta-orchestration step.
+///
+/// Reported rather than enforced: compaction is OPTIONAL. An uncompacted ledger
+/// is slower to read, never wrong, so this must never sit on the critical path
+/// of filing work.
+pub struct Drift {
+    pub fragment_count: usize,
+    pub total_bytes: u64,
+    pub malformed_count: usize,
+}
+
+impl Drift {
+    /// Thresholds are judgement, not correctness. These are deliberately loose:
+    /// compaction rewrites the base, which is the one operation that CAN
+    /// conflict, so doing it often would reintroduce the problem this design
+    /// removes.
+    pub fn eligible(&self) -> bool {
+        self.fragment_count >= 25 || self.total_bytes >= 256 * 1024 || self.malformed_count > 0
+    }
+
+    pub fn verdict(&self) -> String {
+        let reason = if self.malformed_count > 0 {
+            "malformed-fragments"
+        } else if self.fragment_count >= 25 {
+            "fragment-count"
+        } else if self.total_bytes >= 256 * 1024 {
+            "total-bytes"
+        } else {
+            "-"
+        };
+        format!(
+            "compaction: eligible={} fragments={} bytes={} malformed={} reason={}",
+            self.eligible(),
+            self.fragment_count,
+            self.total_bytes,
+            self.malformed_count,
+            reason
+        )
+    }
+}
+
+pub fn drift(index: &Path) -> Drift {
+    let fragments = load_all(index);
+    let malformed_count = malformed(index).len();
+    let total_bytes = fragments
+        .iter()
+        .filter_map(|f| std::fs::metadata(&f.path).ok())
+        .map(|m| m.len())
+        .sum();
+    Drift {
+        fragment_count: fragments.len(),
+        total_bytes,
+        malformed_count,
+    }
+}
+
+impl Ledger {
+    /// Fragment-aware load: `base ⊕ fold(fragments)`.
+    ///
+    /// Every read path MUST come through here. A reader that forgets fragments
+    /// reports a stale ledger with total confidence, and if the CLI, the MCP
+    /// server and the expert disagree about what the plan says, the retrieval
+    /// surface is worse than useless.
+    pub fn load_with_fragments(path: &Path) -> Result<Self, String> {
+        let raw =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let base: Value = serde_yaml::from_str(&raw).map_err(|e| format!("parse: {e}"))?;
+        let fragments = load_all(path);
+        if fragments.is_empty() {
+            return Self::load(path);
+        }
+        let merged = fold(&base, &fragments);
+        let merged_raw =
+            serde_yaml::to_string(&merged).map_err(|e| format!("serialize merged: {e}"))?;
+        let archived_ids = Self::collect_archived_ids(path);
+        let mut ledger = Self::parse(&merged_raw, archived_ids)
+            .map_err(|e| format!("{} (+{} fragments): {e}", path.display(), fragments.len()))?;
+        ledger.source_path = Some(path.to_path_buf());
+        Ok(ledger)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BASE: &str = "\
+packets:
+    - packet_id: alpha
+      order: 100
+      status: ready
+      events:
+        - type: filed
+          ts: \"2026-01-01T00:00:00Z\"
+          agent_id: origin
+          summary: born
+";
+
+    fn base() -> Value {
+        serde_yaml::from_str(BASE).expect("base parses")
+    }
+
+    fn frag(name: &str, yaml: &str) -> Fragment {
+        Fragment {
+            name: name.to_string(),
+            path: PathBuf::from(name),
+            doc: serde_yaml::from_str(yaml).expect("fragment parses"),
+        }
+    }
+
+    fn packet_ids(doc: &Value) -> Vec<String> {
+        let mut ps = Vec::new();
+        crate::collect_packets(doc, &mut ps);
+        let mut ids: Vec<String> = ps
+            .iter()
+            .filter_map(|p| p.get("packet_id").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect();
+        ids.sort();
+        ids
+    }
+
+    fn events_of(doc: &Value, id: &str) -> Vec<String> {
+        let mut ps = Vec::new();
+        crate::collect_packets(doc, &mut ps);
+        ps.iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some(id))
+            .and_then(|p| p.get("events").and_then(Value::as_sequence).cloned())
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|e| e.get("summary").and_then(Value::as_str))
+            .map(str::to_string)
+            .collect()
+    }
+
+    fn field(doc: &Value, id: &str, key: &str) -> String {
+        let mut ps = Vec::new();
+        crate::collect_packets(doc, &mut ps);
+        ps.iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some(id))
+            .and_then(|p| p.get(key).and_then(Value::as_str))
+            .unwrap_or("<missing>")
+            .to_string()
+    }
+
+    const HOST_A: &str = "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n";
+    const HOST_B: &str = "packets:\n  - packet_id: gamma\n    order: 581-bbbb\n    status: ready\n";
+
+    #[test]
+    fn concurrent_packet_adds_from_two_hosts_both_survive() {
+        // The scenario this whole module exists for: two hosts filing at once.
+        // Under the monolithic ledger this is a git conflict a human resolves.
+        let merged = fold(
+            &base(),
+            &[frag("1-a.yaml", HOST_A), frag("2-b.yaml", HOST_B)],
+        );
+        assert_eq!(packet_ids(&merged), vec!["alpha", "beta", "gamma"]);
+    }
+
+    #[test]
+    fn the_fold_is_commutative_the_defining_crdt_property() {
+        // Order of arrival must not change the result. If this fails, two hosts
+        // compute different states from identical inputs, which presents as data
+        // corruption rather than as a sorting bug.
+        let ab = fold(
+            &base(),
+            &[frag("1-a.yaml", HOST_A), frag("2-b.yaml", HOST_B)],
+        );
+        let ba = fold(
+            &base(),
+            &[frag("2-b.yaml", HOST_B), frag("1-a.yaml", HOST_A)],
+        );
+        assert_eq!(packet_ids(&ab), packet_ids(&ba));
+    }
+
+    #[test]
+    fn the_fold_is_idempotent_so_a_half_finished_compaction_is_safe() {
+        // Compaction folds then deletes. If it dies between the two, the next
+        // fold sees fragments whose contents are ALREADY in the base. Folding
+        // them again must add nothing, or every crash duplicates events.
+        let ev = "events:\n  - packet_id: alpha\n    event:\n      type: note\n      ts: \"2026-02-02T00:00:00Z\"\n      agent_id: h1\n      summary: probe\n";
+        let once = fold(&base(), &[frag("1-a.yaml", ev)]);
+        assert_eq!(events_of(&once, "alpha"), vec!["born", "probe"]);
+
+        let twice = fold(&once, &[frag("1-a.yaml", ev)]);
+        assert_eq!(
+            events_of(&twice, "alpha"),
+            vec!["born", "probe"],
+            "re-folding an already-merged fragment must be a no-op"
+        );
+    }
+
+    #[test]
+    fn events_from_two_hosts_on_one_packet_both_survive() {
+        // Events are a G-SET, not a register. Treating them as last-writer-wins
+        // would silently discard one host's evidence — the subtlest way to lose
+        // work in this design.
+        let a = "events:\n  - packet_id: alpha\n    event:\n      type: note\n      ts: \"2026-02-02T00:00:00Z\"\n      agent_id: h1\n      summary: from-a\n";
+        let b = "events:\n  - packet_id: alpha\n    event:\n      type: note\n      ts: \"2026-02-02T00:00:01Z\"\n      agent_id: h2\n      summary: from-b\n";
+        let merged = fold(&base(), &[frag("1-a.yaml", a), frag("2-b.yaml", b)]);
+        let evs = events_of(&merged, "alpha");
+        assert!(
+            evs.contains(&"from-a".to_string()) && evs.contains(&"from-b".to_string()),
+            "both hosts' events must survive: {evs:?}"
+        );
+    }
+
+    #[test]
+    fn status_is_last_writer_wins_and_the_winner_does_not_depend_on_order() {
+        // A status field CAN only hold one value, so the winner must be chosen
+        // deterministically by (ts, host) rather than by who was applied last.
+        let older = "status:\n  - packet_id: alpha\n    field: status\n    value: claimed\n    ts: \"2026-03-01T00:00:00Z\"\n    host: aaa\n";
+        let newer = "status:\n  - packet_id: alpha\n    field: status\n    value: completed\n    ts: \"2026-03-02T00:00:00Z\"\n    host: bbb\n";
+
+        let forward = fold(&base(), &[frag("1-a.yaml", older), frag("2-b.yaml", newer)]);
+        let reverse = fold(&base(), &[frag("2-b.yaml", newer), frag("1-a.yaml", older)]);
+        assert_eq!(field(&forward, "alpha", "status"), "completed");
+        assert_eq!(
+            field(&reverse, "alpha", "status"),
+            "completed",
+            "the newer write must win regardless of fold order"
+        );
+    }
+
+    #[test]
+    fn a_packet_already_in_the_base_is_never_overwritten_by_a_fragment() {
+        // Re-adding must be a no-op, not an overwrite: an overwrite would make
+        // the result depend on fold order, breaking commutativity.
+        let dup = "packets:\n  - packet_id: alpha\n    order: 999\n    status: completed\n";
+        let merged = fold(&base(), &[frag("1-a.yaml", dup)]);
+        assert_eq!(packet_ids(&merged), vec!["alpha"], "no duplicate packet");
+        assert_eq!(
+            field(&merged, "alpha", "status"),
+            "ready",
+            "the base wins for G-Set re-adds; status changes go through the LWW channel"
+        );
+    }
+
+    #[test]
+    fn compaction_reports_exactly_what_it_consumed() {
+        // It must delete BY NAME, never by glob: a fragment written by another
+        // host mid-compaction has not been folded, and globbing it away would
+        // silently destroy filed work.
+        let dir = std::env::temp_dir().join(format!("tilland-frag-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        std::fs::write(&index, BASE).expect("write base");
+        std::fs::write(
+            d.join("index.d").join("20260801t0000z-aaaa-h1.yaml"),
+            HOST_A,
+        )
+        .expect("write frag");
+
+        let base_doc: Value = serde_yaml::from_str(BASE).expect("parse");
+        let c = compact(&base_doc, &index);
+        assert_eq!(c.consumed.len(), 1, "exactly the one fragment present");
+        assert!(packet_ids(&c.merged).contains(&"beta".to_string()));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn fragment_names_sort_chronologically_because_the_fold_depends_on_it() {
+        let early = fragment_name("20260801T0100Z", "aaaa", "linux-mutable");
+        let late = fragment_name("20260801T0200Z", "bbbb", "osx");
+        assert!(early < late, "utc-first naming must sort chronologically");
+        assert!(
+            !fragment_name("2026-08-01T01:00Z", "a/b", "host name").contains(['/', ':', ' ']),
+            "a fragment name must be filesystem-safe"
+        );
+    }
+
+    #[test]
+    fn a_malformed_fragment_is_skipped_but_reported_never_silently_dropped() {
+        let dir = std::env::temp_dir().join(format!("tilland-bad-{}", std::process::id()));
+        let d = dir.join("plan");
+        std::fs::create_dir_all(d.join("index.d")).expect("mkdir");
+        let index = d.join("index.yaml");
+        std::fs::write(&index, BASE).expect("write base");
+        std::fs::write(
+            d.join("index.d").join("20260801t0000z-aaaa-h1.yaml"),
+            HOST_A,
+        )
+        .expect("ok");
+        std::fs::write(
+            d.join("index.d").join("20260801t0001z-bbbb-h2.yaml"),
+            "{{{ not yaml",
+        )
+        .expect("bad");
+
+        assert_eq!(load_all(&index).len(), 1, "the good fragment still loads");
+        assert_eq!(
+            malformed(&index).len(),
+            1,
+            "the bad one is REPORTED — skipping quietly would lose work with no signal"
+        );
+        assert!(
+            drift(&index).eligible(),
+            "a malformed fragment makes compaction eligible"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_empty_fragment_dir_leaves_the_base_untouched() {
+        let merged = fold(&base(), &[]);
+        assert_eq!(packet_ids(&merged), vec!["alpha"]);
+        assert_eq!(events_of(&merged, "alpha"), vec!["born"]);
+    }
+}

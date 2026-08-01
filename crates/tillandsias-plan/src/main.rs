@@ -8,10 +8,41 @@
 use std::path::{Path, PathBuf};
 use tillandsias_plan::{Ledger, Schema, answer, edit, groundtruth, methodology, spec};
 
-fn usage() -> ! {
-    eprintln!(
-        "usage: tillandsias-plan [--index <path>] <command>\n\
+/// ORDER 569. The capability manifest, embedded from the crate's own
+/// `capabilities.txt` at COMPILE TIME.
+///
+/// `include_str!` is the load-bearing part: the list travels INSIDE the
+/// artifact, so `tillandsias-plan capabilities` describes the sources this
+/// binary was built from — not the sources sitting in whatever checkout happens
+/// to be mounted next to it. A stale binary therefore reports a stale (or, if it
+/// predates this order, an absent) capability set, which is exactly the signal
+/// order 531 lacked when a pre-expert build stamped `experts: ready` and every
+/// `plan_answer` came back `confidence=unsupported`.
+///
+/// The forge reads the SAME filename out of the mounted checkout to learn what a
+/// relaunch would provide. One file, two readers — see capabilities.txt for why
+/// this is data rather than a Rust array. If it becomes a Rust array again, the
+/// shell side has to hardcode a second copy and the two will drift.
+const CAPABILITY_MANIFEST: &str = include_str!("../capabilities.txt");
+
+/// The manifest's tokens, comments and blank lines stripped.
+fn capability_tokens() -> Vec<&'static str> {
+    CAPABILITY_MANIFEST
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect()
+}
+
+const USAGE: &str = "usage: tillandsias-plan [--index <path>] <command>\n\
          commands:\n\
+           capabilities              ORDER 569. Print this binary's subcommand capability set,\n\
+                                     one token per line on stdout and nothing else. The set is\n\
+                                     embedded at COMPILE time, so it describes the sources this\n\
+                                     artifact was built from. A binary WITHOUT this subcommand\n\
+                                     predates order 569 and its capabilities are unknowable —\n\
+                                     that absence is itself the stale-binary signal the forge\n\
+                                     wrapper branches on.\n\
            check                     integrity + schema validation (exit 1 on violations)\n\
            next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n\
                                      (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n\
@@ -48,8 +79,50 @@ fn usage() -> ! {
                                      glob) to grade further corpora with the same harness.\n\
                                      --envelope grades ONE case against an envelope captured\n\
                                      elsewhere (e.g. off the MCP server). Exit 1 = graded RED,\n\
-                                     exit 2 = the harness could not run at all."
+                                     exit 2 = the harness could not run at all.\n\
+           spec-index --out <dir> [--root D]\n\
+                                     ORDER 547. Chunk the whole-spec corpus into <dir>/chunks.jsonl\n\
+           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n\
+                                     network-free cosine top-k over caller-supplied embeddings\n\
+           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n\
+                                     build a VERIFIED envelope keeping only the citations the\n\
+                                     answer actually used\n\
+           fragments                 report the append-only plan/index.d/ overlay: which\n\
+                                     fragments are live, which are malformed, and whether\n\
+                                     compaction is eligible\n\
+           compact                   fold every fragment into the base ledger and delete\n\
+                                     exactly the ones folded (refuses a lossy rewrite)";
+
+fn usage() -> ! {
+    eprintln!("{USAGE}");
+    std::process::exit(2);
+}
+
+/// ORDER 569. An unrecognised subcommand is its OWN named failure, distinct from
+/// the missing-operand `usage()` above.
+///
+/// Both used to funnel into `usage()`, which made "this binary cannot do that"
+/// indistinguishable from "you forgot an argument" — and the pre-394b binary
+/// order 531 shipped was worse still: it printed usage on STDOUT and exited 0,
+/// so the MCP wrapper could not tell incapability from success without sniffing
+/// the shape of the output. Naming the condition, listing what this artifact CAN
+/// do, and exiting non-zero is what lets the wrapper (and a human reading a
+/// terminal) say "wrong binary" instead of "wrong question".
+///
+/// If this is deleted, an agent whose forge carries a stale expert gets a usage
+/// dump where it asked for an answer, and the capability probe in
+/// images/default/lib-expert-capability.sh loses its negative control.
+fn unknown_subcommand(name: &str) -> ! {
+    eprintln!(
+        "error: unknown subcommand '{name}' — this tillandsias-plan was built from sources \
+         that do not provide it."
     );
+    eprintln!("  this binary can do: {}", capability_tokens().join(", "));
+    eprintln!(
+        "  if you expected '{name}' to exist, the ARTIFACT is stale relative to the checkout: \
+         rebuild it (cargo build --release -p tillandsias-plan) or relaunch the forge."
+    );
+    eprintln!("{USAGE}");
     std::process::exit(2);
 }
 
@@ -483,6 +556,26 @@ fn main() {
         usage();
     }
 
+    // ORDER 569. `capabilities` runs FIRST and touches nothing — no ledger, no
+    // methodology corpus, no filesystem at all beyond the embedded manifest.
+    //
+    // That is the whole point: the forge wrapper asks a binary what it can do
+    // BEFORE it knows whether an index exists, and on a checkout whose plan
+    // ledger may be broken or absent. A capability probe that could fail for an
+    // unrelated reason would be indistinguishable from a stale binary, which is
+    // exactly the ambiguity this order exists to remove.
+    //
+    // STDOUT CARRIES ONLY THE TOKENS, one per line, exit 0. The shell side
+    // validates that shape (`^[a-z][a-z0-9-]*$`) and treats anything else —
+    // a usage dump, a warning, an empty stream — as "this binary predates the
+    // manifest", which is its own named state rather than a guess.
+    if args[0] == "capabilities" {
+        for token in capability_tokens() {
+            println!("{token}");
+        }
+        return;
+    }
+
     // ORDER 394b. `verify-answer` deliberately runs BEFORE the ledger is
     // loaded: it audits an envelope's citations against the CHECKOUT, and a
     // verifier that needed the corpus it is auditing could not be pointed at
@@ -596,7 +689,10 @@ fn main() {
             "methodology-ask" => {
                 methodology::answer_question(&corpus, &query, file_filter.as_deref())
             }
-            _ => usage(),
+            // Order 569: `methodology-<something-we-do-not-have>` is an
+            // INCAPABILITY, not a malformed invocation. Saying so is what lets a
+            // caller tell a stale artifact from a bad question.
+            other => unknown_subcommand(other),
         };
         // ORDER 523 (R2): self-verify before emitting. The methodology corpus
         // root IS the checkout, so citations resolve against `root`.
@@ -755,13 +851,26 @@ fn main() {
         }
     }
 
-    let ledger = match Ledger::load(&index) {
+    // FRAGMENT-AWARE by default. Every read path must go through the same
+    // overlay: a reader that forgets fragments reports a stale ledger with total
+    // confidence, and if the CLI, the MCP server and the expert disagree about
+    // what the plan says, the retrieval surface is worse than useless.
+    let ledger = match Ledger::load_with_fragments(&index) {
         Ok(l) => l,
         Err(e) => {
             eprintln!("error: {e}");
             std::process::exit(1);
         }
     };
+    // A fragment that cannot be parsed is SKIPPED so one bad file never makes
+    // the whole plan unreadable — but skipping it quietly would lose filed work
+    // with no signal, which this project refuses on principle.
+    for bad in tillandsias_plan::fragments::malformed(&index) {
+        eprintln!(
+            "warning: ledger fragment {} does not parse and was SKIPPED — its contents are not in the answers below",
+            bad.display()
+        );
+    }
 
     let schema_path = index
         .parent()
@@ -770,6 +879,135 @@ fn main() {
     let schema = Schema::load(&schema_path).unwrap_or_else(|_| Schema::minimal());
 
     match args[0].as_str() {
+        "fragments" => {
+            // Report the overlay's state and whether compaction is eligible.
+            // Read-only: compaction itself is a separate, deliberate act.
+            let d = tillandsias_plan::fragments::drift(&index);
+            println!("{}", d.verdict());
+            for f in tillandsias_plan::fragments::load_all(&index) {
+                println!("fragment: {}", f.name);
+            }
+            for bad in tillandsias_plan::fragments::malformed(&index) {
+                println!("malformed: {}", bad.display());
+            }
+        }
+        "compact" => {
+            // Fold every fragment into the base and delete EXACTLY the ones
+            // folded.
+            //
+            // Two rules make this safe, and both are easy to break:
+            //   1. Delete by NAME, never by glob. A fragment written by another
+            //      host while this ran has not been folded, and globbing it away
+            //      would silently destroy filed work — the classic
+            //      GC-versus-writer race.
+            //   2. VALIDATE the candidate before replacing the base. A
+            //      compaction that emits a malformed base is worse than no
+            //      compaction at all.
+            let raw = match std::fs::read_to_string(&index) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {}: {e}", index.display());
+                    std::process::exit(1);
+                }
+            };
+            let base: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("error: base ledger does not parse: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let c = tillandsias_plan::fragments::compact(&base, &index);
+            if c.consumed.is_empty() {
+                println!("ok: nothing to compact (0 fragments)");
+                return;
+            }
+            // FAIL CLOSED ON A LOSSY REWRITE.
+            //
+            // This path serializes the merged document with serde_yaml, which
+            // is NOT format-preserving. On the real ledger that is destructive
+            // in two specific, verified ways:
+            //
+            //   * serde_yaml DROPS COMMENTS. plan/index.yaml carries ~120
+            //     comment lines, including ratified operator decisions recorded
+            //     inline (e.g. the 2026-07-21 EXPERTS-does-not-gate-v0.4 note).
+            //     Compaction would delete them with no diff anyone would read.
+            //   * serde_yaml re-indents list items to column 0, while
+            //     `edit::append_event` locates packets by the literal prefix
+            //     `"    - "` (lib.rs). A round-tripped ledger would silently stop
+            //     accepting events on EVERY packet.
+            //
+            // Refusing is the only safe behaviour until compaction is
+            // format-preserving (text-level append reusing the `edit` module,
+            // rather than a YAML round-trip). A tool that quietly destroys
+            // operator decisions to tidy a file is the worst possible trade.
+            let base_has_comments = raw.lines().any(|l| l.trim_start().starts_with('#'));
+            let base_is_indented = raw.lines().any(|l| l.starts_with("    - "));
+            if base_has_comments || base_is_indented {
+                eprintln!(
+                    "error: compaction REFUSED — this base is not safely round-trippable \
+                     (comments={base_has_comments}, indented-items={base_is_indented}).\n\
+                     \x20 serde_yaml drops comments and re-indents list items to column 0, which \
+                     would delete recorded operator decisions and break `append-event`'s \
+                     packet lookup.\n\
+                     \x20 The base is UNCHANGED and every fragment is intact — reading is \
+                     already transparent, so nothing is blocked by staying uncompacted.\n\
+                     \x20 Format-preserving compaction is packet \
+                     format-preserving-ledger-compaction."
+                );
+                std::process::exit(1);
+            }
+            let candidate = match serde_yaml::to_string(&c.merged) {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!("error: serialize merged ledger: {e}");
+                    std::process::exit(1);
+                }
+            };
+            // The gate: the merged ledger must load AND pass integrity before it
+            // is allowed to replace a working base.
+            match Ledger::parse(&candidate, Default::default()) {
+                Ok(l) => {
+                    let report = l.check_integrity(&schema.reference_fields);
+                    if !report.violations.is_empty() {
+                        eprintln!(
+                            "error: compaction REFUSED — the merged ledger violates integrity ({} violation(s)); the base is unchanged and every fragment is intact:",
+                            report.violations.len()
+                        );
+                        for v in &report.violations {
+                            eprintln!("  {v}");
+                        }
+                        std::process::exit(1);
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "error: compaction REFUSED — the merged ledger does not parse ({e}); the base is unchanged and every fragment is intact"
+                    );
+                    std::process::exit(1);
+                }
+            }
+            if let Err(e) = std::fs::write(&index, &candidate) {
+                eprintln!("error: write {}: {e}", index.display());
+                std::process::exit(1);
+            }
+            let mut removed = 0usize;
+            for p in &c.consumed {
+                match std::fs::remove_file(p) {
+                    Ok(()) => removed += 1,
+                    Err(e) => eprintln!(
+                        "warning: could not remove folded fragment {}: {e}",
+                        p.display()
+                    ),
+                }
+            }
+            println!(
+                "ok: compacted {} fragment(s) into {} ({} removed)",
+                c.consumed.len(),
+                index.display(),
+                removed
+            );
+        }
         "next-order" => {
             // Mint a collision-free order token for a NEW packet.
             //
@@ -976,7 +1214,10 @@ fn main() {
             }
             println!("appended {etype} event to {target}");
         }
-        _ => usage(),
+        // Order 569. Was `usage()`, which conflated "this binary cannot do that"
+        // with "you forgot an operand". The wrapper needs the two apart: the
+        // first means RELAUNCH/REBUILD, the second means fix the call.
+        other => unknown_subcommand(other),
     }
 }
 
@@ -985,6 +1226,65 @@ mod tests {
     use super::*;
     use answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
     use std::collections::BTreeMap;
+
+    /// ORDER 569. The manifest is read by THREE parties — this binary, the forge
+    /// wrapper, and lib-common.sh — and two of them are shell. A token carrying a
+    /// space, a comma, or an uppercase letter would parse differently on each
+    /// side, so the shape is pinned here rather than discovered in a forge.
+    ///
+    /// Sorted + unique is not cosmetic either: the shell side compares the two
+    /// capability sets as sorted token lists, and a duplicate would make a set
+    /// difference report a phantom missing capability.
+    #[test]
+    fn the_capability_manifest_is_a_sorted_unique_shell_safe_token_list() {
+        let tokens = capability_tokens();
+        assert!(!tokens.is_empty(), "the capability manifest is empty");
+        for t in &tokens {
+            assert!(
+                t.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-'),
+                "capability token {t:?} is not [a-z0-9-]; the shell readers split on \
+                 whitespace and join with commas"
+            );
+            assert!(
+                t.starts_with(|c: char| c.is_ascii_lowercase()),
+                "capability token {t:?} must start with a lowercase letter"
+            );
+        }
+        let mut sorted = tokens.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(
+            sorted, tokens,
+            "capabilities.txt must be sorted and free of duplicates"
+        );
+        assert!(
+            tokens.contains(&"capabilities"),
+            "the manifest must declare `capabilities` itself — the wrapper uses its \
+             PRESENCE to tell a post-569 binary from a stale one"
+        );
+    }
+
+    /// ORDER 569. Every capability this binary CLAIMS must also be documented,
+    /// so a human reading `--help` and a machine reading `capabilities` are told
+    /// the same story.
+    ///
+    /// Deliberately one-directional (manifest ⊆ usage, not the reverse): a
+    /// subcommand that exists but is not declared makes the expert UNDER-report
+    /// itself, which is fail-safe — the wrapper simply refuses to route to it.
+    /// The reverse, claiming a capability that does not dispatch, is the
+    /// dangerous direction, and it is caught BEHAVIOURALLY by
+    /// litmus:expert-capability-skew-honesty, which invokes every declared token.
+    #[test]
+    fn every_declared_capability_is_documented_in_usage() {
+        for t in capability_tokens() {
+            assert!(
+                USAGE.contains(t),
+                "capability {t:?} is declared in capabilities.txt but absent from the \
+                 usage text — agents would never learn it exists"
+            );
+        }
+    }
 
     /// ORDER 523 (R2). `answer::verify` existed but nothing on the RUNTIME path
     /// called it, so the emitter and the checker could disagree about the same

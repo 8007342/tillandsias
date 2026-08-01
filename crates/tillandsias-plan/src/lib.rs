@@ -22,6 +22,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 pub mod answer;
+/// CRDT fragment overlay — conflict-free ADDITIVE writes to the ledger, so
+/// concurrent hosts never produce a merge a human must adjudicate. Implements
+/// `methodology/distributed-work.yaml` → `crdt_principles.append_only_history`,
+/// which required exactly this and which the monolithic index file never was.
+pub mod fragments;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
 pub mod methodology;
@@ -597,7 +602,7 @@ pub struct IntegrityReport {
     pub warnings: Vec<String>,
 }
 
-fn collect_packets(value: &Value, out: &mut Vec<Value>) {
+pub(crate) fn collect_packets(value: &Value, out: &mut Vec<Value>) {
     match value {
         Value::Mapping(m) => {
             if m.contains_key(Value::String("packet_id".into())) {
