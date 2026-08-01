@@ -186,8 +186,22 @@ git grep -nE '^(<<<<<<<|=======|>>>>>>>)( |$)' && { echo "CONFLICT MARKER PRESEN
 
 # 2. Every touched YAML still parses (the broken-plan/index.yaml bug — `build
 #    --check` does NOT validate data files, so this step is what catches it):
+#    PICK THE VALIDATOR THAT EXISTS WHERE YOU ARE. `ruby` is NOT in the forge
+#    image; `yq` is. Hosts usually have both. `python3` is present in the forge
+#    and is FORBIDDEN for committed automation (tlatoani_hard_no_python) — its
+#    presence is not permission, and it is the trap this fallback chain exists
+#    to keep you out of.
+if command -v tillandsias-policy >/dev/null 2>&1; then
+  yamlcheck() { tillandsias-policy validate-yaml "$1"; }
+elif command -v yq >/dev/null 2>&1; then
+  yamlcheck() { yq . "$1" >/dev/null; }
+elif command -v ruby >/dev/null 2>&1; then
+  yamlcheck() { ruby -ryaml -e "YAML.load_file('$1')"; }
+else
+  echo "no sanctioned YAML validator available — do NOT substitute python3"; exit 1
+fi
 for y in $(git diff --name-only origin/<active-branch>..HEAD | grep -E '\.ya?ml$'); do
-  ruby -ryaml -e "YAML.load_file('$y')" || { echo "INVALID YAML: $y"; exit 1; }
+  yamlcheck "$y" || { echo "INVALID YAML: $y"; exit 1; }
 done
 
 # 3. Code still compiles — clippy + cargo catch the duplicate-item E0428 directly

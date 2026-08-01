@@ -194,6 +194,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-standalone-traceability
+  - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape

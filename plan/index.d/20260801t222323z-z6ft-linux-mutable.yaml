@@ -1,0 +1,114 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260801
+packets:
+  - packet_id: brew-token-full-isolation-requires-a-privilege-boundary
+    order: 589-y5rd
+    desired_release: v0.6
+    title: "Isolating the brew token from the agent needs a uid or container boundary — a podman secret alone cannot do it"
+    status: ready
+    kind: research
+    deliverable: decision record + sidecar-or-uid design
+    depends_on: [own-the-attestation-fetch-so-lanes-need-no-github-identity]
+    pickup_role: linux
+    capability_tags: [security, credentials, isolation, brew, podman, operator-decision]
+    estimated_hours: 6
+    outcome: >
+      OPERATOR REQUIREMENT 2026-08-01, verbatim: the brew token should "live only
+      during the brew routine, and only for the brew command... Absolutely
+      nothing else has access to this token ever-ever-ever :D Can we guarantee
+      that?"
+      THE HONEST ANSWER TODAY IS NO, and the reason is structural rather than a
+      missing feature. VERIFIED: every forge lane runs as a single uid — `id`
+      inside the shipped image reports uid=1000(forge), and the launcher passes
+      --userns=keep-id. The established podman-secret pattern mounts a file
+      mode 0400 owned by uid 1000 (GIT_VAULT_TOKEN_SECRET_OPTS, main.rs:2829).
+      The AGENT also runs as uid 1000. A 0400 file owned by the reader is
+      readable by the reader: the agent can simply cat it. Moving from --env to
+      --secret is a real improvement — it removes the value from podman argv,
+      from the recorded container config, and from /proc/1/environ — but it does
+      NOT isolate the token from the agent, and claiming otherwise would be a
+      false guarantee, which is worse than the current honest exposure.
+      WHAT WOULD ACTUALLY GUARANTEE IT — two designs, both real, to be chosen
+      between:
+      (a) A UID BOUNDARY. Run the brew shim as a second uid that owns the secret
+      0400; the agent's uid cannot read it, while the installed prefix is shared
+      by group. Cheapest, stays in one container, but --userns=keep-id and the
+      forge's single-user assumptions must be re-examined; and any agent able to
+      run the shim can still cause an install, so it bounds READ access, not USE.
+      (b) A SIDECAR BOUNDARY. brew runs in its own short-lived container holding
+      the secret; the agent's lane receives only the installed artifacts over a
+      shared volume and never the credential. Strongest, and it matches this
+      repo's established broker pattern (git-credential-tillandsias.sh, the
+      order-424 mirror work) — a component that holds a credential and hands out
+      capability. Costs a container per install.
+      SEQUENCING, and this is the point: BOTH may be unnecessary. If
+      own-the-attestation-fetch-so-lanes-need-no-github-identity lands, bundles
+      are fetched at image build time and there IS NO RUNTIME TOKEN — the
+      guarantee becomes trivially true because there is nothing to isolate. Do
+      not build an isolation mechanism for a credential we are trying to delete.
+      This packet exists to be answered, and "we removed the token instead" is
+      the preferred answer.
+      ALSO UNRESOLVED, and it undercuts audit claims: vault's file audit device
+      writes to /vault/audit inside the container and is NOT a mounted volume
+      (verified — the destination does not appear in the container's Mounts). So
+      every mint record dies on recreate, including on the destructive reset the
+      release smoke performs. Short-TTL minted tokens WITHOUT durable audit give
+      the appearance of a trail rather than a trail.
+      AND A HARD CONSTRAINT ON "MINIMUM TTL": GitHub removed the OAuth
+      Authorizations API in 2020, so there is no way to programmatically mint a
+      short-lived PAT. TTL can attach to the VAULT credential that authorizes
+      reading the GitHub token, never to the GitHub token itself. A GitHub App
+      installation token (1 hour, auto-expiring) is the only genuinely short-TTL
+      option — and it cannot read Homebrew's public attestations, because an
+      installation token is scoped to repositories the app is installed on.
+    exit_criteria:
+      - "a decision between uid boundary, sidecar boundary, and deleting the runtime token entirely, with the reasoning recorded"
+      - "if a boundary is built, a test proves the AGENT uid cannot read the credential — not merely that it is absent from argv"
+      - "no design claims isolation it cannot deliver; the scrubbable-vs-unscrubbable table is stated in the deliverable"
+      - "vault audit durability is resolved before any short-TTL mint is described as audited"
+
+  - packet_id: persist-or-eliminate-the-ephemeral-brew-prefix
+    order: 589-b7k2
+    desired_release: v0.6
+    title: "The brew prefix is ephemeral, so every forge launch re-installs and re-attests every tool — that is the rate-limit multiplier"
+    status: ready
+    kind: fix
+    deliverable: brew prefix persistence decision + measured attestation-call budget
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [brew, ephemerality, performance, rate-limit, forge]
+    estimated_hours: 4
+    outcome: >
+      OPERATOR QUESTION 2026-08-01: are we hitting GitHub's rate limit because of
+      our developer setup, or would a normal user launching a forge ten times a
+      day hit it too?
+      MEASURED FACTS. GitHub allows 60 API requests/hour unauthenticated per IP
+      and 5,000/hour authenticated. Every lane egresses through ONE squid proxy,
+      so all concurrent lanes share a single bucket. /home/linuxbrew is created
+      in images/default/Containerfile:27 but is NOT mounted as a volume
+      (verified: no volume or mount references it), so the installed prefix dies
+      with the --rm container. Only HOMEBREW_CACHE points at the project cache.
+      CONSEQUENCE: every forge launch re-installs and re-attests every on-demand
+      tool it touches. Attestation is per BOTTLE, not per formula — `brew install
+      jq` pulls jq plus oniguruma, so two attestation calls minimum.
+      ANSWER TO THE QUESTION: at ten launches a day using a few tools each,
+      spread across a day, an AUTHENTICATED user is nowhere near 5,000/hour and
+      an anonymous one is likely under 60/hour too. Bursty use — several lanes in
+      one hour, each installing several tools — can reach 60/hour anonymously.
+      So a normal user is mostly fine; OUR exhaustion came from repeated testing
+      plus a much nastier amplifier described below.
+      THE AMPLIFIER THAT MATTERS. Homebrew retries attestation five times
+      (ATTESTATION_MAX_RETRIES), so a FAILING attestation costs up to six API
+      calls per bottle instead of one. A blocked egress path therefore does not
+      merely fail — it burns quota six times faster, and can convert a
+      connectivity fault into a genuine rate-limit fault, which then looks like a
+      different bug. That feedback loop is what made this hard to read.
+      THE FIX MAKES THE QUESTION MOOT. Baking tools into the image
+      (bake-allowlisted-tools-into-the-image) removes runtime attestation calls
+      for those tools entirely. Persisting the brew prefix is the cheaper
+      half-measure and trades against the ephemerality principle, so it needs a
+      deliberate decision rather than a default.
+    exit_criteria:
+      - "the attestation API call budget for a typical forge launch is MEASURED, not estimated"
+      - "a decision is recorded on persisting the brew prefix versus baking tools in, weighed against the ephemerality principle"
+      - "the retry amplification is bounded so a blocked path cannot silently convert into a rate-limit fault"

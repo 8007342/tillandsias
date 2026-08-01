@@ -556,11 +556,15 @@ Before exit:
    handoff exception above and exits without touching the checkout.
 2. Refresh `plan/index.yaml` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
-3. Validate touched YAML with a parser. The approved validator is
-   `tillandsias-policy validate-yaml <files>` where built, with
-   `ruby -ryaml -e "YAML.load_file('<file>')"` as the sanctioned fallback.
-   Python is not permitted for committed automation (see
+3. Validate touched YAML with a parser, using the one that EXISTS where you are:
+   `tillandsias-policy validate-yaml <files>` where built, else
+   `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.
+   **`ruby` is NOT in the forge image; `yq` is** — a skill that names only ruby
+   sends a forge agent to a tool that does not exist, and the tool sitting next
+   to it is `python3`, which is FORBIDDEN for committed automation (see
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
+   Its presence on PATH is not permission. The forge startup context lists what
+   is actually available.
 4. Commit targeted files only.
 5. Push the relevant branch.
 6. If a startup boundary was recorded, run the guard's `verify` mode. A guard

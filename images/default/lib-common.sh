@@ -3451,6 +3451,33 @@ Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-pla
 Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
 Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
 
+## Tooling actually present here — check this before reaching for something
+
+Do NOT assume a tool exists because a skill or doc names it. This forge is a
+Fedora base, not your host, and the difference has bitten agents repeatedly.
+
+**Present:** \`jq\` \`yq\` \`git\` \`gh\` \`cargo\` \`rustc\` \`node\` \`go\` \`rust-analyzer\`
+**ABSENT:** \`ruby\` — several skills still show \`ruby -ryaml\` for YAML validation.
+It is not here. Use \`yq\` instead (verified: it accepts valid YAML and exits
+non-zero on invalid).
+
+\`\`\`bash
+yq . <file> >/dev/null || echo "INVALID YAML: <file>"
+\`\`\`
+
+**\`python3\` is present and is FORBIDDEN for committed automation**
+(\`methodology.yaml\` → \`tlatoani_hard_no_python\`). Its presence is not permission.
+This is the trap worth naming: the sanctioned validator (\`ruby\`) is missing, the
+compiled one (\`tillandsias-policy\`) is built per-lane and may not exist yet, and
+the forbidden one is sitting right there on PATH. Reach for \`yq\`.
+
+**On-demand tools** (\`tmux\`, \`lazygit\`, \`gum\`, \`fd\`, \`rg\`, …): typing the command
+triggers a userspace Homebrew install through a shim, gated on an allowlist. That
+install is NOT free — it verifies a Sigstore attestation per bottle and is
+time-bounded, so it can fail with "this tool is unavailable". That is a normal
+outcome, not a broken forge: prefer what is already present, and treat an
+on-demand tool as a convenience rather than a dependency.
+
 ## Code navigation — LSP is available (order 399)
 
 \`rust-analyzer\` ships in this forge. OpenCode's built-in LSP picks it up
