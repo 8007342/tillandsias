@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260801
+events:
+  - packet_id: brew-attestation-verification-always-fails-and-stalls-forge-startup
+    event:
+      type: progress
+      ts: "2026-08-01T21:45:00Z"
+      agent_id: linux-mutable-macuahuitl-opus5-20260801
+      host: linux_mutable
+      summary: >
+        REOPENED, and my earlier completed event was PREMATURE. I closed this on
+        the strength of `gh attestation trusted-root --verify-only` succeeding.
+        That verifies the TUF trust root, NOT a completed attested install, and
+        the distinction turned out to be the whole remaining bug.
+        A real `brew install jq` through the proxy, with a valid token and
+        .sigstore.dev allowlisted, still fails — with a decisive error:
+        "failed to fetch bundle with URL: Get
+        https://tmaproduction.blob.core.windows.net/attestations/... :
+        read tcp 10.0.42.43->10.0.42.40:3128: read: connection reset by peer".
+        10.0.42.40:3128 is this proxy, and "connection reset" is the deny_info
+        TCP_RESET denial documented in the previous event — the denial wearing
+        the disguise, exactly as predicted.
+        MECHANISM: the attestations API returns a `bundle_url` alongside the
+        inline bundle, and cli/cli's api/client.go uses the INLINE bundle only
+        when bundle_url is EMPTY; otherwise it fetches from the URL and
+        hard-errors with no fallback. So Sigstore egress was necessary and NOT
+        sufficient. This was flagged by research BEFORE the test ran and the
+        test confirmed it — worth noting because the research also correctly
+        called out that my decisive check was the wrong one.
+        FIX APPLIED to images/proxy/allowlist.txt: the SPECIFIC host
+        tmaproduction.blob.core.windows.net, deliberately NOT
+        .blob.core.windows.net — the latter would admit all of Azure Blob
+        Storage, which anyone can publish to, and that is far too much surface
+        for one bundle fetch. If GitHub moves the bucket the fetch fails loudly
+        and the line gets updated; a detectable break beats a permanently open
+        namespace.
+        NOT YET VERIFIED END TO END, and this packet stays open until it is. The
+        confirming run is blocked in this session by a proxy image that keeps
+        rebuilding from a stale layer plus a --no-cache build that cannot reach
+        the alpine mirrors while the enclave is in flux. The single command that
+        settles it, once the proxy image genuinely carries the new allowlist:
+        run tillandsias-brew-shim-exec for any allowlisted formula in a lane with
+        the token present, and expect an install rather than an
+        InvalidAttestationError.
+        WHAT THIS EPISODE ARGUES. The runtime path now depends on an
+        UNDOCUMENTED Azure blob host reached with a rotating SAS token. That is
+        fragile by construction and is a strong argument for packet
+        own-the-attestation-fetch-so-lanes-need-no-github-identity: fetch bundles
+        at image BUILD time and verify at runtime against the shipped bundle,
+        which removes both the credential and this host from the runtime path
+        entirely.
