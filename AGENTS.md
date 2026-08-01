@@ -30,6 +30,8 @@ sed -n '1,220p' plan/index.yaml
 If `.forge-startup-context.md` exists in the repository root, you are inside a
 Tillandsias forge container — read it for live infrastructure state.
 
+**Expert MCP Servers Available**: `project-plan` (`forge-plan`) and `project-info` MCP tools provide fast sub-100ms cited answers over `plan/index.yaml` (`plan_query`, `plan_ready`, `plan_status`, `plan_answer`), methodology rules (`methodology_ask`, `methodology_path`), and repository files (`search_code`, `read_file`, `git_status`). Preferred for instant, token-efficient queries over large files.
+
 **UX IS LOCKED**: never add, remove, or alter ANY user-visible UX surface
 (menus, labels, chips, notifications, dialogs) without explicit operator
 approval recorded in the plan ledger. UX is for end users who know nothing

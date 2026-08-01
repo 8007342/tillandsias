@@ -931,15 +931,20 @@ distributed_work:
       from the plan ledger without conflicting or idling.
     steps:
       - step: orient_and_identify
-        description: "Run start-of-session checks to fetch canonical remote state and determine host/capabilities."
+        description: >
+          Run start-of-session checks to fetch canonical remote state and determine host/capabilities.
+          Use local MCP servers (`project-plan` / `forge-plan` and `project-info`) for instant sub-100ms
+          structured queries over plan, methodology, and repo status (`plan_query`, `plan_ready`, `plan_status`,
+          `plan_answer`, `methodology_ask`, `git_status`, `search_code`, `read_file`).
       - step: select_shaped_work
         description: >
-          Scan the plan ledger. Filter for ready/pending/failed-retryable tasks where owner_host
+          Scan the plan ledger via `project-plan` / `forge-plan` MCP tools (`plan_ready` / `plan_query` / `plan_answer`)
+          or direct file inspection. Filter for ready/pending/failed-retryable tasks where owner_host
           matches or is 'any', and matching capability tags exist. Rank the
           survivors by VALUE and RELEVANCE per [[large_packet_is_eligible_work]],
           not by smallness: a large, fresh, release-targeted packet outranks a
           small, stale one. Ranking order: milestone `release_target` first
-          ([[release_aware_packets]]), then ACTIVE-release `desired_release`
+          ([[release_aware_packets]]), then ACTIVE-release `desired_release` (`v0.5`)
           over later-release ([[version_aware_release_planning]]), then
           freshness. A packet you cannot finish this cycle is still eligible —
           claim it and take a partial slice, split it, or audit-dispose it (the
