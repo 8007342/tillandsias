@@ -305,3 +305,51 @@ final_assertion: >
   bounded uncertainty exception records and gates the temporary loss of certainty.
   When learning reveals a previously unmodeled unknown, methodology/event records
   the surprise and semantic distillation preserves the learned distinction.
+
+# ── Capability scales with topology; the interface does not (2026-08-02) ──────
+capability_ladder:
+  decided_by: "The Tlatoāni, 2026-08-02"
+  rule: >
+    Tillandsias is a REAL CLOUD that works almost the same with one node as with
+    dozens. An entry-level user with a single laptop hosts their own services. A
+    power user with a few nodes gets more robust ones. As topology grows, more
+    robust services become AVAILABLE — the user does not reconfigure, and does
+    not choose.
+  we_decide_for_them: >
+    The user is not asked which database, which replication factor, or which
+    storage layer. They cannot evaluate those, and asking is how a
+    non-technical user acquires a risk they do not understand. We pick, using
+    options that are already thoroughly documented and solved — the work is
+    WIRING the best-known answer, not inventing one.
+  the_obligation_that_creates: >
+    Deciding for someone is only legitimate if the decision is reversible.
+    Every default we choose on a user's behalf MUST have a migration path off
+    it, and that path must be ours to run, not theirs. A default without a
+    migration path is not a decision made for the user; it is a trap set for
+    them.
+  the_almost_is_load_bearing: >
+    "Almost the same" is exact, and the gap is DURABILITY, not features. A
+    single laptop cannot survive its own loss; three nodes can lose one. The
+    INTERFACE is topology-independent — "add a database" is the same prompt
+    everywhere — but the GUARANTEES are not, and they must be legible in the
+    user's own language ("this survives your app crashing, not your laptop
+    dying"). Presenting identical guarantees across topologies is how users
+    lose data while believing they were safe.
+  the_hard_part_is_the_migration: >
+    Neither endpoint is hard. Anyone can run one Postgres on one disk; anyone
+    can run a cluster. Moving a LIVE user's data from the first to the second —
+    automatically, without loss, without a maintenance window they would have to
+    understand — is the actual product. Judge a packet on whether it makes the
+    NEXT rung reachable, not only on whether it works at its own.
+  never_foreclose_a_higher_rung: >
+    A tier-1 choice must not make tier-3 unreachable. If the single-node default
+    stores data in a shape that cannot later stream-replicate, the first
+    decision has trapped the user at the bottom of the ladder — and they will
+    discover it exactly when they finally need to grow. Every default is chosen
+    with its successor already in mind.
+  support_before_spoon_feeding: >
+    We support every layer of abstraction and every option FIRST, then expose
+    them in order of complexity as a project grows organically — from one app on
+    one laptop to a distributed cluster serving millions. Exposure is
+    progressive; capability is not. A rung we cannot implement is a rung we must
+    not imply.

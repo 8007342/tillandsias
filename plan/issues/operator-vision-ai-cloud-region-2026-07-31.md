@@ -200,3 +200,67 @@ Still unrefined, and deliberately left open: XP legibility without exposing
 epics/stories; what a *level* maps to in policy terms; whether levels can be lost
 when a constraint regresses; and recovery when the token is lost — which for a
 non-technical user is a likelier event than compromise.
+
+---
+
+## Addendum 2026-08-02: the always-on node, and the storage question it opens
+
+Recorded as VISION context. Research packets:
+`arm64-native-build-for-fedora-on-raspberry-pi-5`,
+`mesh-persistent-storage-substrate-research`,
+`add-a-database-one-prompt-capability-research`.
+
+### The node, concretely
+
+The headline story above — "an old computer beside a router" — now has hardware.
+A Raspberry Pi 5 running the Fedora 44 cloud image: launch a Tillandsias, log in,
+it joins the Cloudflare mesh, and it is a 24/7 node carrying always-on production
+web containers.
+
+The operator's framing is the load-bearing part: **the Pi is chosen for being
+ALWAYS ON, not for being POWERFUL**, and that "redirects what they can do
+completely." A node selected for uptime hosts long-lived production services; it
+does not host inference or builds. This is the first place the fleet stops being
+homogeneous, and the capability envelope work (`accel_class`) already reports
+that truthfully rather than pretending.
+
+It also replaces something real: the operator's current home setup runs NextCloud,
+DNS and assorted docker containers on an Ubuntu Server Pi 5, "handled manually
+and they're slow and painful." That is the actual competitor to beat, and the bar
+is not "works" but "stops being manual."
+
+### The open problem: transparent persistent pervasive storage
+
+Operator, thinking aloud: *"I still don't know how to provide transparent
+persistent pervasive storage… clustered nextcloud, or a single nextcloud in a
+clustered filesystem, or… glob a filesystem elsewhere, since we'll likely need
+some CassandraDB, and/or PostgreSQL support. Our users don't need to know
+anything, they just prompt 'add a database' and it works."*
+
+Four constraints worth carrying forward, because each removes an option that
+otherwise looks reasonable:
+
+1. **Always-on is not durable.** Uptime and durability are different properties.
+   A node that never reboots still loses everything when its storage dies, and
+   the machine chosen for being cheap must not hold the only copy.
+2. **NextCloud is a file-sync application, not a database substrate.** Syncing a
+   directory while a database writes to it corrupts the database, and the
+   corruption typically surfaces from a backup that also synced. NextCloud may
+   well be right for user documents; it must not decide database state.
+3. **With one always-on node, replication has nothing to replicate to.** Quorum
+   systems assume several simultaneously-live nodes. One Pi plus laptops that
+   close is not that. Phase one is honestly *one durable node plus verified
+   backups*; clustering becomes available at two or three.
+4. **Cassandra and Postgres are not interchangeable.** AP versus CP is a
+   behavioural difference a user will feel. Which one a prompt yields should
+   follow from what was asked, not from what we wired first.
+
+One hardware consequence the operator should know before buying: on a Pi 5, SD
+storage is a poor host for a database — write amplification and wear make sudden
+total failure realistic rather than a tail risk. NVMe over the Pi's PCIe lane is
+the credible option.
+
+And the question users cannot be asked but will be destroyed by: **backup, and
+specifically verified RESTORE.** Under this vision's own standard — "we cannot let
+users risk things they don't understand" — durability cannot be a prompt option.
+An unverified backup is a belief, not a property.
