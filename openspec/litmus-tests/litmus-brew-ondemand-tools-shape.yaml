@@ -28,8 +28,17 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: image-wired"
 
-  - step: "attestation verification is REQUIRED and analytics disabled"
-    command: "grep -Fq 'HOMEBREW_VERIFY_ATTESTATIONS=1' images/default/brew-shim-exec.sh && grep -Fq 'HOMEBREW_NO_ANALYTICS=1' images/default/brew-shim-exec.sh && echo 'ok: attested-env'"
+  # REVERSED 2026-08-01 with the operator's no-GitHub-token directive. This step
+  # asserted HOMEBREW_VERIFY_ATTESTATIONS=1 — a control that could never run,
+  # because Homebrew's attestation path fetches the bundle from GitHub's API and
+  # gh refuses any API call without a credential (GhAuthNeeded, raised before gh
+  # is spawned). Asserting a control is "required" when it cannot execute reports
+  # a guarantee nobody has.
+  # What is pinned instead: the state is DECLARED rather than merely absent, and
+  # analytics stay off. The integrity that actually holds (signed formula index
+  # -> bottle_checksum -> sha256) needs no flag.
+  - step: "attestation state is explicitly declared and analytics disabled"
+    command: "grep -Fq 'HOMEBREW_NO_VERIFY_ATTESTATIONS=1' images/default/brew-shim-exec.sh && grep -Fq 'HOMEBREW_NO_ANALYTICS=1' images/default/brew-shim-exec.sh && echo 'ok: attested-env'"
     timeout_ms: 3000
     expected_behavior: "ok: attested-env"
 

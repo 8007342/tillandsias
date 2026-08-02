@@ -7,9 +7,18 @@
 #   tillandsias-brew-shim-exec <command> <formula> [args...]
 #
 # Contract:
-# - VERIFIABLE PACKAGES ONLY: homebrew-core formulae with Sigstore build
-#   provenance, verified at install (HOMEBREW_VERIFY_ATTESTATIONS=1).
-#   Casks and third-party taps are structurally rejected.
+# - HOMEBREW-CORE FORMULAE ONLY. Casks and third-party taps are structurally
+#   rejected, and the command/formula pair must appear in the shipped allowlist.
+# - INTEGRITY TODAY, PROVENANCE PENDING — stated precisely because this header
+#   previously claimed Sigstore verification that could not run. What holds now:
+#   our pinned homebrew-1.pem verifies a PS512 JWS over the formula index, whose
+#   bottle_checksum is checked against the downloaded bytes. That is authenticated
+#   integrity from a SINGLE publisher (Homebrew signs the index and builds the
+#   bottle), so it defeats MITM, a hostile mirror and corruption — but it does NOT
+#   establish which commit or workflow produced the bytes.
+#   Sigstore verification is OFF because it requires a GitHub credential to FETCH
+#   the bundle, and no GitHub token may exist in a forge (operator directive
+#   2026-08-01). See brew_env() for the credential-free replacement.
 # - First use installs the tool in userspace (Homebrew-on-Linux under
 #   /home/linuxbrew/.linuxbrew), then execs the real binary transparently.
 # - With TILLANDSIAS_BREW_AUTOINSTALL=0 the shim instead prints the
@@ -46,7 +55,38 @@ fi
 
 brew_env() {
     export PATH="$BREW_PREFIX/bin:$BREW_PREFIX/sbin:$PATH"
-    export HOMEBREW_VERIFY_ATTESTATIONS=1
+    # ATTESTATION IS EXPLICITLY OFF, and this is a correction rather than a
+    # relaxation. Declared rather than merely omitted so the state is auditable:
+    # an absent variable would leave a reader guessing whether it was a decision
+    # or an oversight.
+    #
+    # We used to set HOMEBREW_VERIFY_ATTESTATIONS=1 here. Homebrew's attestation
+    # path calls `gh attestation verify`, which FETCHES the Sigstore bundle from
+    # GitHub's API — and gh refuses any API call without a credential, so
+    # attestation.rb raises GhAuthNeeded before gh is even spawned. Under the
+    # operator's absolute directive (no GitHub token in a forge, at runtime or at
+    # image build), that flag could never succeed. It was not protecting us; it
+    # was guaranteeing that every on-demand install failed.
+    #
+    # WHAT WE STILL GET BY DEFAULT, and it is more than "a checksum": our own
+    # pinned homebrew-1.pem (RSA-4096, inside our clone at the pinned tag)
+    # verifies a PS512 JWS over the formula index, which carries the
+    # bottle_checksum, which is checked against the downloaded bytes. That is
+    # AUTHENTICATED INTEGRITY FROM A SINGLE PUBLISHER — it defeats MITM (including
+    # a proxy holding our own CA), a hostile ghcr mirror, and corruption.
+    #
+    # WHAT IT IS NOT: provenance. Homebrew signs the index AND builds the bottle,
+    # so one publisher sits on both ends; nothing here says which commit, workflow
+    # or builder produced the bytes. Do not describe this as provenance.
+    #
+    # THE REPLACEMENT IS REAL AND NEEDS NO CREDENTIAL: ship the Sigstore bundle
+    # and a pinned trusted root in the image, then verify here ourselves with
+    # `gh attestation verify <bottle> --repo Homebrew/homebrew-core --bundle
+    # <shipped> --custom-trusted-root <shipped-root>`. That returns 0 with no
+    # token, no gh config, and even with --network=none, and gh is ALREADY in the
+    # base image. Tracked by packet
+    # own-the-attestation-fetch-so-lanes-need-no-github-identity.
+    export HOMEBREW_NO_VERIFY_ATTESTATIONS=1
     export HOMEBREW_NO_ANALYTICS=1
     export HOMEBREW_NO_AUTO_UPDATE=1
     export HOMEBREW_NO_ENV_HINTS=1
@@ -88,18 +128,24 @@ if [ ! -x "$BREW_PREFIX/bin/brew" ]; then
 fi
 
 brew_env
-echo "tillandsias: installing '$FORMULA' in userspace via brew (attested bottle)..." >&2
-# BOUND THE INSTALL. Homebrew's attestation path retries 5 times with an
-# exponential backoff of 1+3+9+27+81 = 121 SECONDS PER FORMULA, and exposes no
-# knob to shorten it. On 2026-08-01 that stalled forge startup past the
-# liveness probe's budget and failed the post-build e2e gate with
-# FORGE_EXIT=125 "dead_crashed" — a tool install taking the whole lane down.
+echo "tillandsias: installing '$FORMULA' in userspace via brew (signed formula index, checksum-verified bottle)..." >&2
+# BOUND THE INSTALL, but not for the reason an earlier version of this comment
+# gave — that reason was wrong and is corrected here rather than deleted, because
+# the wrong number was quoted downstream.
 #
-# The specific cause then was egress (Sigstore was not allowlisted, fixed in
-# images/proxy/allowlist.txt), but this bound is deliberately INDEPENDENT of
-# that: any future attestation failure produces the same 121s ladder, and a
-# forge must degrade to "this tool is unavailable" rather than to "the lane
-# appears dead". Defence in depth, not a substitute for the fix.
+# CORRECTION: the 1+3+9+27+81 = 121s ladder (ATTESTATION_MAX_RETRIES, verified at
+# attestation.rb:200 and :269-277 of tag 4.5.8) only ever catches
+# InvalidAttestationError. GhAuthNeeded is declared at :47 as a SIBLING class,
+# never rescued by that block — so a missing-credential failure is IMMEDIATE, not
+# 121 seconds. The 121s stall observed on 2026-08-01 came from a different
+# situation entirely: a token WAS present and Sigstore egress was blocked, so the
+# failure kept landing in the retried branch.
+#
+# The bound stays, because a network stall, a slow mirror, or a future retried
+# failure can still hang an install, and a forge must degrade to "this tool is
+# unavailable" rather than to "the lane appears dead" — which is exactly what
+# took down the post-build e2e gate with FORGE_EXIT=125. Defence in depth against
+# a class of failure, not against one incident.
 #
 # `timeout` returns 124 on expiry; hint_and_exit already tells the agent how to
 # proceed without the tool.
@@ -112,7 +158,7 @@ fi
 if ! "$@" >&2; then
     rc=$?
     if [ "$rc" = 124 ]; then
-        echo "tillandsias: brew install $FORMULA TIMED OUT after ${BREW_INSTALL_TIMEOUT}s (bounded on purpose — attestation retries alone cost 121s)." >&2
+        echo "tillandsias: brew install $FORMULA TIMED OUT after ${BREW_INSTALL_TIMEOUT}s (bounded on purpose — a stalled fetch can hang an install indefinitely)." >&2
     else
         echo "tillandsias: brew install $FORMULA failed (attestation verification is REQUIRED and may be the cause — that is by design)." >&2
     fi
