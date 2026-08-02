@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260802
+packets:
+  - packet_id: capability-ladder-and-migration-paths-research
+    order: 596-ygqf
+    desired_release: v0.7
+    title: "Research: the capability ladder — same interface from one laptop to a cluster, with US running every migration"
+    status: ready
+    kind: research
+    deliverable: plan/issues/ research doc + decision record
+    depends_on: [mesh-persistent-storage-substrate-research]
+    pickup_role: any
+    capability_tags: [research, architecture, storage, mesh, ux, vision, migration]
+    estimated_hours: 10
+    outcome: >
+      OPERATOR PRINCIPLE 2026-08-02, now recorded canonically in
+      methodology/philosophy.yaml as capability_ladder: "a REAL CLOUD that works
+      (almost) the same with 1 node, or with a few dozens... When the topology
+      grows we make available more robust services. We decide for the user, and
+      provide the migration paths."
+      THIS PACKET EXISTS BECAUSE THE MIGRATIONS ARE THE PRODUCT, and nothing
+      currently specifies even one of them. Neither endpoint is hard: a single
+      Postgres on a single disk is trivial, and a replicated cluster is a solved
+      problem with abundant documentation. Moving a LIVE user's data from the
+      first to the second — automatically, without loss, and without a
+      maintenance window a non-technical user would have to understand — is the
+      part nobody has solved FOR THEM, and it is the part we are promising.
+      ENUMERATE THE RUNGS AND THE TRANSITIONS BETWEEN THEM. Rungs are cheap to
+      list; transitions are where the design lives. At minimum: one laptop
+      (ephemeral, survives an app crash but not the loss of the machine); one
+      always-on node with NVMe (survives reboots and app crashes, not disk
+      death); three-plus always-on nodes (survives losing a node); and beyond
+      that, whatever a genuinely distributed deployment requires. For each
+      TRANSITION, state what moves, who runs it, what the user observes, and
+      what happens if it fails halfway.
+      THE DESIGN CONSTRAINT THAT GOVERNS EVERY DEFAULT: a tier-1 choice must not
+      make tier-3 unreachable. If the single-node default stores data in a shape
+      that cannot later stream-replicate, the very first decision has trapped the
+      user at the bottom of the ladder — and they will discover it precisely when
+      they finally need to grow. Every default must be chosen with its successor
+      already in mind, and this packet should record, per rung, WHAT THE NEXT
+      RUNG REQUIRES OF IT.
+      THE 'ALMOST' MUST BE MADE LEGIBLE, not smoothed over. The interface is
+      topology-independent — "add a database" is the same prompt everywhere — but
+      the GUARANTEES are not. A single laptop cannot survive its own loss. The
+      user must be told what they actually have, in their own language ("this
+      survives your app crashing, not your laptop dying"), because presenting
+      identical guarantees across topologies is exactly how someone loses data
+      while believing they were safe. Under the vision's own standard we may not
+      let users risk what they do not understand — and an unstated durability
+      difference is precisely such a risk.
+      SCOPE DISCIPLINE: this packet does not implement any rung. It produces the
+      ladder, the transitions, and the per-rung obligations that the
+      implementation packets (storage substrate, add-a-database, NextCloud,
+      fleet enrollment) must each satisfy. It is the thing they are measured
+      against, not a competitor to them.
+    exit_criteria:
+      - "every rung is named with its concrete durability guarantee stated in user-facing language, not in engineering terms"
+      - "every TRANSITION between adjacent rungs is specified: what moves, who runs it, what the user sees, and the half-failed case"
+      - "each rung records what the NEXT rung requires of it, so no default can foreclose a higher rung"
+      - "at least one transition is proven end to end on real hardware before the ladder is claimed to exist"
+      - "a rung we cannot implement is not exposed; the doc states which rungs are real today"
