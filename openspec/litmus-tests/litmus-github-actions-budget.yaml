@@ -1,0 +1,59 @@
+# @trace spec:ci-release
+#
+# CLOUD MINUTES ARE A HARD BUDGET. Operator directive 2026-08-02, issued after
+# roughly 10% of a MONTHLY GitHub Actions quota was consumed in a single day:
+# only the release may run in the cloud, because it signs binaries with
+# GitHub-held secrets that exist nowhere else. Everything else runs locally.
+#
+# WHY A LITMUS AND NOT JUST A RULE IN THE METHODOLOGY. The workflow that caused
+# this was `ci.yml`, and its own header called it "intentionally cheap" — true
+# per run, irrelevant in aggregate, because it fired on EVERY push to three
+# branches plus every PR to main. A working day of agent pushes is dozens of
+# runs. The defect was the TRIGGER, not the job, and no amount of making the job
+# cheaper would have fixed it. A future agent adding "just a tiny check" on push
+# would repeat it exactly, which is what this test exists to stop.
+name: litmus:github-actions-budget
+spec: ci-release
+phase: pre-build
+description: >
+  Assert only the release workflow exists, that it is manually dispatched and
+  never triggered by push, pull_request or schedule, and that no workflow
+  reintroduces an automatic cloud trigger.
+severity: critical
+size: instant
+
+preconditions:
+  - repository contains .github/
+  - shell utilities (ls, grep, awk) available
+
+critical_path:
+  - step: "exactly ONE workflow exists, and it is the release"
+    command: "n=$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); f=$(ls .github/workflows/ 2>/dev/null | tr '\\n' ' '); if [ \"$n\" = 1 ] && [ -f .github/workflows/release.yml ]; then echo 'ok: release-only'; else echo \"found $n workflow(s): $f — only release.yml may exist\"; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: release-only"
+
+  - step: "release.yml is workflow_dispatch ONLY — no push, pull_request, or schedule"
+    command: "blk=$(awk '/^on:/{f=1;next} f && /^[a-z]/{f=0} f' .github/workflows/release.yml); if echo \"$blk\" | grep -qE '^[[:space:]]*(push|pull_request|schedule|repository_dispatch):'; then echo \"release.yml has an automatic trigger: $(echo \"$blk\" | tr '\\n' ' ')\"; else echo 'ok: manual dispatch only'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: manual dispatch only"
+
+  - step: "no workflow anywhere declares a scheduled/cron job"
+    command: "if grep -rlE '^[[:space:]]*(schedule|cron):' .github/workflows/ 2>/dev/null | grep -q .; then echo 'a scheduled workflow exists — it burns cloud minutes on a timer'; else echo 'ok: no scheduled jobs'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: no scheduled jobs"
+
+  - step: "the budget rule is recorded in the methodology, not only in this test"
+    command: "grep -Fq 'github_actions_budget' methodology/ci.yaml && grep -Fq 'ONLY the actual release' methodology/ci.yaml && echo 'ok: rule recorded'"
+    timeout_ms: 5000
+    expected_behavior: "ok: rule recorded"
+
+  - step: "the local-gate obligation that REPLACED push CI is stated"
+    command: "grep -Fq 'agent_obligation' methodology/ci.yaml && grep -Fq 'build.sh --check' methodology/ci.yaml && echo 'ok: local obligation stated'"
+    timeout_ms: 5000
+    expected_behavior: "ok: local obligation stated"
+
+failure_modes:
+  - "a push or pull_request trigger is added to any workflow, so every agent push burns cloud minutes again"
+  - "a scheduled job is added, burning minutes on a timer with nobody watching"
+  - "a second workflow appears because a check was 'easier in CI' than locally"
+  - "release.yml gains an automatic trigger and fires on pushes to main"

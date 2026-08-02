@@ -145,6 +145,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:ci-release-musl-binary-policy
+  - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape

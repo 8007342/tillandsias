@@ -276,3 +276,50 @@ execution_contract:
     failure_line: "spec=<spec-id> test=<test-id> reason=<smallest actionable cause>"
     trace_line: "@trace spec:<spec-id>"
     summary_line: "state the failing phase, the failing spec set, and the exit code"
+
+# ── Cloud minutes are a hard budget (The Tlatoāni, 2026-08-02) ───────────────
+#
+# OPERATOR DIRECTIVE, issued after burning ~10% of a MONTHLY GitHub Actions
+# quota in a single day: "ONLY the actual release needs to run in the cloud,
+# since it uses github secrets for signing some binaries, everything else runs
+# locally."
+github_actions_budget:
+  decided_by: "The Tlatoāni, 2026-08-02"
+  rule: >
+    GitHub Actions runs EXACTLY ONE workflow: the release. Nothing else may
+    consume cloud minutes — no push CI, no PR CI, no scheduled jobs, no cache
+    warming, no webhooks. Every other gate runs locally.
+  why_the_release_is_the_only_exception: >
+    The release workflow signs binaries with GitHub-held secrets. That signing
+    material exists only in the cloud, so the job cannot run anywhere else. No
+    other job has that property, and "it is convenient in CI" is not that
+    property.
+  what_was_removed_and_why:
+    ci_yml: >
+      Fired on EVERY push to linux-next/windows-next/osx-next and on every PR to
+      main. A working day of agent pushes is dozens of runs — roughly 10% of a
+      monthly quota in one day. Its own header said it was "intentionally cheap",
+      which was true per run and irrelevant in aggregate: the defect was the
+      TRIGGER, not the job.
+    nix_cache_warm_yml: >
+      A weekly scheduled job whose entire purpose was keeping a cache warm.
+      Spending metered cloud minutes to make other cloud minutes faster is
+      circular when nothing else is allowed to run in the cloud.
+  trigger_rules:
+    - "release.yml stays workflow_dispatch ONLY — never push, never pull_request, never schedule."
+    - "No workflow may add push, pull_request, schedule, or repository_dispatch triggers."
+    - "No repository webhooks."
+  what_we_gave_up_and_where_it_moved: >
+    ci.yml existed for a real reason recorded in its header: an agent once pushed
+    UNPARSEABLE Rust to linux-next and the release PR watched an empty check set
+    (plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md). Nothing
+    server-side validates a push any more, so that protection now rests ENTIRELY
+    on local gates run BEFORE pushing: `./build.sh --check` at minimum, and
+    `./build.sh --ci-full` before a release. An agent that pushes without running
+    the local gate reintroduces exactly that failure — and there is no longer a
+    safety net behind it. This is a deliberate trade of a safety net for a
+    budget, and it makes the local gate load-bearing rather than advisory.
+  agent_obligation: >
+    Run the local gate before every push. Do not add a workflow to catch what a
+    local gate should have caught. If a check genuinely cannot run locally, that
+    is a finding to file, not a reason to spend cloud minutes.
