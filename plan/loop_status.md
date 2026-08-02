@@ -1,5 +1,27 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-02T05:19Z-05:38Z (linux_mutable - 585-v2fa DONE; local-build RED before reset)
+
+- **Host**: `macuahuitl`, branch `linux-next`; credential/branch guards green,
+  startup boundary clean. `windows-next` and `osx-next` are both ancestors of
+  linux-next with zero ahead commits; no merge, deadlock, or branch-drift action
+  was required.
+- **585-v2fa DONE (`37722dba`)**: fragment-only packets are now appended before
+  LWW status and event G-Set updates apply. Regression coverage proves
+  ready -> claimed -> completed plus both retained lifecycle events. All 76
+  tillandsias-plan tests and `./build.sh --check` passed.
+- **Freshness**: `litmus:environment-isolation` refreshed after a live 4/4
+  post-build run against the forge image.
+- **Local-build E2E FAIL before reset**: `./build.sh --ci-full --install`
+  stopped on 3 pre-build failures (229 PASS). Existing 584-2qq2 owns trace
+  regeneration ordering; new 592-5zmn owns stale `ci.yml` and
+  `nix-cache-warm.yml` litmus assumptions. No install, Podman reset, init, or
+  nested forge launch occurred. Report:
+  `plan/issues/build-install-smoke-e2e-findings-2026-08-02.md`.
+- **Next**: drain 584-2qq2 and 592-5zmn, then rerun the local-build E2E. Release
+  and published-artifact smoke are deferred while the local integration gate is
+  red.
+
 ## Cycle 2026-08-01T06:11Z-07:10Z (linux_mutable — order 568 checkpoint; local-build RED captured; published v0.4.260728.2 PASS)
 
 - **Host**: `macuahuitl`, branch `linux-next`; credential/branch guards green,
