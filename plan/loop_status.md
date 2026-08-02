@@ -1,5 +1,33 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-02T17:20Z-18:50Z (forge/opencode — order 540 DONE; crash trail + long-run repro on linux-next-debug)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next`; credential `ok:forge-git-mirror`, branch `ok:branch-linux-next`.
+  Startup worktree was clean; opsx skill sync already committed as `e87705ec`.
+- **Order 540 DONE (`403bd3cc`, pushed as `144576ef`)**: meta-orchestration now
+  MERGES launch-generated opsx/openspec dirt instead of refusing the cycle.
+  `scripts/check-opsx-generated-dirt.sh` returns a falsifiable
+  `ok:opsx-only|ok:clean-tree|non-opsx:` verdict for the exact 22-path generated
+  set; the worktree guard gained `re-snapshot` so the cycle commits the sync as
+  `chore(opsx):` and re-anchors the boundary; the skill's start-of-cycle wires
+  the deterministic checker. New litmus
+  `litmus:meta-orchestration-opsx-sync-merge` (exit criteria a-d) green;
+  order-489 dirty-tree litmus stays green byte-identically. `./build.sh --check`
+  green.
+- **Container-crash investigation (active, on `linux-next-debug`)**: opencode
+  runs as PID 1; hypothesis is the embedded Bun 1.3.14 runtime (same class as
+  the arm64 segfault in
+  `plan/issues/forge-opencode-bun-segfault-2026-07-27.md`). Root overlay 95%
+  full, cgroup unlimited memory/pids, zero OOM events. Durable crash watcher
+  `scripts/forge-longrun-crash-repro.sh` samples every 15s for 6h under
+  `/home/forge/.cache/tillandsias-project/forge-crash-trail/` (PID 4850).
+  Trail commit `180adb03` on `linux-next-debug`; merge deferred until the run
+  reproduces or completes.
+- **Next**: verify order 540 on a fresh launch whose CLI drifted (live
+  proof), let the 6h crash watcher run, then reconcile `linux-next-debug`
+  into `linux-next`.
+
 ## Cycle 2026-08-02T05:19Z-05:38Z (linux_mutable - 585-v2fa DONE; local-build RED before reset)
 
 - **Host**: `macuahuitl`, branch `linux-next`; credential/branch guards green,
