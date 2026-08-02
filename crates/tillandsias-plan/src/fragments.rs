@@ -263,8 +263,8 @@ pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
         }
     }
 
-    apply_to_packets(&mut merged, &new_events, &lww);
     append_packets(&mut merged, new_packets);
+    apply_to_packets(&mut merged, &new_events, &lww);
     merged
 }
 
@@ -696,6 +696,31 @@ packets:
             "completed",
             "the newer write must win regardless of fold order"
         );
+    }
+
+    #[test]
+    fn fragment_only_packet_accepts_lifecycle_updates_and_events() {
+        let added = "packets:\n  - packet_id: gamma\n    order: 585-v2fa\n    status: ready\n";
+        let claimed = "status:\n  - packet_id: gamma\n    field: status\n    value: claimed\n    ts: \"2026-03-01T00:00:00Z\"\n    host: aaa\nevents:\n  - packet_id: gamma\n    event:\n      type: claim\n      ts: \"2026-03-01T00:00:00Z\"\n      agent_id: h1\n      summary: claimed\n";
+        let completed = "status:\n  - packet_id: gamma\n    field: status\n    value: completed\n    ts: \"2026-03-02T00:00:00Z\"\n    host: bbb\nevents:\n  - packet_id: gamma\n    event:\n      type: completed\n      ts: \"2026-03-02T00:00:00Z\"\n      agent_id: h2\n      summary: completed\n";
+
+        let in_progress = fold(
+            &base(),
+            &[frag("1-add.yaml", added), frag("2-claim.yaml", claimed)],
+        );
+        assert_eq!(field(&in_progress, "gamma", "status"), "claimed");
+        assert_eq!(events_of(&in_progress, "gamma"), vec!["claimed"]);
+
+        let done = fold(
+            &base(),
+            &[
+                frag("1-add.yaml", added),
+                frag("2-claim.yaml", claimed),
+                frag("3-complete.yaml", completed),
+            ],
+        );
+        assert_eq!(field(&done, "gamma", "status"), "completed");
+        assert_eq!(events_of(&done, "gamma"), vec!["claimed", "completed"]);
     }
 
     #[test]
