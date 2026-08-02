@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-macuahuitl-opus5-20260802
+events:
+  - packet_id: mesh-persistent-storage-substrate-research
+    event:
+      type: note
+      ts: "2026-08-02T07:30:00Z"
+      agent_id: linux-mutable-macuahuitl-opus5-20260802
+      host: linux_mutable
+      summary: >
+        HARDWARE CORRECTION FROM THE OPERATOR, and it invalidates one of this
+        packet's four founding constraints. I wrote "with one always-on node,
+        replication has nothing to replicate to" and built a phase-1 design
+        around a single durable node. The operator has FIVE Pi 5s, each with a
+        1 TB NVMe drive — only one is currently set up, manually, on Ubuntu
+        Server. So the topology is not one-node-plus-laptops; it is a five-node
+        always-on cluster with local fast storage, which is a textbook small
+        cluster rather than a degenerate case.
+        WHAT THAT CHANGES. Replication moves from impossible to straightforward:
+        five nodes support replication factor 3 with quorum 2, tolerating two
+        simultaneous failures. Roughly 5 TB raw becomes ~1.6 TB usable at RF=3,
+        which is ample for personal applications. Cassandra's design assumptions
+        are met rather than strained. Ceph and Gluster become arguable rather
+        than absurd. Do NOT design for a single durable node.
+        THE INSIGHT THAT SHOULD SHAPE THE DESIGN, and it argues against the
+        clustered-filesystem options the operator was weighing: DATABASES DO NOT
+        WANT A CLUSTERED FILESYSTEM UNDERNEATH THEM. Cassandra already replicates
+        at the application layer; putting it on Ceph means replicating twice —
+        RF=3 over a 3x-replicated filesystem is nine copies, plus network
+        round-trips on every local write. Both Cassandra and PostgreSQL are
+        explicitly designed to own local disks. Five Pi 5s with local NVMe is
+        exactly the shape both want.
+        SO THE LIKELY SPLIT IS BY WORKLOAD, NOT ONE SUBSTRATE FOR EVERYTHING:
+        DATABASES get local NVMe with application-level replication (Cassandra
+        native; Postgres via streaming replication). FILES — NextCloud, user
+        documents, container volumes — have no application-level replication and
+        DO need a shared or replicated layer, which is where a clustered FS or a
+        single node plus sync earns its place. The operator's instinct that they
+        want "all of them" is right; the discipline is assigning each to the
+        layer it actually serves.
+        THE HARD ONE IS THE TRANSACTIONAL DATABASE, and it deserves a warning
+        rather than a design sketch. The operator wants "one fully hardcore
+        transactional" alongside eventually-consistent ones. PostgreSQL HA is
+        genuinely difficult: automatic failover risks split-brain, and a wrong
+        failover corrupts the very consistency the workload was chosen for. A
+        single well-backed-up Postgres on one NVMe node, with a tested restore,
+        is frequently MORE reliable in practice than a hand-rolled HA cluster —
+        and "hardcore transactional" is precisely the workload where a subtly
+        wrong cluster is worse than an honest single node. Treat multi-node
+        Postgres as a deliberate later step with its own evidence, not as the
+        obvious consequence of owning five machines.
+        BACKUPS ARE DEPRIORITISED BY THE OPERATOR, with a stated reason: "I'm one
+        oauth token away from storing cheap daily/weekly/monthly backups in
+        google drive, so I don't care too much about those yet." Accepted — but
+        this packet's exit criterion about VERIFIED RESTORE stands, because the
+        gap it names is not where backups are stored, it is whether a restore has
+        ever been performed. A Google Drive bucket full of never-restored dumps
+        is the same belief-not-property failure.
+        AND THE PRODUCT FRAMING, worth carrying into every design choice here:
+        "they're like one abstraction layer on top of docker containers and
+        ansible. I don't want to deal with a fleet." The operator currently runs
+        NextCloud, DNS and docker containers on one Pi BY HAND and hates it. The
+        competitor is not a cloud provider; it is manual homelab administration,
+        and the bar is not "works" but "stops being manual".
+
+  - packet_id: add-a-database-one-prompt-capability-research
+    event:
+      type: note
+      ts: "2026-08-02T07:31:00Z"
+      agent_id: linux-mutable-macuahuitl-opus5-20260802
+      host: linux_mutable
+      summary: >
+        OPERATOR CLARIFICATION 2026-08-02: they want BOTH engines, concretely —
+        "some of my github apps use an eventual consistent database, and one
+        fully hardcore transactional". That settles a question this packet had
+        left open: offering both is a real requirement, not a hypothetical.
+        It does NOT settle engine selection by prompt, which stays the harder
+        problem. A user who says "add a database" is not expressing a consistency
+        preference, and defaulting them onto an eventually-consistent engine
+        because the mesh story favours it would hand them behaviour that
+        surprises them later, in production, with data. The default for an
+        unqualified request should be the transactional one; eventual consistency
+        should be reachable but chosen.
+        The operator's own usage is the model: THEY know which app needs which,
+        because they know the workload. A non-technical user does not, so the
+        system must either infer it from what the app does or default safely.
+        Record which, and why.
