@@ -11327,26 +11327,48 @@ fn build_forge_agent_run_args_with_vault(
     {
         spec = spec.env(key, value);
     }
-    // GitHub token injection (order 359): forge tooling that talks to GitHub —
-    // brew attestation verification (bottles + the GitHub API) and any direct
-    // git-over-HTTPS — otherwise goes ANONYMOUS and gets rate-limited/blocked
-    // (operator repro 2026-07-15: brew could not verify the ncurses bottle,
-    // "missing GitHub API token"). We control the credential, so inject it.
-    // Read HOST-SIDE from Vault (the tray has access) and hand it to the lane
-    // as env, EXACTLY like the provider keys above — never on disk, never in
-    // argv. The forge's OWN vault policy still cannot read secret/github/token
-    // (forge-policy-has-no-token-read invariant is untouched); a compromised
-    // lane holds only this one env value, same trust level as the LLM keys.
-    // Injected for every lane because brew is available in all of them.
-    // @trace plan/issues/forge-github-token-injection (order 359)
-    if let Ok(gh_token) =
-        crate::vault_bootstrap::vault_kv_get_via_exec("secret/github/token", "token", debug)
-        && !gh_token.is_empty()
-    {
-        // HOMEBREW_GITHUB_API_TOKEN: brew's documented env for authenticated
-        // ghcr.io bottle pulls + attestation verification.
-        spec = spec.env("HOMEBREW_GITHUB_API_TOKEN", &gh_token);
-    }
+    // NO GITHUB TOKEN REACHES A FORGE LANE. This is deliberate, absolute, and
+    // reverses order 359 — do not reintroduce it.
+    //
+    // Order 359 injected HOMEBREW_GITHUB_API_TOKEN into every lane so brew could
+    // verify bottle attestations. Operator decision 2026-08-01 removes it
+    // outright: "token NEVER EVER EVER touches the forge. For no reason."
+    //
+    // WHY THE ORIGINAL REASONING DOES NOT SURVIVE SCRUTINY:
+    //
+    // * The credential was never a security requirement. Verifying a Sigstore
+    //   attestation needs the artifact, the bundle, a trust root and a policy —
+    //   no verifier identity. Reproduced with no token and no network interface
+    //   at all: exit 0, correct signer; one flipped byte, exit 1. The token buys
+    //   a GitHub API RATE-LIMIT bucket for FETCHING the bundle, nothing more.
+    // * The comment it replaced claimed "never on disk, never in argv" while
+    //   `spec.env()` becomes `--env KEY=VALUE`, i.e. an argv element readable
+    //   from /proc/<pid>/cmdline and retained in the container config for the
+    //   container's lifetime. The guarantee was false as written.
+    // * A lane runs as uid 1000 and so does the agent, so no in-container
+    //   mechanism could have isolated it from the agent anyway.
+    //
+    // DEVELOPMENT CONFIG AND RUNTIME CONFIG ARE DIFFERENT LIFECYCLES AND MUST
+    // NOT OVERLAP (operator, 2026-08-01). A credential belongs where the IMAGE
+    // is BUILT — on a development host, once — not in every disposable lane a
+    // user launches. Users must never need a GitHub account to run a forge.
+    //
+    // CONSEQUENCE, stated so nobody "fixes" it by putting the token back:
+    // Homebrew raises GhAuthNeeded before it even spawns `gh` when no credential
+    // is present, so an ON-DEMAND `brew install` in a lane now fails by design.
+    // The shim degrades to "this tool is unavailable" and says why.
+    //
+    // THE REPAIR IS NOT A BUILD-TIME TOKEN EITHER. Operator, 2026-08-01: "do not
+    // build it into the forge anywhere, not even during container creation."
+    // There is no tier at which a GitHub credential is acceptable here — not
+    // runtime, not `podman build`, not a helper script. The tools must come from
+    // a source whose provenance needs NO third-party identity to verify: Fedora
+    // RPMs, whose signatures we verify ourselves (which means removing
+    // --nogpgcheck — packet remove-nogpgcheck-from-base-images). That is
+    // verifiable provenance to origin with nobody's account involved.
+    // See also bake-allowlisted-tools-into-the-image.
+    //
+    // @trace plan/issues/forge-github-token-injection (order 359, REVERSED)
 
     spec.build_run_args()
 }
@@ -13922,17 +13944,32 @@ mod tests {
     }
 
     #[test]
-    fn github_token_injected_as_env_host_side_never_argv() {
-        // Order 359: the github token reaches the forge as an env var read
-        // HOST-SIDE, never on argv/disk, and the forge's own vault policy is
-        // untouched (still cannot read secret/github/token).
+    fn no_github_token_ever_reaches_a_forge_lane() {
+        // REVERSES order 359, and this test reverses with it.
+        //
+        // The predecessor was named `github_token_injected_as_env_host_side_never_argv`
+        // and asserted only that the injection EXISTED. It pinned the deviation
+        // rather than guarding against it, and its name claimed "never argv" — a
+        // property it never checked and which was FALSE, because `spec.env()`
+        // becomes `--env KEY=VALUE`, an argv element of `podman run`.
+        //
+        // Operator decision 2026-08-01: "token NEVER EVER EVER touches the
+        // forge. For no reason." Development config and runtime config are
+        // different lifecycles; a credential belongs where the image is BUILT,
+        // not in every disposable lane a user launches.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "fn build_forge_agent_run_args_with_vault(");
-        // Injected via .env(), the same seam as the LLM provider keys.
-        assert!(window.contains("spec = spec.env(\"HOMEBREW_GITHUB_API_TOKEN\""));
-        // Read host-side from vault (the tray has access; the forge does not).
-        assert!(window.contains("vault_kv_get_via_exec(\"secret/github/token\", \"token\""));
-        // Quarantine invariant unchanged: forge-policy still forbids the read.
+        assert!(
+            !window.contains("spec.env(\"HOMEBREW_GITHUB_API_TOKEN\""),
+            "no GitHub token may be injected into a forge lane — this is the \
+             order-359 reversal, and putting it back is the regression this test \
+             exists to catch"
+        );
+        assert!(
+            !window.contains("vault_kv_get_via_exec(\"secret/github/token\""),
+            "the lane builder must not even READ the github token from vault"
+        );
+        // And the quarantine invariant it always depended on still holds.
         let forge_hcl = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../images/vault/policies/forge.hcl"
