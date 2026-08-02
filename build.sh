@@ -870,6 +870,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings 2>&1
     _info "Clippy (listen-vsock) passed"
 
+    _step "Checking plan ledger integrity (tillandsias-plan check)..."
+    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- check 2>&1; then
+        _error "plan/index.yaml failed integrity check: run 'cargo run -p tillandsias-plan -- check' for details"
+        exit 1
+    fi
+    _info "Plan ledger check passed"
+
+    _step "Checking plan order uniqueness (tillandsias-policy plan-orders)..."
+    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy -- plan-orders 2>&1; then
+        _error "plan/index.yaml has open duplicate order tokens: run 'cargo run -p tillandsias-policy -- plan-orders' for details"
+        exit 1
+    fi
+    _info "Plan order uniqueness passed"
+
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0

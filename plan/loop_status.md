@@ -1,10 +1,9 @@
 # Multi-Host Coordination Loop Status
 
-## Cycle 2026-08-02T17:20Z-18:50Z (forge/opencode — order 540 DONE; crash trail + long-run repro on linux-next-debug)
+## Cycle 2026-08-02T17:20Z-18:50Z (forge/opencode — order 540 + ledger order-id theme DONE)
 
 - **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
   `linux-next`; credential `ok:forge-git-mirror`, branch `ok:branch-linux-next`.
-  Startup worktree was clean; opsx skill sync already committed as `e87705ec`.
 - **Order 540 DONE (`403bd3cc`, pushed as `144576ef`)**: meta-orchestration now
   MERGES launch-generated opsx/openspec dirt instead of refusing the cycle.
   `scripts/check-opsx-generated-dirt.sh` returns a falsifiable
@@ -15,6 +14,23 @@
   `litmus:meta-orchestration-opsx-sync-merge` (exit criteria a-d) green;
   order-489 dirty-tree litmus stays green byte-identically. `./build.sh --check`
   green.
+- **Ledger order-id theme DONE (566 + 581-h99t + 581-jf7g)**: order 566
+  marked completed (collision-free mint + honest refusal + check warning were
+  landed 2026-08-01; this drain recorded the resolution of the six remaining
+  HEAD collisions). 581-h99t: nulled the order on all-but-one member of each
+  grandfathered collision group (160/196/197/201/224/294 — 7 orders nulled),
+  taught `plan-orders` to key on raw tokens so suffixed tokens sharing a
+  prefix are distinct while `provisional`/`null` are exempt, and minted
+  permanent `594-*` tokens for all 28 stranded provisional packets (0 remain).
+  plan-orders now reports `492 packets, 0 grandfathered`. 581-jf7g: empirical
+  union-merge verdict in
+  `plan/issues/concurrent-ledger-append-without-manual-merges-2026-08-02.md` —
+  union resolves end-of-file appends but silently corrupts same-region event
+  appends; rejected, kept manual resolution, and wired `tillandsias-plan check`
+  + `tillandsias-policy plan-orders` into `build.sh --check` so a malformed
+  ledger cannot reach a push undetected. Litmus plan-index-order-uniqueness
+  extended with suffixed-token steps; 11/11 methodology-accountability litmus
+  green.
 - **Container-crash investigation (active, on `linux-next-debug`)**: opencode
   runs as PID 1; hypothesis is the embedded Bun 1.3.14 runtime (same class as
   the arm64 segfault in
@@ -24,9 +40,8 @@
   `/home/forge/.cache/tillandsias-project/forge-crash-trail/` (PID 4850).
   Trail commit `180adb03` on `linux-next-debug`; merge deferred until the run
   reproduces or completes.
-- **Next**: verify order 540 on a fresh launch whose CLI drifted (live
-  proof), let the 6h crash watcher run, then reconcile `linux-next-debug`
-  into `linux-next`.
+- **Next**: push this drain, then reconcile `linux-next-debug` into
+  `linux-next` once the crash watcher completes.
 
 ## Cycle 2026-08-02T05:19Z-05:38Z (linux_mutable - 585-v2fa DONE; local-build RED before reset)
 

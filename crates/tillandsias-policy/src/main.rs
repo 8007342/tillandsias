@@ -4866,6 +4866,26 @@ fn run_in_pty_cmd(args: &[String]) {
 const PLAN_ORDER_DONE_STATUSES: [&str; 5] =
     ["done", "completed", "success", "obsoleted", "obsolete"];
 
+/// The order token a packet contributes to uniqueness accounting, or `None`
+/// when the packet is deliberately outside the check:
+///
+/// - `order: null` — order withdrawn during collision disposal (581-h99t).
+/// - `order: provisional` — sentinel meaning "not yet assigned"; many packets
+///   share it by design, so it can never be a collision.
+///
+/// Suffixed tokens (`575-k3f9`, `392b`) are kept as their RAW value: two tokens
+/// sharing a prefix but differing in suffix are distinct orders and MUST pass —
+/// the suffix scheme makes a shared prefix legal by construction.
+fn plan_orders_token(step: &serde_yaml::Value) -> Option<String> {
+    match step.get("order") {
+        None => None,
+        Some(serde_yaml::Value::Number(n)) => Some(n.to_string()),
+        Some(serde_yaml::Value::String(s)) if s == "provisional" => None,
+        Some(serde_yaml::Value::String(s)) => Some(s.clone()),
+        Some(_) => None,
+    }
+}
+
 fn plan_orders_check(yaml: &serde_yaml::Value) -> Result<(usize, usize), Vec<String>> {
     let steps = yaml
         .get("plan_index")
@@ -4873,11 +4893,11 @@ fn plan_orders_check(yaml: &serde_yaml::Value) -> Result<(usize, usize), Vec<Str
         .and_then(|s| s.as_sequence())
         .ok_or_else(|| vec!["plan_index.steps sequence not found".to_string()])?;
 
-    let mut by_order: std::collections::BTreeMap<i64, Vec<(String, String)>> =
+    let mut by_order: std::collections::BTreeMap<String, Vec<(String, String)>> =
         std::collections::BTreeMap::new();
     let mut packet_count = 0usize;
     for step in steps {
-        let Some(order) = step.get("order").and_then(|o| o.as_i64()) else {
+        let Some(order) = plan_orders_token(step) else {
             continue;
         };
         packet_count += 1;
@@ -5277,6 +5297,16 @@ trailing"#;
         serde_yaml::from_str(&format!("plan_index:\n  steps:\n{steps}")).unwrap()
     }
 
+    fn plan_orders_token_fixture(entries: &[(&str, &str, &str)]) -> serde_yaml::Value {
+        let steps = entries
+            .iter()
+            .map(|(id, order, status)| {
+                format!("    - packet_id: {id}\n      order: {order}\n      status: {status}\n")
+            })
+            .collect::<String>();
+        serde_yaml::from_str(&format!("plan_index:\n  steps:\n{steps}")).unwrap()
+    }
+
     #[test]
     fn plan_orders_duplicate_with_open_packet_fails() {
         let yaml = plan_orders_fixture(&[
@@ -5323,6 +5353,44 @@ trailing"#;
         for member in ["x-pending(pending)", "y-ready(ready)", "z-pending(pending)"] {
             assert!(err[0].contains(member), "{err:?}");
         }
+    }
+
+    #[test]
+    fn plan_orders_suffixed_tokens_sharing_prefix_pass() {
+        // 575-k3f9 and 575-m2p1 share a prefix — the suffix scheme makes that
+        // legal by construction; they must be distinct orders, not a collision.
+        let yaml = plan_orders_token_fixture(&[
+            ("a", "575-k3f9", "ready"),
+            ("b", "575-m2p1", "ready"),
+            ("c", "575-m2p2", "done"),
+        ]);
+        let (packets, grandfathered) = plan_orders_check(&yaml).unwrap();
+        assert_eq!(packets, 3);
+        assert_eq!(grandfathered, 0);
+    }
+
+    #[test]
+    fn plan_orders_duplicate_suffixed_token_with_open_packet_fails() {
+        let yaml = plan_orders_token_fixture(&[
+            ("a", "575-k3f9", "ready"),
+            ("b", "575-k3f9", "done"),
+            ("c", "575-k3f9", "pending"),
+        ]);
+        let err = plan_orders_check(&yaml).unwrap_err();
+        assert_eq!(err.len(), 1);
+        assert!(err[0].starts_with("duplicate-order:575-k3f9:"), "{err:?}");
+    }
+
+    #[test]
+    fn plan_orders_provisional_sentinel_and_null_are_exempt() {
+        let yaml = plan_orders_token_fixture(&[
+            ("a-provisional", "provisional", "ready"),
+            ("b-provisional", "provisional", "pending"),
+            ("c-null", "null", "ready"),
+        ]);
+        let (packets, grandfathered) = plan_orders_check(&yaml).unwrap();
+        assert_eq!(packets, 0);
+        assert_eq!(grandfathered, 0);
     }
 
     #[test]

@@ -51,10 +51,20 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: unit-tests-pinned"
 
+  - step: "suffixed tokens sharing a prefix are distinct and pass (581-h99t)"
+    command: "grep -q 'plan_orders_suffixed_tokens_sharing_prefix_pass' crates/tillandsias-policy/src/main.rs && echo 'ok: suffixed-token-test-pinned'"
+    timeout_ms: 3000
+    expected_behavior: "ok: suffixed-token-test-pinned"
+
+  - step: "live ledger passes: suffixed tokens are counted as distinct packets"
+    command: "if command -v cargo >/dev/null 2>&1; then out=$(cargo run -q -p tillandsias-policy -- plan-orders 2>&1); rc=$?; else rc=0; out='ok'; fi; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -q '0 grandfathered' && echo 'ok: no-grandfathered-groups' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 120000
+    expected_behavior: "ok: no-grandfathered-groups"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"
-  expected_log: "plan-orders uniqueness pinned (live ledger pass, open-duplicate fail, done-only grandfather, unit tests)"
+  expected_log: "plan-orders uniqueness pinned (live ledger pass, open-duplicate fail, done-only grandfather, suffixed-token pass, unit tests)"
   log_fields:
     spec: "methodology-accountability"
     test: "plan-index-order-uniqueness"

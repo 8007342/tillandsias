@@ -2334,7 +2334,7 @@ plan_index:
     # ─────────────────────────────────────────────────────────────────────────
 
     - packet_id: race-safeguards-research
-      order: 160
+      order: null
       title: "Research: race-surface inventory + safeguard strategy (concurrent launches, lifecycle churn)"
       status: completed
       kind: research
@@ -2893,7 +2893,7 @@ plan_index:
     # ─────────────────────────────────────────────────────────────────────────
 
     - packet_id: microsoft-linux-guest-research
-      order: 160
+      order: null
       title: "Research: Azure Linux 4.0 ('Microsoft Linux') as WSL2 guest — footprint, podman/SELinux parity, memory-model reality check"
       status: completed
       kind: research
@@ -4470,7 +4470,7 @@ plan_index:
         - "Nix/cross-compilation for both architectures succeeds inside Toolbx on Silverblue"
 
     - packet_id: audit-plan-cross-branch-writes
-      order: 196
+      order: null
       title: "Audit: clarify advance-work-from-plan cross-branch write instructions"
       status: completed
       events:
@@ -4503,7 +4503,7 @@ plan_index:
         - "Skill and methodology files updated to resolve ambiguity"
 
     - packet_id: audit-credential-guard-windows
-      order: 197
+      order: null
       title: "Audit: fix check-credential-channel.sh invocation context on Windows"
       status: completed
       events:
@@ -4536,7 +4536,7 @@ plan_index:
         - "Deliverable written with root cause and fix details"
 
     - packet_id: litmus-runner-command-backslash-escaping
-      order: 201
+      order: null
       title: "Fix: litmus runner's command: extraction doesn't collapse \\\\ to \\, breaking valid-YAML regex escapes"
       status: completed
       kind: enhancement
@@ -5293,7 +5293,7 @@ plan_index:
         - "scripts/build-image.sh vault --force completes (success or a fast, legible failure) on an offline host within a few seconds, matching the other 3 images — DONE: now fails within TILLANDSIAS_BUILD_TIMEOUT_SECS (default 1800s, configurable) with a clear message instead of hanging forever; succeeds normally when network is actually reachable (verified all 5 images build clean on this now-online host)"
 
     - packet_id: forge-gitconfig-quarantine-and-injection
-      order: 224
+      order: null
       title: "Forge: quarantine host .gitconfig + inject forge-owned git config with mirror redirect at launch"
       status: completed
       kind: enhancement+bugfix
@@ -9897,7 +9897,7 @@ plan_index:
             - "host run test_missing_image_error_handling (podman reachable): strict assertions, ok"
 
     - packet_id: macos-guest-disk-resize-forge-fit
-      order: 294
+      order: null
       title: "macOS guest disk grown to 250G so the forge-base image build fits (was ~5GB, every agent attach failed)"
       status: completed
       kind: bug
@@ -14377,7 +14377,7 @@ plan_index:
 
     - packet_id: wsl2-transparent-build-wrappers
       provisional_id: windows-260715-3
-      order: provisional
+      order: 594-rwsf
       title: "Build scripts WSL2-aware on Windows: transparent tillandsias-build distro re-exec (toolbox parity) so Linux-shaped build/CI work runs on Windows hosts"
       status: completed
       kind: enhancement
@@ -15051,7 +15051,7 @@ plan_index:
             wiring deliverable lands now.
     - packet_id: forge-maintenance-session-name-collision
       provisional_id: windows-260715-4
-      order: provisional
+      order: 594-75ki
       title: "P2: forge maintenance-session relaunch dies 125 — bare podman run --name without --replace (order-314 class, maintenance surface)"
       status: completed
       kind: bug
@@ -15245,7 +15245,7 @@ plan_index:
 
     - packet_id: windows-inforge-meta-orchestration-transparent-push
       provisional_id: windows-260716-1
-      order: provisional
+      order: 594-pm5h
       desired_release: v0.5
       release_target: stable-milestone-v1
       title: "GOAL: BigPickle/Hy3-class agent completes a full /meta-orchestration inside the Windows forge with a transparent verified push to GitHub"
@@ -15347,7 +15347,7 @@ plan_index:
 
     - packet_id: git-mirror-container-created-without-relay-credential
       provisional_id: windows-260716-2
-      order: provisional
+      order: 594-pisu
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: per-project mirror container created WITHOUT the vault-token secret — relay fail-closes every in-forge push; mint/mount failure is silent"
@@ -16532,7 +16532,7 @@ plan_index:
         - "FIRST-FIRE PROOF: inside a forge launched from an image whose lib-common.sh contains the installer, a crate-touching commit appends a fire record to /tmp/tillandsias-hooks.log AND replaces ~/.local/bin/tillandsias-plan via a CARGO_TARGET_DIR-aware install (the answer surface observably changes); evidence recorded here with the commit hash"
 
     - packet_id: experts-refresh-on-commit/cargo-target-install
-      order: provisional
+      order: 594-zm47
       provisional_id: forge-260730-1
       desired_release: v0.5
       release_target: forge-local-experts-milestone
@@ -16580,7 +16580,7 @@ plan_index:
         - "a behavioral fixture exercises both success and refusal paths without requiring a live forge image rebuild"
 
     - packet_id: experts-refresh-on-commit/first-fire-e2e
-      order: provisional
+      order: 594-gqeu
       provisional_id: forge-260730-2
       desired_release: v0.5
       release_target: forge-local-experts-milestone
@@ -17062,7 +17062,7 @@ plan_index:
 
     - packet_id: vault-unseal-secret-regenerated-on-reensure
       provisional_id: windows-260717-2
-      order: provisional
+      order: 594-75gn
       # REPRO 2026-07-23 (windows lane, fresh guest): repeated
       # tillandsias-headless service restarts (same-version hot-injects)
       # re-ran the liveness re-ensure and wedged the vault at the deep-skew
@@ -17151,7 +17151,7 @@ plan_index:
 
     - packet_id: guest-crashloop-detection
       provisional_id: windows-260717-3
-      order: provisional
+      order: 594-u6zy
       release_target: stable-milestone-v1
       title: "Guest crash-loop DETECTION — bounded restart/unseal/handshake counter surfaced as a falsifiable diagnose+tray verdict"
       status: completed
@@ -17202,7 +17202,7 @@ plan_index:
 
     - packet_id: guest-intentional-ephemeral-reset
       provisional_id: windows-260717-4
-      order: provisional
+      order: 594-b4mt
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Intentional EPHEMERAL RESET — one-click wipe+reprovision of the guest (destructive-by-design; re-auth is the only cost)"
@@ -17269,7 +17269,7 @@ plan_index:
 
     - packet_id: windows-wsl-absent-runtime-setup
       provisional_id: windows-260722-1
-      order: provisional
+      order: 594-89pc
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Windows: WSL-absent is a first-class runtime state — preflight before download, background `wsl --install` with curated progress, restart-required surfacing; installer ends with the idempotent install"
@@ -17363,7 +17363,7 @@ plan_index:
 
     - packet_id: windows-app-identity-metadata
       provisional_id: windows-260722-3
-      order: provisional
+      order: 594-vb78
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Windows app identity: VERSIONINFO metadata ('Tillandsias v#.#.######.# by Tlatoani'), stable shell identity across updates, single idempotent Installed-Software entry"
@@ -17444,7 +17444,7 @@ plan_index:
 
     - packet_id: github-login-vault-write-missing-ca-mount
       provisional_id: windows-260722-4
-      order: provisional
+      order: 594-rt73
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: --github-login token store dies with 'CA bundle not readable' on a fresh guest — login container lacks the CA mount and never runs ensure_ca_bundle"
@@ -17492,7 +17492,7 @@ plan_index:
 
     - packet_id: curated-connection-chips-and-skew-guard-fix
       provisional_id: windows-260722-5
-      order: provisional
+      order: 594-jj3k
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Curated connection-state chips (Tlatoani 'Workspace' family, cross-tray) + build-version skew guard compared the wrong version (0.1.0 crate version, false WARN every handshake)"
@@ -17549,7 +17549,7 @@ plan_index:
 
     - packet_id: forge-first-launch-progress-surface
       provisional_id: windows-260722-6
-      order: provisional
+      order: 594-kgnr
       desired_release: v0.5
       release_target: stable-milestone-v1
       title: "Forge first launch: surface curated progress for the silent minutes (image build, inference first-run, harness installers) — 'the user must know that something is happening'"
@@ -17607,7 +17607,7 @@ plan_index:
 
     - packet_id: mirror-first-seed-vs-launch-readiness-race
       provisional_id: windows-260722-7
-      order: provisional
+      order: 594-csgb
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: first forge launch races the mirror's initial upstream seed — readiness gate passes on 'reachable', clone retries exhaust minutes before refs arrive (live Windows repro for the 452/454 family)"
@@ -17706,7 +17706,7 @@ plan_index:
 
     - packet_id: windows-exec-probe-timeout-not-damage
       provisional_id: windows-260723-1
-      order: provisional
+      order: 594-ubdi
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "418 refinement: a probe TIMEOUT is not a damaged distro — do not destructively re-import on a transiently wedged WSL service"
@@ -17785,7 +17785,7 @@ plan_index:
 
     - packet_id: codex-lane-state-amnesia
       provisional_id: windows-260723-2
-      order: provisional
+      order: 594-khn2
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: codex lane state amnesia — ephemeral CODEX_HOME replays codex FIRST-RUN every launch (281s silent stall, 80% of launch); login one-shot re-pulls 136MB + full ensure before the device code (50s)"
@@ -17888,7 +17888,7 @@ plan_index:
 
     - packet_id: harness-refresh-not-byte-cheap
       provisional_id: windows-260723-3
-      order: provisional
+      order: 594-i6ys
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "harness refresh moves ~1.09GB per lane launch — 273MB Claude dist downloaded TWICE in 7s; the 'warm cache makes this cheap' contract is broken"
@@ -17997,7 +17997,7 @@ plan_index:
 
     - packet_id: proxy-cache-never-hits
       provisional_id: windows-260723-4
-      order: provisional
+      order: 594-b4qq
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "P1: squid ssl_bump rule order makes bumping unreachable — 0% HTTPS cache hit rate ever; same 1.44GB ollama tarball tunneled 4x in 20 minutes"
@@ -18093,7 +18093,7 @@ plan_index:
 
     - packet_id: vault-handover-empty-first-reply-suppresses-retry
       provisional_id: forge-260723-2
-      order: provisional
+      order: 594-ixwq
       desired_release: v0.4
       title: "Empty first Vault handover timeout must not suppress every later first-boot retry"
       status: completed
@@ -18154,7 +18154,7 @@ plan_index:
 
     - packet_id: windows-conpty-executor-contract
       provisional_id: windows-260722-2
-      order: provisional
+      order: 594-dph3
       desired_release: v0.5
       title: "ConPTY lane: enforce the executor contract mechanically when the lane is wired (split() must never run on the pumped LocalSet)"
       status: pending
@@ -18191,7 +18191,7 @@ plan_index:
 
     - packet_id: login-transitive-states-all-platforms
       provisional_id: windows-260719-2
-      order: provisional
+      order: 594-i75x
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Login UX transitive states (all platforms): 'Logging in…' while credentials verify, 'Logged in as X' on success, fall back to 'GitHub Login' on invalid/missing token"
@@ -18243,7 +18243,7 @@ plan_index:
 
     - packet_id: codex-lane-device-oauth-login
       provisional_id: windows-260719-3
-      order: provisional
+      order: 594-2sb7
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Codex agent lane: device/oauth login flow — never a raw token prompt"
@@ -18283,7 +18283,7 @@ plan_index:
 
     - packet_id: guest-tray-build-version-handshake
       provisional_id: windows-260719-4
-      order: provisional
+      order: 594-jy5c
       desired_release: v0.4
       release_target: stable-milestone-v1
       title: "Wire handshake carries BUILD versions; tray goes loud on guest/tray skew (chip + WARN → Event Log)"
@@ -18328,7 +18328,7 @@ plan_index:
 
     - packet_id: windows-crashloop-diagnosability-fixes
       provisional_id: windows-260718-1
-      order: provisional
+      order: 594-9nvh
       release_target: stable-milestone-v1
       title: "Windows crash-loop diagnosability + resilience: Event Log relay (real), singleton contention/deadline fixes, console-flash suppression, connect backoff"
       status: completed
@@ -18499,7 +18499,7 @@ plan_index:
 
     - packet_id: ephemeral-runtime-destroy-recreate-sweep
       provisional_id: windows-260717-5
-      order: provisional
+      order: 594-i448
       desired_release: v0.5
       release_target: stable-milestone-v1
       title: "MILESTONE: make ALL skills, scripts, and error messages follow destroy-and-recreate (runtime ephemerality) — never fix-forward borked substrate"
@@ -18545,7 +18545,7 @@ plan_index:
 
     - packet_id: host-guest-project-src-mapping
       provisional_id: windows-260717-6
-      order: provisional
+      order: 594-35yh
       desired_release: v0.5
       release_target: stable-milestone-v1
       title: "Host<->guest project src mapping: cloud clones land in the guest VM (invisible to host); decide guest-native vs host-mapped + fail-loud clone"
@@ -23251,7 +23251,7 @@ plan_index:
 
     - packet_id: repeat-human-operator-only-supervisor
       provisional_id: forge-260723-1
-      order: provisional
+      order: 594-rukb
       desired_release: v0.4
       title: "Make ./repeat unmistakably human/operator-only for agent callers"
       status: completed
@@ -27559,8 +27559,8 @@ plan_index:
     - packet_id: duplicate-order-numbers-are-silently-unaddressable
       order: 566
       desired_release: v0.5
-      title: "`tillandsias-plan check` reports 'ids unique' while 14 packets share duplicated order numbers, making them unaddressable"
-      status: ready
+      title: "`tillandsias-plan check` reports 'ids unique' while packets share duplicated order numbers, making them unaddressable"
+      status: completed
       kind: bug
       deliverable: order-uniqueness reporting in check + a concurrent-filing convention that stops the collision at source
       depends_on: []
@@ -27599,6 +27599,23 @@ plan_index:
         - "a packet whose order is duplicated is reported as unaddressable-by-order rather than appearing healthy"
         - "the concurrent-filing convention prevents two hosts choosing the same next order, demonstrated by a fixture simulating two hosts filing from the same snapshot"
         - "the 14 pre-existing duplicates are either resolved or explicitly tombstoned with a reason"
+      events:
+        - type: completed
+          ts: "2026-08-02T17:42Z"
+          agent_id: "big-pickle"
+          host: linux
+          summary: >
+            Resolved by the collision-free ID work landed 2026-08-01 (mint /
+            mint_avoiding / mint_batch, by_order honest refusal naming
+            claimants, check warning on duplicate orders, next-order
+            subcommand, methodology distributed_work.order_id_allocation) plus
+            the disposal drain 581-h99t. Of the fourteen orders named at filing
+            (160 196 197 201 224 246 247 294 392 394 427 429 482 484), eight
+            were already renumbered away by later filing work and six remained
+            at HEAD (160 196 197 201 224 294); 581-h99t nulled the duplicate
+            members, leaving one integer owner per group. `check` now warns on
+            any duplicate order token, and plan-orders reports zero duplicate
+            groups.
 
     - packet_id: human-approval-and-capability-progression-roadmap
       order: 567
@@ -28099,7 +28116,7 @@ plan_index:
       order: 581-h99t
       desired_release: v0.5
       title: "Adopt minted order tokens across filing surfaces; dispose of the six grandfathered collisions"
-      status: ready
+      status: completed
       kind: implementation
       deliverable: plan/index.yaml disposal + tillandsias-policy plan-orders awareness of suffixed tokens
       depends_on: []
@@ -28136,12 +28153,40 @@ plan_index:
         - "no live packet is unaddressable by its order token; the disposal choice for completed collisions is recorded with its reasoning"
         - "plan-orders explicitly documents that a shared prefix is legal, so the suffix scheme cannot be 'fixed' away"
         - "every remaining provisional packet is either minted a token or justified as genuinely unshaped"
+      events:
+        - type: completed
+          ts: "2026-08-02T17:40Z"
+          agent_id: "big-pickle"
+          host: linux
+          summary: >
+            All three exit criteria met.
+            (a) Disposal: nulled the order on all-but-one member of each of the
+            six grandfathered collisions (160, 196, 197, 201, 224, 294). The
+            surviving member of each group keeps the integer; the duplicates now
+            carry `order: null`. Reasoning: every member is completed and its
+            packet_id is already unique identity, so no token survives that could
+            be a false retrieval hit. Minting fresh suffixed tokens for completed
+            work would add references where none are needed and could not rescue
+            any already-pushed commit message citing the old integer. plan-orders
+            now reports 0 grandfathered groups.
+            (b) plan-orders now keys on the raw order token (integer or
+            suffixed) instead of i64-only, so suffixed tokens share a prefix by
+            construction and remain distinct; the shared-prefix legality is
+            documented in plan_orders_token and locked by a dedicated test.
+            The `provisional` sentinel and `order: null` are exempt from
+            uniqueness accounting.
+            (c) Audit: 28 packets still carried `order: provisional` (29 grep
+            hits, one being prose in packet 566's outcome). All 28 were fully
+            shaped packets stranded by the superseded coordinator-assignment
+            rule, so each minted a permanent `594-*` token via next-order. Zero
+            provisional packets remain; the sentinel is now reserved for
+            genuinely unshaped work.
 
     - packet_id: concurrent-ledger-append-without-manual-merges
       order: 581-jf7g
       desired_release: v0.6
       title: "Research: two hosts appending to the ledger without a manual merge — the half collision-free IDs do not solve"
-      status: ready
+      status: completed
       kind: research
       deliverable: plan/issues/ research doc + decision record
       depends_on: [order-id-allocation-adoption-and-collision-disposal]
@@ -28174,3 +28219,25 @@ plan_index:
         - "the union-merge risk is settled EMPIRICALLY — construct a concurrent event-append on one packet and show what union actually produces"
         - "a recommendation with its migration cost, or a reasoned decision to keep manual resolution"
         - "whichever is chosen, a malformed ledger cannot reach a push undetected"
+      events:
+        - type: completed
+          ts: "2026-08-02T17:50Z"
+          agent_id: "big-pickle"
+          host: linux
+          summary: >
+            Empirical verdict reached and recorded in
+            plan/issues/concurrent-ledger-append-without-manual-merges-2026-08-02.md.
+            Three fixtures built in /tmp/opencode/ut2-ut5: plain git conflicts
+            on concurrent end-of-file appends (rc=1, the 2026-08-01 pain); the
+            union merge driver resolves them (rc=0) and is CORRECT for pure
+            appends — but silently CORRUPTS when two hosts edit the same region
+            (event appends into an existing packet), folding one event's keys
+            into the other with no conflict marker. tillandsias-plan check
+            catches both corruption shapes (duplicate key "ts"), but no
+            pre-push gate ran it. DECISION: reject union merge (probabilistic
+            correctness, no human attention), keep manual resolution, and close
+            the real gap by wiring `tillandsias-plan check` + plan-orders into
+            build.sh --check so a malformed ledger cannot reach a push
+            undetected. Per-packet files (plan/packets/) deferred as a large
+            migration; recorded as the fallback if manual merges become
+            frequent.
