@@ -132,7 +132,30 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `lin
    Refuse the cycle and do not begin committable work. Report the dirty-start
    blocker through the final handoff as defined above. Do not commit, discard,
    restore, reset, or clean unknown startup dirt.
-4. Update the active local branch from remote with fast-forward or an explicit
+4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
+   startup dirt, run the deterministic detector:
+   ```bash
+   scripts/check-opsx-generated-dirt.sh
+   ```
+   It prints exactly one line matching `^(ok:opsx-only|ok:clean-tree|non-opsx:.*)$`
+   and exits `0` only when every status-visible dirty path is exactly the
+   22-path opsx/openspec generated set (`.opencode/commands/opsx-*.md` +
+   `.opencode/skills/openspec-*/SKILL.md`) — the launch-generated artifact from
+   the installed openspec CLI (see
+   `plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md`). On
+   `ok:opsx-only`, the dirt is INTENDED versioned project content, not operator
+   work: commit it as its own sync change on the canonical branch before worker
+   drain, then re-anchor the startup boundary:
+   ```bash
+   git add .opencode/commands/opsx-*.md .opencode/skills/openspec-*/
+   git commit -m "chore(opsx): sync generated openspec commands and skills"
+   scripts/meta-orchestration-worktree-guard.sh re-snapshot "$boundary_dir"
+   ```
+   A `non-opsx:` verdict means real sibling/operator dirt — fall through to the
+   dirty-start refusal exactly as written; never commit, discard, or clean it.
+   An `ok:clean-tree` verdict means there is nothing to merge. The checker is a
+   falsifiable machine decision; do not substitute prose judgment for it.
+5. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
 
 ## Credential Channel Guard

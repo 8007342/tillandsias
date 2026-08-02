@@ -26420,7 +26420,7 @@ plan_index:
       order: 540
       desired_release: v0.5
       title: "Meta-orchestration must MERGE launch-generated opsx/openspec skill syncs instead of refusing the cycle as dirty-start"
-      status: ready
+      status: in_progress
       kind: enhancement
       deliverable: plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md
       depends_on: []
@@ -26460,6 +26460,25 @@ plan_index:
             pushed to linux-next, unblocking future launches until the CLI drifts
             again. This packet captures the permanent fix so meta-orchestration
             merges generated opsx dirt as normal cycle input instead of refusing.
+        - type: checkpoint
+          ts: "2026-08-02T18:20:00Z"
+          agent_id: "forge-big-pickle-20260802"
+          host: forge
+          branch: linux-next
+          summary: >
+            Implemented the permanent fix: scripts/check-opsx-generated-dirt.sh
+            returns a falsifiable ok:opsx-only / non-opsx / ok:clean-tree verdict
+            for every status-visible dirty path (exact 22-path generated set);
+            the meta-orchestration worktree guard gained a re-snapshot mode so a
+            cycle can commit the generated sync as chore(opsx): and re-anchor the
+            boundary; skills/meta-orchestration/SKILL.md start-of-cycle now runs
+            the deterministic checker and merges ok:opsx-only dirt instead of
+            refusing. New litmus
+            litmus:meta-orchestration-opsx-sync-merge (a)-(d) green, order-489
+            dirty-tree litmus stays green, test-check-opsx-generated-dirt
+            branches green. Remaining before closure: push chore(opsx) flow
+            proof is local-only in fixture; commit+push this checkpoint and run
+            the plan check.
 
     - packet_id: npu-container-citizenship-e2e
       order: 541
