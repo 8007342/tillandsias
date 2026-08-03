@@ -386,6 +386,7 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 /// Exit codes:
 ///   * `0` — provisioned (or already provisioned)
 ///   * `1` — hard failure (manifest parse, network, conversion, SHA)
+///
 /// `--reset-guest` CLI verb (windows-260717-4): intentional EPHEMERAL RESET —
 /// delete the provisioned boot artifacts (rootfs.img and with it the in-VM
 /// vault, vmlinuz, initramfs.img), clear the persisted crash-loop state (a
