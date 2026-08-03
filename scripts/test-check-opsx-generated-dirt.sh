@@ -102,7 +102,11 @@ fi
 echo "ok: branch3 ok:clean-tree rc=4"
 
 # ── the live worktree must currently be clean or fail with honest verdict ────
-live="$(cd "$ROOT" && "$CHECKER")"
+# The checker exits nonzero BY CONTRACT for every verdict except opsx-only
+# (3=non-opsx, 4=clean-tree); under set -e the bare assignment died on a
+# clean tree before the PASS line ever printed. Tolerate the rc, judge the
+# verdict string — the case below is the assertion.
+live="$(cd "$ROOT" && "$CHECKER")" || true
 case "$live" in
     ok:clean-tree|ok:opsx-only) echo "ok: live worktree verdict '$live'" ;;
     *) echo "WARN: live worktree is not clean: '$live' (expected during active work)" ;;
