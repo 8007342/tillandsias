@@ -26,11 +26,13 @@
 #     by name. A glob would remove a fragment another host wrote mid-compaction
 #     and had not been folded, destroying filed work with no signal.
 #
-# Also pins that compaction stays FAIL-CLOSED on a non-round-trippable base.
-# serde_yaml drops comments (plan/index.yaml carries ~120, including recorded
-# operator decisions) and re-indents list items to column 0, while
-# edit::append_event finds packets by a literal four-space prefix. Relaxing that
-# guard to make the tool run would destroy operator decisions to tidy a file.
+# Also pins that compaction is TEXT-LEVEL and format-preserving (packet
+# 582-4wdi, order 582-4wdi): the base is never re-serialized, so its ~120
+# operator comment lines and the four-space item prefix edit::append_event
+# locates survive BY CONSTRUCTION. The lossy serde_yaml round-trip that would
+# drop them is gone; in its place the replacement candidate must PARSE and pass
+# the integrity gate before it may replace the base — a malformed or broken
+# merge still REFUSES with the base unchanged.
 name: litmus:ledger-fragment-convergence
 spec: methodology-accountability
 phase: pre-build
@@ -38,8 +40,9 @@ description: >
   Execute the ledger fragment overlay and assert its CRDT properties: the fold
   is commutative and idempotent, events from two hosts on one packet both
   survive, status is deterministically last-writer-wins, compaction consumes
-  only what it folded, and compaction refuses a base it cannot round-trip
-  without dropping comments.
+  only what it folded, and compaction is TEXT-LEVEL and format-preserving
+  (comments and item indentation survive by construction, and the candidate
+  must parse and pass integrity before replacing the base).
 severity: high
 size: quick
 
@@ -78,10 +81,15 @@ critical_path:
     timeout_ms: 300000
     expected_behavior: "ok: fragment-only packet is queryable"
 
-  - step: "compaction stays FAIL-CLOSED on a base whose comments a round-trip would delete"
-    command: "grep -Fq 'compaction REFUSED' crates/tillandsias-plan/src/main.rs && grep -Fq 'base_has_comments' crates/tillandsias-plan/src/main.rs && echo 'ok: compaction refuses a lossy rewrite'"
+  - step: "compaction is TEXT-LEVEL and format-preserving (the base is never re-serialized)"
+    command: "grep -Fq 'compact_text' crates/tillandsias-plan/src/fragments.rs && grep -Fq 'compaction REFUSED' crates/tillandsias-plan/src/main.rs && echo 'ok: compaction is format-preserving'"
     timeout_ms: 5000
-    expected_behavior: "ok: compaction refuses a lossy rewrite"
+    expected_behavior: "ok: compaction is format-preserving"
+
+  - step: "the REAL ledger compacts with every comment, item order, and fold state preserved"
+    command: "cargo test --quiet --release -p tillandsias-plan compaction_on_the_real_ledger 2>&1 | grep -q 'test result: ok' && echo 'ok: real-ledger compaction preserves format'"
+    timeout_ms: 300000
+    expected_behavior: "ok: real-ledger compaction preserves format"
 
   - step: "compaction deletes BY NAME, never by glob (the GC-versus-writer race)"
     command: "grep -Fq 'consumed' crates/tillandsias-plan/src/fragments.rs && ! grep -Eq 'remove_dir_all\\(.*index\\.d|index\\.d/\\*' crates/tillandsias-plan/src/main.rs && echo 'ok: no glob deletion'"
@@ -103,5 +111,6 @@ failure_modes:
   - "the fold stops being idempotent, so an interrupted compaction duplicates every event it re-reads"
   - "events become last-writer-wins, silently discarding one host's evidence"
   - "compaction deletes fragments by glob, destroying work written by another host mid-compaction"
-  - "the fail-closed guard is relaxed to make compaction run, deleting ~120 comments including recorded operator decisions"
+  - "compaction reverts to a serde_yaml round-trip, silently dropping ~120 comments including recorded operator decisions"
+  - "compaction stops being format-preserving, so edit::append_event can no longer resolve packets after a fold"
   - "a reader bypasses the overlay and reports a stale ledger with total confidence"

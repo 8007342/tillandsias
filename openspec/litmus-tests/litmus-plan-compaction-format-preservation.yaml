@@ -1,0 +1,97 @@
+# @trace spec:methodology-accountability
+#
+# Pins the format-preserving TEXT compaction that packet 582-4wdi
+# (format-preserving-ledger-compaction, order 582-4wdi) delivers.
+#
+# WHY BEHAVIOURAL AND NOT A GREP. The failure being pinned is silent
+# destruction: a serde_yaml round-trip of plan/index.yaml drops ~120 operator
+# comment lines (including recorded decisions) and re-indents list items to
+# column 0, so edit::append_event — which locates packets by a literal
+# four-space-dash prefix — would stop resolving EVERY packet after one
+# compaction. That is data loss with no error signal. The old compaction
+# therefore REFUSED whenever the base carried comments or indented items,
+# which left the fragment directory growing without bound. This test pins the
+# replacement: compaction is TEXT-LEVEL (the base is never re-serialized), so
+# comments and the exact item indentation survive BY CONSTRUCTION, and the
+# candidate must still PARSE and pass the integrity gate before it may replace
+# the base.
+#
+# The strongest single step runs the compaction against a fixture copy of the
+# REAL plan/index.yaml and its real fragments, then asserts every comment
+# survives, every `    - ` item survives in order, and the rendered text folds
+# to EXACTLY the same packets the Value-domain fold computes — format
+# preservation proven on the production shape, not on a toy fixture.
+name: litmus:plan-compaction-format-preservation
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin format-preserving ledger compaction: the real-ledger compaction test
+  keeps every comment and item in order and folds to the same state; a second
+  compaction is a byte-identical no-op; compaction refuses when the final list
+  item is not a packet; events still append AND prepend to a compacted base;
+  the compact CLI refuses a merge that violates integrity without touching the
+  base; and the format-preserving tests are pinned by name.
+severity: high
+size: quick
+
+preconditions:
+  - cargo toolchain available (the steps execute the compaction, not its source text)
+  - repository contains crates/tillandsias-plan/src/fragments.rs
+  - repository contains plan/index.yaml (the real-ledger fixture)
+
+critical_path:
+  - step: "the real ledger compacts format-preservingly (comments + item order + fold-equivalence)"
+    command: "cargo test --quiet --release -p tillandsias-plan compaction_on_the_real_ledger_preserves_every_comment_and_item 2>&1 | grep -q 'test result: ok' && echo 'ok: real-ledger compaction preserves format'"
+    timeout_ms: 300000
+    expected_behavior: "ok: real-ledger compaction preserves format"
+
+  - step: "comments and indentation survive and future event edits still work on the compacted base"
+    command: "cargo test --quiet --release -p tillandsias-plan compaction_preserves_comments_and_indentation_and_matches_the_fold 2>&1 | grep -q 'test result: ok' && echo 'ok: comments survive and append/push events resolve'"
+    timeout_ms: 300000
+    expected_behavior: "ok: comments survive and append/push events resolve"
+
+  - step: "a second compaction of an already-compacted base is a byte-identical no-op (half-finished runs are safe)"
+    command: "cargo test --quiet --release -p tillandsias-plan compaction_is_idempotent_so_a_half_finished_run_is_safe 2>&1 | grep -q 'test result: ok' && echo 'ok: compaction is idempotent'"
+    timeout_ms: 300000
+    expected_behavior: "ok: compaction is idempotent"
+
+  - step: "compaction refuses when the final list item is not a packet item (appending would land in the wrong section)"
+    command: "cargo test --quiet --release -p tillandsias-plan compaction_refuses_when_the_final_list_item_is_not_a_packet 2>&1 | grep -q 'test result: ok' && echo 'ok: bad-anchor refusal pinned'"
+    timeout_ms: 300000
+    expected_behavior: "ok: bad-anchor refusal pinned"
+
+  - step: "edit::append_event resolves both packet key shapes and respects item boundaries (the four-space prefix survives)"
+    command: "cargo test --quiet --release -p tillandsias-plan append_event_reaches_both_packet_shapes 2>&1 | grep -q 'test result: ok' && echo 'ok: append-event survives compaction'"
+    timeout_ms: 300000
+    expected_behavior: "ok: append-event survives compaction"
+
+  - step: "the base is never re-serialized: the candidate must PARSE and pass integrity before the CLI writes it"
+    command: "grep -Fq 'check_integrity' crates/tillandsias-plan/src/main.rs && grep -Fq 'Ledger::parse' crates/tillandsias-plan/src/main.rs && grep -Fq 'compaction REFUSED' crates/tillandsias-plan/src/main.rs && echo 'ok: parse+integrity gate present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parse+integrity gate present"
+
+  - step: "positive control: a depends_on that resolves via plan/archive/ is ACCEPTED and folds (regression: the gate once refused with an empty archive set)"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/index.d\" \"$W/plan/archive\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n      depends_on: [ghost]\\n' > \"$W/plan/index.yaml\"; printf 'packets:\\n  - packet_id: ghost\\n    order: 1\\n    status: done\\n' > \"$W/plan/archive/archived.yaml\"; printf 'packets:\\n  - packet_id: beta\\n    order: 900-aaaa\\n    status: ready\\n' > \"$W/plan/index.d/20260801t0100z-aaaa-a.yaml\"; out=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/index.yaml\" compact 2>&1 || true); rc=$?; nf=$(ls \"$W/plan/index.d\" | wc -l); cd /; rm -rf \"$W\"; [ \"$rc\" = 0 ] && [ \"$nf\" = 0 ] && printf '%s' \"$out\" | grep -q 'ok: compacted 1 fragment' && echo 'ok: archive-resolved depends_on folds' || { echo \"FAIL: rc=$rc nf=$nf out=$out\"; exit 1; }"
+    timeout_ms: 300000
+    expected_behavior: "ok: archive-resolved depends_on folds"
+
+  - step: "negative control: the compact CLI refuses an integrity-violating merge, leaving the base unchanged"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n      depends_on: [ghost]\\n' > \"$W/plan/index.yaml\"; printf 'packets:\\n  - packet_id: beta\\n    order: 900-aaaa\\n    status: ready\\n' > \"$W/plan/index.d/20260801t0100z-aaaa-a.yaml\"; before=$(md5sum \"$W/plan/index.yaml\" | cut -d' ' -f1); out=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/index.yaml\" compact 2>&1 || true); after=$(md5sum \"$W/plan/index.yaml\" | cut -d' ' -f1); nf=$(ls \"$W/plan/index.d\" | wc -l); cd /; rm -rf \"$W\"; [ \"$before\" = \"$after\" ] && [ \"$nf\" = 1 ] && printf '%s' \"$out\" | grep -q 'compaction REFUSED' && echo 'ok: integrity violation refuses with base+fragments intact' || { echo \"FAIL: base changed or fragment deleted: out=$out\"; exit 1; }"
+    timeout_ms: 300000
+    expected_behavior: "ok: integrity violation refuses with base+fragments intact"
+
+failure_modes:
+  - "compaction reverts to a serde_yaml round-trip, silently dropping ~120 comments including recorded operator decisions"
+  - "compaction stops being format-preserving, so edit::append_event no longer resolves packets after a fold"
+  - "compaction writes a candidate that does not fold to the same state the CRDT computes"
+  - "the parse/integrity gate is removed, so a malformed or broken merge can replace a working base"
+  - "compaction emits events at the wrong indentation, so push_event misreads them as packet fields and splits"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "plan compaction format-preservation pinned (real-ledger proof, idempotency, bad-anchor refusal, append-event survival, integrity gate)"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "plan-compaction-format-preservation"
+    artifact: "crates/tillandsias-plan/src/fragments.rs + lib.rs + main.rs + plan/index.yaml"

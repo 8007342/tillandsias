@@ -432,6 +432,418 @@ pub fn compact(base: &Value, index: &Path) -> Compaction {
     }
 }
 
+/// The format-preserving compaction verdict: the candidate base TEXT plus
+/// exactly which fragments it consumed. The same delete-by-name contract as
+/// [`Compaction`] — never a glob, or a fragment written by another host
+/// mid-compaction is silently destroyed.
+#[derive(Debug)]
+pub struct CompactionText {
+    pub candidate: String,
+    pub consumed: Vec<PathBuf>,
+}
+/// Format-preserving, text-level compaction.
+///
+/// Folds every fragment the way [`fold`] does, then renders the DELTA as text
+/// edits on the untouched base text:
+///
+///   * brand-new packets are APPENDED as canonical `    - ` list items, so the
+///     base keeps every comment and every byte of existing indentation;
+///   * events are routed through [`crate::edit::push_event`], the same
+///     format-preserving text edit the live ledger uses for appends;
+///   * LWW field wins are applied by targeted line replacement inside the
+///     target packet's own span.
+///
+/// The base is never re-serialized, so format preservation holds BY
+/// CONSTRUCTION rather than by careful serialization. The caller still gates
+/// the candidate with parse + integrity before writing it.
+///
+/// The filesystem is untouched here; the caller writes `candidate` and deletes
+/// exactly `consumed`. Fail-closed: every refusal leaves the base intact.
+pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
+    let raw =
+        std::fs::read_to_string(index).map_err(|e| format!("read {}: {e}", index.display()))?;
+    let base: Value =
+        serde_yaml::from_str(&raw).map_err(|e| format!("base ledger does not parse: {e}"))?;
+    let fragments = load_all(index);
+    if fragments.is_empty() {
+        return Ok(CompactionText {
+            candidate: raw,
+            consumed: Vec::new(),
+        });
+    }
+    let merged = fold(&base, &fragments);
+
+    // The G-Set / LWW deltas, derived from the fold OUTPUT so the rendered text
+    // can never disagree with the CRDT state every other host computes.
+    let mut base_packets: BTreeSet<String> = BTreeSet::new();
+    let mut base_events: BTreeSet<String> = BTreeSet::new();
+    {
+        let mut ps = Vec::new();
+        crate::collect_packets(&base, &mut ps);
+        for p in &ps {
+            if let Some(id) = p.get("packet_id").and_then(Value::as_str) {
+                base_packets.insert(id.to_string());
+                if let Some(evs) = p.get("events").and_then(Value::as_sequence) {
+                    for e in evs {
+                        base_events.insert(event_identity(id, e));
+                    }
+                }
+            }
+        }
+    }
+    let mut merged_packets = Vec::new();
+    crate::collect_packets(&merged, &mut merged_packets);
+
+    // 1. New packets: in the merged document, absent from the base.
+    let new_packets: Vec<Value> = merged_packets
+        .iter()
+        .filter(|p| {
+            p.get("packet_id")
+                .and_then(Value::as_str)
+                .is_some_and(|id| !base_packets.contains(id))
+        })
+        .cloned()
+        .collect();
+
+    // 2. New events: identities in the merged document, absent from the base.
+    //
+    // Only events on packets that EXIST IN THE BASE are pushed here. An event
+    // on a packet added by a fragment is already folded INTO that packet's
+    // value by `fold`, so `render_item` emits it — pushing it again would
+    // duplicate it (verified live: 582-26mm rendered its appended event twice).
+    let mut new_events: Vec<(String, Value)> = Vec::new();
+    for p in &merged_packets {
+        let Some(id) = p.get("packet_id").and_then(Value::as_str) else {
+            continue;
+        };
+        if !base_packets.contains(id) {
+            continue;
+        }
+        if let Some(evs) = p.get("events").and_then(Value::as_sequence) {
+            for e in evs {
+                if base_events.insert(event_identity(id, e)) {
+                    new_events.push((id.to_string(), e.clone()));
+                }
+            }
+        }
+    }
+
+    // 3. LWW field wins, recomputed exactly as `fold` resolves them, filtered
+    //    to packets that exist in the merged document and to wins that change
+    //    the base text (a win over the same value needs no edit).
+    let mut lww: std::collections::BTreeMap<String, (String, String, Value)> =
+        std::collections::BTreeMap::new();
+    for frag in &fragments {
+        let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) else {
+            continue;
+        };
+        for u in us {
+            let (Some(pid), Some(field), Some(value)) = (
+                u.get("packet_id").and_then(Value::as_str),
+                u.get("field").and_then(Value::as_str),
+                u.get("value"),
+            ) else {
+                continue;
+            };
+            let ts = u
+                .get("ts")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let host = u
+                .get("host")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let key = format!("{pid}\u{1}{field}");
+            let better = match lww.get(&key) {
+                None => true,
+                Some((prev_ts, prev_host, _)) => {
+                    (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                }
+            };
+            if better {
+                lww.insert(key, (ts, host, value.clone()));
+            }
+        }
+    }
+    let lww_wins: Vec<(String, String, Value)> = lww
+        .into_iter()
+        .filter(|(key, (_, _, value))| {
+            let mut parts = key.split('\u{1}');
+            let (Some(pid), Some(field)) = (parts.next(), parts.next()) else {
+                return false;
+            };
+            let in_merged = merged_packets
+                .iter()
+                .any(|p| p.get("packet_id").and_then(Value::as_str) == Some(pid));
+            in_merged && base_value(&base, pid, field) != Some(value.clone())
+        })
+        .map(|(key, (_, _, value))| {
+            let mut parts = key.split('\u{1}');
+            (
+                parts.next().unwrap().to_string(),
+                parts.next().unwrap().to_string(),
+                value,
+            )
+        })
+        .collect();
+
+    // ---- Render the delta as text edits on the untouched base text. ----
+
+    // Drop trailing blank lines so appended packets sit directly under the
+    // final packet item rather than after a gap; the file ends with one `\n`.
+    let mut out: Vec<String> = raw.lines().map(String::from).collect();
+    while out.last().is_some_and(|l| l.trim().is_empty()) {
+        out.pop();
+    }
+
+    if !new_packets.is_empty() {
+        // Fail-closed anchor: the final 4-space list item must be a packet item
+        // running to the end of the file, or appending would land the new items
+        // inside whatever OTHER list follows. On this ledger the packet sequence
+        // is the final section, so that is the shape compaction requires.
+        let last_item = out
+            .iter()
+            .rposition(|l| l.starts_with("    - "))
+            .ok_or_else(|| {
+                "refusing to compact: the base has no `    - ` packet item to append after"
+                    .to_string()
+            })?;
+        let is_packet_item = (last_item..out.len()).any(|i| {
+            let t = out[i].trim();
+            t.starts_with("packet_id:") || t.starts_with("- packet_id:")
+        });
+        if !is_packet_item {
+            return Err(
+                "refusing to compact: the final list item in the base is not a packet item, so \
+                 appending new packets would land in the wrong section"
+                    .to_string(),
+            );
+        }
+        for p in &new_packets {
+            out.push(render_item(p));
+        }
+    }
+
+    // `render_item` ends its item with `\n`, so a naive `join("\n")` plus a
+    // trailing `+ "\n"` would leave a blank line after the last appended packet.
+    // Normalize to exactly one trailing `\n` so a second (no-op) compaction
+    // produces byte-identical output.
+    let mut candidate_lines: Vec<String> = out.join("\n").lines().map(String::from).collect();
+    while candidate_lines.last().is_some_and(|l| l.trim().is_empty()) {
+        candidate_lines.pop();
+    }
+    let mut candidate = candidate_lines.join("\n") + "\n";
+
+    for (pid, ev) in &new_events {
+        candidate = crate::edit::push_event(&candidate, pid, &render_list_item(ev, 8))?;
+    }
+
+    let mut lines: Vec<String> = candidate.lines().map(String::from).collect();
+    for (pid, field, value) in &lww_wins {
+        apply_lww(&mut lines, pid, field, value)?;
+    }
+    candidate = lines.join("\n") + "\n";
+
+    let consumed = fragments.iter().map(|f| f.path.clone()).collect();
+    Ok(CompactionText {
+        candidate,
+        consumed,
+    })
+}
+
+/// The value a packet carries for a scalar field, for deciding whether an LWW
+/// win changes the base text. `None` means the field is absent.
+fn base_value(doc: &Value, pid: &str, field: &str) -> Option<Value> {
+    let mut ps = Vec::new();
+    crate::collect_packets(doc, &mut ps);
+    ps.iter()
+        .find(|p| p.get("packet_id").and_then(Value::as_str) == Some(pid))
+        .and_then(|p| p.get(field))
+        .cloned()
+}
+
+/// Render a packet value as one canonical `    - ` list item.
+///
+/// serde_yaml CANNOT be used to render the whole packet, because it emits a
+/// nested block sequence's items at the SAME column as their key (verified on
+/// the live fragments: `capability_tags:`/`events:` items came out at the key's
+/// column, not one level deeper). The ledger's canonical style — and the shape
+/// `edit::item_span` / `edit::push_event` assume — is keys at 6, list items at
+/// 8. A packet rendered the serde_yaml way puts events at 6-space, which
+/// `push_event` then misreads as packet fields and splits. So the top level is
+/// emitted here field-by-field; values are still serialized by serde_yaml and
+/// indented to their canonical column.
+fn render_item(v: &Value) -> String {
+    let m = v.as_mapping().expect("a folded packet is a mapping");
+    let mut out = String::new();
+    let mut first = true;
+    for (k, val) in m.iter() {
+        let key = k.as_str().unwrap_or("<non-string-key>");
+        if first {
+            // The first field sits on the item's dash line, exactly like the
+            // ledger's `- packet_id: x` / `- order: N` openings. Its value is a
+            // scalar in practice; anything else renders under the dash.
+            first = false;
+            match scalar_text(val) {
+                Some(s) => out.push_str(&format!("    - {key}: {s}\n")),
+                None => out.push_str(&format!(
+                    "    - {key}:{}\n",
+                    render_value(val, 6).trim_end_matches('\n')
+                )),
+            }
+        } else {
+            out.push_str(&emit_field(key, 6, val));
+        }
+    }
+    out
+}
+
+/// A single-line YAML rendering of `v`, or `None` when it cannot be one line.
+fn scalar_text(v: &Value) -> Option<String> {
+    let s = serde_yaml::to_string(v).ok()?;
+    let s = s.trim_end();
+    if s.contains('\n') {
+        None
+    } else {
+        Some(s.to_string())
+    }
+}
+
+/// Render the value of `key:` at column `keycol` in the ledger's canonical
+/// style: scalars inline, empty lists as `[]`, block lists at `keycol + 2`,
+/// multi-line strings as literal blocks with content at `keycol + 2`.
+fn emit_field(key: &str, keycol: usize, v: &Value) -> String {
+    let indent = " ".repeat(keycol);
+    match v {
+        Value::Sequence(seq) if !seq.is_empty() => {
+            let mut out = format!("{indent}{key}:\n");
+            for item in seq {
+                out.push_str(&render_list_item(item, keycol + 2));
+            }
+            out
+        }
+        _ => format!(
+            "{indent}{key}:{}\n",
+            render_value(v, keycol).trim_end_matches('\n')
+        ),
+    }
+}
+
+/// The text that follows a `key:` for the value `v` positioned so the key text
+/// sits at column `keycol`: either ` value` on the same line, or newline plus
+/// continuation lines at `keycol + 2`. Returns a string ENDING in `\n`.
+fn render_value(v: &Value, keycol: usize) -> String {
+    match v {
+        Value::String(s) if s.contains('\n') => format!(" {}\n", block_scalar(s, keycol + 2)),
+        Value::Sequence(seq) if !seq.is_empty() => {
+            let mut out = String::new();
+            for item in seq {
+                out.push('\n');
+                out.push_str(&render_list_item(item, keycol + 2));
+            }
+            out
+        }
+        _ => match scalar_text(v) {
+            Some(s) => format!(" {s}\n"),
+            None => {
+                // A nested non-scalar, non-sequence value (a mapping): serialize
+                // and indent each line to the continuation column.
+                let ser = serde_yaml::to_string(v).expect("a value serializes");
+                let pad = " ".repeat(keycol + 2);
+                let mut out = String::new();
+                for l in ser.lines() {
+                    out.push('\n');
+                    out.push_str(&pad);
+                    out.push_str(l);
+                }
+                out.push('\n');
+                out
+            }
+        },
+    }
+}
+
+/// One item of a block sequence whose dash sits at column `indent`. Returns a
+/// string ending in `\n`.
+fn render_list_item(item: &Value, indent: usize) -> String {
+    let pad = " ".repeat(indent);
+    match item {
+        Value::Mapping(_) => {
+            // serde_yaml renders a flat mapping list-item as `- key: v` with
+            // nested fields and block content correctly indented relative to the
+            // dash — exactly the event shape. Re-prefix the whole block to our
+            // column.
+            let s = serde_yaml::to_string(&vec![item.clone()]).expect("a mapping item serializes");
+            let s = s.trim_end_matches('\n');
+            s.lines().map(|l| format!("{pad}{l}\n")).collect()
+        }
+        Value::String(s) if s.contains('\n') => format!("{pad}- {}\n", block_scalar(s, indent + 4)),
+        _ => match scalar_text(item) {
+            Some(s) => format!("{pad}- {s}\n"),
+            None => {
+                // A nested non-mapping item (never in this ledger): serialize
+                // and indent each line at indent + 2.
+                let ser = serde_yaml::to_string(item).expect("a value serializes");
+                let pad2 = " ".repeat(indent + 2);
+                let mut out = format!("{pad}-\n");
+                for l in ser.lines() {
+                    out.push_str(&pad2);
+                    out.push_str(l);
+                    out.push('\n');
+                }
+                out
+            }
+        },
+    }
+}
+
+/// A YAML literal block scalar (`|` / `|-`) whose continuation lines sit at
+/// `indent`, preserving the string byte-for-byte. The ledger writes `>` folded
+/// scalars, which do NOT round-trip internal newlines, so folding is refused —
+/// literal is the only style that is exact.
+fn block_scalar(s: &str, indent: usize) -> String {
+    let (chomp, body) = if s.ends_with('\n') {
+        ("|", s.strip_suffix('\n').unwrap_or(s))
+    } else {
+        ("|-", s)
+    };
+    let pad = " ".repeat(indent);
+    let mut out = format!("{chomp}\n");
+    for l in body.split('\n') {
+        out.push_str(&pad);
+        out.push_str(l);
+        out.push('\n');
+    }
+    out
+}
+
+/// Apply one LWW field win by replacing the field's line inside the target
+/// packet's own span, or inserting the line when the packet has no such field.
+/// Refuses non-scalar values: folding a nested value in place would require a
+/// YAML round-trip, which is exactly what this path exists to avoid.
+fn apply_lww(lines: &mut Vec<String>, pid: &str, field: &str, value: &Value) -> Result<(), String> {
+    let raw = lines.join("\n");
+    let (start, end) = crate::edit::item_span(&raw, pid)
+        .ok_or_else(|| format!("LWW target packet_id '{pid}' not found in candidate"))?;
+    let rendered =
+        serde_yaml::to_string(value).map_err(|e| format!("render {pid}.{field}: {e}"))?;
+    let rendered = rendered.trim_end();
+    if rendered.contains('\n') {
+        return Err(format!(
+            "refusing to apply LWW update {pid}.{field}: the value is not a scalar, and a \
+             non-scalar field update cannot be folded in place without a YAML round-trip"
+        ));
+    }
+    let key_prefix = format!("      {field}:");
+    match (start..end).find(|&i| lines[i].starts_with(&key_prefix)) {
+        Some(li) => lines[li] = format!("{key_prefix} {rendered}"),
+        None => lines.insert(start + 1, format!("{key_prefix} {rendered}")),
+    }
+    Ok(())
+}
+
 /// Drift signals that make compaction eligible, for the meta-orchestration step.
 ///
 /// Reported rather than enforced: compaction is OPTIONAL. An uncompacted ledger
@@ -937,6 +1349,190 @@ plan_index:
                 "order {order} must resolve through the overlay"
             );
         }
+        let _ = std::fs::remove_dir_all(&d);
+    }
+}
+
+#[cfg(test)]
+mod compaction_text_tests {
+    use super::*;
+
+    const COMMITTED: &str = "\
+# operator decision ratified 2026-07-21: EXPERTS does not gate v0.4
+plan_index:
+  version: v1
+  steps:
+    - packet_id: alpha
+      order: 100
+      status: ready
+      # a comment inside a packet must survive too
+      events:
+        - type: filed
+          ts: \"2026-01-01T00:00:00Z\"
+          agent_id: origin
+          host: linux
+          summary: born
+";
+
+    fn scratch(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("tilland-ctext-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(d.join("plan/index.yaml"), COMMITTED).expect("write base");
+        d
+    }
+
+    /// Every base `    - ` item survives, in order, in the candidate — the
+    /// property a serde_yaml round-trip destroys by re-indenting to column 0.
+    fn assert_items_preserved(base: &str, candidate: &str) {
+        let base_items: Vec<&str> = base.lines().filter(|l| l.starts_with("    - ")).collect();
+        let cand_items: Vec<&str> = candidate
+            .lines()
+            .filter(|l| l.starts_with("    - "))
+            .collect();
+        let mut idx = 0;
+        for b in &base_items {
+            let pos = cand_items[idx..]
+                .iter()
+                .position(|x| x == b)
+                .unwrap_or_else(|| panic!("base item lost or reordered: {b:?}"));
+            idx += pos + 1;
+        }
+    }
+
+    /// The rendered text must parse to EXACTLY the same packets (and per-packet
+    /// events) as the Value-domain fold — the strongest possible guarantee that
+    /// compaction did not change state while preserving format.
+    fn assert_fold_equivalent(index: &Path, base_raw: &str) {
+        let base_doc: Value = serde_yaml::from_str(base_raw).expect("base parses");
+        let merged = fold(&base_doc, &load_all(index));
+        let candidate = compact_text(index).expect("compacts").candidate;
+        let cand_doc: Value = serde_yaml::from_str(&candidate).expect("candidate parses");
+        let mut cp = Vec::new();
+        crate::collect_packets(&cand_doc, &mut cp);
+        let mut mp = Vec::new();
+        crate::collect_packets(&merged, &mut mp);
+        assert_eq!(cp, mp, "the rendered text must fold to the same state");
+    }
+
+    #[test]
+    fn compaction_preserves_comments_and_indentation_and_matches_the_fold() {
+        let d = scratch("fold");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n    depends_on: [alpha]\n    outcome: >\n      multiline\n      outcome text\n",
+        )
+        .expect("fragment 1");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0200z-bbbb-h2.yaml"),
+            "events:\n  - packet_id: alpha\n    event:\n      type: note\n      ts: \"2026-02-02T00:00:00Z\"\n      agent_id: h1\n      host: linux\n      summary: probe\nstatus:\n  - packet_id: beta\n    field: status\n    value: claimed\n    ts: \"2026-03-01T00:00:00Z\"\n    host: h2\n",
+        )
+        .expect("fragment 2");
+
+        let c = compact_text(&index).expect("format-preserving compaction succeeds");
+
+        for comment in COMMITTED
+            .lines()
+            .filter(|l| l.trim_start().starts_with('#'))
+        {
+            assert!(
+                c.candidate.contains(comment),
+                "comment must survive: {comment:?}"
+            );
+        }
+        assert_items_preserved(COMMITTED, &c.candidate);
+
+        // The candidate is semantically identical to the Value-domain fold, and
+        // must still accept future text edits — the two shapes a round-trip used
+        // to break.
+        assert_fold_equivalent(&index, COMMITTED);
+        let block =
+            crate::edit::event_block("note", "2026-03-01T00:00:00Z", "h3", "linux", "after");
+        crate::edit::push_event(&c.candidate, "alpha", &block).expect("events still append");
+        crate::edit::append_event(&c.candidate, "beta", &block).expect("events still prepend");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn compaction_is_idempotent_so_a_half_finished_run_is_safe() {
+        let d = scratch("idem");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n",
+        )
+        .expect("fragment");
+
+        let first = compact_text(&index).expect("first pass");
+        std::fs::write(&index, &first.candidate).expect("write folded base");
+
+        let second = compact_text(&index).expect("second pass");
+        assert_eq!(
+            second.candidate, first.candidate,
+            "re-folding an already-compacted base must be a no-op"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn compaction_refuses_when_the_final_list_item_is_not_a_packet() {
+        let d = scratch("anchor");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n",
+        )
+        .expect("fragment");
+        // The base ends with a NON-packet list; appending packets there would
+        // land them in the wrong section.
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - packet_id: alpha\n      order: 100\n      status: ready\n  tags:\n    - alpha\n    - beta\n",
+        )
+        .expect("write base with trailing list");
+
+        let err = compact_text(&index).expect_err("must refuse");
+        assert!(
+            err.contains("not a packet item"),
+            "refusal must name the bad anchor: {err}"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn compaction_on_the_real_ledger_preserves_every_comment_and_item() {
+        // The packet's exit criterion, applied to the actual repo state: fold a
+        // COPY of plan/index.yaml + its real fragments and diff the text. This
+        // is deliberately LIVE — a compaction that quietly destroys a comment or
+        // re-indents an item on the real ledger is the bug this feature exists
+        // to prevent, and it must not pass CI.
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let raw = std::fs::read_to_string(&repo).expect("live base loads");
+        let d = scratch("live");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(&index, &raw).expect("copy base");
+        if let Ok(entries) = std::fs::read_dir(repo.parent().unwrap().join("index.d")) {
+            for e in entries.flatten() {
+                let p = e.path();
+                if p.extension().and_then(|x| x.to_str()) == Some("yaml")
+                    && let Ok(content) = std::fs::read_to_string(&p)
+                {
+                    std::fs::write(d.join("plan/index.d").join(p.file_name().unwrap()), content)
+                        .expect("copy fragment");
+                }
+            }
+        }
+
+        let c = compact_text(&index).expect("real ledger compacts");
+        for comment in raw.lines().filter(|l| l.trim_start().starts_with('#')) {
+            assert!(
+                c.candidate.contains(comment),
+                "real-ledger comment must survive: {comment:?}"
+            );
+        }
+        assert_items_preserved(&raw, &c.candidate);
+        assert_fold_equivalent(&index, &raw);
         let _ = std::fs::remove_dir_all(&d);
     }
 }

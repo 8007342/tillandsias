@@ -1,5 +1,40 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-03T00:08Z (forge/opencode — packet 582-4wdi DONE: format-preserving compaction)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next`; operator-directed interactive drain of the
+  fragment-overlay follow-up theme (582-4wdi / 582-nqw5 / 582-26mm), 582-4wdi
+  first.
+- **582-4wdi DONE (`format-preserving-ledger-compaction`)**: compaction is now
+  TEXT-LEVEL, not a serde_yaml round-trip — the base is never re-serialized, so
+  its ~120 operator comment lines and the four-space item prefix
+  `edit::append_event` locates survive BY CONSTRUCTION. `fragments::compact_text`
+  appends new packets field-by-field (keys at 6, list items at 8, multi-line
+  strings as `|`/`|-` literal blocks — serde_yaml's same-column nested-list
+  behavior was verified and rejected), routes new events through the new
+  `edit::push_event` (bottom-append, complement of `append_event`), and re-applies
+  LWW status wins as targeted line edits. The fail-closed refusal guard is
+  REPLACED by a parse + integrity gate. Verified on a LIVE copy of the real
+  ledger: 24/24 fragments folded, second pass byte-identical. Production ledger
+  intentionally NOT compacted here.
+- **Tests + litmus**: 4 new `compaction_text_tests` (incl.
+  `compaction_on_the_real_ledger_preserves_every_comment_and_item`, which folds a
+  fixture copy of the real plan/index.yaml + real fragments and asserts every
+  comment, item order, and fold-state survives); full workspace suite green;
+  `./build.sh --check` green. New litmus
+  `litmus:plan-compaction-format-preservation` (8 steps incl. an archive-aware
+  positive control); `litmus-ledger-fragment-convergence` updated to pin
+  format-preservation instead of the removed fail-closed guard; 10/10
+  methodology-accountability litmus green.
+- **Live gate fix found by running `compact` against the production ledger**:
+  the candidate was validated with an empty archived-id set, so any `depends_on`
+  resolving via `plan/archive/` (`agent-login-flows-research`,
+  `encrypted-control-channel-research`) was wrongly refused. Now validated with
+  the same archived ids `tillandsias-plan check` uses.
+- **Remaining theme**: 582-nqw5 (loop_status fragment overlay) and 582-26mm
+  (ledger-reader audit) still `ready` for the next drain.
+
 ## Cycle 2026-08-02T17:20Z-18:50Z (forge/opencode — order 540 + ledger order-id theme DONE)
 
 - **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch

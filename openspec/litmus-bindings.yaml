@@ -563,6 +563,7 @@ specs:
   - litmus:cycle-metrics-answer-rate-shape
   - litmus:order-id-collision-free
   - litmus:ledger-fragment-convergence
+  - litmus:plan-compaction-format-preservation
   - litmus:idiomatic-layers-doctrine-shape
   - litmus:large-packet-eligibility-doctrine-shape
   - litmus:version-release-and-forge-selfservice-shape

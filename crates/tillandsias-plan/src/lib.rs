@@ -887,6 +887,56 @@ pub mod edit {
     use super::Ledger;
     use std::collections::BTreeSet;
 
+    /// Locate a packet item's line span `[start, end)` in `raw`, by the same
+    /// list-item boundary scan every edit below uses. `start`/`end` are
+    /// indices into `raw.lines()`; the span is the item's own lines (fields,
+    /// events, everything) up to the next list item of ANY shape, or EOF.
+    ///
+    /// Items are located by LIST-ITEM BOUNDARY, not by assuming `packet_id` is
+    /// the item's first key. Both of the original locators keyed off the
+    /// literal "- packet_id:", which is only how an item renders when
+    /// `packet_id` happens to be its FIRST key. 19 of the ledger's packets are
+    /// written `- order: N` with `packet_id` on the following line, and for
+    /// those:
+    ///
+    ///   1. the START search failed, so `append-event` reported
+    ///      "packet_id '<id>' not found" for a packet that plainly exists and
+    ///      that `status <id>` resolves fine — a misleading message hiding a
+    ///      read/write asymmetry, and one that silently made ~4% of the ledger
+    ///      unable to receive evidence at all;
+    ///
+    ///   2. worse, the END search skipped those items as span boundaries. A
+    ///      packet_id-first packet followed by an order-first one therefore
+    ///      got a span running PAST its own end, so an event could be inserted
+    ///      into the NEXT packet's `events:` block — silent cross-packet
+    ///      corruption, in the one code path whose entire purpose is to make
+    ///      hand-edit corruption impossible.
+    ///
+    /// Item boundaries are unambiguous at this indentation, so use them.
+    pub fn item_span(raw: &str, target_id: &str) -> Option<(usize, usize)> {
+        let lines: Vec<&str> = raw.lines().collect();
+        let is_item = |l: &str| l.starts_with("    - ");
+        let item_starts: Vec<usize> = (0..lines.len()).filter(|&i| is_item(lines[i])).collect();
+
+        let want_key = format!("packet_id: {target_id}");
+        for (n, &s) in item_starts.iter().enumerate() {
+            let e = item_starts.get(n + 1).copied().unwrap_or(lines.len());
+            // A key line reads "packet_id: x" normally, but "- packet_id: x"
+            // when it is the item's FIRST key. Strip the list marker so both
+            // shapes compare equal — matching only one of them is precisely
+            // how this function came to serve 460 packets and silently refuse
+            // the other 19.
+            let hit = (s..e).any(|i| {
+                let t = lines[i].trim();
+                t == want_key || t.strip_prefix("- ") == Some(want_key.as_str())
+            });
+            if hit {
+                return Some((s, e));
+            }
+        }
+        None
+    }
+
     /// Insert `event_block` as the FIRST entry under the target packet's
     /// `events:` list, preserving all surrounding formatting. `event_block`
     /// is the event's already-8-space-indented lines, newline-terminated
@@ -895,58 +945,8 @@ pub mod edit {
     /// [`validate_candidate`] returns no violations.
     pub fn append_event(raw: &str, target_id: &str, event_block: &str) -> Result<String, String> {
         let mut lines: Vec<String> = raw.lines().map(String::from).collect();
-
-        // Locate packets by LIST-ITEM BOUNDARY, not by assuming `packet_id` is
-        // the item's first key.
-        //
-        // Both of the original locators keyed off the literal "- packet_id:",
-        // which is only how an item renders when `packet_id` happens to be its
-        // FIRST key. 19 of the ledger's 479 packets are written `- order: N`
-        // with `packet_id` on the following line, and for those:
-        //
-        //   1. the START search failed, so `append-event` reported
-        //      "packet_id '<id>' not found" for a packet that plainly exists and
-        //      that `status <id>` resolves fine — a misleading message hiding a
-        //      read/write asymmetry, and one that silently made ~4% of the ledger
-        //      unable to receive evidence at all;
-        //
-        //   2. worse, the END search skipped those items as span boundaries. A
-        //      packet_id-first packet followed by an order-first one therefore
-        //      got a span running PAST its own end, so an event could be inserted
-        //      into the NEXT packet's `events:` block — silent cross-packet
-        //      corruption, in the one code path whose entire purpose is to make
-        //      hand-edit corruption impossible.
-        //
-        // Item boundaries are unambiguous at this indentation, so use them.
-        let is_item = |l: &str| l.starts_with("    - ");
-        let item_starts: Vec<usize> = (0..lines.len()).filter(|&i| is_item(&lines[i])).collect();
-
-        let want_key = format!("packet_id: {target_id}");
-        let start = *item_starts
-            .iter()
-            .find(|&&s| {
-                let e = item_starts
-                    .iter()
-                    .copied()
-                    .find(|&x| x > s)
-                    .unwrap_or(lines.len());
-                // A key line reads "packet_id: x" normally, but "- packet_id: x"
-                // when it is the item's FIRST key. Strip the list marker so both
-                // shapes compare equal — matching only one of them is precisely
-                // how this function came to serve 460 packets and silently refuse
-                // the other 19.
-                (s..e).any(|i| {
-                    let t = lines[i].trim();
-                    t == want_key || t.strip_prefix("- ") == Some(want_key.as_str())
-                })
-            })
+        let (start, end) = item_span(raw, target_id)
             .ok_or_else(|| format!("packet_id '{target_id}' not found"))?;
-        // The packet span ends at the next list item of ANY shape, or EOF.
-        let end = item_starts
-            .iter()
-            .copied()
-            .find(|&x| x > start)
-            .unwrap_or(lines.len());
         let block: Vec<String> = event_block.lines().map(String::from).collect();
         if block.is_empty() {
             return Err("empty event block".to_string());
@@ -955,6 +955,47 @@ pub mod edit {
             Some(ei) => {
                 for (k, bl) in block.iter().enumerate() {
                     lines.insert(ei + 1 + k, bl.clone());
+                }
+            }
+            None => {
+                let mut ins = vec!["      events:".to_string()];
+                ins.extend(block);
+                for (k, bl) in ins.iter().enumerate() {
+                    lines.insert(end + k, bl.clone());
+                }
+            }
+        }
+        Ok(lines.join("\n") + "\n")
+    }
+
+    /// Insert `event_block` as the LAST entry under the target packet's
+    /// `events:` list, preserving all surrounding formatting and leaving any
+    /// existing events in place. The complement of [`append_event`] (which
+    /// inserts first), used by compaction so the folded text keeps the same
+    /// event ORDER the CRDT fold produced. Creates the `events:` block if the
+    /// packet has none. Does NOT validate.
+    pub fn push_event(raw: &str, target_id: &str, event_block: &str) -> Result<String, String> {
+        let mut lines: Vec<String> = raw.lines().map(String::from).collect();
+        let (start, end) = item_span(raw, target_id)
+            .ok_or_else(|| format!("packet_id '{target_id}' not found"))?;
+        let block: Vec<String> = event_block.lines().map(String::from).collect();
+        if block.is_empty() {
+            return Err("empty event block".to_string());
+        }
+        match (start..end).find(|&i| lines[i] == "      events:") {
+            Some(ei) => {
+                // The events sequence runs from the header to the next packet
+                // field (a line at exactly 6-space) or to the item's end. Only
+                // the FIRST line of an event is a `- ` dash — its fields are
+                // indented deeper — so "the last dash line" is the START of the
+                // last event, and inserting there splits it (duplicate-key
+                // corruption, caught by the parse gate). Insert after the whole
+                // block instead.
+                let insert_at = (ei + 1..end)
+                    .find(|&i| lines[i].starts_with("      ") && !lines[i].starts_with("        "))
+                    .unwrap_or(end);
+                for (k, bl) in block.iter().enumerate() {
+                    lines.insert(insert_at + k, bl.clone());
                 }
             }
             None => {

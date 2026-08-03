@@ -937,70 +937,42 @@ fn main() {
             //   2. VALIDATE the candidate before replacing the base. A
             //      compaction that emits a malformed base is worse than no
             //      compaction at all.
-            let raw = match std::fs::read_to_string(&index) {
-                Ok(r) => r,
+            //
+            // The fold itself is TEXT-LEVEL and format-preserving
+            // (fragments::compact_text): the base is never re-serialized, so
+            // every comment and the exact item indentation survive BY
+            // CONSTRUCTION, and the appended packets/events are emitted in the
+            // shape `edit::append_event`/`push_event` recognize. A YAML
+            // round-trip would drop ~120 operator comment lines and re-indent
+            // list items to column 0, silently breaking every future event
+            // append — the refusal-to-round-trip rationale that preceded this
+            // implementation is recorded in packet
+            // format-preserving-ledger-compaction.
+            let c = match tillandsias_plan::fragments::compact_text(&index) {
+                Ok(c) => c,
                 Err(e) => {
-                    eprintln!("error: read {}: {e}", index.display());
+                    eprintln!(
+                        "error: compaction REFUSED — {e}\n\x20 the base is UNCHANGED and every \
+                         fragment is intact — reading is already transparent, so nothing is \
+                         blocked by staying uncompacted"
+                    );
                     std::process::exit(1);
                 }
             };
-            let base: serde_yaml::Value = match serde_yaml::from_str(&raw) {
-                Ok(v) => v,
-                Err(e) => {
-                    eprintln!("error: base ledger does not parse: {e}");
-                    std::process::exit(1);
-                }
-            };
-            let c = tillandsias_plan::fragments::compact(&base, &index);
             if c.consumed.is_empty() {
                 println!("ok: nothing to compact (0 fragments)");
                 return;
             }
-            // FAIL CLOSED ON A LOSSY REWRITE.
-            //
-            // This path serializes the merged document with serde_yaml, which
-            // is NOT format-preserving. On the real ledger that is destructive
-            // in two specific, verified ways:
-            //
-            //   * serde_yaml DROPS COMMENTS. plan/index.yaml carries ~120
-            //     comment lines, including ratified operator decisions recorded
-            //     inline (e.g. the 2026-07-21 EXPERTS-does-not-gate-v0.4 note).
-            //     Compaction would delete them with no diff anyone would read.
-            //   * serde_yaml re-indents list items to column 0, while
-            //     `edit::append_event` locates packets by the literal prefix
-            //     `"    - "` (lib.rs). A round-tripped ledger would silently stop
-            //     accepting events on EVERY packet.
-            //
-            // Refusing is the only safe behaviour until compaction is
-            // format-preserving (text-level append reusing the `edit` module,
-            // rather than a YAML round-trip). A tool that quietly destroys
-            // operator decisions to tidy a file is the worst possible trade.
-            let base_has_comments = raw.lines().any(|l| l.trim_start().starts_with('#'));
-            let base_is_indented = raw.lines().any(|l| l.starts_with("    - "));
-            if base_has_comments || base_is_indented {
-                eprintln!(
-                    "error: compaction REFUSED — this base is not safely round-trippable \
-                     (comments={base_has_comments}, indented-items={base_is_indented}).\n\
-                     \x20 serde_yaml drops comments and re-indents list items to column 0, which \
-                     would delete recorded operator decisions and break `append-event`'s \
-                     packet lookup.\n\
-                     \x20 The base is UNCHANGED and every fragment is intact — reading is \
-                     already transparent, so nothing is blocked by staying uncompacted.\n\
-                     \x20 Format-preserving compaction is packet \
-                     format-preserving-ledger-compaction."
-                );
-                std::process::exit(1);
-            }
-            let candidate = match serde_yaml::to_string(&c.merged) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("error: serialize merged ledger: {e}");
-                    std::process::exit(1);
-                }
-            };
             // The gate: the merged ledger must load AND pass integrity before it
             // is allowed to replace a working base.
-            match Ledger::parse(&candidate, Default::default()) {
+            //
+            // The candidate is validated with the SAME archived-id set the live
+            // loader uses. An empty set here would flag every `depends_on` that
+            // points at an archived (done) packet as an unresolved reference,
+            // refusing a compaction `plan check` would have accepted — verified
+            // live 2026-08-03 on agent-login-flows-research / encrypted-
+            // control-channel-research, both archived in plan/archive/.
+            match Ledger::parse(&c.candidate, ledger.archived_ids().clone()) {
                 Ok(l) => {
                     let report = l.check_integrity(&schema.reference_fields);
                     if !report.violations.is_empty() {
@@ -1021,7 +993,7 @@ fn main() {
                     std::process::exit(1);
                 }
             }
-            if let Err(e) = std::fs::write(&index, &candidate) {
+            if let Err(e) = std::fs::write(&index, &c.candidate) {
                 eprintln!("error: write {}: {e}", index.display());
                 std::process::exit(1);
             }
