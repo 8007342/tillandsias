@@ -105,7 +105,7 @@ critical_path:
     # control at the end proves the check can go red — without it this step
     # would pass just as happily if `unknown subcommand` were never printed at
     # all, which is exactly the dead check the whole file is written against.
-    command: "F=/tmp/.litmus-569; for t in $(cat $F/now.txt); do out=$(timeout 60 $F/bin/plan --index $F/checkout/plan/index.yaml $t </dev/null 2>&1 || true); case $out in *'unknown subcommand'*) echo \"DRIFT: declared capability $t does not dispatch\"; exit 1 ;; esac; done; ctl=$($F/bin/plan --index $F/checkout/plan/index.yaml definitely-not-a-subcommand </dev/null 2>&1 || true); case $ctl in *'unknown subcommand'*) echo 'ok: declared-capabilities-dispatch' ;; *) echo 'NEGATIVE CONTROL FAILED: an undeclared subcommand was accepted'; exit 1 ;; esac"
+    command: "F=/tmp/.litmus-569; for t in $(cat $F/now.txt); do out=$(timeout 60 $F/bin/plan --index $F/checkout/plan/index.yaml $t </dev/null 2>&1 || true); case $out in *'error: unknown subcommand'*) echo \"DRIFT: declared capability $t does not dispatch\"; exit 1 ;; esac; done; ctl=$($F/bin/plan --index $F/checkout/plan/index.yaml definitely-not-a-subcommand </dev/null 2>&1 || true); case $ctl in *'error: unknown subcommand'*) echo 'ok: declared-capabilities-dispatch' ;; *) echo 'NEGATIVE CONTROL FAILED: an undeclared subcommand was accepted'; exit 1 ;; esac"
     timeout_ms: 300000
     expected_behavior: "ok: declared-capabilities-dispatch"
 
