@@ -27725,7 +27725,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Expert lane capability honesty: stale-binary detection, strict JSON-RPC framing, diagnostics off stdout"
-      status: ready
+      status: completed
       kind: fix
       deliverable: images/default/lib-common.sh + config-overlay/mcp/forge-plan.sh + crates/tillandsias-plan (CLI exit/stream discipline) + litmus
       depends_on: []
@@ -27757,7 +27757,7 @@ plan_index:
         - forge-plan.sh tools/call responses parse under a strict JSON parser (litmus pins a control-character envelope round-trip)
       events:
         - type: filed
-          ts: '2026-08-01T01:25:00Z'
+          ts: "2026-08-01T01:25:00Z"
           agent_id: forge-claude-fable-metaorch-20260801
           host: forge
           summary: >
@@ -27766,6 +27766,15 @@ plan_index:
             framing broke strict JSON; stdout warnings corrupted envelopes. Post-fix
             re-probe with a linux-next binary (12.79s build) returned exact cited
             envelopes, verify-answer green - the lane heals once capability is real.
+        - type: completed
+          ts: "2026-08-03T20:33:40Z"
+          agent_id: forge-antigravity-20260803
+          host: forge
+          summary: >
+            Completed and verified. All 28/28 behavioral steps in
+            litmus:expert-capability-skew-honesty passed (stale binary detection,
+            unknown subcommand exit code 2 on stderr, strict JSON-RPC framing,
+            and startup context capability line propagation).
     - packet_id: forge-launch-sets-tillandsias-agent
       order: 570
       desired_release: v0.5
@@ -27861,7 +27870,7 @@ plan_index:
           summary: "Filed from the operator's cycle-metrics request. Telemetry + reporter landed in this cycle; methodology/skills wiring and the litmus follow."
 
         - type: note
-          ts: 2026-08-01T06:00:00Z
+          ts: "2026-08-01T06:00:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
@@ -28120,19 +28129,19 @@ plan_index:
 
       events:
         - type: note
-          ts: 2026-08-01T23:10:00Z
+          ts: "2026-08-01T23:10:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
             SECOND INDEPENDENT SIGHTING, and it now has a measured cost in CI. The v0.4.260801.5 build passed pre-build 229/229 and installed cleanly, then failed post-build litmus:opencode-prompt-e2e-shape step 3 with FORGE_EXIT=125 and the probe verdict "dead_crashed / probe_error past soft budget" — the liveness probe gave up on a forge that had not finished starting. That matches this packet's measurement exactly: attestation verification fails on EVERY formula and burns a 1/3/9/27/81s ladder each time (121s per formula, never succeeding), and on 2026-08-01 the forge lane had still not started after three minutes and ten retries. The e2e's earlier run failed differently — "HEAD unchanged after 120s" — which is the same stall observed through a different assertion. RULED OUT this cycle, so the next reader does not re-investigate: the forge IMAGE is healthy (it starts, and /usr/local/lib/tillandsias/ carries lib-common.sh, lib-expert-capability.sh and lib-inference-state.sh), and the network path is open (proxy allowlist covers .github.com; squid logs show CONNECT github.com:443 answering TCP_TUNNEL/200 with zero denials throughout the retry storm). The credential is present and non-empty. CONSEQUENCE FOR PRIORITY: this is no longer only a startup-latency annoyance. It is failing the post-build e2e gate, which is the gate that proves an agent can actually do work in a forge — so it now blocks the signal, not just the clock. Worth raising above its filed estimate. Still fix the root cause rather than the symptom: attestation is a supply-chain control, and neither disabling it nor widening the probe budget is a repair.
         - type: completed
-          ts: 2026-08-01T19:20:00Z
+          ts: "2026-08-01T19:20:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
             ROOT-CAUSED AND FIXED, verified end to end at runtime. CAUSE: HOMEBREW_VERIFY_ATTESTATIONS=1 makes brew shell out to `gh attestation verify`, which checks a Sigstore bundle against the Rekor transparency log using a trust root fetched from the Sigstore TUF repository. images/proxy/allowlist.txt covered api.github.com but NOT .sigstore.dev — 110 entries, zero Sigstore coverage. The credential was never the problem: it was present and non-empty (93 chars) throughout. MEASURED THROUGH THE LIVE PROXY, from inside the forge image, before: api.github.com 200, github.com 200, fulcio/rekor/tuf-repo-cdn all 000. After adding a single `.sigstore.dev` entry and rebuilding: api.github.com 200, rekor 200, tuf-repo-cdn 200, and the decisive check `gh attestation trusted-root --verify-only` now prints "Local TUF repository for https://tuf-repo-cdn.sigstore.dev updated and verified". ONE ENTRY, NOT THREE: squid 6.x treats a subdomain of an already-listed domain as a FATAL config error, and .sigstore.dev covers fulcio, rekor and tuf-repo-cdn. THE WRONG BELIEF WAS WRITTEN DOWN NEXT TO THE BUG. The allowlist comment asserted "attestation verification from api.github.com (both already covered below)". api.github.com serves attestation METADATA; it cannot verify it. That comment is corrected in place, and a litmus now fails if the claim returns. TWO CORRECTIONS TO THIS PACKET'S OWN EARLIER EVIDENCE, both mine: (1) I cited "squid's live log shows CONNECT github.com:443 answering TCP_TUNNEL/200 with zero denials during the retry storm" as proof the network was open. That log window covered about eight seconds of unrelated later traffic and contained no attestation requests at all. It was not evidence. (2) Worse, "zero denials" could not have been evidence even in principle: squid.conf:96 sets `deny_info TCP_RESET strict_deny_acl`, so a DENIED CONNECT is logged as TCP_DENIED/200. Grepping for 403 or for a non-200 status shows a clean log by construction. Anyone auditing egress on this proxy must grep for TCP_DENIED, never for a status code. ALSO LANDED, deliberately independent of the root cause: the brew install is now time-bounded (TILLANDSIAS_BREW_INSTALL_TIMEOUT, default 150s). Homebrew's ladder is 1+3+9+27+81 = 121s per formula with no knob to shorten it, so ANY future attestation failure reproduces the same stall. A tool install must degrade to "this tool is unavailable", never to "the lane appears dead" — which is what took down the post-build e2e gate with FORGE_EXIT=125. The bound is defence in depth, not a substitute for the fix, and a litmus asserts attestation stays REQUIRED so the bound can never become a way to disable it. NOT DONE, and it should be: nobody has yet captured the actual stderr of a failing attestation. print_stderr:false suppresses STREAMING only — the captured stderr is carried in the exception raised after the retries exhaust, so the reason is recoverable, merely delayed. Do not repeat the claim that the error is "swallowed". RESIDUAL ALTERNATIVES NOT ELIMINATED, so a recurrence is not misdiagnosed: an HTTP 403 (insufficient scope, SAML SSO, secondary rate limit) is NOT in Homebrew's non-retrying dispatch and falls through to InvalidAttestationError, producing an identical 121s signature. So the honest claim is "not token-absent and not the 401 shape", not "provably never credential-shaped".
         - type: progress
-          ts: 2026-08-01T21:45:00Z
+          ts: "2026-08-01T21:45:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
@@ -28290,7 +28299,7 @@ plan_index:
         - the fail-closed guard is removed only when the above two are proven, never relaxed to make the tool run
       events:
         - type: completed
-          ts: 2026-08-03T00:08:08Z
+          ts: "2026-08-03T00:08:08Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260802
           host: linux
           summary: |
@@ -28320,7 +28329,7 @@ plan_index:
         - the operator-owned Direction section cannot be clobbered by an agent write
       events:
         - type: completed
-          ts: 2026-08-03T00:44:48Z
+          ts: "2026-08-03T00:44:48Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260802
           host: linux_mutable
           summary: |
@@ -28352,13 +28361,13 @@ plan_index:
         - a litmus fails if a new direct reader of plan/index.yaml appears without the overlay
       events:
         - type: note
-          ts: 2026-08-01T06:01:00Z
+          ts: "2026-08-01T06:01:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
             CONCRETE STARTING POINT, verified 2026-08-01: project-info.sh's plan_query reads plan/index.yaml with yq+jq directly, so it now sees only the COMPACTED BASE and silently omits every fragment-only packet. Antigravity measured that same tool at 86.76ms returning 370 matching items, so it is in active use by agents — this is a live divergence, not a latent one. The failure to prevent is two authoritative-looking surfaces disagreeing: plan_answer (overlay-aware, via the compiled CLI) will report a packet that plan_query (base-only) says does not exist, and an agent has no way to tell which is lying.
         - type: completed
-          ts: 2026-08-03T01:18:00Z
+          ts: "2026-08-03T01:18:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260803
           host: linux_mutable
           summary: |
@@ -28388,7 +28397,7 @@ plan_index:
         - no command entry is lost or reworded in the process
       events:
         - type: completed
-          ts: 2026-08-01T07:05:00Z
+          ts: "2026-08-01T07:05:00Z"
           agent_id: forge-opencode-metaorch-20260801
           host: forge
           summary: |
@@ -28418,7 +28427,7 @@ plan_index:
         - reproduced under deliberate load before and after, so the fix is shown to work rather than assumed
       events:
         - type: note
-          ts: 2026-08-01T11:45:00Z
+          ts: "2026-08-01T11:45:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
@@ -28469,7 +28478,7 @@ plan_index:
         - TILLANDSIAS_SKIP_TRACE_INDEX=1 remains an explicit non-mutating override
       events:
         - type: filed
-          ts: 2026-08-01T06:39:23Z
+          ts: "2026-08-01T06:39:23Z"
           agent_id: linux-macuahuitl-opencode-20260801T0611Z
           host: linux_mutable
           summary: |
@@ -28498,7 +28507,7 @@ plan_index:
         - fixture cleanup proves no marker or lock state survives the test
       events:
         - type: filed
-          ts: 2026-08-01T06:39:23Z
+          ts: "2026-08-01T06:39:23Z"
           agent_id: linux-macuahuitl-opencode-20260801T0611Z
           host: linux_mutable
           summary: |
@@ -28527,13 +28536,13 @@ plan_index:
         - a fragment-only packet can be moved ready -> claimed -> completed through subsequent fragments and the read reflects it deterministically
       events:
         - type: filed
-          ts: 2026-08-01T07:06:00Z
+          ts: "2026-08-01T07:06:00Z"
           agent_id: forge-opencode-metaorch-20260801
           host: forge
           summary: |
             Found while closing 583-2bpw: the completion fragment was written but the packet stayed `ready`. Isolated to fold() ordering via the compiled CLI on a synthetic ledger (base packet alpha LWW works, fragment-only gamma LWW silently dropped; events dropped for gamma too). See plan/issues/fragment-overlay-lww-and-events-lost-on-fragment-packets-2026-08-01.md.
         - type: completed
-          ts: 2026-08-02T05:21:53Z
+          ts: "2026-08-02T05:21:53Z"
           agent_id: linux-macuahuitl-opencode-20260802T0519Z
           host: linux
           summary: |
@@ -28562,7 +28571,7 @@ plan_index:
         - a focused fixture proves a contaminated parent PATH is sanitized
       events:
         - type: filed
-          ts: 2026-08-01T07:10:54Z
+          ts: "2026-08-01T07:10:54Z"
           agent_id: linux-macuahuitl-opencode-20260801T0611Z
           host: linux_mutable
           summary: |
@@ -28591,7 +28600,7 @@ plan_index:
         - the clean verdict grammar remains unchanged
       events:
         - type: filed
-          ts: 2026-08-01T07:10:54Z
+          ts: "2026-08-01T07:10:54Z"
           agent_id: linux-macuahuitl-opencode-20260801T0611Z
           host: linux_mutable
           summary: |
@@ -28839,7 +28848,7 @@ plan_index:
         - a litmus inspects a REAL launched lane, closing the gap that litmus:credential-isolation left by using a fake podman backend
       events:
         - type: note
-          ts: 2026-08-01T23:31:00Z
+          ts: "2026-08-01T23:31:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
@@ -28870,7 +28879,7 @@ plan_index:
         - if --secret is chosen, a test proves the value is absent from Config.CreateCommand, and the deliverable states plainly that the agent can still read the file
       events:
         - type: note
-          ts: 2026-08-01T23:30:00Z
+          ts: "2026-08-01T23:30:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260801
           host: linux_mutable
           summary: |
@@ -29003,7 +29012,7 @@ plan_index:
         - litmus:github-actions-budget remains green and exactly one workflow, release.yml, remains
       events:
         - type: filed
-          ts: 2026-08-02T05:37:34Z
+          ts: "2026-08-02T05:37:34Z"
           agent_id: linux-macuahuitl-opencode-20260802T0519Z
           host: linux
           summary: |
@@ -29087,7 +29096,7 @@ plan_index:
         - the Pi 5 storage medium requirement (NVMe vs SD) is stated as a hardware precondition
       events:
         - type: note
-          ts: 2026-08-02T07:30:00Z
+          ts: "2026-08-02T07:30:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260802
           host: linux_mutable
           summary: |
@@ -29120,7 +29129,7 @@ plan_index:
         - the design composes with 353/376/373 rather than introducing a parallel service mechanism
       events:
         - type: note
-          ts: 2026-08-02T07:31:00Z
+          ts: "2026-08-02T07:31:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260802
           host: linux_mutable
           summary: |
@@ -29245,7 +29254,7 @@ plan_index:
         Deliberately NOT auto-pruning. Reclaiming space is the operator's decision: on this host the 905G is overwhelmingly operator data (Games 287G, Steam 126G, tillandsias-bak 234G), and the project's own reclaimable footprint is 14.55GB of stale podman images (507 images, 7 active). A launcher that silently deleted images to make room would be making that call for them. Diagnose and refuse; let the operator choose what goes.
       events:
         - type: filed
-          ts: 2026-08-03T19:00:00Z
+          ts: "2026-08-03T19:00:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260803
           host: linux_mutable
           summary: |
@@ -29301,7 +29310,7 @@ plan_index:
         - forge-launch-disk-headroom-preflight
       events:
         - type: filed
-          ts: 2026-08-03T19:00:00Z
+          ts: "2026-08-03T19:00:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260803
           host: linux_mutable
           summary: |
