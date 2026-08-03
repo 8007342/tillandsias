@@ -324,7 +324,10 @@ fn query_packets<'a>(
             let have = str_list(p, "capability_tags");
             tags.iter().all(|t| have.contains(t))
         })
-        .filter(|_| limit == 0 || true)
+        // `limit == 0` means UNLIMITED and is load-bearing: drain-queue.sh passes
+        // it explicitly so a default cap cannot silently truncate the ready queue.
+        // `take` alone expresses that; the filter that used to sit here was
+        // `|_| limit == 0 || true`, which is unconditionally true and did nothing.
         .take(if limit == 0 { usize::MAX } else { limit })
         .collect()
 }
