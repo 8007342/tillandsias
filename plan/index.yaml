@@ -27860,6 +27860,12 @@ plan_index:
           host: linux_mutable
           summary: "Filed from the operator's cycle-metrics request. Telemetry + reporter landed in this cycle; methodology/skills wiring and the litmus follow."
 
+        - type: note
+          ts: 2026-08-01T06:00:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            ECONOMIC EVIDENCE FOR EXPERT USEFULNESS, measured independently inside a forge by the Antigravity sibling and recorded here because it answers a question this packet deliberately left open. This packet's answer_rate measures whether the expert RESOLVES what it is asked; it says nothing about whether querying is cheaper than the alternative. Antigravity measured that directly (plan/issues/mcp-server-performance-and-discoverability-audit-2026-08-01.md and the order-557 validation event): the expert lane is roughly 80x cheaper and 5x faster than naive ledger browsing for a cloud agent, with the deterministic CLI at about 30ms and zero token cost, and per-tool latencies of 21-86ms across both MCP servers. That is a THIRD axis beyond used-and-useful, and it is the one that actually motivates adoption: an expert can be well-used and high-answer-rate and still not worth calling if it costs more than reading the file. Here it is three orders of magnitude the other way. NOT folded into answer_rate, deliberately. Cost is a property of the SURFACE, measured once per change, whereas answer_rate is a property of a CYCLE. Averaging them would let a cheap surface mask a useless one, which is the same conflation this packet refused when it excluded `degraded` from the answer-rate denominator.
     - packet_id: forge-env-credentials-land-in-podman-argv
       order: 576
       desired_release: v0.5
@@ -28112,6 +28118,25 @@ plan_index:
         - "no formula install can burn an unbounded retry ladder during forge startup; the bound is asserted by a litmus"
         - "order 435 is updated with the measured finding that the token does not currently buy working attestation"
 
+      events:
+        - type: note
+          ts: 2026-08-01T23:10:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            SECOND INDEPENDENT SIGHTING, and it now has a measured cost in CI. The v0.4.260801.5 build passed pre-build 229/229 and installed cleanly, then failed post-build litmus:opencode-prompt-e2e-shape step 3 with FORGE_EXIT=125 and the probe verdict "dead_crashed / probe_error past soft budget" — the liveness probe gave up on a forge that had not finished starting. That matches this packet's measurement exactly: attestation verification fails on EVERY formula and burns a 1/3/9/27/81s ladder each time (121s per formula, never succeeding), and on 2026-08-01 the forge lane had still not started after three minutes and ten retries. The e2e's earlier run failed differently — "HEAD unchanged after 120s" — which is the same stall observed through a different assertion. RULED OUT this cycle, so the next reader does not re-investigate: the forge IMAGE is healthy (it starts, and /usr/local/lib/tillandsias/ carries lib-common.sh, lib-expert-capability.sh and lib-inference-state.sh), and the network path is open (proxy allowlist covers .github.com; squid logs show CONNECT github.com:443 answering TCP_TUNNEL/200 with zero denials throughout the retry storm). The credential is present and non-empty. CONSEQUENCE FOR PRIORITY: this is no longer only a startup-latency annoyance. It is failing the post-build e2e gate, which is the gate that proves an agent can actually do work in a forge — so it now blocks the signal, not just the clock. Worth raising above its filed estimate. Still fix the root cause rather than the symptom: attestation is a supply-chain control, and neither disabling it nor widening the probe budget is a repair.
+        - type: completed
+          ts: 2026-08-01T19:20:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            ROOT-CAUSED AND FIXED, verified end to end at runtime. CAUSE: HOMEBREW_VERIFY_ATTESTATIONS=1 makes brew shell out to `gh attestation verify`, which checks a Sigstore bundle against the Rekor transparency log using a trust root fetched from the Sigstore TUF repository. images/proxy/allowlist.txt covered api.github.com but NOT .sigstore.dev — 110 entries, zero Sigstore coverage. The credential was never the problem: it was present and non-empty (93 chars) throughout. MEASURED THROUGH THE LIVE PROXY, from inside the forge image, before: api.github.com 200, github.com 200, fulcio/rekor/tuf-repo-cdn all 000. After adding a single `.sigstore.dev` entry and rebuilding: api.github.com 200, rekor 200, tuf-repo-cdn 200, and the decisive check `gh attestation trusted-root --verify-only` now prints "Local TUF repository for https://tuf-repo-cdn.sigstore.dev updated and verified". ONE ENTRY, NOT THREE: squid 6.x treats a subdomain of an already-listed domain as a FATAL config error, and .sigstore.dev covers fulcio, rekor and tuf-repo-cdn. THE WRONG BELIEF WAS WRITTEN DOWN NEXT TO THE BUG. The allowlist comment asserted "attestation verification from api.github.com (both already covered below)". api.github.com serves attestation METADATA; it cannot verify it. That comment is corrected in place, and a litmus now fails if the claim returns. TWO CORRECTIONS TO THIS PACKET'S OWN EARLIER EVIDENCE, both mine: (1) I cited "squid's live log shows CONNECT github.com:443 answering TCP_TUNNEL/200 with zero denials during the retry storm" as proof the network was open. That log window covered about eight seconds of unrelated later traffic and contained no attestation requests at all. It was not evidence. (2) Worse, "zero denials" could not have been evidence even in principle: squid.conf:96 sets `deny_info TCP_RESET strict_deny_acl`, so a DENIED CONNECT is logged as TCP_DENIED/200. Grepping for 403 or for a non-200 status shows a clean log by construction. Anyone auditing egress on this proxy must grep for TCP_DENIED, never for a status code. ALSO LANDED, deliberately independent of the root cause: the brew install is now time-bounded (TILLANDSIAS_BREW_INSTALL_TIMEOUT, default 150s). Homebrew's ladder is 1+3+9+27+81 = 121s per formula with no knob to shorten it, so ANY future attestation failure reproduces the same stall. A tool install must degrade to "this tool is unavailable", never to "the lane appears dead" — which is what took down the post-build e2e gate with FORGE_EXIT=125. The bound is defence in depth, not a substitute for the fix, and a litmus asserts attestation stays REQUIRED so the bound can never become a way to disable it. NOT DONE, and it should be: nobody has yet captured the actual stderr of a failing attestation. print_stderr:false suppresses STREAMING only — the captured stderr is carried in the exception raised after the retries exhaust, so the reason is recoverable, merely delayed. Do not repeat the claim that the error is "swallowed". RESIDUAL ALTERNATIVES NOT ELIMINATED, so a recurrence is not misdiagnosed: an HTTP 403 (insufficient scope, SAML SSO, secondary rate limit) is NOT in Homebrew's non-retrying dispatch and falls through to InvalidAttestationError, producing an identical 121s signature. So the honest claim is "not token-absent and not the 401 shape", not "provably never credential-shaped".
+        - type: progress
+          ts: 2026-08-01T21:45:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            REOPENED, and my earlier completed event was PREMATURE. I closed this on the strength of `gh attestation trusted-root --verify-only` succeeding. That verifies the TUF trust root, NOT a completed attested install, and the distinction turned out to be the whole remaining bug. A real `brew install jq` through the proxy, with a valid token and .sigstore.dev allowlisted, still fails — with a decisive error: "failed to fetch bundle with URL: Get https://tmaproduction.blob.core.windows.net/attestations/... : read tcp 10.0.42.43->10.0.42.40:3128: read: connection reset by peer". 10.0.42.40:3128 is this proxy, and "connection reset" is the deny_info TCP_RESET denial documented in the previous event — the denial wearing the disguise, exactly as predicted. MECHANISM: the attestations API returns a `bundle_url` alongside the inline bundle, and cli/cli's api/client.go uses the INLINE bundle only when bundle_url is EMPTY; otherwise it fetches from the URL and hard-errors with no fallback. So Sigstore egress was necessary and NOT sufficient. This was flagged by research BEFORE the test ran and the test confirmed it — worth noting because the research also correctly called out that my decisive check was the wrong one. FIX APPLIED to images/proxy/allowlist.txt: the SPECIFIC host tmaproduction.blob.core.windows.net, deliberately NOT .blob.core.windows.net — the latter would admit all of Azure Blob Storage, which anyone can publish to, and that is far too much surface for one bundle fetch. If GitHub moves the bucket the fetch fails loudly and the line gets updated; a detectable break beats a permanently open namespace. NOT YET VERIFIED END TO END, and this packet stays open until it is. The confirming run is blocked in this session by a proxy image that keeps rebuilding from a stale layer plus a --no-cache build that cannot reach the alpine mirrors while the enclave is in flux. The single command that settles it, once the proxy image genuinely carries the new allowlist: run tillandsias-brew-shim-exec for any allowlisted formula in a lane with the token present, and expect an install rather than an InvalidAttestationError. WHAT THIS EPISODE ARGUES. The runtime path now depends on an UNDOCUMENTED Azure blob host reached with a rotating SAS token. That is fragile by construction and is a strong argument for packet own-the-attestation-fetch-so-lanes-need-no-github-identity: fetch bundles at image BUILD time and verify at runtime against the shipped bundle, which removes both the credential and this host from the runtime path entirely.
     - packet_id: order-id-allocation-adoption-and-collision-disposal
       order: 581-h99t
       desired_release: v0.5
@@ -28241,3 +28266,1043 @@ plan_index:
             undetected. Per-packet files (plan/packets/) deferred as a large
             migration; recorded as the fallback if manual merges become
             frequent.
+    - packet_id: format-preserving-ledger-compaction
+      order: 582-4wdi
+      desired_release: v0.5
+      title: 'Compaction must preserve ledger format: a serde_yaml round-trip deletes 120 operator comments and breaks append-event'
+      status: completed
+      kind: fix
+      deliverable: crates/tillandsias-plan/src/fragments.rs + edit-module-based text compaction + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - plan
+        - ledger
+        - crdt
+        - rust
+        - tooling
+      estimated_hours: 5
+      outcome: |
+        The CRDT fragment overlay landed 2026-08-01 with reading fully transparent and compaction FAIL-CLOSED. This packet makes compaction usable. VERIFIED, not assumed: the current compaction path serializes the merged document with serde_yaml, which is not format-preserving, and on the real ledger that is destructive in two specific ways. (1) serde_yaml DROPS COMMENTS, and plan/index.yaml carries ~120 comment lines including ratified operator decisions recorded inline. (2) serde_yaml re-indents list items to column 0, while edit::append_event locates packets by the literal prefix four-spaces-dash; a round-tripped ledger would silently stop accepting events on EVERY packet. Both were confirmed by round-tripping a fixture and reading the output. So compaction currently REFUSES when the base carries comments or indented items, naming both conditions. That is the right default — a tool that quietly destroys operator decisions to tidy a file is the worst possible trade — but it means the fragment directory grows without bound. THE FIX IS ALREADY HALF-BUILT: edit::append_event is format-preserving, text-level, and tested. Compaction should reuse it rather than round-trip YAML: append new packets as TEXT to the end of the base, route events through append_event, and do targeted line replacement for LWW status fields. Format preservation then holds by construction rather than by careful serialization.
+      exit_criteria:
+        - compaction preserves every comment and the exact item indentation, proven by compacting a fixture copy of the REAL plan/index.yaml and diffing
+        - append-event still resolves every packet after a compaction (the four-space prefix survives)
+        - the fail-closed guard is removed only when the above two are proven, never relaxed to make the tool run
+      events:
+        - type: completed
+          ts: 2026-08-03T00:08:08Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260802
+          host: linux
+          summary: |
+            Compaction is now TEXT-LEVEL and format-preserving: the base is never re-serialized, so its ~120 operator comment lines and the four-space item prefix edit::append_event locates survive BY CONSTRUCTION. fragments.rs compact_text() emits appended packets field-by-field (keys at 6, list items at 8, multi-line strings as literal blocks), routes new events through the new edit::push_event() (bottom-append, complement of append_event), and re-applies LWW status wins as targeted line edits. All four compaction_text_tests green, including compaction_on_the_real_ledger_preserves_every_comment_and_item, which compacts a fixture copy of the REAL plan/index.yaml + real fragments and asserts every comment, item order, and fold-state survives. The fail-closed serde_yaml round-trip guard is REPLACED by a parse + integrity gate (Ledger::parse + check_integrity) before the candidate may replace the base. Live gate fix: the candidate is validated with the same archived-id set as `tillandsias-plan check` — an empty set wrongly refused depends_on that resolves via plan/archive/ (agent-login-flows-research, encrypted-control-channel-research). New litmus litmus:plan-compaction-format-preservation (8 steps, including archive-aware positive control); litmus-ledger-fragment- convergence updated to pin format-preservation instead of the removed fail-closed guard. 10/10 methodology-accountability litmus green, ./build.sh --check green, full workspace test suite green. Verified on a live copy: compact folded 24/24 fragments, byte-identical on the second pass. Packet 582-4wdi. Production ledger NOT compacted here — that is the compaction step's deliberate act.
+
+    - packet_id: loop-status-crdt-fragments
+      order: 582-nqw5
+      desired_release: v0.5
+      title: Apply the fragment overlay to plan/loop_status.md, which has the same concurrent-write problem
+      status: completed
+      kind: implementation
+      deliverable: loop_status fragment overlay + reader + compaction
+      depends_on:
+        - format-preserving-ledger-compaction
+      pickup_role: linux
+      capability_tags:
+        - plan
+        - crdt
+        - concurrency
+        - tooling
+      estimated_hours: 4
+      outcome: |
+        Operator 2026-08-01: "our ./plan/index.yaml and I would guess the loop_status probably suffer similar high concurrency issues". Correct — loop_status.md is a single narrative file every host rewrites, so it conflicts for exactly the reason index.yaml did. It differs in one way that matters: it is PROSE, not keyed records, so there is no packet_id to key a G-Set on. Do not force the index.yaml design onto it unexamined. Decide first what the CRDT actually is: probably an append-only log of dated host-scoped entries where the rendered file is a fold, with the operator-owned Direction section as an LWW-Register that only the operator writes. Getting this wrong would silently drop one host's status narrative, which is worse than a conflict a human resolves.
+      exit_criteria:
+        - the CRDT type for each section of loop_status is chosen and justified, not assumed from index.yaml
+        - two hosts writing status concurrently produce no git conflict and neither narrative is lost
+        - the operator-owned Direction section cannot be clobbered by an agent write
+      events:
+        - type: completed
+          ts: 2026-08-03T00:44:48Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260802
+          host: linux_mutable
+          summary: |
+            The fragment overlay now applies to plan/loop_status.md. The CRDT was chosen PER SECTION, not assumed from the index overlay (the packet body demanded this): prose has no packet_id to key a G-Set on. `## Cycle <ts> (<host> — …)` is a G-SET keyed by its heading line (the heading embeds timestamp+host, so it IS the stable prose identity; the union of two hosts' appends keeps BOTH narratives); `## Direction` and `## ACTIVE RELEASE` are LWW-REGISTER, operator-writes-only — append refuses any fragment carrying them by name, and fold never touches them; every other section is base-only and fragments never carry it. The rendered document is a FOLD (base + every fragment's Cycle sections, newest first after the title, deduplicated by heading, idempotent, pure).
+            New CLI, dispatched BEFORE the ledger load because loop_status is a different corpus: `loop-status` (the folded view, broken-pipe graceful so it survives `| head`), `loop-status-append` (stdin or --file -> ONE new fragment under plan/loop_status.d/, refusing any non-cycle heading by name, exit 1 on refusal or empty input), `loop-status-compact` (fold + delete EXACTLY the consumed fragments by name — never a glob; gated on nothing dropped / nothing lost / operator sections byte-identical / re-fold idempotent), and `loop-status-fragments` (drift verdict with eligibility). Fragment filenames are UTC-first `<utc>-<suffix>-<host>.md` (same lexical-sort contract as plan/index.d/). Loop-status write paths in meta-orchestration and coordinate-multihost-work now append via the overlay instead of rewriting the shared document, so two hosts writing status no longer conflict.
+            13 loop_status unit tests green (commutative, idempotent, G-Set survival, gate refusals). Exit criteria all met: per-section CRDT justified; two-host fixture shows both narratives with no shared-write conflict; Direction cannot be clobbered (append + fold + gates refuse). litmus:loop-status-fragment-overlay bound to methodology-accountability (9 steps, all green through the runner). ./build.sh --check green (cargo fmt + clippy fixed), plan ledger check green, full workspace test suite green. Commit 9aeb1031 pushed to linux-next. Packet 582-nqw5.
+
+    - packet_id: mcp-and-expert-read-paths-use-the-fragment-overlay
+      order: 582-26mm
+      desired_release: v0.5
+      title: Every ledger read path must use the fragment overlay, or surfaces disagree about what the plan says
+      status: completed
+      kind: fix
+      deliverable: images/default/config-overlay/mcp/forge-plan.sh + project-info.sh + any direct YAML readers
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - plan
+        - crdt
+        - mcp
+        - experts
+        - retrieval
+      estimated_hours: 3
+      outcome: |
+        The tillandsias-plan CLI now reads base plus fragments transparently. Any OTHER reader that opens plan/index.yaml directly sees only the base and reports a stale ledger WITH TOTAL CONFIDENCE — the most dangerous failure shape for a retrieval surface, and the one the expert system exists to eliminate. Audit every reader. Known candidates: project-info.sh's plan_query (reads the YAML with yq+jq directly), any grep-based fallback, the Observatorium, and anything consuming plan/index.yaml outside the compiled crate. Each either routes through the CLI or is documented as base-only with a stated reason. The failure to prevent is DISAGREEMENT: if plan_answer says a packet exists and plan_query says it does not, an agent cannot tell which surface is lying, and both look authoritative.
+      exit_criteria:
+        - every ledger reader is enumerated with its verdict (overlay-aware, or base-only-with-reason)
+        - a fragment-only packet is visible through the MCP tools, proven by querying it — not by reading the code
+        - a litmus fails if a new direct reader of plan/index.yaml appears without the overlay
+      events:
+        - type: note
+          ts: 2026-08-01T06:01:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            CONCRETE STARTING POINT, verified 2026-08-01: project-info.sh's plan_query reads plan/index.yaml with yq+jq directly, so it now sees only the COMPACTED BASE and silently omits every fragment-only packet. Antigravity measured that same tool at 86.76ms returning 370 matching items, so it is in active use by agents — this is a live divergence, not a latent one. The failure to prevent is two authoritative-looking surfaces disagreeing: plan_answer (overlay-aware, via the compiled CLI) will report a packet that plan_query (base-only) says does not exist, and an agent has no way to tell which is lying.
+        - type: completed
+          ts: 2026-08-03T01:18:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260803
+          host: linux_mutable
+          summary: |
+            Every content reader of plan/index.yaml is now overlay-aware or base-only-with-reason, and the two base-only readers were rerouted through the compiled CLI. Exit criterion 1 — the enumeration, with verdicts: OVERLAY-AWARE (route through the compiled tillandsias-plan CLI, which folds base + plan/index.d/): forge-plan.sh (wraps the CLI; ORDER 569 capability_gap refuses pre-569 binaries); the crate itself (main/lib/fragments/loop_status/answer/groundtruth — Ledger loads base plus fragments). REROUTED THIS PACKET, from base-only: project-info.sh plan_query (was yq+jq direct read; now resolves the CLI via $TILLANDSIAS_PLAN_BIN / $HOME/.local/bin / /usr/local/bin / /usr/bin / cargo target/release and runs `query --status/--role/--tag(s)/--limit/--json`, returning the same 9-key projection); scripts/drain-queue.sh extract_ready_packets (was awk; now `query --status ready --limit 0` — the explicit limit-0 is load-bearing, a default 20 would silently truncate the queue). BASE-ONLY-WITH-REASON: scripts/check-plan-schema-divergence.sh (reads only the default_status_values schema vocabulary, which fragments never carry); crates/tillandsias-policy plan-orders (legacy duplicate-order gate, superseded by the fragment-aware `tillandsias-plan check`; no live caller). NOT READERS (existence check / comments / @trace / legacy-dead): post-commit-expert-refresh.sh, check-committable-branch.sh, claim-ledger-node.sh, container-teardown-straggler-probe.sh, test-pre-receive-yaml-gate.sh, headless/tests/common/mod.rs, archive-plan-packets.rb (dead in forge); Observatorium reads no ledger.
+            Exit criterion 2 — a fragment-only packet is visible through the MCP tools, proven by querying, not by reading code: 582-26mm itself exists ONLY in plan/index.d/ (0 occurrences in the base). `query --status ready --role linux --tag crdt --json` returns it; drain-queue --dry-run --tag crdt lists it; verified end-to-end through the rebuilt binary.
+            Exit criterion 3 — a litmus fails if a new direct reader appears: litmus:no-unprotected-plan-ledger-readers (8 steps) is bound to methodology-accountability. The negative control writes a probe reader containing `yq` into scripts/ and asserts scripts/check-plan-ledger- readers.sh exits non-zero naming it. The behavioural steps build a tmp fixture (empty base + a fragment-only packet) and assert query --json sees it while a base-only yq read does not. 12/12 methodology- accountability litmus green through the runner; ./build.sh --check green (cargo fmt + clippy fixed); full workspace test suite green. Query filter-semantics unit test green. Packet 582-26mm.
+
+    - packet_id: cli-usage-text-loses-column-alignment
+      order: 583-2bpw
+      desired_release: v0.5
+      title: 'tillandsias-plan usage text prints flush-left: Rust line-continuations strip the following line''s indentation'
+      status: completed
+      kind: fix
+      deliverable: crates/tillandsias-plan/src/main.rs USAGE const
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - cli
+        - ux
+        - rust
+        - cosmetic
+      estimated_hours: 1
+      outcome: |
+        Reported by the order-569 agent 2026-08-01. Every entry under 'commands:' prints flush-left instead of in aligned columns, because a Rust string literal's backslash line-continuation strips the FOLLOWING line's leading whitespace. Pre-existing and structural rather than newly introduced, but now conspicuous: the usage text has grown to roughly twenty commands, and several carry multi-line explanations that are unreadable unaligned. This is the CLI's front door for every agent that types the command wrong, so legibility is not purely cosmetic — an unreadable usage block sends an agent to read source instead. Fix by using a raw string or explicit \n concatenation that preserves intended indentation.
+      exit_criteria:
+        - usage output is column-aligned as authored, verified by running the binary rather than by reading the literal
+        - no command entry is lost or reworded in the process
+      events:
+        - type: completed
+          ts: 2026-08-01T07:05:00Z
+          agent_id: forge-opencode-metaorch-20260801
+          host: forge
+          summary: |
+            Implemented in the forge cycle 2026-08-01: the USAGE const switched from backslash-continued string literals (whose `\` strips the following line's leading whitespace, rendering every command flush-left) to a concat!() of \n-terminated literals that preserves the authored column alignment. No entry lost or reworded: every line's text is byte-identical, only the construction changed, and the every_declared_capability_is_documented_in_usage test still passes. Verified by RUNNING the binary (usage now renders commands at 11-space indent with descriptions aligned at column 38) and by `cargo test -p tillandsias-plan` (71 lib + 4 bin tests green; 8 tests that first failed were all `No space left on device` on the full /tmp tmpfs, not code defects — rerun with TMPDIR on the overlay passed). Packet 583-2bpw.
+
+    - packet_id: litmus-container-steps-flake-under-build-contention
+      order: 583-zgaz
+      desired_release: v0.5
+      title: Container-launching litmus steps time out under concurrent build load, reddening CI for environmental reasons
+      status: ready
+      kind: bug
+      deliverable: timeout policy or contention gate for container-launching litmus steps
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - litmus
+        - ci
+        - flake
+        - containers
+        - resilience
+      estimated_hours: 3
+      outcome: |
+        OBSERVED 2026-08-01: litmus:forge-standard-gitconfig-path step 1 ("Git resolves the injected config from its standard global path", 30s timeout) TIMED OUT during ./build.sh --ci-full --install while a cargo build and a running observatorium container competed for the host. Run standalone immediately afterwards, the same litmus passed all four steps. So the failure was CONTENTION, not a defect — but it failed the gate and blocked an install, which is indistinguishable from a real failure to whoever reads the summary. This is the second flake found in one day (the other was a genuine test bug — a birthday-collision assertion — and was fixed at source). Distinguishing them cost real time each way, which is the actual damage: a flaky gate teaches agents to re-run rather than to read. DO NOT simply widen the timeout. That is the "relax the guard" move this project refuses; a step that needs 30s of exclusive host time is making an assumption about the machine, and the fix is to make that assumption explicit — serialize container-launching steps, detect contention and skip with a NAMED reason (the runner already has a skip vocabulary), or give such steps a declared resource requirement. A skip with a named reason is honest; a timeout reported as a failure is not.
+      exit_criteria:
+        - container-launching litmus steps either run without contention or SKIP with a named reason — never fail for lack of host resources
+        - the distinction between 'timed out' and 'asserted false' is visible in the CI summary, not only in the log
+        - reproduced under deliberate load before and after, so the fix is shown to work rather than assumed
+      events:
+        - type: note
+          ts: 2026-08-01T11:45:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            THIRD INSTANCE, and it sharpens the diagnosis considerably. litmus:e2e-eligibility-probe-shape step 4 ("the probe emits exactly one well-formed verdict line", 5s budget) TIMED OUT during ./build.sh --ci-full --install, failing the gate and blocking an install. It then timed out AGAIN on an immediate standalone re-run at load 3.19, and PASSED on the next run with no change to any file. THE MARGIN IS THE FINDING. The step was measured directly at 95ms across six consecutive runs (podman ps alone: ~20ms), and the litmus's exact command line completes in 95ms with rc=0. So a 5s budget is a FIFTY-FOLD margin, and it still times out. That rules out "the budget is slightly too tight" — the machine is stalling for multiple seconds on a step that normally costs a twentieth of a second. RULED OUT, so nobody repeats the work: it is not an assertion failure (the command returns the expected single well-formed line), not the FD leak in step 3 (which does `exec 9>` and never closes it — running steps 3 and 4 back to back in one shell completes in 101ms), and not a slow podman. WHAT THIS CHANGES ABOUT THE FIX. Widening timeouts is now clearly the wrong repair — there is no width that survives a multi-second stall on a 95ms operation, and each widening only lengthens the eventual failure. The two earlier instances were container-LAUNCHING steps, where a tight budget was at least arguable; this one is a plain shell probe, which means the problem is host saturation during the build, not the steps. Candidate directions: serialize the litmus phase against the build's own cargo/podman work rather than running them concurrently; or detect saturation and SKIP with a named reason. A skip that says why is honest; a timeout reported as a failure is not, and it has now cost three investigations. HONESTY NOTE: on the two earlier instances I attributed the failure to contention and moved on. This time I checked standalone first and it failed, which briefly looked like a real defect — the right instinct, and worth keeping. Only repeated timing showed the true shape.
+
+    - packet_id: capability-manifest-must-list-new-subcommands
+      order: 583-dv9n
+      desired_release: v0.5
+      title: Adding a plan subcommand without adding it to capabilities.txt makes the MCP wrapper silently refuse to route to it
+      status: ready
+      kind: fix
+      deliverable: crates/tillandsias-plan/capabilities.txt guard + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - experts
+        - mcp
+        - capability
+        - drift
+      estimated_hours: 2
+      outcome: |
+        Noted by the order-569 agent as a deliberate one-directional property, and recorded here so it is a known trade rather than a surprise. The manifest-to-dispatch direction IS enforced behaviourally (every declared token is invoked, with a negative control proving the check can fail). Dispatch-to-manifest is NOT: a subcommand that exists but is undeclared makes the expert UNDER-report itself, which is fail-safe by design. The cost is a silent one. A new subcommand omitted from capabilities.txt works fine from the CLI and is simply never routed to by the MCP wrapper, so it appears missing to every agent inside a forge while appearing present to anyone testing on the host. That is the "verified where it was written is not verified where it runs" shape, arriving through a data file. Fail-safe is the right default and should NOT be inverted. What is missing is a cheap warning: a check that lists dispatch arms absent from the manifest and reports them, without gating. Verify against the current tree first — 'fragments' and 'compact' were added the same day and may already be undeclared.
+      exit_criteria:
+        - an undeclared dispatch arm is reported (warning, not gate) so the omission is visible before it reaches a forge
+        - 'the fail-safe direction is preserved: under-declaring must never break the wrapper'
+        - the current tree is audited and any undeclared subcommand is either declared or justified
+
+    - packet_id: build-trace-regeneration-before-gate-regression
+      order: 584-2qq2
+      title: Restore trace-index regeneration before every CI-bearing build dispatch
+      status: ready
+      kind: fix
+      desired_release: v0.5
+      owner_host: linux
+      pickup_role: linux
+      capability_tags:
+        - build
+        - ci
+        - litmus
+        - traceability
+      deliverable: plan/issues/smoke-e2e-findings-local-build-linux-2026-08-01.md
+      depends_on: []
+      outcome: |
+        Gate-bearing build modes regenerate deterministic tracked trace indexes exactly once before entering local-ci, preserving order 495's clean post-build forge boundary.
+      exit_criteria:
+        - litmus:build-trace-index-dispatch-coverage passes all six steps
+        - --ci-full --install, --ci --install, and --release fixtures each emit traces,gate in that order
+        - TILLANDSIAS_SKIP_TRACE_INDEX=1 remains an explicit non-mutating override
+      events:
+        - type: filed
+          ts: 2026-08-01T06:39:23Z
+          agent_id: linux-macuahuitl-opencode-20260801T0611Z
+          host: linux_mutable
+          summary: |
+            Local-build E2E gate 1 reproduced the failure for every CI-bearing dispatch; focused clickable-trace-index quick litmus is deterministically red at step 4 (2 suites pass, 1 fails).
+
+    - packet_id: shared-stack-launch-marker-suite-race-regression
+      order: 584-e8pe
+      title: Make the shared-stack launch-marker lifecycle test hermetic in the full tray suite
+      status: ready
+      kind: fix
+      desired_release: v0.5
+      owner_host: linux
+      pickup_role: linux
+      capability_tags:
+        - rust
+        - testing
+        - concurrency
+        - lifecycle
+      deliverable: plan/issues/smoke-e2e-findings-local-build-linux-2026-08-01.md
+      depends_on: []
+      outcome: |
+        Launch-marker teardown semantics are tested without process-global state, cross-test markers, or timing races, so the full tray-feature suite and isolated execution agree.
+      exit_criteria:
+        - the full tillandsias-headless tray-feature suite passes the launch-marker test
+        - the test passes under repeated shuffled or concurrent execution
+        - fixture cleanup proves no marker or lock state survives the test
+      events:
+        - type: filed
+          ts: 2026-08-01T06:39:23Z
+          agent_id: linux-macuahuitl-opencode-20260801T0611Z
+          host: linux_mutable
+          summary: |
+            The 388-test tray run failed after 680 seconds at the dropped-marker assertion while 385 tests passed; the exact test passes immediately alone with --features tray. This recurs after the 2026-07-24 shared-flock repair.
+
+    - packet_id: fragment-overlay-lww-and-events-lost-on-fragment-packets
+      order: 585-v2fa
+      desired_release: v0.5
+      title: fold() applies LWW status and event appends BEFORE appending fragment-only packets, so no new packet can ever change status or receive an event
+      status: completed
+      kind: fix
+      deliverable: crates/tillandsias-plan/src/fragments.rs (fold ordering) + unit test pinning the fragment-only-packet LWW/event path
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - plan
+        - crdt
+        - ledger
+        - rust
+      estimated_hours: 2
+      outcome: |
+        Verified defect (not prose): crates/tillandsias-plan/src/fragments.rs fold() runs apply_to_packets over the base clone BEFORE append_packets adds the fragment-only packets, so the LWW `status:` register and `events:` set never reach packets that exist only in fragments. Every newly-filed packet is fragment-only (that is the overlay's filing model), so no packet filed via a fragment can be marked claimed/in_progress/completed/blocked, and no event can be appended to it — the reduction loop's own bookkeeping is blocked on this. Reproduced with the compiled CLI on a synthetic ledger: a base packet's status LWW applies (ready->claimed) while a fragment-only packet's identical LWW entry is silently dropped (stays ready); the event appended to the fragment packet is dropped by the same pass. Silent loss: `check` reports the ledger structurally sound. Existing tests never catch it because every LWW/event test operates on the base packet alpha. Suggested fix: swap the last two statements of fold() (append_packets before apply_to_packets); LWW winner is a pure (ts,host) function of the fragment set, so ordering is preserved and idempotency holds. Full reproduction + reasoning: plan/issues/ fragment-overlay-lww-and-events-lost-on-fragment-packets-2026-08-01.md. Blocks closing every fragment-filed packet including 583-2bpw.
+      exit_criteria:
+        - a synthetic ledger where a fragment-only packet receives a later LWW status update and an event shows BOTH under `tillandsias-plan status` / event query — the exact fixture from the issue, before and after
+        - the fold-order swap keeps every existing fragments.rs test green (idempotency, commutativity, base-packet LWW all still hold)
+        - a fragment-only packet can be moved ready -> claimed -> completed through subsequent fragments and the read reflects it deterministically
+      events:
+        - type: filed
+          ts: 2026-08-01T07:06:00Z
+          agent_id: forge-opencode-metaorch-20260801
+          host: forge
+          summary: |
+            Found while closing 583-2bpw: the completion fragment was written but the packet stayed `ready`. Isolated to fold() ordering via the compiled CLI on a synthetic ledger (base packet alpha LWW works, fragment-only gamma LWW silently dropped; events dropped for gamma too). See plan/issues/fragment-overlay-lww-and-events-lost-on-fragment-packets-2026-08-01.md.
+        - type: completed
+          ts: 2026-08-02T05:21:53Z
+          agent_id: linux-macuahuitl-opencode-20260802T0519Z
+          host: linux
+          summary: |
+            Swapped fragment fold application order so newly appended packets exist before LWW scalar updates and event G-Set appends are applied. Added a regression test proving a fragment-only packet moves ready -> claimed -> completed and retains both lifecycle events. Verified with all 76 tillandsias-plan tests and ./build.sh --check. Packet 585-v2fa.
+
+    - packet_id: release-smoke-must-not-inherit-litmus-podman-shim
+      order: 586-5yc7
+      title: Sanitize release-smoke Podman discovery so it exercises the host runtime
+      status: ready
+      kind: fix
+      desired_release: v0.5
+      owner_host: linux
+      pickup_role: linux
+      capability_tags:
+        - testing
+        - release
+        - podman
+        - harness
+      deliverable: plan/issues/smoke-e2e-findings-v0.4.260728.2-2026-08-01.md
+      depends_on: []
+      outcome: |
+        Published-release smoke commands resolve the host Podman binary rather than a prior litmus runner's PATH shim, preserving clean-room fidelity.
+      exit_criteria:
+        - release smoke records /usr/bin/podman or another non-target host runtime
+        - the litmus runner retains its hermetic shim for litmus child processes
+        - a focused fixture proves a contaminated parent PATH is sanitized
+      events:
+        - type: filed
+          ts: 2026-08-01T07:10:54Z
+          agent_id: linux-macuahuitl-opencode-20260801T0611Z
+          host: linux_mutable
+          summary: |
+            v0.4.260728.2 smoke passed, but install and cold init both selected target/litmus-runtime/bin/podman from the invoking environment.
+
+    - packet_id: teardown-straggler-probe-proc-exit-race
+      order: 586-i6j7
+      title: Suppress benign proc-disappearance races in the teardown straggler probe
+      status: ready
+      kind: optimization
+      desired_release: v0.5
+      owner_host: linux
+      pickup_role: linux
+      capability_tags:
+        - testing
+        - process-lifecycle
+        - shell
+        - observability
+      deliverable: plan/issues/smoke-e2e-findings-v0.4.260728.2-2026-08-01.md
+      depends_on: []
+      outcome: |
+        A process exiting between proc enumeration and cmdline read is treated as an expected race without stderr noise, while real zombies and orphans still fail the probe.
+      exit_criteria:
+        - a disappearing /proc/<pid>/cmdline fixture emits no shell diagnostic
+        - zombie and orphan positive fixtures still exit non-zero
+        - the clean verdict grammar remains unchanged
+      events:
+        - type: filed
+          ts: 2026-08-01T07:10:54Z
+          agent_id: linux-macuahuitl-opencode-20260801T0611Z
+          host: linux_mutable
+          summary: |
+            The post-reset probe returned clean but leaked a No-such-file diagnostic when the inspected tillandsias process exited mid-read.
+
+    - packet_id: release-smoke-clobbers-the-developer-binary-and-wipes-the-runtime
+      order: 587-fr7g
+      desired_release: v0.5
+      title: 'The release smoke silently downgrades the workstation: it curl-installs the last release over ~/.local/bin and destructively resets the runtime, then never restores either'
+      status: ready
+      kind: fix
+      deliverable: skills/smoke-curl-install-and-test-e2e + scripts/install.sh prefix isolation + restore step
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - e2e
+        - smoke
+        - release
+        - developer-experience
+        - destructive
+      estimated_hours: 4
+      outcome: |
+        OPERATOR-VISIBLE 2026-08-01: "The tray is dead, it was build .5, I tried relaunching from terminal but it launched an old installed binary from path." ROOT CAUSE, established from evidence rather than inferred. A sibling ran /smoke-curl-install-and-test-e2e and recorded it in commit 5603b2dd (plan/issues/smoke-e2e-findings-v0.4.260728.2-2026-08-01.md). That skill does exactly what it says on the tin, and the tin is the problem: it CURL-INSTALLS the published release into the developer's real ~/.local/bin — the smoke's own log confirms "installed version matched v0.4.260728.2" — and it performs a DESTRUCTIVE RESET, its own words being "containers, volumes, and images were empty afterward". So the freshly built and installed v0.4.260801.5 was overwritten by a four-day-old release, and the running tray's entire runtime was wiped from under it. The tray's clean "Received shutdown signal / Graceful shutdown completed" was the CORRECT response to having its world deleted, not a crash. Verified after the fact: ~/.local/bin/tillandsias reported v0.4.260728.2 with an mtime of 23:41, well after the 23:02 local install. WHY THIS IS A DEFECT AND NOT JUST SURPRISING. Simulating a clean operator install is exactly the right thing for this smoke to do, and it must keep doing it. What is wrong is that it does so IN PLACE, on the developer's only PATH entry, and then leaves. The operator loses their build with no warning before, no notice after, and no restore — and the failure surfaces much later as "why is my binary old", which is precisely how it surfaced. It also silently invalidates any concurrent work: another agent mid-cycle is now testing a different binary than the one it built. FIX DIRECTION, not prescribed: run the smoke against an isolated prefix (scripts/install.sh already parameterises INSTALL_DIR) with PATH scoped to it, so the real ~/.local/bin is never touched; or snapshot and restore the prior binary around the run. Whichever is chosen, announce the destruction BEFORE it happens — a destructive step that a human would want to know about must say so first, per the project's own confirm-before-destroy discipline.
+      exit_criteria:
+        - running the release smoke leaves ~/.local/bin/tillandsias byte-identical to what it was before, or the smoke states loudly and in advance that it will replace it
+        - the destructive runtime reset is announced before it runs, and its scope is stated
+        - a litmus proves the developer binary survives a smoke run (or that the announcement is emitted), by running the real path rather than grepping the skill text
+
+    - packet_id: proxy-mediated-github-auth-so-the-credential-never-enters-the-forge
+      order: 587-ig9g
+      desired_release: v0.6
+      title: 'Research: perform GitHub authentication AT THE PROXY, so brew can install without any credential inside the forge'
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - research
+        - security
+        - credentials
+        - proxy
+        - brew
+        - forge
+      estimated_hours: 6
+      outcome: |
+        OPERATOR DIRECTION 2026-08-01: "File a plan packet to investigate if we can make that attestation in the proxy through url rewriting, so the credential doesn't need to be in the forge even to use it for brew installs." THE PRIZE: today HOMEBREW_GITHUB_API_TOKEN is injected into EVERY forge lane and is readable from the container config via podman inspect (verified at runtime, 93-character value — packet forge-env-credentials-land-in-podman-argv). If the proxy supplies the authentication, the forge holds CAPABILITY rather than a CREDENTIAL, and the zero-credential invariant becomes true instead of aspirational. THE CONSTRAINT THAT DECIDES IT, and the first thing to establish: a proxy can only add an Authorization header to a connection it TERMINATES. Read images/proxy/squid.conf and determine which hosts are SPLICED versus BUMPED. Order 390's research already found that api.github.com is spliced today, so this would require bumping it — meaning the proxy decrypts GitHub API traffic for every lane. That is a deliberate posture change and must be argued on its merits, not slipped in as an implementation detail. COMPARE THE ESTABLISHED ALTERNATIVE rather than assuming the proxy is the answer: this repo already uses a BROKER pattern for exactly this shape (git-credential-tillandsias.sh, order 424's mirror work) — a component that holds the credential and hands out scoped capability. A broker needs no TLS interception. Order 390 also proposed proxy-mediated capability as a fourth option on order 435. State clearly which is better HERE and why. SEQUENCING: do not start until the attestation root cause is known (packet brew-attestation-verification-always-fails-and-stalls-forge-startup). If attestation is failing because sigstore endpoints are unreachable or because gh reads a different variable, then no amount of header injection fixes it, and this packet would be solving the wrong problem elegantly.
+      exit_criteria:
+        - a verdict on whether squid can inject the credential for brew's actual GitHub calls, grounded in which hosts are spliced vs bumped TODAY
+        - the TLS-interception trade is stated plainly with its blast radius, not buried
+        - the broker alternative is compared on the same criteria, with a recommendation
+        - 'the dependency on the attestation root cause is honoured: this does not proceed on the assumption that a missing header is the problem'
+
+    - packet_id: remove-nogpgcheck-from-base-images
+      order: 588-3irh
+      desired_release: v0.5
+      title: The base image installs everything with RPM signature verification DISABLED, while enforcing Sigstore on optional tools
+      status: ready
+      kind: fix
+      deliverable: images/default/Containerfile.base + images/chromium/Containerfile.core
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - security
+        - supply-chain
+        - containers
+        - provenance
+      estimated_hours: 2
+      outcome: |
+        VERIFIED 2026-08-01. images/default/Containerfile.base:14 and images/chromium/Containerfile.core:10 install the ENTIRE base — bash, coreutils, git, gh, gcc, rust, node, java — with --nogpgcheck, i.e. RPM signature verification turned OFF. The same image then enforces Sigstore attestation on OPTIONAL on-demand utilities. So the layer everything else stands on is the unverified one, and the layer verified hardest is the one that matters least. That is provenance applied upside down, and it is the cheapest correction available. Likely to just work: images/chromium/Containerfile.framework:22 and :43 and images/inference/Containerfile:17 ALREADY run microdnf install without the flag, so the pattern is proven in this repo. NOT yet tested with a build — the flag may have been added for a real reason nobody recorded, and if so that reason belongs in a comment beside it. Independent of all brew work and strictly larger in blast radius.
+      exit_criteria:
+        - no Containerfile installs packages with --nogpgcheck, or each remaining use carries a recorded justification
+        - the images still build and the litmus suite passes
+        - a litmus fails if --nogpgcheck reappears without a justification comment
+
+    - packet_id: bake-allowlisted-tools-into-the-image
+      order: 588-dx63
+      desired_release: v0.6
+      title: Bake the Fedora-available on-demand tools into the image so no runtime credential is needed for them
+      status: ready
+      kind: implementation
+      deliverable: images/default/Containerfile.base + a reduced brew tools allowlist
+      depends_on:
+        - remove-nogpgcheck-from-base-images
+      pickup_role: linux
+      capability_tags:
+        - supply-chain
+        - containers
+        - brew
+        - provenance
+        - ephemerality
+      estimated_hours: 6
+      outcome: |
+        Measured 2026-08-01: the brew tools allowlist carries 80 entries; 14 are already baked into Containerfile.base; of the remaining 66, roughly 43 resolve in Fedora 44 under first-guess package names (an APPROXIMATE mapping — treat as a lower bound and re-derive before relying on it), and about 23 have no Fedora package (cosign, sops, dive, pandoc, zellij, starship, lazygit, dasel, gron, jless, taplo, broot, bottom, watchexec, xh, doggo, websocat, ast-grep, kubectl, fx, dust, lazydocker, 7zz). Baking the Fedora-available set covers roughly 57 of 80 with NO runtime credential, and moves their provenance to RPM signing at image BUILD time, which is where a credential is legitimate. It also removes a second package manager from a container meant to be disposable. Cost, stated rather than hidden: image size grows, and the tool set becomes a rebuild-cadence decision rather than an on-demand one. The operator should see the size delta before this lands.
+      exit_criteria:
+        - the Fedora-available subset is installed at build time and the allowlist shrinks to only what genuinely needs brew
+        - no runtime credential is required for any baked tool, proven by installing one in a lane with no token present
+        - the image size delta is measured and reported, not assumed acceptable
+
+    - packet_id: own-the-attestation-fetch-so-lanes-need-no-github-identity
+      order: 588-ttex
+      desired_release: v0.6
+      title: Fetch and pin attestation bundles at BUILD time; verify at runtime with a shipped bundle so no forge holds a GitHub identity
+      status: ready
+      kind: implementation
+      deliverable: build-time bundle fetch + pinned trusted root + runtime verification against the shipped bundle
+      depends_on:
+        - bake-allowlisted-tools-into-the-image
+      pickup_role: linux
+      capability_tags:
+        - security
+        - supply-chain
+        - provenance
+        - sigstore
+        - brew
+        - credentials
+      estimated_hours: 10
+      outcome: |
+        THE DESIGN THAT REMOVES THE IDENTITY — the operator's objection answered structurally rather than mitigated. ESTABLISHED BY RESEARCH 2026-08-01: verifying a Sigstore/SLSA attestation requires NO identity from the verifier. Reproduced with no token, no gh config, and inside a network namespace with no interface at all: exit 0, real certificate chain, correct signer; one flipped byte gives exit 1. The GitHub token in Homebrew's path is a RATE-LIMIT credential for the API call that FETCHES the bundle. gh refuses any API call without a token, which is a CLIENT-side gate, not a server-side one — gh's own authors exempt the bundle flag from that check, and Homebrew never passes it. SO: fetch bundles anonymously at IMAGE BUILD time, ship them plus a pinned trusted root (about 34 KB) into the image, and at runtime fetch the bottle, verify it against the shipped bundle and pinned root, then install. Pure shell; gh is already in the base image. THREE CORRECTIONS THAT WOULD OTHERWISE BITE, each from adversarial review. Do NOT pin a single signer workflow: homebrew-core signs from several, so pinning one fails closed on every dispatch-rebottle-signed bottle — use a certificate-identity regex. ORDERING IS LOAD-BEARING: disabling Homebrew's own verification and checking AFTER install is verify-after-execute, which is strictly weaker than today; fetch, verify, THEN install. And runtime egress does not collapse to ghcr.io, because the shim still clones the Homebrew repo and resolves formulae via the brew.sh API — what this removes is Sigstore egress and the credential. HONEST COSTS: upstream bottle digests rotate, so pinned bundles go stale and the affected formula fails until rebuild (arguably a feature here); and a cached trusted root cannot observe key revocation between builds — GitHub warns about exactly this, so regenerate it every build.
+      exit_criteria:
+        - a forge lane installs an allowlisted tool with attestation verified and NO GitHub credential present anywhere in the lane
+        - verification runs BEFORE install, proven by a fixture where verification fails and nothing is installed
+        - the trusted root is regenerated per image build, and a stale root is detected rather than silently trusted
+
+    - packet_id: cheatsheet-provenance-make-the-validator-honest-then-sign-a-manifest
+      order: 588-8mh8
+      desired_release: v0.5
+      title: Cheatsheets claim provenance nothing verifies, and the tooling renders that absence to agents as a verification badge
+      status: ready
+      kind: fix
+      deliverable: policy-crate validator honesty + a signed cheatsheet manifest gating the image bake
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - security
+        - provenance
+        - cheatsheets
+        - agents
+        - prompt-injection
+        - supply-chain
+      estimated_hours: 8
+      outcome: |
+        OPERATOR DIRECTION 2026-08-01: "Rightful provenance at every abstraction layer is the way to go" — binaries AND cheatsheets. MEASURED, not asserted. crates/tillandsias-policy/src/main.rs:4505-4513 emits its partial-verify marker PRECISELY WHEN NO HASH EXISTS. INDEX.md carries 143 such markers and zero verified ones. 144 of 144 bundled cheatsheets have no baked sha256, and main.rs:326-334 routes that to notes rather than warnings, so strict mode prints "all tier checks passed" and exits 0. The rest of the frontmatter is unenforced assertion: 36 files violate the authority enum; 93 assert current status while their own last_verified is past the spec's 90-day cutoff; 48 of 170 claiming hand-curated also carry a literal TODO marker saying they were not; 0 of 73 pull-on-demand recipes contain any integrity check. THE VERIFICATION LAYER WAS TOMBSTONED IN PLACE. litmus-cheatsheet-source-layer-shape.yaml:85 asserts that the source contains the string "no sources fetched yet; nothing to validate" — a test asserting the presence of the message a checker prints when it verifies nothing. Coverage measures the presence of a checker, not of checking. WHY THIS OUTRANKS THE BINARY LAYER. A tampered binary runs sandboxed as the user. A tampered cheatsheet is INSTRUCTIONS AN AGENT FOLLOWS, plus shell commands it is told to run, delivered into context with an authority badge, while the agent holds the lane's credentials. lib-common.sh has three unauthenticated merge paths, including an undeclared project shadow copied over a forge default with NO in-file marking (its own comment says so), and a pass that appends every markdown file in the pull cache to the index as pulled. That is OWASP LLM01 indirect prompt injection crossed with LLM03 supply chain. PROPORTIONATE FIX, and GitHub's own guidance says exactly this: sign manifests that include hashes of contents, NOT individual documentation files. One signed manifest, not 219 signatures. TIER 0, no crypto, do first: make the validator honest. Never claim verification where no hash exists; route a missing hash to warnings; COMPUTE status from last_verified rather than trusting it; validate the authority enum; make the TODO-marker-plus-hand-curated combination an error; and fix or delete scripts/check-cheatsheet-staleness.sh, whose line 3 is a freshness header dated today asserting everything is under 90 days while the script reports 217 of 217 stale — 215 of those only because it greps for a prose "Last updated" line the corpus abandoned for frontmatter. The checker measures a field that no longer exists, then self-attests that it ran clean. TIER 1: a sorted sha256 manifest (pure coreutils), signed in the release workflow with cosign sign-blob. THE SIGNER IS THE WORKFLOW'S OIDC IDENTITY, NOT A HUMAN'S — the correct answer to the operator's inversion complaint, and something this repo already gets right for binaries. UNRESOLVED BEFORE BUILDING: verifying at boot against a manifest baked into the same image layer is a self-consistency check, not an authenticity check, unless the trust root is pinned OUTSIDE the image. Solve that first or this rebuilds the same false badge at a higher altitude. TIER 2, no crypto, highest blast-radius value: anything reaching the in-image cheatsheet directory that is not in the manifest gets a mandatory in-body banner at merge time, before any content. The silent undeclared-shadow copy must not stay silent, and the pulled marker must say UNVERIFIED. RESIDUAL, stated plainly: none of this answers whether a cheatsheet's content matches its cited sources. That was the tombstoned source layer's job, it is genuinely harder, and a manifest signature must not be allowed to imply it.
+      exit_criteria:
+        - no marker claims verification where no hash exists; strict mode FAILS on the current corpus until the gaps are closed or explicitly waived
+        - status is COMPUTED from last_verified, never trusted from the file
+        - a signed manifest gates the image bake, with the trust root pinned outside the image
+        - any unmanifested cheatsheet reaching the in-image directory is banner-marked in-body before its content
+
+    - packet_id: brew-token-full-isolation-requires-a-privilege-boundary
+      order: 589-y5rd
+      desired_release: v0.6
+      title: Isolating the brew token from the agent needs a uid or container boundary — a podman secret alone cannot do it
+      status: ready
+      kind: research
+      deliverable: decision record + sidecar-or-uid design
+      depends_on:
+        - own-the-attestation-fetch-so-lanes-need-no-github-identity
+      pickup_role: linux
+      capability_tags:
+        - security
+        - credentials
+        - isolation
+        - brew
+        - podman
+        - operator-decision
+      estimated_hours: 6
+      outcome: |
+        OPERATOR REQUIREMENT 2026-08-01, verbatim: the brew token should "live only during the brew routine, and only for the brew command... Absolutely nothing else has access to this token ever-ever-ever :D Can we guarantee that?" THE HONEST ANSWER TODAY IS NO, and the reason is structural rather than a missing feature. VERIFIED: every forge lane runs as a single uid — `id` inside the shipped image reports uid=1000(forge), and the launcher passes --userns=keep-id. The established podman-secret pattern mounts a file mode 0400 owned by uid 1000 (GIT_VAULT_TOKEN_SECRET_OPTS, main.rs:2829). The AGENT also runs as uid 1000. A 0400 file owned by the reader is readable by the reader: the agent can simply cat it. Moving from --env to --secret is a real improvement — it removes the value from podman argv, from the recorded container config, and from /proc/1/environ — but it does NOT isolate the token from the agent, and claiming otherwise would be a false guarantee, which is worse than the current honest exposure. WHAT WOULD ACTUALLY GUARANTEE IT — two designs, both real, to be chosen between: (a) A UID BOUNDARY. Run the brew shim as a second uid that owns the secret 0400; the agent's uid cannot read it, while the installed prefix is shared by group. Cheapest, stays in one container, but --userns=keep-id and the forge's single-user assumptions must be re-examined; and any agent able to run the shim can still cause an install, so it bounds READ access, not USE. (b) A SIDECAR BOUNDARY. brew runs in its own short-lived container holding the secret; the agent's lane receives only the installed artifacts over a shared volume and never the credential. Strongest, and it matches this repo's established broker pattern (git-credential-tillandsias.sh, the order-424 mirror work) — a component that holds a credential and hands out capability. Costs a container per install. SEQUENCING, and this is the point: BOTH may be unnecessary. If own-the-attestation-fetch-so-lanes-need-no-github-identity lands, bundles are fetched at image build time and there IS NO RUNTIME TOKEN — the guarantee becomes trivially true because there is nothing to isolate. Do not build an isolation mechanism for a credential we are trying to delete. This packet exists to be answered, and "we removed the token instead" is the preferred answer. ALSO UNRESOLVED, and it undercuts audit claims: vault's file audit device writes to /vault/audit inside the container and is NOT a mounted volume (verified — the destination does not appear in the container's Mounts). So every mint record dies on recreate, including on the destructive reset the release smoke performs. Short-TTL minted tokens WITHOUT durable audit give the appearance of a trail rather than a trail. AND A HARD CONSTRAINT ON "MINIMUM TTL": GitHub removed the OAuth Authorizations API in 2020, so there is no way to programmatically mint a short-lived PAT. TTL can attach to the VAULT credential that authorizes reading the GitHub token, never to the GitHub token itself. A GitHub App installation token (1 hour, auto-expiring) is the only genuinely short-TTL option — and it cannot read Homebrew's public attestations, because an installation token is scoped to repositories the app is installed on.
+      exit_criteria:
+        - a decision between uid boundary, sidecar boundary, and deleting the runtime token entirely, with the reasoning recorded
+        - if a boundary is built, a test proves the AGENT uid cannot read the credential — not merely that it is absent from argv
+        - no design claims isolation it cannot deliver; the scrubbable-vs-unscrubbable table is stated in the deliverable
+        - vault audit durability is resolved before any short-TTL mint is described as audited
+
+    - packet_id: persist-or-eliminate-the-ephemeral-brew-prefix
+      order: 589-b7k2
+      desired_release: v0.6
+      title: The brew prefix is ephemeral, so every forge launch re-installs and re-attests every tool — that is the rate-limit multiplier
+      status: ready
+      kind: fix
+      deliverable: brew prefix persistence decision + measured attestation-call budget
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - brew
+        - ephemerality
+        - performance
+        - rate-limit
+        - forge
+      estimated_hours: 4
+      outcome: |
+        OPERATOR QUESTION 2026-08-01: are we hitting GitHub's rate limit because of our developer setup, or would a normal user launching a forge ten times a day hit it too? MEASURED FACTS. GitHub allows 60 API requests/hour unauthenticated per IP and 5,000/hour authenticated. Every lane egresses through ONE squid proxy, so all concurrent lanes share a single bucket. /home/linuxbrew is created in images/default/Containerfile:27 but is NOT mounted as a volume (verified: no volume or mount references it), so the installed prefix dies with the --rm container. Only HOMEBREW_CACHE points at the project cache. CONSEQUENCE: every forge launch re-installs and re-attests every on-demand tool it touches. Attestation is per BOTTLE, not per formula — `brew install jq` pulls jq plus oniguruma, so two attestation calls minimum. ANSWER TO THE QUESTION: at ten launches a day using a few tools each, spread across a day, an AUTHENTICATED user is nowhere near 5,000/hour and an anonymous one is likely under 60/hour too. Bursty use — several lanes in one hour, each installing several tools — can reach 60/hour anonymously. So a normal user is mostly fine; OUR exhaustion came from repeated testing plus a much nastier amplifier described below. THE AMPLIFIER THAT MATTERS. Homebrew retries attestation five times (ATTESTATION_MAX_RETRIES), so a FAILING attestation costs up to six API calls per bottle instead of one. A blocked egress path therefore does not merely fail — it burns quota six times faster, and can convert a connectivity fault into a genuine rate-limit fault, which then looks like a different bug. That feedback loop is what made this hard to read. THE FIX MAKES THE QUESTION MOOT. Baking tools into the image (bake-allowlisted-tools-into-the-image) removes runtime attestation calls for those tools entirely. Persisting the brew prefix is the cheaper half-measure and trades against the ephemerality principle, so it needs a deliberate decision rather than a default.
+      exit_criteria:
+        - the attestation API call budget for a typical forge launch is MEASURED, not estimated
+        - a decision is recorded on persisting the brew prefix versus baking tools in, weighed against the ephemerality principle
+        - the retry amplification is bounded so a blocked path cannot silently convert into a rate-limit fault
+
+    - packet_id: credential-lifecycle-audit-milestone
+      order: 590-z3jh
+      desired_release: v0.5
+      title: 'MILESTONE: every credential audited at RUNTIME — none reaches a forge, none at container creation'
+      status: ready
+      kind: milestone
+      deliverable: plan/index.yaml (criteria holder; children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - milestone
+        - security
+        - credentials
+        - audit
+        - provenance
+      estimated_hours: 0
+      outcome: |
+        OPERATOR DIRECTIVE 2026-08-01: "file ./plan packets for all agents to individually audit and validate the tokens lifecycle, never making it into the forge, nor at container creation." THE RULE THIS MILESTONE ENFORCES. Development config and runtime config are different lifecycles and must not overlap. A credential may exist where an image is BUILT, on a development host. It may not exist in a disposable lane a user launches, and it may not be baked in at container creation. WHY EACH CHILD MUST VERIFY AT RUNTIME, NOT BY READING SOURCE. This project's named recurring failure is "verified where it was written is not verified where it runs", and it has bitten repeatedly in exactly this area: a unit test asserted a token injection EXISTED while its own name claimed "never argv"; litmus:credential-isolation runs against a FAKE podman backend and asserts nothing about a real lane; litmus:environment-isolation inspects the IMAGE env with no launch args, so every injected variable is structurally invisible to it. No test anywhere inspected a launched lane's environment until this milestone. Every child therefore closes on evidence from a RUNNING container — podman inspect, /proc/<pid>/environ, ls -l /run/secrets — never on a grep of the source that produced it. THE ONE COMMAND EVERY AUDIT SHARES, so results are comparable: podman inspect <lane> --format '{{range .Config.Env}}{{println .}}{{end}}' plus a check of .Config.CreateCommand, which retains the full podman argv for the container's lifetime and is where --env VALUES come to rest.
+      exit_criteria:
+        - every credential in the system has a child packet with a runtime-verified verdict
+        - no credential appears in any forge lane's Config.Env or Config.CreateCommand
+        - each child states its evidence as a command an operator can re-run, not as a source citation
+
+    - packet_id: audit-github-token-lifecycle
+      order: 590-4u7a
+      desired_release: v0.5
+      release_target: credential-lifecycle-audit-milestone
+      title: 'AUDIT: the GitHub token — prove it reaches the git mirror only, and never a forge lane'
+      status: ready
+      kind: verification
+      deliverable: runtime audit record + litmus asserting a launched lane's env
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - security
+        - credentials
+        - audit
+        - git-mirror
+        - forge
+      estimated_hours: 3
+      outcome: |
+        THE CREDENTIAL: vault path secret/github/token. EXPECTED LIFECYCLE, to be CONFIRMED rather than assumed. Stored in Vault. Read by the tray on the development host for gh login and remote-project flows. Read by the GIT MIRROR container via images/git/git-credential-tillandsias.sh, which fetches it at call time and writes it to a credential helper's stdout — never an env var, never argv. The forge pushes to the mirror with NO credential; the mirror pushes upstream. That is the broker pattern and it predates this audit. WHAT CHANGED 2026-08-01: order 359 injected this token into EVERY forge lane as HOMEBREW_GITHUB_API_TOKEN for brew attestation. That was reversed in commit 82160687. This packet proves the reversal holds at runtime and keeps holding. AUDIT THE MIRROR TOO, not just the forge. The mirror legitimately holds the credential, so verify HOW: confirm it is absent from the mirror's Config.Env and Config.CreateCommand, and present only transiently in the credential helper's process. A legitimate holder using an illegitimate transport is still a finding. ALSO CONFIRM the forge's own vault policy still cannot read the path (images/vault/policies/forge.hcl must not grant github/token), so a compromised lane cannot fetch what it is no longer handed.
+      exit_criteria:
+        - a LAUNCHED forge lane shows no github token in Config.Env, Config.CreateCommand, or /proc/1/environ — evidence pasted, not summarised
+        - 'the git mirror holds it only via the credential helper: absent from its Config.Env and CreateCommand'
+        - forge.hcl grants no read on secret/github/token, verified against the running vault, not the file alone
+        - a litmus inspects a REAL launched lane, closing the gap that litmus:credential-isolation left by using a fake podman backend
+      events:
+        - type: note
+          ts: 2026-08-01T23:31:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            SCOPE CLARIFICATION from the same investigation: with the order-359 reversal committed (82160687), the GitHub token was THE env-injected credential in a forge lane, and it is now gone. Everything else that reaches a lane uses the podman-secret or broker pattern. That makes this audit's job narrower and sharper than when it was filed: prove the reversal holds at RUNTIME and cannot silently regress, rather than survey a field of exposures.
+
+    - packet_id: audit-llm-provider-key-lifecycle
+      order: 590-mtgn
+      desired_release: v0.5
+      release_target: credential-lifecycle-audit-milestone
+      title: 'AUDIT: the LLM provider keys still travel the bad seam — env injection puts them in podman argv'
+      status: ready
+      kind: verification
+      deliverable: runtime audit record + a decision on moving them to the secret/broker pattern
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - security
+        - credentials
+        - audit
+        - forge
+        - llm
+      estimated_hours: 4
+      outcome: |
+        THE CREDENTIALS: secret/claude/oauth, secret/codex/oauth, secret/antigravity/oauth (ProviderId::vault_path, main.rs:7030-7036). THIS IS THE UNFINISHED HALF. Removing the GitHub token from forge lanes did NOT touch these. They still reach a lane through spec.env(), which ContainerSpec::build_run_args (container_spec.rs:331) turns into `--env KEY=VALUE` — an argv element of podman run, readable from /proc/<pid>/cmdline, and RETAINED IN Config.CreateCommand for the container's lifetime. The entrypoint cannot unset that; no amount of in-container scrubbing reaches it. THE HONEST COMPLICATION, which must be stated in the deliverable rather than discovered later: a forge lane runs as uid 1000 and so does the agent. A podman secret mounted 0400 owned by uid 1000 is READABLE BY THE AGENT. So moving to --secret genuinely removes the value from argv and from the container config — a real improvement — but it does NOT isolate the key from the agent that needs it. Do not claim otherwise. AND THE HARDER QUESTION UNDERNEATH: unlike the GitHub token, these keys are needed BY the agent, so the broker pattern does not obviously apply — you cannot hand an agent "capability to be an LLM client" without the key. Say whether a broker is possible here or whether argv-removal is the honest ceiling.
+      exit_criteria:
+        - a LAUNCHED lane's Config.CreateCommand is inspected and every provider key found there is listed with its variable name
+        - 'a decision is recorded: move to --secret, build a broker, or accept with a stated reason — no silent status quo'
+        - if --secret is chosen, a test proves the value is absent from Config.CreateCommand, and the deliverable states plainly that the agent can still read the file
+      events:
+        - type: note
+          ts: 2026-08-01T23:30:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260801
+          host: linux_mutable
+          summary: |
+            CORRECTION — this packet OVERSTATED the finding, and the operator caught it with "what llm provider keys? I'm not aware of such." MEASURED against the running vault: secret/anthropic/api-key, secret/openai/api-key and secret/gemini/api-key are ALL EMPTY on this host. The injection at main.rs is gated on `!key.is_empty()`, so NOTHING is injected. This is a DORMANT code path, not a live exposure. The packet described it as current, which was wrong. THE MISTAKE UNDERNEATH, worth recording because the next reader will hit it: there are TWO enums named ProviderId in this crate. main.rs:7029 has GitHub/Claude/Codex/Antigravity mapping to secret/*/oauth — the LOGIN flows. vault_bootstrap.rs:931 has Anthropic/Openai/Gemini mapping to secret/*/api-key — the LANE injection. I read the vault paths from the first, saw `.env(p.env_var(), &key)` in the lane builder, and assumed they were the same. Same name, different enum, different purpose. That collision is its own defect and is filed separately. WHAT ACTUALLY HAPPENS with the credentials this host DOES hold: the OAuth documents (secret/claude/oauth, secret/codex/oauth, secret/antigravity/oauth — all PRESENT) reach a lane through the GOOD pattern. The lane receives a scoped Vault token as a PODMAN SECRET (--secret, mode 0400 under /run/secrets) and its entrypoint restores the provider document inside the container. The OAuth credential itself never appears in --env, never on podman argv, never in Config.CreateCommand. There is also a credential quarantine: empty tmpfs overlays at /home/forge/.ssh and /home/forge/.config/gh. SO THE REVISED SCOPE OF THIS PACKET: it is no longer "fix a live exposure". It is "prevent a latent one" — if anyone ever writes a key to secret/<provider>/api-key, it will be injected via --env KEY=VALUE and land in podman argv and the container config silently, with no warning and no test catching it. That is worth guarding BEFORE someone sets one, not after. The exit criteria stand, but the deliverable must state the path is currently dormant so a future agent does not go hunting for an exposure that is not there and conclude the audit tooling is broken.
+
+    - packet_id: audit-vault-token-and-approle-lifecycle
+      order: 590-3hsa
+      desired_release: v0.5
+      release_target: credential-lifecycle-audit-milestone
+      title: 'AUDIT: the Vault token and AppRole — the pattern we hold up as correct, checked at runtime'
+      status: ready
+      kind: verification
+      deliverable: runtime audit record + audit-durability fix
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - security
+        - credentials
+        - audit
+        - vault
+      estimated_hours: 4
+      outcome: |
+        THE CREDENTIALS: the git mirror's Vault token and its AppRole document, delivered as podman secrets (GIT_VAULT_TOKEN_SECRET_OPTS and GIT_VAULT_APPROLE_SECRET_OPTS, main.rs:2829 and :2838) as 0400 files under /run/secrets. THIS IS THE PATTERN THE OTHER AUDITS ARE MEASURED AGAINST, which is exactly why it must be verified rather than assumed correct. Its own comment states the intent: the bootstrap copies each value to a mode-0400 tmpfs file "without putting either value in argv or the environment". Confirm that is true of the RUNNING container. A SEPARATE AND SERIOUS FINDING TO CLOSE HERE: vault's file audit device writes to /vault/audit/audit.json (images/vault/entrypoint.sh:224), and /vault/audit is NOT a mounted volume — verified, the destination does not appear in the container's Mounts. Every audit record therefore dies on recreate, including on the destructive reset the release smoke performs. Any future claim that a credential is "audited" is false until this is fixed, and short-TTL minted tokens without durable audit give the APPEARANCE of a trail rather than a trail. HashiCorp additionally recommends two audit devices, because with a single device Vault REFUSES requests it cannot log — so a full disk becomes an outage.
+      exit_criteria:
+        - the mirror's Vault token and AppRole are confirmed absent from Config.Env and Config.CreateCommand on a RUNNING container
+        - /run/secrets files are confirmed 0400 and owned as intended, from inside the running container
+        - the audit device writes to a persistent volume and survives a container recreate, proven by recreating and reading prior records
+        - the single-audit-device outage risk is either mitigated with a second device or accepted with a recorded reason
+
+    - packet_id: audit-no-credential-at-image-build
+      order: 590-pce8
+      desired_release: v0.5
+      release_target: credential-lifecycle-audit-milestone
+      title: 'AUDIT: no credential is consumed at image build — not as ARG, not as a build secret, not via a helper'
+      status: ready
+      kind: verification
+      deliverable: build-time audit record + litmus over every Containerfile and build script
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - security
+        - credentials
+        - audit
+        - containers
+        - build
+      estimated_hours: 3
+      outcome: |
+        OPERATOR DIRECTIVE, the strictest clause: "There is no github token available during forge creation at any point... do not build it into the forge anywhere, not even during container creation." This closes the tier the other audits do not cover. A credential absent from a RUNNING container can still have been present while the IMAGE was built — baked into a layer, passed as ARG (which persists in image history), or handed to a helper the Containerfile invokes. That would satisfy every runtime audit while violating the directive. AUDIT: every images/*/Containerfile* for ARG or ENV carrying a credential, any --secret or --mount=type=secret in the build, any script invoked during build that reads Vault or the environment, and the image HISTORY (podman history) for a layer containing a credential. NOTE THE ONE LEGITIMATE CASE and do not flag it wrongly: the DEVELOPMENT HOST may hold credentials for its own purposes (the operator's gh login, pushing releases). The rule is about what enters the IMAGE and the CONTAINER, not about what exists on a developer's machine. This audit also fixes a real risk introduced by good intentions: a proposal to "bake attested tools at build time using the dev host's token" was considered and REJECTED by the operator. A future agent may re-derive that idea as an optimisation; this packet is the guard that catches it.
+      exit_criteria:
+        - no Containerfile passes a credential via ARG, ENV, or a build secret, verified across every images/*/Containerfile*
+        - podman history on each shipped image shows no layer carrying a credential
+        - a litmus fails if a build secret or credential-bearing ARG is added to any Containerfile
+        - the development-host exception is stated so the audit does not produce false positives against the operator's own tooling
+
+    - packet_id: truly-ephemeral-project-checkout-drop-the-host-mount
+      order: 591-x7ws
+      desired_release: v0.5
+      title: 'Remove the host ~/src bind-mount: every forge checks out fresh from cloud into the mirror, then from the mirror into the forge'
+      status: ready
+      kind: implementation
+      multi_cycle: true
+      deliverable: launcher + lib-common checkout path + cross-platform parity doc + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - ephemerality
+        - git-mirror
+        - cross-platform
+        - architecture
+        - windows
+        - macos
+      estimated_hours: 16
+      outcome: |
+        OPERATOR DIRECTION 2026-08-02. The host bind-mount is to go entirely. Instead: a clean checkout from the cloud into the GIT MIRROR every time, then a checkout from the mirror into the forge. Truly ephemeral, truly idempotent, every launch. WHY THIS IS THE RIGHT SHAPE AND NOT JUST TIDIER. Today TILLANDSIAS_PROJECT_HOST_MOUNT=1 bind-mounts the host working tree at /home/forge/src/<project>, and that single decision propagates defects across the whole system. The bind-mounted .git/config carries the host's own origin, so the forge needs rewrite_origin_for_enclave_push to install a container-ephemeral insteadOf rule (lib-common.sh:448-480) purely to undo a problem the mount created. The launcher must seed the forge's branch from whatever branch the HOST checkout happens to sit on (read_host_project_current_branch -> TILLANDSIAS_FORGE_SEED_BRANCH), which is the entire mechanism behind order 531: a checkout parked on main after a release silently pins every later forge to main, which carries no crates/tillandsias-plan/src/answer.rs, so the forge builds a PRE-EXPERT binary and then truthfully reports `experts: ready` while every plan_answer returns confidence=unsupported. Truthful state, wrong artifact. THE OPERATOR'S KEY INSIGHT: with a fresh checkout there IS no ambient branch to inherit, so the whole class disappears rather than being guarded against. Branch selection becomes an explicit orchestration decision made per unit of work — which is what it always should have been. The release skill's non-negotiable "return the checkout to linux-next" step, the forge-expert-base guard, and the seed-branch plumbing all become unnecessary rather than merely satisfied. IT ALSO BITES HARDER OFF-LINUX, which is why the operator raised it now: bind-mount semantics differ on Windows and macOS (path translation, case sensitivity, file locking, uid mapping through a guest VM), so the mount is a recurring source of platform-specific divergence in a project that wants 1:1 feature parity. DOCUMENT CAREFULLY — the operator asked for this explicitly. This change touches every platform's launch path, so the design must be written down before implementation, with the per-platform behaviour stated rather than discovered. Keep the parity matrix honest as it lands. HONEST COSTS TO WEIGH, not to hide. A fresh clone per launch costs time and bandwidth (the mirror makes the second hop local, so the real cost is the cloud->mirror hop, and the mirror can stay warm between launches). And UNCOMMITTED HOST WORK BECOMES INVISIBLE TO A FORGE — today an operator can edit locally and have a forge see it immediately. That is a genuine workflow the mount enables, and removing it must be a deliberate trade with a stated answer for "how do I test a local edit in a forge?", not an oversight discovered later.
+      exit_criteria:
+        - no forge launch path bind-mounts a host working tree; TILLANDSIAS_PROJECT_HOST_MOUNT and its dependent code paths are removed, not merely unused
+        - a forge's branch is selected explicitly by orchestration, never inherited from a host checkout's current branch
+        - the design is documented per-platform BEFORE implementation, and the tray-parity matrix stays all-green on required rows
+        - the answer to 'how do I test an uncommitted local edit in a forge' is written down and works
+        - a litmus proves two consecutive launches of the same project produce byte-identical checkouts from the mirror, regardless of the host checkout's state or branch
+
+    - packet_id: tray-cloud-project-overflow-is-a-dead-end
+      order: 591-33s6
+      desired_release: v0.5
+      title: The tray's 'All cloud projects' overflow item dumps to STDERR — a GUI user clicks it, the menu closes, and nothing happens
+      status: ready
+      kind: bug
+      deliverable: a real project picker (multi-column fan-out if the platform supports it) on all three trays
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - tray
+        - ux
+        - bug
+        - cross-platform
+        - windows
+        - macos
+        - linux
+      estimated_hours: 12
+      outcome: |
+        OPERATOR REPORT 2026-08-02, reproduced in tonight's logs: "the project listing only lists a few projects, and says to click to show them all, however clicking the show more projects resets the tray menu and loses focus, and launching it again still has the collapsed project count." Present on ALL platforms. ROOT CAUSE, verified in source. tray/mod.rs:2935-2946 states it plainly: "Clicking dumps the full list to stderr (see event dispatch on CLOUD_OVERFLOW_ID)." So the overflow item writes to STDERR — which a GUI user never sees — and the menu closes because menus close on click. Nothing changes, so relaunching shows the same collapsed list. From the user's side the control is a no-op that also costs them their menu. THE COMMENT NEXT TO IT ASSERTS THE OPPOSITE and should be corrected in the same change: "The cap + overflow item is the standard pattern for native indicator menus and resolves the user-visible clipping bug on its own." It does not resolve it; it relocates the list somewhere a GUI user cannot reach. There is already a TODO(@tray-overflow) acknowledging the real fix needs window plumbing the tray module does not have — the honest reading is that the clipping bug was never closed. WHAT THE OPERATOR ASKED FOR: investigate MULTI-COLUMN FAN-OUT — a popup/modal submenu with several columns — because "it will be a common scenario for users to have tens of projects in their github accounts." This host shows 23 today, so the cap is already biting in normal use. RESEARCH FIRST, PER PLATFORM, because the tray backends are genuinely different and a design that only works on one breaks parity. Linux is StatusNotifierItem/DBusMenu over zbus, which is why a window does not exist here today; establish what DBusMenu can express (nested submenus? column hints?) and what a GTK picker would cost. macOS NSMenu and Windows Shell_NotifyIcon have their own constraints. If multi-column is not universally available, a scrollable or paginated submenu that WORKS beats a multi-column one that only works on one platform — parity is the constraint, elegance is not. MINIMUM ACCEPTABLE OUTCOME even if the picker slips: clicking the overflow item must do something a user can see, or the item must not be clickable. A control that silently does nothing is worse than an absent one.
+      exit_criteria:
+        - clicking the overflow control produces a visible, usable way to reach every project — verified by a human or a UI-level test, not by reading a log
+        - the same behaviour ships on Linux, macOS and Windows, with the parity matrix updated
+        - the source comment claiming the overflow 'resolves the user-visible clipping bug' is corrected
+        - a multi-column or paginated design is chosen per-platform with its constraints recorded, or multi-column is rejected with a stated reason
+
+    - packet_id: retire-stale-removed-workflow-litmus-assumptions
+      order: 592-5zmn
+      desired_release: v0.5
+      title: Retire stale ci.yml and nix-cache-warm.yml assumptions from pre-build litmuses
+      status: ready
+      kind: fix
+      deliverable: openspec/litmus-tests/litmus-ci-release-toolchain-shape.yaml and openspec/litmus-tests/litmus-nix-cache-size-signal.yaml
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - ci
+        - litmus
+        - github-actions
+      estimated_hours: 1
+      outcome: |
+        The pre-build suite no longer fails because two litmuses require GitHub workflow files that were intentionally removed under the ratified one-workflow Actions budget. Preserve active release/Nix contracts while deleting or replacing assertions over retired workflow surfaces.
+      next_action: |
+        Run each named litmus alone, compare its assertions with litmus:github-actions-budget and methodology CI policy, then remove or redirect only the stale workflow-file checks.
+      exit_criteria:
+        - scripts/run-litmus-test.sh ci-release --phase pre-build passes without requiring .github/workflows/ci.yml
+        - scripts/run-litmus-test.sh nix-builder --phase pre-build passes without requiring .github/workflows/nix-cache-warm.yml
+        - litmus:github-actions-budget remains green and exactly one workflow, release.yml, remains
+      events:
+        - type: filed
+          ts: 2026-08-02T05:37:34Z
+          agent_id: linux-macuahuitl-opencode-20260802T0519Z
+          host: linux
+          summary: |
+            Local-build smoke at 37722dba stopped before reset with both stale workflow assumptions red. Adjacent GitHub Actions budget checks passed; evidence is in build-install-smoke-e2e-findings-2026-08-02.md.
+
+    - packet_id: arm64-native-build-for-fedora-on-raspberry-pi-5
+      order: 593-9y5r
+      desired_release: v0.6
+      title: arm64 Linux native build that runs on the Fedora cloud image on a Raspberry Pi 5 — the 24/7 affinity node
+      status: ready
+      kind: implementation
+      deliverable: aarch64 release artifact + multi-arch images + a Pi 5 bring-up record
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - arm64
+        - raspberry-pi
+        - fedora
+        - containers
+        - release
+        - mesh
+        - headless
+      estimated_hours: 10
+      outcome: |
+        OPERATOR DIRECTION 2026-08-02: an arm64 Linux native binary running on the Fedora cloud image on a Raspberry Pi 5, to serve as the 24/7 AFFINITY BUILD — so a "publish to www.mydomain.com" prompt launches the wired web container on THAT Tillandsias rather than on a laptop that closes at night. This is the vision doc's headline node made real: "a non-technical user logs a Tillandsias into an old computer, plugs it next to a router, and walks away" (plan/issues/operator-vision-ai-cloud-region-2026-07-31.md). HALF OF THIS ALREADY EXISTS, verified in-repo. scripts/build-guest-binaries.sh already produces tillandsias-headless-aarch64-unknown-linux-musl — a STATICALLY LINKED aarch64 ELF, built via Nix (.#tillandsias-headless-aarch64-musl) with a cargo cross-compile fallback, and already checked for arch and static linkage at :58. A static musl binary is exactly the right shape for a Fedora cloud image: no glibc coupling, no runtime deps. ONE REAL CAVEAT ON THAT BINARY: it is built --features listen-vsock, because its current consumer is the guest VM inside the macOS/Windows hosts, where it binds a vsock control wire. A Pi is a FIRST-CLASS HOST, not a guest — it needs the normal host feature set, not the vsock listener. The comment at build-guest-binaries.sh:161-164 warns that mismatched features produce "a guest that boots but never binds the control wire" (order 282); the inverse mistake is equally available here. Decide the Pi's feature set deliberately rather than reusing the guest profile because it is already wired. THE ACTUAL WORK IS THE IMAGES, NOT THE BINARY. Verified: no Containerfile or build script does ANY architecture handling — images are built for the host arch, full stop (scripts/build-image.sh has no platform/arch logic). A Pi needs arm64 images for proxy, router, git, vault, inference, web and forge. The base images are mainstream (fedora-minimal:44, alpine:3.20, hashicorp/vault:1.18, caddy:2-alpine) and very likely publish arm64, but THAT IS UNVERIFIED — a manifest check could not run here because the local proxy was down. Verify each base image's arm64 availability FIRST; if any lacks it, that single image decides the whole approach. SIZE THE INFERENCE LANE HONESTLY. A Pi 5 has no usable LLM accelerator, so the accel envelope will report accel_class=cpu-only — which the work landed 2026-08-01 already handles truthfully rather than pretending. Decide whether the inference container ships on this host class at all; a 4-16 GB Pi running a model while also serving web containers is a different machine from this workstation, and "it technically starts" is not the bar. SCOPE HONESTY, because the operator asked for something "small with near no dependencies": the BINARY is small and independent. The IMAGES are moderate and independent. The AFFINITY ROUTING — "launch the web container on the 24/7 node instead" — is NOT dependency-free: it needs node discovery and a measured uptime-affinity property, which is packet node-discovery-and-uptime-affinity, and cross-node authorization from mesh-identity-plane-research. Ship the Pi as a working host first; route to it second. CANNOT BE VERIFIED UNTIL THE HARDWARE EXISTS (operator is building the infra). Everything above is a plan against the repo as it stands; the Pi 5 bring-up record is the deliverable that closes it.
+      exit_criteria:
+        - a Fedora aarch64 cloud image on a Pi 5 runs the tillandsias binary and brings up the enclave, recorded as a bring-up log with versions
+        - every base image is confirmed to publish arm64 BEFORE image work starts; any that does not is called out with its replacement or a stated blocker
+        - the Pi build's feature set is chosen deliberately and differs from the guest-VM vsock profile where appropriate, with the reason recorded
+        - the inference lane's presence on this host class is an explicit decision, not a default
+        - affinity ROUTING is out of scope here and remains with node-discovery-and-uptime-affinity
+
+    - packet_id: multi-arch-container-image-builds
+      order: 593-vnhm
+      desired_release: v0.6
+      title: Container images are built host-arch only — nothing supports building or publishing arm64
+      status: ready
+      kind: implementation
+      deliverable: arch-aware image build + published multi-arch manifests + litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - containers
+        - arm64
+        - build
+        - release
+        - cross-platform
+      estimated_hours: 8
+      outcome: |
+        VERIFIED 2026-08-02: neither scripts/build-image.sh nor any Containerfile carries platform or architecture handling. Every image is built for whatever the building host happens to be, which on every current host is x86_64. That is invisible today because all hosts share an arch, and it becomes a hard blocker the moment an arm64 host exists — which is exactly what arm64-native-build-for-fedora-on-raspberry-pi-5 needs. Establish first, because it decides the approach: does every base image we depend on publish arm64? fedora-minimal:44, alpine:3.20, hashicorp/vault:1.18, caddy:2-alpine. They are mainstream and probably do, but a manifest check could not be completed here (local proxy down), so this is UNVERIFIED and must not be assumed. One missing arm64 base would redirect the whole design. Then choose between building natively on each arch and cross-building with emulation (podman --platform + qemu-user-static). Emulated builds are slow and can fail in surprising ways for compiled steps; a native builder per arch is faster and more honest but needs a machine. Note the Pi itself could be its own builder, which is slow but removes emulation entirely. Whatever is chosen, the image TAGS must stop implying an arch they do not carry: today a tag like tillandsias-proxy:v0.4.260802.1 silently means x86_64, and pulling it on a Pi would fail or, worse, appear to work under emulation.
+      exit_criteria:
+        - every base image's arm64 availability is confirmed and recorded before any build work
+        - images build for a named target architecture rather than implicitly for the builder's
+        - an image tag cannot be mistaken for multi-arch when it is not — either publish manifests or make the arch explicit in the tag
+        - a litmus fails if a new Containerfile or build path reintroduces implicit host-arch assumptions
+
+    - packet_id: mesh-persistent-storage-substrate-research
+      order: 594-s4g4
+      desired_release: v0.7
+      title: 'Research: transparent persistent storage across a mesh where most nodes are NOT always on'
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - research
+        - storage
+        - mesh
+        - database
+        - durability
+        - vision
+      estimated_hours: 8
+      outcome: |
+        OPERATOR THINKING 2026-08-02, captured as research so it informs what we build now rather than being re-derived later: "I still don't know how to provide transparent persistent pervasive storage. I'm not sure if through a clustered nextcloud, or a single nextcloud in a clustered filesystem, or if I'll glob a filesystem elsewhere, since we'll likely need some CassandraDB, and/or PostgreSQL support. Our users don't need to know anything, they just prompt 'add a database' and it works." FOUR THINGS WORTH PINNING BEFORE ANY OPTION IS EVALUATED, because each one eliminates a candidate that otherwise looks reasonable. (1) ALWAYS-ON IS NOT DURABLE. The Pi5 is being adopted for uptime, not power, and those are different properties. A node that never reboots still loses everything when its storage dies. Conflating the two would put the only copy of a user's data on the machine chosen for being cheap. (2) NEXTCLOUD IS A FILE SYNC APPLICATION, NOT A STORAGE SUBSTRATE FOR DATABASES. Putting live Postgres or Cassandra data files under a syncing directory is not merely suboptimal — concurrent sync against files a database is actively writing corrupts them, and the corruption is usually discovered later, from a backup that also synced. NextCloud may still be right for USER DOCUMENTS; it must not be the answer for database state. Evaluate the two needs separately or the wrong one will decide both. (3) WITH ONE ALWAYS-ON NODE, REPLICATION HAS NOTHING TO REPLICATE TO. Every clustered option — Cassandra's quorum, Ceph, Gluster — assumes several nodes that are simultaneously up. A single Pi plus laptops that close is not that topology. So the honest first phase is ONE DURABLE NODE PLUS VERIFIED BACKUPS, and replication becomes available only when a second and third always-on node exist. Designing for a cluster that does not exist yet would produce something that neither works now nor is simpler later. (4) CASSANDRA AND POSTGRES ARE NOT INTERCHANGEABLE and should not be offered as if they were. Cassandra is AP — it tolerates partitions and suits many-node eventually-consistent workloads. Postgres is CP — single-writer, needing real durable storage and explicit failover. Which one a user gets should follow from what they asked for, not from which we wired first. HARDWARE CONSTRAINT THAT DECIDES A LOT: on a Pi 5, SD-card storage is a poor host for a database — write amplification and wear make sudden, total failure a realistic outcome rather than a tail risk. The Pi 5's PCIe lane and NVMe are the credible option, and that turns a storage decision into a hardware requirement the operator should know before buying. THE QUESTION USERS CANNOT BE ASKED BUT WILL BE DESTROYED BY IS BACKUP. A non-technical user who loses their application's database has lost something unrecoverable and will not have been in a position to prevent it. Under the vision's own standard — "we cannot let users risk things they do not understand" — durability and restore cannot be an option presented in a prompt. They must be automatic, and the RESTORE must be verified, not just the backup: an unverified backup is a belief, not a property.
+      exit_criteria:
+        - the document separates USER DOCUMENT storage from DATABASE state storage and answers them independently
+        - each candidate (clustered nextcloud, nextcloud on a clustered FS, remote/globbed FS, single durable node) is judged against a ONE-always-on-node topology, not an assumed cluster
+        - a phase-1 design exists that works with exactly one always-on node, and states what changes when a second and third arrive
+        - backup AND verified restore are specified as automatic, with the verification method named
+        - the Pi 5 storage medium requirement (NVMe vs SD) is stated as a hardware precondition
+      events:
+        - type: note
+          ts: 2026-08-02T07:30:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260802
+          host: linux_mutable
+          summary: |
+            HARDWARE CORRECTION FROM THE OPERATOR, and it invalidates one of this packet's four founding constraints. I wrote "with one always-on node, replication has nothing to replicate to" and built a phase-1 design around a single durable node. The operator has FIVE Pi 5s, each with a 1 TB NVMe drive — only one is currently set up, manually, on Ubuntu Server. So the topology is not one-node-plus-laptops; it is a five-node always-on cluster with local fast storage, which is a textbook small cluster rather than a degenerate case. WHAT THAT CHANGES. Replication moves from impossible to straightforward: five nodes support replication factor 3 with quorum 2, tolerating two simultaneous failures. Roughly 5 TB raw becomes ~1.6 TB usable at RF=3, which is ample for personal applications. Cassandra's design assumptions are met rather than strained. Ceph and Gluster become arguable rather than absurd. Do NOT design for a single durable node. THE INSIGHT THAT SHOULD SHAPE THE DESIGN, and it argues against the clustered-filesystem options the operator was weighing: DATABASES DO NOT WANT A CLUSTERED FILESYSTEM UNDERNEATH THEM. Cassandra already replicates at the application layer; putting it on Ceph means replicating twice — RF=3 over a 3x-replicated filesystem is nine copies, plus network round-trips on every local write. Both Cassandra and PostgreSQL are explicitly designed to own local disks. Five Pi 5s with local NVMe is exactly the shape both want. SO THE LIKELY SPLIT IS BY WORKLOAD, NOT ONE SUBSTRATE FOR EVERYTHING: DATABASES get local NVMe with application-level replication (Cassandra native; Postgres via streaming replication). FILES — NextCloud, user documents, container volumes — have no application-level replication and DO need a shared or replicated layer, which is where a clustered FS or a single node plus sync earns its place. The operator's instinct that they want "all of them" is right; the discipline is assigning each to the layer it actually serves. THE HARD ONE IS THE TRANSACTIONAL DATABASE, and it deserves a warning rather than a design sketch. The operator wants "one fully hardcore transactional" alongside eventually-consistent ones. PostgreSQL HA is genuinely difficult: automatic failover risks split-brain, and a wrong failover corrupts the very consistency the workload was chosen for. A single well-backed-up Postgres on one NVMe node, with a tested restore, is frequently MORE reliable in practice than a hand-rolled HA cluster — and "hardcore transactional" is precisely the workload where a subtly wrong cluster is worse than an honest single node. Treat multi-node Postgres as a deliberate later step with its own evidence, not as the obvious consequence of owning five machines. BACKUPS ARE DEPRIORITISED BY THE OPERATOR, with a stated reason: "I'm one oauth token away from storing cheap daily/weekly/monthly backups in google drive, so I don't care too much about those yet." Accepted — but this packet's exit criterion about VERIFIED RESTORE stands, because the gap it names is not where backups are stored, it is whether a restore has ever been performed. A Google Drive bucket full of never-restored dumps is the same belief-not-property failure. AND THE PRODUCT FRAMING, worth carrying into every design choice here: "they're like one abstraction layer on top of docker containers and ansible. I don't want to deal with a fleet." The operator currently runs NextCloud, DNS and docker containers on one Pi BY HAND and hates it. The competitor is not a cloud provider; it is manual homelab administration, and the bar is not "works" but "stops being manual".
+
+    - packet_id: add-a-database-one-prompt-capability-research
+      order: 594-xev8
+      desired_release: v0.7
+      title: 'Research: ''add a database'' as a single prompt — what the user never has to know, and what we must therefore decide for them'
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on:
+        - mesh-persistent-storage-substrate-research
+      pickup_role: any
+      capability_tags:
+        - research
+        - ux
+        - database
+        - service-catalog
+        - vision
+      estimated_hours: 6
+      outcome: |
+        OPERATOR GOAL 2026-08-02: "Our users don't need to know anything, they just prompt 'add a database' and it works." This is the service-catalog vision applied to stateful services, and it builds on existing work rather than restarting it: enclave-service-catalog- milestone (353), catalog-multi-service-compose (376) and web-share-release-milestone (373) already cover launching and composing enclave services. What is new here is STATE — a web container can be destroyed and recreated freely; a database cannot. EVERY QUESTION THE USER IS NOT ASKED IS A DECISION WE MAKE FOR THEM, and each should be written down as such rather than defaulted into: which engine, where it runs (the 24/7 node, presumably — but stated, not assumed), how it is reached from a web container, whether it is exposed beyond the enclave (it must not be), how credentials are minted and where they live, how it is backed up, how it is restored, and what happens when the node holding it is unreachable. THE ANSWER TO 'WHICH ENGINE' SHOULD FOLLOW FROM THE PROMPT, not from what is easiest to wire. A user asking for "a database" for a small web app wants Postgres semantics; nobody prompting in plain language is asking for eventual consistency. Offering Cassandra by default because the mesh story favours it would give users a database whose behaviour surprises them. CREDENTIALS ARE THE PART MOST LIKELY TO GO WRONG, given this project's history: a database provisioned by a prompt needs credentials that the web container can use and the agent cannot exfiltrate. The broker pattern already used for git (a component holds the credential, hands out capability) is the precedent to follow, not env injection — which put a GitHub token in podman argv for months (order 359, reversed 2026-08-01). DELETION IS THE DANGEROUS VERB. "Remove the database" from a non-technical user means "I'm done with this app", not "destroy the only copy of my data". Whatever the design, deletion of stateful services needs a different confirmation path than deletion of stateless ones — and probably a recoverable window rather than an immediate destroy.
+      exit_criteria:
+        - every question the user is not asked is enumerated with the decision we make on their behalf and why
+        - engine selection follows from the request, with the default justified against what a plain-language prompt actually means
+        - credentials follow the broker pattern; no database credential reaches an agent lane as an environment variable
+        - deletion of a stateful service is specified with a recovery window, distinct from stateless teardown
+        - the design composes with 353/376/373 rather than introducing a parallel service mechanism
+      events:
+        - type: note
+          ts: 2026-08-02T07:31:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260802
+          host: linux_mutable
+          summary: |
+            OPERATOR CLARIFICATION 2026-08-02: they want BOTH engines, concretely — "some of my github apps use an eventual consistent database, and one fully hardcore transactional". That settles a question this packet had left open: offering both is a real requirement, not a hypothetical. It does NOT settle engine selection by prompt, which stays the harder problem. A user who says "add a database" is not expressing a consistency preference, and defaulting them onto an eventually-consistent engine because the mesh story favours it would hand them behaviour that surprises them later, in production, with data. The default for an unqualified request should be the transactional one; eventual consistency should be reachable but chosen. The operator's own usage is the model: THEY know which app needs which, because they know the workload. A non-technical user does not, so the system must either infer it from what the app does or default safely. Record which, and why.
+
+    - packet_id: fleet-enrollment-one-tillandsia-per-node-research
+      order: 595-6y8b
+      desired_release: v0.7
+      title: 'Research: enroll a fleet of always-on nodes by launching a Tillandsias and logging in — no ansible, no manual setup'
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on:
+        - mesh-identity-plane-research
+        - node-discovery-and-uptime-affinity
+      pickup_role: any
+      capability_tags:
+        - research
+        - mesh
+        - fleet
+        - provisioning
+        - raspberry-pi
+        - vision
+      estimated_hours: 8
+      outcome: |
+        OPERATOR CONTEXT 2026-08-02, and it is the sharpest product framing so far: "they're like one abstraction layer on top of docker containers and ansible. I don't want to deal with a fleet." THE CONCRETE SITUATION: the operator owns FIVE Raspberry Pi 5s, each with a 1 TB NVMe drive, explicitly chosen to be ALWAYS ON rather than fast. One is currently running Ubuntu Server with NextCloud, DNS and assorted docker containers, "handled manually", which they hate. The target flow is: boot a Pi 5 on the Fedora 44 cloud image, launch a Tillandsias, log in, and it joins the mesh as a 24/7 node ready to carry always-on production containers. THE COMPETITOR IS NOT A CLOUD PROVIDER — it is manual homelab administration plus ansible. That sets the bar precisely: not "it works" but "it stops being manual", and enrolling the fifth node must cost the same as enrolling the first. Any design where per-node effort grows with fleet size has failed on its own terms, however elegant. WHAT THIS PACKET MUST ANSWER, none of which is settled: What exactly does "log in" enroll? A node presumably authenticates as the OPERATOR, but thereafter acts as a NODE — those are different principals and the mesh identity work (mesh-identity-plane-research) has to express both. A design where every node holds the operator's own credential is the failure this project has already made once with a GitHub token. What is the trust-on-first-use story? A brand-new headless Pi with no screen must join without the user performing a security ritual they do not understand — that open question is already recorded in the vision doc and lands here concretely. What happens when a node is re-imaged, replaced, or stolen? Enrollment without revocation is half a system, and a stolen always-on node is a credible threat for hardware sitting in a house. Does enrollment need a fleet-wide view at all? The operator does NOT want to manage a fleet, which argues against any dashboard-of-nodes model and in favour of nodes announcing capability and the mesh routing to them — consistent with node-discovery-and-uptime-affinity measuring uptime rather than asking. RELATIONSHIP TO EXISTING WORK, so this does not grow a parallel mechanism: identity comes from mesh-identity-plane-research, discovery and affinity from node-discovery-and-uptime-affinity, the arm64 artifact from arm64-native-build-for-fedora-on-raspberry-pi-5, and the production posture from production-posture-no-network-tunnel-only. This packet owns only the ENROLLMENT experience and what it implies for those.
+      exit_criteria:
+        - enrolling the fifth node costs the same as the first, demonstrated rather than asserted
+        - the distinction between the operator's identity and a node's identity is explicit, and no node holds the operator's own long-lived credential
+        - first-join requires no security ritual a non-technical user cannot perform, or the required interaction is specified and justified
+        - revocation is designed alongside enrollment, including the stolen-node case
+        - no fleet dashboard is required for normal operation; nodes announce, the mesh routes
+
+    - packet_id: nextcloud-as-a-tillandsias-service-research
+      order: 595-ic3d
+      desired_release: v0.7
+      title: 'Research: NextCloud as a managed Tillandsias service on always-on nodes, replacing the operator''s hand-run instance'
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on:
+        - mesh-persistent-storage-substrate-research
+        - enclave-service-catalog-milestone
+      pickup_role: any
+      capability_tags:
+        - research
+        - nextcloud
+        - storage
+        - service-catalog
+        - mesh
+        - vision
+      estimated_hours: 6
+      outcome: |
+        OPERATOR DIRECTION 2026-08-02: "we'll still want NextCloud in a tillandsia at some point, in the 24/7 affinity hosts." This is a real migration target, not a hypothetical — the operator runs NextCloud by hand on a Pi today and wants it managed instead. WHY THIS IS A GOOD FIRST STATEFUL SERVICE, and worth doing before the database work: NextCloud is exactly the workload a shared or replicated FILE layer serves, because unlike Cassandra and PostgreSQL it has no application-level replication of its own. It therefore exercises the file half of the storage substrate honestly, while databases exercise the local-NVMe half. Getting NextCloud right teaches us the file layer without risking transactional data. IT ALSO CARRIES ITS OWN DATABASE, which is the trap. NextCloud needs PostgreSQL or MariaDB underneath, so "add NextCloud" implicitly provisions a database — meaning this packet cannot be designed independently of add-a-database-one-prompt-capability-research, and the database it creates must follow the same broker-pattern credential rules rather than a NextCloud-specific shortcut. MIGRATION IS THE DELIVERABLE, NOT A FRESH INSTALL. The operator has existing data on a hand-run instance. A design that only handles green-field installs leaves them doing the hard part manually, which is the exact thing they are trying to stop doing.
+      exit_criteria:
+        - the file-storage layer NextCloud sits on is chosen against the substrate research, not invented here
+        - the database NextCloud requires is provisioned through the same mechanism as any other, with the same credential discipline
+        - migration from an existing hand-run instance is designed, with the data path stated
+        - the service survives the loss of any single node, or its single-node limitation is stated explicitly
+
+    - packet_id: capability-ladder-and-migration-paths-research
+      order: 596-ygqf
+      desired_release: v0.7
+      title: 'Research: the capability ladder — same interface from one laptop to a cluster, with US running every migration'
+      status: ready
+      kind: research
+      deliverable: plan/issues/ research doc + decision record
+      depends_on:
+        - mesh-persistent-storage-substrate-research
+      pickup_role: any
+      capability_tags:
+        - research
+        - architecture
+        - storage
+        - mesh
+        - ux
+        - vision
+        - migration
+      estimated_hours: 10
+      outcome: |
+        OPERATOR PRINCIPLE 2026-08-02, now recorded canonically in methodology/philosophy.yaml as capability_ladder: "a REAL CLOUD that works (almost) the same with 1 node, or with a few dozens... When the topology grows we make available more robust services. We decide for the user, and provide the migration paths." THIS PACKET EXISTS BECAUSE THE MIGRATIONS ARE THE PRODUCT, and nothing currently specifies even one of them. Neither endpoint is hard: a single Postgres on a single disk is trivial, and a replicated cluster is a solved problem with abundant documentation. Moving a LIVE user's data from the first to the second — automatically, without loss, and without a maintenance window a non-technical user would have to understand — is the part nobody has solved FOR THEM, and it is the part we are promising. ENUMERATE THE RUNGS AND THE TRANSITIONS BETWEEN THEM. Rungs are cheap to list; transitions are where the design lives. At minimum: one laptop (ephemeral, survives an app crash but not the loss of the machine); one always-on node with NVMe (survives reboots and app crashes, not disk death); three-plus always-on nodes (survives losing a node); and beyond that, whatever a genuinely distributed deployment requires. For each TRANSITION, state what moves, who runs it, what the user observes, and what happens if it fails halfway. THE DESIGN CONSTRAINT THAT GOVERNS EVERY DEFAULT: a tier-1 choice must not make tier-3 unreachable. If the single-node default stores data in a shape that cannot later stream-replicate, the very first decision has trapped the user at the bottom of the ladder — and they will discover it precisely when they finally need to grow. Every default must be chosen with its successor already in mind, and this packet should record, per rung, WHAT THE NEXT RUNG REQUIRES OF IT. THE 'ALMOST' MUST BE MADE LEGIBLE, not smoothed over. The interface is topology-independent — "add a database" is the same prompt everywhere — but the GUARANTEES are not. A single laptop cannot survive its own loss. The user must be told what they actually have, in their own language ("this survives your app crashing, not your laptop dying"), because presenting identical guarantees across topologies is exactly how someone loses data while believing they were safe. Under the vision's own standard we may not let users risk what they do not understand — and an unstated durability difference is precisely such a risk. SCOPE DISCIPLINE: this packet does not implement any rung. It produces the ladder, the transitions, and the per-rung obligations that the implementation packets (storage substrate, add-a-database, NextCloud, fleet enrollment) must each satisfy. It is the thing they are measured against, not a competitor to them.
+      exit_criteria:
+        - every rung is named with its concrete durability guarantee stated in user-facing language, not in engineering terms
+        - 'every TRANSITION between adjacent rungs is specified: what moves, who runs it, what the user sees, and the half-failed case'
+        - each rung records what the NEXT rung requires of it, so no default can foreclose a higher rung
+        - at least one transition is proven end to end on real hardware before the ladder is claimed to exist
+        - a rung we cannot implement is not exposed; the doc states which rungs are real today
+
+    - packet_id: forge-launch-disk-headroom-preflight
+      order: 597-fmm2
+      status: ready
+      desired_release: v0.5
+      role: runtime
+      tags:
+        - forge
+        - launcher
+        - preflight
+        - diagnosability
+        - cross-platform
+      title: |
+        Preflight disk headroom before forge/enclave launch and name the cause, instead of surfacing a bare podman exit 125.
+      problem: |
+        VERIFIED 2026-08-03 on linux-mutable: `df /` reports 952G total, 905G used, 44G free — 96%. VERIFIED by grep across crates/tillandsias-headless/src/*.rs and scripts/*.sh: there is NO disk-headroom check anywhere on the launch path — no statvfs, no available-space probe, no free-space guard.
+        A forge image is 3.13GB and the enclave pulls several more. When the volume cannot absorb a layer, podman fails the build or the run, and the user is shown `FORGE_EXIT=125` with no cause. Exit 125 means podman failed BEFORE the container ever executed, so every runtime-side diagnostic an agent reaches for is looking at the wrong layer — the container it wants to inspect was never created.
+        This is the project's named recurring failure in its native habitat: the condition is perfectly visible from the host and completely invisible at the point of use.
+      why_it_matters: |
+        An end user on a full disk currently gets an opaque number. Worse, the remedy an agent reaches for is the order-281 self-heal, which is destructive and does not fix a full disk (see overlay-self-heal-must-not-destroy-durable-volumes).
+      exit_criteria:
+        - |
+            The launch path probes available bytes on the podman graphroot filesystem BEFORE attempting image build or container run, and refuses with a message naming the filesystem, the bytes free, the bytes required, and the shortfall.
+
+        - |
+            The threshold is derived from the actual image set to be materialised, not a hardcoded constant that ages badly.
+
+        - |
+            A litmus test asserts the refusal message shape on a simulated low-space condition — the check must be executable, not prose.
+
+        - |
+            The probe is cross-platform: Linux, the macOS VZ guest, and the Windows guest all run podman inside a guest whose virtual disk can fill independently of the host's. Verify what each platform can actually see.
+
+      notes: |
+        Deliberately NOT auto-pruning. Reclaiming space is the operator's decision: on this host the 905G is overwhelmingly operator data (Games 287G, Steam 126G, tillandsias-bak 234G), and the project's own reclaimable footprint is 14.55GB of stale podman images (507 images, 7 active). A launcher that silently deleted images to make room would be making that call for them. Diagnose and refuse; let the operator choose what goes.
+      events:
+        - type: filed
+          ts: 2026-08-03T19:00:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260803
+          host: linux_mutable
+          summary: |
+            Filed from the FORGE_EXIT=125 triage. Host at 96% (44G free of 952G) and no disk probe exists anywhere on the launch path. Whether disk pressure is THE cause of the current e2e step-3 failure is not yet established — the missing preflight is a defect on its own merits either way.
+
+    - packet_id: overlay-self-heal-must-not-destroy-durable-volumes
+      order: 597-pr4x
+      status: ready
+      desired_release: v0.5
+      role: runtime
+      tags:
+        - forge
+        - podman
+        - data-loss
+        - self-heal
+        - order-281
+        - cross-platform
+      title: |
+        The order-281 overlay self-heal runs `podman system reset --force`, which destroys the git mirror and the forge cache. Narrow it or protect them.
+      problem: |
+        VERIFIED at crates/tillandsias-headless/src/main.rs:1869 — `is_overlay_corruption_error` fires on an error containing BOTH "overlay" and "no such file". VERIFIED at :1902-1929 — `try_overlay_self_heal` then runs `podman system reset --force` once and retries the build once. The one-shot `healed` flag is correct and does prevent an infinite loop; that part of the design is sound.
+        The problem is blast radius, not looping. `podman system reset --force` removes ALL images, containers, networks, AND VOLUMES. VERIFIED via `podman volume ls` on this host, two of those volumes are durable state:
+        
+          * `tillandsias-mirror-tillandsias` — the git mirror. Forge containers push
+            through it as their credential channel (the meta-orchestration
+            Credential Channel Guard names exactly this: "forge containers use a
+            transparent git mirror service for authenticated pushes"). Any forge
+            commit that has reached the mirror but not yet reached origin is
+            destroyed with no signal.
+          * `tillandsias-forge-cache-tillandsias` — the forge cache, including the
+            brew cache the operator explicitly asked to stay warm so sequential
+            forge launches perform only quick upgrades.
+        
+        `podman system df` on this host: 16.13GB of local volumes, 4 active.
+        The trigger and the cause are not the same thing. Order 281's actual cause was a KILLED BUILD leaving a layer reference pointing at a missing diff dir. A build killed by a FULL DISK produces the same signature — and for that cause the reset is both maximally destructive and useless: it frees space, rebuilds, refills the disk, and fails again, having destroyed the mirror and the cache on the way.
+      exit_criteria:
+        - |
+            Before any reset, check disk headroom (shares the probe from forge-launch-disk-headroom-preflight). If the real cause is space, refuse with that diagnosis and do NOT reset.
+
+        - |
+            Replace the blanket `system reset --force` with the narrowest action that clears corrupted overlay state, or explicitly back up / recreate the durable volumes around it. `podman system reset` is a sledgehammer for a layer-reference problem.
+
+        - |
+            Durable volumes are enumerated in ONE place and named as durable, so a future destructive path cannot silently include them.
+
+        - |
+            A litmus test asserts that the self-heal path does not destroy `tillandsias-mirror-*` or `tillandsias-forge-cache-*`.
+
+        - |
+            UNVERIFIED FROM HERE, and the packet must resolve it: whether the mirror can in fact hold commits not yet at origin at the moment a reset fires. If it cannot, the data-loss claim reduces to cache loss and this packet drops in severity — establish which before designing the fix.
+
+      depends_on:
+        - forge-launch-disk-headroom-preflight
+      events:
+        - type: filed
+          ts: 2026-08-03T19:00:00Z
+          agent_id: linux-mutable-macuahuitl-opus5-20260803
+          host: linux_mutable
+          summary: |
+            Filed alongside the headroom preflight. The order-281 self-heal is correctly one-shot but destroys all volumes, including the git mirror (forge push channel) and the forge/brew cache. A disk-full build produces the same overlay signature that triggers it, making the destructive remedy both wrong and ineffective for that cause.
