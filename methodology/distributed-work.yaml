@@ -47,8 +47,9 @@ distributed_work:
           decided_by: "The Tlatoāni, 2026-08-01"
           cheatsheet: cheatsheets/concurrent-git/crdt-ledger-fragments.md
           status: >
-            Reading is IMPLEMENTED and transparent. Compaction is implemented but
-            deliberately FAIL-CLOSED on the real ledger; see the caveat below.
+            Reading is IMPLEMENTED and transparent. Compaction is IMPLEMENTED,
+            text-level, and proven on the real ledger as of 2026-08-03; see
+            compaction_is_text_level below.
           history: >
             This rule was written 2026-05-25 and the implementation contradicted
             it for over two months: one monolithic plan/index.yaml that every
@@ -92,17 +93,26 @@ distributed_work:
             the most likely way to lose data in this design. Compaction is
             OPTIONAL and must never sit on the critical path of filing work: an
             uncompacted ledger is slower to read, never wrong.
-          caveat_compaction_is_fail_closed: >
-            VERIFIED 2026-08-01: serde_yaml is not format-preserving. It DROPS
-            COMMENTS (plan/index.yaml carries ~120, including ratified operator
-            decisions recorded inline) and re-indents list items to column 0,
-            while edit::append_event locates packets by a literal four-space
-            prefix — so a round-tripped ledger would silently stop accepting
-            events on every packet. Compaction therefore REFUSES on a base with
-            comments or indented items and says so. Do not relax that guard to
-            make the tool run; make compaction format-preserving instead (packet
-            format-preserving-ledger-compaction), reusing the text-level
-            edit module rather than round-tripping YAML.
+          compaction_is_text_level: >
+            RESOLVED 2026-08-03 (order 582-4wdi, commit 81e12b65). Compaction is
+            TEXT-LEVEL: it never re-serializes the base, so existing bytes are
+            untouched by construction. First real-ledger run folded 28 fragments
+            with 120 comment lines preserved exactly, 535 packets preserved, and
+            a plan/index.yaml diff of 1021 added lines and ZERO removed lines.
+            That zero is the invariant to protect. The candidate base must still
+            PARSE and pass the integrity gate before it may replace the base; a
+            malformed merge REFUSES with the base unchanged.
+          history_why_it_was_fail_closed: >
+            VERIFIED 2026-08-01, retained because it is the regression to guard
+            against: serde_yaml is not format-preserving. It DROPS COMMENTS
+            (plan/index.yaml carries ~120, including ratified operator decisions
+            recorded inline) and re-indents list items to column 0, while
+            edit::append_event locates packets by a literal four-space prefix —
+            so a round-tripped ledger silently stops accepting events on every
+            packet. Compaction refused for two months rather than fold lossily,
+            and that refusal was correct. If compaction ever regresses to
+            round-tripping YAML, restore the refusal; do not accept a lossy fold
+            to make the tool run.
         exceptions:
           - "Status fields in YAML index files (plan/index.yaml) ARE
             last-writer-wins; this is the trade-off for queryability.

@@ -313,11 +313,19 @@ Two rules, both easy to get wrong:
 - **Compaction deletes only the fragments it folded, by name.** Never
   `rm plan/index.d/*`. A fragment another host wrote while you were compacting
   has not been folded, and removing it silently destroys their work.
-- **`compact` currently REFUSES on the real ledger, and that is correct.**
-  `serde_yaml` drops comments (there are ~120, including recorded operator
-  decisions) and re-indents items so `append-event` stops finding packets. Do
-  not "fix" the refusal by relaxing the guard; the fix is format-preserving
-  compaction (packet `format-preserving-ledger-compaction`).
+- **Compaction is TEXT-LEVEL and never re-serializes the base.** It ran on the
+  real ledger for the first time on 2026-08-03 (order 582-4wdi, commit 81e12b65):
+  28 fragments folded, 120 comment lines preserved exactly, 535 packets
+  preserved, and the `plan/index.yaml` diff was 1021 added lines and **zero
+  removed lines**. That zero is the property to protect — existing base bytes are
+  untouched by construction, so the inline operator decisions and the four-space
+  item prefix `append-event` locates by cannot be lost by a fold.
+
+  It refused for months before that, correctly: a `serde_yaml` round-trip drops
+  comments and re-indents items to column 0, after which `append-event` silently
+  stops finding packets. If compaction ever regresses to round-tripping YAML,
+  restore the refusal rather than accepting a lossy fold. The candidate base must
+  still PARSE and pass the integrity gate before it may replace the base.
 
 If `malformed=N` is non-zero, a fragment did not parse and was SKIPPED — its
 contents are absent from every answer. Treat that as a finding, not noise.

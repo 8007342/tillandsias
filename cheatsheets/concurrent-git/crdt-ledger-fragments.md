@@ -2,7 +2,7 @@
 tags: [crdt, concurrency, ledger, append-only, compaction, merge, distributed]
 languages: [yaml, rust, bash]
 since: 2026-08-01
-last_verified: 2026-08-01
+last_verified: 2026-08-03
 sources:
   - methodology/distributed-work.yaml
   - https://inria.hal.science/inria-00555588/document
