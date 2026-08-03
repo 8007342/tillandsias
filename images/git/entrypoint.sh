@@ -106,7 +106,16 @@ fi
 if [ "${TILLANDSIAS_YAML_GATE_EXEMPT_REFS+set}" != "set" ]; then
     TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*'
 fi
+# CI workflow budget (order 598). UNSET-ONLY like the rest: an end-user project
+# that legitimately runs its own GitHub Actions exports this EMPTY and the gate
+# disappears. For Tillandsias, release.yml is the only workflow permitted to
+# consume paid minutes — signing needs GitHub secrets, everything else runs on
+# local hardware via scripts/release-preflight.sh and the pre-push gate.
+if [ "${TILLANDSIAS_CI_WORKFLOW_ALLOWLIST+set}" != "set" ]; then
+    TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml'
+fi
 export TILLANDSIAS_BRANCH_CREATION_REGEX TILLANDSIAS_BRANCH_GRAMMAR_HINT TILLANDSIAS_YAML_GATE_EXEMPT_REFS
+export TILLANDSIAS_CI_WORKFLOW_ALLOWLIST
 if [ -n "$TILLANDSIAS_BRANCH_CREATION_REGEX" ]; then
     echo "[git-service] branch-name grammar active (warn-only, rung 2); yaml-gate exempt refs: ${TILLANDSIAS_YAML_GATE_EXEMPT_REFS:-none}"
 else

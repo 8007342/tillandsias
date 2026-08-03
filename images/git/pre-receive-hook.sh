@@ -155,6 +155,65 @@ warn_if_outside_branch_grammar() {
     return 0
 }
 
+# --- CI workflow budget (order 598, operator directive 2026-08-03) ---
+# @trace spec:git-mirror-service
+#
+# "ONLY the actual release needs to run in the cloud, since it uses github
+# secrets for signing some binaries, everything else runs locally."
+#
+# CONFIG-DRIVEN and convention-neutral, like the branch grammar above: the hook
+# hard-codes no filenames. Absent config = no gate, which is byte-identical to
+# this hook's prior behavior and correct for an end-user repo that legitimately
+# runs its own CI.
+#
+#   TILLANDSIAS_CI_WORKFLOW_ALLOWLIST  Space-separated shell glob(s) matched
+#                                      against the BASENAME of any changed file
+#                                      under .github/workflows/. A file whose
+#                                      basename matches none of them is
+#                                      REJECTED.
+#
+# Rejection, not a warning — unlike the branch grammar. A warning here would be
+# indistinguishable from no gate: the push would still land, the workflow would
+# still fire, and the minutes would still be spent. The failure this prevents
+# already happened once (nix-cache-warm.yml kept firing from the default branch
+# for two days after it was "removed").
+#
+# Returns 0 when the path is fine (not a workflow, or an allowed one).
+workflow_path_is_allowed() {
+    local path="$1"
+    local base pattern
+
+    [ -n "${TILLANDSIAS_CI_WORKFLOW_ALLOWLIST:-}" ] || return 0
+
+    case "$path" in
+        .github/workflows/*) ;;
+        *) return 0 ;;
+    esac
+
+    # TOP-LEVEL ONLY. A shell `case` glob matches `/`, so a naive
+    # `.github/workflows/*.yml` also catches `.github/workflows/nested/x.yml`.
+    # GitHub only executes workflow files at the top level of that directory, so
+    # a nested file consumes no minutes and rejecting it would be a false
+    # positive against legitimate content.
+    base="${path#.github/workflows/}"
+    case "$base" in
+        */*) return 0 ;;
+    esac
+
+    case "$base" in
+        *.yml|*.yaml) ;;
+        *) return 0 ;;
+    esac
+    for pattern in $TILLANDSIAS_CI_WORKFLOW_ALLOWLIST; do
+        # shellcheck disable=SC2254
+        # Unquoted on purpose: the config supplies shell glob patterns.
+        case "$base" in
+            $pattern) return 0 ;;
+        esac
+    done
+    return 1
+}
+
 ref_is_gate_exempt() {
     local refname="$1"
     local pattern
@@ -262,6 +321,24 @@ while read -r OLDSHA NEWSHA REFNAME; do
     # Check each changed file (process substitution, not pipe, to avoid subshell)
     while IFS= read -r FILEPATH; do
         [ -n "$FILEPATH" ] || continue
+
+        # CI workflow budget gate. Rejecting HERE is uniquely effective: the
+        # mirror relays the transaction upstream only after accepting it
+        # locally, so a workflow file stopped at this point never reaches the
+        # forge host and therefore can never trigger a paid run. A local hook
+        # can be --no-verify'd; this cannot.
+        # A DELETION also appears in `git diff --name-only`, so gate only paths
+        # that still EXIST in the new tree. Without this, removing a workflow
+        # would be rejected — the gate would block the very cleanup it exists to
+        # protect, and the only way to comply would be to bypass it.
+        if git cat-file -e "$NEWSHA:$FILEPATH" 2>/dev/null; then
+            if ! workflow_path_is_allowed "$FILEPATH"; then
+                log_msg "REJECT: $FILEPATH is not an allowed CI workflow"
+                log_msg "REJECT: allowed: ${TILLANDSIAS_CI_WORKFLOW_ALLOWLIST:-<none>}"
+                : > "$REJECT_MARKER"
+            fi
+        fi
+
         is_ledger_yaml "$FILEPATH" || continue
         is_legacy_archive "$FILEPATH" && continue
 
