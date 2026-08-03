@@ -2964,7 +2964,7 @@ fn build_git_run_args(
 fn detect_inference_tier() -> &'static str {
     #[cfg(target_os = "macos")]
     {
-        return "metal";
+        "metal"
     }
     #[cfg(not(target_os = "macos"))]
     {

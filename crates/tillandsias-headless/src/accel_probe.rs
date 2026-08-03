@@ -160,8 +160,13 @@ fn enumerate_cpu() -> DeviceRecord {
     let mut flags = Vec::new();
     let physical_cores;
     let logical_cores;
+    // Only the Linux probe mutates these defaults incrementally; the macOS arm
+    // overwrites them wholesale, so off-Linux the initializers are never read.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut ram_gb = None;
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut cpu_name = "Host CPU".to_string();
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut, unused_assignments))]
     let mut vendor = "unknown".to_string();
 
     #[cfg(target_os = "linux")]
@@ -241,6 +246,11 @@ fn enumerate_cpu() -> DeviceRecord {
 // @trace spec:accel-capability-probe
 fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
     let mut gpus = Vec::new();
+
+    // Only the Linux arm consults the tier (CDI container-deliverability);
+    // the macOS arm is host-native only by spec (PROBE-7).
+    #[cfg(not(target_os = "linux"))]
+    let _ = effective_tier;
 
     #[cfg(target_os = "macos")]
     {
@@ -405,6 +415,8 @@ fn enumerate_npus() -> Vec<DeviceRecord> {
 
 // @trace spec:accel-capability-probe
 fn enumerate_host() -> HostInfo {
+    // Only the Linux power-supply scan can flip this; other hosts keep false.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
     let mut battery = false;
 
     #[cfg(target_os = "linux")]
@@ -450,6 +462,7 @@ fn num_cpus() -> u32 {
         .unwrap_or(1)
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn physical_core_count() -> Option<u32> {
     #[cfg(target_os = "linux")]
     {
@@ -584,6 +597,7 @@ pub fn accel_envelope(doc: &CapabilityDocument) -> String {
 ///
 /// Falls back to the whole line when the shape does not match, so an unexpected
 /// `nvidia-smi` format degrades to "noisy" rather than "empty".
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 fn nvidia_model_name(line: &str) -> String {
     let after_index = line.split_once(": ").map(|(_, rest)| rest).unwrap_or(line);
     let without_uuid = after_index
