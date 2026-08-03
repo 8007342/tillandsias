@@ -570,6 +570,7 @@ specs:
   - litmus:large-packet-eligibility-doctrine-shape
   - litmus:version-release-and-forge-selfservice-shape
   - litmus:ephemerality-invariant-shape
+  - litmus:release-gates-run-locally
   coverage_ratio: 100
   last_verified: '2026-08-03'
 - spec_id: meta-orchestration

@@ -255,6 +255,43 @@ if [[ -n "$CI_SPEC_LIST" ]]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Git hooks: install them, do not merely ship them
+# ---------------------------------------------------------------------------
+# scripts/install-hooks.sh has existed for months and .git/hooks/ was EMPTY on
+# this checkout — every hook the repo ships was inert because installing them
+# was a manual step nobody performed. That is the exact shape of enforcement the
+# operator ruled out: "we should not be asking agents each time to follow git
+# methodology by chance."
+#
+# Since push CI was removed (2026-08-03) the pre-push gate is the trunk's only
+# automated protection, so shipping it uninstalled is indistinguishable from not
+# having it. Every build.sh invocation now ensures it is wired.
+#
+# Silent when already correct; never fatal — a hook-install failure must not
+# block a build, only report itself.
+_ensure_git_hooks_installed() {
+    [[ -d "$SCRIPT_DIR/.git" || -f "$SCRIPT_DIR/.git" ]] || return 0
+    [[ -f "$SCRIPT_DIR/scripts/install-hooks.sh" ]] || return 0
+    # Forge containers quarantine core.hooksPath deliberately; do not fight it.
+    [[ "${TILLANDSIAS_HOST_KIND:-}" == "forge" ]] && return 0
+
+    local hooks_dir out
+    hooks_dir="$(git -C "$SCRIPT_DIR" rev-parse --absolute-git-dir 2>/dev/null)/hooks"
+    if [[ -f "$hooks_dir/pre-push" ]] \
+        && grep -qF "tillandsias-pre-push-v2" "$hooks_dir/pre-push" 2>/dev/null; then
+        return 0
+    fi
+    if out="$(bash "$SCRIPT_DIR/scripts/install-hooks.sh" 2>&1)"; then
+        _info "Git hooks installed (pre-push gate is now active)"
+    else
+        _warn "Git hook install did not complete; pushes are UNGATED until it does"
+        _warn "  run: scripts/install-hooks.sh"
+    fi
+    return 0
+}
+_ensure_git_hooks_installed
+
 _forge_check_only_without_host_podman_setup() {
     [[ "${TILLANDSIAS_HOST_KIND:-}" == "forge" ]] || return 1
     [[ "$FLAG_CHECK" == true ]] || return 1
@@ -883,6 +920,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
         exit 1
     fi
     _info "Plan order uniqueness passed"
+
+    # Record that the gate passed against THIS exact tree. The pre-push hook
+    # verifies this stamp instead of re-running the whole gate: a multi-minute
+    # hook gets --no-verify'd on its second use and then enforces nothing, while
+    # hashing the diff costs milliseconds for the same guarantee. Push CI was
+    # removed 2026-08-03, so this is the trunk's only remaining protection.
+    if [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
+        bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1 \
+            && _info "Gate stamp recorded (pre-push will accept this tree)" \
+            || _warn "Could not record gate stamp — pre-push may ask you to re-run --check"
+    fi
 
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
