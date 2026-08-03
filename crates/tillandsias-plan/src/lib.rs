@@ -92,11 +92,11 @@ pub struct Ledger {
     source_path: Option<PathBuf>,
 }
 
-fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
+pub fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
     packet.get(key).and_then(Value::as_str)
 }
 
-fn str_list(packet: &Value, key: &str) -> Vec<String> {
+pub fn str_list(packet: &Value, key: &str) -> Vec<String> {
     packet
         .get(key)
         .and_then(Value::as_sequence)

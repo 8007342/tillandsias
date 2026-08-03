@@ -6,7 +6,9 @@
 //! @trace spec:spec-traceability
 
 use std::path::{Path, PathBuf};
-use tillandsias_plan::{Ledger, Schema, answer, edit, groundtruth, loop_status, methodology, spec};
+use tillandsias_plan::{
+    Ledger, Schema, answer, edit, groundtruth, loop_status, methodology, spec, str_field, str_list,
+};
 
 /// ORDER 569. The capability manifest, embedded from the crate's own
 /// `capabilities.txt` at COMPILE TIME.
@@ -57,6 +59,15 @@ const USAGE: &str = concat!(
     "           blocked-by <id|order>     packets directly blocked by X\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
     "           ready [role]              ready packets (optionally for a pickup role)\n",
+    "           query [--status S] [--role R] [--tag T]... [--limit N] [--json]\n",
+    "                                     ORDER 582-26mm. THE generic filtered reader over the\n",
+    "                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only\n",
+    "                                     correct way to enumerate packets by status / pickup_role /\n",
+    "                                     capability_tags. project-info plan_query and drain-queue\n",
+    "                                     both route here; a reader that forgets fragments reports a\n",
+    "                                     stale ledger with total confidence. TSV by default\n",
+    "                                     (order<TAB>packet_id<TAB>desired_release<TAB>tags); --json\n",
+    "                                     emits the plan_query projection array.\n",
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
     "           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n",
@@ -278,6 +289,44 @@ fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
         .and_then(serde_yaml::Value::as_str)
         .unwrap_or("?");
     format!("{order}\t{status}\t{id}")
+}
+
+/// ORDER 582-26mm. Filter the FOLDED ledger by status (exact), pickup_role
+/// (case-insensitive substring), capability_tags (every given tag must be
+/// present), then cap at `limit`. Reproduces project-info.sh plan_query's
+/// contract so the yq/jq direct reader could be retired without changing what
+/// the MCP tool returns. `limit == 0` is treated as "no cap" so a caller can
+/// ask for every match.
+fn query_packets<'a>(
+    ledger: &'a Ledger,
+    status: Option<&str>,
+    role: Option<&str>,
+    tags: &[String],
+    limit: usize,
+) -> Vec<&'a serde_yaml::Value> {
+    ledger
+        .packets
+        .iter()
+        .filter(|p| match status {
+            Some(s) => str_field(p, "status") == Some(s),
+            None => true,
+        })
+        .filter(|p| match role {
+            Some(r) => {
+                let want = r.to_ascii_lowercase();
+                str_field(p, "pickup_role")
+                    .map(|pr| pr.to_ascii_lowercase().contains(&want))
+                    .unwrap_or(false)
+            }
+            None => true,
+        })
+        .filter(|p| {
+            let have = str_list(p, "capability_tags");
+            tags.iter().all(|t| have.contains(t))
+        })
+        .filter(|_| limit == 0 || true)
+        .take(if limit == 0 { usize::MAX } else { limit })
+        .collect()
 }
 
 /// Distinguish "resolves, blocks nothing" from "does not resolve" for the
@@ -1361,6 +1410,113 @@ fn main() {
                 emit(&line(&ledger, p));
             }
         }
+        "query" => {
+            // ORDER 582-26mm. The generic filtered reader over the FOLDED
+            // ledger — the single correct way to enumerate packets by
+            // status/role/tag without opening plan/index.yaml directly.
+            // project-info.sh's plan_query (yq) and drain-queue.sh (awk) both
+            // read the BASE only and reported a stale ledger with total
+            // confidence; both now route here. The filter semantics below
+            // reproduce plan_query's contract exactly: exact status, pickup_role
+            // as a case-insensitive substring, capability_tags all-must-match,
+            // then a limit.
+            let mut status: Option<String> = None;
+            let mut role: Option<String> = None;
+            let mut tags: Vec<String> = Vec::new();
+            let mut limit: usize = 20;
+            let mut json = false;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--status" => {
+                        i += 1;
+                        status = args.get(i).cloned();
+                    }
+                    "--role" => {
+                        i += 1;
+                        role = args.get(i).cloned();
+                    }
+                    "--tag" => {
+                        i += 1;
+                        if let Some(t) = args.get(i) {
+                            tags.push(t.clone());
+                        }
+                    }
+                    "--limit" => {
+                        i += 1;
+                        if let Some(n) = args.get(i).and_then(|s| s.parse().ok()) {
+                            limit = n;
+                        }
+                    }
+                    "--json" => json = true,
+                    other => {
+                        eprintln!("error: unknown query flag: {other}");
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+            let matched = query_packets(&ledger, status.as_deref(), role.as_deref(), &tags, limit);
+            if json {
+                let arr: Vec<serde_json::Value> = matched
+                    .iter()
+                    .map(|p| {
+                        let mut obj = serde_json::Map::new();
+                        for key in [
+                            "packet_id",
+                            "order",
+                            "title",
+                            "status",
+                            "kind",
+                            "pickup_role",
+                            "capability_tags",
+                            "deliverable",
+                            "depends_on",
+                        ] {
+                            if let Some(v) = p.get(key) {
+                                obj.insert(
+                                    key.to_string(),
+                                    serde_json::to_value(v).unwrap_or(serde_json::Value::Null),
+                                );
+                            }
+                        }
+                        serde_json::Value::Object(obj)
+                    })
+                    .collect();
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::Value::Array(arr))
+                        .unwrap_or_else(|_| "[]".to_string())
+                );
+            } else {
+                for p in matched {
+                    let id = ledger.id_of(p);
+                    let order = p
+                        .get("order")
+                        .map(|v| match v {
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            serde_yaml::Value::String(s) => s.clone(),
+                            _ => "?".into(),
+                        })
+                        .unwrap_or_else(|| "?".into());
+                    let release = p
+                        .get("desired_release")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    let tags = p
+                        .get("capability_tags")
+                        .and_then(serde_yaml::Value::as_sequence)
+                        .map(|s| {
+                            s.iter()
+                                .filter_map(serde_yaml::Value::as_str)
+                                .collect::<Vec<_>>()
+                                .join(",")
+                        })
+                        .unwrap_or_default();
+                    emit(&format!("{order}\t{id}\t{release}\t{tags}"));
+                }
+            }
+        }
         "ready" => {
             for p in ledger.ready(args.get(1).map(String::as_str)) {
                 emit(&line(&ledger, p));
@@ -1711,5 +1867,60 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// ORDER 582-26mm. The generic filtered reader must reproduce plan_query's
+    /// filter contract EXACTLY: exact status, pickup_role as a case-insensitive
+    /// substring, capability_tags all-must-match, then a limit. These are the
+    /// semantics project-info's yq/jq pipeline used, so routing that surface
+    /// through the CLI changes nothing about what the MCP tool answers.
+    #[test]
+    fn query_packets_reproduces_plan_query_filter_semantics() {
+        let led = Ledger::parse(
+            "plan_index:\n  steps:\n\
+             \x20 - packet_id: p1\n    order: 1\n    status: ready\n    pickup_role: linux\n    capability_tags: [plan, crdt]\n\
+             \x20 - packet_id: p2\n    order: 2\n    status: blocked\n    pickup_role: windows\n    capability_tags: [plan]\n\
+             \x20 - packet_id: p3\n    order: 3\n    status: ready\n    pickup_role: Linux-Mutable\n    capability_tags: [crdt, plan]\n\
+             \x20 - packet_id: p4\n    order: 4\n    status: ready\n    capability_tags: []\n",
+            Default::default(),
+        )
+        .expect("parse");
+
+        // Exact status only.
+        let ready = query_packets(&led, Some("ready"), None, &[], 0);
+        assert_eq!(ids(ready), vec!["p1", "p3", "p4"]);
+
+        // pickup_role is a case-insensitive SUBSTRING.
+        let linux = query_packets(&led, None, Some("linux"), &[], 0);
+        assert_eq!(ids(linux), vec!["p1", "p3"]);
+
+        // capability_tags all-must-match, independent of order in the list.
+        let crdt_plan = query_packets(&led, None, None, &["plan".into(), "crdt".into()], 0);
+        assert_eq!(ids(crdt_plan), vec!["p1", "p3"]);
+
+        // Combined filters narrow the set.
+        let combo = query_packets(&led, Some("ready"), Some("linux"), &["crdt".into()], 0);
+        assert_eq!(ids(combo), vec!["p1", "p3"]);
+
+        // Limit caps the result.
+        let limited = query_packets(&led, Some("ready"), None, &[], 2);
+        assert_eq!(ids(limited), vec!["p1", "p3"]);
+
+        // A packet with no capability_tags matches a tag filter only if the
+        // filter is empty.
+        let empty_tag = query_packets(&led, Some("ready"), None, &["plan".into()], 0);
+        assert_eq!(ids(empty_tag), vec!["p1", "p3"]);
+    }
+
+    fn ids(packets: Vec<&serde_yaml::Value>) -> Vec<String> {
+        packets
+            .iter()
+            .map(|p| {
+                p.get("packet_id")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap()
+                    .to_string()
+            })
+            .collect()
     }
 }

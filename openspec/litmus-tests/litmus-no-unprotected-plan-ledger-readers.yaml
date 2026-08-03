@@ -1,0 +1,98 @@
+# @trace spec:methodology-accountability
+# @trace order:582-26mm (mcp-and-expert-read-paths-use-the-fragment-overlay)
+#
+# Pins that EVERY content reader of plan/index.yaml sees the FOLDED ledger
+# (base ⊕ plan/index.d/ fragments), never the base alone.
+#
+# WHY BEHAVIOURAL AND NOT A SINGLE GREP. The failure being pinned is
+# DISAGREEMENT: if forge-plan's plan_answer says a packet exists and
+# project-info's plan_query says it does not, an agent cannot tell which
+# surface is lying, and both look authoritative. Each surface is therefore
+# exercised against the REAL binary on a fragment-only packet — the one packet
+# a base-only reader is GUARANTEED to miss.
+#
+# The regression that would recur: someone reads plan/index.yaml with yq/awk/
+# ruby to "get the plan faster", the fragment files stay invisible, and the
+# MCP/expert/drain surfaces quietly diverge. The scan gate
+# (scripts/check-plan-ledger-readers.sh) fails when a NEW direct reader appears
+# (exit criterion 3); the behavioural steps prove the two rerouted surfaces
+# (project-info plan_query, drain-queue) now see a fragment-only packet (exit
+# criterion 2).
+name: litmus:no-unprotected-plan-ledger-readers
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Every content reader of plan/index.yaml must be overlay-aware (routes through
+  the compiled tillandsias-plan CLI, which folds base + plan/index.d/
+  fragments) or explicitly base-only-with-reason. The scan gate fails when a
+  new direct reader appears; plan_query --json and drain-queue must both surface
+  a fragment-only ready packet; the `query` capability is declared and the unit
+  test for its filter semantics is green.
+severity: high
+size: quick
+
+preconditions:
+  - cargo toolchain available (the steps execute the real binary, not its source text)
+  - repository contains crates/tillandsias-plan/src/main.rs
+  - repository contains scripts/check-plan-ledger-readers.sh
+
+critical_path:
+  # ── (a) the scan gate: every reader is overlay-aware or base-only-with-reason ──
+  - step: "GATE: the reader scan passes on a healthy tree (every reader is overlay-aware or base-only-with-reason)"
+    command: "set -e; out=$(bash scripts/check-plan-ledger-readers.sh 2>&1); rc=$?; test $rc -eq 0; printf '%s' \"$out\" | grep -q 'ok: every reader' && echo 'ok: reader-scan-clean'"
+    timeout_ms: 30000
+    expected_behavior: "ok: reader-scan-clean"
+
+  - step: "GATE (negative control): the SAME scan FAILS when a new unprotected direct reader appears"
+    command: "W=$(mktemp -d); printf '%s\\n' '#!/usr/bin/env bash' 'result=$(yq -o=json . plan/index.yaml)' 'echo \"$result\"' > \"$W/new-reader.sh\"; cp \"$W/new-reader.sh\" scripts/.probe-new-direct-reader.sh; out=$(bash scripts/check-plan-ledger-readers.sh 2>&1); rc=$?; rm -f scripts/.probe-new-direct-reader.sh; cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'unprotected direct reader' && echo 'ok: scan-fails-on-new-direct-reader'"
+    timeout_ms: 30000
+    expected_behavior: "ok: scan-fails-on-new-direct-reader"
+
+  # ── (b) project-info plan_query routes through the CLI ──────────────────────
+  - step: "PIN: project-info.sh no longer opens plan/index.yaml with yq, and its plan_query routes through the compiled CLI"
+    command: "set -e; if grep -n 'plan_query' images/default/config-overlay/mcp/project-info.sh | grep -q 'yq'; then echo 'FAIL: plan_query still has a yq read'; exit 1; fi; grep -Fq 'query \"${_qargs[@]}\"' images/default/config-overlay/mcp/project-info.sh && grep -q 'resolve_plan_bin' images/default/config-overlay/mcp/project-info.sh && echo 'ok: plan-query-routes-through-cli'"
+    timeout_ms: 10000
+    expected_behavior: "ok: plan-query-routes-through-cli"
+
+  - step: "PIN: drain-queue.sh extract_ready_packets routes through the CLI (the scan gate already forbids any awk read of plan/index.yaml)"
+    command: "set -e; grep -q 'query --status ready --limit 0' scripts/drain-queue.sh && echo 'ok: drain-queue-routes-through-cli'"
+    timeout_ms: 10000
+    expected_behavior: "ok: drain-queue-routes-through-cli"
+
+  # ── (c) a fragment-only packet is visible through the overlay-aware readers ──
+  - step: "BEHAVIOURAL: `query --json` sees a packet that EXISTS ONLY as a fragment (a base-only reader is guaranteed to miss it)"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/index.d\"; printf '%s\\n' 'packets: []' > \"$W/plan/index.yaml\"; printf '%s\\n' 'packets:' '  - packet_id: frag-only-probe' '    order: 999-zzz' '    title: fragment only' '    status: ready' '    kind: fix' '    pickup_role: linux' '    capability_tags: [probe]' '    deliverable: probe' '    depends_on: []' > \"$W/plan/index.d/20260803t010000z-frag-probe-linux.yaml\"; J=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/index.yaml\" query --status ready --tag probe --limit 1 --json 2>&1); rc=$?; cd /; rm -rf \"$W\"; test $rc -eq 0 && printf '%s' \"$J\" | grep -q 'frag-only-probe' && printf '%s' \"$J\" | grep -q '999-zzz' && echo 'ok: fragment-only-packet-visible-through-query-json'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fragment-only-packet-visible-through-query-json"
+
+  - step: "NEGATIVE CONTROL: the same packet is INVISIBLE to a base-only yq read — the disagreement the overlay exists to kill"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/index.d\"; printf '%s\\n' 'packets: []' > \"$W/plan/index.yaml\"; printf '%s\\n' 'packets:' '  - packet_id: frag-only-probe' '    order: 999-zzz' '    title: fragment only' '    status: ready' '    kind: fix' '    pickup_role: linux' '    capability_tags: [probe]' '    deliverable: probe' '    depends_on: []' > \"$W/plan/index.d/20260803t010000z-frag-probe-linux.yaml\"; B=$(yq '.packets[] | .packet_id' \"$W/plan/index.yaml\" 2>/dev/null || true); cd /; rm -rf \"$W\"; if [ -z \"$B\" ] || ! printf '%s' \"$B\" | grep -q 'frag-only-probe'; then echo 'ok: base-only-reader-cannot-see-fragment'; else echo 'FAIL: base-only reader saw the fragment (fixture wrong)'; exit 1; fi"
+    timeout_ms: 30000
+    expected_behavior: "ok: base-only-reader-cannot-see-fragment"
+
+  # ── (d) capability + unit-test pins ─────────────────────────────────────────
+  - step: "PIN: the `query` capability is DECLARED and dispatches"
+    command: "set -e; grep -qx query crates/tillandsias-plan/capabilities.txt || { echo 'token query missing from manifest'; exit 1; }; cargo run --quiet --release -p tillandsias-plan -- capabilities | grep -qx query && echo 'ok: query-capability-declared-and-dispatchable'"
+    timeout_ms: 300000
+    expected_behavior: "ok: query-capability-declared-and-dispatchable"
+
+  - step: "PIN: the query filter-semantics unit test is green"
+    command: "cargo test --quiet --release -p tillandsias-plan --bin tillandsias-plan query_packets_reproduces_plan_query_filter_semantics 2>&1 | grep -q 'test result: ok' && echo 'ok: query-filter-semantics-test-green'"
+    timeout_ms: 300000
+    expected_behavior: "ok: query-filter-semantics-test-green"
+
+failure_modes:
+  - "a new direct reader of plan/index.yaml appears (yq/awk/ruby) and reports the base-only ledger with total confidence"
+  - "project-info plan_query regresses to a yq read, so forge-plan and project-info disagree about what the plan says"
+  - "drain-queue regresses to an awk parse, so a fragment-only ready packet is never drained"
+  - "the `query` subcommand's filter semantics drift from plan_query's contract (exact status, substring role, all-match tags, limit)"
+  - "the CLI forgets to fold plan/index.d/ fragments, so every reader above silently reports a stale ledger"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "every plan/index.yaml reader is overlay-aware or base-only-with-reason; plan_query + drain-queue route through the CLI and see fragment-only packets"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "no-unprotected-plan-ledger-readers"
+    artifact: "scripts/check-plan-ledger-readers.sh + crates/tillandsias-plan/src/main.rs + images/default/config-overlay/mcp/project-info.sh + scripts/drain-queue.sh"

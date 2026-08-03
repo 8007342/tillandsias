@@ -47,6 +47,7 @@ methodology
 methodology-ask
 methodology-index
 next-order
+query
 ready
 spec-envelope
 spec-index

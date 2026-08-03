@@ -140,6 +140,57 @@ discover_sibling_projects() {
     fi
 }
 
+# ── Plan ledger resolution ────────────────────────────────────
+# @trace spec:plan-ledger-fragment-overlay
+# ORDER 582-26mm. plan_query must see the FOLDED ledger (base ⊕ plan/index.d/
+# fragments), never the base alone — a reader that forgets fragments reports a
+# stale ledger with total confidence, and if plan_answer says a packet exists
+# while plan_query says it does not, an agent cannot tell which surface lies.
+# The compiled CLI loads the overlay; routing plan_query through it makes this
+# server's answer agree with forge-plan's by construction.
+resolve_plan_index() {
+    if [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ] && [ -f "${TILLANDSIAS_PLAN_INDEX}" ]; then
+        printf '%s\n' "$TILLANDSIAS_PLAN_INDEX"
+        return 0
+    fi
+    for candidate in \
+        "$HOME/src/tillandsias/plan/index.yaml" \
+        "$HOME/tillandsias/plan/index.yaml" \
+        "/opt/cheatsheets/plan-index.yaml"; do
+        if [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    printf '\n'
+}
+
+resolve_plan_bin() {
+    if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
+        printf '%s\n' "$TILLANDSIAS_PLAN_BIN"
+        return 0
+    fi
+    for candidate in \
+        "$HOME/.local/bin/tillandsias-plan" \
+        "/usr/local/bin/tillandsias-plan" \
+        "/usr/bin/tillandsias-plan"; do
+        if [ -x "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+    # Cargo-built binary in the checkout this server is serving.
+    _idx="$(resolve_plan_index)"
+    if [ -n "$_idx" ]; then
+        _root="$(dirname "$(dirname "$_idx")")"
+        if [ -x "$_root/target/release/tillandsias-plan" ]; then
+            printf '%s\n' "$_root/target/release/tillandsias-plan"
+            return 0
+        fi
+    fi
+    printf '\n'
+}
+
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
     method=$(echo "$line" | jq -r '.method // empty')
@@ -373,21 +424,35 @@ ${preview}"
                     ;;
                 "plan_query")
                     filter_args=$(echo "$args" | jq -c '.')
-                    # Rewritten from python3 (tlatoani_hard_no_python). yq v4 is present in the
-# forge image and reads the ledger natively, so this no longer hand-parses YAML.
-                        result=$(yq -o=json '
-                            [ .plan_index.steps[]
-                              | pick(["packet_id","order","title","status","kind","pickup_role","capability_tags","deliverable","depends_on"]) ]
-                        ' plan/index.yaml 2>/dev/null | jq --argjson f "$filter_args" '
-                            [ .[]
-                              | select(($f.status // null) == null or .status == $f.status)
-                              | select(($f.pickup_role // null) == null or ((.pickup_role // "") | ascii_downcase | contains($f.pickup_role | ascii_downcase)))
-                              | select(($f.capability_tags // null) == null or (((.capability_tags // []) - $f.capability_tags) | length) == ((.capability_tags // []) | length) - ($f.capability_tags | length))
-                            ] | .[0:(($f.limit // 20) | tonumber)]')
-                    if [ -z "$result" ]; then
+                    # ORDER 582-26mm. Was a DIRECT yq read of plan/index.yaml —
+                    # the BASE only, so a fragment-only packet (plan/index.d/)
+                    # was invisible here while forge-plan's plan_* tools saw it:
+                    # the exact disagreement this packet exists to kill. Now
+                    # routes through the compiled CLI, which folds base ⊕
+                    # fragments; the yq+jq projection and filter contract is
+                    # reproduced by `query --json` so callers see no change.
+                    _pbin="$(resolve_plan_bin)"
+                    _pidx="$(resolve_plan_index)"
+                    if [ -z "$_pbin" ] || [ -z "$_pidx" ]; then
                         result="No matching packets found"
+                    else
+                        _qargs=()
+                        _st=$(echo "$filter_args" | jq -r '.status // empty')
+                        _rl=$(echo "$filter_args" | jq -r '.pickup_role // empty')
+                        _lm=$(echo "$filter_args" | jq -r '.limit // 20')
+                        [ -n "$_st" ] && _qargs+=(--status "$_st")
+                        [ -n "$_rl" ] && _qargs+=(--role "$_rl")
+                        while IFS= read -r _t; do
+                            [ -n "$_t" ] && _qargs+=(--tag "$_t")
+                        done < <(echo "$filter_args" | jq -r '.capability_tags[]? // empty')
+                        _qargs+=(--limit "$_lm" --json)
+                        result=$("$_pbin" --index "$_pidx" query "${_qargs[@]}" 2>/dev/null || true)
+                        if [ -z "$result" ] || [ "$result" = "[]" ]; then
+                            result="No matching packets found"
+                        fi
                     fi
                     ;;
+
                 *)
                     result="Unknown tool: $tool"
                     ;;
