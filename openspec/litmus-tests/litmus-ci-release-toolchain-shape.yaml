@@ -7,10 +7,13 @@
 # statically-linked validation, cosign sign-blob). This companion pins
 # the cloud-minute policy: hosted release is manual, release.yml owns
 # only build/sign/publish work, and local scripts own verification and
-# dashboard generation before dispatch. Since 2026-07-21 a lean fmt+check
-# push/PR gate (ci.yml, check-only — born 0f54dc0d, ratified
-# plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md) is
-# permitted; hosted TEST execution remains banned.
+# dashboard generation before dispatch. A lean fmt+check push/PR gate
+# (ci.yml, check-only — born 0f54dc0d, ratified
+# plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md) was
+# permitted 2026-07-21 → 2026-08-03, then removed in the GitHub Actions
+# budget purge (f45e0dc5 on linux-next, bebe107b on main: minutes are a
+# hard budget). Since that purge release.yml is the ONLY hosted workflow;
+# ALL hosted verification (check and test alike) is banned.
 #
 # Plus: release.yml is
 # workflow_dispatch-only by design — a regression flipping it
@@ -52,13 +55,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "workflow_dispatch:"
 
-  - step: "hosted verification stays lean: no litmus/convergence workflows; ci.yml is check-only (no hosted test execution; born 0f54dc0d, ratified plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md)"
-    # nix-cache-warm.yml legitimately exists (commit 769b4a32, reverting
-    # FlakeHub caching back to nix-community/cache-nix-action) — it warms
-    # the Nix build cache on a schedule/push, it does not run tests or
-    # verification, so it does not violate the local-only-verification
-    # contract this step protects.
-    command: "test ! -e .github/workflows/litmus-tests.yml && test ! -e .github/workflows/github-actions-convergence.yml && grep -Fq 'cargo check' .github/workflows/ci.yml && ! grep -Fq 'cargo test' .github/workflows/ci.yml && echo 'ok: hosted verification lean (check-only ci.yml permitted)'"
+  - step: "hosted verification stays lean: no litmus/convergence workflows and no ci.yml (removed in the 2026-08-03 Actions budget purge, f45e0dc5/bebe107b)"
+    # ci.yml (check-only gate, born 0f54dc0d) and nix-cache-warm.yml
+    # (cache warmer, 769b4a32) were BOTH deleted in the 2026-08-03
+    # GitHub Actions budget purge — f45e0dc5 on linux-next ("remove ALL
+    # cloud workflows except the release — minutes are a hard budget"),
+    # bebe107b on main. release.yml is now the sole workflow; the
+    # sibling litmus:github-actions-budget pins that "exactly one
+    # workflow" shape, this step pins the named absences.
+    command: "test ! -e .github/workflows/litmus-tests.yml && test ! -e .github/workflows/github-actions-convergence.yml && test ! -e .github/workflows/ci.yml && echo 'ok: hosted verification lean'"
     timeout_ms: 3000
     expected_behavior: "ok: hosted verification lean"
 

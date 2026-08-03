@@ -75,7 +75,7 @@ critical_path:
     expected_behavior: "ok: versioninfo-template"
 
   - step: "WHOLE FILE is pure ASCII (windows-260722-1 root cause: BOM-less UTF-8 misread as ANSI turns an em-dash into a CP-1252 smart quote, which PS5.1 treats as a QUOTE CHARACTER — the installer parsed into a different program that silently skipped download+extract)"
-    command: "LC_ALL=C grep -c -P '[^\\x00-\\x7F]' scripts/install-windows.ps1 | grep -qx 0 && echo 'ok: pure-ascii'"
+    command: "n=$(LC_ALL=C tr -d '\\000-\\177' < scripts/install-windows.ps1 | wc -c); mf_assert_count \"$n\" 0 >/dev/null && echo 'ok: pure-ascii'"
     timeout_ms: 3000
     expected_behavior: "ok: pure-ascii"
 

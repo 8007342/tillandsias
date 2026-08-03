@@ -109,7 +109,12 @@ run_with_lockdir() {
         fi
         sleep 2
     done
-    trap 'rm -rf "$lock_dir"' EXIT
+    # The EXIT trap fires after this function has returned, so a `local`
+    # variable would be out of scope there and `set -u` would abort the trap
+    # ("lock_dir: unbound variable"), leaking the lockdir. Hoist the path to
+    # a script-global that survives function return.
+    SMOKE_LOCK_DIR="$lock_dir"
+    trap 'rm -rf "${SMOKE_LOCK_DIR:-}"' EXIT
     write_holder "$lock_dir/holder" "$@"
     log_line "acquired path=$lock_dir fallback=mkdir"
     set +e

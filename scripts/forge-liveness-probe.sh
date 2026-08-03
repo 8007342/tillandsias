@@ -93,7 +93,9 @@ probe_container_running() {
 probe_heartbeat_fresh() {
     [[ -f "$HEARTBEAT_PATH" ]] || return 1
     local mtime now age
-    mtime=$(stat --format='%Y' "$HEARTBEAT_PATH" 2>/dev/null) || return 1
+    # GNU stat first; BSD stat fallback (macOS) — GNU path unchanged on Linux.
+    mtime=$(stat --format='%Y' "$HEARTBEAT_PATH" 2>/dev/null \
+        || stat -f '%m' "$HEARTBEAT_PATH" 2>/dev/null) || return 1
     now=$(date +%s)
     age=$(( now - mtime ))
     [[ $age -le $HEARTBEAT_DEADLINE_SECS ]]
@@ -147,7 +149,10 @@ classify_state() {
 
 calc_deadline() {
     local deadline=$(( START_EPOCH + BUDGET_SECS ))
-    date -u -d "@${deadline}" '+%Y-%m-%dT%H:%M:%SZ'
+    # GNU date first (-d @epoch); BSD date fallback (-r epoch, macOS).
+    # GNU must be tried first: GNU's -r means --reference=FILE.
+    date -u -d "@${deadline}" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null \
+        || date -u -r "${deadline}" '+%Y-%m-%dT%H:%M:%SZ'
 }
 
 # ── Wait loop ─────────────────────────────────────────────────────────────────
