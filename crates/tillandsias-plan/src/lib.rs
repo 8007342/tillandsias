@@ -29,6 +29,14 @@ pub mod answer;
 pub mod fragments;
 /// ORDER 394d — the committed ground-truth query set and its grader.
 pub mod groundtruth;
+/// ORDER 582-nqw5 — the same fragment overlay applied to `plan/loop_status.md`.
+/// Prose, not keyed records, so the CRDT is chosen per section rather than
+/// assumed from the index overlay: the dated host-scoped `## Cycle` entries are
+/// a G-SET keyed by their heading, the operator-owned `## Direction` and
+/// `## ACTIVE RELEASE` sections are LWW-REGISTER written only by the operator,
+/// and every other section is base-only. See the module doc for the full
+/// justification and the fail-closed guards.
+pub mod loop_status;
 pub mod methodology;
 /// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,
 /// cosine retrieval, verifiable envelope construction). Embedding and synthesis

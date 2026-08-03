@@ -31,7 +31,7 @@ writes to merge without a human adjudicating a conflict.
   monolithic index file was simply never built that way.
 - Shapiro, Preguiça, Baquero, Zawirski, *A Comprehensive Study of Convergent and
   Commutative Replicated Data Types* (INRIA RR-7506) — the canonical taxonomy.
-- **Last updated:** 2026-08-01
+- **Last updated:** 2026-08-03
 
 ## Why this class of problem is already solved
 
@@ -64,6 +64,10 @@ plan/
   index.d/              # fragments — append-only, immutable once written
     20260801T0342Z-h99t-linux-mutable.yaml
     20260801T0344Z-jf7g-osx.yaml
+  loop_status.md        # the COMPACTED status base — rewritten only by compaction
+  loop_status.d/        # status fragments — one file per host per cycle
+    20260803T011000Z-aa11-linux-mutable.md
+    20260803T011100Z-bb22-windows-mutable.md
 ```
 
 Two properties do all the work:
@@ -118,6 +122,30 @@ rules are not:
   silently discards the loser's entries. Lists want G-Sets.
 - **Editing a fragment** breaks immutability and therefore convergence, usually
   long after the edit, in a way that is very hard to trace.
+
+## Prose: the same overlay on `plan/loop_status.md`
+
+`loop_status.md` conflicts under concurrency for the same reason `index.yaml`
+did, but it is PROSE, not keyed records — there is no `packet_id` to key a
+G-Set on. Do not force the index design onto it unexamined; choose the CRDT per
+section (packet `loop-status-crdt-fragments`, 582-nqw5):
+
+| section                                   | CRDT |
+|-------------------------------------------|------|
+| `## Cycle <ts> (<host> — …)`              | **G-Set keyed by the heading line** — the heading embeds timestamp+host, so it *is* the stable identity. Union keeps both hosts' narratives. |
+| `## Direction`                            | **LWW-Register, operator-writes-only.** An agent fragment that names it is refused. |
+| `## ACTIVE RELEASE`                       | **LWW-Register, operator/coordinator-writes-only.** Same refusal. |
+| everything else (`## This Loop`, `## WINDOWS LANE`, …) | **base-only** — fragments never carry it. |
+
+The rendered file is a fold: base text plus every fragment's `## Cycle`
+sections, inserted newest-first right after the title, deduplicated by heading
+(G-Set). An agent writes status by appending its own
+`plan/loop_status.d/<utc>-<suffix>-<host>.md` via `loop-status-append`, so two
+hosts recording a cycle never touch the same path. Reading is
+`tillandsias-plan loop-status` (the fold view — never read `loop_status.md`
+directly), compaction is `loop-status-compact`, gated on: nothing dropped,
+nothing lost, the operator-owned sections byte-identical, and the fold
+idempotent.
 
 ## See also
 

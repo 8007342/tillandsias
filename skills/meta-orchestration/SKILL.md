@@ -577,8 +577,15 @@ Before exit:
    promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit. A
    dirty-start preflight refusal performs no reduction cycle; it uses the final
    handoff exception above and exits without touching the checkout.
-2. Refresh `plan/index.yaml` and `plan/loop_status.md` if this cycle
-   changed active work, blockers, tested release, or host assignments.
+2. Refresh `plan/index.yaml` if this cycle changed active work, blockers,
+   tested release, or host assignments. Record THIS cycle's status as a NEW
+   `## Cycle` fragment in `plan/loop_status.d/` via
+   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO>` — never
+   edit the shared `plan/loop_status.md` directly, or a concurrent host's
+   status write conflicts for the same reason the old monolithic ledger did
+   (packet 582-nqw5). The folded view (`tillandsias-plan loop-status`) is the
+   status every host sees; `loop-status-compact` folds fragments into the base
+   when drift makes it eligible.
 3. Validate touched YAML with a parser, using the one that EXISTS where you are:
    `tillandsias-policy validate-yaml <files>` where built, else
    `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.

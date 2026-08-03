@@ -39,6 +39,10 @@ check
 compact
 fragments
 grade
+loop-status
+loop-status-append
+loop-status-compact
+loop-status-fragments
 methodology
 methodology-ask
 methodology-index

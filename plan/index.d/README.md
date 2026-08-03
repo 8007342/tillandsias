@@ -64,10 +64,10 @@ packet is queryable immediately — reads fold fragments in automatically.
 fragments into the base and deletes exactly the ones it folded — never a glob,
 because a fragment written mid-compaction has not been folded.
 
-Compaction currently **refuses** on the real ledger, deliberately: `serde_yaml`
-drops the ~120 comments in `plan/index.yaml` (including recorded operator
-decisions) and re-indents items so `append-event` stops finding packets. An
-uncompacted ledger is slower to read, never wrong, so nothing is blocked by the
-refusal. See packet `format-preserving-ledger-compaction`.
+Compaction is TEXT-LEVEL and format-preserving (packet
+`format-preserving-ledger-compaction`): the base is never re-serialized, so its
+~120 comment lines and the item indentation `append-event` locates survive BY
+CONSTRUCTION, and the candidate is gated with parse + integrity before it may
+replace the base.
 
 Full reference: `cheatsheets/concurrent-git/crdt-ledger-fragments.md`

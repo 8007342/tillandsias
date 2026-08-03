@@ -1,0 +1,114 @@
+# @trace spec:methodology-accountability
+# @trace order:582-nqw5 (loop-status-crdt-fragments)
+#
+# Pins the CRDT fragment overlay on plan/loop_status.md that packet 582-nqw5
+# (loop-status-crdt-fragments, order 582-nqw5) delivers.
+#
+# WHY BEHAVIOURAL AND NOT A GREP. The failures being pinned are silent: (1) two
+# hosts rewriting the shared loop_status.md conflict on every push; (2) a fold
+# that drops one host's narrative loses work with no error signal; (3) an agent
+# write reaching the operator-owned `## Direction` section clobbers operator
+# direction. None of these has a compile-time check, so each is exercised
+# against the REAL binary on an isolated checkout.
+#
+# The CRDT is chosen PER SECTION, not assumed from the index overlay — loop_status
+# is prose, there is no packet_id to key a G-Set on:
+#   `## Cycle <ts> (<host> — …)`   -> G-SET keyed by the heading line (the
+#                                     heading embeds timestamp+host, so it IS
+#                                     the stable identity; union keeps both
+#                                     hosts' narratives)
+#   `## Direction` / `## ACTIVE RELEASE` -> LWW-REGISTER, operator-writes-only
+#   everything else                -> base-only, fragments never carry it
+# The rendered file is a FOLD (base + every fragment's cycle sections, newest
+# first after the title, deduplicated by heading).
+#
+# Exit-criterion mapping: step (b) proves two hosts write without a conflict and
+# neither narrative is lost (exit 2); steps (e)/(f) prove the operator-owned
+# Direction section cannot be clobbered by an agent write (exit 3); step (g)
+# pins the per-section CRDT justification by proving the cycle log is a G-Set
+# and the operator sections are not agents' to write (exit 1).
+name: litmus:loop-status-fragment-overlay
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Pin the loop_status fragment overlay: two hosts append cycle status to
+  separate files and both narratives fold in newest-first; compaction folds
+  exactly its fragments and is a no-op on the second run; loop-status-append
+  refuses an agent fragment naming the operator-owned Direction section and a
+  hand-written one is reported malformed and never folded; the CRDT unit tests
+  are green and the loop-status capability tokens are declared and dispatch.
+severity: high
+size: quick
+
+preconditions:
+  - cargo toolchain available (the steps execute the real binary, not its source text)
+  - repository contains crates/tillandsias-plan/src/loop_status.rs
+  - repository contains crates/tillandsias-plan/capabilities.txt
+
+critical_path:
+  # ── (a) fixture: a real binary over an isolated checkout ────────────────
+  - step: "FIXTURE: stage an isolated checkout with a representative loop_status base"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Cycle 2026-08-02T00:00Z (fixture — base entry)' '' '- base body' '' '## ACTIVE RELEASE: v0.5 (v0.4 SHIPPED)' '' '> v0.4 shipped' '' '## This Loop (2026-07-10)' '' '- legacy' '' '## Direction — what are we all doing today' '' '<!-- Operator-owned thematic direction (The Tlatoāni, updated 2026-07-17).' '     One theme, no packet ids. -->' '' '**base theme**' > \"$W/plan/loop_status.md\"; echo \"$W\" > /tmp/.litmus-nqw5-w1; echo 'ok: fixture-1-ready'"
+    timeout_ms: 10000
+    expected_behavior: "ok: fixture-1-ready"
+
+  # ── (b) two hosts write status CONCURRENTLY ─────────────────────────────
+  - step: "BEHAVIOURAL: two hosts append cycle status to SEPARATE files (the write that used to conflict no longer shares a path)"
+    command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); printf '%s\\n' '## Cycle 2026-08-03T01:10Z (linux_mutable — fixture host A)' '' '- host-A narrative' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T01:10:00Z --host linux_mutable --suffix aa11; printf '%s\\n' '## Cycle 2026-08-03T01:11Z (windows_mutable — fixture host B)' '' '- host-B narrative' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T01:11:00Z --host windows_mutable --suffix bb22; n=$(ls \"$W/plan/loop_status.d\"/*.md | wc -l); grep -q 'host-A narrative' \"$W/plan/loop_status.d\"/*.md && grep -q 'host-B narrative' \"$W/plan/loop_status.d\"/*.md && test $n = 2 && echo 'ok: two-hosts-two-files'"
+    timeout_ms: 300000
+    expected_behavior: "ok: two-hosts-two-files"
+
+  - step: "BEHAVIOURAL: the fold view contains BOTH narratives, newest-first, with the base untouched"
+    command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status); printf '%s' \"$V\" | grep -q 'host-A narrative'; printf '%s' \"$V\" | grep -q 'host-B narrative'; printf '%s' \"$V\" | grep -q '**base theme**'; printf '%s' \"$V\" | grep -q '> v0.4 shipped'; printf '%s' \"$V\" | grep -q -- '- legacy'; first=$(printf '%s' \"$V\" | grep -m1 '^## Cycle'); case $first in *'host B'*) echo 'ok: both-narratives-newest-first-base-intact' ;; *) echo \"FAIL: first cycle was: $first\"; exit 1 ;; esac"
+    timeout_ms: 300000
+    expected_behavior: "ok: both-narratives-newest-first-base-intact"
+
+  # ── (c) compaction folds exactly its fragments and is idempotent ─────────
+  - step: "BEHAVIOURAL: compaction folds fragments into the base, deletes exactly the ones folded, and keeps both narratives + operator sections"
+    command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); d1=$(sed -n '/^## Direction/,$p' \"$W/plan/loop_status.md\"); cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-compact; n=$(ls \"$W/plan/loop_status.d\"/*.md 2>/dev/null | wc -l); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status); printf '%s' \"$V\" | grep -q 'host-A narrative'; printf '%s' \"$V\" | grep -q 'host-B narrative'; printf '%s' \"$V\" | grep -q '**base theme**'; d2=$(sed -n '/^## Direction/,$p' \"$W/plan/loop_status.md\"); test \"$d1\" = \"$d2\" && test $n = 0 && echo 'ok: compacted-exactly-consumed-narratives-and-operator-intact'"
+    timeout_ms: 300000
+    expected_behavior: "ok: compacted-exactly-consumed-narratives-and-operator-intact"
+
+  - step: "BEHAVIOURAL: a SECOND compaction is a no-op (a crash between fold and delete is safe to re-run)"
+    command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); m1=$(md5sum \"$W/plan/loop_status.md\" | cut -d' ' -f1); out=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-compact 2>&1); m2=$(md5sum \"$W/plan/loop_status.md\" | cut -d' ' -f1); test \"$m1\" = \"$m2\" && printf '%s' \"$out\" | grep -q 'nothing to compact' && echo 'ok: second-compaction-no-op'"
+    timeout_ms: 300000
+    expected_behavior: "ok: second-compaction-no-op"
+
+  # ── (d) the operator-owned Direction section cannot be clobbered ─────────
+  - step: "NEGATIVE CONTROL: loop-status-append REFUSES an agent fragment naming the Direction section"
+    command: "W=$(mktemp -d); mkdir -p \"$W/plan\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Direction — what are we all doing today' '' '**base theme**' > \"$W/plan/loop_status.md\"; out=$(printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T02:00:00Z --host h9 --suffix zz99 2>&1); rc=$?; n=$(ls \"$W/plan/loop_status.d\"/*.md 2>/dev/null | wc -l); cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'non-cycle heading' && test $n = 0 && echo 'ok: append-refuses-direction'"
+    timeout_ms: 300000
+    expected_behavior: "ok: append-refuses-direction"
+
+  - step: "NEGATIVE CONTROL: a HAND-WRITTEN Direction fragment is reported malformed and never folded in"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/loop_status.d\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Direction — what are we all doing today' '' '**base theme**' > \"$W/plan/loop_status.md\"; printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' > \"$W/plan/loop_status.d/20260803t020000z-zz99-bad.md\"; R=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-fragments 2>&1); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status 2>&1); printf '%s' \"$R\" | grep -q 'malformed'; printf '%s' \"$V\" | grep -q '**base theme**'; ! printf '%s' \"$V\" | grep -q 'clobber'; test -f \"$W/plan/loop_status.d/20260803t020000z-zz99-bad.md\"; cd /; rm -rf \"$W\"; echo 'ok: hand-written-direction-fragment-is-malformed-not-folded'"
+    timeout_ms: 300000
+    expected_behavior: "ok: hand-written-direction-fragment-is-malformed-not-folded"
+
+  # ── (e) the per-section CRDT choice is pinned behaviourally + by unit tests
+  - step: "PIN: the loop_status CRDT unit tests (commutativity, idempotency, G-Set survival, gate refusals) are green"
+    command: "cargo test --quiet --release -p tillandsias-plan --lib loop_status 2>&1 | grep -q 'test result: ok' && echo 'ok: loop-status-unit-tests-green'"
+    timeout_ms: 300000
+    expected_behavior: "ok: loop-status-unit-tests-green"
+
+  - step: "PIN: the loop-status capability tokens are DECLARED and the manifest/binary readers agree"
+    command: "set -e; for t in loop-status loop-status-append loop-status-compact loop-status-fragments; do grep -qx $t crates/tillandsias-plan/capabilities.txt || { echo \"token $t missing from manifest\"; exit 1; }; done; cargo run --quiet --release -p tillandsias-plan -- capabilities | grep -qx loop-status && echo 'ok: loop-status-capabilities-declared'"
+    timeout_ms: 300000
+    expected_behavior: "ok: loop-status-capabilities-declared"
+
+failure_modes:
+  - "an agent rewrites plan/loop_status.md in place, so two hosts writing status conflict on every push"
+  - "a fold drops or overwrites one host's cycle narrative (the cycle log is treated as a register instead of a G-Set)"
+  - "an agent fragment naming `## Direction` or `## ACTIVE RELEASE` reaches the operator-owned section"
+  - "compaction deletes fragments by glob instead of by name, destroying a fragment written mid-compaction"
+  - "the rendered loop_status stops being a deterministic fold (order or dedup depends on input order)"
+  - "the operator-owned Direction section changes between base and candidate and the gate does not refuse"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "loop_status fragment overlay pinned: two-host G-Set union, exact-name compaction, operator-section refusal, unit tests + capability tokens green"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "loop-status-fragment-overlay"
+    artifact: "crates/tillandsias-plan/src/loop_status.rs + lib.rs + main.rs + capabilities.txt + plan/loop_status.d/README.md"

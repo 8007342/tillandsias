@@ -391,6 +391,17 @@ pub fn fragment_doc(packets: Vec<Value>, events: Vec<Value>, status: Vec<Value>)
 /// reasoning as order-token allocation), and the host makes a stray fragment
 /// traceable to whoever wrote it.
 pub fn fragment_name(utc_compact: &str, suffix: &str, host: &str) -> String {
+    fragment_filename(utc_compact, suffix, host, "yaml")
+}
+
+/// The [`crate::loop_status`] overlay's fragment name: the same UTC-first,
+/// collision-free contract as [`fragment_name`], with the `.md` extension the
+/// prose overlay reads.
+pub fn fragment_name_md(utc_compact: &str, suffix: &str, host: &str) -> String {
+    fragment_filename(utc_compact, suffix, host, "md")
+}
+
+fn fragment_filename(utc_compact: &str, suffix: &str, host: &str, ext: &str) -> String {
     let safe = |s: &str| -> String {
         s.chars()
             .map(|c| {
@@ -402,7 +413,12 @@ pub fn fragment_name(utc_compact: &str, suffix: &str, host: &str) -> String {
             })
             .collect()
     };
-    format!("{}-{}-{}.yaml", safe(utc_compact), safe(suffix), safe(host))
+    format!(
+        "{}-{}-{}.{ext}",
+        safe(utc_compact),
+        safe(suffix),
+        safe(host)
+    )
 }
 
 /// The compaction verdict: the merged base plus exactly which fragments it

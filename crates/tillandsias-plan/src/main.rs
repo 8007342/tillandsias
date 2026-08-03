@@ -6,7 +6,7 @@
 //! @trace spec:spec-traceability
 
 use std::path::{Path, PathBuf};
-use tillandsias_plan::{Ledger, Schema, answer, edit, groundtruth, methodology, spec};
+use tillandsias_plan::{Ledger, Schema, answer, edit, groundtruth, loop_status, methodology, spec};
 
 /// ORDER 569. The capability manifest, embedded from the crate's own
 /// `capabilities.txt` at COMPILE TIME.
@@ -92,7 +92,22 @@ const USAGE: &str = concat!(
     "                                     fragments are live, which are malformed, and whether\n",
     "                                     compaction is eligible\n",
     "           compact                   fold every fragment into the base ledger and delete\n",
-    "                                     exactly the ones folded (refuses a lossy rewrite)"
+    "                                     exactly the ones folded (refuses a lossy rewrite)\n",
+    "           loop-status [--index plan/loop_status.md]\n",
+    "                                     ORDER 582-nqw5. THE loop_status reader: the folded view\n",
+    "                                     (base ⊕ loop_status.d/ fragments). The only correct way to\n",
+    "                                     read loop_status — a reader that forgets fragments reports\n",
+    "                                     a stale status with total confidence.\n",
+    "           loop-status-append [--ts ISO] [--host H] [--suffix S] [--file F]\n",
+    "                                     ORDER 582-nqw5. Append ONE `## Cycle …` section (stdin or\n",
+    "                                     --file) as a NEW fragment file — concurrent hosts each write\n",
+    "                                     their own path, so appending status no longer conflicts.\n",
+    "                                     Refuses `## Direction` and every other non-cycle heading.\n",
+    "           loop-status-compact        ORDER 582-nqw5. Fold fragments into loop_status and delete\n",
+    "                                     exactly the ones folded, gated on: nothing dropped, nothing\n",
+    "                                     lost, operator-owned sections byte-identical, fold idempotent\n",
+    "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
+    "                                     fragments, malformed ones, and whether compaction is eligible\n"
 );
 
 fn usage() -> ! {
@@ -499,6 +514,183 @@ fn report(
     failed
 }
 
+/// ORDER 582-nqw5. The loop_status overlay commands. `base` is the target
+/// document (`plan/loop_status.md` unless `--index` named something else); the
+/// fragment store is its `*.d/` sibling, exactly like the index overlay.
+fn run_loop_status(args: &[String], base: &Path) {
+    match args[0].as_str() {
+        "loop-status" => {
+            // The READER — the only correct way to read loop_status, for the
+            // same reason every ledger read goes through load_with_fragments: a
+            // reader that forgets fragments reports a stale status with total
+            // confidence.
+            for bad in loop_status::malformed(base) {
+                eprintln!(
+                    "warning: loop_status fragment {} is malformed and was SKIPPED — its contents are not in the view below",
+                    bad.display()
+                );
+            }
+            let raw = match std::fs::read_to_string(base) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {}: {e}", base.display());
+                    std::process::exit(1);
+                }
+            };
+            match loop_status::fold_text(&raw, &loop_status::load_all(base)) {
+                Ok(view) => {
+                    // Graceful on a closed pipe: a viewer piped through
+                    // `head`/`rg` must not panic mid-stream. Other write
+                    // errors are real and reported.
+                    use std::io::Write;
+                    let mut out = std::io::stdout().lock();
+                    match out.write_all(view.as_bytes()) {
+                        Ok(()) => {}
+                        Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => {}
+                        Err(e) => {
+                            eprintln!("error: write stdout: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: fold {}: {e}", base.display());
+                    std::process::exit(1);
+                }
+            }
+        }
+        "loop-status-fragments" => {
+            // Report the overlay's state and whether compaction is eligible.
+            // Read-only: compaction itself is a separate, deliberate act.
+            let d = loop_status::drift(base);
+            println!("{}", d.verdict());
+            for f in loop_status::load_all(base) {
+                emit(&format!("fragment: {}", f.name));
+            }
+            for bad in loop_status::malformed(base) {
+                emit(&format!("malformed: {}", bad.display()));
+            }
+        }
+        "loop-status-compact" => {
+            // Fold every fragment into the base and delete EXACTLY the ones
+            // folded — the same delete-by-name contract as `compact`: never a
+            // glob, or a fragment written by another host mid-compaction is
+            // silently destroyed.
+            let c = match loop_status::compact(base) {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!(
+                        "error: compaction REFUSED — {e}\n\x20 the base is UNCHANGED and every \
+                         fragment is intact — the loop-status view is already transparent, so \
+                         nothing is blocked by staying uncompacted"
+                    );
+                    std::process::exit(1);
+                }
+            };
+            if c.consumed.is_empty() {
+                println!("ok: nothing to compact (0 fragments)");
+                return;
+            }
+            // The gate: prose has no YAML to parse, so the structural gate must
+            // prove nothing dropped, nothing lost, the operator-owned sections
+            // byte-identical, and the fold idempotent — see
+            // loop_status::validate_candidate.
+            let base_raw = match std::fs::read_to_string(base) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {}: {e}", base.display());
+                    std::process::exit(1);
+                }
+            };
+            let fragments = loop_status::load_all(base);
+            if let Err(e) = loop_status::validate_candidate(&base_raw, &c.candidate, &fragments) {
+                eprintln!(
+                    "error: compaction REFUSED — {e}; the base is unchanged and every fragment is intact"
+                );
+                std::process::exit(1);
+            }
+            if let Err(e) = std::fs::write(base, &c.candidate) {
+                eprintln!("error: write {}: {e}", base.display());
+                std::process::exit(1);
+            }
+            let mut removed = 0usize;
+            for p in &c.consumed {
+                match std::fs::remove_file(p) {
+                    Ok(()) => removed += 1,
+                    Err(e) => eprintln!(
+                        "warning: could not remove folded fragment {}: {e}",
+                        p.display()
+                    ),
+                }
+            }
+            println!(
+                "ok: compacted {} fragment(s) into {} ({} removed)",
+                c.consumed.len(),
+                base.display(),
+                removed
+            );
+        }
+        "loop-status-append" => {
+            // The WRITER surface. Takes one cycle entry on stdin (or --file),
+            // validates it (refusing `## Direction` and every other non-cycle
+            // heading), and writes it as a NEW fragment file — the concurrent
+            // write that used to conflict on the shared base now lands on a
+            // per-host path.
+            let mut raw = String::new();
+            if let Some(i) = args.iter().position(|a| a == "--file")
+                && let Some(f) = args.get(i + 1)
+            {
+                raw = match std::fs::read_to_string(f) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("error: read {}: {e}", f);
+                        std::process::exit(1);
+                    }
+                };
+            } else if let Err(e) = std::io::Read::read_to_string(&mut std::io::stdin(), &mut raw) {
+                eprintln!("error: read stdin: {e}");
+                std::process::exit(1);
+            }
+            let mut ts = loop_status::utc_compact_now();
+            if let Some(i) = args.iter().position(|a| a == "--ts")
+                && let Some(v) = args.get(i + 1)
+            {
+                ts = loop_status::iso_to_compact(v);
+            }
+            let host = args
+                .iter()
+                .position(|a| a == "--host")
+                .and_then(|i| args.get(i + 1))
+                .cloned()
+                .unwrap_or_else(|| {
+                    std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
+                });
+            let suffix = args
+                .iter()
+                .position(|a| a == "--suffix")
+                .and_then(|i| args.get(i + 1))
+                .cloned()
+                .unwrap_or_else(|| {
+                    format!(
+                        "{:08x}",
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.subsec_nanos())
+                            .unwrap_or(0)
+                    )
+                });
+            match loop_status::append(base, &raw, &ts, &suffix, &host) {
+                Ok(path) => println!("ok: wrote {}", path.display()),
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        other => unknown_subcommand(other),
+    }
+}
+
 // ── order 547 index I/O helpers (JSONL / JSON, dependency-only serde_json) ───
 
 fn read_chunks(path: &Path) -> Vec<spec::Chunk> {
@@ -579,12 +771,14 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut index = PathBuf::from("plan/index.yaml");
+    let mut index_explicit = false;
     if args.first().map(String::as_str) == Some("--index") {
         args.remove(0);
         if args.is_empty() {
             usage();
         }
         index = PathBuf::from(args.remove(0));
+        index_explicit = true;
     }
     if args.is_empty() {
         usage();
@@ -883,6 +1077,25 @@ fn main() {
                 std::process::exit(2);
             }
         }
+    }
+
+    // ORDER 582-nqw5. The loop_status overlay is a DIFFERENT corpus from the
+    // plan ledger — prose, not keyed records — so its commands run before (and
+    // independently of) the ledger load: a checkout with a broken
+    // plan/index.yaml must still be able to read, append, and compact its
+    // loop_status. The target defaults to plan/loop_status.md unless `--index`
+    // named something else explicitly.
+    if matches!(
+        args[0].as_str(),
+        "loop-status" | "loop-status-append" | "loop-status-compact" | "loop-status-fragments"
+    ) {
+        let base = if index_explicit {
+            index.clone()
+        } else {
+            PathBuf::from(loop_status::DEFAULT_BASE)
+        };
+        run_loop_status(&args, &base);
+        return;
     }
 
     // FRAGMENT-AWARE by default. Every read path must go through the same
