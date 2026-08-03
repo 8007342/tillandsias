@@ -44,13 +44,29 @@ GIT_DIR="$(git rev-parse --absolute-git-dir 2>/dev/null)" || {
 STAMP_FILE="$GIT_DIR/tillandsias-gate-stamp"
 
 compute() {
-    # HEAD, the tracked diff, and the untracked file list. Hashing the diff
-    # rather than the whole tree keeps this fast on a large checkout while still
-    # catching every edit.
+    # Hash the CONTENT of every tracked and untracked file in the worktree.
+    #
+    # This deliberately ignores HEAD and the index. An earlier version hashed
+    # `HEAD + git diff HEAD`, which was wrong in a way that made the gate
+    # unusable: committing changes HEAD without changing a single byte of
+    # content, so the stamp went stale at exactly the moment you push. `git add`
+    # broke it the same way. The property we actually want is "the gate
+    # validated these bytes", and bytes do not care which commit they are on.
+    #
+    # So: staging is invisible, committing is invisible, editing is not. A
+    # deleted file drops its line and therefore changes the stamp, which is
+    # correct. The path list is folded in explicitly so a deletion cannot be
+    # confused with an unreadable file.
+    #
+    # Cost is ~60ms over ~4000 files — cheap enough that the hook can do this on
+    # every push, which is the whole reason the stamp exists instead of re-running
+    # the multi-minute gate.
     {
-        git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null || echo "no-head"
-        git -C "$REPO_ROOT" diff HEAD 2>/dev/null
-        git -C "$REPO_ROOT" status --porcelain=v1 --untracked-files=all 2>/dev/null
+        git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
+            | LC_ALL=C sort -z | tr '\0' '\n'
+        git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
+            | (cd "$REPO_ROOT" && xargs -0 -r sha256sum 2>/dev/null) \
+            | LC_ALL=C sort
     } | sha256sum | cut -d' ' -f1
 }
 

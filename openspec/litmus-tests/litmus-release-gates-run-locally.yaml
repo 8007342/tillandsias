@@ -92,6 +92,16 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: stamp detects tree change"
 
+  # REGRESSION PIN. The first implementation hashed `HEAD + git diff HEAD`, so
+  # committing — which changes HEAD without changing one byte of content — went
+  # stale at exactly the moment you push, and `git add` broke it the same way.
+  # The gate was unusable. The property is "the gate validated these BYTES", and
+  # bytes do not care which commit they sit on.
+  - step: "staging and committing do NOT invalidate the stamp (only editing does)"
+    command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; echo seed > \"$t\"/f.txt; git -C \"$t\" add -A; git -C \"$t\" commit -qm base; ( cd \"$t\" && bash gate-stamp.sh write >/dev/null && echo edited > f.txt && bash gate-stamp.sh write >/dev/null && git add -A && a=$(bash gate-stamp.sh verify || true) && git commit -qm c && b=$(bash gate-stamp.sh verify || true) && echo more >> f.txt && c=$(bash gate-stamp.sh verify || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'ok:gate-fresh' ] && [ \"$c\" = 'stale:tree-changed-since-gate' ]; then echo 'ok: stamp survives add+commit, dies on edit'; else echo \"fail: add='$a' commit='$b' edit='$c'\"; fi )"
+    timeout_ms: 60000
+    expected_behavior: "ok: stamp survives add+commit, dies on edit"
+
   - step: "the stamp is git-dir local and never enters the worktree"
     command: "grep -Fq 'absolute-git-dir' scripts/gate-stamp.sh && ! git ls-files --error-unmatch .git/tillandsias-gate-stamp >/dev/null 2>&1 && echo 'ok: stamp is local machine state'"
     timeout_ms: 5000
