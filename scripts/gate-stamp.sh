@@ -58,15 +58,38 @@ compute() {
     # correct. The path list is folded in explicitly so a deletion cannot be
     # confused with an unreadable file.
     #
+    # Symlinks are folded in as their TARGET STRING — git's own content model
+    # for links — never followed. Hashing THROUGH them broke the stamp
+    # entirely: the committed per-runtime skill links point at DIRECTORIES
+    # (.claude/skills/<name> -> ../../skills/<name>), sha256sum exits 1 with
+    # "Is a directory", pipefail propagates, and `write` could never record a
+    # stamp — so a green ./build.sh --check still left every push refused
+    # (observed on macOS 2026-08-03, first push after hook installation).
+    # Following links would also double-count regular-file targets.
+    #
     # Cost is ~60ms over ~4000 files — cheap enough that the hook can do this on
     # every push, which is the whole reason the stamp exists instead of re-running
     # the multi-minute gate.
     {
         git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
             | LC_ALL=C sort -z | tr '\0' '\n'
-        git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
-            | (cd "$REPO_ROOT" && xargs -0 -r sha256sum 2>/dev/null) \
-            | LC_ALL=C sort
+        {
+            git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
+                | (
+                    cd "$REPO_ROOT" && while IFS= read -r -d '' f; do
+                        [[ -L "$f" ]] && printf 'link:%s -> %s\n' "$f" "$(readlink "$f")"
+                    done
+                    :
+                )
+            git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
+                | (
+                    cd "$REPO_ROOT" && while IFS= read -r -d '' f; do
+                        [[ -f "$f" && ! -L "$f" ]] && printf '%s\0' "$f"
+                    done
+                    :
+                ) \
+                | xargs -0 -r sha256sum 2>/dev/null
+        } | LC_ALL=C sort
     } | sha256sum | cut -d' ' -f1
 }
 
