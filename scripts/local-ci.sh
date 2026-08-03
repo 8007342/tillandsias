@@ -779,7 +779,10 @@ if [[ -x "scripts/freshness-inventory.sh" ]]; then
     if [[ -n "$_fresh_cov" ]]; then
         log_info "FRESHNESS coverage: ${_fresh_cov} (${_fresh_stamped:-0}/${_fresh_total:-?} components stamped)"
     fi
-    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k2 -n -r | head -5)"
+    # Grammar is `freshness-stale: <path> <age-days> ...`; age is field 3.
+    # Sorting field 2 ranked paths lexically and advertised the wrong audit
+    # source as "top stalest" with total confidence.
+    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k3,3nr | head -5)"
     if [[ -n "$_fresh_flagged" ]]; then
         log_info "Top stalest components (audit candidates — advisory only):"
         while IFS= read -r line; do

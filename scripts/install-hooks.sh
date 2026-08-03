@@ -15,16 +15,11 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# For worktrees, .git may be a file pointing to the actual git dir
-GIT_HOOKS_DIR="$REPO_ROOT/.git/hooks"
-if [[ -f "$REPO_ROOT/.git" ]]; then
-    GIT_DIR="$(grep '^gitdir:' "$REPO_ROOT/.git" | cut -d' ' -f2)"
-    # Resolve relative path
-    if [[ ! "$GIT_DIR" = /* ]]; then
-        GIT_DIR="$REPO_ROOT/$GIT_DIR"
-    fi
-    GIT_HOOKS_DIR="$GIT_DIR/hooks"
-fi
+# Ask Git for the path it will actually execute. This handles ordinary clones,
+# linked worktrees, and core.hooksPath (the forge uses a shared external hooks
+# directory). Writing unconditionally to .git/hooks can report success while
+# every installed guard remains inert.
+GIT_HOOKS_DIR="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-path hooks)"
 
 # Ensure hooks directory exists
 mkdir -p "$GIT_HOOKS_DIR"
@@ -82,7 +77,7 @@ done
 # guard returned. A failing VERSION guard would be silently masked by a passing
 # local gate. Composing with explicit `|| exit` makes the first failure decisive.
 #
-# v2 supersedes the v1 "# version-guard-hook" marker; an older hook is replaced.
+# v3 supersedes the v1/v2 markers; an older hook is replaced.
 install_prepush() {
     cat > "$PREPUSH_TARGET" <<HOOK
 #!/usr/bin/env bash

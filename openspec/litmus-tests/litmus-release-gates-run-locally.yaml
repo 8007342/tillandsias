@@ -92,6 +92,15 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: stamp detects tree change"
 
+  # Tillandsias tracks each harness skill entry as a symlink to a directory.
+  # `sha256sum <symlink>` follows it, refuses the directory, and made the first
+  # stamp implementation fail on every real checkout even though its regular-
+  # file fixture stayed green. Exercise that exact filesystem shape.
+  - step: "the stamp hashes tracked directory symlinks without following them"
+    command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; mkdir \"$t\"/skills-a \"$t\"/skills-b; ln -s skills-a \"$t\"/active-skill; git -C \"$t\" add gate-stamp.sh active-skill; git -C \"$t\" commit -qm base; ( cd \"$t\" && bash gate-stamp.sh write >/dev/null && a=$(bash gate-stamp.sh verify) && rm active-skill && ln -s skills-b active-skill && b=$(bash gate-stamp.sh verify || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'stale:tree-changed-since-gate' ]; then echo 'ok: directory symlink hashed by target'; else echo \"fail: fresh='$a' after-retarget='$b'\"; fi )"
+    timeout_ms: 60000
+    expected_behavior: "ok: directory symlink hashed by target"
+
   # REGRESSION PIN. The first implementation hashed `HEAD + git diff HEAD`, so
   # committing — which changes HEAD without changing one byte of content — went
   # stale at exactly the moment you push, and `git add` broke it the same way.
@@ -120,7 +129,7 @@ critical_path:
   # of this step failed for exactly that reason. What must be true is a property
   # of the file git actually executes.
   - step: "the composed hook REPLAYS stdin so every guard can read the ref list"
-    command: "h=$(git rev-parse --absolute-git-dir)/hooks/pre-push; if [ ! -f \"$h\" ]; then echo 'skip: no pre-push installed in this checkout'; else n=$(grep -c 'REFS\" *| *bash' \"$h\"); if grep -q 'REFS=\"\\$(cat)\"' \"$h\" && [ \"$n\" -ge 2 ]; then echo 'ok: stdin replayed to both guards'; else echo \"fail: capture=$(grep -c 'REFS=' \\\"$h\\\") replays=$n\"; fi; fi"
+    command: "h=$(git rev-parse --path-format=absolute --git-path hooks)/pre-push; if [ ! -f \"$h\" ]; then echo \"fail: no pre-push installed at effective hooks path $h\"; else n=$(grep -c 'REFS\" *| *bash' \"$h\"); if grep -q 'REFS=\"\\$(cat)\"' \"$h\" && [ \"$n\" -ge 2 ]; then echo 'ok: stdin replayed to both guards'; else echo \"fail: capture=$(grep -c 'REFS=' \\\"$h\\\") replays=$n\"; fi; fi"
     timeout_ms: 5000
     expected_behavior: "ok: stdin replayed to both guards"
 
@@ -133,7 +142,9 @@ failure_modes:
   - "a validation is deleted from release.yml and never lands locally, trading cost for coverage"
   - "the preflight exists but cannot refuse, so it reports green on a broken release"
   - "hooks ship uninstalled and every gate is inert — the state this repo was actually in"
+  - "the installer writes .git/hooks while core.hooksPath points elsewhere, reporting success for guards Git never executes"
   - "the pre-push hook reverts to appended `bash <script>` lines, masking a failing guard's exit code behind a later passing one"
   - "the stamp becomes time-based instead of content-based, so reverting an edit no longer restores freshness"
   - "the gate stamp gets committed, making one machine's local state look authoritative to every other host"
+  - "the stamp follows a tracked skill symlink into its directory and therefore cannot record any real Tillandsias checkout"
   - "a new workflow is added to .github/workflows and quietly resumes burning cloud minutes"

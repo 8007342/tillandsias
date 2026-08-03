@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# freshness: auditor=linux-forge-20260718T0334Z date=2026-07-18 verdict=refreshed scope=re-validated; still used by run-litmus-test.sh and remote_projects.rs command-shape litmus; verdict from 2026-07-17 (exec branch no longer fabricates vault handover) still holds; keychain isolation ask still open
+# freshness: auditor=forge-tillandsias-codex-20260803t214004z date=2026-08-03 verdict=updated scope=re-validated syntax, vault-handover refusal, remote-project preflight, and stateful-container litmus consumers after order-443 tracking; corrected advisory age sorting in local-ci.sh
 
 # Minimal Podman test backend for command-shape litmus runs.
 # It records the invocation and returns canned success outputs for the

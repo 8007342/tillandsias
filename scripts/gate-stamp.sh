@@ -61,13 +61,28 @@ compute() {
     # Cost is ~60ms over ~4000 files — cheap enough that the hook can do this on
     # every push, which is the whole reason the stamp exists instead of re-running
     # the multi-minute gate.
-    {
-        git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
-            | LC_ALL=C sort -z | tr '\0' '\n'
-        git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
-            | (cd "$REPO_ROOT" && xargs -0 -r sha256sum 2>/dev/null) \
-            | LC_ALL=C sort
-    } | sha256sum | cut -d' ' -f1
+    # Hash path, filesystem type, and content as NUL-framed records. A plain
+    # `sha256sum <path>` follows symlinks; Tillandsias deliberately tracks the
+    # runtime skill entries as symlinks to directories, so that implementation
+    # failed every real checkout with "Is a directory" and never wrote a stamp.
+    # Hash the link target text instead. Refuse any other non-file entry rather
+    # than silently claiming that an unmeasured tree was validated.
+    git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
+        | LC_ALL=C sort -z \
+        | while IFS= read -r -d '' path; do
+            absolute="$REPO_ROOT/$path"
+            if [[ -L "$absolute" ]]; then
+                digest="$(readlink "$absolute" | sha256sum | cut -d' ' -f1)" || exit 1
+                printf 'symlink\0%s\0%s\0' "$path" "$digest"
+            elif [[ -f "$absolute" ]]; then
+                digest="$(sha256sum "$absolute" | cut -d' ' -f1)" || exit 1
+                printf 'file\0%s\0%s\0' "$path" "$digest"
+            else
+                echo "gate-stamp: unsupported worktree entry: $path" >&2
+                exit 1
+            fi
+        done \
+        | sha256sum | cut -d' ' -f1
 }
 
 case "${1:-verify}" in
