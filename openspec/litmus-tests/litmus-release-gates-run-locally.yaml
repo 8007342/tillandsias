@@ -78,7 +78,7 @@ critical_path:
     expected_behavior: "ok: release.yml is the only workflow"
 
   - step: "the pre-push hook composes FAIL-FAST (a masked exit code is the bug this replaced)"
-    command: "grep -Fq '|| exit' scripts/install-hooks.sh && grep -Fq 'tillandsias-pre-push-v2' scripts/install-hooks.sh && echo 'ok: fail-fast composition'"
+    command: "grep -Fq '|| exit' scripts/install-hooks.sh && grep -Fq 'tillandsias-pre-push-v3' scripts/install-hooks.sh && echo 'ok: fail-fast composition'"
     timeout_ms: 5000
     expected_behavior: "ok: fail-fast composition"
 
@@ -101,6 +101,28 @@ critical_path:
     command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; echo seed > \"$t\"/f.txt; git -C \"$t\" add -A; git -C \"$t\" commit -qm base; ( cd \"$t\" && bash gate-stamp.sh write >/dev/null && echo edited > f.txt && bash gate-stamp.sh write >/dev/null && git add -A && a=$(bash gate-stamp.sh verify || true) && git commit -qm c && b=$(bash gate-stamp.sh verify || true) && echo more >> f.txt && c=$(bash gate-stamp.sh verify || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'ok:gate-fresh' ] && [ \"$c\" = 'stale:tree-changed-since-gate' ]; then echo 'ok: stamp survives add+commit, dies on edit'; else echo \"fail: add='$a' commit='$b' edit='$c'\"; fi )"
     timeout_ms: 60000
     expected_behavior: "ok: stamp survives add+commit, dies on edit"
+
+  # REGRESSION PIN. The VERSION guard originally asked "does VERSION differ from
+  # main?", which is a different question and made it refuse EVERY linux-next
+  # push: between releases linux-next legitimately carries a VERSION ahead of
+  # main. It went unnoticed for months because .git/hooks/ was empty; the day the
+  # hook was installed it blocked the first push it saw, on commits that never
+  # touched VERSION. A guard that must be bypassed every time trains --no-verify,
+  # which also skips the local gate — so a wrong guard is worse than none.
+  - step: "the VERSION guard asks whether the PUSHED COMMITS touch VERSION, not whether it differs from main"
+    command: "grep -Fq 'version_touched' scripts/hooks/pre-push-version-guard.sh && ! grep -Eq '^\\s*if \\[\\[ \"\\$main_version\" != \"\\$current_version\" \\]\\]' scripts/hooks/pre-push-version-guard.sh && echo 'ok: guard tests the pushed range'"
+    timeout_ms: 5000
+    expected_behavior: "ok: guard tests the pushed range"
+
+  # Asserted against the INSTALLED hook, not the generator's source. The
+  # generator writes a heredoc, so its `$` are backslash-escaped on disk and a
+  # grep for the intended runtime text does not match there — the first version
+  # of this step failed for exactly that reason. What must be true is a property
+  # of the file git actually executes.
+  - step: "the composed hook REPLAYS stdin so every guard can read the ref list"
+    command: "h=$(git rev-parse --absolute-git-dir)/hooks/pre-push; if [ ! -f \"$h\" ]; then echo 'skip: no pre-push installed in this checkout'; else n=$(grep -c 'REFS\" *| *bash' \"$h\"); if grep -q 'REFS=\"\\$(cat)\"' \"$h\" && [ \"$n\" -ge 2 ]; then echo 'ok: stdin replayed to both guards'; else echo \"fail: capture=$(grep -c 'REFS=' \\\"$h\\\") replays=$n\"; fi; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: stdin replayed to both guards"
 
   - step: "the stamp is git-dir local and never enters the worktree"
     command: "grep -Fq 'absolute-git-dir' scripts/gate-stamp.sh && ! git ls-files --error-unmatch .git/tillandsias-gate-stamp >/dev/null 2>&1 && echo 'ok: stamp is local machine state'"

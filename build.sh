@@ -279,7 +279,7 @@ _ensure_git_hooks_installed() {
     local hooks_dir out
     hooks_dir="$(git -C "$SCRIPT_DIR" rev-parse --absolute-git-dir 2>/dev/null)/hooks"
     if [[ -f "$hooks_dir/pre-push" ]] \
-        && grep -qF "tillandsias-pre-push-v2" "$hooks_dir/pre-push" 2>/dev/null; then
+        && grep -qF "tillandsias-pre-push-v3" "$hooks_dir/pre-push" 2>/dev/null; then
         return 0
     fi
     if out="$(bash "$SCRIPT_DIR/scripts/install-hooks.sh" 2>&1)"; then

@@ -63,7 +63,7 @@ fi
 # --- Install pre-push hook -------------------------------------------------
 
 PREPUSH_TARGET="$GIT_HOOKS_DIR/pre-push"
-PREPUSH_MARKER="# tillandsias-pre-push-v2"
+PREPUSH_MARKER="# tillandsias-pre-push-v3"
 
 VERSION_GUARD="$REPO_ROOT/scripts/hooks/pre-push-version-guard.sh"
 LOCAL_GATE="$REPO_ROOT/scripts/hooks/pre-push-local-gate.sh"
@@ -92,17 +92,24 @@ $PREPUSH_MARKER
 # Fail-fast composition: the first refusal wins. Do NOT convert this back into a
 # list of bare \`bash <script>\` lines; subshell exits do not propagate and a
 # failing guard would be masked by a later passing one.
-bash "$VERSION_GUARD" "\$@" || exit \$?
-bash "$LOCAL_GATE"    "\$@" || exit \$?
+#
+# STDIN IS CAPTURED ONCE AND REPLAYED. Git supplies the ref list
+# ("<local ref> <local sha> <remote ref> <remote sha>") on stdin, and a stream
+# can only be consumed once — the first guard to read it would starve every
+# guard after it. The VERSION guard needs that list to tell whether the commits
+# being PUSHED touch VERSION, so it must not be the only one that can see it.
+REFS="\$(cat)"
+printf '%s\n' "\$REFS" | bash "$VERSION_GUARD" "\$@" || exit \$?
+printf '%s\n' "\$REFS" | bash "$LOCAL_GATE"    "\$@" || exit \$?
 HOOK
     chmod +x "$PREPUSH_TARGET"
 }
 
 if [[ -f "$PREPUSH_TARGET" ]] && grep -qF "$PREPUSH_MARKER" "$PREPUSH_TARGET" 2>/dev/null; then
     echo "✓ pre-push hook (VERSION guard + local gate) already installed"
-elif [[ -f "$PREPUSH_TARGET" ]] && grep -qF "# version-guard-hook" "$PREPUSH_TARGET" 2>/dev/null; then
+elif [[ -f "$PREPUSH_TARGET" ]] && grep -qE "# (version-guard-hook|tillandsias-pre-push-v2)" "$PREPUSH_TARGET" 2>/dev/null; then
     install_prepush
-    echo "✓ pre-push hook upgraded to v2 (adds the local gate; fixes masked exit codes)"
+    echo "✓ pre-push hook upgraded to v3 (local gate, fail-fast, stdin replay)"
 elif [[ -f "$PREPUSH_TARGET" ]]; then
     echo "⚠ an unrecognized pre-push hook exists — leaving it alone" >&2
     echo "  To adopt the Tillandsias gate, move it aside and re-run this script." >&2
