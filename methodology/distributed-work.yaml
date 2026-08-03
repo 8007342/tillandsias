@@ -931,9 +931,10 @@ distributed_work:
       wrong_direction_progress_mediation:
         trigger: "A sibling implements plans or code deviating from active specs or violating core design invariants."
         action: >
-          Freeze the sibling's lease. Document the divergence in loop_status.md and their
-          work queue. Force-assign a corrective 'Spec Alignment & Litmus Verification'
-          packet as their next primary task.
+          Freeze the sibling's lease. Document the divergence as a cycle entry via the
+          loop_status overlay (`tillandsias-plan loop-status-append`, never an in-place
+          rewrite of plan/loop_status.md) and their work queue. Force-assign a corrective
+          'Spec Alignment & Litmus Verification' packet as their next primary task.
       thrashing_mediation:
         trigger: "Two hosts repeatedly overwrite each other's plan notes or code changes (undo-loops)."
         action: >

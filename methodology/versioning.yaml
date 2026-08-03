@@ -461,7 +461,9 @@ stable_channel:
     gate: >
       The script refuses (refused:no-evidence) unless plan/ contains a dated
       e2e/smoke PASS record naming that version; --force overrides loudly
-      and must be recorded in plan/loop_status.md. On success it flips
+      and must be recorded as a cycle entry via `tillandsias-plan
+      loop-status-append` (never an in-place rewrite of plan/loop_status.md).
+      On success it flips
       prerelease=false, marks the release "latest", and moves the annotated
       `stable` git tag to the release commit.
     demotion: "gh release edit <tag> --prerelease (README URLs fall back to the previous stable)"

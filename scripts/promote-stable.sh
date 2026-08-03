@@ -43,7 +43,7 @@ if ! grep -rIlE "(e2e|smoke).*(PASS|pass).*${VERSION_NO_V}|${VERSION_NO_V}.*(e2e
         "$REPO_ROOT/plan/" >/dev/null 2>&1; then
     if [ "$FORCE" = "--force" ]; then
         echo "WARNING: promoting $TAG WITHOUT e2e PASS evidence in plan/ (--force)." >&2
-        echo "Record the override in plan/loop_status.md (who/when/why)." >&2
+        echo "Record the override as a cycle entry via 'tillandsias-plan loop-status-append' (who/when/why; never rewrite plan/loop_status.md in place)." >&2
     else
         echo "No e2e PASS evidence for $VERSION_NO_V found under plan/." >&2
         echo "Run /smoke-curl-install-and-test-e2e first, or pass --force (operator override)." >&2
