@@ -122,3 +122,13 @@ mf_threshold_std() {
   local count="$1" min="$2"
   [ "$count" -ge "$min" ] 2>/dev/null
 }
+
+# mf_touch_age_minutes FILE MINUTES
+#   Set FILE's mtime to MINUTES ago. GNU touch understands relative -d;
+#   BSD/macOS touch does not, so fall back to an absolute -t stamp derived
+#   with BSD date -v. Tests must use this instead of `touch -d 'N minutes
+#   ago'` directly — that idiom is GNU-only.
+mf_touch_age_minutes() {
+  touch -d "$2 minutes ago" "$1" 2>/dev/null \
+    || touch -t "$(date -v -"$2"M +%Y%m%d%H%M.%S)" "$1"
+}

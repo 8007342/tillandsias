@@ -1,0 +1,24 @@
+{
+  "mcpServers": {
+    "git-tools": {
+      "type": "stdio",
+      "command": "/home/forge/.config-overlay/mcp/git-tools.sh",
+      "args": []
+    },
+    "project-info": {
+      "type": "stdio",
+      "command": "/home/forge/.config-overlay/mcp/project-info.sh",
+      "args": []
+    },
+    "host-browser": {
+      "type": "stdio",
+      "command": "/home/forge/.config-overlay/mcp/host-browser.sh",
+      "args": []
+    },
+    "forge-plan": {
+      "type": "stdio",
+      "command": "/home/forge/.config-overlay/mcp/forge-plan.sh",
+      "args": []
+    }
+  }
+}

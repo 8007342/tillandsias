@@ -24,6 +24,11 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: header grammar pinned"
 
+  - step: "Req: local CI ranks stale audit candidates by numeric age"
+    command: "sample=$(printf '%s\\n' 'freshness-stale: z.sh 3 days' 'freshness-stale: a.sh 20 days'); first=$(printf '%s\\n' \"$sample\" | sort -t' ' -k3,3nr | head -1); grep -Fq \"sort -t' ' -k3,3nr\" scripts/local-ci.sh && [ \"$first\" = 'freshness-stale: a.sh 20 days' ] && echo 'ok: advisory ranks by age'"
+    timeout_ms: 3000
+    expected_behavior: "ok: advisory ranks by age"
+
   - step: "Req: incident component stamps present (run-litmus-test.sh, tls-test-server.c, environment-isolation)"
     command: "grep -qE '^#? freshness: auditor=.* date=.* verdict=(refreshed|updated|obsoleted) scope=.*' scripts/run-litmus-test.sh && grep -qE '^// freshness: auditor=.* date=.* verdict=(refreshed|updated|obsoleted) scope=.*' scripts/tls-test-server.c && grep -qE '^# freshness: auditor=.* date=.* verdict=(refreshed|updated|obsoleted) scope=.*' openspec/litmus-tests/litmus-environment-isolation.yaml && echo 'ok: 2026-07-15 incident components stamped'"
     timeout_ms: 3000

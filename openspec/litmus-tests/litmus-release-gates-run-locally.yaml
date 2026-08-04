@@ -1,0 +1,150 @@
+# @trace spec:methodology-accountability, spec:versioning
+# @cheatsheet concurrent-git/plan-discipline.md
+#
+# Pins the 2026-08-03 operator directive: "ONLY the actual release needs to run
+# in the cloud, since it uses github secrets for signing some binaries,
+# everything else runs locally."
+#
+# WHY EACH STEP EXISTS
+#
+# The failure this guards against is not "a workflow reappears" — it is the
+# quieter one where a validation is DELETED from the cloud and never actually
+# lands anywhere else. That trades cost for coverage and looks like a cleanup in
+# the diff. So the test asserts BOTH halves: gone from release.yml, AND present
+# and enforced locally.
+#
+# The second failure it guards against is the one that already happened: the
+# repo shipped scripts/install-hooks.sh for months while .git/hooks/ sat EMPTY,
+# so every hook was inert. Shipping a gate uninstalled is indistinguishable from
+# not having one, which is why "build.sh installs them" is pinned as a source
+# fact rather than trusted to a runbook step.
+name: litmus:release-gates-run-locally
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Assert that the release validations which do not need GitHub secrets run on
+  local hardware and are enforced by the pre-push gate: the preflight exists and
+  passes, its gates are absent from release.yml, the pre-push hook composes
+  fail-fast, build.sh installs the hooks, and the stamp mechanism can actually
+  refuse a stale tree.
+severity: high
+size: quick
+
+preconditions:
+  - repository contains scripts/release-preflight.sh and scripts/gate-stamp.sh
+  - a git checkout (the stamp is computed from HEAD plus the working diff)
+
+critical_path:
+  - step: "the local preflight exists, is executable, and emits its verdict grammar"
+    command: "test -x scripts/release-preflight.sh && v=$(bash scripts/release-preflight.sh 2>/dev/null | tail -1) && echo \"$v\" | grep -Eq '^(ok:release-preflight|blocked:[a-z-]+)$' && echo \"ok: verdict grammar ($v)\""
+    timeout_ms: 60000
+    expected_behavior: "ok: verdict grammar (ok:release-preflight)"
+
+  - step: "the preflight PASSES on this tree (a gate that cannot pass is not adopted)"
+    command: "bash scripts/release-preflight.sh 2>/dev/null | tail -1 | grep -Fqx 'ok:release-preflight' && echo 'ok: preflight green'"
+    timeout_ms: 60000
+    expected_behavior: "ok: preflight green"
+
+  - step: "the preflight can REFUSE — reintroduce a workflow and require a block"
+    command: "set -e; f=.github/workflows/zz-litmus-probe.yml; cleanup() { rm -f \"$f\"; }; trap cleanup EXIT; printf 'name: p\\non: [push]\\njobs:\\n  x:\\n    runs-on: ubuntu-latest\\n    steps: [{run: echo}]\\n' > \"$f\"; v=$(bash scripts/release-preflight.sh 2>/dev/null | tail -1); if [ \"$v\" = 'blocked:unsanctioned-workflow' ]; then echo 'ok: preflight refuses'; else echo \"fail: expected blocked:unsanctioned-workflow, got '$v'\"; fi"
+    timeout_ms: 60000
+    expected_behavior: "ok: preflight refuses"
+
+  # COMMENT LINES ARE STRIPPED FIRST. The removal site deliberately documents
+  # which steps moved and where they went, naming them verbatim — so a bare
+  # `grep -F 'Verify version monotonicity'` matches the explanation of the fix
+  # and reports the fix as missing. This test failed exactly that way on its
+  # first run, and it is the fourth time this repo has shipped a guard that
+  # matched its own prose. Assert on the STEP DEFINITION (`- name:`), never on a
+  # mention.
+  - step: "the moved gates are GONE from release.yml as STEPS (comments stripped; a mention is not a step)"
+    command: "body=$(grep -vE '^\\s*#' .github/workflows/release.yml); if echo \"$body\" | grep -Eq '^\\s*-\\s*name:\\s*(Verify version monotonicity|Assert retired setup/secrets flags)'; then echo 'fail: a moved gate is still a step in release.yml'; else echo 'ok: moved gates absent from the cloud workflow'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: moved gates absent from the cloud workflow"
+
+  - step: "negative control: the same check FAILS when such a step really is present"
+    command: "probe=$(printf 'jobs:\\n  r:\\n    steps:\\n      - name: Verify version monotonicity\\n        run: true\\n'); if echo \"$probe\" | grep -vE '^\\s*#' | grep -Eq '^\\s*-\\s*name:\\s*(Verify version monotonicity|Assert retired setup/secrets flags)'; then echo 'ok: detector fires on a real step'; else echo 'fail: detector is blind — it would pass on a reintroduced gate'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: detector fires on a real step"
+
+  - step: "and their new home is RECORDED in release.yml, so the removal is not mistaken for a drop"
+    command: "grep -Fq 'scripts/release-preflight.sh' .github/workflows/release.yml && echo 'ok: relocation documented at the removal site'"
+    timeout_ms: 5000
+    expected_behavior: "ok: relocation documented at the removal site"
+
+  - step: "release.yml remains the ONLY workflow — the whole point of the budget"
+    command: "n=$(ls -1 .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); if [ \"$n\" -eq 1 ] && [ -f .github/workflows/release.yml ]; then echo 'ok: release.yml is the only workflow'; else echo \"fail: $n workflow file(s) present\"; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: release.yml is the only workflow"
+
+  - step: "the pre-push hook composes FAIL-FAST (a masked exit code is the bug this replaced)"
+    command: "grep -Fq '|| exit' scripts/install-hooks.sh && grep -Fq 'tillandsias-pre-push-v3' scripts/install-hooks.sh && echo 'ok: fail-fast composition'"
+    timeout_ms: 5000
+    expected_behavior: "ok: fail-fast composition"
+
+  - step: "build.sh INSTALLS the hooks rather than merely shipping them"
+    command: "grep -Fq '_ensure_git_hooks_installed' build.sh && grep -Fq 'gate-stamp.sh' build.sh && echo 'ok: build.sh wires the gate'"
+    timeout_ms: 5000
+    expected_behavior: "ok: build.sh wires the gate"
+
+  - step: "the stamp mechanism DETECTS a changed tree (behavioural, not a grep)"
+    command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; echo seed > \"$t\"/f.txt; git -C \"$t\" add -A; git -C \"$t\" commit -qm base; ( cd \"$t\" && bash gate-stamp.sh write >/dev/null && a=$(bash gate-stamp.sh verify) && echo changed >> f.txt && b=$(bash gate-stamp.sh verify || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'stale:tree-changed-since-gate' ]; then echo 'ok: stamp detects tree change'; else echo \"fail: fresh='$a' after-edit='$b'\"; fi )"
+    timeout_ms: 60000
+    expected_behavior: "ok: stamp detects tree change"
+
+  # Tillandsias tracks each harness skill entry as a symlink to a directory.
+  # `sha256sum <symlink>` follows it, refuses the directory, and made the first
+  # stamp implementation fail on every real checkout even though its regular-
+  # file fixture stayed green. Exercise that exact filesystem shape.
+  - step: "the stamp hashes tracked directory symlinks without following them"
+    command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; mkdir \"$t\"/skills-a \"$t\"/skills-b; ln -s skills-a \"$t\"/active-skill; git -C \"$t\" add gate-stamp.sh active-skill; git -C \"$t\" commit -qm base; ( cd \"$t\" && bash gate-stamp.sh write >/dev/null && a=$(bash gate-stamp.sh verify) && rm active-skill && ln -s skills-b active-skill && b=$(bash gate-stamp.sh verify || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'stale:tree-changed-since-gate' ]; then echo 'ok: directory symlink hashed by target'; else echo \"fail: fresh='$a' after-retarget='$b'\"; fi )"
+    timeout_ms: 60000
+    expected_behavior: "ok: directory symlink hashed by target"
+
+  # REGRESSION PIN. The first implementation hashed `HEAD + git diff HEAD`, so
+  # committing — which changes HEAD without changing one byte of content — went
+  # stale at exactly the moment you push, and `git add` broke it the same way.
+  # The gate was unusable. The property is "the gate validated these BYTES", and
+  # bytes do not care which commit they sit on.
+  - step: "staging and committing do NOT invalidate the stamp (only editing does)"
+    command: "set -e; t=$(mktemp -d); cleanup() { rm -rf \"$t\"; }; trap cleanup EXIT; git init -q -b main \"$t\"; git -C \"$t\" config user.email t@t; git -C \"$t\" config user.name t; cp scripts/gate-stamp.sh \"$t\"/; echo seed > \"$t\"/f.txt; git -C \"$t\" add -A; git -C \"$t\" commit -qm base; ( cd \"$t\" && bash gate-stamp.sh write >/dev/null && echo edited > f.txt && bash gate-stamp.sh write >/dev/null && git add -A && a=$(bash gate-stamp.sh verify || true) && git commit -qm c && b=$(bash gate-stamp.sh verify || true) && echo more >> f.txt && c=$(bash gate-stamp.sh verify || true); if [ \"$a\" = 'ok:gate-fresh' ] && [ \"$b\" = 'ok:gate-fresh' ] && [ \"$c\" = 'stale:tree-changed-since-gate' ]; then echo 'ok: stamp survives add+commit, dies on edit'; else echo \"fail: add='$a' commit='$b' edit='$c'\"; fi )"
+    timeout_ms: 60000
+    expected_behavior: "ok: stamp survives add+commit, dies on edit"
+
+  # REGRESSION PIN. The VERSION guard originally asked "does VERSION differ from
+  # main?", which is a different question and made it refuse EVERY linux-next
+  # push: between releases linux-next legitimately carries a VERSION ahead of
+  # main. It went unnoticed for months because .git/hooks/ was empty; the day the
+  # hook was installed it blocked the first push it saw, on commits that never
+  # touched VERSION. A guard that must be bypassed every time trains --no-verify,
+  # which also skips the local gate — so a wrong guard is worse than none.
+  - step: "the VERSION guard asks whether the PUSHED COMMITS touch VERSION, not whether it differs from main"
+    command: "grep -Fq 'version_touched' scripts/hooks/pre-push-version-guard.sh && ! grep -Eq '^\\s*if \\[\\[ \"\\$main_version\" != \"\\$current_version\" \\]\\]' scripts/hooks/pre-push-version-guard.sh && echo 'ok: guard tests the pushed range'"
+    timeout_ms: 5000
+    expected_behavior: "ok: guard tests the pushed range"
+
+  # Asserted against the INSTALLED hook, not the generator's source. The
+  # generator writes a heredoc, so its `$` are backslash-escaped on disk and a
+  # grep for the intended runtime text does not match there — the first version
+  # of this step failed for exactly that reason. What must be true is a property
+  # of the file git actually executes.
+  - step: "the composed hook REPLAYS stdin so every guard can read the ref list"
+    command: "h=$(git rev-parse --path-format=absolute --git-path hooks)/pre-push; if [ ! -f \"$h\" ]; then echo \"fail: no pre-push installed at effective hooks path $h\"; else n=$(grep -c 'REFS\" *| *bash' \"$h\"); if grep -q 'REFS=\"\\$(cat)\"' \"$h\" && [ \"$n\" -ge 2 ]; then echo 'ok: stdin replayed to both guards'; else echo \"fail: capture=$(grep -c 'REFS=' \\\"$h\\\") replays=$n\"; fi; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: stdin replayed to both guards"
+
+  - step: "the stamp is git-dir local and never enters the worktree"
+    command: "grep -Fq 'absolute-git-dir' scripts/gate-stamp.sh && ! git ls-files --error-unmatch .git/tillandsias-gate-stamp >/dev/null 2>&1 && echo 'ok: stamp is local machine state'"
+    timeout_ms: 5000
+    expected_behavior: "ok: stamp is local machine state"
+
+failure_modes:
+  - "a validation is deleted from release.yml and never lands locally, trading cost for coverage"
+  - "the preflight exists but cannot refuse, so it reports green on a broken release"
+  - "hooks ship uninstalled and every gate is inert — the state this repo was actually in"
+  - "the installer writes .git/hooks while core.hooksPath points elsewhere, reporting success for guards Git never executes"
+  - "the pre-push hook reverts to appended `bash <script>` lines, masking a failing guard's exit code behind a later passing one"
+  - "the stamp becomes time-based instead of content-based, so reverting an edit no longer restores freshness"
+  - "the gate stamp gets committed, making one machine's local state look authoritative to every other host"
+  - "the stamp follows a tracked skill symlink into its directory and therefore cannot record any real Tillandsias checkout"
+  - "a new workflow is added to .github/workflows and quietly resumes burning cloud minutes"

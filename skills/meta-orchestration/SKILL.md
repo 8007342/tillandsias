@@ -132,7 +132,30 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `lin
    Refuse the cycle and do not begin committable work. Report the dirty-start
    blocker through the final handoff as defined above. Do not commit, discard,
    restore, reset, or clean unknown startup dirt.
-4. Update the active local branch from remote with fast-forward or an explicit
+4. **Generated opsx sync merge (deterministic, order 540)**: before refusing on
+   startup dirt, run the deterministic detector:
+   ```bash
+   scripts/check-opsx-generated-dirt.sh
+   ```
+   It prints exactly one line matching `^(ok:opsx-only|ok:clean-tree|non-opsx:.*)$`
+   and exits `0` only when every status-visible dirty path is exactly the
+   22-path opsx/openspec generated set (`.opencode/commands/opsx-*.md` +
+   `.opencode/skills/openspec-*/SKILL.md`) — the launch-generated artifact from
+   the installed openspec CLI (see
+   `plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md`). On
+   `ok:opsx-only`, the dirt is INTENDED versioned project content, not operator
+   work: commit it as its own sync change on the canonical branch before worker
+   drain, then re-anchor the startup boundary:
+   ```bash
+   git add .opencode/commands/opsx-*.md .opencode/skills/openspec-*/
+   git commit -m "chore(opsx): sync generated openspec commands and skills"
+   scripts/meta-orchestration-worktree-guard.sh re-snapshot "$boundary_dir"
+   ```
+   A `non-opsx:` verdict means real sibling/operator dirt — fall through to the
+   dirty-start refusal exactly as written; never commit, discard, or clean it.
+   An `ok:clean-tree` verdict means there is nothing to merge. The checker is a
+   falsifiable machine decision; do not substitute prose judgment for it.
+5. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
 
 ## Credential Channel Guard
@@ -200,6 +223,46 @@ Read-only/inspection cycles on a `main` checkout remain allowed — the guard
 gates committable cycles only. Pinned by
 `litmus:committable-branch-guard-shape`.
 
+## Forge Expert Base Guard
+
+Run before launching a forge from this checkout. Run the executable guard
+instead of re-deriving the check in prose:
+
+```bash
+scripts/check-forge-expert-base.sh
+```
+
+It prints exactly one line matching
+`^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$`
+and exits `0` when a forge seeded from this checkout can build a working plan
+expert, non-zero when it cannot.
+
+Why this is a separate guard from the branch guard above: the launcher seeds a
+forge's branch from **this checkout's current branch**
+(`read_host_project_current_branch` → `TILLANDSIAS_FORGE_SEED_BRANCH`), so
+whatever branch you are parked on becomes the next forge's base. `main` carries
+no `crates/tillandsias-plan/src/answer.rs`, so a forge seeded from it builds a
+**pre-expert binary** and then reports `experts: ready` truthfully while every
+`plan_answer` / `methodology_path` returns `confidence=unsupported`. Truthful
+state, wrong artifact. Breach record: 2026-07-30, an in-forge session found both
+experts refusing the milestone's own exemplar question; two earlier cycles had
+absorbed the same condition by noticing and hand-rebasing
+(`plan/loop_status.md:203`, `:243`). Order 531.
+
+The test is **source presence, not a branch name** — deliberately. The names
+`linux-next`/`windows-next`/`osx-next`/`main` are Tillandsias's own conventions
+and are explicitly *not* a runtime convention of the product
+(`methodology/multi-host-development.yaml:21-27`), so a forge on an end user's
+project must not assume them. Source presence is a fact about the checkout, and
+it also catches the case a branch-name test cannot: when the seed and the actual
+branch agree because this checkout was itself parked on a pre-expert base,
+nothing looks wrong.
+
+On `blocked:expert-sources-absent`, do NOT launch a forge expecting expert
+answers. Switch this checkout to a branch carrying the expert sources first. On
+`ok:no-plan-crate` the target project simply has no plan expert, which is normal
+off-Tillandsias.
+
 ## Reduction Engine
 
 The loop is a reduction engine, not just a worker. Its job is the project's core
@@ -232,6 +295,69 @@ This is mandatory, not optional (`methodology.yaml` →
 things that make you slower"). File it as a dated issue in `plan/issues/`,
 classified as one of: `research/`, `exploration/`, `enhancement/`, or
 `optimization/`. An unfiled finding is a lost finding and a contract violation.
+
+### Ledger compaction (check each cycle; act only when eligible)
+
+```bash
+tillandsias-plan fragments     # -> compaction: eligible=<bool> fragments=N bytes=N malformed=N reason=<name>
+tillandsias-plan compact       # only when eligible=true
+```
+
+`plan/index.yaml` is a compacted BASE; `plan/index.d/*.yaml` are append-only
+fragments that concurrent hosts write freely. Reads fold them transparently, so
+**an uncompacted ledger is slower, never wrong** — compaction is garbage
+collection, not a correctness step. Never let it block filing work.
+
+Two rules, both easy to get wrong:
+
+- **Compaction deletes only the fragments it folded, by name.** Never
+  `rm plan/index.d/*`. A fragment another host wrote while you were compacting
+  has not been folded, and removing it silently destroys their work.
+- **Compaction is TEXT-LEVEL and never re-serializes the base.** It ran on the
+  real ledger for the first time on 2026-08-03 (order 582-4wdi, commit 81e12b65):
+  28 fragments folded, 120 comment lines preserved exactly, 535 packets
+  preserved, and the `plan/index.yaml` diff was 1021 added lines and **zero
+  removed lines**. That zero is the property to protect — existing base bytes are
+  untouched by construction, so the inline operator decisions and the four-space
+  item prefix `append-event` locates by cannot be lost by a fold.
+
+  It refused for months before that, correctly: a `serde_yaml` round-trip drops
+  comments and re-indents items to column 0, after which `append-event` silently
+  stops finding packets. If compaction ever regresses to round-tripping YAML,
+  restore the refusal rather than accepting a lossy fold. The candidate base must
+  still PARSE and pass the integrity gate before it may replace the base.
+
+If `malformed=N` is non-zero, a fragment did not parse and was SKIPPED — its
+contents are absent from every answer. Treat that as a finding, not noise.
+
+### Filing a packet: mint its order, never pick one
+
+```bash
+tillandsias-plan next-order          # -> 581-k3f9
+```
+
+**Write the packet to a FRAGMENT, not to `plan/index.yaml`.** Create
+`plan/index.d/<utc>-<suffix>-<host>.yaml` with a top-level `packets:` list. Only
+you can have produced that filename, so git never conflicts and no host waits on
+another. Reads fold it in automatically — the packet is queryable immediately.
+Fragments are IMMUTABLE: to change something, write a new fragment, never edit an
+existing one (that is what makes the fold order-independent).
+
+**Never compute "the next free order" yourself.** That number comes from a
+ledger snapshot which is stale the moment another host commits, so two hosts
+filing in the same window pick the SAME number deterministically. It happened
+twice on 2026-07-31 (560–562, then 568–570), and six collisions sit at HEAD.
+
+The minted token is **permanent**. Do not renumber it later, and do not ask a
+coordinator to "normalize" it — order tokens leak into code comments, `@trace
+order:` headers, and commit messages, and a pushed commit message can never be
+corrected. Two hosts landing on prefix `575` produce `575-k3f9` and `575-m2p1`:
+both correct, both permanent, nothing to reconcile. A shared prefix is normal.
+
+Cite `packet_id` in anything durable — depends_on, specs, methodology, commit
+messages. It is the identity and is unique by construction; the order token is a
+human convenience. Canonical: `methodology/distributed-work.yaml` →
+`order_id_allocation`.
 
 ### Reduce: smaller, simpler, verifiable packets
 
@@ -418,6 +544,37 @@ Only `linux_mutable` performs global coordination:
 5. After a release succeeds, ensure the plan records the new latest release so
    immutable Linux hosts know to run curl-install e2e.
 
+## Cycle Metrics (report before the handoff)
+
+Run `scripts/cycle-metrics.sh [<since-ref>]` and include its output verbatim in
+the final handoff. It emits one `key=value` line per block — branch on those,
+never on prose.
+
+The two lines worth reading first:
+
+- **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called
+  two hundred times that refuses two hundred times is heavily used and
+  completely useless, and a call counter reports that as healthy adoption. That
+  is not hypothetical: order 531 had every `plan_answer` returning
+  `confidence=unsupported` (the forge was seeded from a pre-expert branch) while
+  launch state truthfully reported `experts: ready`.
+- **`verdict`** — the single fact to look at first. `attention:` is not a
+  failure; it is the cycle naming its own weakest point.
+  `attention:expert-answered-nothing-check-base-branch` is the order-531
+  signature and means the ARTIFACT is wrong, not that the questions were hard.
+
+Two rules about these numbers:
+
+- **Never report a metric the tooling did not produce.** `experts_substitution`
+  reads `unknown` because it needs the agent harness's tool log, which is not in
+  this repo. Leave it unknown. An estimated number makes an unmeasured thing
+  look measured, which is worse than reporting nothing.
+- **Never propose making expert metrics reward activity.** `answered` is
+  reachable only via citations the compiled expert emits when it resolved a real
+  packet or path, so calling tools more cannot raise the rate. A change that
+  lets `answered` be reached without citations converts a quality signal into a
+  volume signal and must be refused on that ground.
+
 ## Finalization
 
 Before exit:
@@ -428,13 +585,24 @@ Before exit:
    promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit. A
    dirty-start preflight refusal performs no reduction cycle; it uses the final
    handoff exception above and exits without touching the checkout.
-2. Refresh `plan/index.yaml` and `plan/loop_status.md` if this cycle
-   changed active work, blockers, tested release, or host assignments.
-3. Validate touched YAML with a parser. The approved validator is
-   `tillandsias-policy validate-yaml <files>` where built, with
-   `ruby -ryaml -e "YAML.load_file('<file>')"` as the sanctioned fallback.
-   Python is not permitted for committed automation (see
+2. Refresh `plan/index.yaml` if this cycle changed active work, blockers,
+   tested release, or host assignments. Record THIS cycle's status as a NEW
+   `## Cycle` fragment in `plan/loop_status.d/` via
+   `tillandsias-plan loop-status-append --host <host> --ts <UTC-ISO>` — never
+   edit the shared `plan/loop_status.md` directly, or a concurrent host's
+   status write conflicts for the same reason the old monolithic ledger did
+   (packet 582-nqw5). The folded view (`tillandsias-plan loop-status`) is the
+   status every host sees; `loop-status-compact` folds fragments into the base
+   when drift makes it eligible.
+3. Validate touched YAML with a parser, using the one that EXISTS where you are:
+   `tillandsias-policy validate-yaml <files>` where built, else
+   `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.
+   **`ruby` is NOT in the forge image; `yq` is** — a skill that names only ruby
+   sends a forge agent to a tool that does not exist, and the tool sitting next
+   to it is `python3`, which is FORBIDDEN for committed automation (see
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
+   Its presence on PATH is not permission. The forge startup context lists what
+   is actually available.
 4. Commit targeted files only.
 5. Push the relevant branch.
 6. If a startup boundary was recorded, run the guard's `verify` mode. A guard

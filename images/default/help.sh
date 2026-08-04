@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # @trace spec:help-system-localization
+# freshness: auditor=forge-tillandsias-20260730T1619Z date=2026-07-30 verdict=updated scope=fixed infinite self-source segfault (exit 139) when invoked via tillandsias-help symlink; added _THS re-entry guard
 # help.sh — Tillandsias Forge help system
 # English version with common commands, tips, and troubleshooting
 
 # Detect locale if available
-if [ -z "${L_WELCOME_TITLE:-}" ]; then
+if [ -z "${L_WELCOME_TITLE:-}" ] && [ -z "${_THS:-}" ]; then
     _LOCALE_RAW="${LC_ALL:-${LC_MESSAGES:-${LANG:-en}}}"
     _LOCALE="${_LOCALE_RAW%%_*}"
     _LOCALE="${_LOCALE%%.*}"
     _HELP_FILE="/usr/local/share/tillandsias/help-${_LOCALE}.sh"
     [ -f "$_HELP_FILE" ] || _HELP_FILE="/usr/local/share/tillandsias/help.sh"
     if [ "$_HELP_FILE" != "$0" ] && [ -f "$_HELP_FILE" ]; then
+        export _THS=1
         source "$_HELP_FILE"
         exit 0
     fi

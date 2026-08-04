@@ -683,6 +683,26 @@ log_skip() {
     CHECKS_SKIPPED=$((CHECKS_SKIPPED + 1))
 }
 
+# A guard whose SCRIPT IS ABSENT is a repo-integrity failure, never a skip.
+#
+# Every gate below was written as `if [[ -f <script> ]]; then ... else log_skip
+# "<name> checker not found"; fi`. Because the verdict only tests CHECKS_FAILED,
+# that shape means renaming, moving, or deleting any guard script silently
+# DELETES that guard from CI while CI keeps printing "Safe to push!". The Python
+# ban — an explicit operator non-negotiable — evaporated if
+# scripts/check-no-python-scripts.sh was ever relocated, with no message anywhere.
+#
+# Fail closed instead: the guards are committed files, so their absence means the
+# tree is broken, not that the check is inapplicable. Environmental skips (no
+# podman, deep lane excluded in fast mode) keep using log_skip, which is the
+# honest signal for "this genuinely does not apply here".
+log_fail_missing_guard() {
+    local check_name="$1"
+    local script_path="$2"
+    log_fail_tracked "$check_name" \
+        "guard script missing: $script_path — a guard that cannot run is not a guard. Restore it, or remove its gate from scripts/local-ci.sh deliberately."
+}
+
     log_info() {
     printf '%b%s%b %s\n' "${BLUE}" "ℹ" "${NC}" "$*"
 }
@@ -759,7 +779,10 @@ if [[ -x "scripts/freshness-inventory.sh" ]]; then
     if [[ -n "$_fresh_cov" ]]; then
         log_info "FRESHNESS coverage: ${_fresh_cov} (${_fresh_stamped:-0}/${_fresh_total:-?} components stamped)"
     fi
-    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k2 -n -r | head -5)"
+    # Grammar is `freshness-stale: <path> <age-days> ...`; age is field 3.
+    # Sorting field 2 ranked paths lexically and advertised the wrong audit
+    # source as "top stalest" with total confidence.
+    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k3,3nr | head -5)"
     if [[ -n "$_fresh_flagged" ]]; then
         log_info "Top stalest components (audit candidates — advisory only):"
         while IFS= read -r line; do
@@ -792,7 +815,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "spec-cheatsheet-binding" "fail" /tmp/binding-check.log
         fi
     else
-        log_skip "Spec-cheatsheet binding validator not found"
+        log_fail_missing_guard "spec-cheatsheet-binding" "scripts/check-cheatsheet-refs.sh"
         archive_check_log "spec-cheatsheet-binding" "skipped"
     fi
 
@@ -811,7 +834,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "spec-code-drift" "fail" /tmp/drift-check.log
         fi
     else
-        log_skip "Spec-code drift checker not found"
+        log_fail_missing_guard "spec-code-drift" "scripts/hooks/pre-commit-openspec.sh"
         archive_check_log "spec-code-drift" "skipped"
     fi
 
@@ -833,7 +856,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "spec-trace-coverage" "fail" /tmp/trace-coverage.log
         fi
     else
-        log_skip "Trace coverage validator not found"
+        log_fail_missing_guard "spec-trace-coverage" "scripts/validate-traces.sh"
         archive_check_log "spec-trace-coverage" "skipped"
     fi
 
@@ -852,7 +875,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "version-monotonicity" "fail" /tmp/version-check.log
         fi
     else
-        log_skip "Version monotonicity checker not found"
+        log_fail_missing_guard "version-monotonicity" "scripts/check-version-monotonicity.sh"
         archive_check_log "version-monotonicity" "skipped"
     fi
 
@@ -954,7 +977,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "container-base-policy" "fail" /tmp/container-bases.log
         fi
     else
-        log_skip "Container base-image checker not found"
+        log_fail_missing_guard "container-base-policy" "scripts/check-container-bases.sh"
         archive_check_log "container-base-policy" "skipped"
     fi
 
@@ -973,7 +996,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "cheatsheet-tiers" "fail" /tmp/cheatsheet-tiers.log
         fi
     else
-        log_skip "Cheatsheet tier validator not found"
+        log_fail_missing_guard "cheatsheet-tiers" "scripts/check-cheatsheet-tiers.sh"
         archive_check_log "cheatsheet-tiers" "skipped"
     fi
 
@@ -994,7 +1017,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "no-python-scripts" "fail" /tmp/no-python-check.log
         fi
     else
-        log_skip "Python script checker not found"
+        log_fail_missing_guard "no-python-scripts" "scripts/check-no-python-scripts.sh"
         archive_check_log "no-python-scripts" "skipped"
     fi
 
@@ -1009,7 +1032,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
             archive_check_log "no-base64-script-injection" "fail" /tmp/no-base64-script-injection.log
         fi
     else
-        log_skip "Base64 script injection checker not found"
+        log_fail_missing_guard "no-base64-script-injection" "scripts/check-no-base64-script-injection.sh"
         archive_check_log "no-base64-script-injection" "skipped"
     fi
 fi
@@ -1040,7 +1063,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
                 archive_check_log "podman-path-availability" "fail"
             fi
         else
-            log_skip "Litmus test runner not found"
+            log_fail_missing_guard "litmus-runner-missing" "scripts/run-litmus-test.sh"
             archive_check_log "litmus-pre-build" "skipped"
         fi
     else
@@ -1048,19 +1071,37 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         if [[ -f "scripts/run-litmus-test.sh" ]]; then
             if require_podman; then
                 if bash scripts/run-litmus-test.sh --phase pre-build --size instant --compact 2>&1 | tee /tmp/litmus-pre-build.log; then
-                    log_pass "Pre-build instant litmus passed"
+                    log_pass "Pre-build instant litmus passed (instant size only — size:quick tests were NOT run)"
                     archive_check_log "litmus-pre-build" "pass" /tmp/litmus-pre-build.log
                 else
-                    rc=$?
-                    log_info "Instant litmus tests passed; skipping slow compilation tests (use without --fast to run all)"
-                    archive_check_log "litmus-pre-build" "pass-partial" /tmp/litmus-pre-build.log
+                    # This branch fires when the litmus run FAILED. `set -o pipefail`
+                    # is active (see the top of this file), so the pipeline through
+                    # `tee` propagates the runner's non-zero status.
+                    #
+                    # It used to log "Instant litmus tests passed; skipping slow
+                    # compilation tests" — a literal falsehood on the failure path —
+                    # archive the check as `pass-partial`, and capture `rc=$?`
+                    # without ever using it. Because `log_info` does not increment
+                    # CHECKS_FAILED, and the final verdict is
+                    # `if [[ $CHECKS_FAILED -eq 0 ]]`, `./build.sh --ci` printed
+                    # "✓ ALL CHECKS PASSED — Safe to push!" and exited 0 while the
+                    # pre-build litmus was genuinely red. An agent then pushed with
+                    # POSITIVE EVIDENCE that its work was clean, and the failure
+                    # resurfaced in someone else's --ci-full run or in the hosted
+                    # release workflow — maximum distance from cause.
+                    #
+                    # A check that cannot fail is not a gate.
+                    rc=${PIPESTATUS[0]}
+                    log_fail_tracked "litmus-pre-build" \
+                        "Pre-build instant litmus FAILED (exit ${rc}) — see /tmp/litmus-pre-build.log"
+                    archive_check_log "litmus-pre-build" "fail" /tmp/litmus-pre-build.log
                 fi
             else
                 log_fail_tracked "podman-path-availability" "podman is not available on PATH"
                 archive_check_log "podman-path-availability" "fail"
             fi
         else
-            log_skip "Litmus test runner not found"
+            log_fail_missing_guard "litmus-runner-missing" "scripts/run-litmus-test.sh"
             archive_check_log "litmus-pre-build" "skipped"
         fi
     fi
@@ -1094,7 +1135,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "post-build" ]]; then
             archive_check_log "podman-path-availability" "fail"
         fi
     else
-        log_skip "Litmus test runner not found"
+        log_fail_missing_guard "litmus-runner-missing" "scripts/run-litmus-test.sh"
         archive_check_log "litmus-post-build" "skipped"
     fi
 fi
@@ -1139,7 +1180,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "runtime" ]]; then
             fi
         else
             printf 'SKIP\n' >"$RUNTIME_STATUS_FILE"
-            log_skip "Litmus test runner not found"
+            log_fail_missing_guard "litmus-runner-missing" "scripts/run-litmus-test.sh"
             archive_check_log "litmus-runtime" "skipped"
         fi
     else
@@ -1233,7 +1274,19 @@ printf '%b Results:%b %d passed, %d failed, %d skipped\n' "${BOLD}" "${NC}" \
     "$CHECKS_PASSED" "$CHECKS_FAILED" "$CHECKS_SKIPPED" >&2
 
 if [[ $CHECKS_FAILED -eq 0 ]]; then
-    printf '%b%s%b\n' "${GREEN}${BOLD}" "✓ ALL CHECKS PASSED — Safe to push!" "${NC}"
+    # A skipped check is NOT a passed check. Printing "ALL CHECKS PASSED" while
+    # N gates never ran gives an agent positive evidence of coverage it does not
+    # have, and that is how a guard silently stops guarding. Say what actually
+    # ran, and name what did not, so the claim matches the evidence.
+    if [[ $CHECKS_SKIPPED -gt 0 ]]; then
+        printf '%b%s%b\n' "${GREEN}${BOLD}" "✓ CHECKS PASSED ($CHECKS_PASSED) — with $CHECKS_SKIPPED SKIPPED, so this is NOT full coverage" "${NC}"
+        printf '%b%s%b\n' "${YELLOW}" "  Skipped gates did not run and did not pass. Re-run without --fast, or on a host that satisfies their preconditions, before treating this as a release signal." "${NC}"
+    else
+        printf '%b%s%b\n' "${GREEN}${BOLD}" "✓ ALL CHECKS PASSED — Safe to push!" "${NC}"
+    fi
+    if [[ "$FAST_MODE" == "1" ]]; then
+        printf '%b%s%b\n' "${YELLOW}" "  --fast ran the litmus at --size instant only; every size:quick test was SKIPPED by the runner (including the trace-index and self-clean-evidence guards)." "${NC}"
+    fi
     printf '%b%s%b\n' "" "Dispatch the hosted release only for platform builds, signing, and publishing." "${NC}"
     echo ""
     exit 0

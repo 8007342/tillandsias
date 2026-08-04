@@ -1,0 +1,116 @@
+# @trace spec:methodology-accountability
+# @cheatsheet concurrent-git/crdt-ledger-fragments.md
+#
+# Pins the CRDT properties of the ledger fragment overlay.
+#
+# WHY BEHAVIOURAL AND NOT A GREP. A CRDT is defined by three algebraic
+# properties — commutativity, idempotence, and deterministic conflict resolution
+# — and every one of them can be silently broken by a refactor that still reads
+# correctly. "The fold looks fine" is not a check. So this test EXECUTES folds
+# against fixtures and compares results.
+#
+# The properties, and what breaking each one costs:
+#
+#   * COMMUTATIVITY — fold order must not change the result. Break it and two
+#     hosts compute different states from identical inputs, which presents as
+#     data corruption rather than as a sorting bug, and is correspondingly hard
+#     to diagnose.
+#   * IDEMPOTENCE — folding an already-merged fragment must be a no-op.
+#     Compaction folds and then deletes; if it dies between those steps, the next
+#     fold re-reads fragments whose contents are already in the base. Without
+#     idempotence every crash duplicates events.
+#   * EVENTS ARE A SET, NOT A REGISTER — two hosts commenting on one packet keep
+#     both comments. Applying last-writer-wins to the event LIST would silently
+#     discard the loser's evidence, which is the subtlest way to lose work here.
+#   * GC-VERSUS-WRITER — compaction must delete exactly the fragments it folded,
+#     by name. A glob would remove a fragment another host wrote mid-compaction
+#     and had not been folded, destroying filed work with no signal.
+#
+# Also pins that compaction is TEXT-LEVEL and format-preserving (packet
+# 582-4wdi, order 582-4wdi): the base is never re-serialized, so its ~120
+# operator comment lines and the four-space item prefix edit::append_event
+# locates survive BY CONSTRUCTION. The lossy serde_yaml round-trip that would
+# drop them is gone; in its place the replacement candidate must PARSE and pass
+# the integrity gate before it may replace the base — a malformed or broken
+# merge still REFUSES with the base unchanged.
+name: litmus:ledger-fragment-convergence
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Execute the ledger fragment overlay and assert its CRDT properties: the fold
+  is commutative and idempotent, events from two hosts on one packet both
+  survive, status is deterministically last-writer-wins, compaction consumes
+  only what it folded, and compaction is TEXT-LEVEL and format-preserving
+  (comments and item indentation survive by construction, and the candidate
+  must parse and pass integrity before replacing the base).
+severity: high
+size: quick
+
+preconditions:
+  - cargo toolchain available (the steps execute the fold, not its source text)
+  - repository contains crates/tillandsias-plan/src/fragments.rs
+
+critical_path:
+  - step: "the CRDT property suite passes (commutative, idempotent, LWW-deterministic, GC-safe)"
+    command: "cargo test --quiet --release -p tillandsias-plan fragments::tests 2>&1 | grep -q 'test result: ok' && echo 'ok: crdt properties hold'"
+    timeout_ms: 300000
+    expected_behavior: "ok: crdt properties hold"
+
+  - step: "commutativity specifically — the defining property, named so a failure is legible"
+    command: "cargo test --quiet --release -p tillandsias-plan the_fold_is_commutative 2>&1 | grep -q 'test result: ok' && echo 'ok: fold commutes'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fold commutes"
+
+  - step: "idempotence — a compaction that dies halfway must be safe to re-run"
+    command: "cargo test --quiet --release -p tillandsias-plan the_fold_is_idempotent 2>&1 | grep -q 'test result: ok' && echo 'ok: fold is idempotent'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fold is idempotent"
+
+  - step: "events are a G-SET: two hosts commenting on one packet keep BOTH comments"
+    command: "cargo test --quiet --release -p tillandsias-plan events_from_two_hosts_on_one_packet 2>&1 | grep -q 'test result: ok' && echo 'ok: events are a set'"
+    timeout_ms: 300000
+    expected_behavior: "ok: events are a set"
+
+  - step: "END TO END: two hosts file concurrently on separate branches and git merges with ZERO conflicts"
+    command: "set -e; W=$(mktemp -d); cd $W; git init -q -b main .; git config user.email t@t; git config user.name t; mkdir -p plan/index.d; printf 'packets:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > plan/index.yaml; git add -A; git commit -qm base; git checkout -qb host-a; mkdir -p plan/index.d; printf 'packets:\\n  - packet_id: beta\\n    order: 900-aaaa\\n    status: ready\\n' > plan/index.d/20260801t0100z-aaaa-a.yaml; git add -A; git commit -qm a; git checkout -q main; git checkout -qb host-b; mkdir -p plan/index.d; printf 'packets:\\n  - packet_id: gamma\\n    order: 900-bbbb\\n    status: ready\\n' > plan/index.d/20260801t0200z-bbbb-b.yaml; git add -A; git commit -qm b; git checkout -q host-a; git merge --no-edit host-b >/dev/null 2>&1 || true; n=$(git diff --name-only --diff-filter=U | wc -l); cd /; rm -rf $W; if [ \"$n\" -eq 0 ]; then echo 'ok: concurrent filing merges clean'; else echo \"conflicted_files=$n\"; echo 'fail: concurrent filing still conflicts — the overlay is not doing its job'; fi"
+    timeout_ms: 60000
+    expected_behavior: "ok: concurrent filing merges clean"
+
+  - step: "reads are TRANSPARENT: a fragment-only packet resolves through the CLI"
+    command: "cargo run --quiet --release -p tillandsias-plan -- status format-preserving-ledger-compaction 2>/dev/null | grep -q 'format-preserving-ledger-compaction' && echo 'ok: fragment-only packet is queryable'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fragment-only packet is queryable"
+
+  - step: "compaction is TEXT-LEVEL and format-preserving (the base is never re-serialized)"
+    command: "grep -Fq 'compact_text' crates/tillandsias-plan/src/fragments.rs && grep -Fq 'compaction REFUSED' crates/tillandsias-plan/src/main.rs && echo 'ok: compaction is format-preserving'"
+    timeout_ms: 5000
+    expected_behavior: "ok: compaction is format-preserving"
+
+  - step: "the REAL ledger compacts with every comment, item order, and fold state preserved"
+    command: "cargo test --quiet --release -p tillandsias-plan compaction_on_the_real_ledger 2>&1 | grep -q 'test result: ok' && echo 'ok: real-ledger compaction preserves format'"
+    timeout_ms: 300000
+    expected_behavior: "ok: real-ledger compaction preserves format"
+
+  - step: "compaction deletes BY NAME, never by glob (the GC-versus-writer race)"
+    command: "grep -Fq 'consumed' crates/tillandsias-plan/src/fragments.rs && ! grep -Eq 'remove_dir_all\\(.*index\\.d|index\\.d/\\*' crates/tillandsias-plan/src/main.rs && echo 'ok: no glob deletion'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no glob deletion"
+
+  - step: "a malformed fragment is skipped but REPORTED, never silently dropped"
+    command: "cargo test --quiet --release -p tillandsias-plan a_malformed_fragment_is_skipped 2>&1 | grep -q 'test result: ok' && echo 'ok: malformed fragments are visible'"
+    timeout_ms: 300000
+    expected_behavior: "ok: malformed fragments are visible"
+
+  - step: "the doctrine and its cheatsheet are recorded where the expert can answer them"
+    command: "grep -Fq 'crdt_type_per_field' methodology/distributed-work.yaml && test -f cheatsheets/concurrent-git/crdt-ledger-fragments.md && echo 'ok: doctrine + cheatsheet present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: doctrine + cheatsheet present"
+
+failure_modes:
+  - "the fold stops commuting, so two hosts compute different ledgers from identical inputs"
+  - "the fold stops being idempotent, so an interrupted compaction duplicates every event it re-reads"
+  - "events become last-writer-wins, silently discarding one host's evidence"
+  - "compaction deletes fragments by glob, destroying work written by another host mid-compaction"
+  - "compaction reverts to a serde_yaml round-trip, silently dropping ~120 comments including recorded operator decisions"
+  - "compaction stops being format-preserving, so edit::append_event can no longer resolve packets after a fold"
+  - "a reader bypasses the overlay and reports a stale ledger with total confidence"

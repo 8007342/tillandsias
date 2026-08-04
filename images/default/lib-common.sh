@@ -321,6 +321,7 @@ configure_git_identity() {
     git config user.email "$email" 2>/dev/null || true
     trace_lifecycle "git-identity" "configured"
     _install_agent_trailer_hook
+    _install_expert_refresh_hook
 }
 
 # @trace spec:forge-git-identity-anonymization
@@ -364,6 +365,84 @@ HOOK
     chmod 0755 "$hook_file" 2>/dev/null || true
     git config --global core.hooksPath "$hooks_dir" 2>/dev/null || true
     trace_lifecycle "git-hook" "agent trailer hook installed (core.hooksPath=${hooks_dir})"
+}
+
+# @trace packet:experts-refresh-on-commit
+# Install a post-commit hook that triggers incremental expert refresh.
+# Never blocks the commit — forks background work immediately.
+# The hook's source lives at scripts/hooks/post-commit-expert-refresh.sh
+# in the tillandsias repository; this inlines it into the hooks dir.
+_install_expert_refresh_hook() {
+    local hooks_dir="$HOME/.cache/tillandsias/git-hooks"
+    local hook_file="$hooks_dir/post-commit"
+    mkdir -p "$hooks_dir" 2>/dev/null || return 0
+
+    # Idempotent: skip if hook already installed with our marker
+    if [ -f "$hook_file" ] && grep -q "experts-refresh-on-commit" "$hook_file" 2>/dev/null; then
+        return 0
+    fi
+
+    cat > "$hook_file" <<-'HOOK'
+#!/usr/bin/env bash
+# post-commit hook — Tillandsias forge expert refresh (auto-installed, order 396)
+# @trace packet:experts-refresh-on-commit
+HOOK
+
+    # Append the refresh logic (shared from repository source)
+    # This is inlined so the hook is self-contained with no source dependency.
+    cat >> "$hook_file" <<-'REFRESH'
+set -uo pipefail
+
+HOOK_NAME="post-commit-expert-refresh"
+HOOK_START=$(date +%s%N 2>/dev/null || echo 0)
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$REPO_ROOT/plan/index.yaml" ] || exit 0
+
+CHANGED=$(git diff-tree --no-commit-id --name-only -r HEAD 2>/dev/null) || exit 0
+[ -n "$CHANGED" ] || exit 0
+
+HOOK_LOG="${TILLANDSIAS_HOOK_LOG:-/tmp/tillandsias-hooks.log}"
+
+# L0: plan/ and methodology/ — engine reads files fresh at query time.
+# When L1 prose indexes are added, re-index changed corpora here.
+
+# Crate changes → async binary rebuild (bounded, loud on failure)
+if echo "$CHANGED" | grep -qE '^crates/tillandsias-plan/'; then
+    (
+        BIN_DIR="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}"
+        mkdir -p "$BIN_DIR" 2>/dev/null || true
+        BIN_PATH="$BIN_DIR/tillandsias-plan"
+        BUILD_TIMEOUT="${FORGE_EXPERTS_BUILD_TIMEOUT:-600}"
+
+        if command -v cargo &>/dev/null; then
+            timeout "$BUILD_TIMEOUT" cargo build --release -p tillandsias-plan \
+                >> "$HOOK_LOG" 2>&1 \
+                && {
+                    mkdir -p "$BIN_DIR" 2>/dev/null
+                    cp "target/release/tillandsias-plan" "$BIN_PATH" 2>/dev/null
+                    echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) binary rebuilt from commit $(git rev-parse --short HEAD 2>/dev/null)" >> "$HOOK_LOG"
+                } \
+                || echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) FAILED: binary rebuild exited $? (timeout=${BUILD_TIMEOUT}s)" >> "$HOOK_LOG"
+        else
+            echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) SKIP: cargo not available" >> "$HOOK_LOG"
+        fi
+    ) &
+    disown 2>/dev/null || true
+fi
+
+# Measure latency (fork-only, must be <50ms)
+HOOK_END=$(date +%s%N 2>/dev/null || echo 0)
+if [ "$HOOK_START" -ne 0 ] && [ "$HOOK_END" -ne 0 ]; then
+    HOOK_LATENCY_MS=$(( (HOOK_END - HOOK_START) / 1000000 ))
+    echo "[$HOOK_NAME] latency=${HOOK_LATENCY_MS}ms budget_commit=<50ms budget_total=<50ms" >> "$HOOK_LOG" 2>/dev/null || true
+fi
+
+exit 0
+REFRESH
+
+    chmod 0755 "$hook_file" 2>/dev/null || true
+    trace_lifecycle "git-hook" "expert refresh hook installed (post-commit)"
 }
 
 # @trace spec:git-mirror-service, spec:forge-offline, spec:enclave-network
@@ -462,9 +541,11 @@ rewrite_origin_for_enclave_push() {
 # plan/issues/git-branching-methodology-research-2026-07-28.md §5.2): runs on
 # EVERY clone transport (Linux git-daemon network, Windows/WSL filesystem,
 # macOS staged filesystem) so no transport is left with the sticky-HEAD
-# hazard. Deliberately NOT run on the host-mount path — that is the
-# operator's own working tree, not a clone, and it is already on the
-# operator's branch.
+# hazard. The host-mount path also runs this convergence step: the launcher
+# already captured the operator checkout's branch as the launch-gated seed, and
+# the mounted checkout may have moved between that gate and container startup.
+# A failed switch remains fail-soft and is surfaced by the startup context as
+# base_state=mismatch; the verdict never judges the branch by name.
 #
 # The mirror's HEAD symref is global and STICKY: a persisted mirror volume
 # can hand a fresh clone branch Y after this launch's gate passed on branch
@@ -530,7 +611,16 @@ checkout_forge_seed_branch() {
 # fail with "destination already exists".
 #
 # Returns 0 on successful clone, exits 1 on hard failure.
-clone_project_from_mirror() {
+#
+# NOTE (order 456 / 394 rung 1): the PUBLIC entry point is the thin
+# `clone_project_from_mirror` wrapper defined immediately after this
+# implementation. The wrapper is what every entrypoint calls; it delegates here
+# and then starts the backgrounded expert build. The split exists because this
+# implementation has FOUR success returns (host-mount, filesystem transport,
+# git-daemon transport, fallback tail) — a hook appended to the last one would
+# silently skip the other three, which is precisely the class of drift that
+# left order 456's MCP server without a binary.
+_clone_project_from_mirror_impl() {
     local clone_dir
     if [[ -z "${TILLANDSIAS_PROJECT:-}" ]]; then
         return 0  # nothing to clone — non-project session
@@ -560,6 +650,10 @@ clone_project_from_mirror() {
         # but the actual transport is the enclave mirror. The host's `.git/config` is
         # never modified — the host can keep using its own `origin` directly.
         rewrite_origin_for_enclave_push
+        # Order 534: a bind-mounted checkout must converge just like every clone
+        # transport. This is intentionally seed-based, never a Tillandsias
+        # branch-name allowlist; end-user projects keep their own conventions.
+        checkout_forge_seed_branch
         return 0
     fi
 
@@ -734,6 +828,282 @@ clone_project_from_mirror() {
     # Fallback rewrite attempt for any remaining transport or edge case
     # where TILLANDSIAS_PROJECT_HOST_MOUNT may not have been propagated.
     rewrite_origin_for_enclave_push
+    return 0
+}
+
+# clone_project_from_mirror — PUBLIC entry point for every forge lane.
+#
+# @trace order:456, plan/issues/experts-construction-research-2026-07-29.md §3
+# Delegates to the implementation above, then starts the EXPERTS build in the
+# background. Hooking here rather than in each `entrypoint-forge-*.sh` covers
+# ALL agent lanes that get a checkout (opencode, opencode-web, claude, codex,
+# antigravity, terminal) from a single site, so a new lane cannot ship without
+# its plan expert. The research's hook point ("immediately after
+# clone_project_from_mirror") is honoured exactly — the call is simply on the
+# callee side of the boundary so it cannot be forgotten by a caller.
+#
+# The exit status of the clone is preserved verbatim: the expert build NEVER
+# changes whether a launch proceeds.
+clone_project_from_mirror() {
+    local _clone_rc=0
+    _clone_project_from_mirror_impl "$@" || _clone_rc=$?
+    start_forge_experts_async || true
+    return "$_clone_rc"
+}
+
+# ── Forge EXPERTS: launch-time build of the L0 plan query engine ─────────────
+# @trace order:456, order:394 (rung 1, slice 1)
+# @trace plan/issues/experts-construction-research-2026-07-29.md §3
+# @trace spec:forge-environment-discoverability
+#
+# An "expert" is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model. The
+# plan expert is the compiled `tillandsias-plan` CLI, wrapped by the
+# `forge-plan` MCP server (config-overlay/mcp/forge-plan.sh). Order 456 shipped
+# that wrapper WITHOUT its payload: nothing in the image ever built or installed
+# `tillandsias-plan`, so every MCP call answered "binary not found". This block
+# is the payload.
+#
+# WHY BUILT AT LAUNCH INSTEAD OF BAKED INTO THE IMAGE
+#   - `podman build` has NO enclave network (operator finding, order 459), so a
+#     `cargo fetch`/`cargo build` in a Containerfile cannot resolve crates.io.
+#   - The toolchain IS already in the image (Containerfile.base:23 installs
+#     `rust cargo clippy rustfmt rust-analyzer cargo-deny`).
+#   - `.crates.io` is allowlisted through the enclave proxy
+#     (images/proxy/allowlist.txt:18) — the build goes through the proxy, never
+#     direct egress.
+#   - CARGO_HOME and CARGO_TARGET_DIR live on the persistent project cache
+#     (see the cache block above), so a cold build is ~5s and a warm one is a
+#     cargo no-op.
+#
+# IDEMPOTENT + EPHEMERAL
+#   - Idempotent: keyed on a content hash of the plan crate's sources plus the
+#     workspace lockfile. Same sources -> same state, no rebuild. Changed
+#     sources -> rebuild and reinstall, converging on the same result.
+#   - Ephemeral: the launch state lives in tmpfs (/dev/shm) and dies with the
+#     container; the installed binary lives in the container-ephemeral
+#     $HOME/.local/bin. The ONLY thing that outlives the container is the
+#     sanctioned cargo cache — and per the research's §7.3 carve-out a compiled
+#     binary in a cache volume is a BUILD ARTIFACT, not expert knowledge.
+#
+# NEVER GATES A LAUNCH
+#   Every failure mode writes a NAMED degraded reason and returns 0, mirroring
+#   order 486's warn-and-continue contract for inference. A missing binary
+#   degrades the MCP server; it must never degrade the session.
+
+# Install destination for the plan expert binary.
+#
+# CRITICAL: this MUST agree with the probe list in
+# images/default/config-overlay/mcp/forge-plan.sh. A wrapper probing paths that
+# no build step produces is EXACTLY the drift that made order 456 dead on
+# arrival, so the agreement is pinned structurally by
+# litmus:forge-plan-expert-build-shape.
+# $HOME/.local/bin is already on PATH (see the PATH export near the top of this
+# file), so the installed binary is reachable as plain `tillandsias-plan`.
+FORGE_EXPERTS_BIN_DIR="${FORGE_EXPERTS_BIN_DIR:-$HOME/.local/bin}"
+# tmpfs by construction — dies with the container, no reaper needed.
+FORGE_EXPERTS_STATE_DIR="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
+export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
+
+# PINNED STATE GRAMMAR (litmus:forge-plan-expert-build-shape):
+#   experts: ready
+#   experts: building(<n>s)
+#   experts: degraded(<reason>)
+# reason vocabulary (CLOSED set — never an ad-hoc string, never an ambiguous
+# "may still be building"):
+#   no-checkout    the expected project checkout is not a directory
+#   no-plan-crate  this project has no crates/tillandsias-plan (most projects)
+#   no-cargo       cargo is not on PATH in this image
+#   build-failed   cargo build returned non-zero
+#   build-timeout  cargo build exceeded FORGE_EXPERTS_BUILD_TIMEOUT
+#   binary-missing cargo succeeded but produced no artifact
+#   install-failed the artifact could not be installed to FORGE_EXPERTS_BIN_DIR
+#   not-built      no build was ever started in this container
+_forge_experts_set_state() {
+    local state="$1" reason="${2:-}"
+    mkdir -p "$FORGE_EXPERTS_STATE_DIR" 2>/dev/null || return 0
+    if [ "$state" = "degraded" ]; then
+        printf 'degraded:%s\n' "${reason:-unknown}" \
+            > "$FORGE_EXPERTS_STATE_DIR/state" 2>/dev/null || true
+    else
+        printf '%s\n' "$state" > "$FORGE_EXPERTS_STATE_DIR/state" 2>/dev/null || true
+    fi
+    if [ "$state" = "building" ]; then
+        date +%s > "$FORGE_EXPERTS_STATE_DIR/started_at" 2>/dev/null || true
+    fi
+    return 0
+}
+
+# forge_experts_state_line — render the pinned grammar on stdout.
+# Consumed by inject_startup_context and by the forge-plan MCP wrapper's
+# error text. Always succeeds; an unreadable/absent state file renders
+# `degraded(not-built)` rather than an empty or ambiguous string.
+forge_experts_state_line() {
+    local state="" started=0 now=0 elapsed=0
+    if [ -r "$FORGE_EXPERTS_STATE_DIR/state" ]; then
+        state="$(cat "$FORGE_EXPERTS_STATE_DIR/state" 2>/dev/null || true)"
+    fi
+    case "$state" in
+        ready)
+            printf 'ready\n'
+            ;;
+        building)
+            started="$(cat "$FORGE_EXPERTS_STATE_DIR/started_at" 2>/dev/null || echo 0)"
+            case "$started" in
+                '' | *[!0-9]*) started=0 ;;
+            esac
+            now="$(date +%s 2>/dev/null || echo 0)"
+            elapsed=$((now - started))
+            [ "$elapsed" -ge 0 ] || elapsed=0
+            budget="${FORGE_EXPERTS_BUILD_BUDGET_SECS:-300}"
+            if [ "$elapsed" -gt "$budget" ]; then
+                printf 'degraded(build-abandoned-after-%ss)\n' "$elapsed"
+            else
+                printf 'building(%ss)\n' "$elapsed"
+            fi
+            ;;
+        degraded:*)
+            printf 'degraded(%s)\n' "${state#degraded:}"
+            ;;
+        *)
+            printf 'degraded(not-built)\n'
+            ;;
+    esac
+    return 0
+}
+
+# _forge_experts_source_hash — content key over the plan crate + lockfile.
+# POSIX only (find | sort | cat | sha256sum). Any failure yields "unknown",
+# which simply forces a rebuild that cargo itself deduplicates.
+#
+# ORDER 569: `capabilities.txt` is in the key alongside the .rs sources. It is
+# compiled INTO the binary via include_str!, so a change to it changes what the
+# expert reports about itself — but it is neither a .rs file nor Cargo.toml, so
+# without this predicate the idempotency fast path below would see an unchanged
+# hash, skip the rebuild, and leave a binary whose advertised capability set no
+# longer matches the checkout. A capability probe that reports a stale answer is
+# worse than no probe, because it is believed.
+_forge_experts_source_hash() {
+    local crate_dir="$1" project_dir="$2" out=""
+    if command -v sha256sum >/dev/null 2>&1; then
+        out="$(
+            {
+                find "$crate_dir" -type f \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'capabilities.txt' \) -print0 2>/dev/null \
+                    | sort -z | xargs -0 cat 2>/dev/null || true
+                cat "$project_dir/Cargo.lock" 2>/dev/null || true
+            } | sha256sum 2>/dev/null | cut -d' ' -f1
+        )" || out=""
+    fi
+    printf '%s\n' "${out:-unknown}"
+    return 0
+}
+
+# start_forge_experts_async — publish `building` SYNCHRONOUSLY, then fork.
+#
+# Publishing before the fork removes the race where inject_startup_context
+# (which runs later on the critical path) observes no state file at all and has
+# to report something ambiguous. After this returns, the state file always
+# exists and always carries a truthful token.
+start_forge_experts_async() {
+    if [ -z "${TILLANDSIAS_PROJECT:-}" ]; then
+        # Non-project session: nothing was cloned, so there is nothing to build.
+        return 0
+    fi
+    _forge_experts_set_state building
+    ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 &
+    return 0
+}
+
+# ensure_forge_experts — build + install the plan expert. FAIL-SOFT: always
+# returns 0, always leaves a named state behind. Intended to be backgrounded.
+ensure_forge_experts() {
+    local project_dir crate_dir bin_dst stamp src_hash short_hash target_dir built
+    local started rc=0 elapsed=0
+    started="$(date +%s 2>/dev/null || echo 0)"
+
+    project_dir=""
+    if [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    fi
+    [ -n "$project_dir" ] || project_dir="$PWD"
+
+    if [ ! -d "$project_dir" ]; then
+        trace_lifecycle "experts" "degraded (no-checkout): ${project_dir} is not a directory"
+        _forge_experts_set_state degraded no-checkout
+        return 0
+    fi
+
+    crate_dir="$project_dir/crates/tillandsias-plan"
+    if [ ! -f "$crate_dir/Cargo.toml" ]; then
+        # NOT an error. Forges run on arbitrary projects and most have no plan
+        # crate. Named explicitly so an agent reading the state is never left
+        # guessing whether a build failed or was never applicable.
+        trace_lifecycle "experts" "degraded (no-plan-crate): ${crate_dir}/Cargo.toml absent — this project has no plan expert"
+        _forge_experts_set_state degraded no-plan-crate
+        return 0
+    fi
+
+    bin_dst="$FORGE_EXPERTS_BIN_DIR/tillandsias-plan"
+    stamp="$FORGE_EXPERTS_STATE_DIR/plan-source-hash"
+    src_hash="$(_forge_experts_source_hash "$crate_dir" "$project_dir")"
+    short_hash="$(printf '%s' "$src_hash" | cut -c1-12)"
+
+    # Idempotency fast path: same sources + an installed binary => already
+    # converged. A relaunched or rebuilt forge lands here.
+    if [ "$src_hash" != "unknown" ] && [ -x "$bin_dst" ] && [ -r "$stamp" ] \
+        && [ "$(cat "$stamp" 2>/dev/null || true)" = "$src_hash" ]; then
+        trace_lifecycle "experts" "ready (cached): ${bin_dst} already matches source ${short_hash}"
+        _forge_experts_set_state ready
+        return 0
+    fi
+
+    if ! command -v cargo >/dev/null 2>&1; then
+        trace_lifecycle "experts" "degraded (no-cargo): cargo is not on PATH"
+        _forge_experts_set_state degraded no-cargo
+        return 0
+    fi
+
+    target_dir="${CARGO_TARGET_DIR:-$project_dir/target}"
+    trace_lifecycle "experts" "building tillandsias-plan (src=${short_hash}, target=${target_dir}) — crates.io flows through the enclave proxy"
+
+    # Bounded: a cargo target-dir lock held by a concurrent agent build must not
+    # leave the state pinned at `building` forever.
+    if command -v timeout >/dev/null 2>&1; then
+        ( cd "$project_dir" && timeout "${FORGE_EXPERTS_BUILD_TIMEOUT:-600}" \
+            cargo build --release -p tillandsias-plan ) || rc=$?
+    else
+        ( cd "$project_dir" && cargo build --release -p tillandsias-plan ) || rc=$?
+    fi
+
+    if [ "$rc" -eq 124 ]; then
+        trace_lifecycle "experts" "degraded (build-timeout): cargo build exceeded ${FORGE_EXPERTS_BUILD_TIMEOUT:-600}s"
+        _forge_experts_set_state degraded build-timeout
+        return 0
+    fi
+    if [ "$rc" -ne 0 ]; then
+        trace_lifecycle "experts" "degraded (build-failed): cargo build -p tillandsias-plan exited ${rc}"
+        _forge_experts_set_state degraded build-failed
+        return 0
+    fi
+
+    built="$target_dir/release/tillandsias-plan"
+    if [ ! -x "$built" ]; then
+        trace_lifecycle "experts" "degraded (binary-missing): cargo succeeded but ${built} is absent"
+        _forge_experts_set_state degraded binary-missing
+        return 0
+    fi
+
+    mkdir -p "$FORGE_EXPERTS_BIN_DIR" 2>/dev/null || true
+    if ! install -m 0755 "$built" "$bin_dst" 2>/dev/null; then
+        trace_lifecycle "experts" "degraded (install-failed): could not install ${built} -> ${bin_dst}"
+        _forge_experts_set_state degraded install-failed
+        return 0
+    fi
+    printf '%s\n' "$src_hash" > "$stamp" 2>/dev/null || true
+
+    elapsed=$(( $(date +%s 2>/dev/null || echo 0) - started ))
+    [ "$elapsed" -ge 0 ] || elapsed=0
+    trace_lifecycle "experts" "ready: installed ${bin_dst} (src=${short_hash}) in ${elapsed}s"
+    _forge_experts_set_state ready
     return 0
 }
 
@@ -936,7 +1306,9 @@ install_prebuilt() {
     fi
 
     (
-        local tmp="" archive lock_owner="$BASHPID"
+        # BASHPID needs bash >= 4 (always true in the Linux image); the $PPID
+        # fallback keeps the extracted-function test harness alive on bash 3.2.
+        local tmp="" archive lock_owner="${BASHPID:-$(sh -c 'echo "$PPID"')}"
         printf '%s\n' "$lock_owner" >"$tool_lock/owner.pid" 2>/dev/null || true
         # shellcheck disable=SC2329 # invoked indirectly by trap
         _prebuilt_lock_cleanup() {
@@ -1835,8 +2207,11 @@ claude_restore_cached_launcher() {
     ln -sfn "$share" "$HOME/.local/share/claude" 2>/dev/null || true
 
     [ -x "$launcher" ] && return 0
+    # No GNU-only -printf: strip the dirname with awk so BSD find (macOS test
+    # hosts) produces the same basename list as GNU find in the Linux image.
     version="$(find "$share/versions" -mindepth 1 -maxdepth 1 -type f \
-        -perm -u+x -printf '%f\n' 2>/dev/null | LC_ALL=C sort -V | tail -1)"
+        -perm -u+x 2>/dev/null | awk -F/ '{print $NF}' \
+        | LC_ALL=C sort -V | tail -1)"
     [ -n "$version" ] || return 1
     ln -sfn "$HOME/.local/share/claude/versions/$version" "$launcher" 2>/dev/null
     [ -x "$launcher" ]
@@ -1888,7 +2263,9 @@ claude_run_locked_refresh() (
     # Subshell ownership lets the lock cleanup trap cover every return and
     # HUP/INT/TERM path without overwriting the entrypoint's own traps.
     local refresh_lock="$1" result_file="$2" session_stamp="$3"
-    local owner_file="$refresh_lock/owner.pid" lock_owner="$BASHPID"
+    # BASHPID needs bash >= 4 (always true in the Linux image); the $PPID
+    # fallback keeps the extracted-function test harness alive on bash 3.2.
+    local owner_file="$refresh_lock/owner.pid" lock_owner="${BASHPID:-$(sh -c 'echo "$PPID"')}"
     local launcher="$HOME/.local/bin/claude"
     local tmp="" errlog="" refresh_ok=0
     local installer_pid=""
@@ -2171,6 +2548,45 @@ apply_opencode_config_overlay() {
     if [ -f "$overlay_tui" ]; then
         cp -f "$overlay_tui" "$user_tui"
     fi
+}
+
+# ── Claude config overlay ───────────────────────────────────
+# @trace spec:forge-environment-discoverability, order:568
+# Claude stores credentials, project state, and MCP registration in one file.
+# Merge only the forge MCP servers so restoring OAuth state remains lossless.
+apply_claude_config_overlay() {
+    local overlay_root="${TILLANDSIAS_CONFIG_OVERLAY_ROOT:-/home/forge/.config-overlay}"
+    local overlay_cfg="$overlay_root/claude/mcp.json"
+    local user_cfg="${CLAUDE_CONFIG_FILE:-$HOME/.claude.json}"
+    local tmp
+
+    [ -f "$overlay_cfg" ] || return 0
+    if ! jq -e 'type == "object" and (.mcpServers | type == "object")' \
+        "$overlay_cfg" >/dev/null 2>&1; then
+        trace_lifecycle "config" "claude MCP overlay invalid; existing config preserved"
+        return 1
+    fi
+
+    mkdir -p "$(dirname "$user_cfg")"
+    tmp="$(mktemp "${user_cfg}.tmp.XXXXXX")" || return 1
+    if [ -s "$user_cfg" ]; then
+        if ! jq -e 'type == "object"' "$user_cfg" >/dev/null 2>&1 \
+            || ! jq -s '.[0] * {mcpServers: ((.[0].mcpServers // {}) * .[1].mcpServers)}' \
+                "$user_cfg" "$overlay_cfg" >"$tmp"; then
+            rm -f "$tmp"
+            trace_lifecycle "config" "claude config invalid; existing file preserved"
+            return 1
+        fi
+    else
+        cp "$overlay_cfg" "$tmp" || {
+            rm -f "$tmp"
+            return 1
+        }
+    fi
+
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$user_cfg"
+    trace_lifecycle "config" "claude MCP overlay applied"
 }
 
 # ── Hot-path population ─────────────────────────────────────
@@ -2807,16 +3223,186 @@ inject_startup_context() {
     # The forge-launch path already blocks until /api/version answers, so this
     # probe is the authoritative live check; it reports READY or a concrete
     # not-ready reason, never an ambiguous "may be starting".
-    local _inference_status="NOT-READY"
-    local _inference_reason=""
-    if _probe_out="$(curl -fsS --max-time 1 http://inference:11434/api/tags 2>&1)"; then
-        _inference_status="READY"
+    #
+    # Order 392a EXTENSION (model-warm state): an endpoint that answers with
+    # ZERO models is not useful to an agent, so READY now additionally requires
+    # >=1 cached model and carries the warm inventory. The READY / NOT-READY
+    # tokens are unchanged — only the parenthesised detail is new.
+    #
+    # The probe itself lives in lib-inference-state.sh so it stays testable
+    # OUTSIDE the forge image (this file hard-fails at source time on the vendor
+    # CA bundle, so a probe inlined here could only ever be grep-pinned). See
+    # that file for the pinned grammar and the closed reason vocabulary; litmus:
+    # inference-model-preload-policy exercises every branch with a stubbed curl.
+    local _inference_status _inference_state _inference_reason _inference_warm _inference_count
+    local _inference_state_lib="${BASH_SOURCE[0]%/*}/lib-inference-state.sh"
+    if [[ -r "$_inference_state_lib" ]]; then
+        # shellcheck source=lib-inference-state.sh
+        source "$_inference_state_lib"
+        tillandsias_inference_state "http://inference:11434"
+        _inference_status="$TILLANDSIAS_INFERENCE_STATUS"
+        _inference_state="$TILLANDSIAS_INFERENCE_STATE"
+        _inference_reason="$TILLANDSIAS_INFERENCE_REASON"
+        _inference_warm="$TILLANDSIAS_INFERENCE_WARM"
+        _inference_count="$TILLANDSIAS_INFERENCE_MODELS"
     else
-        _inference_reason="${_probe_out:-connection refused}"
-        _inference_status="NOT-READY (${_inference_reason})"
+        _inference_state="not-ready"
+        _inference_reason="probe-helper-missing"
+        _inference_warm="-"
+        _inference_count=0
+        _inference_status="NOT-READY (probe-helper-missing: ${_inference_state_lib} not present in this image)"
     fi
+    # Order 456 / 394 rung 1 EXTENSION (experts launch state): a PEER line to
+    # the inference state above, under the same discipline — a closed token
+    # vocabulary and never an ambiguous "may still be building". The experts
+    # state is read from tmpfs, written by ensure_forge_experts.
+    #
+    # PINNED GRAMMAR (litmus:forge-plan-expert-build-shape):
+    #   experts: ready
+    #   experts: building(<n>s)
+    #   experts: degraded(<reason>)
+    # reason vocabulary (closed set):
+    #   no-checkout | no-plan-crate | no-cargo | build-failed
+    #   | build-timeout | binary-missing | install-failed | not-built
+    # Plus one machine-readable token line agents branch on:
+    #   experts_state=<ready|building|degraded> experts_reason=<name|->
+    #   experts_elapsed=<n|->
+    local _experts_status _experts_state _experts_reason _experts_elapsed
+    _experts_status="$(forge_experts_state_line)"
+    case "$_experts_status" in
+        ready)
+            _experts_state="ready"
+            _experts_reason="-"
+            _experts_elapsed="-"
+            ;;
+        building*)
+            _experts_state="building"
+            _experts_reason="-"
+            _experts_elapsed="${_experts_status#building(}"
+            _experts_elapsed="${_experts_elapsed%s)}"
+            ;;
+        *)
+            _experts_state="degraded"
+            _experts_reason="${_experts_status#degraded(}"
+            _experts_reason="${_experts_reason%)}"
+            _experts_elapsed="-"
+            ;;
+    esac
+
+    # Order 569 EXTENSION (capability skew). `experts_state=ready` above answers
+    # "did the build finish". It has never answered the question an agent
+    # actually has, which is three questions:
+    #
+    #   what can I use NOW · what would a RELAUNCH give me · am I BLOCKED
+    #
+    # Order 531 is why: a forge seeded from a pre-expert base built that base,
+    # installed it, and stamped `ready` truthfully — while every plan_answer
+    # returned confidence=unsupported. And the inverse matters just as much:
+    # local edits to the expert crate are INVISIBLE to the running binary but
+    # WILL be present on the next forge run, so an agent that cannot see the
+    # difference either abandons work that is one relaunch away or waits forever
+    # for a capability that is never coming.
+    #
+    # The probe lives in lib-expert-capability.sh for the same reason the
+    # inference probe lives in lib-inference-state.sh: this file hard-fails at
+    # source time on the vendor CA bundle, so logic inlined here could only ever
+    # be grep-pinned. litmus:expert-capability-skew-honesty runs that helper
+    # directly against fixture binaries and exercises every branch.
+    local _cap_line _cap_skew _cap_advice
+    local _cap_lib="${BASH_SOURCE[0]%/*}/lib-expert-capability.sh"
+    if [[ -r "$_cap_lib" ]]; then
+        # shellcheck source=lib-expert-capability.sh
+        source "$_cap_lib"
+        tillandsias_expert_capability \
+            "$FORGE_EXPERTS_BIN_DIR/tillandsias-plan" "$project_dir"
+        _cap_line="$TILLANDSIAS_EXPERT_CAPABILITY_LINE"
+        _cap_skew="$TILLANDSIAS_EXPERT_CAP_SKEW"
+        _cap_advice="$(tillandsias_expert_capability_advice "$_cap_skew")"
+    else
+        # A missing helper is its own named fact, not a silent "no skew": an
+        # absent probe reporting `skew=none` would be the same lie as `ready`.
+        _cap_line="expert_capability: now=none after_relaunch=none skew=none blocked_capabilities=- lost_on_relaunch=- probe=helper-missing"
+        _cap_advice="The capability probe (${_cap_lib}) is not present in this image, so the fields above are placeholders — treat expert capability as UNVERIFIED and check \`tillandsias-plan capabilities\` by hand."
+    fi
+
+    # Order 480 follow-up (accelerator envelope): the host probes its own
+    # hardware and passes the verdict in; the forge cannot see PCI devices, an
+    # NVIDIA driver, or /dev/accel, so it may never attempt this itself.
+    #
+    # An ABSENT variable is not the same fact as "no accelerator", and conflating
+    # them is how a GPU host silently reads as CPU-only. A launcher too old to
+    # export the envelope, or a container started outside the launcher, is
+    # reported as its own named state rather than being answered wrongly.
+    local _accel_envelope
+    if [[ -n "${TILLANDSIAS_ACCEL_ENVELOPE:-}" ]]; then
+        _accel_envelope="$TILLANDSIAS_ACCEL_ENVELOPE"
+    else
+        _accel_envelope="accel_class=unknown accel_gpu=unknown accel_gpu_name=- accel_npu=unknown accel_npu_name=- accel_reason=envelope-not-exported accel_cpu_cores=- accel_ram_gb=-"
+    fi
+
     local branch version agent_name
     branch="$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+
+    # Order 531: state a VERDICT on the base branch, not just its name.
+    #
+    # The branch name alone was already printed, and it was not enough: an agent
+    # landing on `main` saw "Startup branch: main" and had no signal that this
+    # was wrong. Two cycles absorbed exactly that by noticing and hand-rebasing
+    # (plan/loop_status.md:203, :243), which is the guard-by-attentive-agent
+    # pattern this project forbids.
+    #
+    # Why it happens: the launcher seeds the forge from the HOST CHECKOUT's
+    # current branch (read_host_project_current_branch ->
+    # TILLANDSIAS_FORGE_SEED_BRANCH), and the release skill used to park that
+    # checkout on `main` and never return it. So every forge launched after a
+    # release cycle was pinned to `main`.
+    #
+    # Why it MATTERS: `main` carries no crates/tillandsias-plan/src/answer.rs or
+    # methodology.rs, so the expert build produces a PRE-EXPERT binary and then
+    # truthfully reports `experts: ready` while every plan_answer /
+    # methodology_path call returns confidence=unsupported. Truthful state, wrong
+    # artifact — the hardest kind to notice.
+    # SCOPE RULE (methodology/multi-host-development.yaml:21-27): the names
+    # linux-next / windows-next / osx-next / main are TILLANDSIAS'S OWN
+    # development conventions and are explicitly "NOT a runtime convention of the
+    # product" — a forge launched on an end user's project MUST NOT assume them.
+    # This code runs in EVERY forge, so it may not judge a branch by its NAME.
+    # An earlier draft of this block flagged `main` as non-committable and told
+    # the agent to switch to `linux-next`; that is correct only when the target
+    # project happens to be Tillandsias, and wrong everywhere else.
+    #
+    # So the verdict rests on two things that are true of ANY project:
+    #   - did the checkout land on the branch this launch was GATED on, and
+    #   - can this base actually build the expert.
+    local _base_state _base_detail _seed
+    _seed="${TILLANDSIAS_FORGE_SEED_BRANCH:-}"
+    if [[ "$branch" == "unknown" ]]; then
+        _base_state="unknown"
+        _base_detail="the checkout has no resolvable branch (detached HEAD, or not a git repo)"
+    elif [[ -n "$_seed" && "$branch" != "$_seed" ]]; then
+        _base_state="mismatch"
+        _base_detail="this launch was gated on '${_seed}' but the checkout is on '${branch}' — work will land somewhere other than where the launch intended"
+    else
+        _base_state="ok"
+        _base_detail="checkout is on the branch this launch was gated on"
+    fi
+
+    # The load-bearing signal, and the project-agnostic one: can this base build
+    # the plan expert at all? This is a FACT about the checkout, not a judgement
+    # about a branch name, so it is safe to assert on any project.
+    #
+    # It is what catches the order-531 case the `mismatch` test cannot: when the
+    # host checkout was itself parked on a pre-expert branch, the seed and the
+    # actual branch AGREE, so nothing looks wrong — while the expert build
+    # produces a pre-expert binary and truthfully reports `experts: ready`.
+    local _expert_sources
+    if [[ ! -d "$project_dir/crates/tillandsias-plan" ]]; then
+        _expert_sources="n/a"          # not a plan-expert project; nothing to expect
+    elif [[ -f "$project_dir/crates/tillandsias-plan/src/answer.rs" ]]; then
+        _expert_sources="present"
+    else
+        _expert_sources="absent"
+    fi
     version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
     agent_name="${TILLANDSIAS_AGENT_NAME:-forge}"
     local project_name
@@ -2826,8 +3412,11 @@ inject_startup_context() {
 # Forge Startup Context
 
 **Project**: ${project_name}
-**Startup branch**: ${branch}
+**Startup branch**: ${branch} — \`base_state=${_base_state}\`
 > Note: Branch is a startup snapshot; agents may switch branches during orchestration.
+> Machine-readable (branch on this, do not parse the prose): \`base_state=${_base_state} base_actual=${branch} base_expected=${_seed:-<unset>} expert_sources=${_expert_sources}\`
+> \`base_state\` is one of \`ok\` | \`mismatch\` | \`unknown\`. ${_base_detail}.
+> \`expert_sources=absent\` means this checkout HAS a \`crates/tillandsias-plan\` but NOT \`src/answer.rs\`, so the expert build produces a PRE-EXPERT binary: \`experts: ready\` is then reported truthfully while every \`plan_answer\` / \`methodology_path\` call returns \`confidence=unsupported\`. That is order 531, and note \`base_state\` can read \`ok\` in this situation — the launch landed exactly where it was gated, on a base that cannot build the expert. Do NOT read \`unsupported\` as "the plan has no answer"; it means the ARTIFACT is wrong. Switch to a branch carrying the expert sources before trusting any expert answer, and report which branch you moved to. (\`n/a\` means this project has no plan-expert crate at all, which is normal off-Tillandsias.)
 **Version**: ${version}
 **Agent**: ${agent_name}
 **Generated**: $(date -u +%Y-%m-%dT%H:%MZ)
@@ -2836,7 +3425,22 @@ inject_startup_context() {
 
 - **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
 - **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
+- **Accelerators** — \`${_accel_envelope}\`
+  - This is the HOST's hardware, projected onto a closed vocabulary so you can branch on it without probing devices you cannot see. \`accel_class\` is the one field worth reading first: \`workstation-gpu\` (a discrete GPU is deliverable to this container — larger models are cheap here), \`mobile-npu\` (an NPU is deliverable — prefer small quantized models), \`hybrid-gpu-npu\` (both), or \`cpu-only\`.
+  - \`cpu-only\` is never a bare verdict: when hardware is present but unreachable, \`accel_gpu\`/\`accel_npu\` read \`present-unusable\` and \`accel_reason\` names the obstruction (e.g. \`cdi-spec-missing\` — the GPU exists but the container runtime has no CDI spec to hand it over; \`engine-missing\` — the NPU exists but no runtime targets it yet). Report the reason rather than concluding the node has no accelerator.
+  - \`accel_class\` describes CAPACITY, not readiness. It is independent of \`inference_state\` below: a \`workstation-gpu\` node still reports \`inference_state=not-ready\` until a model is cached.
 - **Inference**: \`http://inference:11434\` (Ollama) — ${_inference_status}, tier: ${TILLANDSIAS_INFERENCE_TIER:-unknown}.
+  - Machine-readable (branch on this, do not parse the prose): \`inference_state=${_inference_state} inference_models=${_inference_count} inference_warm=${_inference_warm} inference_reason=${_inference_reason}\`
+  - \`inference_state\` is \`ready\` only when the endpoint answers AND at least one model is cached. Otherwise \`not-ready\` with a named \`inference_reason\`: \`no-models\` (endpoint up, nothing cached), \`endpoint-unreachable\`, \`endpoint-timeout\`, \`endpoint-http-error\`, \`probe-tool-missing\`, \`probe-helper-missing\`, or \`probe-error-<n>\`. There is no indeterminate "starting up" state.
+  - Local inference is OPTIONAL: a \`not-ready\` endpoint never blocks this session. Use cloud models, or pull one yourself (\`curl http://inference:11434/api/pull -d '{"name":"qwen2.5:0.5b"}'\`).
+- **Experts** — \`experts: ${_experts_status}\`. An expert is a CITED RETRIEVAL SURFACE behind an MCP tool, not a model; the plan expert runs NO inference. Query it through the \`forge-plan\` MCP server (\`plan_check\`, \`plan_status\`, \`plan_ready\`, \`plan_blocked_by\`, \`plan_closure\`, \`plan_burndown\`) instead of grepping \`plan/index.yaml\`.
+  - Machine-readable (branch on this, do not parse the prose): \`experts_state=${_experts_state} experts_reason=${_experts_reason} experts_elapsed=${_experts_elapsed}\`
+  - Machine-readable CAPABILITY SKEW (order 569 — branch on this, do not parse the prose): \`${_cap_line}\`
+  - \`experts_state=ready\` only means THE BUILD FINISHED. It has never meant the binary can answer — a forge seeded from a base without the expert sources builds a pre-expert binary and reports \`ready\` truthfully while every \`plan_answer\` returns \`confidence=unsupported\` (order 531). The line above is the honest one. Read it as three answers: \`now=\` is what you can use in THIS session; \`after_relaunch=\` is what the MOUNTED CHECKOUT would give you on the next forge run (so it already includes your uncommitted edits to the expert crate); \`blocked_capabilities=\` is the direct answer to "is my current work blocked pending a relaunch".
+  - \`skew\` is the field to branch on, and two of its values demand OPPOSITE actions: \`pending-build\` means the build is still running and the capability WILL appear in this session — wait and retry; \`relaunch-required\` means no build will deliver it here, so retrying is FUTILE and you must relaunch the forge (or rebuild by hand). \`relaunch-regresses\` means the running binary has MORE than the checkout and a relaunch would REMOVE capability. \`none\` means nothing is to be gained by waiting or relaunching. \`now=stale-binary\` means a binary is installed but predates the capability manifest, so its abilities are unknowable — treat everything as blocked.
+  - ${_cap_advice}
+  - \`experts_state\` is \`ready\` only once \`tillandsias-plan\` is built and installed on PATH. \`building\` carries elapsed seconds and is TRANSIENT — retry the MCP tool. \`degraded\` always names a reason from a closed set: \`no-plan-crate\` (this project has no plan expert — expected off-tillandsias), \`no-checkout\`, \`no-cargo\`, \`build-failed\`, \`build-timeout\`, \`binary-missing\`, \`install-failed\`, \`not-built\`. There is no indeterminate "may still be building" state.
+  - Experts are OPTIONAL: the build is backgrounded right after the project clone and never gates this session. Details: \`/tmp/forge-lifecycle.log\`.
 - **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.
 
 You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA certs.
@@ -2853,6 +3457,33 @@ Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-pla
 
 Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
 Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
+
+## Tooling actually present here — check this before reaching for something
+
+Do NOT assume a tool exists because a skill or doc names it. This forge is a
+Fedora base, not your host, and the difference has bitten agents repeatedly.
+
+**Present:** \`jq\` \`yq\` \`git\` \`gh\` \`cargo\` \`rustc\` \`node\` \`go\` \`rust-analyzer\`
+**ABSENT:** \`ruby\` — several skills still show \`ruby -ryaml\` for YAML validation.
+It is not here. Use \`yq\` instead (verified: it accepts valid YAML and exits
+non-zero on invalid).
+
+\`\`\`bash
+yq . <file> >/dev/null || echo "INVALID YAML: <file>"
+\`\`\`
+
+**\`python3\` is present and is FORBIDDEN for committed automation**
+(\`methodology.yaml\` → \`tlatoani_hard_no_python\`). Its presence is not permission.
+This is the trap worth naming: the sanctioned validator (\`ruby\`) is missing, the
+compiled one (\`tillandsias-policy\`) is built per-lane and may not exist yet, and
+the forbidden one is sitting right there on PATH. Reach for \`yq\`.
+
+**On-demand tools** (\`tmux\`, \`lazygit\`, \`gum\`, \`fd\`, \`rg\`, …): typing the command
+triggers a userspace Homebrew install through a shim, gated on an allowlist. That
+install is NOT free — it verifies a Sigstore attestation per bottle and is
+time-bounded, so it can fail with "this tool is unavailable". That is a normal
+outcome, not a broken forge: prefer what is already present, and treat an
+on-demand tool as a convenience rather than a dependency.
 
 ## Code navigation — LSP is available (order 399)
 

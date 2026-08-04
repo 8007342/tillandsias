@@ -1,0 +1,139 @@
+# @trace spec:ephemeral-guarantee, spec:forge-environment-discoverability
+# @trace order:394 (rung 1, slice 5 — expert-launch-state-and-ephemerality)
+# @trace plan/issues/experts-construction-research-2026-07-29.md §7.3
+#
+# THE TEARDOWN PROOF (exit criterion 3 of order 394e)
+#
+# litmus:forge-experts-ephemerality-shape pins ephemerality STRUCTURALLY — the
+# expert surfaces are disjoint from every mount the launcher makes persistent.
+# This test proves it BEHAVIOURALLY, with a real container and a real teardown:
+#
+#   1. SEED    a real forge container runs the real lib-common.sh writers
+#              (ensure_forge_experts + _forge_experts_set_state) and ends up
+#              with expert state in tmpfs and an expert binary on PATH.
+#   2. WITNESS the same scan expression used for the verdict finds those
+#              artifacts while the container is ALIVE. Without this the final
+#              "found nothing" is unfalsifiable — a typo'd pattern would pass.
+#   3. TEARDOWN the container is destroyed, exactly as a stack shutdown does.
+#   4. VERDICT  the surfaces that SURVIVED the container are scanned. A control
+#              marker written to the persistent volume during step 1 must still
+#              be found (proving the scanner reaches the volume at all) while
+#              ZERO expert artifacts are found.
+#
+# The negative control in step 4 is what makes this a proof rather than a
+# tautology: a scan that reaches nothing would report "no expert artifacts" too.
+#
+# EXPLICITLY OUT OF SCOPE (order 394 slice 5, research §7.3): the compiled
+# binary inside $CARGO_TARGET_DIR on the persistent cache volume. That is a
+# BUILD ARTIFACT, not knowledge — the cargo subtree is pruned from the verdict
+# scan and the pruning is named here so it can never widen silently.
+#
+# ISOLATION: this test creates and destroys its OWN container and its OWN named
+# volume. It never touches a live tillandsias stack, and it only ever mounts a
+# real project cache volume READ-ONLY.
+name: litmus:forge-experts-teardown-ephemeral
+spec: ephemeral-guarantee
+phase: runtime
+description: >
+  Behavioural teardown proof for the forge plan expert: seed real expert state
+  in a real container, witness it with the verdict scan while the container is
+  alive, destroy the container, then prove the surviving persistent volume and
+  the host filesystem carry the control marker but ZERO expert artifacts.
+severity: high
+size: e2e
+
+preconditions:
+  - podman is available and responsive
+  - the forge image localhost/tillandsias-forge:latest exists locally
+  - workspace contains images/default/lib-common.sh
+
+critical_path:
+  - step: "the forge image needed for a real teardown is present"
+    command: "podman image exists localhost/tillandsias-forge:latest && echo 'ok: forge-image-present'"
+    timeout_ms: 30000
+    expected_behavior: "ok: forge-image-present"
+
+  - step: "SEED: a real container runs the real expert writers and lands state on the ephemeral surfaces"
+    # ensure_forge_experts is the REAL builder: with no plan crate under the cwd
+    # it takes the named degraded path, which still exercises the real state
+    # writer and the real state dir. The converged state (ready + source-hash
+    # stamp + installed binary) is then written the way a successful build
+    # leaves it, without paying for a cargo build inside a litmus.
+    # A control marker goes onto the PERSISTENT volume so step 5 can prove its
+    # scan reaches that volume.
+    command: "podman rm -f tillandsias-litmus-experts-teardown >/dev/null 2>&1; podman volume rm -f tillandsias-litmus-experts-cache >/dev/null 2>&1; podman volume create tillandsias-litmus-experts-cache >/dev/null && podman run -d --name tillandsias-litmus-experts-teardown -v tillandsias-litmus-experts-cache:/home/forge/.cache/tillandsias-project:rw --entrypoint /bin/bash localhost/tillandsias-forge:latest -c 'sleep 240' >/dev/null && podman cp images/default/lib-common.sh tillandsias-litmus-experts-teardown:/tmp/lib-common.sh && podman exec tillandsias-litmus-experts-teardown bash -c 'source /tmp/lib-common.sh >/dev/null 2>&1; cd /tmp; ensure_forge_experts >/dev/null 2>&1; test -s \"$FORGE_EXPERTS_STATE_DIR/state\" || exit 1; _forge_experts_set_state ready; printf deadbeef > \"$FORGE_EXPERTS_STATE_DIR/plan-source-hash\"; mkdir -p \"$FORGE_EXPERTS_BIN_DIR\"; cp /bin/true \"$FORGE_EXPERTS_BIN_DIR/tillandsias-plan\"; printf litmus-control > /home/forge/.cache/tillandsias-project/litmus-control-marker' && echo 'ok: seeded-real-expert-state'"
+    timeout_ms: 90000
+    expected_behavior: "ok: seeded-real-expert-state"
+
+  - step: "WITNESS: the verdict scan expression DOES find expert artifacts while the container lives"
+    # Same pattern set as the verdict scan in step 5. If this ever reports a
+    # small number, the verdict below has stopped meaning anything and the test
+    # must fail HERE rather than pass vacuously later.
+    command: "n=$(podman exec tillandsias-litmus-experts-teardown bash -c 'find /dev/shm /home/forge/.local -xdev -name cargo -prune -o -print 2>/dev/null | grep -Ec \"tillandsias-experts|plan-source-hash|tillandsias-plan\" || true'); test \"$n\" -ge 3 && echo \"ok: witness-live-expert-artifacts=$n\" || { echo \"BROKEN WITNESS: scan found $n expert artifacts in a live seeded container (expected >=3) — the verdict scan proves nothing\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: witness-live-expert-artifacts="
+
+  - step: "WITNESS: while alive, the PERSISTENT volume already holds no expert state"
+    # The invariant is not only "gone after teardown" but "never written there".
+    command: "n=$(podman exec tillandsias-litmus-experts-teardown bash -c 'find /home/forge/.cache/tillandsias-project -xdev -name cargo -prune -o -print 2>/dev/null | grep -Eic \"tillandsias-experts|plan-source-hash|expert\" || true'); test \"$n\" = 0 && echo 'ok: persistent-volume-clean-while-live' || { echo \"REGRESSION: $n expert artifacts written to the persistent cache volume while the forge was live\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: persistent-volume-clean-while-live"
+
+  - step: "TEARDOWN: destroy the container the way a stack shutdown does"
+    command: "podman rm -f tillandsias-litmus-experts-teardown >/dev/null 2>&1; n=$(podman ps -a --format '{{.Names}}' | grep -c '^tillandsias-litmus-experts-teardown$'); test \"$n\" = 0 && echo 'ok: container-destroyed'"
+    timeout_ms: 60000
+    expected_behavior: "ok: container-destroyed"
+
+  - step: "VERDICT: the surviving volume keeps the control marker and ZERO expert artifacts"
+    # The control marker is the negative control: it proves this scan reaches
+    # the surviving surface. Only then does "no expert artifacts" mean anything.
+    command: "out=$(podman run --rm -v tillandsias-litmus-experts-cache:/vol:ro --entrypoint /bin/bash localhost/tillandsias-forge:latest -c 'c=$(find /vol -xdev -name litmus-control-marker | wc -l); e=$(find /vol -xdev -name cargo -prune -o -print | grep -Eic \"tillandsias-experts|plan-source-hash|expert\" || true); echo \"control=$c experts=$e\"'); echo \"$out\" | grep -q 'control=1 experts=0' && echo \"ok: teardown-leaves-no-expert-index ($out)\" || { echo \"REGRESSION or BROKEN SCAN: $out (control=1 experts=0 required)\"; exit 1; }"
+    timeout_ms: 90000
+    expected_behavior: "ok: teardown-leaves-no-expert-index"
+
+  - step: "VERDICT: nothing leaked onto the host tmpfs"
+    # The container's /dev/shm is its own tmpfs. If the state dir were ever
+    # repointed at a bind-mounted or --ipc=host path, expert state would appear
+    # on the host and outlive every forge.
+    command: "n=$(find /dev/shm -maxdepth 3 -name 'tillandsias-experts*' -o -maxdepth 3 -name 'plan-source-hash' 2>/dev/null | wc -l); test \"$n\" = 0 && echo 'ok: host-tmpfs-clean' || { echo \"REGRESSION: expert state present on the HOST tmpfs after teardown\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: host-tmpfs-clean"
+
+  - step: "PRODUCTION SURFACE: real per-project forge cache volumes carry no expert state"
+    # Read-only scan of the volumes real forge launches actually persist to.
+    # A host that has never launched a forge has none — that is a legitimate
+    # cold state, reported as such rather than silently passing as a scan hit.
+    command: "vols=$(podman volume ls --format '{{.Name}}' | grep '^tillandsias-forge-cache-' || true); if [ -z \"$vols\" ]; then echo 'ok: production-surface-absent (no forge cache volume on this host)'; else for v in $vols; do n=$(podman run --rm -v \"$v:/vol:ro\" --entrypoint /bin/bash localhost/tillandsias-forge:latest -c 'find /vol -xdev -name cargo -prune -o -print 2>/dev/null | grep -Eic \"tillandsias-experts|plan-source-hash|expert\" || true'); test \"$n\" = 0 || { echo \"REGRESSION: $n expert artifacts persisted in real cache volume $v\"; exit 1; }; done; echo 'ok: production-surface-clean'; fi"
+    timeout_ms: 120000
+    expected_behavior: "ok: production-surface"
+
+  - step: "CLEANUP: the litmus removes its own throwaway surfaces (idempotent re-run)"
+    command: "podman volume rm -f tillandsias-litmus-experts-cache >/dev/null 2>&1; n=$(podman volume ls --format '{{.Name}}' | grep -c '^tillandsias-litmus-experts-cache$'); test \"$n\" = 0 && echo 'ok: litmus-surfaces-removed'"
+    timeout_ms: 60000
+    expected_behavior: "ok: litmus-surfaces-removed"
+
+observability:
+  traces:
+    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:394"
+  expected_log: "Forge expert state destroyed with the container; surviving volumes hold the control marker and no expert index"
+  log_fields:
+    spec: "ephemeral-guarantee"
+    test: "forge-experts-teardown-ephemeral"
+    resource_type: "expert-state"
+    cleanup_status: "by-construction"
+    structural_sibling: "litmus:forge-experts-ephemerality-shape"
+
+rollback:
+  on_failure: >
+    If the VERDICT step reported experts>0, expert knowledge built from one
+    working tree now survives stack shutdown and will be served to a later,
+    different forge — the ephemerality invariant is broken. Find the write:
+    FORGE_EXPERTS_STATE_DIR must be a /dev/shm path and FORGE_EXPERTS_BIN_DIR
+    must be inside the container overlay ($HOME/.local/bin), never under
+    /home/forge/.cache/tillandsias-project. If it reported control=0, the scan
+    did not reach the surviving volume and the run proved nothing — fix the
+    harness before trusting any green. If the WITNESS step failed, the seed did
+    not produce expert state at all and every later assertion is vacuous.
+  command: "podman rm -f tillandsias-litmus-experts-teardown 2>/dev/null; podman volume rm -f tillandsias-litmus-experts-cache 2>/dev/null; sed -n '/^FORGE_EXPERTS_BIN_DIR=/,/^export FORGE_EXPERTS/p' images/default/lib-common.sh"

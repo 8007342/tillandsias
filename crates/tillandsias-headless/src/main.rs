@@ -85,6 +85,12 @@ mod resource_lock;
 mod agent_result;
 mod catalog;
 mod runtime_phase;
+// @trace spec:accel-capability-probe: Structured hardware capability probe (CPU/GPU/NPU/bandwidth).
+pub mod accel_probe;
+// @trace spec:inference-engine-slots: Engine slot abstraction and backend pinning.
+pub mod engine_slots;
+// @trace spec:inference-policy-router: Workload-class policy router and fallback chains.
+pub mod policy_router;
 
 pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
@@ -163,6 +169,10 @@ fn main() {
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let inference_tier = user_args.iter().any(|a| a == "--inference-tier");
+    // Order 480 follow-up: make the capability probe observable from the host.
+    // Until this flag existed the probe had no caller at all, so there was no
+    // way to falsify what it reports without reading its source.
+    let capabilities = user_args.iter().any(|a| a == "--capabilities");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
     let claude_login = user_args.iter().any(|a| a == "--claude-login");
@@ -322,6 +332,7 @@ fn main() {
         "--force",
         "--init",
         "--inference-tier",
+        "--capabilities",
         "--status-check",
         "--github-login",
         "--with-token",
@@ -528,6 +539,28 @@ fn main() {
         // detection surfaces can never drift; the sibling lanes
         // (orders 401/402) grade their guests against it.
         println!("tier:{}", detect_inference_tier());
+        std::process::exit(0);
+    }
+
+    if capabilities {
+        // Order 480 follow-up: the structured probe, made observable.
+        //
+        // Prints the ENVELOPE first — the same single line, in the same pinned
+        // grammar, that every forge receives as TILLANDSIAS_ACCEL_ENVELOPE — so
+        // what an agent is told can be checked against this host from the host
+        // itself. The full document follows for anything the line elides.
+        //
+        // This also refreshes the capabilities.json cache, which nothing else
+        // in the product wrote before the forge env call site existed.
+        let doc = accel_probe::load_or_probe(effective_inference_tier());
+        println!("{}", accel_probe::accel_envelope(&doc));
+        match serde_json::to_string_pretty(&doc) {
+            Ok(json) => println!("{json}"),
+            Err(err) => {
+                eprintln!("error: capability document did not serialize: {err}");
+                std::process::exit(1);
+            }
+        }
         std::process::exit(0);
     }
 
@@ -2931,7 +2964,7 @@ fn build_git_run_args(
 fn detect_inference_tier() -> &'static str {
     #[cfg(target_os = "macos")]
     {
-        return "metal";
+        "metal"
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -2958,20 +2991,30 @@ fn detect_inference_tier() -> &'static str {
     }
 }
 
-/// Order 392: the tier agents are TOLD must match what the container ACTUALLY
-/// runs, not just the hardware. A `gpu-cuda` host with no CDI spec (order 408
-/// automates generation once the toolkit package is present) silently runs
-/// CPU-only — reporting `gpu-cuda` there is a lie that makes agents expect a
-/// GPU that is not delivered. The effective tier downgrades `gpu-cuda` to
-/// `cpu` when podman cannot hand the GPU to the container, while `gpu-rocm`
-/// (explicit --device) and `metal` are delivered as-is. Keeps the pinned
-/// grammar: `gpu-cuda | gpu-rocm | metal | cpu`.
+/// Order 392 & Order 480: the tier agents are TOLD must match what the container
+/// ACTUALLY runs, not just the hardware. Retained as the derived `legacy_tier`
+/// field in capabilities.json per spec:accel-capability-probe.
+// @trace spec:accel-capability-probe
+// @trace spec:inference-policy-router: Hardware-aware tier routing and fallback chain.
 fn effective_inference_tier() -> &'static str {
     let hardware = detect_inference_tier();
     match hardware {
         "gpu-cuda" if !nvidia_cdi_available() => "cpu",
         other => other,
     }
+}
+
+/// The Ollama payload may contain cuda_v12 and cuda_v13 together when the
+/// entrypoint cannot identify the driver major. Resolve the same fact on the
+/// host so the launch arguments can pin one runner deterministically.
+// @trace spec:inference-engine-slots
+fn detected_cuda_major() -> Option<u32> {
+    std::process::Command::new("nvidia-smi")
+        .arg("-q")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| engine_slots::parse_cuda_major(&String::from_utf8_lossy(&output.stdout)))
 }
 
 /// Order 392: can rootless podman actually deliver the NVIDIA GPU to a
@@ -3245,6 +3288,7 @@ async fn wait_for_git_mirror_ready(
     ))
 }
 
+// @trace spec:inference-engine-slots: Stable enclave inference endpoint (http://inference:11434) and engine slot run args.
 fn build_inference_run_args(
     certs_dir: &Path,
     image: &str,
@@ -3353,7 +3397,30 @@ fn build_inference_run_args(
             format!("TILLANDSIAS_INFERENCE_TIER={effective_tier}"),
         ]);
     }
+    let cuda_major = (effective_tier == "gpu-cuda")
+        .then(detected_cuda_major)
+        .flatten();
+    for (name, value) in engine_slots::pin_backend_environment(effective_tier, cuda_major) {
+        args.extend(["--env".into(), format!("{name}={value}")]);
+    }
     args.extend(proxy_env_args());
+    // Order 524: this env pair MUST be built before the mount/image tail.
+    // It used to be spliced in afterwards with two `args.insert(args.len() - 2,
+    // ..)` calls — but the tail ended `[.., image, "/usr/bin/ollama", "serve"]`,
+    // so `len() - 2` was the index of "/usr/bin/ollama" and both inserts landed
+    // BEHIND the image name. Everything after the image is the container's argv,
+    // not a podman flag, so the variable was never set: status-check mode never
+    // announced itself and the "[inference] status-check mode" line could not
+    // print. No litmus caught it because every SKIP_RUNTIME_PULLS test bypasses
+    // this function and passes `-e` straight to podman. The flag-before-image
+    // invariant is now asserted by a unit test
+    // (inference_run_args_place_every_flag_before_the_image).
+    if skip_runtime_pulls {
+        args.extend([
+            "--env".into(),
+            "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1".into(),
+        ]);
+    }
     args.extend([
         "-v".into(),
         format!(
@@ -3365,18 +3432,15 @@ fn build_inference_run_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
+        // Order 524: no container command follows the image. The previous
+        // `/usr/bin/ollama serve` was dead weight AND a latent failure: the
+        // image is ENTRYPOINT-only (images/inference/Containerfile) and
+        // entrypoint.sh never reads "$@", so those two words were silently
+        // discarded — and `/usr/bin/ollama` does not exist in the image at all
+        // (ollama self-installs into `${OLLAMA_MODELS}.tools/`), so the day the
+        // image switched ENTRYPOINT to CMD the container would have exec-failed.
         image.into(),
-        "/usr/bin/ollama".into(),
-        "serve".into(),
     ]);
-
-    if skip_runtime_pulls {
-        args.insert(args.len() - 2, "--env".into());
-        args.insert(
-            args.len() - 2,
-            "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1".into(),
-        );
-    }
 
     args
 }
@@ -4359,6 +4423,104 @@ fn build_forge_common_args(
     )
 }
 
+/// Lifetime scope of a SHARED (cross-project) stack container — order 477.
+///
+/// The last-lane teardown and the liveness supervisor used to hold
+/// CONTRADICTORY scope sets for the same containers, and the disagreement
+/// was operator-visible: LIVE 2026-07-24 06:50Z, with nothing else running,
+/// the last lane's exit removed `tillandsias-proxy` (teardown's lane-scoped
+/// view) and the liveness supervisor re-created it three seconds later as a
+/// FRESH container — "[liveness] re-ensured 1 container(s):
+/// [tillandsias-proxy]" (its application-lifetime view). Neither action was
+/// a crash; the SETS were wrong. This enum plus [`SHARED_STACK_SCOPES`] is
+/// the one definition both sides answer from, so the post-last-lane
+/// container set converges in a single step instead of churning a
+/// destroy/recreate pair per lane exit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SharedStackScope {
+    /// APPLICATION lifetime. Brought up by infrastructure setup before any
+    /// lane exists, kept running by the liveness supervisor for as long as
+    /// the service lives, and stopped only by [`graceful_shutdown_async`] at
+    /// app exit. The last-lane teardown MUST NOT remove these.
+    Core,
+    /// LANE lifetime. Removed by the last-lane teardown once BOTH order-443
+    /// refcount sources read zero and the order-494 non-force forge probe
+    /// agrees no sibling is live.
+    LaneScoped,
+}
+
+/// The single source of truth for shared-container scope (order 477).
+/// [`remove_shared_stack_containers`] removes exactly the [`LaneScoped`]
+/// rows; the liveness supervisor's steady-state set must be a subset of the
+/// [`Core`] rows. `tests::teardown_and_liveness_agree_on_shared_container_scope`
+/// pins that both hold.
+///
+/// PROXY IS `Core` — the order-477 decision, recorded here with its
+/// rationale (idle footprint vs warm-start latency vs correctness):
+///
+/// * Idle footprint is negligible. The proxy is one Alpine squid holding no
+///   model or repo state. The shared container whose idle cost is actually
+///   material is `tillandsias-inference` (resident model weights plus any
+///   accelerator memory), and that one stays `LaneScoped` — so lane-exit
+///   still reclaims everything worth reclaiming.
+/// * Warm-start latency is paid on the critical path of EVERY lane. A cold
+///   [`ensure_proxy_running`] takes the 300s-bounded `proxy` resource lock,
+///   re-resolves the runtime asset root, ensures the versioned proxy image,
+///   materializes the CA bundle, `podman run`s squid and then sleeps a hard
+///   3s before returning. Destroying it at each last-lane exit buys nothing
+///   and re-pays that on the next launch.
+/// * Correctness closes the argument. Provider-login one-shots
+///   (`tillandsias-<provider>-login-<pid>`) acquire NO launch-in-flight
+///   marker — [`acquire_launch_in_flight_marker`] is called only by forge
+///   lanes — so under a lane-scoped proxy their PRE-CREATE window is
+///   unguarded: a sibling's last-lane teardown can delete the proxy between
+///   "ensure proxy" and "podman run login", which is exactly the order-289
+///   operator repro ("Could not resolve proxy: proxy"). `Core` scope closes
+///   that race by construction rather than by adding a second marker class.
+/// * It matches the spec. spec:proxy-container ("Proxy container lifecycle
+///   management") gives the proxy an APPLICATION lifetime: started
+///   automatically as part of infrastructure setup, before any forge
+///   containers, shared across all projects, "stopped on application exit".
+///
+/// Vault and router were already `Core` on both sides (teardown never named
+/// them; the supervisor owns them) and are listed so the table is the whole
+/// shared set, not just its disputed half.
+///
+/// @trace spec:proxy-container, spec:podman-orchestration
+const SHARED_STACK_SCOPES: &[(&str, SharedStackScope)] = &[
+    ("tillandsias-vault", SharedStackScope::Core),
+    ("tillandsias-proxy", SharedStackScope::Core),
+    ("tillandsias-router", SharedStackScope::Core),
+    ("tillandsias-inference", SharedStackScope::LaneScoped),
+];
+
+/// Scope of `container` when it is a SHARED stack container; `None` for
+/// per-project containers (forge/git/browser) and unknown names.
+fn shared_stack_scope(container: &str) -> Option<SharedStackScope> {
+    SHARED_STACK_SCOPES
+        .iter()
+        .find(|(name, _)| *name == container)
+        .map(|(_, scope)| *scope)
+}
+
+/// The shared containers the last-lane teardown owns — the ONLY names
+/// [`remove_shared_stack_containers`] may remove.
+fn lane_scoped_shared_containers() -> impl Iterator<Item = &'static str> {
+    SHARED_STACK_SCOPES
+        .iter()
+        .filter(|(_, scope)| *scope == SharedStackScope::LaneScoped)
+        .map(|(name, _)| *name)
+}
+
+/// The shared containers the liveness supervisor keeps running for the whole
+/// application lifetime, and which teardown must leave alone.
+fn core_shared_containers() -> impl Iterator<Item = &'static str> {
+    SHARED_STACK_SCOPES
+        .iter()
+        .filter(|(_, scope)| *scope == SharedStackScope::Core)
+        .map(|(name, _)| *name)
+}
+
 /// Result of [`cleanup_stack_containers`] (order 494 interim guard).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ForgeCleanupOutcome {
@@ -4438,10 +4600,15 @@ async fn cleanup_stack_containers(
     ForgeCleanupOutcome::Removed
 }
 
-/// Remove the SHARED stack containers. Callers MUST have verified no forge
-/// is running (order 233) — reach this only through
-/// [`cleanup_shared_stack_if_no_running_forge`]. Router is deliberately
-/// absent: it is supervisor-owned and never torn down by session cleanup.
+/// Remove the LANE-SCOPED half of the shared stack. Callers MUST have
+/// verified no forge is running (order 233) — reach this only through
+/// [`cleanup_shared_stack_if_no_running_forge`].
+///
+/// Order 477: the removal list is DERIVED from [`SHARED_STACK_SCOPES`]
+/// rather than spelled out here, because a second hand-written list is
+/// exactly how this function and the liveness supervisor came to disagree
+/// about the proxy. `Core` rows (vault, proxy, router) are supervisor-owned
+/// and stopped only by [`graceful_shutdown_async`] at application exit.
 async fn remove_shared_stack_containers(client: &PodmanClient) {
     // Order 234 (R6): see cleanup_stack_containers — shutdown owns teardown.
     if !runtime_phase::container_mutations_allowed() {
@@ -4451,8 +4618,17 @@ async fn remove_shared_stack_containers(client: &PodmanClient) {
         );
         return;
     }
-    let _ = client.remove_container("tillandsias-proxy").await;
-    let _ = client.remove_container("tillandsias-inference").await;
+    // Force removal (`rm -f`) is correct HERE and only here: these
+    // containers are RUNNING in steady state, so the order-494 non-force
+    // probe would refuse every call and the lane-scoped half would leak
+    // forever. What makes the force safe is the two gates the single caller
+    // already passed — a zero live-lane + zero foreign-launch-in-flight
+    // refcount (order 443) and podman's own removal-time refusal on the
+    // forge container (order 494) — plus the order-443 operator refinement
+    // that the LaneScoped members are stateless and may be recreated freely.
+    for name in lane_scoped_shared_containers() {
+        let _ = client.remove_container(name).await;
+    }
 }
 
 /// Resource-name prefix for launch-in-flight advisory locks (order 443
@@ -4516,6 +4692,15 @@ fn foreign_launches_in_flight(own_launch_marker: Option<&str>) -> Vec<String> {
 /// through the proxy — tearing it down under them breaks every curl with
 /// "Could not resolve proxy: proxy" (operator repro 2026-07-11).
 fn is_active_lane_container(name: &str, state: &str) -> bool {
+    // Order 477: a SHARED stack container is infrastructure and can never be
+    // a lane — otherwise it would refcount ITSELF alive and teardown could
+    // never fire. That property used to hold only incidentally (no shared
+    // name happens to match the suffix heuristics below); deriving it from
+    // SHARED_STACK_SCOPES makes the refcount predicate read the same table
+    // the teardown and the liveness supervisor read.
+    if shared_stack_scope(name).is_some() {
+        return false;
+    }
     // Order 443: count a lane that is ALIVE OR STARTING, not only "running".
     // A sibling forge mid-launch — podman "created" / "configured" /
     // "initializing", e.g. still installing its agent harness or cloning from
@@ -4613,8 +4798,17 @@ async fn cleanup_shared_stack_if_no_running_forge(
     // Always trace shared teardown (not only under --debug): when the proxy
     // vanishes under a live lane we need the actor in the log, not a guess
     // (order 289 instrumentation).
+    // Order 477: name BOTH halves of the shared stack in the trace. The
+    // 2026-07-24 operator question ("was that proxy restart a crash?") was
+    // unanswerable from a log line that said "shared stack" and meant only
+    // part of it.
     eprintln!(
-        "[tillandsias] no active lane containers; cleaning project + shared stack for {project_name}"
+        "[tillandsias] no active lane containers; cleaning project + shared stack for \
+         {project_name} (lane-scoped: {}; keeping application-lifetime: {})",
+        lane_scoped_shared_containers()
+            .collect::<Vec<_>>()
+            .join(", "),
+        core_shared_containers().collect::<Vec<_>>().join(", ")
     );
     if cleanup_stack_containers(client, project_name).await == ForgeCleanupOutcome::LeftInPlace {
         // Order 494 interim guard: podman just refused (or failed) a
@@ -10937,6 +11131,17 @@ fn build_forge_agent_run_args_with_vault(
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
         .env("TILLANDSIAS_INFERENCE_TIER", effective_inference_tier())
+        // Order 480 follow-up: the tier string alone cannot express "this node
+        // has an NPU but no engine for it" or "this GPU exists but the runtime
+        // cannot hand it to you", which is exactly the two-tier distinction
+        // (workstation GPU vs mobile NPU) agents must route on. The envelope is
+        // the structured probe projected onto ONE line with a closed vocabulary.
+        // Until this call site existed, accel_probe had NO consumer and
+        // capabilities.json was never written on any host.
+        .env(
+            "TILLANDSIAS_ACCEL_ENVELOPE",
+            accel_probe::accel_envelope(&accel_probe::load_or_probe(effective_inference_tier())),
+        )
         .tmpfs("/tmp:size=256m,mode=1777")
         .tmpfs("/run/user/1000:size=64m,mode=0700")
         .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
@@ -11122,26 +11327,48 @@ fn build_forge_agent_run_args_with_vault(
     {
         spec = spec.env(key, value);
     }
-    // GitHub token injection (order 359): forge tooling that talks to GitHub —
-    // brew attestation verification (bottles + the GitHub API) and any direct
-    // git-over-HTTPS — otherwise goes ANONYMOUS and gets rate-limited/blocked
-    // (operator repro 2026-07-15: brew could not verify the ncurses bottle,
-    // "missing GitHub API token"). We control the credential, so inject it.
-    // Read HOST-SIDE from Vault (the tray has access) and hand it to the lane
-    // as env, EXACTLY like the provider keys above — never on disk, never in
-    // argv. The forge's OWN vault policy still cannot read secret/github/token
-    // (forge-policy-has-no-token-read invariant is untouched); a compromised
-    // lane holds only this one env value, same trust level as the LLM keys.
-    // Injected for every lane because brew is available in all of them.
-    // @trace plan/issues/forge-github-token-injection (order 359)
-    if let Ok(gh_token) =
-        crate::vault_bootstrap::vault_kv_get_via_exec("secret/github/token", "token", debug)
-        && !gh_token.is_empty()
-    {
-        // HOMEBREW_GITHUB_API_TOKEN: brew's documented env for authenticated
-        // ghcr.io bottle pulls + attestation verification.
-        spec = spec.env("HOMEBREW_GITHUB_API_TOKEN", &gh_token);
-    }
+    // NO GITHUB TOKEN REACHES A FORGE LANE. This is deliberate, absolute, and
+    // reverses order 359 — do not reintroduce it.
+    //
+    // Order 359 injected HOMEBREW_GITHUB_API_TOKEN into every lane so brew could
+    // verify bottle attestations. Operator decision 2026-08-01 removes it
+    // outright: "token NEVER EVER EVER touches the forge. For no reason."
+    //
+    // WHY THE ORIGINAL REASONING DOES NOT SURVIVE SCRUTINY:
+    //
+    // * The credential was never a security requirement. Verifying a Sigstore
+    //   attestation needs the artifact, the bundle, a trust root and a policy —
+    //   no verifier identity. Reproduced with no token and no network interface
+    //   at all: exit 0, correct signer; one flipped byte, exit 1. The token buys
+    //   a GitHub API RATE-LIMIT bucket for FETCHING the bundle, nothing more.
+    // * The comment it replaced claimed "never on disk, never in argv" while
+    //   `spec.env()` becomes `--env KEY=VALUE`, i.e. an argv element readable
+    //   from /proc/<pid>/cmdline and retained in the container config for the
+    //   container's lifetime. The guarantee was false as written.
+    // * A lane runs as uid 1000 and so does the agent, so no in-container
+    //   mechanism could have isolated it from the agent anyway.
+    //
+    // DEVELOPMENT CONFIG AND RUNTIME CONFIG ARE DIFFERENT LIFECYCLES AND MUST
+    // NOT OVERLAP (operator, 2026-08-01). A credential belongs where the IMAGE
+    // is BUILT — on a development host, once — not in every disposable lane a
+    // user launches. Users must never need a GitHub account to run a forge.
+    //
+    // CONSEQUENCE, stated so nobody "fixes" it by putting the token back:
+    // Homebrew raises GhAuthNeeded before it even spawns `gh` when no credential
+    // is present, so an ON-DEMAND `brew install` in a lane now fails by design.
+    // The shim degrades to "this tool is unavailable" and says why.
+    //
+    // THE REPAIR IS NOT A BUILD-TIME TOKEN EITHER. Operator, 2026-08-01: "do not
+    // build it into the forge anywhere, not even during container creation."
+    // There is no tier at which a GitHub credential is acceptable here — not
+    // runtime, not `podman build`, not a helper script. The tools must come from
+    // a source whose provenance needs NO third-party identity to verify: Fedora
+    // RPMs, whose signatures we verify ourselves (which means removing
+    // --nogpgcheck — packet remove-nogpgcheck-from-base-images). That is
+    // verifiable provenance to origin with nobody's account involved.
+    // See also bake-allowlisted-tools-into-the-image.
+    //
+    // @trace plan/issues/forge-github-token-injection (order 359, REVERSED)
 
     spec.build_run_args()
 }
@@ -12952,6 +13179,76 @@ mod tests {
     }
 
     #[test]
+    fn inference_run_args_place_every_flag_before_the_image() {
+        // Order 524. The generated arg VECTOR is the only observable form of the
+        // podman boundary, so it has to be asserted directly — reading the code
+        // is what let the original defect live: the skip_runtime_pulls env pair
+        // was spliced in at `args.len() - 2` after a tail ending
+        // [.., image, "/usr/bin/ollama", "serve"], so it landed BEHIND the image
+        // and became container argv. podman silently accepted it, the variable
+        // was never set, and no existing litmus could see it because they all
+        // bypass this function.
+        //
+        // Invariant: podman's positional grammar is `podman run [FLAGS] IMAGE
+        // [CMD...]`, so nothing flag-shaped may appear at or after the image.
+        let certs = Path::new("/tmp/tilland-test-certs");
+        let image = "localhost/tillandsias-inference:test";
+
+        for skip in [false, true] {
+            let args = build_inference_run_args(certs, image, skip);
+            let image_at = args
+                .iter()
+                .position(|a| a == image)
+                .unwrap_or_else(|| panic!("image {image} missing from args (skip={skip})"));
+
+            // Nothing may follow the image: this container is ENTRYPOINT-only and
+            // its entrypoint never reads "$@", so any trailing word is silently
+            // discarded today and an exec failure the day it becomes a CMD image.
+            assert_eq!(
+                image_at,
+                args.len() - 1,
+                "the image must be the LAST argument (skip={skip}); trailing args: {:?}",
+                &args[image_at + 1..]
+            );
+
+            // And every flag must precede it.
+            for (i, a) in args.iter().enumerate() {
+                if i >= image_at && a.starts_with('-') {
+                    panic!(
+                        "flag-shaped arg {a:?} at index {i} is at/after the image \
+                         (index {image_at}, skip={skip}) — podman would treat it as \
+                         container argv, not a flag. Full args: {args:?}"
+                    );
+                }
+            }
+
+            // The regression itself: with skip requested, the env pair must be a
+            // real podman --env BEFORE the image, not stray container argv.
+            let want = "TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1";
+            let present = args.iter().position(|a| a == want);
+            if skip {
+                let at = present.unwrap_or_else(|| {
+                    panic!("skip_runtime_pulls=true must set {want}; args: {args:?}")
+                });
+                assert!(
+                    at < image_at,
+                    "{want} must precede the image (found {at} vs image {image_at})"
+                );
+                assert_eq!(
+                    args.get(at - 1).map(String::as_str),
+                    Some("--env"),
+                    "{want} must be introduced by --env; args: {args:?}"
+                );
+            } else {
+                assert!(
+                    present.is_none(),
+                    "skip_runtime_pulls=false must NOT set {want}; args: {args:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn inference_run_args_gate_gpu_delivery_on_tier_and_cdi() {
         // Order 392: hardware truth (detect_inference_tier) decides the
         // tier; DELIVERY is gated separately — cuda needs a CDI spec and
@@ -13031,6 +13328,21 @@ mod tests {
             forge.contains("TILLANDSIAS_INFERENCE_TIER")
                 && forge.contains("effective_inference_tier()"),
             "effective tier must be exported into the forge env for agents/startup context"
+        );
+    }
+
+    #[test]
+    // @trace spec:inference-engine-slots
+    fn inference_run_args_apply_the_selected_backend_pin() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn build_inference_run_args(");
+        assert!(
+            window.contains("engine_slots::pin_backend_environment(effective_tier, cuda_major)"),
+            "the backend pin must be emitted by the production podman argument builder"
+        );
+        assert!(
+            window.contains("detected_cuda_major"),
+            "CUDA runner selection must be based on the detected UMD major"
         );
     }
 
@@ -13344,6 +13656,263 @@ mod tests {
         );
     }
 
+    /// The container names the liveness supervisor re-ensures on every tick.
+    ///
+    /// Read out of `container_deps::LivenessProbe::run_check`'s steady-state
+    /// `services` array and resolved through `Service::name()`, so the
+    /// order-477 agreement tests compare REAL container names against
+    /// [`SHARED_STACK_SCOPES`] instead of a transcription that could silently
+    /// drift from the supervisor it claims to describe.
+    fn liveness_steady_state_containers() -> Vec<&'static str> {
+        let liveness_src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/container_deps.rs"
+        ));
+        assert_eq!(
+            liveness_src.matches("let services = [").count(),
+            1,
+            "the liveness supervisor must declare exactly one steady-state set"
+        );
+        let run_check_at = liveness_src
+            .find("pub fn run_check(&mut self)")
+            .expect("LivenessProbe::run_check must exist");
+        let set_at = liveness_src
+            .find("let services = [")
+            .expect("run_check must declare its steady-state `services` array");
+        let tests_at = liveness_src
+            .find("#[cfg(test)]")
+            .unwrap_or(liveness_src.len());
+        assert!(
+            run_check_at < set_at && set_at < tests_at,
+            "the steady-state set must live inside run_check, not in test scaffolding"
+        );
+        let set_end = liveness_src[set_at..]
+            .find("];")
+            .expect("steady-state array must terminate")
+            + set_at;
+        let steady_state = &liveness_src[set_at..set_end];
+
+        // Enumerated by value (not transcribed by name) so `Service::name()`
+        // supplies the container names; the count guard fails loudly if a new
+        // Service variant is declared and this list is not extended.
+        const DECLARED: [container_deps::Service; 7] = [
+            container_deps::Service::EnclaveNetwork,
+            container_deps::Service::EgressNetwork,
+            container_deps::Service::CaBundle,
+            container_deps::Service::Vault,
+            container_deps::Service::Proxy,
+            container_deps::Service::GitLogin,
+            container_deps::Service::ForgeLaunch,
+        ];
+        let enum_at = liveness_src
+            .find("pub enum Service {")
+            .expect("Service enum must exist");
+        let enum_end = liveness_src[enum_at..]
+            .find("\n}")
+            .expect("Service enum must terminate")
+            + enum_at;
+        let declared_variants = liveness_src[enum_at..enum_end]
+            .lines()
+            .filter(|line| {
+                let t = line.trim();
+                t.ends_with(',') && !t.starts_with("//")
+            })
+            .count();
+        assert_eq!(
+            declared_variants,
+            DECLARED.len(),
+            "a Service variant was added — extend DECLARED so the scope \
+             agreement still covers every node"
+        );
+
+        let re_ensured: Vec<&'static str> = DECLARED
+            .into_iter()
+            .filter(|service| steady_state.contains(&format!("Service::{service:?}")))
+            .map(|service| service.name())
+            .collect();
+        assert!(
+            !re_ensured.is_empty(),
+            "the liveness supervisor must keep at least one container running"
+        );
+        re_ensured
+    }
+
+    /// Order 477: the last-lane teardown and the liveness supervisor must
+    /// answer ONE question — "may the last-lane teardown remove this shared
+    /// container?" — the same way.
+    ///
+    /// They did not. Teardown removed `tillandsias-proxy` (lane-scoped view)
+    /// and the supervisor re-created it 3s later as a fresh container
+    /// (application-lifetime view), observed live 2026-07-24 06:50Z with no
+    /// other lane running. This test reads BOTH sides — the teardown
+    /// behaviorally (what argv it actually issues against a fake podman) and
+    /// the supervisor structurally (the steady-state `services` array inside
+    /// `container_deps::LivenessProbe::run_check`, resolved through
+    /// `Service::name()` so it compares real container names) — and fails if
+    /// either drifts from [`SHARED_STACK_SCOPES`].
+    #[test]
+    fn teardown_and_liveness_agree_on_shared_container_scope() {
+        // ── Side A: what the teardown actually removes ──────────────────
+        let backend = Arc::new(FakeBackend::default());
+        let client = PodmanClient::with_backend(backend.clone());
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build current-thread runtime")
+            .block_on(remove_shared_stack_containers(&client));
+        let issued = backend.seen();
+        for (_, argv) in &issued {
+            assert_eq!(
+                argv.first().map(String::as_str),
+                Some("rm"),
+                "shared teardown must only issue removals: {argv:?}"
+            );
+        }
+        let removed: Vec<String> = issued
+            .iter()
+            .map(|(_, argv)| argv.last().cloned().unwrap_or_default())
+            .collect();
+        let lane_scoped: Vec<String> = lane_scoped_shared_containers().map(String::from).collect();
+        assert_eq!(
+            removed, lane_scoped,
+            "the last-lane teardown must remove exactly the LaneScoped rows of \
+             SHARED_STACK_SCOPES — no hand-written second list"
+        );
+
+        // ── Side B: what the liveness supervisor keeps running ──────────
+        let re_ensured = liveness_steady_state_containers();
+
+        // ── The agreement ───────────────────────────────────────────────
+        for name in &re_ensured {
+            assert_eq!(
+                shared_stack_scope(name),
+                Some(SharedStackScope::Core),
+                "the liveness supervisor re-ensures {name} on every tick, so \
+                 SHARED_STACK_SCOPES must classify it Core"
+            );
+            assert!(
+                !removed.iter().any(|r| r == name),
+                "order 477 churn: the last-lane teardown removed {name} while the \
+                 liveness supervisor re-ensures it — the destroy/recreate pair \
+                 observed live 2026-07-24"
+            );
+        }
+        for name in core_shared_containers() {
+            assert!(
+                !removed.iter().any(|r| r == name),
+                "Core container {name} is supervisor-owned and stopped only at \
+                 application exit; the last-lane teardown must not remove it"
+            );
+        }
+
+        // ── The order-477 decision itself, pinned by name ───────────────
+        assert_eq!(
+            shared_stack_scope("tillandsias-proxy"),
+            Some(SharedStackScope::Core),
+            "proxy scope decision (order 477): Core — negligible idle footprint, \
+             warm-start cost on every lane, and it closes the unmarked \
+             provider-login pre-create window"
+        );
+        assert!(
+            re_ensured.contains(&"tillandsias-proxy"),
+            "the liveness supervisor must keep the proxy running"
+        );
+        assert_eq!(
+            shared_stack_scope("tillandsias-inference"),
+            Some(SharedStackScope::LaneScoped),
+            "inference holds the only material idle footprint (resident model \
+             weights) and is stateless — it stays lane-scoped"
+        );
+    }
+
+    /// Order 477 (the packet's steady-state criterion): after the LAST lane
+    /// exits, the container set must converge in ONE step — the set the
+    /// teardown leaves standing must be exactly the set the liveness
+    /// supervisor's next tick finds already running, so the settling window
+    /// produces zero re-creates.
+    ///
+    /// The live 2026-07-24 06:50Z counter-example: teardown left
+    /// {vault, router}, the supervisor wanted {vault, proxy} — the missing
+    /// intersection member was re-created 3s later.
+    #[test]
+    fn post_last_lane_steady_state_needs_no_liveness_recreate() {
+        // Sync test + block_on: env_lock must protect XDG_RUNTIME_DIR for the
+        // whole call, and holding a std MutexGuard across a syntactic await
+        // trips clippy::await_holding_lock (same shape as the order-494 test).
+        let _guard = env_lock();
+        let restore = TestEnvRestore::capture(&["XDG_RUNTIME_DIR"]);
+        let scratch =
+            std::env::temp_dir().join(format!("tilland-order477-locks-{}", std::process::id()));
+        std::fs::create_dir_all(&scratch).expect("mk scratch lock dir");
+        restore.set("XDG_RUNTIME_DIR", &scratch);
+
+        // The observed pre-teardown state: full shared stack up, last forge
+        // already exited (so the order-443 lane scan reads zero lanes).
+        let ps = r#"[
+          {"Names":["tillandsias-vault"],"State":"running"},
+          {"Names":["tillandsias-proxy"],"State":"running"},
+          {"Names":["tillandsias-router"],"State":"running"},
+          {"Names":["tillandsias-inference"],"State":"running"},
+          {"Names":["tillandsias-fixture-forge"],"State":"exited"}
+        ]"#;
+        let up_before = [
+            "tillandsias-vault",
+            "tillandsias-proxy",
+            "tillandsias-router",
+            "tillandsias-inference",
+        ];
+
+        let backend = Arc::new(FakeBackend::default());
+        backend.push(Ok(fake_podman_output(0, ps)));
+        // Every later command (non-force forge rm, git/browser rm, shared rm)
+        // falls through to the FakeBackend default: exit 0.
+        let client = PodmanClient::with_backend(backend.clone());
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("build current-thread runtime")
+            .block_on(cleanup_shared_stack_if_no_running_forge(
+                &client, "fixture", None, false,
+            ));
+
+        drop(restore);
+        let _ = std::fs::remove_dir_all(&scratch);
+
+        let removed: Vec<String> = backend
+            .seen()
+            .iter()
+            .filter(|(_, argv)| argv.first().map(String::as_str) == Some("rm"))
+            .map(|(_, argv)| argv.last().cloned().unwrap_or_default())
+            .collect();
+        let survivors: Vec<&str> = up_before
+            .into_iter()
+            .filter(|name| !removed.iter().any(|r| r == name))
+            .collect();
+
+        assert_eq!(
+            survivors,
+            core_shared_containers().collect::<Vec<_>>(),
+            "the post-last-lane steady state must be exactly the Core rows of \
+             SHARED_STACK_SCOPES; removed={removed:?}"
+        );
+        // The churn assertion: the supervisor's next tick re-ensures only
+        // containers this teardown left running, so it creates nothing.
+        for name in liveness_steady_state_containers() {
+            assert!(
+                survivors.contains(&name),
+                "the liveness supervisor would re-create {name} within the \
+                 settling window — teardown and liveness have diverged again \
+                 (order 477); survivors={survivors:?}"
+            );
+        }
+        assert!(
+            removed.iter().any(|r| r == "tillandsias-inference"),
+            "the leak side must not regress: the lane-scoped half of the \
+             shared stack still goes away with the last lane; removed={removed:?}"
+        );
+    }
+
     #[test]
     fn forge_gitdir_staging_hands_root_staged_trees_to_forge_uid() {
         // Order 382: the guest headless (WSL2/VZ) runs as root, so staged
@@ -13375,17 +13944,32 @@ mod tests {
     }
 
     #[test]
-    fn github_token_injected_as_env_host_side_never_argv() {
-        // Order 359: the github token reaches the forge as an env var read
-        // HOST-SIDE, never on argv/disk, and the forge's own vault policy is
-        // untouched (still cannot read secret/github/token).
+    fn no_github_token_ever_reaches_a_forge_lane() {
+        // REVERSES order 359, and this test reverses with it.
+        //
+        // The predecessor was named `github_token_injected_as_env_host_side_never_argv`
+        // and asserted only that the injection EXISTED. It pinned the deviation
+        // rather than guarding against it, and its name claimed "never argv" — a
+        // property it never checked and which was FALSE, because `spec.env()`
+        // becomes `--env KEY=VALUE`, an argv element of `podman run`.
+        //
+        // Operator decision 2026-08-01: "token NEVER EVER EVER touches the
+        // forge. For no reason." Development config and runtime config are
+        // different lifecycles; a credential belongs where the image is BUILT,
+        // not in every disposable lane a user launches.
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let window = source_window(source, "fn build_forge_agent_run_args_with_vault(");
-        // Injected via .env(), the same seam as the LLM provider keys.
-        assert!(window.contains("spec = spec.env(\"HOMEBREW_GITHUB_API_TOKEN\""));
-        // Read host-side from vault (the tray has access; the forge does not).
-        assert!(window.contains("vault_kv_get_via_exec(\"secret/github/token\", \"token\""));
-        // Quarantine invariant unchanged: forge-policy still forbids the read.
+        assert!(
+            !window.contains("spec.env(\"HOMEBREW_GITHUB_API_TOKEN\""),
+            "no GitHub token may be injected into a forge lane — this is the \
+             order-359 reversal, and putting it back is the regression this test \
+             exists to catch"
+        );
+        assert!(
+            !window.contains("vault_kv_get_via_exec(\"secret/github/token\""),
+            "the lane builder must not even READ the github token from vault"
+        );
+        // And the quarantine invariant it always depended on still holds.
         let forge_hcl = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../images/vault/policies/forge.hcl"
@@ -16086,8 +16670,10 @@ mod tests {
             "exact json must activate the delegated capture path"
         );
 
-        // Any other present text value → fail-closed before launch.
-        for bad in ["xml", "yaml", "jsonl", "Json", "JSON", "json ", " json"] {
+        // Any other present text value → fail-closed before launch. The empty
+        // string is the realistic corrupt-launcher shape (`VAR=` with the value
+        // lost) and MUST NOT be read as "absent".
+        for bad in ["", "xml", "yaml", "jsonl", "Json", "JSON", "json ", " json"] {
             restore.set("TILLANDSIAS_AGENT_RESULT_FORMAT", bad);
             let err = delegated_run_config(Some("work"))
                 .expect_err("unknown format value must fail before launch");
@@ -16114,6 +16700,152 @@ mod tests {
         }
 
         restore.remove("TILLANDSIAS_AGENT_RESULT_FORMAT");
+    }
+
+    /// Order 464 exit criterion 3. Detached OpenCode Web is OUTSIDE the
+    /// structured-result contract — a strictly stronger claim than "the Web
+    /// argv lacks `TILLANDSIAS_AGENT_RESULT_FORMAT=json`", and one the
+    /// fail-closed grammar makes load-bearing: once an unknown value is a
+    /// launch ERROR on the CLI lanes, a Web launch that consulted the same
+    /// gate would start refusing `opencode serve` sessions that have no
+    /// current-run capture to protect in the first place.
+    ///
+    /// Two independent proofs, because either alone is escapable:
+    ///
+    /// 1. Behavioural — across every value class (exact `json`, unknown text,
+    ///    empty, non-UTF8) the Web argv must not contain the variable NAME
+    ///    anywhere, while the CLI argv carries it for exactly `json`.
+    /// 2. Structural — `run_opencode_web_mode` must never consult
+    ///    `delegated_run_config`/`delegated_json_requested`, and both CLI
+    ///    entry points must consult `delegated_run_config` BEFORE they build
+    ///    any container argv, which is what makes the grammar reject "before
+    ///    container launch" rather than somewhere inside a builder.
+    ///
+    /// Spec: forge-as-only-runtime, "Delegated agent results come from the
+    /// current scoped run".
+    #[test]
+    fn delegated_result_format_web_lane_stays_outside_the_contract() {
+        const VAR: &str = "TILLANDSIAS_AGENT_RESULT_FORMAT";
+        let _env = env_lock();
+        let restore = TestEnvRestore::capture(&[
+            "TILLANDSIAS_AGENT_RESULT_FORMAT",
+            "TILLANDSIAS_AGENT_RESULT_FILE",
+            "TILLANDSIAS_AGENT_TIMEOUT_SECS",
+            "TILLANDSIAS_FORGE_INSTANCE",
+        ]);
+        restore.set("TILLANDSIAS_FORGE_INSTANCE", "web-scope-gate");
+        restore.remove("TILLANDSIAS_AGENT_RESULT_FILE");
+        restore.remove("TILLANDSIAS_AGENT_TIMEOUT_SECS");
+
+        let project = PathBuf::from("/tmp/project");
+        let certs = PathBuf::from("/tmp/ca");
+        let build = |mode: ForgeMode| {
+            build_opencode_forge_args(
+                &project,
+                "alpha",
+                Some("seed prompt"),
+                &certs,
+                "1.2.3",
+                mode,
+                None,
+                false,
+                false,
+            )
+        };
+
+        // Proof 1a: every UTF-8 value class, including the ones the grammar
+        // now rejects on the CLI lanes.
+        for value in ["json", "", "xml", "JSON", "json ", "jsonl"] {
+            restore.set(VAR, value);
+            let web = build(ForgeMode::Web);
+            assert!(
+                web.iter().all(|arg| !arg.contains(VAR)),
+                "OpenCode Web serve has no current-run capture and must not carry \
+                 the internal result-mode variable for value {value:?}: {web:?}"
+            );
+            let cli = build(ForgeMode::Cli);
+            assert_eq!(
+                has_arg(&cli, "TILLANDSIAS_AGENT_RESULT_FORMAT=json"),
+                value == "json",
+                "CLI lane propagation for {value:?} disagrees with the exact-json contract: {cli:?}"
+            );
+        }
+
+        // Proof 1b: non-UTF8 bytes must be inert on the Web builder (no panic,
+        // no propagation) rather than reaching the container.
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            restore.set(VAR, std::ffi::OsStr::from_bytes(b"json\xfe\xff"));
+            let web = build(ForgeMode::Web);
+            assert!(
+                web.iter().all(|arg| !arg.contains(VAR)),
+                "non-UTF8 result format must not reach the Web container: {web:?}"
+            );
+        }
+
+        restore.remove(VAR);
+        let web_unset = build(ForgeMode::Web);
+        assert!(
+            web_unset.iter().all(|arg| !arg.contains(VAR)),
+            "unset must leave the Web lane untouched: {web_unset:?}"
+        );
+
+        // Proof 2: structural. A future edit could re-add the variable through
+        // a different code path, or wire the fail-closed gate into the Web
+        // lane; the behavioural proof above would still pass for the second
+        // mistake because the gate errors before any argv exists.
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+
+        let builder = source_window(source, "fn build_opencode_forge_args(");
+        assert_eq!(
+            builder.matches(VAR).count(),
+            1,
+            "the forge arg builder must name the result-mode variable exactly once, \
+             under the ForgeMode::Cli guard: {builder}"
+        );
+        assert!(
+            builder.contains("matches!(mode, ForgeMode::Cli) && delegated_json_requested(prompt)"),
+            "the single result-mode emission must stay guarded on the CLI mode: {builder}"
+        );
+
+        let web_window = source_window(source, "pub(crate) fn run_opencode_web_mode(");
+        assert!(
+            web_window.contains("launch_opencode_web_browser("),
+            "web window did not span the whole lane — the assertions below would be vacuous"
+        );
+        assert!(
+            web_window.contains("ForgeMode::Web,"),
+            "the Web lane must build its forge argv in Web mode: {web_window}"
+        );
+        for forbidden in [VAR, "delegated_run_config", "delegated_json_requested"] {
+            assert!(
+                !web_window.contains(forbidden),
+                "OpenCode Web must stay outside the structured-result contract, \
+                 but its lane references {forbidden}"
+            );
+        }
+
+        // Both CLI entry points gate BEFORE they build any container argv.
+        for (entry, launch) in [
+            ("fn run_opencode_mode(", "build_opencode_forge_args("),
+            (
+                "fn run_forge_agent_cli_mode(",
+                "build_forge_agent_run_args_with_vault(",
+            ),
+        ] {
+            let window = source_window(source, entry);
+            let gate = window
+                .find("delegated_run_config(")
+                .unwrap_or_else(|| panic!("{entry} must consult the result-format gate"));
+            let build_at = window
+                .find(launch)
+                .unwrap_or_else(|| panic!("{entry} must build container argv via {launch}"));
+            assert!(
+                gate < build_at,
+                "{entry} must reject an unsupported result format BEFORE building container argv"
+            );
+        }
     }
 
     #[cfg(unix)]

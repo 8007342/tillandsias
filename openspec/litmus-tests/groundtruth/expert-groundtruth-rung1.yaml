@@ -1,0 +1,420 @@
+# ORDER 394d — THE COMMITTED GROUND TRUTH for the Tillandsias expert family.
+#
+# @trace spec:forge-environment-discoverability
+# @trace order:394, order:394d (rung 1, slice 4)
+# @trace order:456 (exit criterion 3 — correct packets for the active release)
+# @trace plan/issues/experts-construction-decision-2026-07-17.md (the residual
+#        this file discharges: "per-tier measurements + ground-truth harness")
+#
+# WHAT THIS FILE IS
+#
+#   Questions an agent really asks, paired with the answer the expert MUST
+#   give, expressed as checkable properties of the 394b envelope. Graded by
+#   `tillandsias-plan grade` (crates/tillandsias-plan/src/groundtruth.rs).
+#
+# WHY IT IS NOT WRITTEN IN PROSE
+#
+#   An expected answer that is a paragraph can only be compared by a human or
+#   by another model. Every expectation here is machine-checkable and most of
+#   them are re-read FROM THE CORPUS at grading time: `span_contains` cuts the
+#   cited line range out of the file and requires the governing text to be
+#   inside it. So a case can only go green if the citation really points at
+#   the rule — the failure mode that looks fine (real file, in-bounds range,
+#   wrong lines) is exactly what this catches.
+#
+# WHY IT IS REUSABLE BY ORDERS 457 AND 400
+#
+#   Nothing below names a corpus. `expect` is written against the ENVELOPE:
+#   confidence, citation count, citation kind, citation fields, cited-span
+#   text, answer text. The two corpora already graded here (a YAML ledger and
+#   a YAML methodology tree) carry COMPLETELY DIFFERENT authority keys —
+#   packet_id/order/status vs yaml_path/key — and the grader has no branch for
+#   either. Orders 457 (cheatsheet) and 400 (code) therefore reuse this format
+#   VERBATIM:
+#
+#     1. register the engine name in groundtruth.rs ENGINES + Harness::run;
+#     2. drop `cheatsheet-rung1.yaml` / `code-rung1.yaml` NEXT TO THIS FILE;
+#     3. run `tillandsias-plan grade openspec/litmus-tests/groundtruth/*.yaml`.
+#
+#   No grading logic changes, and the accuracy bar cannot be quietly lowered
+#   for the new expert because it is the same code path.
+#
+# MAINTENANCE CONTRACT
+#
+#   Expected texts are QUOTES from the corpus, never paraphrases. If a case
+#   goes red because a rule was rewritten, re-read the rule and update the
+#   quote IN THE SAME COMMIT as the rewrite. If a case goes red because the
+#   engine changed, the engine is wrong until proven otherwise. Deleting a case
+#   to get green is a bar-lowering and needs the same approval as any other
+#   (methodology `bar_raise_governance`).
+
+version: 1
+name: expert-groundtruth-rung1
+description: >
+  Ground truth for the rung-1 experts: the plan ledger expert (order 394b) and
+  the methodology L0 path-query expert (order 394c). Plan cases pin packet
+  identity, order and status; methodology cases pin the exact YAML path, the
+  file the rule lives in, and a verbatim fragment of the governing rule that
+  must be inside the cited span. Refusal cases pin that the experts say
+  "unsupported" instead of guessing — including the near-miss case, where the
+  refusal must NOT leak the neighbouring block as if it were an answer.
+
+cases:
+
+  # ══ PLAN EXPERT ═════════════════════════════════════════════════════════
+  # These are the order-456 half: the compiled plan layer must return the
+  # CORRECT packets, not merely a parseable list.
+
+  - id: plan-active-release-experts-milestone
+    engine: plan.answer
+    query: "burndown of forge-local-experts-milestone"
+    why: >
+      ORDER 456 EXIT CRITERION 3. forge-local-experts-milestone (order 391) is
+      the ACTIVE RELEASE's (v0.5) experts milestone. This is the query an agent
+      runs to find what is left in the release, so it is the one that must be
+      right. The positive set pins the whole 394 family with its real statuses;
+      the negative set is what stops a "return every packet in the ledger"
+      regression from satisfying the positive set — a burndown that answers
+      with the whole ledger is wrong in the direction nobody notices.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 20
+      citations_include:
+        - path: plan/index.yaml
+          packet_id: plan-methodology-experts-rung1
+          order: "394"
+          status: ready
+          span_contains:
+            - "packet_id: plan-methodology-experts-rung1"
+            - "release_target: forge-local-experts-milestone"
+        - path: plan/index.yaml
+          packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
+          order: 394a
+          status: completed
+        # NOTE: deliberately does NOT assert this packet's status. A query set
+        # that pins the MUTABLE status of an in-flight packet goes red on every
+        # legitimate ledger update — this case did exactly that the first time
+        # 394d was closed. Identity + deliverable text are stable; status is not.
+        - path: plan/index.yaml
+          packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
+          order: 394d
+          span_contains:
+            - "committed query set (plan + methodology) + grading harness runnable in-forge"
+        - path: plan/index.yaml
+          packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
+          order: 394e
+          status: in_progress
+        - path: plan/index.yaml
+          packet_id: experts-construction-research
+          status: completed
+      citations_exclude:
+        # Not in this milestone. If it shows up, the release-target filter is
+        # gone and the burndown is answering with the whole ledger.
+        - packet_id: git-mirror-service
+        - packet_id: stable-milestone-v1
+      answer_contains:
+        - "release-target children of 'forge-local-experts-milestone'"
+
+  - id: plan-blocked-by-394c
+    engine: plan.answer
+    query: "what is blocked by 394c"
+    why: >
+      The dependency edge THIS packet sits on. An exact, tiny answer set: 394d
+      is the only packet that declares depends_on 394c, so `max_citations: 1`
+      makes over-answering a failure too. Alphanumeric order lookup (394c, not
+      394) is order 516's fix — a regression there resolves the wrong packet
+      and this goes red.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: plan/index.yaml
+          packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
+          order: 394d
+          span_contains:
+            - "packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness"
+            - "plan-methodology-experts-rung1/methodology-expert-layer0"
+
+  - id: plan-closure-downstream-of-394a
+    engine: plan.answer
+    query: "everything downstream of 394a"
+    why: >
+      TRANSITIVE closure, not the direct edge: 394d depends on 394c which
+      depends on 394b which depends on 394a. A closure that collapsed to the
+      direct-edge query would still return rows and still look fine; requiring
+      394d specifically is what distinguishes them.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 4
+      citations_include:
+        - packet_id: plan-methodology-experts-rung1/expert-answer-envelope
+          order: 394b
+        - packet_id: plan-methodology-experts-rung1/methodology-expert-layer0
+          order: 394c
+        - packet_id: plan-methodology-experts-rung1/expert-groundtruth-harness
+          order: 394d
+        - packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
+          order: 394e
+
+  - id: plan-status-of-394a
+    engine: plan.answer
+    query: "status of 394a"
+    why: >
+      The single-packet lookup, with its status pinned. 394a is DONE; if the
+      status field stops being read the citation authority goes stale and every
+      "what is left" answer built on it is wrong.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: plan/index.yaml
+          packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping
+          order: 394a
+          status: completed
+          span_contains:
+            - "build and install the tillandsias-plan binary at forge launch"
+
+  - id: plan-ready-for-linux-excludes-done
+    engine: plan.answer
+    query: "what is ready for linux"
+    why: >
+      The pickup query, and the one where a broken filter is invisible: a
+      `ready` list that quietly includes DONE packets sends agents to redo
+      finished work. Asserted STRUCTURALLY — no row may carry status done,
+      and the list must be non-trivial — rather than by naming a packet whose
+      status changes as work drains. Naming one is what turned this case red
+      the first time 394d closed; the invariant never moves, the packet does.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 20
+      citations_exclude:
+        - status: completed
+        - status: completed
+        - status: obsoleted
+
+  - id: plan-refuses-an-unknown-packet
+    engine: plan.answer
+    query: "status of no-such-packet-xyz"
+    why: >
+      REFUSAL. A packet that does not exist must come back unsupported with
+      zero citations, never as the status of some nearby packet. This is the
+      §4 invariant that makes the whole envelope trustworthy.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_contains:
+        - "unsupported:"
+
+  # ══ METHODOLOGY EXPERT (L0 YAML path query) ═════════════════════════════
+  # A completely different corpus with completely different authority keys,
+  # graded by the same code. That is the corpus-agnosticism claim, exercised
+  # rather than asserted.
+
+  - id: methodology-forge-cycle-budget
+    engine: methodology.ask
+    query: "may a forge cycle drain two packets?"
+    why: >
+      The question the methodology expert exists for: an agent about to break
+      the one-packet-per-cycle rule. Wrong here means agents drain two packets
+      per forge cycle on the expert's authority.
+    expect:
+      confidence: exact
+      citation_kind: methodology
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: methodology/distributed-work.yaml
+          kind: methodology
+          yaml_path: distributed_work.worker_agent_protocol.forge_cycle_budget.rule
+          key: "rule:"
+          span_contains:
+            - "drain AT MOST ONE plan packet per cycle"
+            - "SPLIT the packet into smaller ready"
+
+  - id: methodology-no-python
+    engine: methodology.ask
+    query: "is Python allowed in a committed script?"
+    why: >
+      The hardest hard-no in the project. An expert that softened this answer
+      would license the exact class of commit scripts/check-no-python-scripts.sh
+      exists to reject.
+    expect:
+      confidence: exact
+      citation_kind: methodology
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: methodology.yaml
+          yaml_path: methodology.runtime_language_policy.tlatoani_hard_no_python.rule
+          key: "rule:"
+          span_contains:
+            - "Python is not allowed for Tillandsias runtime"
+            - "must not be\n        copied into committed scripts"
+
+  - id: methodology-base64-ban
+    engine: methodology.ask
+    query: "may I embed a script in base64?"
+    why: >
+      The circumvention rule. It exists because the no-python policy WAS
+      circumvented this way on 2026-07-01; an expert that cannot cite it makes
+      the second attempt cheaper.
+    expect:
+      confidence: exact
+      citation_kind: methodology
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: methodology.yaml
+          yaml_path: methodology.runtime_language_policy.base64_script_injection_ban.rule
+          key: "rule:"
+          span_contains:
+            - "base64-encoded string literals"
+            - "deliberate act of circumvention"
+
+  - id: methodology-platform-branch-macos
+    engine: methodology.ask
+    query: "which branch does macOS checkpoint to?"
+    why: >
+      A MAPPING, not a rule sentence — the citation must cover the whole
+      platform_branches block, so the answer carries linux/windows/macos
+      together. A scanner that ended the block early would cite a range missing
+      `macos: osx-next` and this goes red.
+    expect:
+      confidence: exact
+      citation_kind: methodology
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: methodology/multi-host-development.yaml
+          yaml_path: multi_host_development.platform_branches
+          key: "platform_branches:"
+          span_contains:
+            - "macos: osx-next"
+            - "linux: linux-next"
+            - "windows: windows-next"
+
+  - id: methodology-pre-push-gate
+    engine: methodology.ask
+    query: "must I merge origin/linux-next before pushing windows-next?"
+    why: >
+      The rule that keeps cross-platform conflicts off the trunk. It is also in
+      CLAUDE.md's coordination notes, so a drift between the two is a real risk
+      and this quote is the anchor.
+    expect:
+      confidence: exact
+      citation_kind: methodology
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: methodology/multi-host-development.yaml
+          yaml_path: multi_host_development.pull_merge_cadence.pre_push_gate.rule
+          key: "rule:"
+          span_contains:
+            - "resolve all conflicts LOCALLY before"
+            - "EVERY push to their remote branch"
+
+  - id: methodology-issue-filing-mandate
+    engine: methodology.ask
+    query: "must I file an issue I observed outside my scope?"
+    why: >
+      The obligation every agent is tempted to skip. Cited verbatim so "out of
+      scope" cannot be re-litigated by paraphrase.
+    expect:
+      confidence: exact
+      citation_kind: methodology
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: methodology.yaml
+          yaml_path: methodology.cooperative_work_discipline.issue_filing_mandate.rule
+          key: "rule:"
+          span_contains:
+            - "MUST be filed as a"
+            - "Noticing is the\n        trigger; filing is the obligation."
+
+  - id: methodology-path-query-bar-raise
+    engine: methodology.path
+    query: "bar_raise_governance.authority"
+    why: >
+      The PATH engine rather than the question router, and a block scalar
+      rather than a mapping. The scanner's folded-scalar rule is what makes
+      this citable at all: the authority text is full of colons and would index
+      as keys without it.
+    expect:
+      confidence: exact
+      citation_kind: methodology
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: methodology/convergence.yaml
+          yaml_path: bar_raise_governance.authority
+          key: "authority:"
+          span_contains:
+            - "MUST approve every time"
+            - "MUST NOT self-escalate the bar"
+
+  - id: methodology-refuses-unknown-path
+    engine: methodology.path
+    query: "no_such_methodology_key_at_all"
+    why: >
+      REFUSAL. An unknown path is unsupported with zero citations — never the
+      nearest key dressed up as an answer.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_contains:
+        - "unsupported:"
+        - "no methodology YAML path matches"
+
+  - id: methodology-near-miss-does-not-leak-the-answer
+    engine: methodology.path
+    query: "forge_cycle"
+    why: >
+      THE MOST IMPORTANT REFUSAL CASE. `forge_cycle` is one token short of
+      `forge_cycle_budget`; a ranked engine answers it. This one must refuse,
+      offer the near key as NAVIGATION ONLY, and — the load-bearing half — the
+      refusal text must NOT contain the neighbouring rule's prose, or an agent
+      reads a refusal as an answer.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_contains:
+        - "unsupported:"
+        - "navigation only"
+        - "distributed_work.worker_agent_protocol.forge_cycle_budget"
+      answer_excludes:
+        - "drain AT MOST ONE plan packet per cycle"
+
+  - id: methodology-refuses-an-unrouted-question
+    engine: methodology.ask
+    query: "what is the airspeed velocity of an unladen swallow"
+    why: >
+      Out-of-corpus prose. The router has no fallback on purpose; the refusal
+      lists the routed forms so the agent can re-ask as a path.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_contains:
+        - "unsupported:"
+        - "no canonical methodology question matches"
+
+  - id: methodology-refuses-an-ambiguous-question
+    engine: methodology.ask
+    query: "is python allowed in base64"
+    why: >
+      AMBIGUITY IS A REFUSAL, not a coin flip: this matches both the no-python
+      route and the base64 route, so it gets neither. A scoring tiebreak here
+      would answer a question that was never asked.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_contains:
+        - "unsupported:"
+        - "no canonical methodology question matches"

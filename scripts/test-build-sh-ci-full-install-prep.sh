@@ -16,8 +16,41 @@ if [[ "$(grep -cF 'local -a command=(bash "$SCRIPT_DIR/scripts/local-ci.sh" "$@"
     exit 1
 fi
 
-if grep -F 'scripts/bump-version.sh' "$BUILD_SH" >/dev/null; then
-    echo "ci-full-install-prep: local build/install must not bump tracked release versions" >&2
+# The rule this enforces is "the CYCLE's own build must not bump tracked release
+# state", not "build.sh may never reference the bump script".
+#
+# Those were the same assertion until 2026-07-31, when methodology/versioning.yaml's
+# long-unimplemented increment_rule was finally wired up: "Build: local monotonic
+# build counter — increments on every local build (./build.sh)". A flat grep
+# prohibition makes that rule unimplementable, so the two committed artifacts
+# contradicted each other and this fixture caught the collision immediately.
+#
+# Resolution: developer dispatches bump (methodology + the operator's stated
+# semantics — "even local builds should have incremented build versions,
+# versions stay monotonically increasing"), while _prepare_ci_full_install_inputs
+# — the meta-orchestration cycle's own build — must not. A cycle has to exit with
+# a clean worktree, and unlike a regenerated trace index (which is derived and
+# converges), a monotonic counter never converges to a value a second cycle would
+# agree on.
+#
+# So assert the SCOPED rule: the prep function must not bump.
+prep_block="$(awk '/^_prepare_ci_full_install_inputs\(\) \{/,/^\}/' "$BUILD_SH")"
+if [[ -z "$prep_block" ]]; then
+    echo "ci-full-install-prep: _prepare_ci_full_install_inputs not found" >&2
+    exit 1
+fi
+# Strip comments before matching: the prep function documents WHY it does not
+# bump, and a naive grep matches that explanation and fails on the very comment
+# that records the rule.
+if grep -vE '^[[:space:]]*#' <<<"$prep_block" \
+    | grep -qE '_bump_build_version|scripts/bump-version\.sh'; then
+    echo "ci-full-install-prep: the cycle's own build must not bump tracked release versions" >&2
+    exit 1
+fi
+# And the bump must remain SUPPRESSIBLE, so any other caller that must not mutate
+# the checkout has an escape hatch rather than needing this file edited again.
+if ! grep -F 'TILLANDSIAS_SKIP_VERSION_BUMP' "$BUILD_SH" >/dev/null; then
+    echo "ci-full-install-prep: the build counter must honour TILLANDSIAS_SKIP_VERSION_BUMP" >&2
     exit 1
 fi
 

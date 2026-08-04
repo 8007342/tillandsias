@@ -400,6 +400,41 @@ multi_host_development:
       - "Saying `macos-next` — wrong. Always `osx-next`."
       - "Pushing platform code to `linux-next` directly — should route through the platform branch unless the file is shared (plan/, methodology/, openspec/, cheatsheets/)."
 
+  forge_base_determinism:
+    rule: >
+      A forge's base branch is seeded from the HOST CHECKOUT's current branch
+      (read_host_project_current_branch -> TILLANDSIAS_FORGE_SEED_BRANCH), and
+      the guest converges onto it. Therefore whatever branch a checkout is
+      parked on becomes the base of every forge launched from it. Any workflow
+      that moves the checkout MUST return it, and any workflow that launches a
+      forge MUST verify the base can build what the forge will claim to
+      provide. This is enforced by scripts/check-forge-expert-base.sh, not by
+      an agent noticing.
+    enforced_by: scripts/check-forge-expert-base.sh
+    grammar: "^(ok:(expert-base-ready|no-plan-crate)|blocked:(expert-sources-absent|not-a-git-repo))$"
+    why_source_presence_not_branch_name: >
+      The check tests for the expert engine SOURCES, never for a branch name.
+      Branch names here are Tillandsias's own convention and are explicitly not
+      a runtime convention of the product (see `scope` above), so a forge on an
+      end user's project must not assume them. Source presence is a fact about
+      the checkout and is safe to assert anywhere. It also catches the failure a
+      branch-name test cannot: when the seed and the actual branch AGREE because
+      the host checkout was itself parked on a pre-expert base, nothing looks
+      wrong while the expert build silently produces a pre-expert binary.
+    failure_signature: >
+      `experts: ready` reported truthfully in the forge startup context while
+      every plan_answer / methodology_path returns confidence=unsupported. The
+      state is not lying — the artifact is wrong. Reading `unsupported` as "the
+      plan has no answer" is the wrong inference and the one this rule exists to
+      prevent.
+    falsification_signal: >
+      A forge launched from a checkout whose `crates/tillandsias-plan/src/
+      answer.rs` is absent, and no guard, startup-context verdict, or gate
+      reported it before an agent asked a question and got a refusal.
+      Historically: order 531, plus two earlier cycles that absorbed it by
+      noticing and hand-rebasing (plan/loop_status.md:203, :243).
+    review_cadence: on_forge_launch_path_change
+
   common_pitfalls:
     rule: >
       Learned by the integration loop between 2026-05-24 and 2026-05-25.

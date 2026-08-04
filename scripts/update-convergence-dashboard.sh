@@ -42,7 +42,12 @@ spark_glyph() {
 }
 
 if [[ -s "$SOURCE" ]]; then
-    mapfile -t rows < <(
+    # bash-3.2 portability (stock macOS /bin/bash): mapfile/readarray do not
+    # exist there, so collect lines with a while-read append loop instead.
+    rows=()
+    while IFS= read -r row_line_in; do
+        rows+=("$row_line_in")
+    done < <(
         jq -r '
           . as $r
           | ($r.release_version // $r.version // "unknown") as $release
@@ -144,7 +149,9 @@ if [[ "$total_rows" -gt 0 ]]; then
 fi
 
 row_index=0
-for row in "${rows[@]}"; do
+# ${rows[@]+"${rows[@]}"} guards the empty-array expansion: bash < 4.4 treats
+# "${rows[@]}" on an empty array as an unbound variable under `set -u`.
+for row in ${rows[@]+"${rows[@]}"}; do
     row_index=$((row_index + 1))
     IFS=$'\t' read -r release date commit total earned residual pct worst_spec worst_reason evidence projection ci_result ci_run_id <<<"$row"
     glyph="$(spark_glyph "$pct")"
@@ -342,7 +349,7 @@ dashboard_contract_json=$(cat <<'CONTRACT'
 CONTRACT
 )
 
-cat >"$JSON_OUT" <<EOF
+cat >"$JSON_OUT.tmp$$" <<EOF
 {
   "generated_at": "$generated_at",
   "title": "$TITLE",
@@ -451,7 +458,41 @@ EOF
     printf '%s\n' '- `docs/cheatsheets/centicolon-dashboard.md` — visual contract, tail compression, anti-gaming rules.'
     printf '%s\n' '- `cheatsheets/observability/cheatsheet-metrics.md` — metric definitions and aggregation patterns.'
     printf '%s\n' '- `cheatsheets/runtime/cheatsheet-crdt-overrides.md` — CRDT discipline this dashboard inherits.'
-} >"$MD_OUT"
+} >"$MD_OUT.tmp$$"
+
+# PUBLISH ONLY ON SUBSTANTIVE CHANGE.
+#
+# Both outputs embed a wall-clock `generated_at`, so an unconditional write
+# dirties the worktree on EVERY run. That made litmus:local-ci-self-clean-evidence
+# unsatisfiable: `./build.sh --ci-full` regenerated these two files, then failed
+# on the dirt it had just created, and committing the result only reset the loop
+# with a new timestamp. The gate could never return 0 — which matters more since
+# 2026-08-03, when that gate became the release path's only verification.
+#
+# So: compare the candidate against what is on disk with the timestamp lines
+# normalized away. Identical content keeps the existing file, timestamp and all,
+# and the run is idempotent. Real movement publishes, timestamp included.
+_dashboard_strip_stamps() {
+    sed -E \
+        -e 's/^<!-- Last regenerated:.*-->$/<!-- STAMP -->/' \
+        -e 's/^_Generated at .*_$/_STAMP_/' \
+        -e 's/"generated_at"[[:space:]]*:[[:space:]]*"[^"]*"/"generated_at": "STAMP"/' \
+        "$1"
+}
+
+_dashboard_publish() {
+    local candidate="$1" destination="$2"
+    if [[ -f "$destination" ]] \
+        && diff -q <(_dashboard_strip_stamps "$candidate") \
+                   <(_dashboard_strip_stamps "$destination") >/dev/null 2>&1; then
+        rm -f "$candidate"          # nothing moved but the clock — leave it alone
+        return 0
+    fi
+    mv "$candidate" "$destination"
+}
+
+_dashboard_publish "$MD_OUT.tmp$$"   "$MD_OUT"
+_dashboard_publish "$JSON_OUT.tmp$$" "$JSON_OUT"
 
 cp "$MD_OUT" "$SUMMARY_OUT"
 
@@ -475,7 +516,12 @@ cleanup_old_evidence_bundles() {
 
     # Find JSON evidence bundle files (evidence-bundle.json, evidence-bundle-<timestamp>.json)
     # and tar.gz bundles (evidence-bundle-<timestamp>.tar.gz)
-    mapfile -t old_bundles < <(
+    # bash-3.2 portability: mapfile/readarray are unavailable on stock macOS
+    # /bin/bash, so collect lines with a while-read append loop instead.
+    old_bundles=()
+    while IFS= read -r bundle_line_in; do
+        old_bundles+=("$bundle_line_in")
+    done < <(
         find "$convergence_dir" \
             -type f \
             \( -name "evidence-bundle*.json" -o -name "evidence-bundle*.tar.gz" \) \

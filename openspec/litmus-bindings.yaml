@@ -2,6 +2,13 @@ version: '1.0'
 description: Tillandsias Spec-to-Litmus Test Bindings Registry
 generated: '2026-05-03T12:36:39.186138'
 specs:
+- spec_id: accel-capability-probe
+  status: active
+  litmus_tests:
+  - litmus:accel-capability-probe-contract-shape
+  - litmus:accel-envelope-reaches-the-forge
+  coverage_ratio: 100
+  last_verified: '2026-07-31'
 - spec_id: agent-cheatsheets
   status: obsolete
   litmus_tests: []
@@ -138,6 +145,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:ci-release-musl-binary-policy
+  - litmus:github-actions-budget
   - litmus:ci-release-toolchain-shape
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
@@ -173,6 +181,7 @@ specs:
 - spec_id: clickable-trace-index
   status: active
   litmus_tests:
+  - litmus:build-trace-index-dispatch-coverage
   - litmus:clickable-trace-index-generation
   - litmus:clickable-trace-index-observatorium-skeleton
   coverage_ratio: 67
@@ -186,6 +195,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-standalone-traceability
+  - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
   - litmus:claude-launch-stability-shape
@@ -317,8 +327,17 @@ specs:
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
   - litmus:forge-lsp-availability-shape
+  - litmus:forge-plan-expert-build-shape
+  - litmus:forge-experts-discoverability-shape
+  - litmus:forge-experts-ephemerality-shape
+  - litmus:plan-answer-envelope-citability
+  - litmus:methodology-path-query-citability
+  - litmus:expert-groundtruth-harness
+  - litmus:expert-refresh-cargo-target-shape
+  - litmus:expert-capability-skew-honesty
+  - litmus:capability-manifest-guard
   coverage_ratio: 80
-  last_verified: '2026-07-16'
+  last_verified: '2026-08-04'
 - spec_id: forge-forward-compat
   status: deprecated
   litmus_tests: []
@@ -450,13 +469,33 @@ specs:
   - litmus:inference-container-implementation-shape
   - litmus:inference-firstrun-default-models-shape
   - litmus:inference-tier-probe-shape
-  coverage_ratio: 80
-  last_verified: '2026-07-04'
+  - litmus:inference-gpu-device-args
+  - litmus:inference-engine-slot-boundary-shape
+  - litmus:inference-model-preload-policy
+  - litmus:inference-model-warm-timing
+  - litmus:inference-engine-payload-and-tuning
+  coverage_ratio: 85
+  last_verified: '2026-07-29'
+- spec_id: inference-engine-slots
+  status: active
+  litmus_tests:
+  - litmus:inference-engine-slot-boundary-shape
+  - litmus:inference-policy-router-implementation
+  - litmus:enclave-isolation
+  coverage_ratio: 100
+  last_verified: '2026-07-30'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null
   coverage_ratio: 0
   last_verified: '2026-05-12'
+- spec_id: inference-policy-router
+  status: active
+  litmus_tests:
+  - litmus:inference-policy-router-invariants-shape
+  - litmus:inference-policy-router-implementation
+  coverage_ratio: 100
+  last_verified: '2026-07-28'
 - spec_id: init-command
   status: active
   litmus_tests:
@@ -522,15 +561,23 @@ specs:
   - litmus:no-duplicate-rust-item-defs
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
+  - litmus:cycle-metrics-answer-rate-shape
+  - litmus:order-id-collision-free
+  - litmus:ledger-fragment-convergence
+  - litmus:plan-compaction-format-preservation
+  - litmus:loop-status-fragment-overlay
+  - litmus:no-unprotected-plan-ledger-readers
   - litmus:idiomatic-layers-doctrine-shape
   - litmus:large-packet-eligibility-doctrine-shape
   - litmus:version-release-and-forge-selfservice-shape
   - litmus:ephemerality-invariant-shape
+  - litmus:release-gates-run-locally
   coverage_ratio: 100
-  last_verified: '2026-07-18'
+  last_verified: '2026-08-03'
 - spec_id: meta-orchestration
   status: active
   litmus_tests:
+  - litmus:forge-expert-base-guard-shape
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape
   - litmus:committable-branch-guard-shape
@@ -541,6 +588,7 @@ specs:
   - litmus:forge-e2e-rate-limit-shape
   - litmus:smoke-lock-fd-isolation-shape
   - litmus:meta-orchestration-dirty-tree-safety
+  - litmus:meta-orchestration-opsx-sync-merge
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels
@@ -649,8 +697,9 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:headless-init-status-check-source-built
   - litmus:container-start-health
+  - litmus:forge-secret-capability-contract
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-07-28'
 - spec_id: project-bootstrap-readme
   status: active
   litmus_tests:
@@ -669,6 +718,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
+  - litmus:brew-attestation-egress
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
   coverage_ratio: 75
@@ -940,8 +990,9 @@ specs:
   - litmus:podman-secrets-integration-shape
   - litmus:opencode-vault-auth-content
   - litmus:git-mirror-vault-agent-auto-auth
+  - litmus:forge-secret-capability-contract
   coverage_ratio: 75
-  last_verified: '2026-07-23'
+  last_verified: '2026-07-28'
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
@@ -977,8 +1028,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
+  - litmus:forge-experts-ephemerality-shape
+  - litmus:forge-experts-teardown-ephemeral
   coverage_ratio: 100
-  last_verified: '2026-05-15'
+  last_verified: '2026-07-28'
 - spec_id: reverse-proxy-internal
   status: active
   litmus_tests:

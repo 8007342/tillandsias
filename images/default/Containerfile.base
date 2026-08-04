@@ -14,6 +14,7 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 RUN microdnf install -y --nogpgcheck --setopt=install_weak_deps=0 \
         glibc-langpack-en \
         bash coreutils findutils grep sed gawk tar gzip xz \
+        which \
         procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \
         git gh curl wget jq ripgrep fd-find bat fzf eza htop mc tree nano vim-minimal zoxide git-delta git-lfs httpie yq \

@@ -1,0 +1,122 @@
+# @trace spec:forge-environment-discoverability, spec:inference-container
+#
+# OpenCode and Claude affordances (orders 395 and 568): drift-protection for
+# the forge-plan expert discoverability surface. Pins:
+#
+#   * forge-plan MCP server registration in OpenCode config.json (exit criterion 1:
+#     "fresh OpenCode session lists/queries the experts with zero out-of-band
+#     setup" — the MCP entry IS the zero-setup path)
+#   * Claude's forge-only manifest and lossless runtime merge into
+#     ~/.claude.json after OAuth restoration
+#   * forge-plan.sh MCP server file + key tool literals (the server exists
+#     and exposes the canonical tool set)
+#   * ONE instruction file mentions the forge-plan MCP tools (exit criterion
+#     2: "instructions mention the experts exactly once (discoverable, not
+#     spammy)") — forge-discovery.md is the canonical discoverability surface
+#
+# Combined with litmus:forge-plan-expert-build-shape (which pins the
+# build+install path, the startup-context grammar, and the probe/binary
+# agreement), this completes the discoverability coverage for order 395.
+name: litmus:forge-experts-discoverability-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin the forge-plan MCP registration for OpenCode and Claude, the MCP server
+  file tool literals, and the single discoverability mention in
+  forge-discovery.md.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/default/config-overlay/claude/mcp.json
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - workspace contains images/default/config-overlay/opencode/instructions/forge-discovery.md
+  - shell utilities (grep, jq) are available in PATH
+
+critical_path:
+  - step: "forge-plan MCP server registered in config.json"
+    # Exit criterion 1: zero out-of-band setup. The forge-plan MCP entry
+    # in config.json is what makes the tools visible to a fresh OpenCode
+    # session — no manual tool registration needed. Pin the entry name
+    # and the command path so a rename breaks here rather than silently.
+    command: "jq -e '.mcp[\"forge-plan\"]' images/default/config-overlay/opencode/config.json >/dev/null && echo \"ok: forge-plan MCP registered\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan MCP registered"
+
+  - step: "forge-plan MCP command resolves to forge-plan.sh"
+    # The command path must point to the real server file. A stale path
+    # (after a relocate) would silently break every expert tool.
+    command: "jq -r '.mcp[\"forge-plan\"].command[0]' images/default/config-overlay/opencode/config.json | grep -qF 'forge-plan.sh' && echo \"ok: forge-plan command resolves\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan command resolves"
+
+  - step: "Claude MCP manifest registers forge-plan and project-info as stdio servers"
+    command: "jq -e '.mcpServers[\"forge-plan\"] | .type == \"stdio\" and (.command | endswith(\"/forge-plan.sh\"))' images/default/config-overlay/claude/mcp.json >/dev/null && jq -e '.mcpServers[\"project-info\"] | .type == \"stdio\" and (.command | endswith(\"/project-info.sh\"))' images/default/config-overlay/claude/mcp.json >/dev/null && echo 'ok: claude expert MCPs registered'"
+    timeout_ms: 3000
+    expected_behavior: "ok: claude expert MCPs registered"
+
+  - step: "Claude entrypoint merges MCP registration after OAuth restore"
+    command: "restore_line=$(grep -n 'provider-oauth-vault restore' images/default/entrypoint-forge-claude.sh | cut -d: -f1); overlay_line=$(grep -n '^apply_claude_config_overlay$' images/default/entrypoint-forge-claude.sh | cut -d: -f1); test -n \"$restore_line\" && test -n \"$overlay_line\" && test \"$overlay_line\" -gt \"$restore_line\" && echo 'ok: claude overlay follows OAuth restore'"
+    timeout_ms: 3000
+    expected_behavior: "ok: claude overlay follows OAuth restore"
+
+  - step: "Claude overlay preserves auth and custom servers while adding forge experts"
+    command: "d=$(mktemp -d); mkdir -p \"$d/overlay/claude\"; cp images/default/config-overlay/claude/mcp.json \"$d/overlay/claude/mcp.json\"; printf '%s\n' '{\"oauthAccount\":{\"accountUuid\":\"keep-me\"},\"mcpServers\":{\"custom\":{\"command\":\"custom-server\"}}}' >\"$d/.claude.json\"; { printf '%s\n' 'trace_lifecycle() { :; }'; sed -n '/^apply_claude_config_overlay() {/,/^}/p' images/default/lib-common.sh; } >\"$d/test.sh\"; HOME=\"$d\" TILLANDSIAS_CONFIG_OVERLAY_ROOT=\"$d/overlay\" bash -c '. \"$1\"; apply_claude_config_overlay' _ \"$d/test.sh\"; jq -e '.oauthAccount.accountUuid == \"keep-me\" and .mcpServers.custom.command == \"custom-server\" and (.mcpServers[\"forge-plan\"].command | endswith(\"/forge-plan.sh\")) and (.mcpServers[\"project-info\"].command | endswith(\"/project-info.sh\"))' \"$d/.claude.json\" >/dev/null; rc=$?; rm -rf \"$d\"; test \"$rc\" = 0 && echo 'ok: claude overlay merge is lossless'"
+    timeout_ms: 5000
+    expected_behavior: "ok: claude overlay merge is lossless"
+
+  - step: "forge-plan.sh MCP server file exists"
+    # The server binary must exist at the expected location. A deletion
+    # or rename breaks the MCP registration silently.
+    command: "test -f images/default/config-overlay/mcp/forge-plan.sh && echo \"ok: forge-plan.sh exists\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan.sh exists"
+
+  - step: "forge-plan.sh exposes plan_answer tool"
+    # Order 394b: plan_answer is the canonical cited-envelope tool.
+    # If the literal disappears, the expert contract is broken.
+    command: "grep -F 'plan_answer' images/default/config-overlay/mcp/forge-plan.sh"
+    timeout_ms: 3000
+    expected_behavior: "plan_answer"
+
+  - step: "forge-plan.sh exposes methodology_path tool"
+    # Order 394c: methodology_path is the L0 methodology query tool.
+    # Pin the literal so a regression surfaces here.
+    command: "grep -F 'methodology_path' images/default/config-overlay/mcp/forge-plan.sh"
+    timeout_ms: 3000
+    expected_behavior: "methodology_path"
+
+  - step: "forge-plan.sh exposes plan_blocked_by tool"
+    # Core query tool — pin the literal.
+    command: "grep -F 'plan_blocked_by' images/default/config-overlay/mcp/forge-plan.sh"
+    timeout_ms: 3000
+    expected_behavior: "plan_blocked_by"
+
+  - step: "instruction file mentions forge-plan MCP tools exactly once"
+    # Exit criterion 2: "instructions mention the experts exactly once
+    # (discoverable, not spammy)". forge-discovery.md is the canonical
+    # discoverability surface. Verify the mention contains the key
+    # "forge-plan" and "plan_answer" / "before grepping" guidance.
+    command: "grep -cF 'forge-plan' images/default/config-overlay/opencode/instructions/forge-discovery.md | grep -qF '1' && grep -F 'forge-plan' images/default/config-overlay/opencode/instructions/forge-discovery.md | grep -qF 'plan_answer' && echo \"ok: forge-plan mentioned exactly once in forge-discovery.md with tool guidance\""
+    timeout_ms: 3000
+    expected_behavior: "ok: forge-plan mentioned exactly once in forge-discovery.md with tool guidance"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace spec:inference-container"
+  expected_log: "forge-plan MCP registered for OpenCode and Claude, server file present, canonical tools pinned, instruction mention exactly once"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-experts-discoverability-shape"
+    artifact: "images/default/config-overlay/{opencode/config.json,claude/mcp.json,mcp/forge-plan.sh} + images/default/entrypoint-forge-claude.sh + images/default/lib-common.sh"
+
+rollback:
+  on_failure: >
+    An order-395 affordance surface drifted. Restore: `forge-plan` entry in
+    config.json `.mcp` section; `forge-plan.sh` server file with the
+    canonical tool set (plan_answer, methodology_path, plan_blocked_by);
+    `forge-plan` mention in forge-discovery.md's "Where to Look When Stuck"
+    table.
+  command: "grep -nE 'forge-plan|plan_answer|methodology_path' images/default/config-overlay/opencode/config.json images/default/config-overlay/mcp/forge-plan.sh images/default/config-overlay/opencode/instructions/forge-discovery.md | head -15"

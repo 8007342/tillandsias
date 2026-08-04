@@ -31,4 +31,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L5611](../../../crates/tillandsias-headless/src/tray/mod.rs#L5611)
 - [crates/tillandsias-headless/src/tray/mod.rs#L5767](../../../crates/tillandsias-headless/src/tray/mod.rs#L5767)
 - [locales/en.toml#L48](../../../locales/en.toml#L48)
-- [scripts/local-ci.sh#L921](../../../scripts/local-ci.sh#L921)
+- [scripts/local-ci.sh#L944](../../../scripts/local-ci.sh#L944)

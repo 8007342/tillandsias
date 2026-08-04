@@ -36,23 +36,26 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
 4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
- 5.  **Read Authoritative Ledgers**: Read:
-     -   `methodology.yaml`
-     -   `methodology/distributed-work.yaml`
-     -   `plan.yaml`
-     -   `plan/index.yaml`
-     -   `plan/loop_status.md`
-     -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
-         thematic direction). Reduce your packet selection against that theme
-         rather than inventing new direction; cite the direction in your work-queue
-         ledger entry (order 381).
+5.  **Use Local MCP Servers for Instant Context**:
+    - **`project-plan` (`forge-plan`)**: Call `plan_query`, `plan_ready`, `plan_status`, `plan_answer`, `methodology_path`, `methodology_ask` for fast sub-60ms cited envelopes over `plan/` and `methodology/`.
+    - **`project-info`**: Call `read_file`, `search_code`, `git_status`, `project_structure` for fast sub-90ms repo navigation without heavy context load.
+6.  **Read Authoritative Ledgers**: Read:
+    -   `methodology.yaml`
+    -   `methodology/distributed-work.yaml`
+    -   `plan.yaml`
+    -   `plan/index.yaml` (or via `project-plan` / `forge-plan` MCP tools)
+    -   `plan/loop_status.md`
+    -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
+        thematic direction). Reduce your packet selection against that theme
+        rather than inventing new direction; cite the direction in your work-queue
+        ledger entry (order 381).
 
 ---
 
 ## 2 — Discover Work & Select Shaped Packet
 
-1.  **Walk the Graph**: Read, in order:
-    -   `plan/index.yaml` — packet index + selection policy.
+1.  **Walk the Graph**: Read (via `project-plan` / `project-info` MCP tools or direct file inspection), in order:
+    -   `plan/index.yaml` — packet index + selection policy (`plan_query` / `plan_ready`).
     -   `plan/issues/<host>-next-*work-queue*.md` — your host's queue (e.g. `linux-next-work-queue-*`, `osx-next-work-queue-*`, `windows-next-work-queue-*`).
     -   `plan/issues/forge-diagnostics-automation-2026-05-27.md` and `plan/issues/cross-host-blocker-roundup-*.md` — high-impact packets.
     -   (Linux only) `plan/issues/linux-headless-spec-gaps-2026-05-27.md` — diagnostics + headless backlog.
@@ -64,12 +67,14 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     -   There is no active unexpired lease.
 3.  **Selection Priority (Top Wins)**:
     -   **Release-targeted packets FIRST**: packets carrying `release_target: <milestone-packet-id>` outrank the general backlog (canonical: `methodology/distributed-work.yaml` → `release_aware_packets`). A host with no eligible targeted work falls back to the priorities below — targeting concentrates effort, it never idles a host. Never claim a `kind: milestone` packet for implementation — milestones hold criteria; claim their children (`ambitious_milestone_reduction.milestone_packet_semantics`).
+    -   **Active Release Packets (`desired_release: v0.5`)**: Prioritize open work targeting the active release minor (`v0.5`) over future releases (`v0.6+`) to concentrate effort on shipping current milestones (e.g. `harness-mcp-expert-validation` order 554, `forge-local-experts-milestone` order 391).
     -   **If running on `forge` host**: Prioritize forge diagnostics, toolchain improvements, and onboarding tasks (e.g. `forge-improvements/proposals/` and `smoke-finding/forge-*` packets) to unblock other builders.
     -   **Diagnostics-driven container-start verification** (USER PRIORITY, linux runtime-host today): work that strengthens the `--diagnostics` → annex → distill → litmus chain. See `scripts/forge-diagnostics-annex.sh`, `scripts/distill-forge-diagnostics.sh`, `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`, `methodology/forge-diagnostics.yaml` piggyback_protocol.
     -   **Spec gap fills**: `openspec/specs/<spec>/spec.md` requirements without implementation coverage. Focus on `headless-mode`, `podman-idiomatic-patterns`, `runtime-diagnostics-stream`, `logging-accountability`, `observability-metrics`.
     -   **Drift-protection litmus**: instant-phase tests pinning surfaces that recent work added (formatter literals, env-var contracts, public API names, unit-test names).
     -   **Clippy / idiomatic-podman hardening**.
-    -   **Version-aware release ordering** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `version_aware_release_planning`). Releases are sequential numbered bundles (v0.3 → v0.4 → …), stability-gated not time-gated; "release X" is the CalVer Minor. Every open packet should carry `desired_release: vX.Y` (its ship-bucket, distinct from the milestone `release_target`). After the milestone preference, prefer packets targeting the **ACTIVE release** (see `plan/loop_status.md`) over later-release ones — concentrate effort on shipping the current bundle. Cross-platform deps are gated by release order (dependent's `desired_release` >= its upstream's). A packet that must slip to a later release: file a `progress` note proposing the slip; the coordinator ratifies. Unmarked open packets default to the active release.
+    -   **Version-aware release ordering** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `version_aware_release_planning`). Releases are sequential numbered bundles (v0.3 → v0.4 → …), stability-gated not time-gated; "release X" is the CalVer Minor. Every open packet should carry `desired_release: vX.Y` (its ship-bucket, distinct from the milestone `release_target`). After the milestone preference, prefer packets targeting the **ACTIVE release** (`v0.5`; see `plan/loop_status.md`) over later-release ones — concentrate effort on shipping the current bundle. Cross-platform deps are gated by release order (dependent's `desired_release` >= its upstream's). A packet that must slip to a later release: file a `progress` note proposing the slip; the coordinator ratifies. Unmarked open packets default to the active release.
+    -   **Filing a new packet? Mint its order, never pick one**: run `tillandsias-plan next-order` (→ `581-k3f9`). Computing "the next free order" from the ledger reads a snapshot that is stale the moment another host commits, so concurrent filers collide deterministically — twice on 2026-07-31, with six collisions still at HEAD. The minted token is PERMANENT: never renumber it, because order tokens leak into code comments, `@trace order:` headers, and commit messages, and a pushed commit message cannot be corrected. A prefix shared by two packets is normal, not a defect. Cite `packet_id` in anything durable. Canonical: `methodology/distributed-work.yaml` → `order_id_allocation`.
     -   **In-forge self-service** (canonical: `methodology/distributed-work.yaml` → `in_forge_agent_self_service`): if you are running INSIDE the forge and hit a missing tool/capability/fix, unblock your FUTURE launches by filing in the SHARED CHECKOUT (the forge is rebuilt from sources each launch): a capability/tool proposal → `plan/forge-improvements/proposals/<date>-<slug>.md`; a forge bug → a `plan/issues/` packet `capability_tags: [forge, …]` `owner_host: linux|any`. If the packet is `forge`-tagged/`any` and fits the forge budget, just do it. Always shaped + verifiable + pushed (a finding that dies with the container is lost).
     -   **A LARGE packet is ELIGIBLE — size is not a skip reason** (The Tlatoāni 2026-07-17; canonical: `methodology/distributed-work.yaml` → `large_packet_is_eligible_work`). Do NOT scan a queue of big packets, judge them all "too large", and reach for an old, small, near-obsolete task instead — that inverts the queue's value order and churns work that later specs will supersede. Rank by VALUE and RELEVANCE, never by smallness: a large, fresh, release-targeted packet OUTRANKS a small, stale one. When you claim a packet you cannot finish this cycle, end in ONE of three valid outcomes, each a complete successful cycle: **(a) partial slice** — smallest vertical slice under a verifiable constraint + a `progress` event with `partial_artifact_refs` and an updated `next_action`; **(b) split** — decompose into smaller `ready` child packets at ownership/dependency/evidence boundaries (`split_into`), the shaping commit IS the cycle's output (this generalizes the forge-only order-264 split rule to every host); **(c) audit-dispose** — if it is stale/superseded, retire it (obsolete/tombstone) per the freshness class. A near-obsolete-looking packet is a signal to AUDIT it, not to implement it as busywork.
 4.  **Long-running packets** (`multi_cycle: true`): claims are CYCLE-SCOPED — you claim one session's slice, not the packet. A `ready` multi_cycle packet with prior progress events is claimable (that's the design, not a stale lease). Canonical rules: `methodology/distributed-work.yaml` → `long_running_packets`.
@@ -181,8 +186,22 @@ git grep -nE '^(<<<<<<<|=======|>>>>>>>)( |$)' && { echo "CONFLICT MARKER PRESEN
 
 # 2. Every touched YAML still parses (the broken-plan/index.yaml bug — `build
 #    --check` does NOT validate data files, so this step is what catches it):
+#    PICK THE VALIDATOR THAT EXISTS WHERE YOU ARE. `ruby` is NOT in the forge
+#    image; `yq` is. Hosts usually have both. `python3` is present in the forge
+#    and is FORBIDDEN for committed automation (tlatoani_hard_no_python) — its
+#    presence is not permission, and it is the trap this fallback chain exists
+#    to keep you out of.
+if command -v tillandsias-policy >/dev/null 2>&1; then
+  yamlcheck() { tillandsias-policy validate-yaml "$1"; }
+elif command -v yq >/dev/null 2>&1; then
+  yamlcheck() { yq . "$1" >/dev/null; }
+elif command -v ruby >/dev/null 2>&1; then
+  yamlcheck() { ruby -ryaml -e "YAML.load_file('$1')"; }
+else
+  echo "no sanctioned YAML validator available — do NOT substitute python3"; exit 1
+fi
 for y in $(git diff --name-only origin/<active-branch>..HEAD | grep -E '\.ya?ml$'); do
-  ruby -ryaml -e "YAML.load_file('$y')" || { echo "INVALID YAML: $y"; exit 1; }
+  yamlcheck "$y" || { echo "INVALID YAML: $y"; exit 1; }
 done
 
 # 3. Code still compiles — clippy + cargo catch the duplicate-item E0428 directly
@@ -220,6 +239,13 @@ status `ready`. The packet closes only when every agent named in
 `verification_required` has emitted passing `verified-by` events
 (`methodology/distributed-work.yaml` → `long_running_packets`).
 
+0.  **Cycle Metrics**: Run `scripts/cycle-metrics.sh` and include its output in
+    your completion report. Read `verdict` first — it names the cycle's weakest
+    point. `attention:expert-answered-nothing-check-base-branch` means the
+    expert ARTIFACT is wrong (order 531), not that the questions were hard;
+    check the base branch before trusting any expert answer from this cycle.
+    Report `experts_substitution` as `unknown` — it is not derivable in-repo and
+    must never be estimated.
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
 2.  **Emit Completed Event**: Update the task's YAML block:
     -   Append a `completed` event to `events:` listing all commit SHAs and validation log paths.

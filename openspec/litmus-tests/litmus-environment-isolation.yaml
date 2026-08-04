@@ -1,5 +1,5 @@
 # @trace spec:environment-runtime, spec:forge-launch
-# freshness: auditor=linux-tlatoani-opencode-20260717T0920Z date=2026-07-17 verdict=updated scope=env allowlist re-validated against image change 6b299368 (NODE_USE_SYSTEM_CA) after stale-allowlist gate flake fixed 8578e283
+# freshness: auditor=linux-macuahuitl-opencode-20260802T0519Z date=2026-08-02 verdict=refreshed scope=live post-build run passed 4/4; explicit env allowlist, session leak rejection, image warmup, and cargo PATH checks remain meaningful and complete
 # Verify the forge container sees ONLY a minimal environment — no host env
 # leakage (session/display vars, DOCKER_HOST, XDG_*). Rewritten for order
 # 267: the previous revision was not valid YAML (mirror-gate incompatible),

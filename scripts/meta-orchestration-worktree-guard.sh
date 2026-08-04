@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-    echo "usage: $0 snapshot|verify STATE_DIR" >&2
+    echo "usage: $0 snapshot|re-snapshot|verify STATE_DIR" >&2
     exit 2
 }
 
@@ -78,6 +78,18 @@ case "$mode" in
         printf '%s\n' "$repo_root" >"$state_dir/repo-root"
         cd "$repo_root"
         capture "$state_dir/startup"
+        ;;
+    re-snapshot)
+        # Re-anchor the boundary after an intentional commit of launch-generated
+        # opsx/openspec dirt (order 540). Sole caller: meta-orchestration after
+        # scripts/check-opsx-generated-dirt.sh returned ok: and the cycle merged
+        # the generated set as a chore(opsx): commit. Anything NOT in the
+        # generated set must have been refused earlier, so re-anchoring here is
+        # safe only when the caller proved the prior dirty set was opsx-only.
+        load_state "$@"
+        mkdir -p "$state_dir/tmp"
+        capture "$state_dir/startup"
+        echo "ok: startup boundary re-anchored"
         ;;
     verify)
         load_state "$@"

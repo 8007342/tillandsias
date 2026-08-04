@@ -188,14 +188,14 @@ where
                     format!("wire version mismatch: local={WIRE_VERSION} server={wire_version}"),
                 ));
             }
-            if let Some(guest_version) = build_version {
-                if guest_version != env!("CARGO_PKG_VERSION") {
-                    tracing::warn!(
-                        "build version skew: tray={} guest={}",
-                        env!("CARGO_PKG_VERSION"),
-                        guest_version
-                    );
-                }
+            if let Some(guest_version) = build_version
+                && guest_version != env!("CARGO_PKG_VERSION")
+            {
+                tracing::warn!(
+                    "build version skew: tray={} guest={}",
+                    env!("CARGO_PKG_VERSION"),
+                    guest_version
+                );
             }
             wire_version
         }

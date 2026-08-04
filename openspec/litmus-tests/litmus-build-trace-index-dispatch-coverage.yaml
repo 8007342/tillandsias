@@ -1,0 +1,98 @@
+# @trace spec:clickable-trace-index
+# Order 490 (clickable-trace-index-build-dispatch-gap): build.sh regenerated the
+# clickable trace indexes only from the two install paths, so plain debug,
+# --release, --observatorium and --init builds could complete against stale
+# TRACES.md and per-spec backlinks — violating the "Build integration"
+# requirement at openspec/specs/clickable-trace-index/spec.md:90-102.
+#
+# A grep for `generate-traces.sh` in build.sh cannot see that gap (it was
+# satisfied by the install path alone), so this test drives build.sh for real:
+# a throwaway sandbox holds a copy of build.sh with every external dependency
+# replaced by a counting stub, and each dispatch is executed and counted. A
+# newly added build-producing dispatch that forgets the regeneration call turns
+# this test red.
+#
+# THE COUNTER MEASURES REGENERATIONS, NOT INVOCATIONS. _regenerate_trace_indexes
+# calls generate-traces.sh twice on purpose: once with --check to learn whether
+# the tracked indexes were ALREADY stale before this build touched them, and once
+# to actually regenerate. That probe exists because swallowing the signal made
+# three agents in one day ship a @trace change without its index refresh and left
+# the next agent failing litmus:local-ci-self-clean-evidence for dirt it did not
+# create (build.sh, _regenerate_trace_indexes comment).
+#
+# A read-only --check is not a regeneration, so the stub must not count it —
+# otherwise this test reports "2" for a dispatch that regenerated exactly once
+# and reads as a dispatch-coverage defect. Counting raw invocations would also
+# forbid ever probing before acting, which is the opposite of what the ordering
+# discipline below wants.
+#
+# Ordering is pinned too. Order 495 (litmus:local-ci-self-clean-evidence)
+# established that tracked generated evidence must never be refreshed between a
+# clean CI gate and the post-build forge gate's dirty-start guard, so the fixture
+# asserts the regeneration lands BEFORE the gate, and that build.sh suppresses
+# regeneration for the post-build/runtime litmus phases.
+name: litmus:build-trace-index-dispatch-coverage
+spec: clickable-trace-index
+phase: pre-build
+description: Drive every build.sh dispatch in a stubbed sandbox and assert each build-producing mode regenerates the clickable trace indexes exactly once, test/check-only modes never do, and regeneration always precedes the CI gate
+severity: high
+size: quick
+
+preconditions:
+  - repository root contains build.sh
+  - bash, grep, printf, and mktemp-style writable TMPDIR are available
+  - no real cargo, podman, forge, or network access is required (all stubbed)
+
+critical_path:
+  - step: "build a stubbed build.sh sandbox that counts generate-traces.sh invocations"
+    command: "set -e; S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; rm -rf $S; mkdir -p $S/scripts $S/bin $S/target/debug; cp build.sh $S/build.sh; : > $S/scripts/with-tillandsias-builder.sh; : > $S/scripts/with-wsl2-builder.sh; printf 'require_podman() { return 0; }\\npodman_runtime_health_probe() { return 1; }\\n' > $S/scripts/common.sh; for s in setup-podman-registries.sh build-guest-binaries.sh generate-evidence-bundle.sh; do printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/$s; chmod +x $S/scripts/$s; done; printf '#!/bin/sh\\ncase \"$1\" in --check) exit 0 ;; esac\\necho traces >> $TRACE_LOG\\n' > $S/scripts/generate-traces.sh; printf '#!/bin/sh\\necho gate >> $TRACE_LOG\\n' > $S/scripts/local-ci.sh; printf '#!/bin/sh\\necho litmus >> $TRACE_LOG\\n' > $S/scripts/run-litmus-test.sh; printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/tillandsias-podman; chmod +x $S/scripts/generate-traces.sh $S/scripts/local-ci.sh $S/scripts/run-litmus-test.sh $S/scripts/tillandsias-podman; for t in cargo rustc rustfmt clippy-driver gcc pkg-config file; do printf '#!/bin/sh\\nexit 0\\n' > $S/bin/$t; chmod +x $S/bin/$t; done; printf '#!/bin/sh\\necho x86_64-unknown-linux-musl\\n' > $S/bin/rustup; chmod +x $S/bin/rustup; printf '#!/bin/sh\\nexit 0\\n' > $S/target/debug/tillandsias; chmod +x $S/target/debug/tillandsias; echo ok:sandbox-ready"
+    success_pattern: "^ok:sandbox-ready$"
+    timeout_ms: 20000
+
+  - step: "every build-producing dispatch regenerates exactly once; test-only and check-only never do; combined flags dedupe"
+    command: "S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; n() { : > $S/log; ( cd $S && env TRACE_LOG=$S/log PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S TILLANDSIAS_SKIP_TRACE_INDEX=${SKIP:-0} bash ./build.sh $@ ) >/dev/null 2>&1 || true; grep -c '^traces$' $S/log || true; }; r=$(n)-$(n --release)-$(n --install)-$(n --observatorium .)-$(n --init)-$(n --test)-$(n --check)-$(n --clean --release --install); if [ $r = 1-1-1-1-1-0-0-1 ]; then echo ok:dispatch-coverage; else echo observed:$r expected:1-1-1-1-1-0-0-1 order:debug,release,install,observatorium,init,test,check,combined; echo 'remedy: every build-producing build.sh dispatch must call _regenerate_trace_indexes (openspec/specs/clickable-trace-index/spec.md Build integration)'; echo fail:dispatch-coverage; exit 1; fi"
+    success_pattern: "^ok:dispatch-coverage$"
+    failure_pattern: "^fail:dispatch-coverage$"
+    timeout_ms: 90000
+
+  - step: "TILLANDSIAS_SKIP_TRACE_INDEX=1 suppresses regeneration for callers that must not mutate the tracked checkout"
+    command: "S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; n() { : > $S/log; ( cd $S && env TRACE_LOG=$S/log PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S TILLANDSIAS_SKIP_TRACE_INDEX=${SKIP:-0} bash ./build.sh $@ ) >/dev/null 2>&1 || true; grep -c '^traces$' $S/log || true; }; on=$(n); off=$(SKIP=1 n); if [ $on = 1 ] && [ $off = 0 ]; then echo ok:skip-honored; else echo default:$on expected:1 skipped:$off expected:0; echo 'remedy: the same debug build must regenerate by default and stay silent under TILLANDSIAS_SKIP_TRACE_INDEX=1'; echo fail:skip-honored; exit 1; fi"
+    success_pattern: "^ok:skip-honored$"
+    failure_pattern: "^fail:skip-honored$"
+    timeout_ms: 30000
+
+  - step: "order 495: every gate-bearing invocation regenerates before its CI gate, never between a clean gate and the post-build forge"
+    command: "S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; o() { : > $S/log; ( cd $S && env TRACE_LOG=$S/log PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S bash ./build.sh $@ ) >/dev/null 2>&1 || true; tr '\\n' ',' < $S/log; }; bad=none; for m in ci-full-install ci-install release; do case $m in ci-full-install) r=$(o --ci-full --install) ;; ci-install) r=$(o --ci --install) ;; release) r=$(o --release) ;; esac; case $r in traces,gate,*) ;; *) bad=$bad+$m:$r ;; esac; done; if [ $bad = none ]; then rm -rf $S; echo ok:regeneration-before-gate; else echo observed:$bad expected-prefix:traces,gate; echo 'remedy: regenerate trace indexes ahead of every CI gate (order 495) so the post-build forge dirty-start guard has nothing to refuse'; echo fail:regeneration-before-gate; exit 1; fi"
+    success_pattern: "^ok:regeneration-before-gate$"
+    failure_pattern: "^fail:regeneration-before-gate$"
+    timeout_ms: 90000
+
+  - step: "order 495: the post-build and runtime litmus phases run with regeneration suppressed"
+    command: "a=$(grep -nF '_run_litmus_phase() {' build.sh | cut -d: -f1); b=$(grep -nF '_run_local_ci_gate() {' build.sh | cut -d: -f1); c=$(grep -nF 'TILLANDSIAS_SKIP_TRACE_INDEX=1 ' build.sh | tail -1 | cut -d: -f1); if [ ${c:-0} -gt ${a:-0} ] && [ ${c:-0} -lt ${b:-0} ]; then echo ok:post-build-window-guarded; else echo litmus_phase_fn=$a ci_gate_fn=$b skip_assignment=$c; echo fail:post-build-window-guarded; exit 1; fi"
+    success_pattern: "^ok:post-build-window-guarded$"
+    failure_pattern: "^fail:post-build-window-guarded$"
+    timeout_ms: 5000
+
+  - step: "shared build helpers are defined above their first caller (bash resolves definitions at execution time)"
+    command: "def=$(grep -nF '_regenerate_trace_indexes() {' build.sh | cut -d: -f1); first=$(grep -n '^ *_regenerate_trace_indexes$' build.sh | head -1 | cut -d: -f1); rdef=$(grep -nF '_require_host_build_tools() {' build.sh | cut -d: -f1); rfirst=$(grep -n '^ *_require_host_build_tools$' build.sh | head -1 | cut -d: -f1); if [ ${def:-0} -gt 0 ] && [ ${def:-0} -lt ${first:-0} ] && [ ${rdef:-0} -gt 0 ] && [ ${rdef:-0} -lt ${rfirst:-0} ]; then echo ok:helpers-defined-before-first-call; else echo trace_def=$def trace_first=$first tools_def=$rdef tools_first=$rfirst; echo fail:helpers-defined-before-first-call; exit 1; fi"
+    success_pattern: "^ok:helpers-defined-before-first-call$"
+    failure_pattern: "^fail:helpers-defined-before-first-call$"
+    timeout_ms: 5000
+
+gating_points:
+  - success: "ok:dispatch-coverage"
+  - failure: "fail:dispatch-coverage"
+  - success: "ok:regeneration-before-gate"
+  - failure: "fail:regeneration-before-gate"
+
+observability:
+  traces:
+    - "@trace spec:clickable-trace-index"
+  expected_log: "Every build-producing build.sh dispatch refreshes the clickable trace indexes exactly once, ahead of any CI gate"
+  log_fields:
+    spec: "clickable-trace-index"
+    test: "build-trace-index-dispatch-coverage"
+
+rollback:
+  on_failure: "a build.sh dispatch builds artifacts without refreshing TRACES.md, regenerates more than once, regenerates on a test/check-only run, or regenerates after the CI gate; add or move the _regenerate_trace_indexes call at the offending dispatch"
+  command: "grep -n '_regenerate_trace_indexes' build.sh && sed -n '/Shared build helpers/,/Standalone operations/p' build.sh"

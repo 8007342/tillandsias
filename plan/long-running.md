@@ -18,6 +18,7 @@ cycle that changes a listed packet's phase, status, or verification tally.
 | 251 | `long-running-work-packet-methodology` | verification (LM-04 active-view repair 2026-07-14) | — | opencode-bigpickle (LM-01..05), antigravity-gemini (LM-01,02,04), codex-gpt55-highthink re-verification (LM-03,04,05) |
 | 330 | `git-mirror-observability-and-managed-alternatives` | research | order 315 recommendation + Tlatoani adopt/keep decision | no named verification gate |
 | 334 | `stable-milestone-v1` | tracking | 12 release-target children + three-platform curl-install evidence | operator evidence gate |
+| 484 | `inference-policy-router` | implementation | ready children 484b–484e | failure quarantine, Linux signal watcher, preemption/resume/priority, status/pin |
 
 Protocol summary (canonical: `long_running_packets` in
 `methodology/distributed-work.yaml`):

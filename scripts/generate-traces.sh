@@ -8,7 +8,25 @@
 #   - openspec/specs/<name>/TRACES.md per active spec (back-links)
 #
 # Usage:
-#   ./scripts/generate-traces.sh
+#   ./scripts/generate-traces.sh            # regenerate the tracked indexes
+#   ./scripts/generate-traces.sh --check    # report staleness, mutate NOTHING
+#
+# --check exists because there was previously NO command that answered "are the
+# committed trace indexes current?" with an exit code. The generator was a pure
+# writer: it always rewrote every index, printed `Written:` whether or not
+# content changed, never compared against git, and structurally could not exit
+# non-zero. So the invariant was unenforceable by construction, not merely
+# unenforced — every consumer had to hand-roll a `git status` comparison, and
+# none did. The result: adding an @trace and shipping left TRACES.md dirty with
+# zero signal, and the next agent's pre-build sweep failed
+# litmus:local-ci-self-clean-evidence for dirt it did not create. That happened
+# three separate times in one day (orders 480, then 482a/484, then 579c54e3).
+#
+# PINNED GRAMMAR for --check — exactly one line on stdout:
+#   ok:trace-indexes-current
+#   stale:trace-indexes count=<N>
+# Exit 0 when current, 1 when stale. Stale paths are listed on stderr with the
+# exact remedy, so an agent is never left guessing what to run.
 #
 # No external dependencies — uses only grep, find, sort, awk, sed.
 # =============================================================================
@@ -20,9 +38,27 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-TRACES_MD="$ROOT/TRACES.md"
+CHECK_MODE=0
+case "${1:-}" in
+    --check) CHECK_MODE=1 ;;
+    "") ;;
+    *) echo "usage: generate-traces.sh [--check]" >&2; exit 2 ;;
+esac
+
+# INPUTS always come from the real checkout. Only OUTPUT is redirected, so
+# --check can generate into a throwaway tree and diff, touching no tracked file.
+OUT_ROOT="$ROOT"
+if [[ "$CHECK_MODE" == "1" ]]; then
+    OUT_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tillandsias-traces-check.XXXXXX")"
+    trap 'rm -rf "$OUT_ROOT"' EXIT
+fi
+
+TRACES_MD="$OUT_ROOT/TRACES.md"
 OPENSPEC_SPECS="$ROOT/openspec/specs"
 OPENSPEC_ARCHIVE="$ROOT/openspec/changes/archive"
+
+# Quiet the per-file chatter in --check; the pinned line is the whole output.
+_gt_say() { [[ "$CHECK_MODE" == "1" ]] || echo "$@"; }
 
 # ---------------------------------------------------------------------------
 # Step 1: Scan — collect all @trace spec: annotations
@@ -163,7 +199,7 @@ _locate_spec() {
     fi
 } > "$TRACES_MD"
 
-echo "[generate-traces] Written: TRACES.md"
+_gt_say "[generate-traces] Written: TRACES.md"
 
 # ---------------------------------------------------------------------------
 # Step 5: Per-spec TRACES.md (active specs only)
@@ -178,7 +214,9 @@ if [[ -n "$UNIQUE_SPECS" ]]; then
         [[ ! -f "$active_spec" ]] && continue
 
         spec_dir="$OPENSPEC_SPECS/${spec_name}"
-        per_spec_md="$spec_dir/TRACES.md"
+        # Output is OUT_ROOT-relative so --check writes into the throwaway tree.
+        per_spec_md="$OUT_ROOT/openspec/specs/${spec_name}/TRACES.md"
+        mkdir -p "$(dirname "$per_spec_md")"
 
         # Collect source entries for this spec
         entries_for_spec=""
@@ -213,8 +251,48 @@ if [[ -n "$UNIQUE_SPECS" ]]; then
             done <<< "$entries_for_spec"
         } > "$per_spec_md"
 
-        echo "[generate-traces] Written: openspec/specs/${spec_name}/TRACES.md"
+        _gt_say "[generate-traces] Written: openspec/specs/${spec_name}/TRACES.md"
     done <<< "$UNIQUE_SPECS"
+fi
+
+if [[ "$CHECK_MODE" == "1" ]]; then
+    # Compare every generated artifact against its committed counterpart.
+    # Compare against what is COMMITTED (git HEAD), not against the working
+    # tree. The failure this guard prevents is shipping an @trace change without
+    # its index refresh, so the question that matters is "are the COMMITTED
+    # indexes current?" — not "would regeneration be a no-op right now?". A
+    # working-tree comparison answers the second, and reports `ok` while
+    # freshly-regenerated indexes sit UNCOMMITTED — which is exactly the state
+    # that breaks the next agent.
+    stale=()
+    while IFS= read -r produced; do
+        rel="${produced#$OUT_ROOT/}"
+        if ! git -C "$ROOT" cat-file -e "HEAD:$rel" 2>/dev/null; then
+            # Never committed — a new spec's index counts as stale.
+            stale+=("$rel")
+            continue
+        fi
+        if ! git -C "$ROOT" show "HEAD:$rel" 2>/dev/null | cmp -s - "$produced"; then
+            stale+=("$rel")
+        fi
+    done < <(find "$OUT_ROOT" -name TRACES.md -type f | sort)
+
+    if [[ ${#stale[@]} -eq 0 ]]; then
+        echo "ok:trace-indexes-current"
+        exit 0
+    fi
+    echo "stale:trace-indexes count=${#stale[@]}"
+    {
+        echo "[generate-traces] The committed trace indexes do NOT match the current @trace annotations."
+        echo "[generate-traces] Stale paths:"
+        for f in "${stale[@]}"; do echo "  $f"; done
+        echo "[generate-traces] REMEDY — run BOTH, in the SAME commit as your @trace change:"
+        echo "    ./scripts/generate-traces.sh"
+        echo "    git add TRACES.md openspec/specs/*/TRACES.md"
+        echo "[generate-traces] Leaving these uncommitted fails litmus:local-ci-self-clean-evidence"
+        echo "[generate-traces] for the NEXT agent, far from the cause. See methodology: generated evidence."
+    } >&2
+    exit 1
 fi
 
 echo "[generate-traces] Done."

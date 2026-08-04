@@ -118,17 +118,43 @@ Update the PR body with today's `${new_tag}` even if reusing — the human revie
 
 ---
 
-## 3 — Wait for CI / merge when green
+## 3 — Gate LOCALLY, then merge
 
-Poll the PR's `mergeable` + `statusCheckRollup` until either:
-
-- ALL required checks pass → proceed to merge.
-- ANY check fails → surface the failing run URL, exit without merging, write a ledger entry. The next 24-hour cycle retries.
+> **This step changed on 2026-08-03 and the change is silent, so read it.**
+> Push CI was removed (operator directive: only the release may spend cloud
+> minutes). `main`'s three required status contexts were cleared, because they
+> named jobs that no longer exist and made every PR permanently unmergeable.
+>
+> The trap: `gh pr checks --watch` does NOT fail when there are no checks. It
+> prints `no checks reported on the '<branch>' branch` and **exits 0**,
+> immediately. So the old text — "ALL required checks pass → proceed to merge" —
+> now means "merge with zero verification" while reading exactly like a gate that
+> passed. That is a false green, which is worse than a hard break.
+>
+> The verification did not disappear; it moved to this host. Run it here.
 
 ```bash
-gh pr checks ${existing_pr} --watch              # blocks until green or red
-gh pr merge ${existing_pr} --merge --auto         # uses a merge commit (preserves linux-next history)
+# THE GATE. This is the whole safety net now — there is nothing server-side.
+./build.sh --ci-full || { echo "gate failed — do NOT merge"; exit 1; }
+scripts/release-preflight.sh || { echo "preflight refused — do NOT merge"; exit 1; }
 ```
+
+`release-preflight.sh` carries the two checks that used to live inside
+`release.yml` (VERSION monotonicity, retired CLI flags) plus the plan-ledger and
+actions-budget gates. It prints one line: `ok:release-preflight` or
+`blocked:<reason>`.
+
+Only once both are green:
+
+```bash
+gh pr merge ${existing_pr} --merge            # merge commit — preserves linux-next history
+```
+
+Note `--auto` is dropped: auto-merge waits for checks that will never report, so
+the PR would simply sit there. Merge directly, having gated locally.
+
+If either gate fails: surface the failure, do NOT merge, do NOT tag, write a
+ledger entry. The next cycle retries.
 
 Use `--merge` (not `--squash`): the linux-next history is the audit log of the daily work-loop and integration cron cycles. Preserve it.
 
@@ -138,10 +164,16 @@ Use `--merge` (not `--squash`): the linux-next history is the audit log of the d
 
 `main` has server-side branch protection (enabled 2026-07-28, order 476
 prong (a)): direct pushes are rejected for EVERYONE including admins
-(`enforce_admins: true`), so the VERSION bump lands through a short-lived
-PR with auto-merge. PRs to main require the three CI checks but ZERO
-approvals, so the flow stays fully automated; ci.yml has no path filters,
-so a VERSION-only PR still gets its checks.
+(`enforce_admins: true`), so the VERSION bump lands through a short-lived PR.
+
+**Corrected 2026-08-03 (order 598-h774).** This section used to say "PRs to main
+require the three CI checks but ZERO approvals" and "ci.yml has no path filters,
+so a VERSION-only PR still gets its checks". Both are now false: `ci.yml` is
+deleted, and `main`'s `required_status_checks.contexts` is `[]`. What remains is
+the PR requirement and `enforce_admins: true` — no server-side verification of
+content at all. Step 3's local gate is what stands in for it, and it already ran
+against this tree; a VERSION-only bump changes one line and does not need it
+re-run.
 
 ```bash
 git checkout main
@@ -159,13 +191,49 @@ git push origin "${bump_branch}"
 gh pr create --base main --head "${bump_branch}" \
     --title "release: bump VERSION to ${new_version}" \
     --body "Automated VERSION bump for ${new_tag} by the merge-to-main-and-release skill. Auto-merges when CI is green (0 approvals required by branch protection)."
-gh pr merge "${bump_branch}" --auto --merge
-gh pr checks "${bump_branch}" --watch          # blocks until green or red
+# No --auto and no --watch: with zero required contexts, auto-merge waits for a
+# check that will never report and the PR sits open forever, while `checks
+# --watch` exits 0 on "no checks reported" and reads like a gate that passed.
+# Step 3 already gated this tree locally; merge directly.
+gh pr merge "${bump_branch}" --merge
 git checkout main
 git pull origin main                           # now contains the bump merge
 git push origin --delete "${bump_branch}" 2>/dev/null || true
 git branch -D "${bump_branch}"
+
+# RETURN THE CHECKOUT. Non-negotiable, and the reason is not tidiness.
+#
+# The forge launcher seeds a new forge's branch from the HOST CHECKOUT'S CURRENT
+# BRANCH (read_host_project_current_branch, crates/tillandsias-headless/src/
+# main.rs:2701 -> TILLANDSIAS_FORGE_SEED_BRANCH), and the guest converges to it
+# (images/default/lib-common.sh:565 checkout_forge_seed_branch). So leaving this
+# checkout parked on `main` silently pins EVERY forge launched afterwards to
+# `main`.
+#
+# That is not cosmetic. `main` does not carry crates/tillandsias-plan/src/
+# answer.rs or methodology.rs, so a forge seeded from it builds a PRE-EXPERT
+# binary; ensure_forge_experts then truthfully reports `experts: ready` while
+# every plan_answer / methodology_path call returns confidence=unsupported.
+# Order 531 is exactly this, and it made milestone 391 ungradeable from inside a
+# forge. Two prior cycles absorbed it by noticing and hand-rebasing
+# (plan/loop_status.md:203, :243).
+git checkout "${release_source_branch:-linux-next}"
+git pull --ff-only origin "${release_source_branch:-linux-next}" || true
 ```
+
+Capture `release_source_branch="$(git symbolic-ref --short HEAD)"` at the START
+of the release flow, before the first `git checkout main`, so this returns to
+wherever the operator actually was rather than assuming `linux-next`.
+
+Verify before considering the release complete:
+
+```bash
+git symbolic-ref --short HEAD   # MUST NOT be `main`
+```
+
+A release that ends with the checkout on `main` is not finished, however green
+the tag is: it has armed the next forge launch to build an expert-less binary
+that reports itself ready.
 
 Confirm `cat VERSION` on main equals `${new_version}` before tagging. If
 the bump PR's checks fail, surface the run URL and stop — do not tag a
@@ -252,7 +320,8 @@ branch is not ahead of upstream.
 
 - **NEVER push directly to `main`** — always via PR. Since 2026-07-28 this
   is server-enforced (order 476: branch protection with `enforce_admins`,
-  required CI checks, 0 approvals), so a direct push fails loudly — including
+  PR required, 0 approvals, and since 2026-08-03 zero required status
+  contexts), so a direct push fails loudly — including
   the VERSION bump, which is why step 4 uses a PR.
 - **NEVER `git push --force`** — main is protected (force-pushes and
   deletions rejected server-side).

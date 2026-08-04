@@ -1,0 +1,249 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:394, order:394b (rung 1, slice 2)
+# @trace plan/issues/experts-construction-research-2026-07-29.md §4
+#
+# THE REGRESSION THIS EXISTS TO PREVENT
+#
+# An expert that answers without citing is a liability under
+# `traces_and_litmus_tests_provide_falsifiable_evidence` (methodology.yaml:151)
+# and `centicolons_report_residual_obligations_not_proof` (:154). The ratified
+# §4 contract is one sentence:
+#
+#   Every expert answer is a JSON envelope with a non-empty `citations` array.
+#   An answer with ZERO citations is returned as "no supported answer" — never
+#   a guess.
+#
+# A citation is only evidence if it can be CHECKED, and the failure that makes
+# citation systems worthless is the one that looks fine: a well-formed
+# reference — real file, in-bounds line range — pointing at a span that says
+# nothing about the claim. Grep cannot see that. So the load-bearing steps here
+# are BEHAVIOURAL: they run the engine, take the envelope it produced, and then
+# FABRICATE citations in it — shifting the line range off the packet, swapping
+# the path, emptying the citation list while keeping `confidence: exact` — and
+# assert the verifier REFUSES each one. A verifier that cannot be made to fail
+# is not evidence, it is decoration.
+#
+# Four things are pinned:
+#   (a) the envelope SCHEMA — exactly the four ratified keys, the closed
+#       `confidence` vocabulary, and citation fields including a line range;
+#   (b) a fixture query returns >=1 citation whose path+line-range resolves and
+#       whose span CONTAINS the claimed packet_id — re-derived here with sed,
+#       independently of the crate's own verifier;
+#   (c) FALSIFIABILITY — four separately seeded fabrications, each of which
+#       must turn the check red;
+#   (d) the MCP surface: `plan_answer` is offered, and its DEGRADED paths still
+#       answer with a well-formed unsupported envelope carrying the truthful
+#       experts launch state, never prose and never a guess.
+name: litmus:plan-answer-envelope-citability
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin the order-394b cited answer envelope: the ratified
+  {answer, citations[], freshness, confidence} schema, citations whose
+  path+line-range resolve and whose span contains the packet they are offered
+  as evidence for, the zero-citations-renders-unsupported rule on both the
+  engine and the MCP wrapper side, and — the falsifiability half — that a
+  seeded fabricated citation is REFUSED.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-plan (the deterministic L0 engine)
+  - workspace contains plan/index.yaml
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - cargo and jq are available in PATH
+
+critical_path:
+  # ── (a) the envelope schema ──────────────────────────────────────────────
+  - step: "the engine emits EXACTLY the four ratified envelope keys"
+    # Extra keys are as much a contract break as missing ones: every consumer
+    # (MCP client, harness 394d, renderer 457) parses this shape.
+    #
+    # The `rm -f` is load-bearing, not tidiness: every later step reads this
+    # file, so a stale copy from a previous run would let them all pass while
+    # the engine emitted nothing at all — the dead-check trap order 256/267
+    # closed for exit codes, applied to fixture state.
+    command: "rm -f /tmp/.litmus-394b-env.json /tmp/.litmus-394b-uns.json /tmp/.litmus-394b-mcp.json /tmp/.litmus-394b-f1 /tmp/.litmus-394b-f2 /tmp/.litmus-394b-f3 /tmp/.litmus-394b-f4; cargo run -q -p tillandsias-plan -- --index plan/index.yaml answer 'what is blocked by 394a' > /tmp/.litmus-394b-env.json && test \"$(jq -r 'keys | join(\",\")' /tmp/.litmus-394b-env.json)\" = 'answer,citation_root,citations,confidence,freshness' && echo 'ok: envelope-keys-exact'"
+    timeout_ms: 240000
+    expected_behavior: "ok: envelope-keys-exact"
+
+  - step: "citations carry path + line_start + line_end + kind + authority"
+    # A citation without a LINE RANGE is unverifiable — file-level citations
+    # are the classic way a citation system becomes unfalsifiable.
+    command: "test \"$(jq -r '.citations[0] | keys | join(\",\")' /tmp/.litmus-394b-env.json)\" = 'authority,kind,line_end,line_start,path' && jq -e '.citations[0].line_start >= 1 and .citations[0].line_end >= .citations[0].line_start' /tmp/.litmus-394b-env.json >/dev/null && echo 'ok: citation-shape'"
+    timeout_ms: 10000
+    expected_behavior: "ok: citation-shape"
+
+  - step: "freshness carries source_commit + indexed_at, and the sha is the real HEAD"
+    command: "test \"$(jq -r '.freshness | keys | join(\",\")' /tmp/.litmus-394b-env.json)\" = 'indexed_at,source_commit' && test \"$(jq -r '.freshness.source_commit' /tmp/.litmus-394b-env.json)\" = \"$(git rev-parse HEAD)\" && echo 'ok: freshness-real'"
+    timeout_ms: 10000
+    expected_behavior: "ok: freshness-real"
+
+  - step: "the confidence vocabulary is CLOSED to exact|retrieved|unsupported"
+    # An open-ended confidence string is an unfalsifiable grade. Asserted at
+    # the source, so a fourth variant cannot be added silently.
+    command: "test \"$(jq -r '.confidence' /tmp/.litmus-394b-env.json)\" = 'exact' && test \"$(grep -c '^    Exact,\\|^    Retrieved,\\|^    Unsupported,' crates/tillandsias-plan/src/answer.rs)\" = 3 && echo 'ok: closed-confidence-vocabulary'"
+    timeout_ms: 10000
+    expected_behavior: "ok: closed-confidence-vocabulary"
+
+  # ── (b) the citation actually resolves and says what is claimed ──────────
+  - step: "EXIT (ii): >=1 citation, and its span CONTAINS the claimed packet_id"
+    # Re-derived with sed rather than trusting the crate's own verifier: the
+    # cited line range is cut out of the file and searched for the packet_id
+    # the citation claims authority over. This is the check that catches a
+    # perfectly well-formed reference to the wrong place.
+    command: "n=$(jq -r '.citations | length' /tmp/.litmus-394b-env.json); test \"$n\" -ge 1 || exit 1; p=$(jq -r '.citations[0].path' /tmp/.litmus-394b-env.json); s=$(jq -r '.citations[0].line_start' /tmp/.litmus-394b-env.json); e=$(jq -r '.citations[0].line_end' /tmp/.litmus-394b-env.json); id=$(jq -r '.citations[0].authority.packet_id' /tmp/.litmus-394b-env.json); test -f \"$p\" || exit 1; sed -n \"${s},${e}p\" \"$p\" | grep -q \"packet_id: ${id}\" && echo \"ok: span-contains-claim n=$n $p:$s-$e\""
+    timeout_ms: 15000
+    expected_behavior: "ok: span-contains-claim"
+
+  - step: "the answer TEXT names every packet it cites (no decorative citations)"
+    command: "ans=$(jq -r '.answer' /tmp/.litmus-394b-env.json); for id in $(jq -r '.citations[].authority.packet_id' /tmp/.litmus-394b-env.json); do printf '%s' \"$ans\" | grep -qF \"$id\" || exit 1; done; echo 'ok: every-citation-is-claimed'"
+    timeout_ms: 10000
+    expected_behavior: "ok: every-citation-is-claimed"
+
+  - step: "the verifier ACCEPTS the engine's own envelope"
+    command: "cargo run -q -p tillandsias-plan -- --index plan/index.yaml verify-answer < /tmp/.litmus-394b-env.json | grep -q '^ok: envelope verified' && echo 'ok: verifier-accepts-truth'"
+    timeout_ms: 120000
+    expected_behavior: "ok: verifier-accepts-truth"
+
+  # ── (c) FALSIFIABILITY: each seeded fabrication must be REFUSED ──────────
+  - step: "SEEDED FABRICATION 1: line range shifted off the packet is REFUSED"
+    # The dangerous case. Path is real, range is in-bounds, nothing is
+    # malformed — and the span says nothing about the packet cited. If this
+    # step ever passes silently, citations have become decoration.
+    command: "jq '.citations[0].line_start = 1 | .citations[0].line_end = 3' /tmp/.litmus-394b-env.json | cargo run -q -p tillandsias-plan -- --index plan/index.yaml verify-answer > /tmp/.litmus-394b-f1 2>&1 && { echo 'FAIL: a fabricated line range was ACCEPTED'; exit 1; }; grep -q 'FABRICATED citation' /tmp/.litmus-394b-f1 && echo 'ok: fabricated-range-refused'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fabricated-range-refused"
+
+  - step: "SEEDED FABRICATION 2: a citation path that does not exist is REFUSED"
+    command: "jq '.citations[0].path = \"plan/fabricated-by-the-litmus.yaml\"' /tmp/.litmus-394b-env.json | cargo run -q -p tillandsias-plan -- --index plan/index.yaml verify-answer > /tmp/.litmus-394b-f2 2>&1 && { echo 'FAIL: a nonexistent citation path was ACCEPTED'; exit 1; }; grep -q 'does not resolve' /tmp/.litmus-394b-f2 && echo 'ok: fabricated-path-refused'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fabricated-path-refused"
+
+  - step: "SEEDED FABRICATION 3: a confident answer with ZERO citations is REFUSED"
+    # THE LOAD-BEARING RULE. This is the shape a model-rendered answer takes
+    # when it has nothing behind it.
+    command: "jq '.citations = []' /tmp/.litmus-394b-env.json | cargo run -q -p tillandsias-plan -- --index plan/index.yaml verify-answer > /tmp/.litmus-394b-f3 2>&1 && { echo 'FAIL: an uncited confident answer was ACCEPTED'; exit 1; }; grep -q 'MUST render as unsupported' /tmp/.litmus-394b-f3 && echo 'ok: uncited-guess-refused'"
+    timeout_ms: 120000
+    expected_behavior: "ok: uncited-guess-refused"
+
+  - step: "SEEDED FABRICATION 4: citing a packet the answer never mentions is REFUSED"
+    command: "jq '.citations[0].authority.packet_id = \"plan-yaml-compiled-editor\"' /tmp/.litmus-394b-env.json | cargo run -q -p tillandsias-plan -- --index plan/index.yaml verify-answer > /tmp/.litmus-394b-f4 2>&1 && { echo 'FAIL: a decorative citation was ACCEPTED'; exit 1; }; grep -qE 'FABRICATED citation|decorative citation' /tmp/.litmus-394b-f4 && echo 'ok: decorative-citation-refused'"
+    timeout_ms: 120000
+    expected_behavior: "ok: decorative-citation-refused"
+
+  - step: "an unanswerable question returns unsupported with zero citations — never a guess"
+    command: "cargo run -q -p tillandsias-plan -- --index plan/index.yaml answer 'what is the airspeed velocity of an unladen swallow' > /tmp/.litmus-394b-uns.json && test \"$(jq -r '.confidence' /tmp/.litmus-394b-uns.json)\" = 'unsupported' && test \"$(jq -r '.citations | length' /tmp/.litmus-394b-uns.json)\" = '0' && jq -r '.answer' /tmp/.litmus-394b-uns.json | grep -q '^unsupported:' && echo 'ok: refusal-not-a-guess'"
+    timeout_ms: 120000
+    expected_behavior: "ok: refusal-not-a-guess"
+
+  - step: "the rule is STRUCTURAL, not just checked: confidence is derived, never an argument"
+    # `Envelope::supported` downgrades an empty citation set to `unsupported`
+    # and DISCARDS the prose, so the bad state is unconstructable rather than
+    # merely detectable. Pinned at the source because it is the reason the
+    # dynamic check has nothing to catch on our own outputs.
+    command: "sed -n '/pub fn supported(/,/^    }/p' crates/tillandsias-plan/src/answer.rs > /tmp/.litmus-394b-ctor && grep -q 'citations.is_empty() || confidence == Confidence::Unsupported' /tmp/.litmus-394b-ctor && grep -q 'return Self::unsupported' /tmp/.litmus-394b-ctor && grep -q 'answer: format!(\"unsupported: {}\"' crates/tillandsias-plan/src/answer.rs && rm -f /tmp/.litmus-394b-ctor && echo 'ok: unconstructable-by-design'"
+    timeout_ms: 10000
+    expected_behavior: "ok: unconstructable-by-design"
+
+  # ── (d) the MCP surface ─────────────────────────────────────────────────
+  - step: "the forge-plan MCP server offers plan_answer with a question parameter"
+    command: "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' | bash images/default/config-overlay/mcp/forge-plan.sh | jq -e '.result.tools | map(select(.name == \"plan_answer\")) | length == 1 and (.[0].inputSchema.properties.question.type == \"string\")' >/dev/null && echo 'ok: plan_answer-exposed'"
+    timeout_ms: 20000
+    expected_behavior: "ok: plan_answer-exposed"
+
+  - step: "BEHAVIOURAL: plan_answer over MCP returns a verified envelope end to end"
+    # The whole path an agent actually takes: JSON-RPC in, envelope out, and
+    # the envelope re-verified against the checkout.
+    command: "tb=\"${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\"; cargo build -q --release -p tillandsias-plan && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | TILLANDSIAS_PLAN_BIN=\"$tb\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394b-mcp.json && test \"$(jq -r '.confidence' /tmp/.litmus-394b-mcp.json)\" = 'exact' && \"$tb\" --index plan/index.yaml verify-answer < /tmp/.litmus-394b-mcp.json | grep -q '^ok: envelope verified' && echo 'ok: mcp-envelope-verified'"
+    timeout_ms: 300000
+    expected_behavior: "ok: mcp-envelope-verified"
+
+  - step: "BEHAVIOURAL: with the binary absent, plan_answer STILL answers with an envelope, not prose"
+    # The order-456 DOA lesson applied to a JSON tool: the degraded path must
+    # stay parseable. A client that gets prose here cannot tell a refusal from
+    # an answer.
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -e '.confidence == \"unsupported\" and (.citations | length) == 0' >/dev/null && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'building(' && echo 'ok: degraded-path-is-a-truthful-envelope'"
+    timeout_ms: 30000
+    expected_behavior: "ok: degraded-path-is-a-truthful-envelope"
+
+  - step: "the degraded envelope reports the TRUTHFUL experts state, not a generic not-found"
+    # Reuses order 456's experts_state_line grammar
+    # (ready | building(<n>s) | degraded(<reason>)), so an agent can tell
+    # "retry shortly" from "never, this session". Both branches asserted.
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'degraded:no-plan-crate\\n' > \"$d/state/state\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -r '.answer' | grep -q 'degraded(no-plan-crate)' && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'NOT APPLICABLE' && echo 'ok: truthful-degraded-state'"
+    timeout_ms: 30000
+    expected_behavior: "ok: truthful-degraded-state"
+
+  - step: "the wrapper's degraded envelope PASSES the same verifier the engine's does"
+    # One contract, both producers. If the wrapper drifted into emitting
+    # citations with `unsupported`, or a confident empty envelope, this fails.
+    command: "tb=\"${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\"; d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > \"$d/env.json\"; \"$tb\" --index plan/index.yaml verify-answer < \"$d/env.json\" | grep -q 'confidence=Unsupported'; rc=$?; rm -rf \"$d\"; test $rc -eq 0 && echo 'ok: one-contract-both-producers'"
+    timeout_ms: 30000
+    expected_behavior: "ok: one-contract-both-producers"
+
+  - step: "the wrapper's degraded constructor cannot emit citations with a confident grade"
+    # Structural twin of the Rust constructor: ONE degraded-path builder, and
+    # it hardcodes `citations: []` next to `confidence: "unsupported"` so the
+    # two cannot drift apart in a later edit.
+    command: "sed -n '/^unsupported_envelope() {/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh > /tmp/.litmus-394b-sh && grep -q 'citations: \\[\\]' /tmp/.litmus-394b-sh && grep -q 'confidence: \"unsupported\"' /tmp/.litmus-394b-sh && grep -q '\"unsupported: \" + $reason' /tmp/.litmus-394b-sh && test \"$(grep -c 'confidence:' /tmp/.litmus-394b-sh)\" = 1 && rm -f /tmp/.litmus-394b-sh && echo 'ok: wrapper-refusal-is-structural'"
+    timeout_ms: 10000
+    expected_behavior: "ok: wrapper-refusal-is-structural"
+
+  - step: "the crate's own unit pins for the envelope are GREEN"
+    # Named, not counted: a bare `N passed` assertion breaks the day someone
+    # adds test N+1, and a bare `0 failed` passes on an empty run. This
+    # requires the envelope suite to be present AND the span pin — the
+    # substrate every citation's resolvability rests on — to be green.
+    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && exit 1; n=$(printf '%s' \"$out\" | grep -c '^test answer::tests::.* ok$'); test \"$n\" -ge 8 || exit 1; printf '%s' \"$out\" | grep -q 'every_live_packet_has_a_span_that_contains_its_own_id ... ok' && echo \"ok: envelope-unit-pins-green n=$n\""
+    timeout_ms: 300000
+    expected_behavior: "ok: envelope-unit-pins-green"
+
+  - step: "NO-PYTHON: the envelope path never INVOKES python"
+    # Matches an interpreter at a command position — start of line, or after
+    # whitespace/pipe/`(`/`!` — so a real `python3 -c` or `| python -` fires.
+    #
+    # COMMENT LINES ARE STRIPPED FIRST, and that is load-bearing rather than
+    # lenient. This step fired on 2026-08-01 against a `#` comment reading
+    # "(python json.loads ...)" that DESCRIBED the defect a fix had just
+    # removed — prose about python, not an invocation of it. A guard that
+    # cannot tell those apart blocks correct work, and its real cost is what it
+    # teaches: an agent facing a red build over a comment reaches for the guard
+    # rather than for the code. This is the third comment-self-match in one day
+    # (methodology.rs's `std::process::` note, build.sh's `_bump_build_version`
+    # note), so the pattern is stripped at source instead of being worked around
+    # a fourth time.
+    #
+    # A COMMENTED-OUT invocation is correctly not an invocation. What must still
+    # fire is real code, and the falsifiability check below proves it does.
+    command: "for f in crates/tillandsias-plan/src/answer.rs crates/tillandsias-plan/src/lib.rs crates/tillandsias-plan/src/main.rs images/default/config-overlay/mcp/forge-plan.sh; do sed -E 's@^[[:space:]]*(#|//|///|//!).*$@@' \"$f\"; done | grep -qiE '(^|[[:space:]|(!\"'\"'\"'=])(python[0-9.]*|pip[0-9.]*)([[:space:]\"'\"'\"']|$)' && { echo 'FAIL: python invocation on the envelope path'; exit 1; }; grep -q 'serde_json' crates/tillandsias-plan/Cargo.toml && echo 'ok: no-python'"
+    timeout_ms: 10000
+    expected_behavior: "ok: no-python"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:394"
+    - "@trace order:394b"
+  expected_log: "Answer envelope schema pinned, citations resolvable and content-checked, fabrication refused, plan_answer exposed over MCP"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "plan-answer-envelope-citability"
+    engine_artifact: "crates/tillandsias-plan/src/answer.rs"
+    mcp_artifact: "images/default/config-overlay/mcp/forge-plan.sh"
+    research: "plan/issues/experts-construction-research-2026-07-29.md"
+
+rollback:
+  on_failure: >
+    The cited answer envelope drifted. If a SCHEMA step failed, a consumer
+    (the 394d ground-truth harness, the 457 renderer, any MCP client) is now
+    parsing a shape the engine no longer emits. If the span-contains-claim step
+    failed, citations are pointing at text that does not support them — every
+    answer the plan expert has given is unverifiable, which is worse than no
+    expert at all. If a SEEDED FABRICATION step failed, the verifier ACCEPTED a
+    fabricated citation: the falsifiability of the whole citation contract is
+    gone and no answer can be trusted until it is restored. If a degraded-path
+    step failed, plan_answer is returning prose or a guess while the expert
+    build is still running, which is the order-456 dead-on-arrival failure
+    re-entering through a tool that promises JSON.
+  command: "cargo run -q -p tillandsias-plan -- --index plan/index.yaml answer 'what is blocked by 394a' | tee /tmp/.litmus-394b-debug.json | jq . && cargo run -q -p tillandsias-plan -- --index plan/index.yaml verify-answer < /tmp/.litmus-394b-debug.json"

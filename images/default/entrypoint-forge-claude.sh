@@ -83,6 +83,11 @@ else
     trace_lifecycle "credentials" "claude: API-key session (no OAuth restore)"
 fi
 
+# @trace spec:forge-environment-discoverability, order:568
+# Run after OAuth restore because Claude keeps credentials and MCP registration
+# in the same document. The overlay merge preserves every non-MCP field.
+apply_claude_config_overlay
+
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007
 # Automatically discover and export SSH keys/agent from the host.

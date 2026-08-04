@@ -1,0 +1,139 @@
+# @trace spec:inference-policy-router
+#
+# Drift protection for the inference-policy-router contract authored by
+# order 479 ahead of its implementation in order 484. The router is the
+# forge differentiator the order-478 research identified — nobody in the
+# local-LLM ecosystem ships battery-aware routing — and it is also the
+# component most exposed to scope creep, because every one of its NEG
+# non-goals is something an enthusiastic implementer would enjoy
+# building.
+#
+# Pinned here:
+#
+#   * CPU tier-S terminates every fallback chain, checked at TABLE LOAD
+#     time so a bad table fails loudly instead of surprising a request.
+#     This is the property that makes "inference always answers" true.
+#   * Models must fit device-visible memory with >=10% headroom, and a
+#     violation advances the chain rather than attempting an OOM (the
+#     order 168 lesson, where OOM deaths were the actual flakiness).
+#   * Three consecutive failures quarantine a (device, slot) pair until
+#     re-probe.
+#   * Adaptive thresholds stay where the research put them: suspend
+#     background within 5 s of a battery/power-saver signal, resume only
+#     on AC AND thermal-nominal AND 60 s interactive idle.
+#   * The three NEG prohibitions: no per-op graph splitting, no
+#     vendor-TOPS routing, no idle model residency on battery.
+#   * Degraded lanes (sub-30%-of-roofline) never outrank healthy ones.
+#   * No Python (tlatoani_hard_no_python) — router, table, and fixtures.
+#
+# Pattern: spec prose wraps, so each step squeezes whitespace with
+# `tr -s` before a fixed-string grep; success emits a token the matcher
+# looks for as a substring of stdout.
+name: litmus:inference-policy-router-invariants-shape
+spec: inference-policy-router
+phase: pre-build
+description: >
+  Pin the inference-policy-router spec invariants that gate order 484:
+  four workload classes with interactive as the default, TOML routing
+  table with a pure route() function, every chain terminating in the CPU
+  tier-S terminal and rejected at load time otherwise, three-strike
+  quarantine, >=10% memory headroom, the 5 s suspend and 60 s resume
+  thresholds, the three NEG prohibitions, degraded lanes never
+  outranking healthy ones, and the no-Python constraint.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains openspec/specs/inference-policy-router/spec.md
+  - shell utilities (grep, tr) are available in PATH
+
+critical_path:
+  - step: "Spec exists and carries its trace header"
+    command: "grep -Fq '<!-- @trace spec:inference-policy-router -->' openspec/specs/inference-policy-router/spec.md && echo 'ok: trace header present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: trace header present"
+
+  - step: "Exactly four workload classes, defaulting to interactive (CLASS-1)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST recognise exactly four workload classes' && tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST be routed as `interactive`' && echo 'ok: four classes, interactive default'"
+    timeout_ms: 3000
+    expected_behavior: "ok: four classes, interactive default"
+
+  - step: "Routing table is data and route() is pure (ROUTE-1)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST be a declarative data file (TOML), not code' && tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST perform no I/O' && echo 'ok: table is data, route is pure'"
+    timeout_ms: 3000
+    expected_behavior: "ok: table is data, route is pure"
+
+  - step: "Every fallback chain terminates in the CPU tier-S terminal (ROUTE-2)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'terminate in the **CPU tier-S terminal**' && tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST be rejected when the routing table is loaded' && echo 'ok: tier-S terminal enforced at load'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tier-S terminal enforced at load"
+
+  - step: "Three consecutive failures quarantine until re-probe (ROUTE-3)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'Three consecutive failures on the same (device, slot) pair MUST quarantine' && echo 'ok: three-strike quarantine'"
+    timeout_ms: 3000
+    expected_behavior: "ok: three-strike quarantine"
+
+  - step: "Models fit device-visible memory with at least 10% headroom (ROUTE-4)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'exceeds 90% of the memory the chosen device can actually address' && echo 'ok: 10% headroom rule'"
+    timeout_ms: 3000
+    expected_behavior: "ok: 10% headroom rule"
+
+  - step: "First request served from a resident small model (ROUTE-5)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST serve the first request from an already-resident small model' && echo 'ok: warm-start first request'"
+    timeout_ms: 3000
+    expected_behavior: "ok: warm-start first request"
+
+  - step: "Power signals are subscribed and work with both Linux power daemons (ADAPT-1)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST subscribe to UPower and PowerProfiles D-Bus `PropertiesChanged`' && tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'tuned-ppd' && echo 'ok: push signals, both daemons'"
+    timeout_ms: 3000
+    expected_behavior: "ok: push signals, both daemons"
+
+  - step: "Background suspends within 5 seconds of a battery signal (ADAPT-2)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'within 5 seconds of receiving the signal' && echo 'ok: 5s suspend'"
+    timeout_ms: 3000
+    expected_behavior: "ok: 5s suspend"
+
+  - step: "Resume requires AC and thermal-nominal and 60 s interactive idle (ADAPT-3)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'no interactive request for at least 60 seconds' && echo 'ok: 60s idle resume gate'"
+    timeout_ms: 3000
+    expected_behavior: "ok: 60s idle resume gate"
+
+  - step: "Pins auto-release, do not survive restart, cannot select unusable devices (ADAPT-4)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST NOT survive an application restart' && tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST NOT be able to select a device the capability probe reports' && echo 'ok: pin semantics bounded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: pin semantics bounded"
+
+  - step: "NEG-1 prohibits per-op splitting, TOPS routing, and idle battery residency"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'No per-operator graph splitting across devices' && tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST NOT be routing inputs' && tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'No idle model residency on battery' && echo 'ok: three NEG guards intact'"
+    timeout_ms: 3000
+    expected_behavior: "ok: three NEG guards intact"
+
+  - step: "Degraded lanes never outrank healthy ones (NEG-2)"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'MUST NOT be preferred over a non-degraded lane' && echo 'ok: degraded lanes deprioritised'"
+    timeout_ms: 3000
+    expected_behavior: "ok: degraded lanes deprioritised"
+
+  - step: "No-Python constraint covers router, table, and fixtures"
+    command: "tr -s '[:space:]' ' ' < openspec/specs/inference-policy-router/spec.md | grep -Fq 'neither the router nor its routing table nor its test fixtures' && echo 'ok: no python'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no python"
+
+observability:
+  traces:
+    - "@trace spec:inference-policy-router"
+    - "@trace spec:accel-capability-probe"
+  expected_log: "inference policy router spec invariants pinned"
+  log_fields:
+    spec: "inference-policy-router"
+    test: "inference-policy-router-invariants-shape"
+    artifact: "openspec/specs/inference-policy-router/spec.md"
+
+rollback:
+  on_failure: >
+    An inference-policy-router invariant was weakened. The tier-S
+    terminal, the load-time chain validation, the 10% headroom rule, the
+    5 s / 60 s adaptive thresholds, and the three NEG prohibitions are
+    the gate order 484 builds against; restore them, or route the change
+    through the bounded-uncertainty exception in
+    methodology/spec-system.yaml with an evidence bundle.
+  command: "sed -n '1,40p' openspec/specs/inference-policy-router/spec.md"

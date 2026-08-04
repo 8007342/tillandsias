@@ -1,0 +1,105 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:583-dv9n (capability-manifest-must-list-new-subcommands)
+#
+# THE REGRESSION THIS EXISTS TO PREVENT
+#
+# The manifest-to-dispatch direction is enforced behaviourally by
+# litmus:expert-capability-skew-honesty (every declared token is invoked, with a
+# negative control). The dispatch-to-manifest direction was NOT: a subcommand
+# added to main.rs but omitted from capabilities.txt worked fine from the CLI
+# and was simply never routed to by the MCP wrapper — so it appeared missing to
+# every agent inside a forge while appearing present to anyone testing on the
+# host. That is the "verified where it was written is not verified where it
+# runs" shape, arriving through a data file.
+#
+# Under-reporting is FAIL-SAFE by design (the wrapper refuses to route to an
+# undeclared subcommand) and must stay that way — this file is written to catch
+# the guard itself, not to invert the safety direction. What order 583-dv9n adds
+# is a WARNING: `capabilities` (the self-report the forge runs at every launch
+# probe) lists dispatch arms the manifest omits, on stderr, exit 0, stdout
+# untouched.
+#
+# Everything here is BEHAVIOURAL against a real rebuilt artifact: a fixture
+# binary compiled from a capabilities.txt that drops `query` — the exact drift
+# the packet describes — is asserted to (a) warn on stderr, (b) still exit 0
+# with a clean token stream on stdout, and (c) leave the probe's shape check
+# untouched. The same source restored to the audited-clean manifest must warn
+# about NOTHING, so the check is precise and cannot grow into noise.
+name: litmus:capability-manifest-guard
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin order 583-dv9n's manifest guard: a dispatch arm omitted from
+  capabilities.txt is reported as a stderr WARNING by `capabilities` (never a
+  gate, stdout tokens untouched, exit 0), a clean tree warns about nothing, and
+  the fail-safe under-report that the MCP wrapper relies on is preserved.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-plan/capabilities.txt (the manifest)
+  - workspace contains crates/tillandsias-plan/src/main.rs (the dispatch)
+  - cargo is available in PATH
+
+critical_path:
+  - step: "FIXTURE: rebuild a REAL artifact from a capabilities.txt that drops one dispatch arm"
+    # The drift is compile-time (include_str!), so the only honest way to
+    # exercise the warning is to BUILD a drifted binary: trim `query` out of the
+    # manifest, compile to an isolated CARGO_TARGET_DIR, then restore the file
+    # UNCONDITIONALLY (a build failure must not leave the workspace manifest
+    # edited — a poisoned capabilities.txt would red-flag every later build in
+    # the suite).
+    command: "set -e; F=/tmp/.litmus-583; rm -rf $F && mkdir -p $F && cp crates/tillandsias-plan/capabilities.txt $F/capabilities.txt.bak && grep -v '^query$' crates/tillandsias-plan/capabilities.txt > $F/trimmed.txt && cp $F/trimmed.txt crates/tillandsias-plan/capabilities.txt; if CARGO_TARGET_DIR=$F/target cargo build -q -p tillandsias-plan --release; then cp $F/target/release/tillandsias-plan $F/bin; cp $F/capabilities.txt.bak crates/tillandsias-plan/capabilities.txt; else cp $F/capabilities.txt.bak crates/tillandsias-plan/capabilities.txt; exit 1; fi; grep -q '^query$' crates/tillandsias-plan/capabilities.txt && echo 'ok: fixture-drifted-built'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fixture-drifted-built"
+
+  - step: "BEHAVIOURAL: the drifted artifact WARNS on stderr, exits 0, and keeps stdout a clean token stream"
+    # The whole contract in one assertion: the warning is visible (the omission
+    # stops being silent) WITHOUT gating (exit 0, stdout shape unchanged — the
+    # shape is what the shell probe branches on, so touching it would break the
+    # wrapper).
+    command: "F=/tmp/.litmus-583; rc=0; $F/bin capabilities >$F/o.txt 2>$F/e.txt || rc=$?; test $rc = 0 && grep -q \"warning: dispatch arm 'query' is not listed in capabilities.txt\" $F/e.txt && grep -q \"order 583-dv9n\" $F/e.txt && ! grep -q 'query' $F/o.txt && ! grep -qvE '^[a-z][a-z0-9-]*$' $F/o.txt && test $(wc -l < $F/o.txt) = 24 && echo 'ok: drift-warns-on-stderr-no-gate'"
+    timeout_ms: 30000
+    expected_behavior: "ok: drift-warns-on-stderr-no-gate"
+
+  - step: "FAIL-SAFE PIN: the capability probe's shape check still passes against the drifted artifact"
+    # Under-declaring must never break the wrapper. lib-expert-capability.sh
+    # reads `capabilities` on stdout with 2>/dev/null and validates the bare
+    # token shape; the drift warning must be invisible to it, and the missing
+    # capability must read as exactly a MISSING capability (present in the
+    # checkout's manifest, absent from the artifact's now-set) — never an error.
+    command: "F=/tmp/.litmus-583; $F/bin capabilities 2>/dev/null | grep -qvE '^[a-z][a-z0-9-]*$' && exit 1; mkdir -p $F/checkout/crates/tillandsias-plan && cp crates/tillandsias-plan/capabilities.txt $F/checkout/crates/tillandsias-plan/capabilities.txt; L=$(FORGE_EXPERTS_STATE_DIR=$F/state sh images/default/lib-expert-capability.sh $F/bin $F/checkout | head -1); case $L in *'now=answer,append-event'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'blocked_capabilities=query'*) echo 'ok: under-report-failsafe' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: under-report-failsafe"
+
+  - step: "NEGATIVE CONTROL: the SAME source restored clean warns about NOTHING"
+    # A warning that fires on a clean tree would be noise, and noise gets
+    # silenced — the check must be precise to stay alive. The restored manifest
+    # (identical to the workspace file) rebuilds to a binary whose drift set is
+    # empty.
+    command: "F=/tmp/.litmus-583; CARGO_TARGET_DIR=$F/target cargo build -q -p tillandsias-plan --release && cp $F/target/release/tillandsias-plan $F/bin-clean && $F/bin-clean capabilities >$F/o2.txt 2>$F/e2.txt; rc=$?; test $rc = 0 && test ! -s $F/e2.txt && test $(wc -l < $F/o2.txt) = 25 && grep -q '^query$' $F/o2.txt && echo 'ok: clean-tree-silent'"
+    timeout_ms: 300000
+    expected_behavior: "ok: clean-tree-silent"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:583-dv9n"
+  expected_log: "Dispatch-to-manifest drift pinned: stderr warning, no gate, fail-safe under-report preserved"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "capability-manifest-guard"
+    manifest: "crates/tillandsias-plan/capabilities.txt"
+    dispatch: "crates/tillandsias-plan/src/main.rs"
+
+rollback:
+  on_failure: >
+    Dispatch-to-manifest drift guard regressed. If the drifted-artifact step
+    failed, a subcommand can be added to main.rs without capabilities.txt and
+    the omission stays silent until a forge silently refuses to route to it. If
+    the FAIL-SAFE PIN failed, the guard (or the probe) is touching stdout or the
+    exit status and under-reporting is breaking the wrapper — the exact inversion
+    this order refuses. If the NEGATIVE CONTROL failed, the warning fires on a
+    clean tree and will be silenced as noise, un-guarding the direction it was
+    built to protect.
+  command: "sed -n '/const DISPATCH_ARMS/,/^];/p' crates/tillandsias-plan/src/main.rs && grep -n 'warning: dispatch arm' crates/tillandsias-plan/src/main.rs"

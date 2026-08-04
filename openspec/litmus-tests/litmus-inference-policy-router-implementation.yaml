@@ -1,0 +1,46 @@
+# @trace spec:inference-policy-router
+# @trace spec:inference-engine-slots
+name: litmus:inference-policy-router-implementation
+spec: inference-policy-router
+phase: pre-build
+description: >
+  Execute the data-driven policy-router and engine-backend pinning unit
+  boundaries. Unlike the instant invariant-shape tests, this quick litmus
+  compiles and runs the Rust assertions that reject malformed fallback chains,
+  enforce memory/context/degraded-lane filtering, select by measured workload
+  objectives, use a resident small model for a cold preferred placement, and
+  wire deterministic Ollama backend pins into production Podman arguments.
+severity: high
+size: quick
+
+preconditions:
+  - cargo is available
+  - images/inference/policy-router.toml exists
+
+critical_path:
+  - step: "Policy routing executes over TOML and serialized facts"
+    command: "cargo test -q -p tillandsias-headless policy_router::tests -- --nocapture && echo 'ok: policy router implementation tests'"
+    timeout_ms: 120000
+    expected_behavior: "ok: policy router implementation tests"
+
+  - step: "Engine slot backend pins execute and reach production run args"
+    command: "cargo test -q -p tillandsias-headless engine_slots::tests -- --nocapture && cargo test -q -p tillandsias-headless inference_run_args_apply_the_selected_backend_pin -- --nocapture && echo 'ok: engine backend pin implementation tests'"
+    timeout_ms: 120000
+    expected_behavior: "ok: engine backend pin implementation tests"
+
+observability:
+  traces:
+    - "@trace spec:inference-policy-router"
+    - "@trace spec:inference-engine-slots"
+  expected_log: "policy router and engine backend pin implementation tests pass"
+  log_fields:
+    spec: "inference-policy-router"
+    test: "inference-policy-router-implementation"
+    artifact: "crates/tillandsias-headless/src/{policy_router,engine_slots,main}.rs"
+
+rollback:
+  on_failure: >
+    Restore the TOML load-time validation, CPU tier-S terminal, exact integer
+    10% memory headroom, measured-objective routing, resident-small-model
+    handoff, or production backend-pin call before continuing.
+  command: "cargo test -p tillandsias-headless policy_router::tests && cargo test -p tillandsias-headless engine_slots::tests"

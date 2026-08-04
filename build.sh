@@ -255,6 +255,43 @@ if [[ -n "$CI_SPEC_LIST" ]]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Git hooks: install them, do not merely ship them
+# ---------------------------------------------------------------------------
+# scripts/install-hooks.sh has existed for months and .git/hooks/ was EMPTY on
+# this checkout — every hook the repo ships was inert because installing them
+# was a manual step nobody performed. That is the exact shape of enforcement the
+# operator ruled out: "we should not be asking agents each time to follow git
+# methodology by chance."
+#
+# Since push CI was removed (2026-08-03) the pre-push gate is the trunk's only
+# automated protection, so shipping it uninstalled is indistinguishable from not
+# having it. Every build.sh invocation now ensures it is wired.
+#
+# Silent when already correct; never fatal — a hook-install failure must not
+# block a build, only report itself.
+_ensure_git_hooks_installed() {
+    [[ -d "$SCRIPT_DIR/.git" || -f "$SCRIPT_DIR/.git" ]] || return 0
+    [[ -f "$SCRIPT_DIR/scripts/install-hooks.sh" ]] || return 0
+    # Forge containers quarantine core.hooksPath deliberately; do not fight it.
+    [[ "${TILLANDSIAS_HOST_KIND:-}" == "forge" ]] && return 0
+
+    local hooks_dir out
+    hooks_dir="$(git -C "$SCRIPT_DIR" rev-parse --absolute-git-dir 2>/dev/null)/hooks"
+    if [[ -f "$hooks_dir/pre-push" ]] \
+        && grep -qF "tillandsias-pre-push-v3" "$hooks_dir/pre-push" 2>/dev/null; then
+        return 0
+    fi
+    if out="$(bash "$SCRIPT_DIR/scripts/install-hooks.sh" 2>&1)"; then
+        _info "Git hooks installed (pre-push gate is now active)"
+    else
+        _warn "Git hook install did not complete; pushes are UNGATED until it does"
+        _warn "  run: scripts/install-hooks.sh"
+    fi
+    return 0
+}
+_ensure_git_hooks_installed
+
 _forge_check_only_without_host_podman_setup() {
     [[ "${TILLANDSIAS_HOST_KIND:-}" == "forge" ]] || return 1
     [[ "$FLAG_CHECK" == true ]] || return 1
@@ -397,6 +434,144 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Shared build helpers
+# ---------------------------------------------------------------------------
+# These live ABOVE the standalone dispatches below on purpose: a function
+# definition only takes effect once the interpreter reaches it, so a helper
+# defined after a dispatch that calls it is plain "command not found" at run
+# time. That is exactly how `./build.sh --observatorium` used to die
+# (_require_host_build_tools was defined ~45 lines below its only caller).
+
+_require_host_build_tools() {
+    local missing=()
+    local tool
+    for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing+=("$tool")
+        fi
+    done
+    if [[ "$FLAG_INSTALL" == true ]] && ! command -v file >/dev/null 2>&1; then
+        missing+=(file)
+    fi
+    if [[ "${#missing[@]}" -gt 0 ]]; then
+        _error "Missing host build tools: ${missing[*]}"
+        _error "Install the Fedora build dependencies, then rerun this command."
+        exit 1
+    fi
+
+    if [[ "$FLAG_INSTALL" == true ]]; then
+        if ! command -v rustup >/dev/null 2>&1; then
+            _error "Portable installs require a rustup-managed toolchain with the musl target."
+            _error "Install rustup, initialize it, then add x86_64-unknown-linux-musl."
+            exit 1
+        fi
+        if ! rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl'; then
+            _error "Missing Rust target: x86_64-unknown-linux-musl"
+            _error "Run: rustup target add x86_64-unknown-linux-musl"
+            exit 1
+        fi
+    fi
+}
+
+# Clickable trace index regeneration. openspec/specs/clickable-trace-index/
+# spec.md ("Build integration") requires build.sh to invoke generate-traces.sh
+# on every build that is not a test-only or check-only invocation. Every
+# build-producing dispatch below calls this helper; the latch makes combined
+# flags (e.g. --clean --release --install) regenerate exactly once, and the
+# test/check dispatches never call it at all.
+#
+# Ordering rule (order 495, litmus:local-ci-self-clean-evidence): the tracked
+# trace indexes are deterministic, so regeneration is a no-op whenever the
+# committed indexes are current. It must therefore run BEFORE any CI gate or
+# post-build forge phase — never between a gate that passed clean and the
+# forge's dirty-start guard, which would refuse the cycle.
+#
+# TILLANDSIAS_SKIP_TRACE_INDEX=1 suppresses regeneration for callers that must
+# not mutate the tracked checkout; build.sh sets it for the post-build and
+# runtime litmus phases, which can launch a real forge.
+# Local build counter. methodology/versioning.yaml declares this and has since
+# the scheme was designed:
+#
+#   Build:
+#     meaning: "Local monotonic build counter — increments on every local build"
+#     monotonic: "Globally monotonic across all machines and branches"
+#     increment_rule: "Automatic on every local build (./build.sh), manual bump at merge"
+#
+# It was never automatic. scripts/bump-version.sh --bump-build existed,
+# scripts/verify-version-monotonic.sh existed, and build.sh called NEITHER — so
+# VERSION sat at 0.4.260728.1 through days of local builds while the published
+# tag moved to v0.4.260728.2, and the version-monotonicity gate was red the whole
+# time. The gate was not miscategorised; it was correctly reporting a real,
+# ongoing defect that nothing else surfaced.
+#
+# Bumped from the same dispatch set as the trace indexes — the build-PRODUCING
+# ones. `--check` and `--test` produce no artifact, so they are not builds and
+# must not move the counter (that distinction is already load-bearing for the
+# trace indexes; reuse it rather than invent a second rule).
+#
+# The bump is fail-soft on the script's own errors but LOUD: it dirties a tracked
+# file, and an agent that does not know that ships an unbumped VERSION.
+_BUILD_VERSION_BUMPED=false
+_bump_build_version() {
+    [[ "$_BUILD_VERSION_BUMPED" == false ]] || return 0
+    _BUILD_VERSION_BUMPED=true
+    if [[ "${TILLANDSIAS_SKIP_VERSION_BUMP:-0}" == "1" ]]; then
+        _info "Skipping build-counter bump (TILLANDSIAS_SKIP_VERSION_BUMP=1)"
+        return 0
+    fi
+    local before after
+    before="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION" 2>/dev/null || echo unknown)"
+    if ! "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build; then
+        _warn "Build-counter bump FAILED. VERSION is unchanged at ${before}; methodology/versioning.yaml requires it to increment on every local build. Run scripts/bump-version.sh --bump-build by hand and read its errors."
+        return 0
+    fi
+    after="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION" 2>/dev/null || echo unknown)"
+    if [[ "$before" != "$after" ]]; then
+        _warn "VERSION bumped ${before} -> ${after} (local build counter). This dirties tracked files."
+        _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
+        _warn "  Verify monotonicity before pushing: scripts/verify-version-monotonic.sh"
+    fi
+}
+
+_TRACE_INDEXES_REGENERATED=false
+_regenerate_trace_indexes() {
+    [[ "$_TRACE_INDEXES_REGENERATED" == false ]] || return 0
+    _TRACE_INDEXES_REGENERATED=true
+    if [[ "${TILLANDSIAS_SKIP_TRACE_INDEX:-0}" == "1" ]]; then
+        _info "Skipping trace index regeneration (TILLANDSIAS_SKIP_TRACE_INDEX=1)"
+        return 0
+    fi
+    _step "Regenerating clickable trace indexes..."
+    # Order 495 requires the regeneration to run here, BEFORE any gate. What it
+    # must NOT do is run silently: `2>/dev/null || true` swallowed every error
+    # AND every signal that the tracked indexes had just changed. The build
+    # dirtied TRACES.md and said nothing, so an agent shipped its @trace change
+    # without the index refresh and the NEXT agent's pre-build sweep failed
+    # litmus:local-ci-self-clean-evidence for dirt it did not create. That
+    # happened three times in one day before this was fixed.
+    #
+    # Ask first, so we can tell the agent whether ITS change is what moved them.
+    local _traces_were_stale=0
+    if ! "$SCRIPT_DIR/scripts/generate-traces.sh" --check >/dev/null 2>&1; then
+        _traces_were_stale=1
+    fi
+
+    if ! "$SCRIPT_DIR/scripts/generate-traces.sh"; then
+        _warn "Trace index regeneration FAILED. The committed indexes are now of unknown currency; run ./scripts/generate-traces.sh by hand and read its errors."
+        return 0
+    fi
+
+    if [[ "$_traces_were_stale" == "1" ]]; then
+        _warn "Trace indexes were STALE and have just been regenerated — your worktree is now dirty."
+        _warn "  This build changed tracked files. That is expected when you add, move, or remove an @trace annotation."
+        _warn "  YOU MUST commit them IN THE SAME COMMIT as the change that moved them:"
+        _warn "      git add TRACES.md openspec/specs/*/TRACES.md"
+        _warn "  Leaving them uncommitted fails litmus:local-ci-self-clean-evidence for the NEXT agent,"
+        _warn "  far from the cause. Verify before pushing:  ./scripts/generate-traces.sh --check"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Standalone operations
 # ---------------------------------------------------------------------------
 
@@ -405,6 +580,8 @@ if [[ "$FLAG_INIT" == true ]]; then
     # (it builds every container image). Fail fast with a clear message
     # here rather than a possibly-confusing downstream Rust error.
     require_podman || exit 1
+    _bump_build_version
+    _regenerate_trace_indexes
     _step "Running tillandsias --init (builds all images with versioned tags)..."
     # Runs on the host where podman works.
     "$SCRIPT_DIR/target/debug/tillandsias" --init 2>&1
@@ -415,6 +592,8 @@ if [[ "$FLAG_INIT" == true ]]; then
 fi
 
 if [[ "${FLAG_OBSERVATORIUM:-false}" == true ]]; then
+    _bump_build_version
+    _regenerate_trace_indexes
     _step "Building workspace (debug)..."
     _require_host_build_tools
     (cd "$SCRIPT_DIR" && cargo build --workspace)
@@ -463,37 +642,6 @@ fi
 # Host build execution
 # ---------------------------------------------------------------------------
 
-_require_host_build_tools() {
-    local missing=()
-    local tool
-    for tool in cargo rustc rustfmt clippy-driver gcc pkg-config; do
-        if ! command -v "$tool" >/dev/null 2>&1; then
-            missing+=("$tool")
-        fi
-    done
-    if [[ "$FLAG_INSTALL" == true ]] && ! command -v file >/dev/null 2>&1; then
-        missing+=(file)
-    fi
-    if [[ "${#missing[@]}" -gt 0 ]]; then
-        _error "Missing host build tools: ${missing[*]}"
-        _error "Install the Fedora build dependencies, then rerun this command."
-        exit 1
-    fi
-
-    if [[ "$FLAG_INSTALL" == true ]]; then
-        if ! command -v rustup >/dev/null 2>&1; then
-            _error "Portable installs require a rustup-managed toolchain with the musl target."
-            _error "Install rustup, initialize it, then add x86_64-unknown-linux-musl."
-            exit 1
-        fi
-        if ! rustup target list --installed | grep -qx 'x86_64-unknown-linux-musl'; then
-            _error "Missing Rust target: x86_64-unknown-linux-musl"
-            _error "Run: rustup target add x86_64-unknown-linux-musl"
-            exit 1
-        fi
-    fi
-}
-
 _run() {
     _require_host_build_tools
     (cd "$SCRIPT_DIR" && "$@")
@@ -512,12 +660,33 @@ _run_litmus_phase() {
         [[ "$arg" == "--strict-all" ]] || phase_args+=("$arg")
     done
 
-    bash "$SCRIPT_DIR/scripts/run-litmus-test.sh" \
+    # Order 495 (litmus:local-ci-self-clean-evidence): these phases run after
+    # the pre-build gate and can launch a real forge whose dirty-start guard
+    # inspects the tracked checkout. A nested build.sh must not regenerate the
+    # tracked trace indexes inside that window, so suppress it for the phase.
+    TILLANDSIAS_SKIP_TRACE_INDEX=1 \
+        bash "$SCRIPT_DIR/scripts/run-litmus-test.sh" \
         --phase "$phase" \
         --size "$size" \
         --compact \
         "${phase_args[@]}" \
         "$@" 2>&1 | tee "$log_file"
+}
+
+# Record that a gate passed against THIS tree, for the pre-push hook to verify.
+# Called from EVERY passing gate. It was originally only in the --check path,
+# which meant `--ci-full` — the STRONGER gate, and the one the release skill
+# requires — left the stamp stale, so a release run had to go back and run the
+# lesser gate just to be allowed to push. Found by the gate refusing its own
+# release push on 2026-08-04.
+_write_gate_stamp() {
+    [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]] || return 0
+    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1; then
+        _info "Gate stamp recorded (pre-push will accept this tree)"
+    else
+        _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
+    fi
+    return 0
 }
 
 _run_local_ci_gate() {
@@ -540,7 +709,15 @@ _prepare_ci_full_install_inputs() {
     [[ "$FLAG_INSTALL" == true ]] || return 0
 
     _step "Preparing trace indexes and staged guest binaries for full install CI..."
-    "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
+    # DELIBERATELY NO _bump_build_version here. This is the meta-orchestration
+    # cycle's own build path, and litmus:meta-orchestration-dirty-tree-safety
+    # (order 495) requires it to leave tracked RELEASE state untouched: a cycle
+    # must exit with a clean worktree, and a monotonically-increasing counter
+    # never converges to a value a second cycle would agree on the way a
+    # regenerated trace index does. Developer dispatches still bump — that is
+    # methodology/versioning.yaml's increment_rule — but the cycle's internal
+    # build must not.
+    _regenerate_trace_indexes
 
     if [[ ! -x "$SCRIPT_DIR/scripts/build-guest-binaries.sh" ]]; then
         _error "Missing executable guest binary builder: scripts/build-guest-binaries.sh"
@@ -549,6 +726,18 @@ _prepare_ci_full_install_inputs() {
 
     "$SCRIPT_DIR/scripts/build-guest-binaries.sh"
 }
+
+# The install dispatch owns the only path with a post-build forge phase, and its
+# CI gate runs below — ahead of the install block itself. Regenerate here so the
+# order 495 rule holds for every install variant (--install, --ci --install,
+# --ci-full --install): trace indexes are refreshed BEFORE the gate, never
+# between the gate and the forge dirty-start guard. The call inside the install
+# block is latched to a no-op by this one. The release dispatch owns its own
+# gate and regenerates at the top of its own block.
+if [[ "$FLAG_INSTALL" == true ]]; then
+    _bump_build_version
+    _regenerate_trace_indexes
+fi
 
 # CI validation
 if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
@@ -588,6 +777,7 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     else
         _info "Quick CI/CD validation passed — ready for development"
     fi
+    _write_gate_stamp
     # If --ci is the only flag, exit with success
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
         if [[ "$FLAG_GRAPHS" == true ]]; then
@@ -605,9 +795,8 @@ fi
 
 if [[ "$FLAG_INSTALL" == true ]]; then
     _step "Building portable launcher (musl-static) with tray support for install..."
-    if [[ "$FLAG_CI_FULL" == false ]]; then
-        "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
-    fi
+    _bump_build_version
+    _regenerate_trace_indexes
 
     # Build only the Linux launcher here. macOS and Windows tray binaries share
     # the `tillandsias-tray` bin name and have platform-specific release paths.
@@ -735,6 +924,27 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-headless --features listen-vsock -- -D warnings 2>&1
     _info "Clippy (listen-vsock) passed"
 
+    _step "Checking plan ledger integrity (tillandsias-plan check)..."
+    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-plan -- check 2>&1; then
+        _error "plan/index.yaml failed integrity check: run 'cargo run -p tillandsias-plan -- check' for details"
+        exit 1
+    fi
+    _info "Plan ledger check passed"
+
+    _step "Checking plan order uniqueness (tillandsias-policy plan-orders)..."
+    if ! _run cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p tillandsias-policy -- plan-orders 2>&1; then
+        _error "plan/index.yaml has open duplicate order tokens: run 'cargo run -p tillandsias-policy -- plan-orders' for details"
+        exit 1
+    fi
+    _info "Plan order uniqueness passed"
+
+    # Record that the gate passed against THIS exact tree. The pre-push hook
+    # verifies this stamp instead of re-running the whole gate: a multi-minute
+    # hook gets --no-verify'd on its second use and then enforces nothing, while
+    # hashing the diff costs milliseconds for the same guarantee. Push CI was
+    # removed 2026-08-03, so this is the trunk's only remaining protection.
+    _write_gate_stamp
+
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
@@ -743,6 +953,8 @@ fi
 
 # Release build
 if [[ "$FLAG_RELEASE" == true ]]; then
+    _bump_build_version
+    _regenerate_trace_indexes
     if ! _run_local_ci_gate --fast "${CI_ARG_LIST[@]}"; then
         _error "CI/CD validation failed — fix issues before releasing"
         exit 1
@@ -770,6 +982,8 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 
 # Default: debug build (only if no other build or CI action was requested)
 elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
+    _bump_build_version
+    _regenerate_trace_indexes
     _step "Building workspace (debug)..."
     _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Debug build complete"

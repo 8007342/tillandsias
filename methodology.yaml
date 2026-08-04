@@ -10,7 +10,8 @@ methodology:
 
   bootstrap:
     command: "/skills bootstrap"
-    first_step: "Read plan.yaml, plan/index.yaml, and methodology/bootstrap/router.yaml."
+    first_step: "Read plan.yaml, plan/index.yaml (or via project-plan / forge-plan MCP server), and methodology/bootstrap/router.yaml."
+    expert_mcp_servers: "project-plan (forge-plan) and project-info MCP servers provide sub-100ms structured, cited answers for plan packets, methodology rules, and repo files."
     active_release: "Declared in plan/loop_status.md under '## ACTIVE RELEASE'."
     selection_rule: "Choose exactly one intent from bootstrap_router.intent_options. The intent defines your required reading set."
     receipt_required_before_source_edits: true

@@ -1,0 +1,223 @@
+# @trace spec:inference-container
+# @trace spec:async-inference-launch
+#
+# Order 406 — inference-cuda-bringup-fat-host.
+#
+# THE DEFECT THIS PINS (live repro, macuahuitl 2026-07-29, RTX A5000 24 GB):
+# the ollama release tarball is `bin/ollama` (37 MB) plus `lib/ollama/` (2101 MB).
+# The entrypoint extracted ONLY `bin/ollama`, its comment calling the remainder
+# skippable "GPU runner libs". But `lib/ollama/` holds **llama-server** — the
+# binary ollama execs for EVERY model load — so the container reached
+# `Up (healthy)`, answered /api/version, satisfied the launcher's readiness gate,
+# and returned HTTP 500 "llama-server binary not found" on every single
+# /api/generate. On every host, on every tier. The inference substrate under the
+# whole EXPERTS milestone (391) could not serve one token.
+#
+# Two independent boundary failures made that state survivable, and this litmus
+# pins the fix for both:
+#   1. the payload was incomplete, and nothing asserted the binary that actually
+#      serves tokens (the guard checked `command -v ollama`, which passes);
+#   2. HEALTHCHECK probed /api/version, which answers as soon as the port binds —
+#      a health badge on a server that cannot serve, which the launcher believed.
+#
+# It also pins the tier-aware backend SELECTION that replaced the all-or-nothing
+# drop (only one accelerator backend is ever usable on a given host, so select
+# instead of discarding the lot) and the MEASURED accelerator tuning.
+#
+# Falsifiability: images/inference/engine-tuning.sh is side-effect-free when
+# sourced and runnable standalone, so every tier branch below is exercised with
+# stubbed inputs — no container, no GPU, no network, no python. Grep-only steps
+# are used exclusively for call-site wiring and for the regression guards that
+# must stay dead (the bin/ollama-only extraction, the version-only healthcheck).
+name: litmus:inference-engine-payload-and-tuning
+spec: inference-container
+phase: pre-build
+description: >
+  Pin the order-406 inference engine payload (llama-server present or the
+  container refuses to start, tier-keyed backend selection instead of an
+  all-or-nothing drop, reinstall on backend-set change) and the MEASURED
+  accelerator tuning policy (flash attention + q8_0 KV cache on the CUDA lane
+  for 30% VRAM at equal throughput; conservative f16 everywhere unmeasured),
+  exercising every tier branch with stubbed inputs.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains images/inference/engine-tuning.sh
+  - workspace contains images/inference/entrypoint.sh
+  - workspace contains images/inference/Containerfile
+  - POSIX sh, grep and env are available in PATH
+
+critical_path:
+  # ── The payload: llama-server is not optional ───────────────────────────
+  - step: "entrypoint installs lib/ollama, not just bin/ollama"
+    # The exact regression that caused the outage: an extraction naming only
+    # bin/ollama. If someone reinstates it, this step goes red.
+    command: "grep -q 'bin/ollama lib/ollama' images/inference/entrypoint.sh && echo 'ok: payload includes lib/ollama'"
+    timeout_ms: 3000
+    expected_behavior: "ok: payload includes lib/ollama"
+
+  - step: "the bin/ollama-ONLY extraction stays dead"
+    # Falsifiability seed: restoring `tar -xf … bin/ollama` with no lib/ollama
+    # must fail this step. Matches the extraction call site only, not prose.
+    command: "if grep -E \"tar -x[a-z]* [^|]*bin/ollama[[:space:]]*$\" images/inference/entrypoint.sh | grep -qv 'lib/ollama'; then echo 'FAIL: bin/ollama-only extraction reinstated — llama-server would be absent and every model load would 500'; exit 1; fi; echo 'ok: no bin-only extraction'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no bin-only extraction"
+
+  - step: "fail-loud guard asserts llama-server, not merely `command -v ollama`"
+    # `command -v ollama` was the WRONG assertion — it passes on a payload that
+    # cannot load a model. The guard must exit non-zero without llama-server.
+    command: "grep -q 'OLLAMA_LIBDIR/llama-server' images/inference/entrypoint.sh && grep -A6 'no executable llama-server' images/inference/entrypoint.sh | grep -q 'exit 1' && echo 'ok: llama-server guard fails loud'"
+    timeout_ms: 3000
+    expected_behavior: "ok: llama-server guard fails loud"
+
+  - step: "HEALTHCHECK asserts engine capability, not just that the port answers"
+    # A /api/version-only probe is what let `Up (healthy)` coexist with a total
+    # inference outage. The probe must also require llama-server to be present,
+    # and it must be a RUNTIME check: the model cache is a forge-SHARED mounted
+    # volume, so a concurrent prune must turn this container unhealthy.
+    command: "grep -A3 'HEALTHCHECK' images/inference/Containerfile | grep -q 'llama-server' && echo 'ok: healthcheck asserts llama-server'"
+    timeout_ms: 3000
+    expected_behavior: "ok: healthcheck asserts llama-server"
+
+  - step: "engine payload is reinstalled when the required backend set changes"
+    # A CPU-only host that gains a GPU (or a driver major bump) must not keep
+    # serving from a payload whose backend it can no longer use.
+    command: "grep -q 'OLLAMA_ENGINE_MANIFEST' images/inference/entrypoint.sh && grep -q '_engine_installed_set. != .\\$OLLAMA_ENGINE_SET' images/inference/entrypoint.sh && echo 'ok: reinstall on set change'"
+    timeout_ms: 3000
+    expected_behavior: "ok: reinstall on set change"
+
+  # ── Tier-keyed backend selection ────────────────────────────────────────
+  - step: "backend selection is derived from the tier, corroborated by devices"
+    # A tier claiming cuda with no /dev/nvidia0 in the container must NOT pull an
+    # 844 MB backend that can never load — the order-392 "no GPU tier in name
+    # only" rule applied to the payload.
+    command: "grep -q '_engine_wanted_backends' images/inference/entrypoint.sh && grep -A4 'gpu-cuda)' images/inference/entrypoint.sh | grep -q '/dev/nvidia0' && echo 'ok: tier + device corroboration'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tier + device corroboration"
+
+  - step: "unknown CUDA major ships BOTH majors rather than guessing wrong"
+    # Correctness over size: guessing wrong here silently downgrades a GPU host
+    # to CPU, which is precisely the failure mode this order exists to kill.
+    command: "grep -q 'cuda_v13 cuda_v12' images/inference/entrypoint.sh && echo 'ok: undetectable CUDA keeps both majors'"
+    timeout_ms: 3000
+    expected_behavior: "ok: undetectable CUDA keeps both majors"
+
+  - step: "a wanted backend the release does not ship is reported, never silent"
+    command: "grep -q 'does not ship it' images/inference/entrypoint.sh && echo 'ok: missing backend is loud'"
+    timeout_ms: 3000
+    expected_behavior: "ok: missing backend is loud"
+
+  # ── Tuning policy: grammar + every branch, stubbed ──────────────────────
+  - step: "tuning helper exists and documents the pinned one-line grammar"
+    command: "test -f images/inference/engine-tuning.sh && grep -Fq 'tuning: tier=<tier> flash_attn=<0|1> kv_cache=<f16|q8_0> num_parallel=<N> vram_mb=<N>' images/inference/engine-tuning.sh && echo 'ok: tuning grammar documented'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tuning grammar documented"
+
+  - step: "24GB CUDA host emits the exact pinned line"
+    # Asserted verbatim once, so a field rename or reorder fails here rather
+    # than silently breaking downstream parsers.
+    command: "out=$(env -u OLLAMA_FLASH_ATTENTION -u OLLAMA_KV_CACHE_TYPE -u OLLAMA_NUM_PARALLEL TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=24564 sh images/inference/engine-tuning.sh); echo \"$out\"; [ \"$out\" = 'tuning: tier=gpu-cuda flash_attn=1 kv_cache=q8_0 num_parallel=4 vram_mb=24564' ] && echo 'ok: pinned line'"
+    timeout_ms: 5000
+    expected_behavior: "ok: pinned line"
+
+  - step: "CUDA lane enables the MEASURED wins (flash attention + q8_0 KV cache)"
+    # Measured on macuahuitl: 8098 MiB -> 5690 MiB VRAM at 32768 ctx with
+    # throughput unchanged (105.9 -> 106.8-107.7 tok/s, qwen2.5:7b Q4_K_M).
+    # That 2408 MiB is most of another resident 7B expert slot.
+    command: "for v in 24564 12288 4096; do out=$(env -u OLLAMA_FLASH_ATTENTION -u OLLAMA_KV_CACHE_TYPE -u OLLAMA_NUM_PARALLEL TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=$v sh images/inference/engine-tuning.sh); printf '%s' \"$out\" | grep -q 'flash_attn=1 kv_cache=q8_0' || { echo \"FAIL: cuda vram=$v did not enable the measured tuning: $out\"; exit 1; }; done; echo 'ok: cuda lane tuned'"
+    timeout_ms: 8000
+    expected_behavior: "ok: cuda lane tuned"
+
+  - step: "VRAM ladder bounds parallelism: >=16GB->4, >=8GB->2, below->1"
+    # Each parallel slot carries its own KV cache; over-parallelising a 4-8 GB
+    # mobile GPU is how a GPU tier starts spilling to host RAM and ends up
+    # slower than the CPU lane it replaced.
+    command: "set -e; for pair in '24564 4' '16384 4' '12288 2' '8192 2' '4096 1' '0 1'; do set -- $pair; out=$(env -u OLLAMA_NUM_PARALLEL TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=$1 sh images/inference/engine-tuning.sh); printf '%s' \"$out\" | grep -q \"num_parallel=$2 \" || { echo \"FAIL: vram=$1 expected num_parallel=$2, got: $out\"; exit 1; }; done; echo 'ok: vram ladder'"
+    timeout_ms: 8000
+    expected_behavior: "ok: vram ladder"
+
+  - step: "unmeasured lanes (vulkan/rocm) and cpu stay conservative — no unmeasured claim"
+    # Claiming a win that was never measured on that accelerator is the same
+    # class of lie as reporting a GPU tier podman cannot deliver.
+    command: "set -e; for t in gpu-rocm gpu-vulkan cpu metal totally-unknown; do out=$(env -u OLLAMA_FLASH_ATTENTION -u OLLAMA_KV_CACHE_TYPE -u OLLAMA_NUM_PARALLEL TILLANDSIAS_INFERENCE_TIER=$t TILLANDSIAS_TUNING_VRAM_MB=24564 sh images/inference/engine-tuning.sh); printf '%s' \"$out\" | grep -q 'flash_attn=0 kv_cache=f16 num_parallel=1' || { echo \"FAIL: tier $t must stay conservative, got: $out\"; exit 1; }; done; echo 'ok: unmeasured lanes conservative'"
+    timeout_ms: 8000
+    expected_behavior: "ok: unmeasured lanes conservative"
+
+  - step: "operator overrides are respected VERBATIM and reported truthfully"
+    # The emitted line must describe what ollama will actually run, never the
+    # policy's preference.
+    command: "set -e; out=$(TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=24564 OLLAMA_FLASH_ATTENTION=0 sh images/inference/engine-tuning.sh); printf '%s' \"$out\" | grep -q 'flash_attn=0' || { echo \"FAIL: operator flash=0 ignored: $out\"; exit 1; }; out=$(TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=24564 OLLAMA_NUM_PARALLEL=8 sh images/inference/engine-tuning.sh); printf '%s' \"$out\" | grep -q 'num_parallel=8' || { echo \"FAIL: operator num_parallel ignored: $out\"; exit 1; }; echo 'ok: overrides verbatim'"
+    timeout_ms: 8000
+    expected_behavior: "ok: overrides verbatim"
+
+  - step: "a quantised KV cache without flash attention degrades to f16, never a half-applied combo"
+    # llama.cpp couples the two; a half-applied combination makes llama-server
+    # refuse to start, i.e. takes the endpoint down.
+    command: "out=$(TILLANDSIAS_INFERENCE_TIER=cpu OLLAMA_KV_CACHE_TYPE=q4_0 sh images/inference/engine-tuning.sh); echo \"$out\"; printf '%s' \"$out\" | grep -q 'flash_attn=0 kv_cache=f16' && echo 'ok: coupling enforced'"
+    timeout_ms: 5000
+    expected_behavior: "ok: coupling enforced"
+
+  - step: "hostile inputs degrade to safe defaults and never execute"
+    # These values cross into a shell-sourced file; a substitution bug here is a
+    # command-injection boundary, not a cosmetic one.
+    command: "set -e; out=$(TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=24564 OLLAMA_KV_CACHE_TYPE='; touch /tmp/litmus-pwned' sh images/inference/engine-tuning.sh); test ! -e /tmp/litmus-pwned || { echo 'FAIL: kv_cache value executed'; exit 1; }; printf '%s' \"$out\" | grep -q 'kv_cache=f16' || { echo \"FAIL: hostile kv_cache not degraded: $out\"; exit 1; }; out=$(TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB='99e9' sh images/inference/engine-tuning.sh); printf '%s' \"$out\" | grep -q 'vram_mb=0' || { echo \"FAIL: non-numeric VRAM not degraded: $out\"; exit 1; }; echo 'ok: hostile inputs safe'"
+    timeout_ms: 8000
+    expected_behavior: "ok: hostile inputs safe"
+
+  - step: "tuning helper always exits 0 (a policy helper must never fail-closed)"
+    command: "TILLANDSIAS_INFERENCE_TIER=bogus sh images/inference/engine-tuning.sh >/dev/null; rc=$?; [ \"$rc\" -eq 0 ] && echo 'ok: always exit 0' || { echo \"FAIL: exited $rc\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: always exit 0"
+
+  # ── Wiring ──────────────────────────────────────────────────────────────
+  - step: "entrypoint sources the tuning helper BEFORE `ollama serve`"
+    # ollama reads OLLAMA_FLASH_ATTENTION / OLLAMA_KV_CACHE_TYPE /
+    # OLLAMA_NUM_PARALLEL once at process start; sourcing after serve is a no-op.
+    command: "src=$(grep -n 'ENGINE_TUNING_SH' images/inference/entrypoint.sh | head -1 | cut -d: -f1); srv=$(grep -n '^ollama serve' images/inference/entrypoint.sh | head -1 | cut -d: -f1); echo \"source=$src serve=$srv\"; [ -n \"$src\" ] && [ -n \"$srv\" ] && [ \"$src\" -lt \"$srv\" ] && echo 'ok: sourced before serve'"
+    timeout_ms: 5000
+    expected_behavior: "ok: sourced before serve"
+
+  - step: "entrypoint no longer hardcodes OLLAMA_NUM_PARALLEL ahead of the policy"
+    # A hardcoded export would look like an operator override and suppress the
+    # tier policy entirely. Only the missing-helper fallback may set it.
+    command: "n=$(grep -c '^export OLLAMA_NUM_PARALLEL=' images/inference/entrypoint.sh || true); echo \"toplevel exports=$n\"; [ \"$n\" -eq 0 ] && echo 'ok: no top-level hardcode'"
+    timeout_ms: 3000
+    expected_behavior: "ok: no top-level hardcode"
+
+  - step: "the tuning helper is shipped into the image and made executable"
+    command: "grep -q 'COPY engine-tuning.sh /usr/local/bin/tillandsias-engine-tuning.sh' images/inference/Containerfile && grep -q 'tillandsias-engine-tuning.sh' images/inference/Containerfile && echo 'ok: shipped'"
+    timeout_ms: 3000
+    expected_behavior: "ok: shipped"
+
+  - step: "helpers are POSIX sh and invoke no python (tlatoani_hard_no_python)"
+    command: "for f in images/inference/engine-tuning.sh; do sh -n \"$f\" || { echo \"FAIL: $f is not valid POSIX sh\"; exit 1; }; if grep -vE '^[[:space:]]*#' \"$f\" | grep -qE '(^|[^a-zA-Z])python[0-9]?([^a-zA-Z]|$)'; then echo \"FAIL: $f invokes python\"; exit 1; fi; done; echo 'ok: POSIX sh, no python'"
+    timeout_ms: 8000
+    expected_behavior: "ok: POSIX sh, no python"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+    - "@trace spec:async-inference-launch"
+  expected_log: "engine payload includes llama-server or the container refuses to start; backend set is tier-keyed and device-corroborated; accelerator tuning pinned on every tier branch with stubbed inputs"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-engine-payload-and-tuning"
+    artifact: "images/inference/engine-tuning.sh + images/inference/entrypoint.sh + images/inference/Containerfile"
+
+rollback:
+  on_failure: >
+    An order-406 surface drifted. Restore: images/inference/entrypoint.sh (the
+    engine payload MUST extract bin/ollama AND lib/ollama — extracting only
+    bin/ollama leaves llama-server absent and every /api/generate returns HTTP
+    500 while the container reports healthy; keep the fail-loud llama-server
+    guard, the tier-keyed and device-corroborated backend selection, and the
+    .engine-set manifest that forces reinstall when the required set changes);
+    images/inference/engine-tuning.sh (the pinned `tuning:` line, flash
+    attention + q8_0 KV cache on the CUDA lane ONLY, the VRAM parallelism
+    ladder, verbatim operator overrides, and always exit 0); and
+    images/inference/Containerfile (COPY + chmod the helper, and a HEALTHCHECK
+    that asserts llama-server as well as /api/version). NEVER reduce the
+    healthcheck to /api/version alone — that is what let a total inference
+    outage wear a healthy badge.
+  command: "env TILLANDSIAS_INFERENCE_TIER=gpu-cuda TILLANDSIAS_TUNING_VRAM_MB=24564 sh images/inference/engine-tuning.sh; grep -n 'lib/ollama\\|llama-server\\|_engine_wanted_backends' images/inference/entrypoint.sh | head -30"

@@ -1,0 +1,86 @@
+# @trace spec:methodology-accountability
+#
+# Pins the collision-free order-ID scheme, behaviourally.
+#
+# WHY IT EXISTS. The predecessor rule (`order_number_assignment`, 2026-07-14)
+# was correct in doctrine and enforced by nothing, so it was simply not
+# followed: on 2026-07-31 two hosts collided TWICE in one session while that
+# rule sat in the methodology saying they must not. Six collisions reached HEAD
+# undetected because `tillandsias-plan check` validated packet_id uniqueness and
+# never looked at `order`.
+#
+# That is this project's own doctrine about itself — "a guard only an attentive
+# agent honors is a suggestion, not a constraint". A written allocation rule is
+# exactly such a suggestion. So the enforcement is the ALLOCATOR (you cannot
+# collide if you never choose) plus these assertions.
+#
+# The steps execute the real binary against real fixtures rather than grepping
+# for phrases, so a rewrite that keeps the wording and breaks the behaviour still
+# turns red.
+name: litmus:order-id-collision-free
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Assert the plan CLI mints unique permanent order tokens, that a duplicated
+  order refuses informatively instead of answering with an arbitrary packet,
+  that `check` reports duplicates it once could not see, that the provisional
+  sentinel stays exempt, and that existing integer orders keep resolving.
+severity: high
+size: quick
+
+preconditions:
+  - cargo toolchain available (the steps run the plan CLI)
+  - repository contains crates/tillandsias-plan and plan/index.yaml
+
+critical_path:
+  - step: "the allocator exists and mints the <seq>-<suffix> shape"
+    command: "cargo run --quiet --release -p tillandsias-plan -- next-order 2>/dev/null | grep -Eq '^[0-9]+-[a-z2-9]{4}$' && echo 'ok: mint shape'"
+    timeout_ms: 300000
+    expected_behavior: "ok: mint shape"
+
+  - step: "concurrent hosts forced onto ONE prefix still get distinct tokens"
+    command: "n=$(for i in 1 2 3 4 5 6 7 8 9 10; do cargo run --quiet --release -p tillandsias-plan -- next-order 999 2>/dev/null; done | sort -u | wc -l); if [ \"$n\" -eq 10 ]; then echo 'ok: distinct under a shared prefix'; else echo \"distinct=$n expected=10\"; echo 'fail: allocator collides on a shared prefix — the whole point of the suffix'; fi"
+    timeout_ms: 300000
+    expected_behavior: "ok: distinct under a shared prefix"
+
+  - step: "a non-numeric prefix is REFUSED, never silently replaced by the default"
+    command: "cargo run --quiet --release -p tillandsias-plan -- next-order abc >/dev/null 2>&1; rc=$?; if [ $rc -eq 2 ]; then echo 'ok: bad prefix refused'; else echo \"rc=$rc expected 2\"; echo 'fail: a bad prefix must not mint under a different prefix and print it as if it complied'; fi"
+    timeout_ms: 300000
+    expected_behavior: "ok: bad prefix refused"
+
+  - step: "the ledger engine refuses an AMBIGUOUS order rather than answering arbitrarily"
+    command: "cargo test --quiet --release -p tillandsias-plan a_duplicated_order_resolves_to_nothing 2>&1 | grep -q 'test result: ok' && echo 'ok: ambiguous order refused'"
+    timeout_ms: 300000
+    expected_behavior: "ok: ambiguous order refused"
+
+  - step: "an ambiguous miss NAMES its claimants (a bare 'no packet matches' would be false)"
+    command: "cargo test --quiet --release -p tillandsias-plan an_ambiguous_miss_can_name_its_claimants 2>&1 | grep -q 'test result: ok' && echo 'ok: claimants named'"
+    timeout_ms: 300000
+    expected_behavior: "ok: claimants named"
+
+  - step: "check reports duplicate orders, and the provisional sentinel stays exempt"
+    command: "cargo test --quiet --release -p tillandsias-plan order_identity_tests 2>&1 | grep -q 'test result: ok' && echo 'ok: order identity suite green'"
+    timeout_ms: 300000
+    expected_behavior: "ok: order identity suite green"
+
+  - step: "MIGRATION IS ADDITIVE: an existing integer order still resolves unchanged"
+    command: "cargo run --quiet --release -p tillandsias-plan -- status 322 2>/dev/null | grep -q 'mirror-authenticated-push-transport' && echo 'ok: legacy integer orders unaffected'"
+    timeout_ms: 300000
+    expected_behavior: "ok: legacy integer orders unaffected"
+
+  - step: "the doctrine is recorded where the methodology expert can answer it"
+    command: "grep -Fq 'order_id_allocation:' methodology/distributed-work.yaml && grep -Fq 'NO TOKEN IS EVER' methodology/distributed-work.yaml && echo 'ok: allocation doctrine recorded'"
+    timeout_ms: 5000
+    expected_behavior: "ok: allocation doctrine recorded"
+
+  - step: "both filing skills tell agents to MINT rather than pick"
+    command: "grep -Fq 'next-order' skills/meta-orchestration/SKILL.md && grep -Fq 'next-order' skills/advance-work-from-plan/SKILL.md && echo 'ok: skills route to the allocator'"
+    timeout_ms: 5000
+    expected_behavior: "ok: skills route to the allocator"
+
+failure_modes:
+  - "the allocator is removed or bypassed and agents resume computing 'next free order' from a stale snapshot"
+  - "minted tokens collide under a shared prefix, defeating the suffix's only purpose"
+  - "an ambiguous order resumes answering with whichever packet parsed last"
+  - "an ambiguous miss degrades to a bare 'no packet matches', which reads as 'no such work'"
+  - "a migration renumbers existing integer orders, recreating the reference debt the scheme exists to remove"

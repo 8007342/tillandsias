@@ -5,11 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L11899](../../../crates/tillandsias-headless/src/main.rs#L11899)
-- [crates/tillandsias-headless/src/main.rs#L11929](../../../crates/tillandsias-headless/src/main.rs#L11929)
-- [crates/tillandsias-headless/src/main.rs#L12027](../../../crates/tillandsias-headless/src/main.rs#L12027)
-- [crates/tillandsias-headless/src/main.rs#L12497](../../../crates/tillandsias-headless/src/main.rs#L12497)
-- [crates/tillandsias-headless/src/main.rs#L12523](../../../crates/tillandsias-headless/src/main.rs#L12523)
+- [crates/tillandsias-headless/src/main.rs#L12166](../../../crates/tillandsias-headless/src/main.rs#L12166)
+- [crates/tillandsias-headless/src/main.rs#L12196](../../../crates/tillandsias-headless/src/main.rs#L12196)
+- [crates/tillandsias-headless/src/main.rs#L12294](../../../crates/tillandsias-headless/src/main.rs#L12294)
+- [crates/tillandsias-headless/src/main.rs#L12764](../../../crates/tillandsias-headless/src/main.rs#L12764)
+- [crates/tillandsias-headless/src/main.rs#L12790](../../../crates/tillandsias-headless/src/main.rs#L12790)
 - [crates/tillandsias-headless/src/metrics_server.rs#L1](../../../crates/tillandsias-headless/src/metrics_server.rs#L1)
 - [crates/tillandsias-metrics/Cargo.toml#L9](../../../crates/tillandsias-metrics/Cargo.toml#L9)
 - [crates/tillandsias-metrics/src/dashboard.rs#L8](../../../crates/tillandsias-metrics/src/dashboard.rs#L8)
@@ -21,4 +21,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-metrics/tests/integration_tests.rs#L3](../../../crates/tillandsias-metrics/tests/integration_tests.rs#L3)
 - [scripts/test-convergence-dashboard.sh#L140](../../../scripts/test-convergence-dashboard.sh#L140)
 - [scripts/update-convergence-dashboard.sh#L18](../../../scripts/update-convergence-dashboard.sh#L18)
-- [scripts/update-convergence-dashboard.sh#L281](../../../scripts/update-convergence-dashboard.sh#L281)
+- [scripts/update-convergence-dashboard.sh#L288](../../../scripts/update-convergence-dashboard.sh#L288)

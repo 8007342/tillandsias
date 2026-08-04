@@ -37,7 +37,7 @@ export TILLANDSIAS_DESTRUCTIVE_RESET_OK=0
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOCK="$ROOT/scripts/test-support/podman-mock.sh"
-BIN="${TILLANDSIAS_BIN:-$ROOT/target/debug/tillandsias}"
+BIN="${TILLANDSIAS_BIN:-${CARGO_TARGET_DIR:-$ROOT/target}/debug/tillandsias}"
 
 if [[ ! -x "$BIN" ]]; then
     echo "[fixture] building tillandsias (debug) ..."
@@ -179,22 +179,30 @@ tracked tillandsias-inference ||
 kill "$flock_pid" 2>/dev/null || true
 flock_pid=""
 
-# ── fixture 2c: control — the LAST exit with no in-flight launch still
-#    tears the stack down (leak side must not regress) ───────────────────────
+# ── fixture 2c: control — the LAST exit tears down lane-scoped containers
+#    (inference) while keeping core application-lifetime containers
+#    (proxy) per order 477 ───────────────────────────────────────────────────
 case_env case2c
-echo "[fixture 2c] last-forge exit still tears down (control)"
+echo "[fixture 2c] last-forge exit tears down lane-scoped containers, keeps core stack"
 run_lane
 [[ "$lane_rc" -eq 0 ]] || fail "fixture 2c: status lane exited rc=$lane_rc" "$case_log"
 grep -q "no active lane containers; cleaning project + shared stack" "$case_log" ||
     fail "fixture 2c: last-exit teardown never fired" "$case_log"
-if tracked tillandsias-proxy; then
-    fail "fixture 2c: proxy survived the last-forge exit (teardown regressed)" "$case_log" "$LITMUS_PODMAN_CALLS_FILE"
-fi
+
+# Core application-lifetime containers MUST survive last-forge exit (order 477)
+tracked tillandsias-proxy ||
+    fail "fixture 2c: core proxy container was incorrectly removed on last exit" "$case_log" "$LITMUS_PODMAN_CALLS_FILE"
+
+# Lane-scoped containers MUST NOT survive last-forge exit
 if tracked tillandsias-inference; then
-    fail "fixture 2c: inference survived the last-forge exit (teardown regressed)" "$case_log" "$LITMUS_PODMAN_CALLS_FILE"
+    fail "fixture 2c: lane-scoped inference container survived last-forge exit" "$case_log" "$LITMUS_PODMAN_CALLS_FILE"
 fi
-grep -q "podman rm -f tillandsias-proxy" "$LITMUS_PODMAN_CALLS_FILE" ||
-    fail "fixture 2c: shared teardown never issued rm for the proxy" "$LITMUS_PODMAN_CALLS_FILE"
+
+grep -q "podman rm -f tillandsias-inference" "$LITMUS_PODMAN_CALLS_FILE" ||
+    fail "fixture 2c: shared teardown never issued rm for lane-scoped inference" "$LITMUS_PODMAN_CALLS_FILE"
+if grep -q "podman rm -f tillandsias-proxy" "$LITMUS_PODMAN_CALLS_FILE"; then
+    fail "fixture 2c: shared teardown incorrectly issued rm for core proxy" "$LITMUS_PODMAN_CALLS_FILE"
+fi
 
 echo "PASS: concurrent-forge shared-stack safety fixtures (order 443 slice 3)"
 exit 0

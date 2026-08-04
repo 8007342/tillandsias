@@ -45,6 +45,27 @@ jobs:
             nix-${{ runner.os }}-
           save: false
 
+      # ── Gates that used to live here now run on local hardware ───────────────
+      #
+      # Operator directive 2026-08-03: only the release may consume cloud
+      # minutes, because only signing genuinely needs GitHub secrets. Two steps
+      # moved OUT of this workflow into scripts/release-preflight.sh:
+      #
+      #   * "Verify version monotonicity"  -> preflight gate 1
+      #   * "Assert retired setup/secrets flags are gone from the CLI"
+      #                                    -> preflight gate 2
+      #
+      # They were pure validation over source and a built binary — nothing about
+      # either needed a runner, and a gate that only fires AFTER the cloud build
+      # has already run spends the minutes and then tells you the release was
+      # never valid.
+      #
+      # The preflight is enforced by the pre-push hook installed from
+      # scripts/install-hooks.sh (which ./build.sh now installs automatically),
+      # and pinned by litmus:release-gates-run-locally. If you are tempted to
+      # re-add a validation step here, check first whether it can run locally;
+      # signing, native-platform builds, and the GitHub Release upload are the
+      # only things that genuinely cannot.
       - name: Resolve and validate version
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -64,8 +85,6 @@ jobs:
           echo "VERSION=${FILE_VERSION}" >> "$GITHUB_ENV"
           echo "Version validated: v${FILE_VERSION}"
 
-      - name: Verify version monotonicity
-        run: bash scripts/verify-version-monotonic.sh
 
       - name: Record Nix Build Start Time
         run: echo "NIX_BUILD_START_TIME=$(date +%s)" >> "$GITHUB_ENV"
@@ -206,26 +225,6 @@ jobs:
           test -f verify.sh
           test -f SHA256SUMS
           ls -la
-
-      - name: Assert retired setup/secrets flags are gone from the CLI
-        run: |
-          # PLEASE REVIEW: osx-next — this guard (added in 38ba099f) banned BOTH
-          # --install AND --init from the binary's --help, but --init is a
-          # supported, spec-mandated user flag: tillandsias-vault
-          # (linux.only-secret-store@v3) states "tillandsias --init SHALL ALWAYS
-          # bootstrap Vault". Banning it blocked every release after
-          # v0.3.260608.4 (the binary correctly advertises --init in --help).
-          # Corrected to guard only the flags v0.3 actually RETIRED
-          # (--install/--without-vault/--legacy-keyring-secrets per the
-          # "Legacy Fallback Removed" requirement); --init stays a valid flag.
-          # The "CI must not invoke setup steps" intent is preserved: the
-          # release workflow never runs the binary with --init.
-          HELP="$(release-artifacts/tillandsias-linux-x86_64 --help 2>&1 || true)"
-          if grep -qE '\-\-install|\-\-without-vault|\-\-legacy-keyring-secrets' <<<"$HELP"; then
-            echo "::error::tillandsias binary still advertises a retired setup/secrets flag (--install/--without-vault/--legacy-keyring-secrets)"
-            exit 1
-          fi
-          echo "✓ No retired --install/--without-vault/--legacy-keyring-secrets flags (--init is a supported user flag; CI never invokes it)"
 
       - name: Create or update GitHub Release
         env:

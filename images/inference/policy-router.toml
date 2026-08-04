@@ -1,0 +1,56 @@
+# @trace spec:inference-policy-router
+# Data-only default placement order. Ollama remains the engine slot until the
+# llama-server parity-smoke child records evidence and this file is changed.
+version = 1
+
+[classes.background]
+[[classes.background.candidates]]
+device_id = "gpu-default"
+device_class = "gpu"
+slot_id = "ollama"
+model_tier = "t1"
+
+[[classes.background.candidates]]
+device_id = "cpu"
+device_class = "cpu"
+slot_id = "ollama"
+model_tier = "tier-s"
+
+[classes.interactive]
+[[classes.interactive.candidates]]
+device_id = "gpu-default"
+device_class = "gpu"
+slot_id = "ollama"
+model_tier = "t1"
+
+[[classes.interactive.candidates]]
+device_id = "cpu"
+device_class = "cpu"
+slot_id = "ollama"
+model_tier = "tier-s"
+
+[classes.quality]
+[[classes.quality.candidates]]
+device_id = "gpu-default"
+device_class = "gpu"
+slot_id = "ollama"
+model_tier = "t3"
+
+[[classes.quality.candidates]]
+device_id = "cpu"
+device_class = "cpu"
+slot_id = "ollama"
+model_tier = "tier-s"
+
+[classes.sustained]
+[[classes.sustained.candidates]]
+device_id = "gpu-default"
+device_class = "gpu"
+slot_id = "ollama"
+model_tier = "t1"
+
+[[classes.sustained.candidates]]
+device_id = "cpu"
+device_class = "cpu"
+slot_id = "ollama"
+model_tier = "tier-s"

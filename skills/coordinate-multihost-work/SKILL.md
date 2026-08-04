@@ -127,7 +127,7 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
 
 Run this before ending the loop whenever `origin/windows-next` or `origin/osx-next` is not an ancestor of `origin/linux-next`, or whenever the latest integrated code has not yet been exercised by the full runtime litmus.
 
-1.  **Check Active Async Run**: Read `plan/localwork/runtime-litmus/current`. If alive, record "validation still running" in `plan/loop_status.md` and wait.
+1.  **Check Active Async Run**: Read `plan/localwork/runtime-litmus/current`. If alive, record "validation still running" as a `## Cycle` entry in `plan/loop_status.d/` (via `tillandsias-plan loop-status-append`) and wait.
 2.  **Merge Sibling Branches**: If clean, attempt a real merge of sibling platform branches in a fresh worktree.
 3.  **Litmus Execution**: Run the full litmus check on the merged code:
     -   `./build.sh --ci-full --install`
@@ -139,7 +139,12 @@ Run this before ending the loop whenever `origin/windows-next` or `origin/osx-ne
 
 ## Loop Status Cache & Reporting
 
-Maintain `plan/loop_status.md` as a short (under 80 lines) quick-start cache:
+Maintain the loop-status quick-start cache (under 80 lines per entry) as
+`## Cycle` entries: write each entry as a NEW fragment with
+`tillandsias-plan loop-status-append --host <host> --ts <ISO>`, and read the
+folded view with `tillandsias-plan loop-status` — NEVER edit the shared
+`plan/loop_status.md` directly, or a concurrent host's status write conflicts
+for the same reason the old monolithic ledger did (packet 582-nqw5):
 -   `LastExecutionTime` in UTC
 -   Brief summary of this loop (including current Convergence Velocity $\mathcal{V}_c$ and active conflict resolution)
 -   High-Velocity Alignment Event status (Active/Inactive)

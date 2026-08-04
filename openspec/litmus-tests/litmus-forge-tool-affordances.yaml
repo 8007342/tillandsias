@@ -1,0 +1,74 @@
+# @trace spec:default-image
+# @trace spec:forge-environment-discoverability
+#
+# Pins that the forge TELLS agents which tools exist, and that our own skills do
+# not send them to tools that do not.
+#
+# THE TRAP THIS CLOSES, measured 2026-08-01 inside the shipped forge image:
+#   ruby              ABSENT
+#   tillandsias-policy ABSENT (built per-lane; may not exist yet at startup)
+#   python3           PRESENT — and FORBIDDEN for committed automation
+#                     (methodology tlatoani_hard_no_python)
+#
+# Both skills instructed agents to validate YAML with `ruby -ryaml`. So an agent
+# following our own documentation verbatim finds the sanctioned tool missing, the
+# compiled one not yet built, and the forbidden one on PATH. That is not an agent
+# discipline problem; it is an affordance defect, and the fix is to name what is
+# actually there.
+#
+# `yq` IS present and is a real YAML parser — verified in-image that it accepts
+# valid YAML and exits non-zero on invalid.
+name: litmus:forge-tool-affordances
+spec: default-image
+phase: pre-build
+description: >
+  Assert the forge startup context declares which tools are present and absent,
+  that it warns python3's presence is not permission, and that the skills offer a
+  validator fallback chain rather than naming only a tool the forge lacks.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-common.sh and the two drain skills
+  - no container runtime required
+
+critical_path:
+  - step: "the startup context names the tooling actually present"
+    command: "grep -Fq 'Tooling actually present here' images/default/lib-common.sh && echo 'ok: affordances declared'"
+    timeout_ms: 5000
+    expected_behavior: "ok: affordances declared"
+
+  - step: "it states ruby is ABSENT, since our own skills historically assumed it"
+    command: "grep -A6 'Tooling actually present here' images/default/lib-common.sh | grep -Fq 'ruby' && grep -Fq 'ABSENT' images/default/lib-common.sh && echo 'ok: ruby absence stated'"
+    timeout_ms: 5000
+    expected_behavior: "ok: ruby absence stated"
+
+  - step: "it warns that python3's PRESENCE IS NOT PERMISSION"
+    command: "grep -Fq 'presence is not permission' images/default/lib-common.sh && echo 'ok: python trap named'"
+    timeout_ms: 5000
+    expected_behavior: "ok: python trap named"
+
+  - step: "it points at yq as the available YAML validator"
+    command: "grep -Fq 'yq . <file>' images/default/lib-common.sh && echo 'ok: yq offered'"
+    timeout_ms: 5000
+    expected_behavior: "ok: yq offered"
+
+  - step: "advance-work-from-plan offers a FALLBACK CHAIN, not just ruby"
+    command: "grep -Fq 'yamlcheck' skills/advance-work-from-plan/SKILL.md && grep -Fq 'command -v yq' skills/advance-work-from-plan/SKILL.md && echo 'ok: chain present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: chain present"
+
+  - step: "meta-orchestration names yq and says ruby is not in the forge"
+    command: "grep -Fq 'ruby` is NOT in the forge image' skills/meta-orchestration/SKILL.md && echo 'ok: meta skill corrected'"
+    timeout_ms: 5000
+    expected_behavior: "ok: meta skill corrected"
+
+  - step: "neither skill proposes python3 as a YAML validator"
+    command: "if grep -nE '(^|[[:space:]|(])python3?[[:space:]].*(yaml|YAML)' skills/advance-work-from-plan/SKILL.md skills/meta-orchestration/SKILL.md | grep -v 'FORBIDDEN\\|not permitted\\|not permission'; then echo 'a skill proposes python for YAML'; else echo 'ok: no python validator'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: no python validator"
+
+failure_modes:
+  - "a skill names a validator the forge does not ship, sending agents to the forbidden python3 sitting next to it"
+  - "the startup context stops declaring tool availability and agents resume guessing"
+  - "python3's presence is read as permission because nothing says otherwise"

@@ -224,3 +224,71 @@ agent_observability_protocol:
     recovery: >
       Reconstruct current task state from latest event per task_id, sorted by
       Lamport order. Conflicting latest events become blocked until reconciled.
+
+  # ── Cycle metrics (order 575) ─────────────────────────────────────────────
+  #
+  # What a meta-orchestration cycle reports about ITSELF when it ends.
+  # Producer: scripts/cycle-metrics.sh. Consumers: skills/meta-orchestration
+  # (Cycle Metrics section) and skills/advance-work-from-plan (step 7.0).
+  cycle_metrics:
+    purpose: >
+      Report what a cycle achieved in verifiable terms, and specifically whether
+      the experts were USED and whether they were USEFUL. Those are two
+      questions, and a single call counter answers neither honestly.
+    used_vs_useful:
+      used: >
+        A volume question. Easy to measure, easy to game, and on its own silent
+        about value.
+      useful: >
+        A quality question. An expert called two hundred times that REFUSES two
+        hundred times is heavily used and completely useless.
+      why_it_matters: >
+        Order 531 was exactly that failure in production: every plan_answer
+        returned confidence=unsupported because the forge was seeded from a
+        branch carrying no expert sources, while the launch state truthfully
+        reported `experts: ready` and every health signal read green. A call
+        counter would have shown healthy adoption throughout the incident.
+    headline_metric:
+      name: answer_rate
+      formula: "answered / (answered + unsupported)"
+      denominator_rule: >
+        `degraded` (the expert could not run at all) and `error` (protocol) are
+        EXCLUDED from the denominator. A broken build is an infrastructure fact,
+        and folding it into a quality ratio makes a wrong artifact look like a
+        hard question — which is precisely how order 531 stayed hidden. Any
+        change that folds degraded into the denominator must be refused.
+    anti_gaming_rule:
+      rule: >
+        `answered` is reachable ONLY when the expert returns CITATIONS, and the
+        compiled binary emits citations only when it resolved a real packet or a
+        real YAML path. Calling a tool more times therefore cannot raise the
+        answer rate; only answering more can.
+      enforcement: >
+        Any proposal that lets `answered` be reached without citations converts a
+        quality signal into a volume signal and MUST be rejected on that ground,
+        not debated as ergonomics. This is the same reasoning that keeps XP
+        constraint-derived rather than activity-derived (packet 567): a metric
+        that rewards activity is a privilege-escalation path wherever it gates
+        anything.
+    honest_limits:
+      substitution: >
+        "Did the agent query the expert INSTEAD of grepping the ledger?" is the
+        metric that would best prove adoption. It requires the AGENT HARNESS's
+        own tool-call log, which does not live in this repository. It is reported
+        as `unknown` and MUST NOT be estimated.
+      token_and_wallclock_efficiency: >
+        Belongs to the harness for the same reason. Not derivable in-repo.
+      rule: >
+        Reporting a number the tooling did not produce is worse than reporting
+        none: it makes an unmeasured thing look measured. `unknown` is a valid
+        and required value.
+    failure_mode_verdicts:
+      - "attention:expert-answered-nothing-check-base-branch — the order-531 signature. The expert RAN every time and answered nothing, which means the ARTIFACT is wrong, not that the questions were hard."
+      - "attention:experts-degraded-<n>-calls-could-not-run — infrastructure, not retrieval quality."
+      - "attention:experts-never-called — the surface exists and no agent used it; an adoption problem, not a quality one."
+    reporter_contract: >
+      The reporter exits 0 whenever the report was produced. A metrics reporter
+      that fails the cycle it measures is a metric that can take down what it
+      measures; the VERDICT carries the judgement instead of the exit code. For
+      the same reason the telemetry write at the MCP chokepoint is best-effort
+      and can never break a tool call.

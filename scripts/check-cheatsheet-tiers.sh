@@ -55,7 +55,15 @@ if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
 fi
 
 cargo build --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" -p tillandsias-policy
+POLICY_BIN="${REPO_ROOT}/target/debug/tillandsias-policy"
+if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
+        [[ -x "${CARGO_TARGET_DIR}/debug/tillandsias-policy" ]] && POLICY_BIN="${CARGO_TARGET_DIR}/debug/tillandsias-policy"
+    else
+        [[ -x "${REPO_ROOT}/${CARGO_TARGET_DIR}/debug/tillandsias-policy" ]] && POLICY_BIN="${REPO_ROOT}/${CARGO_TARGET_DIR}/debug/tillandsias-policy"
+    fi
+fi
 args=(check-cheatsheet-tiers --repo-root "${REPO_ROOT}")
 [[ "${QUIET}" == "1" ]] && args+=(--quiet)
 [[ "${STRICT}" == "1" ]] && args+=(--strict)
-exec "${REPO_ROOT}/target/debug/tillandsias-policy" "${args[@]}"
+exec "${POLICY_BIN}" "${args[@]}"

@@ -9,8 +9,59 @@
 
 # --- Package registries ---
 # Homebrew (order 294): formulae.brew.sh API + brew.sh docs; bottles come
-# from ghcr.io and attestation verification from api.github.com (both
-# already covered below).
+# from ghcr.io.
+#
+# ATTESTATION NEEDS SIGSTORE, NOT JUST api.github.com. The previous comment
+# here claimed attestation verification was "from api.github.com (already
+# covered below)", and that belief is exactly why brew was broken for months:
+# HOMEBREW_VERIFY_ATTESTATIONS=1 makes brew shell out to `gh attestation
+# verify`, which checks a SIGSTORE bundle against the Rekor transparency log
+# and a Fulcio-issued certificate, with the trust root fetched from the
+# Sigstore TUF repository. api.github.com serves the attestation METADATA; it
+# cannot verify it.
+#
+# Measured 2026-08-01 through the live proxy from inside a forge image:
+#     api.github.com            -> HTTP 200
+#     github.com                -> HTTP 200
+#     fulcio.sigstore.dev       -> 000   (unreachable)
+#     rekor.sigstore.dev        -> 000   (unreachable)
+#     tuf-repo-cdn.sigstore.dev -> 000   (unreachable)
+# So every `brew install` burned a 1/3/9/27/81s retry ladder — 121s per
+# formula — and could never have succeeded. It stalled forge startup badly
+# enough to fail the post-build e2e gate (FORGE_EXIT=125, "dead_crashed").
+#
+# ONE entry, not three: squid 6.x treats a subdomain of an already-listed
+# domain as a FATAL config error (see the warning above), and .sigstore.dev
+# covers fulcio, rekor and tuf-repo-cdn.
+#
+# This ENABLES a supply-chain control that was silently failing; it does not
+# relax one. The alternative was to disable attestation, which would have
+# traded away bottle provenance to stop a warning.
+.sigstore.dev
+# GitHub's attestation BUNDLE storage. The attestations API returns a
+# `bundle_url` pointing here (with a short-lived SAS query string), and
+# cli/cli's api/client.go uses the INLINE bundle only when bundle_url is
+# EMPTY — otherwise it fetches from this host and hard-errors with no
+# fallback. So Sigstore egress alone is not sufficient.
+#
+# Measured 2026-08-01 with .sigstore.dev already allowlisted, a valid token,
+# and a real `brew install jq` through this proxy:
+#     failed to fetch bundle with URL:
+#       https://tmaproduction.blob.core.windows.net/attestations/...
+#       read tcp 10.0.42.43->10.0.42.40:3128: read: connection reset by peer
+# (10.0.42.40:3128 is this proxy; "connection reset" is the deny_info
+# TCP_RESET above — a DENIAL, not a network fault.)
+#
+# PINNED TO THE SPECIFIC HOST, deliberately. `.blob.core.windows.net` would
+# admit ALL of Azure Blob Storage, which anyone can publish to; that is far
+# too much surface for one bundle fetch. If GitHub moves this bucket the
+# fetch fails loudly and this line gets updated — a detectable break is the
+# correct trade against a permanently open namespace.
+#
+# This dependency is undocumented and carries a rotating SAS token, which is
+# a strong argument for fetching bundles at IMAGE BUILD time instead — see
+# packet own-the-attestation-fetch-so-lanes-need-no-github-identity.
+tmaproduction.blob.core.windows.net
 .brew.sh
 .npmjs.org
 .npmjs.com

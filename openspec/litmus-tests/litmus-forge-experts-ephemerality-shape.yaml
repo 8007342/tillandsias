@@ -1,0 +1,142 @@
+# @trace spec:ephemeral-guarantee, spec:forge-environment-discoverability
+# @trace order:394 (rung 1, slice 5 — expert-launch-state-and-ephemerality)
+# @trace plan/issues/experts-construction-research-2026-07-29.md §7.3
+#
+# WHAT THIS PROTECTS
+#
+# The plan expert is built INSIDE a running forge from the just-mounted ./plan
+# and ./methodology. That build produces knowledge about a working tree, and the
+# ephemerality invariant says knowledge must not outlive the stack that produced
+# it. Order 394 slice 5 placed the expert's state in tmpfs and its binary in the
+# container's --rm overlay precisely so NO reaper is needed: ephemeral by
+# construction.
+#
+# A single edit can silently undo that. Repointing FORGE_EXPERTS_STATE_DIR at
+# the persistent per-project cache volume — a natural-looking "make the build
+# faster across launches" change — would make expert knowledge survive stack
+# shutdown with no error, no warning, and no test failing anywhere. This litmus
+# is the structural half of the teardown proof: it EXTRACTS the expert surfaces
+# from images/default/lib-common.sh and the PERSISTENT mount targets from the
+# launcher that builds the forge container, and asserts the two sets are
+# disjoint. The behavioural half — seed, destroy, scan the survivors — is
+# litmus:forge-experts-teardown-ephemeral (size e2e).
+#
+# THE ONE SANCTIONED CARVE-OUT
+#   `cargo build` writes into $CARGO_TARGET_DIR, which DOES live on the
+#   persistent cache volume. Per the research's §7.3 a compiled binary in a
+#   build cache is a BUILD ARTIFACT, not expert knowledge, and order 394 slice 5
+#   puts it explicitly out of scope. This litmus keeps that carve-out NARROW:
+#   the expert's own state/index surfaces must still be disjoint from every
+#   persistent mount, and the binary must be COPIED OUT of the cache into the
+#   ephemeral bin dir rather than consumed from it.
+name: litmus:forge-experts-ephemerality-shape
+spec: ephemeral-guarantee
+phase: pre-build
+description: >
+  Pin forge-expert ephemerality by construction: the experts state dir is tmpfs,
+  the experts bin dir is inside the auto-removed container overlay, every write
+  in the experts region targets an ephemeral surface, and NO expert surface is
+  under any volume the launcher mounts persistently into the forge (extracted
+  from both sides and compared, so drift on either side turns this RED).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains crates/tillandsias-podman/src/container_spec.rs
+  - shell utilities (grep, sed, awk) are available in PATH
+
+critical_path:
+  - step: "the experts STATE surface is tmpfs — it cannot outlive the container"
+    # /dev/shm is a kernel tmpfs the container gets fresh and loses on teardown.
+    # This is the whole ephemerality mechanism: no reaper, no cleanup hook, no
+    # shutdown path that can be skipped.
+    command: "s=$(sed -n 's#^FORGE_EXPERTS_STATE_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/lib-common.sh); case \"$s\" in /dev/shm/*) echo \"ok: state-surface-tmpfs=$s\" ;; *) echo \"REGRESSION: experts state dir is not tmpfs: $s\"; exit 1 ;; esac"
+    timeout_ms: 5000
+    expected_behavior: "ok: state-surface-tmpfs=/dev/shm/"
+
+  - step: "the experts BINARY surface is inside the container's auto-removed overlay"
+    # $HOME/.local/bin is plain container filesystem. It exists only while the
+    # container exists, which is the second half of "ephemeral by construction".
+    command: "b=$(sed -n 's#^FORGE_EXPERTS_BIN_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/lib-common.sh); test \"$b\" = '$HOME/.local/bin' && echo \"ok: bin-surface-overlay=$b\""
+    timeout_ms: 5000
+    expected_behavior: "ok: bin-surface-overlay="
+
+  - step: "the forge container is auto-removed, so its overlay is destroyed with the stack"
+    # ContainerSpec::new defaults remove=true and build_run_args emits --rm for
+    # it; only an explicit .persistent() opts out. If the forge agent spec ever
+    # calls .persistent(), $HOME/.local/bin survives teardown and the binary
+    # surface stops being ephemeral.
+    command: "grep -q 'remove: true,' crates/tillandsias-podman/src/container_spec.rs && grep -q 'args.push(\"--rm\".to_string());' crates/tillandsias-podman/src/container_spec.rs && n=$(awk '/^fn build_forge_agent_run_args_with_vault\\(/,/^}/' crates/tillandsias-headless/src/main.rs | grep -c 'persistent()'); test \"$n\" = 0 && echo 'ok: forge-container-auto-removed'"
+    timeout_ms: 10000
+    expected_behavior: "ok: forge-container-auto-removed"
+
+  - step: "DISJOINTNESS PIN: no expert surface sits under a mount that survives teardown"
+    # The persistent mount targets are EXTRACTED from the launcher that builds
+    # the forge run args, not hardcoded here: adding a new persistent volume
+    # that happens to cover an expert surface, or moving an expert surface under
+    # an existing one, turns this RED from either side.
+    command: "home=$(sed -n 's#.*\\.env(\"HOME\", \"\\([^\"]*\\)\").*#\\1#p' crates/tillandsias-headless/src/main.rs | head -1); test -n \"$home\" || { echo 'REGRESSION: forge HOME not extractable'; exit 1; }; persist=$(awk '/^fn build_forge_agent_run_args_with_vault\\(/,/^}/' crates/tillandsias-headless/src/main.rs | grep -A3 '\\.volume(' | grep -oE '\"/[a-z/._-]+' | sed 's#^\"##' | sort -u); test -n \"$persist\" || { echo 'REGRESSION: no persistent mount targets extractable'; exit 1; }; s=$(sed -n 's#^FORGE_EXPERTS_STATE_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/lib-common.sh); b=$(sed -n 's#^FORGE_EXPERTS_BIN_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/lib-common.sh); s=\"${s/\\$HOME/$home}\"; b=\"${b/\\$HOME/$home}\"; for p in $persist; do case \"$s\" in \"$p\"*) echo \"REGRESSION: experts state $s is under persistent mount $p\"; exit 1 ;; esac; case \"$b\" in \"$p\"*) echo \"REGRESSION: experts bin $b is under persistent mount $p\"; exit 1 ;; esac; done; echo \"ok: expert-surfaces-disjoint-from-persistent-mounts\""
+    timeout_ms: 15000
+    expected_behavior: "ok: expert-surfaces-disjoint-from-persistent-mounts"
+
+  - step: "EVERY write in the experts region lands on an ephemeral surface"
+    # Enumerates the region's real redirection targets (comments excluded) and
+    # rejects anything outside the ephemeral set. A new persisted index file
+    # cannot be added without either being ephemeral or turning this RED.
+    command: "bad=$(sed -n '/^# ── Forge EXPERTS: launch-time build/,/^# ── Cache directory structure/p' images/default/lib-common.sh | grep -v '^[[:space:]]*#' | grep -oE '(^|[[:space:]])>>?[[:space:]]*\"?[^\"|&; )]+' | sed -E 's/^[[:space:]]*>>?[[:space:]]*\"?//' | sort -u | grep -vE '^(/dev/null|/tmp/|\\$FORGE_EXPERTS_STATE_DIR/|\\$stamp$)'); test -z \"$bad\" && echo 'ok: writes-confined-to-ephemeral-surfaces' || { echo \"REGRESSION: experts region writes to non-ephemeral target(s): $bad\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: writes-confined-to-ephemeral-surfaces"
+
+  - step: "the idempotency stamp — the one indirect write target — is itself in tmpfs"
+    # $stamp is accepted by the step above by name; prove the name resolves into
+    # the tmpfs state dir rather than into the cache volume next to the target
+    # dir it keys.
+    command: "grep -q 'stamp=\"$FORGE_EXPERTS_STATE_DIR/plan-source-hash\"' images/default/lib-common.sh && echo 'ok: source-hash-stamp-in-tmpfs'"
+    timeout_ms: 5000
+    expected_behavior: "ok: source-hash-stamp-in-tmpfs"
+
+  - step: "CARVE-OUT STAYS NARROW: the cache volume is a build cache, never the serving surface"
+    # cargo's target dir does live on the persistent volume — that is the
+    # sanctioned build-artifact carve-out. It stays a carve-out only while the
+    # binary is COPIED OUT of it into the ephemeral bin dir; the moment the MCP
+    # wrapper is pointed at the cache path instead, a persistent surface starts
+    # serving expert answers.
+    command: "grep -q 'install -m 0755 \"$built\" \"$bin_dst\"' images/default/lib-common.sh && grep -q 'BUILD ARTIFACT, not expert knowledge' images/default/lib-common.sh && ! grep -q 'tillandsias-project' images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: cache-is-build-only'"
+    timeout_ms: 5000
+    expected_behavior: "ok: cache-is-build-only"
+
+  - step: "the state READER only ever reads the ephemeral surface"
+    # A renderer that falls back to a persisted copy would resurrect dead
+    # knowledge into a fresh forge's startup context.
+    command: "n=$(sed -n '/^forge_experts_state_line() {/,/^}/p' images/default/lib-common.sh | grep -cE '(cat|read|<)[^)]*(/home|/var|\\$PROJECT_CACHE|tillandsias-project)'); test \"$n\" = 0 && sed -n '/^forge_experts_state_line() {/,/^}/p' images/default/lib-common.sh | grep -q 'FORGE_EXPERTS_STATE_DIR/state' && echo 'ok: reader-reads-tmpfs-only'"
+    timeout_ms: 5000
+    expected_behavior: "ok: reader-reads-tmpfs-only"
+
+observability:
+  traces:
+    - "@trace spec:ephemeral-guarantee"
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:394"
+  expected_log: "Forge expert surfaces are ephemeral by construction and disjoint from every persistent forge mount"
+  log_fields:
+    spec: "ephemeral-guarantee"
+    test: "forge-experts-ephemerality-shape"
+    builder_artifact: "images/default/lib-common.sh"
+    launcher_artifact: "crates/tillandsias-headless/src/main.rs"
+    behavioural_sibling: "litmus:forge-experts-teardown-ephemeral"
+
+rollback:
+  on_failure: >
+    Forge-expert ephemerality drifted. If the DISJOINTNESS PIN failed, an expert
+    surface now lives under a volume that survives container teardown — expert
+    knowledge built from one working tree will be served to a later, different
+    forge, and the ephemerality invariant is broken. Restore
+    FORGE_EXPERTS_STATE_DIR to a /dev/shm path and FORGE_EXPERTS_BIN_DIR to
+    $HOME/.local/bin. If the write-confinement step failed, a new expert file is
+    being written outside the ephemeral set; move it into
+    $FORGE_EXPERTS_STATE_DIR. If the carve-out step failed, the persistent cargo
+    cache is being used as a serving surface rather than a build cache — the
+    binary must be installed out of it into the ephemeral bin dir.
+  command: "sed -n '/^# ── Forge EXPERTS: launch-time build/,/^# ── Cache directory structure/p' images/default/lib-common.sh | grep -nE 'FORGE_EXPERTS_(STATE|BIN)_DIR=|>|install -m'"

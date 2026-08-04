@@ -74,3 +74,23 @@ from Linux — static validation + style fidelity is the bar here; the first
 real run on GitHub Actions (a push to a covered branch or a PR to `main`) is
 the live proof, and the exit-criteria red-test (a mistyped-but-parseable gated
 edit) can only be confirmed there.
+
+## Windows-host evidence, 2026-08-03 (order 598-yhu5 W1, windows-next e81819f0)
+
+Native msvc typecheck of the real gated bodies, run on Windows 11 hardware
+(the check the CI lanes above were meant to approximate — note those cloud
+lanes were deleted in the 2026-08-01 Actions purge, so this on-host run is
+currently the ONLY typecheck the gated Windows bodies get):
+
+- `cargo check -p tillandsias-windows-tray --all-features --all-targets`:
+  PASS (exit 0, 16.4s warm). `--all-targets` compiled tests/cli_integration.rs,
+  tests/portable_smoke.rs, and the notify_icon.rs `#[cfg(test)]` block.
+- `cargo test -p tillandsias-windows-tray`: 86 passed, 0 failed, 8 ignored
+  across the three test binaries. Smart App Control did not block the fresh
+  test exes this run (it has intermittently before — os error 4551).
+- First run had exactly one red: `embedded_guest_headless_matches_workspace_version`
+  — a STALE STAGED GUEST (assets/ carried v0.4.260728-era bytes vs workspace
+  0.4.260802.1), i.e. the order-282 litmus doing its job, not a typecheck gap.
+  Restaging via scripts/build-guest-binaries.sh (which surfaced its own
+  staging-path defect, fixed this cycle: the cargo fallback staged from a
+  hardcoded $ROOT/target and ignored CARGO_TARGET_DIR) turned it green.

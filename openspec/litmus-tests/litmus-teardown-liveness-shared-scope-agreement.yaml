@@ -1,0 +1,65 @@
+# @trace spec:podman-orchestration
+name: litmus:teardown-liveness-shared-scope-agreement
+spec: podman-orchestration
+phase: pre-build
+description: >-
+  Order 477: the last-lane teardown and the liveness supervisor must answer
+  ONE question the same way — "may the last-lane teardown remove this shared
+  container?". They did not: LIVE 2026-07-24 06:50Z the last lane's exit
+  removed tillandsias-proxy (teardown's lane-scoped view) and the supervisor
+  re-created it 3s later as a fresh container (its application-lifetime
+  view), so an idle host churned one container create per lane exit. STEP 1
+  proves both sides now derive from the single SHARED_STACK_SCOPES table —
+  teardown behaviorally (the argv it issues at a fake podman), liveness
+  structurally (the steady-state `services` array inside
+  container_deps::LivenessProbe::run_check, resolved through
+  Service::name()). STEP 2 pins the post-last-lane steady state: what the
+  teardown leaves standing is exactly what the supervisor's next tick finds
+  running, so the settling window creates nothing — while the lane-scoped
+  half (inference) still goes away, so the leak side does not regress.
+  STEP 3 source-audits that no hand-written second container list re-enters
+  the shared remover, which is how the two sides drifted in the first place.
+severity: high
+size: quick
+
+preconditions:
+  - cargo workspace builds
+
+critical_path:
+  - step: "scope agreement: teardown removal set and liveness steady state both derive from SHARED_STACK_SCOPES"
+    command: "cargo test -p tillandsias-headless tests::teardown_and_liveness_agree_on_shared_container_scope -- --exact 2>&1 | grep 'teardown_and_liveness_agree_on_shared_container_scope ... ok' && echo SHARED-SCOPE-AGREED"
+    timeout_ms: 120000
+    success_pattern: "SHARED-SCOPE-AGREED"
+    failure_pattern: "FAILED|panicked"
+  - step: "post-last-lane steady state converges in one step (no liveness re-create, leak side intact)"
+    command: "cargo test -p tillandsias-headless tests::post_last_lane_steady_state_needs_no_liveness_recreate -- --exact 2>&1 | grep 'post_last_lane_steady_state_needs_no_liveness_recreate ... ok' && echo STEADY-STATE-CONVERGED"
+    timeout_ms: 120000
+    success_pattern: "STEADY-STATE-CONVERGED"
+    failure_pattern: "FAILED|panicked"
+  - step: "source audit: the shared remover derives its list, it does not spell one out"
+    command: "test $(sed -n '/^async fn remove_shared_stack_containers/,/^}/p' crates/tillandsias-headless/src/main.rs | grep -c 'tillandsias-') -eq 0 && test $(grep -c 'lane_scoped_shared_containers()' crates/tillandsias-headless/src/main.rs) -ge 2 && echo SCOPE-TABLE-WIRED"
+    timeout_ms: 5000
+    success_pattern: "SCOPE-TABLE-WIRED"
+    failure_pattern: "No such file"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+    - "@trace spec:proxy-container"
+  expected_log: "STEADY-STATE-CONVERGED"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "teardown-liveness-shared-scope-agreement"
+    decision: "proxy=Core, inference=LaneScoped"
+
+rollback:
+  on_failure: >
+    Either a second hand-written container list re-entered
+    remove_shared_stack_containers (the original order-477 defect shape), or
+    a row of SHARED_STACK_SCOPES was reclassified without moving the liveness
+    supervisor's steady-state set with it, or a new container_deps::Service
+    variant was declared without extending the agreement test's DECLARED
+    list. The proxy's scope decision and its rationale (idle footprint vs
+    warm-start latency vs the unmarked provider-login pre-create window) are
+    recorded on SHARED_STACK_SCOPES itself.
+  command: "grep -n 'SHARED_STACK_SCOPES\\|lane_scoped_shared_containers\\|core_shared_containers' crates/tillandsias-headless/src/main.rs; grep -n 'let services = \\[' crates/tillandsias-headless/src/container_deps.rs"

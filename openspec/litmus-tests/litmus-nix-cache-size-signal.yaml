@@ -1,13 +1,21 @@
 # @trace spec:nix-builder, spec:ci-release
+# @tombstone retired:nix-cache-warm-workflow-purged-2026-08-03
+# nix-cache-warm.yml was removed from every branch in the 2026-08-03 GitHub
+# Actions budget purge (f45e0dc5 on linux-next, bebe107b / PR #86 on main):
+# its weekly cron kept firing from the DEFAULT branch after the first purge
+# pass, so the workflow was deleted rather than repaired. With no cache-warm
+# workflow there is no GHA nix cache to size-check; litmus:github-actions-budget
+# now pins "only release.yml exists". Retired 2026-08-03 by the macOS v0.5
+# validation cycle (598-kibt evidence trail).
+phase: retired
+status: retired
 name: litmus:nix-cache-size-signal
 spec: nix-builder
 description: >
-  Verify the GHA nix cache purge configuration is present (code-level), and
-  when GH_TOKEN is available, assert the live nix cache size is below 80% of
-  the 10 GB LRU limit (8 GB). Skips the API step gracefully without GH_TOKEN.
+  RETIRED. Verified the GHA nix cache purge configuration in
+  nix-cache-warm.yml, a workflow that no longer exists on any branch.
 severity: medium
 size: instant
-phase: pre-build
 
 preconditions:
   - workspace contains .github/workflows/nix-cache-warm.yml

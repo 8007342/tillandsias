@@ -1,0 +1,326 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:569 (forge-experts-capability-honesty)
+# @trace plan/issues/claude-mcp-expert-validation-2026-08-01.md §2, §5B
+# @trace plan/issues/mcp-server-performance-and-discoverability-audit-2026-08-01.md §2.1
+#
+# THE REGRESSION THIS EXISTS TO PREVENT
+#
+# `experts: ready` means THE BUILD FINISHED. It has never meant the expert can
+# answer. Order 531 ran a forge whose mounted checkout was a pre-expert `main`
+# snapshot: the launch compiled that checkout, installed the artifact, stamped
+# `ready` — truthfully — and then every `plan_answer` returned
+# `confidence=unsupported` while every health signal read green. The order-557
+# validation reproduced it hash-exactly and found the compounding defect: the
+# stale binary printed usage on STDOUT and exited 0 for an unknown subcommand,
+# so the MCP wrapper could not tell INCAPABILITY from SUCCESS.
+#
+# The operator extension is the part a bare capability stamp does not cover. An
+# agent must be able to answer three questions without reading source:
+#   what can I use RIGHT NOW · what would a RELAUNCH give me · am I BLOCKED
+# because local work on the expert crate is undiscoverable in the running
+# session but WILL be present on the next forge run.
+#
+# THE LOAD-BEARING DISTINCTION, and the reason most of this file is behavioural:
+# `skew=pending-build` (the async launch build is still running — WAIT AND
+# RETRY) and `skew=relaunch-required` (nothing in this session will deliver it —
+# retrying is FUTILE) demand OPPOSITE actions. Conflating them tells an agent to
+# wait forever for a capability that is never coming. Steps (b4)/(b5) drive
+# exactly the same fixture through both verdicts, changing ONLY the launch state
+# file, so a change that collapses the two turns this RED.
+#
+# Grep-for-wording steps are deliberately scarce here: a test that greps for a
+# phrase passes a rewrite that breaks behaviour, which is this project's named
+# recurring failure ("verified where it was written is not verified where it
+# runs"). Everything that can be executed IS executed — the real CLI, the real
+# capability helper, the real MCP wrapper over real JSON-RPC frames, and the
+# real inject_startup_context.
+#
+# Five things are pinned:
+#   (a) ONE capability manifest, two readers: the binary reports the file it was
+#       compiled with, the checkout is read directly, and every declared token
+#       actually dispatches (with a negative control proving the check can fail);
+#   (b) every branch of the skew grammar, over a closed vocabulary;
+#   (c) the MCP wrapper REFUSES a subcommand its artifact cannot serve, naming
+#       degraded(stale-binary:<missing>) — and does NOT refuse a capable one;
+#   (d) strict JSON-RPC framing: ids keep their JSON type, quotes in ids and
+#       method names cannot break the frame, and a payload is delivered verbatim;
+#   (e) fail-soft: the probe never gates a launch, and carries no python.
+name: litmus:expert-capability-skew-honesty
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin order 569's expert capability honesty: the compiled-in capability manifest
+  and its checkout twin, the now / after_relaunch / blocked skew grammar with
+  pending-build and relaunch-required kept distinct, the MCP wrapper's
+  degraded(stale-binary:<missing>) refusal, strict JSON-RPC framing, and the
+  fail-soft contract.
+severity: critical
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-plan/capabilities.txt (the manifest)
+  - workspace contains images/default/lib-expert-capability.sh (the probe)
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - cargo and jq are available in PATH
+
+critical_path:
+  # ── fixtures ─────────────────────────────────────────────────────────────
+  - step: "FIXTURE: build the real expert and stage an isolated checkout"
+    # rm -rf first is load-bearing, not tidiness: every later step reads these
+    # files, so a stale fixture from a previous run would let them all pass
+    # while nothing was actually built — the dead-check trap this project
+    # closed for exit codes, applied to fixture state.
+    command: "rm -rf /tmp/.litmus-569 && mkdir -p /tmp/.litmus-569/bin /tmp/.litmus-569/checkout/plan /tmp/.litmus-569/checkout/crates/tillandsias-plan /tmp/.litmus-569/state && cargo build -q -p tillandsias-plan --release && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan && test -x $B && cp $B /tmp/.litmus-569/bin/plan && cp crates/tillandsias-plan/capabilities.txt /tmp/.litmus-569/checkout/crates/tillandsias-plan/capabilities.txt && cp plan/index.yaml /tmp/.litmus-569/checkout/plan/index.yaml && echo 'ok: fixture-ready'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fixture-ready"
+
+  # ── (a) ONE manifest, two readers ────────────────────────────────────────
+  - step: "BEHAVIOURAL: the binary reports a capability set, one bare token per line, exit 0"
+    # The SHAPE is the signal the wrapper branches on. A pre-569 artifact prints
+    # usage here (prose, spaces, capitals) and the shape test is what rejects it
+    # — the exit status cannot, because the stale binary order 531 shipped
+    # exited 0 while printing usage.
+    command: "/tmp/.litmus-569/bin/plan capabilities > /tmp/.litmus-569/now.txt && test -s /tmp/.litmus-569/now.txt && ! grep -qvE '^[a-z][a-z0-9-]*$' /tmp/.litmus-569/now.txt && echo 'ok: capability-token-shape'"
+    timeout_ms: 20000
+    expected_behavior: "ok: capability-token-shape"
+
+  - step: "DRIFT PIN: the COMPILED-IN manifest and the CHECKOUT manifest are the same set"
+    # The whole design rests on one file with two readers — include_str! into the
+    # artifact, plain read out of the mounted checkout. If they diverge,
+    # `after_relaunch` starts describing a different list than `now` measures and
+    # every skew verdict becomes fiction.
+    command: "sed 's/#.*//' crates/tillandsias-plan/capabilities.txt | tr -d ' \\t' | grep -E '^[a-z][a-z0-9-]*$' | sort -u > /tmp/.litmus-569/src.txt && sort -u /tmp/.litmus-569/now.txt > /tmp/.litmus-569/nows.txt && diff -u /tmp/.litmus-569/src.txt /tmp/.litmus-569/nows.txt && echo 'ok: manifest-readers-agree'"
+    timeout_ms: 20000
+    expected_behavior: "ok: manifest-readers-agree"
+
+  - step: "DRIFT PIN: the shell probe and include_str! name the SAME manifest path"
+    command: "a=$(sed -n 's#^TILLANDSIAS_EXPERT_MANIFEST_REL=\"\\(.*\\)\"$#\\1#p' images/default/lib-expert-capability.sh) && b=$(sed -n 's#.*include_str!(\"\\.\\./\\(.*\\)\").*#crates/tillandsias-plan/\\1#p' crates/tillandsias-plan/src/main.rs) && test -n $a && test $a = $b && echo \"ok: manifest-path-agree=$a\""
+    timeout_ms: 10000
+    expected_behavior: "ok: manifest-path-agree="
+
+  - step: "BEHAVIOURAL DRIFT PIN: every DECLARED capability actually dispatches (with a negative control)"
+    # Claiming a capability that does not dispatch is the dangerous direction of
+    # drift: the wrapper would route to it and the binary would answer with a
+    # usage dump a model reads as an ANSWER. Each token is INVOKED. The negative
+    # control at the end proves the check can go red — without it this step
+    # would pass just as happily if `unknown subcommand` were never printed at
+    # all, which is exactly the dead check the whole file is written against.
+    command: "F=/tmp/.litmus-569; for t in $(cat $F/now.txt); do out=$(timeout 60 $F/bin/plan --index $F/checkout/plan/index.yaml $t </dev/null 2>&1 || true); case $out in *'error: unknown subcommand'*) echo \"DRIFT: declared capability $t does not dispatch\"; exit 1 ;; esac; done; ctl=$($F/bin/plan --index $F/checkout/plan/index.yaml definitely-not-a-subcommand </dev/null 2>&1 || true); case $ctl in *'error: unknown subcommand'*) echo 'ok: declared-capabilities-dispatch' ;; *) echo 'NEGATIVE CONTROL FAILED: an undeclared subcommand was accepted'; exit 1 ;; esac"
+    timeout_ms: 300000
+    expected_behavior: "ok: declared-capabilities-dispatch"
+
+  - step: "BEHAVIOURAL: an unknown subcommand exits NON-ZERO with the diagnostic on STDERR and nothing on stdout"
+    # Exit criterion 2 of order 569, and the negative control the shell probe
+    # depends on. The pre-394b binary printed usage on STDOUT and exited 0, so a
+    # caller could not distinguish incapability from success, and any diagnostic
+    # on stdout corrupts a machine-readable envelope stream.
+    command: "F=/tmp/.litmus-569; rc=0; $F/bin/plan --index $F/checkout/plan/index.yaml nope-not-real >$F/o.txt 2>$F/e.txt || rc=$?; test $rc -ne 0 && test ! -s $F/o.txt && grep -q 'unknown subcommand' $F/e.txt && echo \"ok: unknown-subcommand-nonzero-stderr-only rc=$rc\""
+    timeout_ms: 60000
+    expected_behavior: "ok: unknown-subcommand-nonzero-stderr-only"
+
+  - step: "BEHAVIOURAL: diagnostics NEVER precede the envelope on stdout"
+    # Exit criterion 3. A methodology corpus carrying a file that does not parse
+    # emits a warning; if that warning lands on stdout the envelope stream is
+    # corrupted and verify-answer refuses the result (observed on main with
+    # methodology/provenance.yaml's duplicate key). stdout must be EXACTLY one
+    # JSON document, whatever the corpus does.
+    command: "F=/tmp/.litmus-569; mkdir -p $F/mroot/methodology && cp methodology.yaml $F/mroot/methodology.yaml && printf 'a: 1\\na: 2\\n' > $F/mroot/methodology/broken.yaml && $F/bin/plan methodology --root $F/mroot forge_cycle_budget.rule >$F/env.json 2>$F/env.err; jq -e 'has(\"answer\") and has(\"citations\") and has(\"confidence\")' $F/env.json >/dev/null && echo 'ok: stdout-is-envelope-only'"
+    timeout_ms: 60000
+    expected_behavior: "ok: stdout-is-envelope-only"
+
+  # ── (b) every branch of the skew grammar ─────────────────────────────────
+  - step: "BEHAVIOURAL: binary and checkout in sync -> skew=none, nothing blocked"
+    command: "F=/tmp/.litmus-569; rm -f $F/state/state $F/state/started_at; L=$(FORGE_EXPERTS_STATE_DIR=$F/state sh images/default/lib-expert-capability.sh $F/bin/plan $F/checkout | head -1); case $L in *'skew=none'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'blocked_capabilities=-'*) echo 'ok: skew-none' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: skew-none"
+
+  - step: "BEHAVIOURAL: checkout offers more + a build IN FLIGHT -> skew=pending-build (wait and retry)"
+    # Capability legitimately INCREASES mid-session: ensure_forge_experts builds
+    # asynchronously after launch. Reporting relaunch-required here would send an
+    # agent to relaunch a forge that was seconds away from being correct.
+    command: "F=/tmp/.litmus-569; printf 'answer\\ncapabilities\\ncheck\\nbrand-new-tool\\n' > $F/checkout/crates/tillandsias-plan/capabilities.txt; printf 'building\\n' > $F/state/state; date +%s > $F/state/started_at; L=$(FORGE_EXPERTS_STATE_DIR=$F/state sh images/default/lib-expert-capability.sh $F/bin/plan $F/checkout | head -1); case $L in *'skew=pending-build'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'blocked_capabilities=brand-new-tool'*) echo 'ok: skew-pending-build' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: skew-pending-build"
+
+  - step: "BEHAVIOURAL: THE SAME fixture with NO build in flight -> skew=relaunch-required (retrying is futile)"
+    # The load-bearing distinction. Only the launch state file differs from the
+    # step above; if the two verdicts ever collapse into one, this pair is what
+    # catches it.
+    command: "F=/tmp/.litmus-569; rm -f $F/state/state $F/state/started_at; L=$(FORGE_EXPERTS_STATE_DIR=$F/state sh images/default/lib-expert-capability.sh $F/bin/plan $F/checkout | head -1); case $L in *'skew=relaunch-required'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'blocked_capabilities=brand-new-tool'*) echo 'ok: skew-relaunch-required' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: skew-relaunch-required"
+
+  - step: "BEHAVIOURAL: an ABANDONED build is not an in-flight one -> relaunch-required, not pending-build"
+    # A builder that was OOM-killed leaves `building` in tmpfs forever. Treating
+    # that as pending-build pins the agent at 'wait' for the whole session.
+    command: "F=/tmp/.litmus-569; printf 'building\\n' > $F/state/state; expr $(date +%s) - 600 > $F/state/started_at; L=$(FORGE_EXPERTS_STATE_DIR=$F/state FORGE_EXPERTS_BUILD_BUDGET_SECS=300 sh images/default/lib-expert-capability.sh $F/bin/plan $F/checkout | head -1); case $L in *'skew=relaunch-required'*) echo 'ok: abandoned-build-not-pending' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: abandoned-build-not-pending"
+
+  - step: "BEHAVIOURAL: a PRE-569 binary (usage on stdout, exit 0) -> now=stale-binary, everything blocked"
+    # The exact artifact order 531 shipped. Its capabilities are UNKNOWABLE, so
+    # nothing it offers may be counted — a conservative refusal, never a guess.
+    command: "F=/tmp/.litmus-569; printf '#!/bin/sh\\necho \\\"usage: tillandsias-plan [--index <path>] <command>\\\"\\necho \\\"commands:\\\"\\nexit 0\\n' > $F/bin/stale && chmod +x $F/bin/stale; cp crates/tillandsias-plan/capabilities.txt $F/checkout/crates/tillandsias-plan/capabilities.txt; rm -f $F/state/state; L=$(FORGE_EXPERTS_STATE_DIR=$F/state sh images/default/lib-expert-capability.sh $F/bin/stale $F/checkout | head -1); case $L in *'now=stale-binary'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'skew=relaunch-required'*) echo 'ok: stale-binary-named' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: stale-binary-named"
+
+  - step: "BEHAVIOURAL: binary RICHER than the checkout -> relaunch-regresses, nothing blocked"
+    # Observed for real in the order-557 validation, which hand-installed a
+    # linux-next binary into a `main`-checkout forge. Reporting skew=none there
+    # invites a relaunch that silently REMOVES the expert.
+    command: "F=/tmp/.litmus-569; printf 'answer\\ncapabilities\\ncheck\\n' > $F/checkout/crates/tillandsias-plan/capabilities.txt; L=$(FORGE_EXPERTS_STATE_DIR=$F/state sh images/default/lib-expert-capability.sh $F/bin/plan $F/checkout | head -1); case $L in *'skew=relaunch-regresses'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'blocked_capabilities=-'*) echo 'ok: skew-relaunch-regresses' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: skew-relaunch-regresses"
+
+  - step: "BEHAVIOURAL: a checkout with NO manifest reports after_relaunch=none and cries NO regression"
+    # Off-Tillandsias projects are the common case. 'we found no manifest' is not
+    # evidence that a relaunch would take anything away, and a phantom
+    # relaunch-regresses would be a guess dressed as a fact.
+    command: "F=/tmp/.litmus-569; L=$(FORGE_EXPERTS_STATE_DIR=$F/state sh images/default/lib-expert-capability.sh $F/bin/plan $F/no-such-checkout | head -1); case $L in *'after_relaunch=none'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'skew=none'*) ;; *) echo \"got: $L\"; exit 1 ;; esac; case $L in *'lost_on_relaunch=-'*) echo 'ok: no-manifest-no-phantom-regression' ;; *) echo \"got: $L\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: no-manifest-no-phantom-regression"
+
+  - step: "the skew vocabulary is CLOSED — exactly four values can ever be assigned"
+    # An open-ended verdict string is an unfalsifiable state, and this project
+    # forbids the indeterminate 'may still be...' branch by construction. The
+    # assignment count is asserted EXACTLY so a fifth verdict cannot be added
+    # without an action being written for it in the advice function.
+    command: "n=$(grep -c 'TILLANDSIAS_EXPERT_CAP_SKEW=\"' images/default/lib-expert-capability.sh); test $n = 4 && for v in pending-build relaunch-required relaunch-regresses; do grep -q \"TILLANDSIAS_EXPERT_CAP_SKEW=\\\"$v\\\"\" images/default/lib-expert-capability.sh || exit 1; grep -q \"^        $v)\" images/default/lib-expert-capability.sh || exit 1; done; echo \"ok: closed-skew-vocabulary n=$n\""
+    timeout_ms: 10000
+    expected_behavior: "ok: closed-skew-vocabulary"
+
+  # ── (c) the MCP wrapper refuses what its artifact cannot serve ───────────
+  - step: "BEHAVIOURAL: a PRE-569 binary makes plan_answer report degraded(stale-binary:...), not a bare unsupported"
+    # Exit criterion 1 of order 569. Before this, the envelope said
+    # confidence=unsupported with a truthful `experts state: ready` — which reads
+    # as 'the plan has no answer' when it means 'the ARTIFACT is wrong'.
+    command: "F=/tmp/.litmus-569; cp crates/tillandsias-plan/capabilities.txt $F/checkout/crates/tillandsias-plan/capabilities.txt; A=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is ready for linux\"}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/stale TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' | jq -r '.answer'); case $A in *'degraded(stale-binary:'*) echo 'ok: wrapper-names-stale-binary' ;; *) echo \"got: $A\"; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: wrapper-names-stale-binary"
+
+  - step: "BEHAVIOURAL: a PARTIALLY capable binary is refused by NAME of the missing subcommand"
+    command: "F=/tmp/.litmus-569; printf '#!/bin/sh\\ncase $1 in capabilities) printf \\\"capabilities\\\\ncheck\\\\nready\\\\n\\\"; exit 0 ;; esac\\necho \\\"error: unknown subcommand\\\" >&2\\nexit 2\\n' > $F/bin/partial && chmod +x $F/bin/partial; A=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is ready for linux\"}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/partial TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' | jq -r '.answer'); case $A in *'degraded(stale-binary:'*'answer'*) echo 'ok: wrapper-names-missing-subcommand' ;; *) echo \"got: $A\"; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: wrapper-names-missing-subcommand"
+
+  - step: "NEGATIVE CONTROL: a CAPABLE binary is NOT refused — the gate must not break the working lane"
+    # A guard that refuses everything would pass every step above and destroy the
+    # expert. The capable path must still return a real cited envelope.
+    command: "F=/tmp/.litmus-569; T=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is ready for linux\"}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/plan TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); C=$(printf '%s' \"$T\" | jq -r '.confidence'); N=$(printf '%s' \"$T\" | jq -r '.citations | length'); test $C != unsupported && test $N -ge 1 && echo \"ok: capable-binary-not-refused confidence=$C citations=$N\""
+    timeout_ms: 120000
+    expected_behavior: "ok: capable-binary-not-refused"
+
+  - step: "BEHAVIOURAL: the expert_capability tool is ADVERTISED and answers the three questions"
+    # A capability verdict an agent has to know to look for in a file is not
+    # discoverable. It is a tool.
+    command: "F=/tmp/.litmus-569; O=$(printf '%s\\n%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"expert_capability\",\"arguments\":{}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/plan TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh); L=$(printf '%s' \"$O\" | sed -n 1p | jq -r '.result.tools[].name' | grep -c '^expert_capability$'); T=$(printf '%s' \"$O\" | sed -n 2p | jq -r '.result.content[0].text'); test $L = 1 && case $T in *'expert_capability: now='*'after_relaunch='*'skew='*'blocked_capabilities='*'lost_on_relaunch='*) echo 'ok: expert-capability-tool' ;; *) echo \"got: $T\"; exit 1 ;; esac"
+    timeout_ms: 60000
+    expected_behavior: "ok: expert-capability-tool"
+
+  - step: "BEHAVIOURAL: inject_startup_context carries the capability line into the forge startup context"
+    # The startup context is what an agent reads before it has asked anything.
+    # lib-common.sh cannot be sourced on a host (it hard-fails on the image's
+    # vendor CA bundle), so the CA initializer call — and ONLY that call — is
+    # stripped from a copy. Everything else, including the function under test,
+    # is the shipped code.
+    command: "F=/tmp/.litmus-569; mkdir -p $F/libtest && sed 's/^init_runtime_ca_trust$/true/' images/default/lib-common.sh > $F/libtest/lib-common.sh && cp images/default/lib-inference-state.sh images/default/lib-expert-capability.sh $F/libtest/ && mkdir -p $F/proj/crates/tillandsias-plan && cp crates/tillandsias-plan/capabilities.txt $F/proj/crates/tillandsias-plan/ && mkdir -p $F/binonly && cp $F/bin/plan $F/binonly/tillandsias-plan && bash -c \"set +e; export FORGE_EXPERTS_BIN_DIR=$F/binonly FORGE_EXPERTS_STATE_DIR=$F/state; source $F/libtest/lib-common.sh >/dev/null 2>&1; inject_startup_context $F/proj >/dev/null 2>&1\" ; grep -q 'expert_capability: now=' $F/proj/.forge-startup-context.md && grep -q 'blocked_capabilities=' $F/proj/.forge-startup-context.md && grep -q 'lost_on_relaunch=' $F/proj/.forge-startup-context.md && echo 'ok: startup-context-carries-capability-line'"
+    timeout_ms: 60000
+    expected_behavior: "ok: startup-context-carries-capability-line"
+
+  # ── (d) strict JSON-RPC framing ──────────────────────────────────────────
+  - step: "BEHAVIOURAL: a NUMERIC request id comes back as a NUMBER, not a string"
+    # JSON-RPC 2.0 requires the response id to equal the request id. Real MCP
+    # clients send numeric ids; re-typing them as strings makes a
+    # type-correlating client see a reply to a request it never sent.
+    command: "F=/tmp/.litmus-569; T=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"expert_capability\",\"arguments\":{}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/plan TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.id | tostring + \":\" + type'); test \"$T\" = '7:number' && echo 'ok: id-type-preserved'"
+    timeout_ms: 60000
+    expected_behavior: "ok: id-type-preserved"
+
+  - step: "BEHAVIOURAL: a quote inside the request id or the method name cannot break the frame"
+    # These were pasted straight into a JSON string literal. One quote from a
+    # client and the frame stopped being JSON at all — with no error anywhere in
+    # this server.
+    command: "F=/tmp/.litmus-569; O=$(printf '%s\\n%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":\"a\\\"b\",\"method\":\"tools/call\",\"params\":{\"name\":\"no_such_tool\",\"arguments\":{}}}' '{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"we\\\"ird\"}' | env TILLANDSIAS_PLAN_BIN=$F/bin/plan TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh); n=$(printf '%s\\n' \"$O\" | wc -l); ok=0; printf '%s\\n' \"$O\" | while IFS= read -r fr; do printf '%s' \"$fr\" | jq -e . >/dev/null || exit 1; done && ok=1; test $n = 2 && test $ok = 1 && printf '%s' \"$O\" | sed -n 1p | jq -e '.id == \"a\\\"b\"' >/dev/null && echo 'ok: framing-injection-safe'"
+    timeout_ms: 60000
+    expected_behavior: "ok: framing-injection-safe"
+
+  - step: "BEHAVIOURAL: a tool result of exactly -e survives VERBATIM (echo ate it as an option)"
+    # `echo \"$result\"` is not a byte pipe: a payload that looks like an option
+    # is consumed, and under any shell whose echo interprets escapes the
+    # binary's strictly-valid \\n becomes a RAW control byte inside the JSON
+    # string — which a strict parser rejects. printf cannot do either.
+    command: "F=/tmp/.litmus-569; printf '#!/bin/sh\\ncase $1 in capabilities) printf \\\"capabilities\\\\ncheck\\\\n\\\"; exit 0 ;; esac\\nprintf -- \\\"-e\\\\n\\\"\\n' > $F/bin/dashe && chmod +x $F/bin/dashe; T=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_check\",\"arguments\":{}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/dashe TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); test \"$T\" = '-e' && echo 'ok: payload-verbatim'"
+    timeout_ms: 60000
+    expected_behavior: "ok: payload-verbatim"
+
+  - step: "BEHAVIOURAL: an envelope's string escapes survive the frame and re-parse STRICTLY"
+    # The order-557 defect: the wrapper un-escaped the binary's valid \\n/\\t into
+    # raw control bytes, so `.result.content[0].text` no longer parsed as JSON
+    # under a strict parser (python json.loads failed strict, passed
+    # strict=False). jq's parser IS strict about raw control characters, so
+    # re-parsing the extracted text is the assertion.
+    command: "F=/tmp/.litmus-569; printf '#!/bin/sh\\ncase $1 in capabilities) printf \\\"answer\\\\ncapabilities\\\\n\\\"; exit 0 ;; esac\\nprintf \\\"%%s\\\\n\\\" \\x27{\"answer\":\"one\\\\ntwo\\\\tthree\",\"citations\":[],\"freshness\":{},\"confidence\":\"exact\"}\\x27\\n' > $F/bin/esc && chmod +x $F/bin/esc; T=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"q\"}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/esc TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); A=$(printf '%s' \"$T\" | jq -r '.answer'); test \"$A\" = \"$(printf 'one\\ntwo\\tthree')\" && echo 'ok: escapes-survive-strict'"
+    timeout_ms: 60000
+    expected_behavior: "ok: escapes-survive-strict"
+
+  - step: "BEHAVIOURAL: every response is exactly ONE line — line-delimited JSON-RPC has no other framing"
+    command: "F=/tmp/.litmus-569; O=$(printf '%s\\n%s\\n%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\"}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_ready\",\"arguments\":{\"role\":\"linux\"}}}' | env TILLANDSIAS_PLAN_BIN=$F/bin/plan TILLANDSIAS_PLAN_INDEX=$F/checkout/plan/index.yaml FORGE_EXPERTS_STATE_DIR=$F/state bash images/default/config-overlay/mcp/forge-plan.sh); n=$(printf '%s\\n' \"$O\" | wc -l); test $n = 3 && printf '%s\\n' \"$O\" | jq -e -s 'length == 3 and all(.[]; has(\"jsonrpc\"))' >/dev/null && echo \"ok: one-line-per-frame n=$n\""
+    timeout_ms: 120000
+    expected_behavior: "ok: one-line-per-frame"
+
+  # ── (e) fail-soft, and no python ─────────────────────────────────────────
+  - step: "FAIL-SOFT: the probe returns 0 and stays inside the grammar for every hostile input"
+    # The expert lane is OPTIONAL (order 486 warn-and-continue). A capability
+    # probe that breaks a forge launch is strictly worse than the skew it was
+    # measuring — and it is sourced by an MCP server running under `set -e`,
+    # where one failing command kills the session mid-request.
+    command: "F=/tmp/.litmus-569; printf '#!/bin/sh\\nexit 3\\n' > $F/bin/boom && chmod +x $F/bin/boom; for pair in \"$F/bin/boom $F/checkout\" \"/nonexistent /nonexistent\" \"$F/bin/plan /dev/null\"; do set -- $pair; out=$(bash -c \"set -euo pipefail; . images/default/lib-expert-capability.sh; tillandsias_expert_capability '$1' '$2'; printf '%s' \\\"\\$TILLANDSIAS_EXPERT_CAPABILITY_LINE\\\"\") || { echo \"probe FAILED for $pair\"; exit 1; }; case $out in 'expert_capability: now='*' skew='*) ;; *) echo \"grammar broken: $out\"; exit 1 ;; esac; done; echo 'ok: probe-fail-soft'"
+    timeout_ms: 60000
+    expected_behavior: "ok: probe-fail-soft"
+
+  - step: "NO-PYTHON: the capability probe is POSIX shell + awk only"
+    # Comments are stripped before the check: the file's own header says it uses
+    # no python, and a guard that cannot tell a PROHIBITION from a VIOLATION is
+    # not a guard.
+    command: "sed 's/#.*//' images/default/lib-expert-capability.sh | grep -qiE '(^|[^a-z])python' && exit 1; grep -q 'awk' images/default/lib-expert-capability.sh && sh -n images/default/lib-expert-capability.sh && bash -n images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: no-python-posix-only'"
+    timeout_ms: 10000
+    expected_behavior: "ok: no-python-posix-only"
+
+  - step: "the launch build is keyed on the manifest too, so an edited manifest forces a rebuild"
+    # capabilities.txt is compiled INTO the binary but is neither .rs nor
+    # Cargo.toml. Without it in the source hash, the idempotency fast path skips
+    # the rebuild and leaves a binary whose advertised capability set no longer
+    # matches the checkout — a capability probe reporting a stale answer, which
+    # is worse than no probe because it is believed.
+    command: "sed -n '/^_forge_experts_source_hash() {/,/^}/p' images/default/lib-common.sh | grep -q \"name 'capabilities.txt'\" && echo 'ok: manifest-in-source-hash'"
+    timeout_ms: 10000
+    expected_behavior: "ok: manifest-in-source-hash"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:569"
+  expected_log: "Expert capability honesty pinned: manifest agreement, skew grammar, wrapper refusal, strict framing"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "expert-capability-skew-honesty"
+    manifest: "crates/tillandsias-plan/capabilities.txt"
+    probe: "images/default/lib-expert-capability.sh"
+    mcp_artifact: "images/default/config-overlay/mcp/forge-plan.sh"
+    validation: "plan/issues/claude-mcp-expert-validation-2026-08-01.md"
+
+rollback:
+  on_failure: >
+    Expert capability honesty regressed. If a manifest-agreement step failed,
+    the compiled-in list and the checkout list no longer describe the same
+    capabilities and every skew verdict is fiction. If the pending-build /
+    relaunch-required pair failed, the two verdicts have collapsed — agents are
+    now told to wait for capabilities that will never arrive, or to relaunch a
+    forge that was seconds from being correct. If a wrapper step failed, a stale
+    binary is again answering plan_answer with a bare confidence=unsupported,
+    which reads as "the plan has no answer" when it means "the ARTIFACT is
+    wrong" (order 531). If a framing step failed, the JSON-RPC wire format is
+    shell-dependent again and a strict MCP client is silently dropping frames.
+    If the NEGATIVE CONTROL failed, the capability gate is refusing a capable
+    binary and the expert lane is dead.
+  command: "sed -n '1,110p' images/default/lib-expert-capability.sh && sed -n '/ORDER 569: capability honesty/,/^}/p' images/default/config-overlay/mcp/forge-plan.sh | head -80"

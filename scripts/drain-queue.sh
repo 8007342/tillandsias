@@ -9,7 +9,8 @@
 ##  example: "./scripts/drain-queue.sh --release v0.4 --limit 3"
 ##  example: "./scripts/drain-queue.sh --dry-run --tag linux"
 #
-# Parses plan/index.yaml for ready packets and launches fresh agent sessions
+# Parses the FOLDED plan ledger (plan/index.yaml ⊕ plan/index.d/ fragments, via
+# the tillandsias-plan CLI) for ready packets and launches fresh agent sessions
 # via ./repeat to drain them one at a time. Each cycle claims the node,
 # runs one advance-work-from-plan session, and releases the claim.
 #
@@ -38,8 +39,9 @@ show_help() {
   cat >&2 <<'EOF'
 drain-queue.sh — Local sequential agent queue drain.
 
-Parses plan/index.yaml for ready packets and launches fresh agent sessions
-via ./repeat to drain them one at a time.
+Reads ready packets from the FOLDED plan ledger (base ⊕ fragments, via the
+tillandsias-plan CLI) and launches fresh agent sessions via ./repeat to drain
+them one at a time.
 
 Usage:
   ./scripts/drain-queue.sh [OPTIONS]
@@ -91,22 +93,37 @@ log() {
 }
 
 # Extract ready packets: order, packet_id, desired_release, capability_tags
+#
+# ORDER 582-26mm. Was an awk parse of plan/index.yaml — the BASE only, so a
+# ready packet filed as a plan/index.d/ fragment was invisible here and the
+# queue silently never drained it. Now routes through the compiled
+# tillandsias-plan CLI, which folds base ⊕ fragments. Output contract is
+# unchanged: `order\tpacket_id\tdesired_release\tcapability_tags` per line,
+# which is exactly what `query --status ready` emits (see main.rs).
 extract_ready_packets() {
-  awk '
-  /^[[:space:]]*- packet_id:/ {
-    if (ready == 1 && pid != "") print ord "\t" pid "\t" rel "\t" tags
-    gsub(/.*: */, ""); pid=$0; rel=""; tags=""; ready=0
-  }
-  /^[[:space:]]*order:/ { gsub(/.*: */, ""); ord=$0 }
-  /^[[:space:]]*desired_release:/ { gsub(/.*: */, ""); rel=$0 }
-  /^[[:space:]]*capability_tags:/ {
-    gsub(/.*: */, "");
-    gsub(/\[|\]/, "");
-    tags=$0
-  }
-  /^[[:space:]]*status: ready/ { ready=1 }
-  END { if (ready == 1 && pid != "") print ord "\t" pid "\t" rel "\t" tags }
-  ' plan/index.yaml
+  local pbin=""
+  if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
+    pbin="${TILLANDSIAS_PLAN_BIN}"
+  else
+    for candidate in \
+      "$HOME/.local/bin/tillandsias-plan" \
+      "/usr/local/bin/tillandsias-plan" \
+      "/usr/bin/tillandsias-plan" \
+      "$(pwd)/target/release/tillandsias-plan"; do
+      if [ -x "$candidate" ]; then
+        pbin="$candidate"
+        break
+      fi
+    done
+  fi
+  if [ -z "$pbin" ]; then
+    log "ERROR: tillandsias-plan binary not found — cannot read the FOLDED ledger (fragment-only ready packets would be missed). Install it (build.sh) or set TILLANDSIAS_PLAN_BIN."
+    return 0
+  fi
+  # `--limit 0` = no cap: the original awk listed EVERY ready packet (the
+  # `--limit <n>` option downstream decides how many get drained, not how many
+  # are listed), and a capped extraction would silently starve the queue.
+  "$pbin" --index "plan/index.yaml" query --status ready --limit 0 2>/dev/null
 }
 
 log "=== Drain Queue Started ==="

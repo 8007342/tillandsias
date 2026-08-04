@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# freshness: auditor=forge-opencode-20260728 date=2026-07-28 verdict=refreshed scope=revalidated inventory coverage (945 components, 8 stamped, 937 unstamped — 0% stamped), stale-report grammar, and advisory output contract; same findings as prior audit — no new drift detected in the stamped set
+# freshness: auditor=forge-antigravity-20260731 date=2026-07-31 verdict=refreshed scope=revalidated inventory coverage (969 components, 8 stamped, 961 unstamped — 0% stamped), stale-report grammar, and advisory output contract; same findings as prior audit — no new drift detected in the stamped set
 # =============================================================================
 # freshness-inventory.sh — FRESHNESS rung 2: component inventory + coverage
 #
@@ -48,7 +48,12 @@ INVENTORY_PATHS=(
 
 # Collect candidate files: shell scripts everywhere, plus yaml/md under the
 # named dirs (cheatsheets, litmus tests, methodology docs).
-mapfile -t CANDIDATES < <(
+# while-read instead of mapfile: macOS ships bash 3.2 (no mapfile), and the
+# litmus runner executes this on every host.
+CANDIDATES=()
+while IFS= read -r _cand; do
+    CANDIDATES+=("$_cand")
+done < <(
     # shell scripts + C helpers anywhere under scripts/
     find scripts -type f \( -name '*.sh' -o -name '*.c' \) 2>/dev/null
     for d in "${INVENTORY_PATHS[@]:1}"; do
@@ -64,7 +69,7 @@ declare -a UNSTAMPED_LINES
 
 today="$(date -u +%Y-%m-%d)"
 
-for f in "${CANDIDATES[@]}"; do
+for f in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
     # Only count files that exist and are regular files.
     [ -f "$f" ] || continue
     total=$((total + 1))

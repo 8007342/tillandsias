@@ -1,5 +1,726 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-03T00:08Z (forge/opencode — packet 582-4wdi DONE: format-preserving compaction)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next`; operator-directed interactive drain of the
+  fragment-overlay follow-up theme (582-4wdi / 582-nqw5 / 582-26mm), 582-4wdi
+  first.
+- **582-4wdi DONE (`format-preserving-ledger-compaction`)**: compaction is now
+  TEXT-LEVEL, not a serde_yaml round-trip — the base is never re-serialized, so
+  its ~120 operator comment lines and the four-space item prefix
+  `edit::append_event` locates survive BY CONSTRUCTION. `fragments::compact_text`
+  appends new packets field-by-field (keys at 6, list items at 8, multi-line
+  strings as `|`/`|-` literal blocks — serde_yaml's same-column nested-list
+  behavior was verified and rejected), routes new events through the new
+  `edit::push_event` (bottom-append, complement of `append_event`), and re-applies
+  LWW status wins as targeted line edits. The fail-closed refusal guard is
+  REPLACED by a parse + integrity gate. Verified on a LIVE copy of the real
+  ledger: 24/24 fragments folded, second pass byte-identical. Production ledger
+  intentionally NOT compacted here.
+- **Tests + litmus**: 4 new `compaction_text_tests` (incl.
+  `compaction_on_the_real_ledger_preserves_every_comment_and_item`, which folds a
+  fixture copy of the real plan/index.yaml + real fragments and asserts every
+  comment, item order, and fold-state survives); full workspace suite green;
+  `./build.sh --check` green. New litmus
+  `litmus:plan-compaction-format-preservation` (8 steps incl. an archive-aware
+  positive control); `litmus-ledger-fragment-convergence` updated to pin
+  format-preservation instead of the removed fail-closed guard; 10/10
+  methodology-accountability litmus green.
+- **Live gate fix found by running `compact` against the production ledger**:
+  the candidate was validated with an empty archived-id set, so any `depends_on`
+  resolving via `plan/archive/` (`agent-login-flows-research`,
+  `encrypted-control-channel-research`) was wrongly refused. Now validated with
+  the same archived ids `tillandsias-plan check` uses.
+- **Remaining theme**: 582-nqw5 (loop_status fragment overlay) and 582-26mm
+  (ledger-reader audit) still `ready` for the next drain.
+
+## Cycle 2026-08-02T17:20Z-18:50Z (forge/opencode — order 540 + ledger order-id theme DONE)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next`; credential `ok:forge-git-mirror`, branch `ok:branch-linux-next`.
+- **Order 540 DONE (`403bd3cc`, pushed as `144576ef`)**: meta-orchestration now
+  MERGES launch-generated opsx/openspec dirt instead of refusing the cycle.
+  `scripts/check-opsx-generated-dirt.sh` returns a falsifiable
+  `ok:opsx-only|ok:clean-tree|non-opsx:` verdict for the exact 22-path generated
+  set; the worktree guard gained `re-snapshot` so the cycle commits the sync as
+  `chore(opsx):` and re-anchors the boundary; the skill's start-of-cycle wires
+  the deterministic checker. New litmus
+  `litmus:meta-orchestration-opsx-sync-merge` (exit criteria a-d) green;
+  order-489 dirty-tree litmus stays green byte-identically. `./build.sh --check`
+  green.
+- **Ledger order-id theme DONE (566 + 581-h99t + 581-jf7g)**: order 566
+  marked completed (collision-free mint + honest refusal + check warning were
+  landed 2026-08-01; this drain recorded the resolution of the six remaining
+  HEAD collisions). 581-h99t: nulled the order on all-but-one member of each
+  grandfathered collision group (160/196/197/201/224/294 — 7 orders nulled),
+  taught `plan-orders` to key on raw tokens so suffixed tokens sharing a
+  prefix are distinct while `provisional`/`null` are exempt, and minted
+  permanent `594-*` tokens for all 28 stranded provisional packets (0 remain).
+  plan-orders now reports `492 packets, 0 grandfathered`. 581-jf7g: empirical
+  union-merge verdict in
+  `plan/issues/concurrent-ledger-append-without-manual-merges-2026-08-02.md` —
+  union resolves end-of-file appends but silently corrupts same-region event
+  appends; rejected, kept manual resolution, and wired `tillandsias-plan check`
+  + `tillandsias-policy plan-orders` into `build.sh --check` so a malformed
+  ledger cannot reach a push undetected. Litmus plan-index-order-uniqueness
+  extended with suffixed-token steps; 11/11 methodology-accountability litmus
+  green.
+- **Container-crash investigation (active, on `linux-next-debug`)**: opencode
+  runs as PID 1; hypothesis is the embedded Bun 1.3.14 runtime (same class as
+  the arm64 segfault in
+  `plan/issues/forge-opencode-bun-segfault-2026-07-27.md`). Root overlay 95%
+  full, cgroup unlimited memory/pids, zero OOM events. Durable crash watcher
+  `scripts/forge-longrun-crash-repro.sh` samples every 15s for 6h under
+  `/home/forge/.cache/tillandsias-project/forge-crash-trail/` (PID 4850).
+  Trail commit `180adb03` on `linux-next-debug`; merge deferred until the run
+  reproduces or completes.
+- **Next**: push this drain, then reconcile `linux-next-debug` into
+  `linux-next` once the crash watcher completes.
+
+## Cycle 2026-08-02T05:19Z-05:38Z (linux_mutable - 585-v2fa DONE; local-build RED before reset)
+
+- **Host**: `macuahuitl`, branch `linux-next`; credential/branch guards green,
+  startup boundary clean. `windows-next` and `osx-next` are both ancestors of
+  linux-next with zero ahead commits; no merge, deadlock, or branch-drift action
+  was required.
+- **585-v2fa DONE (`37722dba`)**: fragment-only packets are now appended before
+  LWW status and event G-Set updates apply. Regression coverage proves
+  ready -> claimed -> completed plus both retained lifecycle events. All 76
+  tillandsias-plan tests and `./build.sh --check` passed.
+- **Freshness**: `litmus:environment-isolation` refreshed after a live 4/4
+  post-build run against the forge image.
+- **Local-build E2E FAIL before reset**: `./build.sh --ci-full --install`
+  stopped on 3 pre-build failures (229 PASS). Existing 584-2qq2 owns trace
+  regeneration ordering; new 592-5zmn owns stale `ci.yml` and
+  `nix-cache-warm.yml` litmus assumptions. No install, Podman reset, init, or
+  nested forge launch occurred. Report:
+  `plan/issues/build-install-smoke-e2e-findings-2026-08-02.md`.
+- **Next**: drain 584-2qq2 and 592-5zmn, then rerun the local-build E2E. Release
+  and published-artifact smoke are deferred while the local integration gate is
+  red.
+
+## Cycle 2026-08-01T06:11Z-07:10Z (linux_mutable — order 568 checkpoint; local-build RED captured; published v0.4.260728.2 PASS)
+
+- **Host**: `macuahuitl`, branch `linux-next`; credential/branch guards green,
+  startup boundary clean. Sibling branches were already ancestors of linux-next
+  (windows ahead=0, osx ahead=0), so coordination required no merge.
+- **Order 568 checkpoint (`c46502c8`)**: Claude forges now merge a baked
+  four-server MCP manifest into restored `~/.claude.json` atomically, preserving
+  OAuth/project/custom-server state. Focused discoverability 8/8 and build check
+  pass. Packet remains in_progress for live fresh-image Claude `/mcp` and native
+  `plan_answer` evidence.
+- **Local-build E2E gate 1 FAIL (`0c71c4e1`)**: destructive reset correctly not
+  reached. Filed 584-2qq2 (trace regeneration now follows rather than precedes
+  all CI gates; focused quick litmus RED) and 584-e8pe (launch-marker lifecycle
+  test fails only in the full tray suite and passes alone).
+- **Published daily v0.4.260728.2 PASS**: checksum/version match, full Podman
+  reset to empty, pristine init/Vault bootstrap, proxy-alive assertion, and
+  in-forge meta-orchestration all passed. Forge pushed `a0eb8111` (583-2bpw
+  implementation plus 585-v2fa fragment-overlay lifecycle defect). Report:
+  plan/issues/smoke-e2e-findings-v0.4.260728.2-2026-08-01.md.
+- **Non-fatal capture**: 586-5yc7 (release smoke inherited the litmus Podman
+  PATH shim) and 586-i6j7 (straggler probe leaked a benign vanished-/proc race).
+- **Freshness**: `scripts/run-litmus-test.sh` refreshed after focused runner
+  self-tests passed 6/6; forge peer refreshed `scripts/tls-test-server.c`.
+- **Next**: 585-v2fa unblocks lifecycle updates for every fragment-filed packet;
+  584-2qq2 restores full local CI; order 568 then needs a fresh Claude forge
+  validation before completion.
+
+## Cycle 2026-08-01T06:56Z (forge/opencode — packet 583-2bpw DONE; CRDT overlay LWW/event gap found and shaped as 585-v2fa)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next` (clean startup at origin/linux-next 0c71c4e1). Guards all green:
+  credential `ok:forge-git-mirror`, branch `ok:branch-linux-next`,
+  expert-base `ok:expert-base-ready`. E2E preflight `skip:no-podman-binary`
+  (forge has no podman by design). `/tmp` tmpfs was 100% full (opencode install
+  artifacts) — boundary snapshot and first `cargo test` run failed with
+  `No space left on device`; reran with `TMPDIR` on the overlay.
+- **order 583-2bpw (cli-usage-text-loses-column-alignment) DONE**: the USAGE
+  const used backslash line-continuations whose `\` strips the following line's
+  leading whitespace, rendering every command flush-left. Rewrote as `concat!()`
+  of `\n`-terminated literals preserving the authored 11-space command indent and
+  column-38 description alignment. No entry lost/reworded (byte-identical text),
+  verified by running the binary and by `cargo test -p tillandsias-plan`
+  (71 lib + 4 bin green). `./build.sh --check` green (fmt/typecheck/clippy x2).
+  Completion recorded in a fragment (20260801t0705z) pending 585-v2fa (see below
+  — the overlay cannot yet mark a fragment-only packet completed).
+- **NEW DEFECT found and shaped as order 585-v2fa**: `fragments.rs::fold()`
+  applies the LWW `status:` register and `events:` appends to the base clone
+  BEFORE `append_packets` adds fragment-only packets, so no fragment-filed packet
+  can ever change status or receive an appended event — every packet filed via
+  the overlay (all of 582-584) is frozen at its filing status. Reproduced with
+  the compiled CLI on a synthetic ledger (base packet LWW works, fragment-only
+  packet LWW silently dropped; `check` still reports `ok` — silent loss).
+  Finding: plan/issues/fragment-overlay-lww-and-events-lost-on-fragment-packets-2026-08-01.md
+  (order 585-v2fa, ready). Suggested fix: swap fold()'s last two statements.
+  This blocks closing every fragment-filed packet, including 583-2bpw.
+- **Freshness audit (order 372)**: audited `scripts/tls-test-server.c` (top
+  stalest, 15d) → verdict **refreshed**; re-validated both branches are live-
+  tested by litmus:forge-runtime-ca-trust (file serve via curl/node, git smart
+  HTTP advertise-refs via `git ls-remote`); stamp updated to 2026-08-01.
+- **Capture**: appended addendum #4 to plan/issues/forge-tool-availability-gaps-2026-08-01.md —
+  the full `/tmp` tmpfs broke `cargo test` with spurious StorageFull failures and
+  the boundary snapshot; fix candidates for the base image/launcher recorded.
+- **Next**: 585-v2fa (fold-order swap — unblocks all fragment packet lifecycle);
+  569 (capability honesty); 570 (TILLANDSIAS_AGENT); 583-2bpw completion then
+  finalizes once 585-v2fa lands; 568 pending fresh-image Claude /mcp evidence;
+  558 (codex); 549/552 (spec index).
+
+## Cycle 2026-08-01T01:30Z (forge/claude — order 557 validation run; experts DEGRADED-then-healed; 568-570 filed)
+
+- **Host**: `forge` (claude harness, Fable 5), branch `linux-next` (worktree from
+  origin/linux-next 1c76d655). Startup checkout was a `main` snapshot with the 22
+  launch-regenerated opsx paths dirty — merged as `chore(opsx)` per the order-540
+  operator decision (this container's openspec CLI is a NEWER generation than
+  e87705ec: store selection, allowed-tools frontmatter). Guards: credential
+  `ok:forge-git-mirror`, branch guard blocked main → all committable work on the
+  linux-next worktree.
+- **order 557 (claude-mcp-expert-validation) drained one cycle**: criterion 1
+  FAIL — Claude Code has NO MCP discovery surface in the forge (nine surfaces
+  probed; opencode's registration has no Claude equivalent) → **order 568** filed
+  with three mechanism options. Criteria 2-3: as-found, all three answer tools
+  returned degraded unsupported envelopes because the launch-built expert binary
+  came from the main checkout (pre-394b; plan-source-hash replication proves it)
+  → **order 569** (capability honesty: stale-binary detection, strict JSON-RPC
+  framing — the wrapper un-escapes control chars, breaking strict clients —
+  stdout diagnostics). After a 12.79s rebuild from linux-next: plan_answer
+  exact/83 cites, methodology_ask exact/1 cite, verify-answer green; spec_answer
+  honest typed-unsupported (549/552). Report:
+  plan/issues/claude-mcp-expert-validation-2026-08-01.md.
+- **TILLANDSIAS_AGENT is unset in live forges** — the tray/mod.rs launch spec
+  never sets it; 555's routing selector has no signal → **order 570** filed
+  (555 evented).
+- **Cost/velocity evidence (operator ask)**: plan question via naive full-ledger
+  Read ≈ $4.18 / ~50s on Fable 5; one MCP expert call ≈ $0.05 / ~11s; the
+  deterministic CLI ≈ $0 / 30ms. Expert lane ~80x cheaper, ~5x faster, and
+  mechanically auditable (cited envelopes) — re-confirms 393's "cited retrieval
+  surface, not a model" from inside a Claude forge.
+- **Hygiene**: last order-440 status straggler fixed (npu-container-citizenship-e2e
+  done→completed; schema-drift advisories now zero); freshness audit (order 372)
+  refreshed scripts/check-cheatsheet-staleness.sh (ran clean); 561 reproduced live
+  (CARGO_TARGET_DIR redirect defeats the wrapper's target/release fallback).
+- **Next**: 568 (Claude MCP registration — unblocks 557 completion); 569
+  (capability honesty); 570 (TILLANDSIAS_AGENT) then 555; 558 (codex validation);
+  549/552 (spec index) for spec_answer's happy path.
+
+## Cycle 2026-08-01T00:26Z (forge — order 553 groundtruth reconciliation DONE + forge tool-gap packets filed)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge), branch `linux-next` (created from
+  origin/linux-next a8bf4419, pushes through this cycle's commit). Startup checkout
+  was on `main` with 22 modified `.opencode/` paths; verified those blobs already
+  match origin/linux-next (operator changes were already pushed) — nothing extra to
+  commit; switched to the forge canonical branch.
+- **order 553 DONE (groundtruth harness RED fixed)**: reconciled the stale fixture
+  pins (done->completed for 394a x2 + experts-construction-research 393, matching the
+  order-440 status-vocabulary normalization) and re-pinned the litmus SEEDED WRONG
+  ANSWER 2 seed to `status: completed` (the old `done` seed matched nothing after the
+  fix — a vacuous-green trap). Grader untouched. Evidence: cargo test -p
+  tillandsias-plan green (48 passed, groundtruth 7/7 incl.
+  the_committed_query_set_is_green_at_head + wrong-span falsifiability); `grade` over
+  the committed set 17/17 PASS; seeded wrong-status copy RED on plan-status-of-394a.
+- **Forge tool-gap capture (operator "next forge run will be better")**: filed
+  plan/issues/forge-tool-availability-gaps-2026-08-01.md + promoted orders **560**
+  (ruby absent from the base — sanctioned YAML fallback + archive-plan-packets dead),
+  **561** (tillandsias-policy/tillandsias-podman-cli not discoverable: scripts exec
+  target/debug/… but CARGO_TARGET_DIR is redirected in the forge), **562** (litmus
+  podman preflight ENV-FAILs a forge on a test whose payload merely *mentions* podman
+  — the groundtruth harness's "how do I run podman rootless" query text tripped the
+  trigger, then `command -v podman` found the runner's own shim and the real podman
+  absent in the forge → ENV-FAIL before steps ran; 11 sibling litmuses in the same
+  spec PASSed).
+- **Verification note**: `litmus:expert-groundtruth-harness` could not run its steps
+  in this forge (preflight ENV-FAIL, order 562); the graded-binary steps (cargo test
+  + `grade` + seeded-wrong) were verified directly and are green.
+- **Next**: 559 (opencode npm idempotent install); 560-562 (forge tool availability,
+  filed this cycle); 555 (harness-affinity selection); 549/552 (in-enclave RAG index +
+  endpoint); 553's regression is closed so every host's cargo test / groundtruth
+  litmus is green again.
+
+## Cycle 2026-08-01T00:20Z (linux_immutable — experts LIVE in a launched forge; build+launch+validate complete)
+
+- **Host**: `yoga`, branch `linux-next` (pushed through c9cf29e0). Completes the
+  operator's "implement 547 + deps, MCP online at launch + reported, full build +
+  live test, per-harness testing packets, forge-agent validation" drain.
+- **Full build + non-destructive launch**: `./build.sh --install` -> tray
+  v0.4.260731.1 (musl-static); `tillandsias --debug --init` provisioned the
+  stack; launched an OpenCode forge. ALL non-destructive
+  (TILLANDSIAS_DESTRUCTIVE_RESET_OK=0) — NPU toolboxes (rocm-fastflowlm,
+  lemonade) + Qwen3-4B/nomic models preserved throughout. VERSION build-bump
+  discarded (not committed; order 535).
+- **Experts LIVE in the forge (order 556 DONE)**: forge built the plan expert at
+  launch (experts state=ready); forge-plan.sh advertises all 10 tools incl. the
+  new spec_answer; plan_answer=exact/107 cites, methodology_ask=exact/1 cite,
+  verify-answer "ok"; spec_answer present + honest typed unsupported (RAG index
+  not built = expected, 549/552). Evidence:
+  plan/issues/forge-launch-live-validation-2026-08-01.md.
+- **Forge agent made progress from within**: the in-forge OpenCode LLM agent
+  independently ran the 556 validation, wrote
+  plan/issues/opencode-mcp-expert-validation-2026-08-01.md, PUSHED it (bc2e68a0),
+  and fixed a pre-existing rustfmt drift — "use forge agents to validate + make
+  progress from within" delivered.
+- **Launch bug found + filed (order 559)**: opencode npm harness install is not
+  idempotent (ENOTEMPTY on a stale .opencode-ai-<rand> temp dir blocked the first
+  launch); fixed by hand, must be made self-healing. The inference exit_code=1 in
+  that failed launch was teardown collateral, not a defect.
+- **This session's shipped chain**: 547 (spec RAG index, done) -> 548
+  (spec_answer MCP tool, live) -> 554-558 (harness testing packets, 556 done) ->
+  559 (npm launch bug). Also captured: 553 (groundtruth harness RED, pre-existing).
+- **Next**: 555 (harness-affinity selection) so 557/558 (claude/codex) auto-route;
+  549/552 (in-enclave RAG index + embedding endpoint) so spec_answer retrieves in
+  the forge (already proven against a local endpoint); 559 (idempotent install);
+  553 (groundtruth fixture refresh).
+
+## Cycle 2026-08-01T00:15Z (linux_immutable — spec_answer MCP tool live + harness testing packets + full build in flight)
+
+- **Host**: `yoga`, branch `linux-next` (b7963f5c..2030b3cc pushed). Continues the
+  order-547/548 experts work.
+- **548 spec_answer MCP tool LIVE**: forge-plan.sh now advertises `spec_answer`
+  and answers it — proven locally (MCP tools/list shows 10 tools incl.
+  spec_answer; tools/call spec_answer -> confidence=retrieved, 6 citations,
+  independent verify-answer "ok". Fail-soft to a cited retrieval-only digest when
+  synthesis is unreachable or ungrounded; typed unsupported when index/endpoint
+  absent. Engine-agnostic (point TILLANDSIAS_SPEC_EXPERT_ENDPOINT at the NPU or
+  GPU slot). So OpenCode's MCP panel will show all three experts (plan_answer,
+  methodology_ask, spec_answer) at forge launch.
+- **Harness testing packets filed (operator ask)**: 554 milestone
+  harness-mcp-expert-validation + 555 harness-affinity-worker-selection
+  (selection prefers the [harness-validation, <harness>] packet matching
+  $TILLANDSIAS_AGENT so a forge picks ITS own tests, not random work) + per-
+  harness validation 556 opencode / 557 claude / 558 codex.
+- **Full build IN FLIGHT**: `./build.sh --install` running (background,
+  TILLANDSIAS_DESTRUCTIVE_RESET_OK=0 to protect the NPU toolboxes/images). On
+  completion: launch a forge (non-destructive), eyeball the OpenCode MCP panel
+  for the expert servers, and dispatch forge agents to run the 556 validation
+  from within the forge.
+- **Carried**: order 553 (groundtruth harness RED, pre-existing) still open —
+  makes `./build.sh --ci-full`'s test gate red, which is why the artifact build
+  uses `--install` (no test gate). Sibling already closed order 545 (no-python).
+- **Next**: forge launch + OpenCode MCP-panel live verify + forge-agent
+  validation (556); then wire the launch-time RAG index build + enclave endpoint
+  (549/552) so spec_answer retrieves in-enclave, not just fail-soft.
+
+## Cycle 2026-07-31T23:45Z (linux_immutable — order 547 IMPLEMENTED + spec RAG expert proven e2e)
+
+- **Host**: `yoga` (XDNA2 + Radeon 840M), branch `linux-next`. Operator
+  directive: implement 547 + deps so the experts are actually usable; MCP servers
+  online at forge launch + reported to the harness; full build + live test;
+  per-harness testing packets; forge-agent validation.
+- **547 DONE (implemented + proven)**: new `crates/tillandsias-plan/src/spec.rs`
+  (network-free) + main.rs dispatch for `spec-index` / `spec-retrieve` /
+  `spec-envelope`. 6 unit tests pass, `cargo build --release -p tillandsias-plan`
+  clean. Full pipeline proven on-host (plan/issues/spec-experts-live-2026-07-31.md):
+  spec-index over the LIVE corpus = 10,113 chunks; embed (nomic) -> spec-retrieve
+  ranked enclave-network + subdomain-routing specs top -> synthesize (qwen3-0.6b-
+  FLM) -> spec-envelope -> independent `verify-answer` = "ok: 2 citation(s)
+  resolve, confidence=Retrieved". The falsifiable contract survives local
+  synthesis; the crate adds NO network dependency.
+- **548 in progress**: the serving logic is proven as a script; the remaining
+  work is folding it into forge-plan.sh as the `spec_answer` MCP tool + endpoint
+  discovery + launch-state registration.
+- **Captured (pre-existing mainline RED, order 553)**: the expert ground-truth
+  harness fails on linux-next HEAD — the committed query set
+  (openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml) drifted from
+  the ledger (order 440 changed 394a etc. done->completed without updating the
+  fixture). Orthogonal to 547; filed for the experts/394 owner. (Same class as
+  order 545 no-python breach.)
+- **Verification**: plan/index.yaml YAML parse PASS; order 553 unique; 547 tests
+  green; crate builds. NOTE: `cargo test -p tillandsias-plan` overall is RED only
+  due to the pre-existing groundtruth drift (order 553), NOT this change.
+- **Next (this cycle continues)**: MCP integration (548 -> forge-plan.sh +
+  OpenCode config), full local build + non-destructive forge launch (protect the
+  NPU toolboxes), per-harness testing packets, forge-agent validation.
+
+## Cycle 2026-07-31T23:10Z (linux_immutable — GPU fat RAG spec expert designed + PROVEN; tiered expert system)
+
+- **Host**: `yoga` (XDNA2 NPU + Radeon 840M iGPU), branch `linux-next`, guards
+  green. Operator directive: super-power the expert layer with a fat GPU spec
+  expert (RAG over "the whole spec") beside the NPU beginner experts.
+- **PoC — SUCCESS** (plan/issues/gpu-fat-spec-expert-2026-07-31.md): the fat
+  spec expert (Qwen3-4B Q4) ran on the Radeon 840M via Vulkan (`-ngl 99`) —
+  **GPU 100% busy** (vs 0% on CPU), prefill 182 t/s, decode 15.5 t/s (~4x the
+  CPU run), giving an accurate cited cross-cutting answer over a 5.5K-token
+  retrieved multi-spec context. Embedding retrieval (nomic on GPU) ranked the
+  relevant chunk first (cosine 0.73 vs 0.50, 768-dim, cosine in awk — no python).
+  Whole-spec corpus = ~950K tokens (340 specs + 266 cheatsheets + 56 methodology)
+  → fits no context → RAG mandatory. Clean teardown (GPU idle, RAM freed).
+- **Design (3-agent workflow)**: the tier router ALREADY EXISTS — the Envelope's
+  `confidence` field is the funnel (deterministic -> NPU beginner -> GPU fat-RAG
+  -> cloud); no new classifier. No-python split at the network boundary
+  (retrieval/chunking/verify in the network-free Rust crate; embedding+synthesis
+  as shell over /v1). Reuses Envelope/verify, methodology.rs indexer, order-546
+  synthesize_prose, order-542 registry, order-480 probe, order-484 router.
+- **Hardware tiers**: mid (this iGPU) = 3-4B comfortable, prefill-bound, keep
+  context tight, load-on-demand; top (fat discrete GPU + NPU) = 14B+ with the NPU
+  beginner lane running CONCURRENTLY (separate VRAM pool, no contention); low =
+  CPU-RAG/cloud fallback with a zero-LLM-token cited-facts floor.
+- **Plan changes**: filed orders **547** fat-spec-corpus-index (Rust RAG index),
+  **548** spec-expert-embed-and-synthesis (spec_answer tool), **549**
+  fat-spec-expert-gpu-slot (Vulkan-pinned optional GPU component), **550**
+  tiered-expert-router (confidence funnel), **551** spec-expert-groundtruth,
+  **552** spec-index-commit-freshness. All release_target
+  forge-local-experts-milestone, all with verifiable exit criteria.
+- **Verification**: plan/index.yaml YAML parse PASS; orders 547-552 unique; no
+  python introduced. Deliverables kept: toolboxes + Qwen3-4B-GGUF + nomic-embed.
+- **Next**: 547 (index) is the unblocked foundation -> 548 (serving) -> 549 (GPU
+  slot) + 550 (router). 542/543/546 (NPU tier) proceed in parallel. The tiered
+  expert system is the operator's dogfood-early velocity play.
+
+## Cycle 2026-07-31T22:40Z (linux_immutable — beginner experts PROVEN on the NPU; v0.5 drain)
+
+- **Host**: `yoga` (XDNA2), branch `linux-next`. Guards green (credential
+  `ok:gh-keyring`, branch `ok:branch-linux-next`, forge-expert-base
+  `ok:expert-base-ready`). Boundary snapshotted clean. Sibling heads:
+  main=7a593409, linux-next=959eeeba, windows-next=e4102a80, osx-next=89cade75.
+- **Drain (operator-directed)**: prove beginner experts can run on the NPU and
+  chart the path to serving them at forge launch.
+- **PoC — SUCCESS** (plan/issues/npu-experts-poc-2026-07-31.md): two beginner
+  experts answered on the XDNA2 NPU via Lemonade/FLM qwen3-0.6b with request-time
+  corpus stuffing (order-544 mechanism, NO ollama-create):
+  - **plan expert** (focused corpus): FULLY CORRECT cited answer —
+    "optional-component-registry (542, ready) blocks npu-inference-container (543)".
+  - **methodology expert** (16KB methodology.yaml): branch fact right, buried
+    pre-push rule softened → first-party proof of the core rule: **deterministic
+    retrieval must NARROW the corpus; the NPU only synthesizes prose from cited
+    facts**. NPU prefill ~1950 t/s, decode ~52 t/s, KV occupancy ~15%,
+    engagement proven (xdna IRQ deltas +3794/+364, runtime_status active).
+    Clean teardown (NPU suspended, port free).
+- **Wiring map** (subagent, cited): experts are 100% compiled/deterministic today
+  (forge-plan.sh → tillandsias-plan binary; self-verifying citation Envelope in
+  answer.rs); the order-393 §3 LLM shim was never built; OLLAMA_KEEP_ALIVE=24h
+  lives at main.rs:3319 (522/527 defect); ensure_forge_experts + the
+  experts_state launch line (lib-common.sh:3327) are where an NPU expert
+  registers.
+- **Plan changes**: added a PoC-evidence event to order **544**; filed order
+  **546** `npu-beginner-experts-serving` (impl, ready, depends 543+544) — a
+  fail-soft `synthesize_prose()` in forge-plan.sh that rephrases the compiled
+  cited Envelope via the enclave NPU /v1, copying citations verbatim so
+  verify/grade litmus still pass, plus discovery (TILLANDSIAS_NPU_ENDPOINT) and
+  a peer `experts_npu_state` launch line. Two-branch litmus (endpoint-unset =
+  byte-identical to today; stub = citations preserved, only prose differs).
+- **Verification**: plan/index.yaml YAML parse PASS; orders 546 unique; no
+  python introduced; base64 checker green.
+- **Next**: 542 (optional-component-registry) → 543 (npu-inference-container) →
+  546 (NPU experts serving, methodology expert first). Pre-existing mainline
+  break order 545 (python policy) still open for a linux host.
+
+## Cycle 2026-07-31T20:17Z (linux_immutable — XDNA2 NPU e2e bring-up folded into v0.5 inference redesign)
+
+- **Host**: `yoga` = AMD Ryzen AI 5 340 (Krackan/XDNA2 NPU) + Radeon 840M,
+  Fedora Silverblue 44, kernel 7.1.4, immutable. **The operator's declared
+  ideal end-user runtime tier.** Branch `linux-next`. Credential guard
+  `ok:gh-keyring`. Reset onto origin/linux-next `6ee743ac` and re-applied fresh
+  (two prior rebase attempts hit the moving 519-540 sibling frontier).
+- **What ran** (2026-07-29): operator-directed research wave via a Workflow —
+  4 research + 2 toolbox-install + 1 container-probe agents (0 errors).
+  Installed toolboxes `rocm-fastflowlm` (FLM v0.9.46) and `lemonade` (Lemonade
+  Server 11.5.0, Apache-2.0), **proved real NPU LLM inference end-to-end**, and
+  reproduced it in **plain rootless podman** offline on a `--internal` enclave
+  network reachable by a sibling container by name.
+- **Headline findings** (deliverable: `plan/issues/npu-container-citizenship-e2e-2026-07-29.md`):
+  1. NPU inference works today: ~90-99 tok/s decode on qwen3:0.6b, TTFT ~0.48s,
+     hard evidence (xdna_mailbox IRQ deltas, runtime_status D3->D0).
+  2. **CONTAINER-CITIZEN, not sidecar, for Linux XDNA2** (reverses order 478 for
+     this lane; macOS/WSL2 stay sidecar) — flags `--device /dev/accel/accel0
+     --security-opt label=disable` + in-image memlock shim.
+  3. FastFlowLM license gate NOT cleared — ROCm/FastFlowLM is a MIRROR not an
+     AMD fork; closed kernels, no redistribution grant → provision-time
+     sha256-pinned download, never vendor. Lemonade is clean Apache-2.0.
+  4. Constraints: 8 MiB memlock cap (root limits.d OR nolock shim) + SELinux
+     `label=disable` for /dev/accel.
+  5. Routing datum: at 0.6B, NPU (~90 t/s) is beaten by CPU (101.6) and Vulkan
+     (107.5) — NPU is the power/sustained lane, not the fast path.
+  6. **NEW (operator 2026-07-31): the fat-GPU desktop ALSO has an NPU** → the
+     NPU is a CONCURRENT background/expert-warm co-processor beside the big GPU
+     on every NPU host, not laptop-only. Order 484 becomes a concurrent
+     multi-device scheduler; the NPU becomes the always-warm expert lane,
+     dissolving the GPU-VRAM pressure sibling orders 522/527 flag.
+- **Integration with sibling 519-540** (§10 of the deliverable): 520
+  (rocm-never-fetched) CORROBORATED — Vulkan is the GPU lane here, not ROCm;
+  521 (payload integrity) is the mechanism the NPU fetch reuses; 525 (enclave-CA
+  not trusted) is a footgun the NPU downloader must dodge; 522/527 (keep-alive
+  VRAM) are the problems order 544 dissolves; 519 (model-lifecycle MCP) is the
+  control surface; 528 (arg-vector litmus) applies to the NPU run-args;
+  e4fa379e restored llama-server, unblocking the /v1 slot 544 targets.
+- **Plan changes**: filed research packet **541** (`npu-container-citizenship-e2e`,
+  done). Amended orders **481, 483, 484** (events) with the container/license/
+  routing reversals + concurrent-scheduler direction; flagged a probe
+  verification gap on done-**480** (memlock/device-mode/fw capture). Filed three
+  new v0.5 packets: **542** `optional-component-registry` (typestate-graph
+  enabler for capability-gated optional containers — NPU now, SCIENTIFIC/R
+  later), **543** `npu-inference-container` (optional XDNA2 enclave container),
+  **544** `experts-engine-neutrality` (request-time stuffing + /v1 upstream +
+  NPU-hosted expert-warm lane). Cross-linked enclave-service-catalog milestone
+  (353) to reuse the registry.
+- **Verification**: `plan/index.yaml` YAML parse PASS.
+- **Host deliverables kept**: toolboxes `rocm-fastflowlm` + `lemonade` (models
+  cached), probe images `tillandsias-scratch/npu-{flm,lemonade}:probe`
+  (LOCAL-ONLY, never push — FLM redistribution gate).
+- **Next**: linux host claims **542** (`optional-component-registry`) first — it
+  blocks **543**. Then **543** (npu-inference-container) and **544**
+  (experts-engine-neutrality, coordinate with 519/522/527 owners). Operator
+  decision pending on memlock provisioning (installer limits.d step vs
+  shim-only) — recorded in packet 543.
+
+## Cycle 2026-07-31T14:34Z (forge — opsx launch-sync: refuse → operator-directed merge → order 540 filed)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`). Credential guard
+  `ok:forge-git-mirror`, committable guard `blocked:committable-cycle-on-main`
+  (launch materialized the checkout on `main`).
+- **Dirty-start refusal**: startup boundary recorded 22 modified tracked paths —
+  `.opencode/commands/opsx-*.md` (11) + `.opencode/skills/openspec-*/SKILL.md`
+  (11) — regenerated by the openspec CLI at launch (mtime == launch; same class
+  as the 2026-07-30T18:15Z 22-path `.opencode/` dirt). Cycle refused
+  `blocked: dirty-start-worktree` and reported the blocker in its handoff.
+- **Operator decision**: the opsx skill sync is INTENDED and committable; opsx
+  updates at its own cadence and must be a NORMAL part of meta-orchestration
+  (merged), never a refusal. Authorized the commit.
+- **Merge**: carried the 22 files to `linux-next`, `./build.sh --check` PASS,
+  committed `e87705ec chore(opsx): sync openspec commands and skills to current
+  CLI generation`, pushed (5da5ddca..e87705ec). Committed bytes == CLI output, so
+  fresh launches are clean until the CLI templates drift again.
+- **Reduction filed**: `plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md`
+  (order 540, ready) — meta-orchestration must detect launch-generated opsx dirt
+  via a falsifiable helper and commit a `chore(opsx):` sync instead of refusing;
+  dirty-start stays fail-closed for any non-opsx path.
+- **Verification**: `./build.sh --check` PASS; `plan/index.yaml` parses (yq).
+
+## Cycle 2026-07-31T02:00Z (forge — order experts-refresh-on-commit/cargo-target-install)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Clean startup boundary (`/tmp/meta-orchestration-boundary.kSJA7U`). Sibling heads: main=7a5934090e5a, linux-next=440f9885b23a, windows-next=e4102a802839, osx-next=89cade756013.
+- **Worker drain (experts-refresh-on-commit/cargo-target-install)**: Implemented effective `CARGO_TARGET_DIR` resolution in `scripts/hooks/post-commit-expert-refresh.sh` (falling back to `$REPO_ROOT/target`), separated cargo build exit status from binary install check (missing/unreadable output logs a named install failure), made script executable, and added `litmus:expert-refresh-cargo-target-shape` behavioral fixture in `openspec/litmus-tests/`. Packet marked `completed`.
+- **Freshness audit**: `scripts/freshness-inventory.sh` disposition **refreshed**. Re-validated inventory coverage and report grammar contracts (`auditor=forge-antigravity-20260731 date=2026-07-31`).
+- **Verification**: `./build.sh --check` PASS; `tillandsias-plan check` PASS; `litmus:expert-refresh-cargo-target-shape` PASS (3/3 steps: syntax & executable, CARGO_TARGET_DIR success, missing binary install failure).
+
+## Cycle 2026-07-30T19:08Z (forge — order 396 evidence-boundary split + MCP usability)
+
+- **Host**: forge container, full meta-orchestration mode, `linux-next`.
+  Credential guard `ok:forge-git-mirror`, committable guard
+  `ok:branch-linux-next`; clean startup boundary. Sibling heads:
+  main=7a5934090e5a, linux-next=bd5c49de76f2,
+  windows-next=e4102a802839, osx-next=89cade756013.
+- **MCP usability**: the Codex connector registrations named `project-info`,
+  `project-plan`, and `forge-plan` returned `server not ready`. The checked-out
+  server implementations themselves are usable: live JSON-RPC calls to
+  project-info returned structured clean Git status plus a filtered ready
+  EXPERTS queue, and forge-plan returned the forge-ready queue from the compiled
+  plan expert. The cycle used those structured answers instead of heuristically
+  scanning the 24k-line plan ledger.
+- **Worker drain (order 396)**: the reopened five-hour EXPERTS refresh packet
+  crossed two independent evidence boundaries and could not fit the forge's
+  600-second launch envelope. Split it into
+  `experts-refresh-on-commit/cargo-target-install` (deterministic hook/install
+  repair + fixture) and `experts-refresh-on-commit/first-fire-e2e` (mutable
+  Linux fresh-image proof). No exit criterion was waived.
+- **Freshness audit**: `scripts/check-cheatsheet-staleness.sh` disposition
+  **updated**. Its documented `--check-urls` form silently used the option text
+  as the day threshold and returned a false clean; its documented bold
+  `Last updated` grammar also collapsed to `MISSING_DATE`. Argument validation
+  now preserves the numeric default, rejects malformed/unknown options, and
+  extracts the ISO date correctly. Record:
+  `plan/issues/optimization/cheatsheet-staleness-option-parser-2026-07-30.md`.
+- **Direction cited**: local EXPERTS — this reduction makes the commit-refresh
+  mechanism independently implementable and its first-person proof explicitly
+  host-owned.
+- **Verification**: `./build.sh --check` PASS; `tillandsias-policy
+  validate-yaml plan/index.yaml` PASS; `tillandsias-plan check` PASS (only
+  pre-existing organic-reference warnings); cheatsheet option/date fixture
+  PASS. `cheatsheet-tooling` focused litmus PASS 2/2. The adjacent
+  `cheatsheet-source-layer` run was 1/2 because its validator hard-codes the
+  absent in-tree `target/debug/tillandsias-policy`; this exact fresh-forge
+  failure is already recorded in
+  `plan/issues/forge-litmus-failures-pre-existing-2026-07-24.md`.
+
+## Cycle 2026-07-30T18:15Z (forge — order 440 plan-status-vocabulary normalization)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: 22 pre-existing `.opencode/` dirty paths (operator-identified disposable).
+- **Worker drain (order 440)**: Normalized the plan ledger's status vocabulary from 11 values with 3 synonym pairs to 10 canonical values. Migrated `done`/`success`/`implemented` → `completed` (199+2+0 = 295 total after merge); `claimed`/`active` → `in_progress` (2+1 = 16 total). Updated `plan/index.yaml default_status_values` and `plan/schema.yaml statuses` to identical canonical list. Added `scripts/check-plan-schema-divergence.sh` guard (verified: catches injected `fake-status`). `tillandsias-plan check`: ok 452 packets. `./build.sh --check`: PASS.
+- **Direction cited**: EXPERTS theme — consistent plan vocabulary means expert queries like "what is finished" return correct results without special-casing synonyms.
+- **Exit**: Clean. `.opencode/` dirt preserved.
+
+## Cycle 2026-07-30T16:40Z (forge — project-info MCP optimization audit, benchmark against traditional tools)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: same 22 pre-existing `.opencode/` dirty paths (operator-identified disposable).
+- **Mission**: operator-directed project-info MCP server correctness test + efficiency comparison vs traditional tools across 8 common meta-orch scenarios.
+- **Findings filed**: `plan/issues/project-info-mcp-optimization-2026-07-30.md` — 3 bugs found (search_code glob is basename-only, no file-glob tool, project_structure depth-capped), 5 new endpoint proposals to fold multiple tool calls into one MCP call (find_files, grep_code, git_status, read_file, plan_query).
+- **Key metric**: `search_code(glob="plan/index.yaml")` silently returns zero results — broken for the single most common search target in any meta-orch cycle. Current project-info ADDS calls rather than saving them; with the proposed 5 new endpoints, it would save 3-5 calls per cycle.
+- **Exit**: No uncommitted cycle-owned changes. Pre-existing `.opencode/` dirt preserved.
+
+## Cycle 2026-07-30T16:18Z (forge — order 533 help segfault fix, forge-launch gitignore issue filed)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary: 22 pre-existing `.opencode/` dirty paths (forge-launch openspec regeneration artifacts), operator-identified as disposable. Issue filed: `plan/issues/forge-opencode-skills-commands-dirty-launch-2026-07-30.md`.
+- **Worker drain (order 533)**: `tillandsias-help` segfault fix — `images/default/help.sh` locale-detection block sourced itself infinitely when invoked via the symlink name (`tillandsias-help`), because `$0` never changes under `source`. Fix: `[ -z "${_THS:-}" ]` re-entry guard with `export _THS=1` before source. Commit `61075061`. Freshness stamp applied (verdict=updated).
+- **Issue filed**: `forge-opencode-skills-commands-dirty-launch-2026-07-30.md` — tracked `.opencode/commands/opsx-*.md` and `.opencode/skills/openspec-*/SKILL.md` get regenerated on every forge launch, making every cycle start dirty. Solution: `git update-index --skip-worktree` in forge entrypoint (zero-token mechanical fix).
+- **Verification**: `./build.sh --check` PASS. YAML validated. No crate changes.
+- **Exit**: Clean push to `origin/linux-next`. No uncommitted cycle-owned changes. Pre-existing `.opencode/` dirt preserved byte-identically.
+
+## Cycle 2026-07-30T06:38Z (forge — milestone 391 first-person experience verification: experts refuse everything in a fresh forge)
+
+- **Host**: forge container, `linux-next` (launched on `main`, switched — see below).
+  Credential guard `ok:forge-git-mirror`, committable guard blocked on `main` at
+  startup → switched to `linux-next` before committable work. Startup boundary:
+  22 pre-existing openspec-regeneration dirty paths under `.claude/`, snapshotted
+  and preserved byte-identically (tree-identical between main and linux-next).
+- **MISSION (operator-directed)**: be milestone 391's test subject — the criteria
+  are written from the in-forge seat and had only ever been verified from the
+  host. Method: USE before READ; implementation was read only to diagnose.
+- **HEADLINE**: in a fresh forge session, BOTH experts refuse every question —
+  `plan_answer` and `methodology_ask` return `confidence=unsupported` ("returned
+  no envelope — experts state: ready") for the milestone's own exemplar question.
+  Root cause: forges launch on `main`; the expert subcommands exist only on
+  `linux-next`; `ensure_forge_experts` faithfully builds the pre-394b binary and
+  truthfully reports `ready`. Machinery proven sound in the same seat after a
+  manual rebuild from linux-next: `confidence=exact` in 33ms with resolving
+  citations, `grade` **17/17 in 124ms in-forge**, `verify-answer` round-trip
+  green with seeded corruption REFUSED (exit 1). Residual filed as **order 531**.
+- **Order 396 FALSIFIED, reopened (done → ready)**: the post-commit
+  expert-refresh hook has never executed anywhere — this forge's
+  `core.hooksPath` dir has only `prepare-commit-msg`; the active image's
+  lib-common.sh (built 2026-07-29 04:09Z) predates the installer (landed
+  2026-07-30 01:00Z) by ~21h. Empirical proof: real commit `b942940f` in this
+  forge, no hook fired. Second falsifier: the hook's install line ignores
+  `CARGO_TARGET_DIR` (`cp target/release/... 2>/dev/null`) and logs a false
+  "binary rebuilt" success — in-forge the cp can never succeed. New FIRST-FIRE
+  exit criterion added.
+- **Order 394e evidence recorded, stays in_progress**: the ACTIVE image's probe
+  proven report-not-gate by direct execution against a dead endpoint (exit 0,
+  `reason=endpoint-unreachable`); this launch had inference UP, so criterion (ii)
+  (cold launch, inference DOWN, prompt reached) still needs a host-side launch.
+- **Milestone 391 judgment recorded on the ledger: stays `ready`, do NOT
+  close.** (a) NOT MET fresh / met by source; (b) same; (c) half — ephemerality
+  + launch rebuild proven, refresh falsified; (d) NOT MET (392b/397/401/402 all
+  ready; one host class proven). Burndown now: **32 ready / 17 done /
+  5 completed / 1 in_progress**.
+- **New packets**: 531 (fresh-launch source gap + honest stale-source state),
+  532 (`lib-inference-state.sh` breaks its pinned one-line grammar with >1
+  model — repo copy affected, reproduced live), 533 (`tillandsias-help`
+  segfaults: symlink + `source` never changes `$0` → infinite self-source).
+  Full report: `plan/issues/forge-local-experts-first-person-experience-2026-07-30.md`.
+- **Freshness disposition (standing audit)**: the forge expert stack itself was
+  this cycle's re-validated component — dispositions: expert machinery
+  REFRESHED (verified by execution), order 396 claim OBSOLETED/reopened,
+  helpers 532/533 flagged for update.
+- **Verification**: `tillandsias-plan check` `ok: 451 packets, ids unique, live
+  references sound` (warnings all pre-existing organic debt). No code touched;
+  no @trace changes (TRACES.md untouched). Layer honesty: every expert PASS
+  this cycle is deterministic L0; zero inference tokens served for answers.
+
+## Cycle 2026-07-30T01:40Z (forge — Expert System v0.5 clearance: order 523 residual & order 526 completed)
+
+- **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`. Credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Startup boundary clean.
+- **Order 523 (`expert-envelope-self-verification`) CLOSED**: Added `citation_root` field to `Envelope` struct and updated `verify-answer` CLI to derive the root from `citation_root` when `--root` is omitted. Emitter and checker now share the exact root; envelope self-verification is 100% complete across all 4 exit criteria. `cargo test -p tillandsias-plan` 44/44 PASS.
+- **Order 526 (`experts-building-state-unbounded`) CLOSED**: Enforced read-side build budget check in `lib-common.sh` and `forge-plan.sh` (`FORGE_EXPERTS_BUILD_BUDGET_SECS`, default 300s). Older `building` states render as `degraded(build-abandoned-after-Ns)`. Added behavioural litmus step 11 to `litmus-forge-plan-expert-build-shape`.
+- **Litmus gates**: Litmus test suites (`forge-plan-expert-build-shape`, `plan-answer-envelope-citability`, `methodology-path-query-citability`, etc.) ALL 100% PASS.
+- **Build verification**: `./build.sh --check` PASS (formatting, type-check, clippy strict + listen-vsock). `tillandsias-plan check` clean.
+
+## Cycle 2026-07-29T21:10Z (linux_mutable macuahuitl — GPU bringup + THE inference substrate was dead)
+
+- **Host**: `linux_mutable` (macuahuitl), `linux-next`. Credential guard
+  `ok:gh-keyring`, committable guard `ok:branch-linux-next`, e2e eligibility
+  `skip:live-runtime-present`. Startup boundary clean and verified on exit.
+  Sibling heads at start: main=ffe85a23/7a593409, linux-next=11fd37f2,
+  windows-next=e4102a80, osx-next=89cade75.
+- **HEADLINE (P0, order 406)**: the inference container **could not serve a
+  single token on any host or tier**, and reported `Up (healthy)` while doing
+  it. `entrypoint.sh:160` extracted only `bin/ollama`, discarding `lib/ollama/`
+  — which holds **`llama-server`**, the binary ollama execs for *every* model
+  load. Every `/api/generate` returned HTTP 500; the healthcheck probed
+  `/api/version` only, so the launcher's readiness gate believed it. Implication
+  for milestone 391: the expert slices already graded PASS (394b/c/d) pass
+  through the **deterministic compiled Rust path** (Layer 0) — no model-backed
+  expert has ever served a token here.
+- **GPU bringup ACHIEVED, no host sudo**: a second, independent blocker was the
+  absent CDI spec. Cleared by extracting `nvidia-ctk`/`nvidia-cdi-hook` 1.19.1
+  from a rootless container into `~/.local/bin`, generating a **user-level**
+  `~/.config/cdi/nvidia.yaml`, and widening `cdi_spec_dirs`. Live evidence:
+  `library=CUDA compute=8.6 NVIDIA RTX A5000 libdirs=ollama,cuda_v13
+  driver=13.3 total=23.5 GiB`, `default_num_ctx=32768`, `/api/generate` HTTP
+  200, `nvidia-smi` shows `llama-server` holding 1126 MiB, `/api/ps`
+  `size_vram=932446207`. Warm qwen2.5:0.5b **425 tok/s** generate / **6600
+  tok/s** prompt eval (was a 13.6 s CPU-only prompt eval).
+- **Tier-aware payload**: only one accelerator backend is ever usable per host,
+  so select instead of dropping all of them — 871 MB installed here instead of
+  2139 MB, and the CPU tier gets a *working* engine for the first time (67 MB).
+  Two streaming passes so the 2.1 GB intermediate tar is never materialised;
+  `.engine-set` manifest forces reinstall when the required set changes.
+- **Measured tuning (not assumed)**: flash attention + `q8_0` KV cache on the
+  CUDA lane = **8098 -> 5690 MiB VRAM at identical throughput** (105.9 vs
+  106.8-107.7 tok/s, qwen2.5:7b Q4_K_M @ 32768 ctx). That 2.4 GB is most of
+  another resident 7B expert slot. Deliberately NOT enabled on vulkan/rocm —
+  unmeasured there, and shipping an unmeasured claim is the same class of error
+  as reporting an undeliverable GPU tier.
+- **New closure**: `litmus:inference-engine-payload-and-tuning` (21 steps, all
+  green), registered under `inference-container`. **Falsifiability proven** by
+  seeding three regressions (bin-only extraction, version-only healthcheck,
+  unmeasured vulkan claim) and confirming each turned its step red; seed damage
+  verified byte-reverted.
+- **Two live MCP boundary defects fixed** (order 456), found and re-verified by
+  driving the real forge-plan server over JSON-RPC: four tools had `required`
+  nested *inside* `properties` (enforcing nothing), and an unknown tool returned
+  a **success** result reading "Unknown tool: X" — the project's own ratified
+  `silent-drop-on-unhandled-control-variant` anti-pattern, and a disagreement
+  with the tray socket which already answers `-32601`. Both fixed.
+- **Ledger correction (394e)**: its `outcome:` prose contradicted its own event
+  — claiming the teardown proof remained when two registered litmus files
+  already ship it (re-run green 8/8 and 9/9). Corrected; the real residual is
+  criterion (ii) only, the cold-launch-with-inference-DOWN soft-degrade proof.
+- **Housekeeping**: `scripts/setup-podman-registries.sh` backed up
+  `registries.conf` on every `build.sh` with no content check and no retention
+  bound — **989 identical copies** (3.9 MB) had accumulated. Now a no-op when
+  current, one `.prev` on real change, and it prunes identical legacy copies
+  (989 pruned, 0 divergent; 3.9 MB -> 16 KB).
+- **Filed**: orders 519 (model-lifecycle MCP surface — the operator's explicit
+  load/unload + RAG-refresh ask, no packet existed), 520 (`gpu-rocm` is CPU-only
+  by construction: ROCm is a separate asset nothing fetches), 521 (engine payload
+  has no checksum/signature/version pin), 522 (expert slots are RAM-derived but
+  VRAM is the binding constraint on GPU hosts). Order 517 widened with root
+  cause: `--init` writes the enclave proxy into the **global** containers.conf
+  `[engine] env`, so `podman pull` and `toolbox create` also fail whenever the
+  enclave is down.
+- **Research orchestrated** (5 parallel analyses + adversarial critique): the
+  tier-matrix and MCP-broker designs both came back **NOT SOUND** with specific
+  refutations, so neither was implemented — recorded instead so the next
+  implementer does not inherit a flawed design. Notably: a "private network
+  alias" is not an access control on the flat enclave bridge, and moving the CDI
+  remedy text into TOML would turn a source-window assertion red.
+- **ADDENDUM (research fan-out completed after the first commit; 10/10 agents,
+  0 errors, ~1.5M subagent tokens)**: the zero-tolerance boundary audit found
+  **two WRONG-ANSWER paths in the ExpertSystem itself**, both reproduced through
+  the shipped surface and both re-verified by hand here. (R1) `Corpus::load`
+  pushes `entries: index_text(&text)` unconditionally alongside `parse_error`
+  (`methodology.rs:160-172`), so an invalid-YAML corpus file is indexed and
+  citable — and the only signal is a stderr line `forge-plan.sh:297` discards
+  with `2>/dev/null`; the observed answer carried `confidence=exact` and glued
+  one claim's caveats onto another. (R2) an envelope escapes with a citation the
+  engine's own verifier REFUSES, because nothing on the runtime path calls
+  `verify()` and the envelope names no root for its paths; reachable via a live
+  probe candidate (`forge-plan.sh:52`). One fix covers both — self-verify at the
+  exit point — filed as order **523**. Also filed: **524** (`skip_runtime_pulls`
+  inserts `--env` AFTER the image name, verified by reading the vec — the flag
+  becomes container argv and is never set, plus a dead `/usr/bin/ollama serve`
+  that does not exist in the image), **525** (ollama's Go TLS never trusts the
+  enclave CA: `SSL_CERT_FILE` is absent, `update-ca-trust` cannot succeed as uid
+  1000 and fails behind three `|| true`, and the result is reported as
+  `no-models` — TLS-broken and empty-cache are indistinguishable), **526** (the
+  `building` experts state is advertised transient but unbounded; a killed
+  builder pins it forever, which is exactly the ambiguity 394e's grammar
+  forbids), **527** (`OLLAMA_KEEP_ALIVE=24h` pins *ephemeral* expert models in
+  VRAM for a day after the stack is gone — ~17 GB of a 24 GB card at the 5690 MiB
+  per-expert cost order 406 measured; the teardown litmus asserts no expert
+  *index* survives and says nothing about VRAM). Evidence added to 521 (upstream
+  publishes an unused `sha256sum.txt`, so integrity verification is
+  straightforward) and 482 (`OLLAMA_VULKAN` defaults TRUE, so multi-backend
+  payloads need an explicit pin). Full record:
+  `plan/issues/expert-inference-boundary-audit-2026-07-29.md`, which also states
+  the one mechanical rule worth adopting: *a value may not cross a boundary
+  unless the receiving side re-derives its trustworthiness with code a litmus can
+  make fail.*
+- **Next**: order 519 (model-lifecycle MCP) is the operator's headline ask and is
+  now unblocked by 406. Order 392b needs only the host-class matrix +
+  `litmus:inference-gpu-device-args`. Order 394e needs only the soft-degrade
+  proof. Orders 401/402 (macOS/Windows tier verification) are now worth
+  dispatching — the payload fix changes what those hosts will observe.
+
 ## Cycle 2026-07-28T22:50Z (forge — v0.5 inference startup cleanup split + freshness audit)
 
 - **Host**: forge container (`TILLANDSIAS_HOST_KIND=forge`), `linux-next`.
@@ -821,9 +1542,19 @@ plan/issues/smoke-e2e-findings-v0.3.260719.1-2026-07-18-windows.md.
 > adversarial triage with zero blockers
 > (`plan/issues/v04-release-triage-2026-07-27.md`), macOS destructive e2e
 > PASS (5a44fd69) + Windows smoke PASS (v0.3.260724.1).
-> **Latest published release for smoke targeting: v0.4.260728.1** — the
+> **Latest published release for smoke targeting: v0.4.260728.2** (published
+> 2026-07-28, run 30406924690, all platform jobs green, full cosign asset
+> set; merged PR #84 = Windows login-gate/vault epoch-skew fixes + same-day
+> linux-next work). Promoted STABLE/latest same day via
+> `promote-stable.sh v0.4.260728.2 --force` — OPERATOR OVERRIDE RECORD
+> (who/when/why): The Tlatoāni, 2026-07-28 live Windows session, directed
+> "release to main and trigger a new release to latest under v0.4";
+> evidence at promotion time was the attended Windows local-build
+> validation of the identical source 89059357 (fresh WSL provision →
+> GitHub login flow PASS → OpenCode forge launch + in-forge agent
+> test/push PASS), NOT a published-artifact curl-install e2e — the
 > order-455 cross-platform smoke queue and curl-install e2e gates on ALL
-> hosts (immutable Linux included) should now run against this build.
+> hosts (immutable Linux included) should now run against v0.4.260728.2.
 
 > OPERATOR DECISION 2026-07-21 (still governing v0.5 scope): the EXPERTS
 > family + the compiled plan/MCP server (456-458) land TOGETHER as a coupled

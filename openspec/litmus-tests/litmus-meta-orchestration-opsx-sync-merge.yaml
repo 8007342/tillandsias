@@ -1,0 +1,62 @@
+# @trace spec:meta-orchestration
+name: litmus:meta-orchestration-opsx-sync-merge
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin the order-540 generated-opsx sync-merge path: a checkout whose only
+  status-visible dirt is the deterministic 22-path opsx/openspec regeneration
+  from the installed openspec CLI must be MERGED as a chore(opsx): sync commit
+  and the startup boundary re-anchored, not refused as a dirty-start blocker.
+  Any non-opsx dirt still fails closed byte-identically. See
+  plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md.
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-opsx-generated-dirt.sh
+  - workspace contains scripts/test-check-opsx-generated-dirt.sh
+  - workspace contains scripts/test-meta-orchestration-opsx-sync-merge.sh
+  - workspace contains scripts/meta-orchestration-worktree-guard.sh
+  - workspace contains scripts/test-meta-orchestration-dirty-tree-safety.sh
+
+critical_path:
+  - step: "opsx detector and its fixtures are executable"
+    command: "test -x scripts/check-opsx-generated-dirt.sh && test -x scripts/test-check-opsx-generated-dirt.sh && test -x scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: executable'"
+    timeout_ms: 1000
+    expected_behavior: "ok: executable"
+
+  - step: "scripts parse under bash"
+    command: "bash -n scripts/check-opsx-generated-dirt.sh scripts/test-check-opsx-generated-dirt.sh scripts/test-meta-orchestration-opsx-sync-merge.sh && echo 'ok: syntax'"
+    timeout_ms: 1000
+    expected_behavior: "ok: syntax"
+
+  - step: "detector verdict branches (opsx-only / non-opsx / clean-tree)"
+    command: "scripts/test-check-opsx-generated-dirt.sh"
+    timeout_ms: 10000
+    expected_behavior: "PASS: check-opsx-generated-dirt branches 1-3 proven"
+
+  - step: "opsx sync-merge flows through the real guard without refusing"
+    command: "scripts/test-meta-orchestration-opsx-sync-merge.sh"
+    timeout_ms: 10000
+    expected_behavior: "PASS: order-540 opsx sync-merge exit criteria (a)-(d)"
+
+  - step: "ordinary dirty-start fixture stays byte-identical fail-closed"
+    command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
+    timeout_ms: 10000
+    expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "order-540 opsx sync-merge exit criteria (a)-(d)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "meta-orchestration-opsx-sync-merge"
+    artifact: "scripts/check-opsx-generated-dirt.sh + guard re-snapshot + skill wiring"
+
+rollback:
+  on_failure: >
+    Restore the startup boundary, keep non-opsx dirt outside the worktree, and
+    refuse the cycle exactly as before when the detector does not prove the
+    dirty set is the generated opsx set.
+  command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"

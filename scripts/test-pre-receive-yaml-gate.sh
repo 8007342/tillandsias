@@ -21,7 +21,15 @@ trap 'rm -rf "$TMPDIR_WORK"' EXIT
 cargo build --quiet --manifest-path "$PROJECT_ROOT/Cargo.toml" -p tillandsias-policy
 BIN_DIR="$TMPDIR_WORK/bin"
 mkdir -p "$BIN_DIR"
-ln -s "$PROJECT_ROOT/target/debug/tillandsias-policy" "$BIN_DIR/tillandsias-policy"
+POLICY_BIN="$PROJECT_ROOT/target/debug/tillandsias-policy"
+if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
+        [[ -x "$CARGO_TARGET_DIR/debug/tillandsias-policy" ]] && POLICY_BIN="$CARGO_TARGET_DIR/debug/tillandsias-policy"
+    else
+        [[ -x "$PROJECT_ROOT/$CARGO_TARGET_DIR/debug/tillandsias-policy" ]] && POLICY_BIN="$PROJECT_ROOT/$CARGO_TARGET_DIR/debug/tillandsias-policy"
+    fi
+fi
+ln -s "$POLICY_BIN" "$BIN_DIR/tillandsias-policy"
 export PATH="$BIN_DIR:$PATH"
 
 BARE="$TMPDIR_WORK/test-mirror.git"
@@ -250,5 +258,70 @@ if TILLANDSIAS_YAML_GATE_EXEMPT_REFS='refs/heads/salvage/*' \
     exit 1
 fi
 echo "PASS: exemption is scoped to configured patterns only"
+
+# --- Test 7: CI workflow budget gate (order 598) -------------------------------
+# Operator directive 2026-08-03: only the release may consume paid cloud minutes.
+# Rejecting at the MIRROR is what makes this stick — the hook relays upstream
+# only after accepting locally, so a workflow stopped here never reaches GitHub
+# and can never trigger a run. A local hook can be --no-verify'd; this cannot.
+git -C "$WORK" checkout -b wf-src 2>/dev/null || git -C "$WORK" checkout wf-src 2>/dev/null
+# restore a VALID ledger so this section tests the workflow gate, not YAML
+cat > "$WORK/plan/index.yaml" <<'VALID'
+plan:
+  version: v1
+VALID
+mkdir -p "$WORK/.github/workflows"
+printf 'name: release\non: workflow_dispatch\njobs:\n  r:\n    runs-on: ubuntu-latest\n    steps: [{run: "echo"}]\n' \
+    > "$WORK/.github/workflows/release.yml"
+git -C "$WORK" add -A
+git -C "$WORK" commit -m "add allowed workflow" --quiet 2>/dev/null
+
+# 7a: an ALLOWED workflow lands
+if ! OUT7A="$(TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml' \
+        git -C "$WORK" push origin HEAD:refs/heads/wf-allowed 2>&1)"; then
+    echo "FAIL: allowed workflow (release.yml) was rejected"
+    printf '%s\n' "$OUT7A"
+    exit 1
+fi
+echo "PASS: allowed workflow accepted"
+
+# 7b: an UNSANCTIONED workflow is REJECTED
+printf 'name: ci\non: [push]\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps: [{run: "echo"}]\n' \
+    > "$WORK/.github/workflows/ci.yml"
+git -C "$WORK" add -A
+git -C "$WORK" commit -m "add unsanctioned workflow" --quiet 2>/dev/null
+if TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml' \
+        git -C "$WORK" push origin HEAD:refs/heads/wf-rejected 2>/dev/null; then
+    echo "FAIL: unsanctioned workflow (ci.yml) was accepted — cloud minutes are unprotected"
+    exit 1
+fi
+echo "PASS: unsanctioned workflow rejected at the mirror"
+
+# 7c: DELETING a workflow must be ACCEPTED. A deletion also appears in
+# `git diff --name-only`, so a gate that ignores tree membership would reject
+# the very cleanup it exists to enable, leaving bypass as the only way to comply.
+git -C "$WORK" rm -q "$WORK/.github/workflows/ci.yml" 2>/dev/null
+git -C "$WORK" commit -m "remove unsanctioned workflow" --quiet 2>/dev/null
+if ! OUT7C="$(TILLANDSIAS_CI_WORKFLOW_ALLOWLIST='release.yml' \
+        git -C "$WORK" push origin HEAD:refs/heads/wf-deletion 2>&1)"; then
+    echo "FAIL: DELETING an unsanctioned workflow was rejected — the gate blocks its own remedy"
+    printf '%s\n' "$OUT7C"
+    exit 1
+fi
+echo "PASS: deleting an unsanctioned workflow is accepted"
+
+# 7d: convention-neutral — with no allowlist configured the gate disappears,
+# so an end-user project running its own CI is unaffected.
+git -C "$WORK" checkout -q -b wf-neutral 2>/dev/null
+printf 'name: ci\non: [push]\njobs:\n  c:\n    runs-on: ubuntu-latest\n    steps: [{run: "echo"}]\n' \
+    > "$WORK/.github/workflows/ci.yml"
+git -C "$WORK" add -A
+git -C "$WORK" commit -m "end-user CI" --quiet 2>/dev/null
+if ! OUT7D="$(git -C "$WORK" push origin HEAD:refs/heads/wf-unconfigured 2>&1)"; then
+    echo "FAIL: workflow rejected although no allowlist was configured (hook is not convention-neutral)"
+    printf '%s\n' "$OUT7D"
+    exit 1
+fi
+echo "PASS: gate is silent without config (convention-neutral)"
 
 echo "ALL TESTS PASSED"

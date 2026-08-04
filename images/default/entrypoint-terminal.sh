@@ -86,6 +86,10 @@ export_workspace_env
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
+# Order 534: terminal is a first-class forge lane and needs the same truthful
+# base, expert-source, inference, and experts verdict as every agent lane.
+inject_startup_context "$PROJECT_DIR"
+
 # ── OpenSpec init (every launch, silent) ────────────────────
 if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
     if ! OS_OUTPUT=$("$OS_BIN" init </dev/null 2>&1); then

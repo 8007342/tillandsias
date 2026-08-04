@@ -7,3 +7,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [images/default/entrypoint-forge-opencode.sh#L93](../../../images/default/entrypoint-forge-opencode.sh#L93)
 - [images/default/entrypoint-forge-opencode-web.sh#L81](../../../images/default/entrypoint-forge-opencode-web.sh#L81)
+- [images/default/lib-inference-state.sh#L3](../../../images/default/lib-inference-state.sh#L3)
