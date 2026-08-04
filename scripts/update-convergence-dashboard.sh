@@ -349,7 +349,7 @@ dashboard_contract_json=$(cat <<'CONTRACT'
 CONTRACT
 )
 
-cat >"$JSON_OUT" <<EOF
+cat >"$JSON_OUT.tmp$$" <<EOF
 {
   "generated_at": "$generated_at",
   "title": "$TITLE",
@@ -458,7 +458,41 @@ EOF
     printf '%s\n' '- `docs/cheatsheets/centicolon-dashboard.md` — visual contract, tail compression, anti-gaming rules.'
     printf '%s\n' '- `cheatsheets/observability/cheatsheet-metrics.md` — metric definitions and aggregation patterns.'
     printf '%s\n' '- `cheatsheets/runtime/cheatsheet-crdt-overrides.md` — CRDT discipline this dashboard inherits.'
-} >"$MD_OUT"
+} >"$MD_OUT.tmp$$"
+
+# PUBLISH ONLY ON SUBSTANTIVE CHANGE.
+#
+# Both outputs embed a wall-clock `generated_at`, so an unconditional write
+# dirties the worktree on EVERY run. That made litmus:local-ci-self-clean-evidence
+# unsatisfiable: `./build.sh --ci-full` regenerated these two files, then failed
+# on the dirt it had just created, and committing the result only reset the loop
+# with a new timestamp. The gate could never return 0 — which matters more since
+# 2026-08-03, when that gate became the release path's only verification.
+#
+# So: compare the candidate against what is on disk with the timestamp lines
+# normalized away. Identical content keeps the existing file, timestamp and all,
+# and the run is idempotent. Real movement publishes, timestamp included.
+_dashboard_strip_stamps() {
+    sed -E \
+        -e 's/^<!-- Last regenerated:.*-->$/<!-- STAMP -->/' \
+        -e 's/^_Generated at .*_$/_STAMP_/' \
+        -e 's/"generated_at"[[:space:]]*:[[:space:]]*"[^"]*"/"generated_at": "STAMP"/' \
+        "$1"
+}
+
+_dashboard_publish() {
+    local candidate="$1" destination="$2"
+    if [[ -f "$destination" ]] \
+        && diff -q <(_dashboard_strip_stamps "$candidate") \
+                   <(_dashboard_strip_stamps "$destination") >/dev/null 2>&1; then
+        rm -f "$candidate"          # nothing moved but the clock — leave it alone
+        return 0
+    fi
+    mv "$candidate" "$destination"
+}
+
+_dashboard_publish "$MD_OUT.tmp$$"   "$MD_OUT"
+_dashboard_publish "$JSON_OUT.tmp$$" "$JSON_OUT"
 
 cp "$MD_OUT" "$SUMMARY_OUT"
 
