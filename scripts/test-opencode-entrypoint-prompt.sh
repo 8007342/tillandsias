@@ -2,6 +2,23 @@
 # @trace spec:forge-opencode-onboarding
 set -euo pipefail
 
+# HERMETICITY. This script drives the entrypoint through several input
+# combinations, each case setting exactly the variables it means to test. Any of
+# those variables inherited from the AMBIENT environment silently changes a case
+# it was not meant to touch — and the entrypoint is correct to honour them, so
+# the failure looks like a product regression rather than a leaky test.
+#
+# That is not hypothetical: run inside a forge lane, which exports
+# TILLANDSIAS_OPENCODE_PROMPT (and, under a structured-result run,
+# TILLANDSIAS_AGENT_RESULT_FORMAT), TWO cases flipped and
+# litmus:forge-opencode-onboarding-shape STEP 4 reported a defect that did not
+# exist. Found 2026-08-04 by /smoke-curl-install-and-test-e2e on v0.4.260804.1.
+#
+# Clear them ONCE here rather than per-case: a per-case fix leaves the next case
+# added below exposed to the same trap.
+unset TILLANDSIAS_OPENCODE_PROMPT
+unset TILLANDSIAS_AGENT_RESULT_FORMAT
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TMP_DIR="$(mktemp -d)"
@@ -99,6 +116,11 @@ TILLANDSIAS_OPENCODE_PROMPT="structured probe" \
 "$ENTRYPOINT_UNDER_TEST"
 assert_call "[run][--auto][--format][json][structured probe]"
 
+# The "no prompt configured" case must CONTROL its inputs, not inherit them.
+# The "no prompt configured" case. Depends on the script-level unset above; it
+# is the most obviously exposed case, but NOT the only one — an ambient
+# TILLANDSIAS_AGENT_RESULT_FORMAT also flipped an earlier case, which is why the
+# sanitize is at the top rather than here.
 rm -f "$CALLS_FILE"
 OPENCODE_CALLS_FILE="$CALLS_FILE" "$ENTRYPOINT_UNDER_TEST"
 assert_call ""
