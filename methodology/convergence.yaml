@@ -453,13 +453,15 @@ bar_raise_governance:
       residual a decidable convergence point.
     why_this_is_not_a_moving_goalpost: >
       Because the specs evolve, there is no final convergent state to reach —
-      only monotone approach. The per-release inequality (the technical-debt
-      ceiling: debt non-increasing, features non-decreasing, no regressions)
-      is the discrete, checkable precondition of the limit claim. An ever-
-      rising bar makes "done" unreachable only if it rises CONTINUOUSLY; a bar
-      that steps at discrete operator-gated release boundaries keeps every
-      intra-release convergence point well defined while still guaranteeing
-      the sequence improves.
+      only an operator-gated sequence of fixed intra-release targets. The
+      per-release inequality (the technical-debt ceiling: debt non-increasing,
+      features non-decreasing, no regressions) is the discrete, checkable
+      guarantee that the measured residual does not worsen and converges to a
+      floor. Reaching a zero floor additionally needs progress evidence that
+      excludes a positive residual fixed point; no contraction is currently
+      claimed. An ever-rising bar makes "done" unreachable only if it rises
+      CONTINUOUSLY; a bar that steps at discrete operator-gated release
+      boundaries keeps every intra-release convergence point well defined.
 
 approved_bar_raises:
   - id: ci-full-all-features-clippy
