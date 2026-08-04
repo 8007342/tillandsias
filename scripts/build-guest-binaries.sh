@@ -183,9 +183,15 @@ build_with_cargo() {
         return 1
     fi
 
+    # Stage from the same target root cargo wrote to: CARGO_TARGET_DIR (set by
+    # scripts/with-wsl2-builder.sh, among others) redirects the build away from
+    # $ROOT/target, and staging from a hardcoded $ROOT/target picks up whatever
+    # stale artifact last landed there (staged v0.3.260715.6 as v0.4.260802.1
+    # on 2026-08-03; only verify_binaries' version check caught it).
+    local cargo_target_root="${CARGO_TARGET_DIR:-$ROOT/target}"
     mkdir -p "$TARGET_DIR"
-    install -m 0755 "$ROOT/target/x86_64-unknown-linux-musl/release/tillandsias" "$X86_64_DEST" || return 1
-    install -m 0755 "$ROOT/target/aarch64-unknown-linux-musl/release/tillandsias" "$AARCH64_DEST" || return 1
+    install -m 0755 "$cargo_target_root/x86_64-unknown-linux-musl/release/tillandsias" "$X86_64_DEST" || return 1
+    install -m 0755 "$cargo_target_root/aarch64-unknown-linux-musl/release/tillandsias" "$AARCH64_DEST" || return 1
 }
 
 if ! build_with_nix; then
