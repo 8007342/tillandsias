@@ -673,6 +673,22 @@ _run_litmus_phase() {
         "$@" 2>&1 | tee "$log_file"
 }
 
+# Record that a gate passed against THIS tree, for the pre-push hook to verify.
+# Called from EVERY passing gate. It was originally only in the --check path,
+# which meant `--ci-full` — the STRONGER gate, and the one the release skill
+# requires — left the stamp stale, so a release run had to go back and run the
+# lesser gate just to be allowed to push. Found by the gate refusing its own
+# release push on 2026-08-04.
+_write_gate_stamp() {
+    [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]] || return 0
+    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1; then
+        _info "Gate stamp recorded (pre-push will accept this tree)"
+    else
+        _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
+    fi
+    return 0
+}
+
 _run_local_ci_gate() {
     local -a command=(bash "$SCRIPT_DIR/scripts/local-ci.sh" "$@")
     if [[ "$FLAG_GRAPHS" == true ]]; then
@@ -761,6 +777,7 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     else
         _info "Quick CI/CD validation passed — ready for development"
     fi
+    _write_gate_stamp
     # If --ci is the only flag, exit with success
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_INSTALL$FLAG_WIPE$FLAG_REMOVE" == "falsefalsefalsefalsefalsefalsefalse" ]]; then
         if [[ "$FLAG_GRAPHS" == true ]]; then
@@ -926,11 +943,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # hook gets --no-verify'd on its second use and then enforces nothing, while
     # hashing the diff costs milliseconds for the same guarantee. Push CI was
     # removed 2026-08-03, so this is the trunk's only remaining protection.
-    if [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
-        bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1 \
-            && _info "Gate stamp recorded (pre-push will accept this tree)" \
-            || _warn "Could not record gate stamp — pre-push may ask you to re-run --check"
-    fi
+    _write_gate_stamp
 
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
