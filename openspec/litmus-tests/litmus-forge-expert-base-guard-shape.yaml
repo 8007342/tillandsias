@@ -108,8 +108,12 @@ critical_path:
     # binary is installed to $HOME/.local/bin by ensure_forge_experts and
     # target/ may not exist at all. Caught by a delegated in-forge Codex run on
     # 2026-07-31 — the same "verified where it was written" class this litmus's
-    # own packet is about.
-    command: "bin=''; for c in ./target/release/tillandsias-plan \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do [ -x \"$c\" ] && { bin=\"$c\"; break; }; done; [ -n \"$bin\" ] || { echo 'SKIP: no tillandsias-plan binary on this host'; exit 0; }; out=$(\"$bin\" methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.sh' && echo 'ok: methodology rule queryable'"
+    # own packet is about. 2026-08-03: probe order aligned with the runner's own
+    # resolution convention (scripts/run-litmus-test.sh: command -v, then
+    # target/) and ./target/debug added — the macOS builder host carries only a
+    # debug build, so the old four-path list took the SKIP escape, which the
+    # step scorer counts as FAIL (no "SKIP:" handling in behavior_matches_output).
+    command: "bin=$(command -v tillandsias-plan 2>/dev/null || true); if [ -z \"$bin\" ]; then for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \"$HOME/.local/bin/tillandsias-plan\" /usr/local/bin/tillandsias-plan /usr/bin/tillandsias-plan; do [ -x \"$c\" ] && { bin=\"$c\"; break; }; done; fi; [ -n \"$bin\" ] || { echo 'SKIP: no tillandsias-plan binary on this host'; exit 0; }; out=$(\"$bin\" methodology 'forge_base_determinism.enforced_by' 2>/dev/null); printf '%s' \"$out\" | grep -q '\"confidence\": \"exact\"' || { echo 'FAIL: rule not resolvable by the methodology expert'; exit 1; }; printf '%s' \"$out\" | grep -q 'check-forge-expert-base.sh' && echo 'ok: methodology rule queryable'"
     timeout_ms: 20000
     expected_behavior: "ok: methodology rule queryable"
 
@@ -137,7 +141,12 @@ critical_path:
   - step: "seed convergence switches by the supplied project branch, not by a Tillandsias branch name"
     # Exercise checkout_forge_seed_branch in a scratch end-user-shaped repo.
     # The arbitrary names prove the runtime mechanism is convention-neutral.
-    command: "d=$(mktemp -d); git -C \"$d\" init -q; git -C \"$d\" config user.name litmus; git -C \"$d\" config user.email litmus@example.invalid; : > \"$d/file\"; git -C \"$d\" add file; git -C \"$d\" commit -qm initial; git -C \"$d\" branch customer-release; git -C \"$d\" switch -qc scratch-work; ( cd \"$d\"; trace_lifecycle() { :; }; source <(sed -n '/^checkout_forge_seed_branch() {/,/^}$/p' \"$OLDPWD/images/default/lib-common.sh\"); TILLANDSIAS_FORGE_SEED_BRANCH=customer-release checkout_forge_seed_branch >/dev/null; test \"$(git symbolic-ref --short HEAD)\" = customer-release ); rc=$?; rm -rf \"$d\"; test \"$rc\" -eq 0 && echo 'ok: arbitrary seed converged'"
+    # Extract-to-file then `.` — NOT `source <(sed ...)`: on stock macOS
+    # bash 3.2 sourcing from a process substitution silently defines nothing,
+    # so the function came back "command not found". The tmp file lives under
+    # the scratch repo's .git/ so it can never dirty the worktree the function
+    # is switching.
+    command: "d=$(mktemp -d); git -C \"$d\" init -q; git -C \"$d\" config user.name litmus; git -C \"$d\" config user.email litmus@example.invalid; : > \"$d/file\"; git -C \"$d\" add file; git -C \"$d\" commit -qm initial; git -C \"$d\" branch customer-release; git -C \"$d\" switch -qc scratch-work; ( cd \"$d\"; trace_lifecycle() { :; }; sed -n '/^checkout_forge_seed_branch() {/,/^}$/p' \"$OLDPWD/images/default/lib-common.sh\" > .git/litmus-fn.sh; . ./.git/litmus-fn.sh; TILLANDSIAS_FORGE_SEED_BRANCH=customer-release checkout_forge_seed_branch >/dev/null; test \"$(git symbolic-ref --short HEAD)\" = customer-release ); rc=$?; rm -rf \"$d\"; test \"$rc\" -eq 0 && echo 'ok: arbitrary seed converged'"
     timeout_ms: 15000
     expected_behavior: "ok: arbitrary seed converged"
 

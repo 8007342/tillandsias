@@ -1306,7 +1306,9 @@ install_prebuilt() {
     fi
 
     (
-        local tmp="" archive lock_owner="$BASHPID"
+        # BASHPID needs bash >= 4 (always true in the Linux image); the $PPID
+        # fallback keeps the extracted-function test harness alive on bash 3.2.
+        local tmp="" archive lock_owner="${BASHPID:-$(sh -c 'echo "$PPID"')}"
         printf '%s\n' "$lock_owner" >"$tool_lock/owner.pid" 2>/dev/null || true
         # shellcheck disable=SC2329 # invoked indirectly by trap
         _prebuilt_lock_cleanup() {
@@ -2205,8 +2207,11 @@ claude_restore_cached_launcher() {
     ln -sfn "$share" "$HOME/.local/share/claude" 2>/dev/null || true
 
     [ -x "$launcher" ] && return 0
+    # No GNU-only -printf: strip the dirname with awk so BSD find (macOS test
+    # hosts) produces the same basename list as GNU find in the Linux image.
     version="$(find "$share/versions" -mindepth 1 -maxdepth 1 -type f \
-        -perm -u+x -printf '%f\n' 2>/dev/null | LC_ALL=C sort -V | tail -1)"
+        -perm -u+x 2>/dev/null | awk -F/ '{print $NF}' \
+        | LC_ALL=C sort -V | tail -1)"
     [ -n "$version" ] || return 1
     ln -sfn "$HOME/.local/share/claude/versions/$version" "$launcher" 2>/dev/null
     [ -x "$launcher" ]
@@ -2258,7 +2263,9 @@ claude_run_locked_refresh() (
     # Subshell ownership lets the lock cleanup trap cover every return and
     # HUP/INT/TERM path without overwriting the entrypoint's own traps.
     local refresh_lock="$1" result_file="$2" session_stamp="$3"
-    local owner_file="$refresh_lock/owner.pid" lock_owner="$BASHPID"
+    # BASHPID needs bash >= 4 (always true in the Linux image); the $PPID
+    # fallback keeps the extracted-function test harness alive on bash 3.2.
+    local owner_file="$refresh_lock/owner.pid" lock_owner="${BASHPID:-$(sh -c 'echo "$PPID"')}"
     local launcher="$HOME/.local/bin/claude"
     local tmp="" errlog="" refresh_ok=0
     local installer_pid=""

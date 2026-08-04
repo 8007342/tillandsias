@@ -81,19 +81,22 @@ if ! ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
 fi
 
 # ── collect dirty paths (tracked edits + untracked, respecting .gitignore) ───
-mapfile -t dirty_paths < <(
+# bash-3.2 compatible (macOS /bin/bash): mapfile/readarray are bash-4+ builtins,
+# so classify the -z porcelain records in a single while-read pass instead.
+# With -z, git never quotes or escapes paths: every record is "XY <path>" with
+# the path starting at byte 3, so no quote-stripping or awk munging is needed.
+dirty_paths=()
+untracked_paths=()
+while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if [[ "${line:0:2}" == "??" ]]; then
+        untracked_paths+=("${line:3}")
+    else
+        dirty_paths+=("${line:3}")
+    fi
+done < <(
     cd "$ROOT" || exit 2
-    git status --porcelain=v1 -z --untracked-files=all |
-        tr '\0' '\n' |
-        awk 'substr($0,1,2) != "??" { $1=""; sub(/^ /, ""); print }'
-)
-
-# untracked entries carry a "?? " prefix; strip it so they join the same set
-mapfile -t untracked_paths < <(
-    cd "$ROOT" || exit 2
-    git status --porcelain=v1 -z --untracked-files=all |
-        tr '\0' '\n' |
-        awk 'substr($0,1,2) == "??" { print substr($0,4) }'
+    git status --porcelain=v1 -z --untracked-files=all | tr '\0' '\n'
 )
 
 [[ ${#dirty_paths[@]} -eq 0 && ${#untracked_paths[@]} -eq 0 ]] && {
@@ -102,11 +105,10 @@ mapfile -t untracked_paths < <(
 }
 
 # ── verdict ──────────────────────────────────────────────────────────────────
+# ${arr[@]+"${arr[@]}"} guards the expansion: under bash 3.2's set -u, an
+# empty array counts as unset and a bare "${arr[@]}" would abort the script.
 non_opsx=""
-for path in "${dirty_paths[@]}" "${untracked_paths[@]}"; do
-    # porcelain v1 may quote paths with special characters; strip quotes
-    path="${path%\"}"
-    path="${path#\"}"
+for path in ${dirty_paths[@]+"${dirty_paths[@]}"} ${untracked_paths[@]+"${untracked_paths[@]}"}; do
     if ! is_in_generated_set "$path"; then
         if [[ -n "$non_opsx" ]]; then
             non_opsx="$non_opsx,"

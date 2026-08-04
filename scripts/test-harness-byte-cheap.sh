@@ -7,6 +7,8 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# mf_* dialect helpers (mf_touch_age_minutes) — GNU/BSD portability layer.
+. "$ROOT/scripts/litmus-stdlib.sh"
 WORK="$(mktemp -d)"
 SESSION_STAMP=""
 cleanup() {
@@ -349,7 +351,7 @@ printf 'fixture 9 ok: interrupted installer child and lock are cleaned\n'
 rm -f "$(claude_session_refresh_stamp)"
 rm -f "$(claude_refresh_record_file)"
 mkdir -p "$HARNESS_CURL_ROOT/claude/refresh.lock"
-touch -d '31 minutes ago' "$HARNESS_CURL_ROOT/claude/refresh.lock"
+mf_touch_age_minutes "$HARNESS_CURL_ROOT/claude/refresh.lock" 31
 : >"$INSTALLER_FETCH_LOG"
 curl_install_claude || fail "stale Claude lock was not reclaimed"
 [ "$(count_lines fetch "$INSTALLER_FETCH_LOG")" = "1" ] \
@@ -359,7 +361,7 @@ curl_install_claude || fail "stale Claude lock was not reclaimed"
 
 rm -rf "$CARGO_HOME/bin/cargo-demo"
 mkdir -p "$PROJECT_CACHE/prebuilt-locks/cargo-demo.lock"
-touch -d '31 minutes ago' "$PROJECT_CACHE/prebuilt-locks/cargo-demo.lock"
+mf_touch_age_minutes "$PROJECT_CACHE/prebuilt-locks/cargo-demo.lock" 31
 install_prebuilt cargo-demo https://example.invalid/prebuilt.tar.gz
 [ -x "$CARGO_HOME/bin/cargo-demo" ] || fail "stale cargo lock was not reclaimed"
 [ ! -d "$PROJECT_CACHE/prebuilt-locks/cargo-demo.lock" ] \

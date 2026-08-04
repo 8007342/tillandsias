@@ -177,19 +177,41 @@ fn test_stress_concurrent_attach_detach() {
 
     let total_time = overall_start.elapsed();
 
-    // Assert performance: all ops should complete quickly
+    // Per-op wall-clock thresholds and failure-count budgets measure host
+    // load, not the code: how many ops hit the wrong phase (and how long a
+    // lock wait takes) is purely a function of OS thread interleaving. Assert
+    // schedule-independent invariants instead; see
+    // plan/issues/optimization/stress-attach-detach-load-flaky-2026-07-15.md.
     assert!(
-        max_duration_ms < 100.0,
-        "Max operation took {:.2}ms (> 100ms threshold)",
-        max_duration_ms
+        total_time < Duration::from_secs(30),
+        "Stress run exceeded 30s (possible deadlock): {:?}",
+        total_time
     );
 
-    // Some failures are expected (contention), but not all
+    // Every operation completed: no deadlocks, no lost ops
+    assert_eq!(
+        total_ops,
+        thread_count * ops_per_thread,
+        "Not all operations completed"
+    );
+
+    // Contention can fail many ops, but never all of them (the first op to
+    // acquire the lock is an attach on a detached project and must succeed)
     assert!(
-        failed_ops < total_ops / 2,
-        "Too many failures: {} / {}",
-        failed_ops,
+        failed_ops < total_ops,
+        "All {} operations failed",
         total_ops
+    );
+
+    // Mock invariant: each successful op toggles `attached` and failures
+    // leave it unchanged, so the final state encodes the success count's
+    // parity regardless of interleaving.
+    let succeeded_ops = total_ops - failed_ops;
+    assert_eq!(
+        project.lock().unwrap().attached,
+        succeeded_ops % 2 == 1,
+        "Final state inconsistent with {} successful alternating ops",
+        succeeded_ops
     );
 
     eprintln!(
@@ -337,21 +359,18 @@ fn test_stress_container_scaling() {
         );
     }
 
-    // Verify scaling behavior: time should not grow exponentially
-    for i in 1..benchmarks.len() {
-        let (count_prev, _, time_prev) = benchmarks[i - 1];
-        let (count_curr, _, time_curr) = benchmarks[i];
-
-        let count_ratio = count_curr as f64 / count_prev as f64;
-        let time_ratio = time_curr.as_secs_f64() / time_prev.as_secs_f64();
-
-        // Time should grow roughly linearly (ratio < 3x for 2x+ containers)
+    // Wall-clock ratios of microsecond-scale mock operations measure
+    // scheduler noise, not algorithmic scaling (this tripped under host
+    // load; see
+    // plan/issues/optimization/stress-attach-detach-load-flaky-2026-07-15.md).
+    // Assert a generous absolute deadline instead: any pathological
+    // (exponential or deadlocking) blowup would blow far past it.
+    for (count, _launch_time, total_time) in &benchmarks {
         assert!(
-            time_ratio < count_ratio * 2.0,
-            "Non-linear scaling detected: {} containers took {:.2}x longer (expected ~{:.2}x)",
-            count_curr,
-            time_ratio,
-            count_ratio
+            *total_time < Duration::from_secs(10),
+            "{} containers took {:?} (> 10s deadline)",
+            count,
+            total_time
         );
     }
 

@@ -28,7 +28,7 @@ preconditions:
 
 critical_path:
   - step: "exactly ONE workflow exists, and it is the release"
-    command: "n=$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); f=$(ls .github/workflows/ 2>/dev/null | tr '\\n' ' '); if [ \"$n\" = 1 ] && [ -f .github/workflows/release.yml ]; then echo 'ok: release-only'; else echo \"found $n workflow(s): $f — only release.yml may exist\"; fi"
+    command: "n=$(ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l); f=$(ls .github/workflows/ 2>/dev/null | tr '\\n' ' '); if mf_assert_count \"$n\" 1 >/dev/null && [ -f .github/workflows/release.yml ]; then echo 'ok: release-only'; else echo \"found $n workflow(s): $f — only release.yml may exist\"; fi"
     timeout_ms: 5000
     expected_behavior: "ok: release-only"
 

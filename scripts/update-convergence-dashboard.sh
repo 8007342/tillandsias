@@ -42,7 +42,12 @@ spark_glyph() {
 }
 
 if [[ -s "$SOURCE" ]]; then
-    mapfile -t rows < <(
+    # bash-3.2 portability (stock macOS /bin/bash): mapfile/readarray do not
+    # exist there, so collect lines with a while-read append loop instead.
+    rows=()
+    while IFS= read -r row_line_in; do
+        rows+=("$row_line_in")
+    done < <(
         jq -r '
           . as $r
           | ($r.release_version // $r.version // "unknown") as $release
@@ -144,7 +149,9 @@ if [[ "$total_rows" -gt 0 ]]; then
 fi
 
 row_index=0
-for row in "${rows[@]}"; do
+# ${rows[@]+"${rows[@]}"} guards the empty-array expansion: bash < 4.4 treats
+# "${rows[@]}" on an empty array as an unbound variable under `set -u`.
+for row in ${rows[@]+"${rows[@]}"}; do
     row_index=$((row_index + 1))
     IFS=$'\t' read -r release date commit total earned residual pct worst_spec worst_reason evidence projection ci_result ci_run_id <<<"$row"
     glyph="$(spark_glyph "$pct")"
@@ -475,7 +482,12 @@ cleanup_old_evidence_bundles() {
 
     # Find JSON evidence bundle files (evidence-bundle.json, evidence-bundle-<timestamp>.json)
     # and tar.gz bundles (evidence-bundle-<timestamp>.tar.gz)
-    mapfile -t old_bundles < <(
+    # bash-3.2 portability: mapfile/readarray are unavailable on stock macOS
+    # /bin/bash, so collect lines with a while-read append loop instead.
+    old_bundles=()
+    while IFS= read -r bundle_line_in; do
+        old_bundles+=("$bundle_line_in")
+    done < <(
         find "$convergence_dir" \
             -type f \
             \( -name "evidence-bundle*.json" -o -name "evidence-bundle*.tar.gz" \) \

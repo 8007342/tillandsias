@@ -1920,13 +1920,13 @@ impl TrayActionHost {
         self.set_status_text("\u{267B}\u{FE0F} Resetting guest\u{2026}");
 
         runtime.spawn(async move {
-            if let Some(vm) = vm_taken {
-                if let Err(e) = vm.stop(VM_STOP_DRAIN).await {
-                    eprintln!(
-                        "[tillandsias-tray] Reset guest: stop failed ({e}); wiping anyway \
-                         (a wedged guest is the reset use-case)"
-                    );
-                }
+            if let Some(vm) = vm_taken
+                && let Err(e) = vm.stop(VM_STOP_DRAIN).await
+            {
+                eprintln!(
+                    "[tillandsias-tray] Reset guest: stop failed ({e}); wiping anyway \
+                     (a wedged guest is the reset use-case)"
+                );
             }
             // File-only wipe; the CID is irrelevant here (path accessors only).
             let vz = VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root);
@@ -2176,6 +2176,14 @@ fn apply_login_state(
     if guard.login == login {
         return false;
     }
+    if matches!(login, GithubLoginState::LoggedOut) {
+        // Fresh logout: the next login must re-fetch cloud projects, so the
+        // submenu shows "(loading repos…)" rather than a stale
+        // "(no repos)" / repo list from the previous session (mirrors the
+        // Windows wiring in notify_icon::apply_github_login).
+        guard.cloud_projects_loaded = false;
+        guard.cloud_projects = Vec::new();
+    }
     guard.login = login;
     drop(guard);
     // Login resolved (or otherwise changed) — clear the grace anchor so later
@@ -2195,7 +2203,14 @@ fn apply_cloud_projects(
 ) -> bool {
     let new_count = projects.len();
     let mut guard = menu_state.lock().unwrap();
-    if guard.cloud_projects == projects {
+    // A confirmed answer (even an empty one) flips the cloud submenu from
+    // "(loading repos…)" to real entries / "(no repos)" — mirrors the Windows
+    // wiring in notify_icon::apply_cloud_projects. The equality early-return
+    // must not swallow that first empty reply, so "just loaded" forces a
+    // rebuild even when the list itself is unchanged.
+    let newly_loaded = !guard.cloud_projects_loaded;
+    guard.cloud_projects_loaded = true;
+    if !newly_loaded && guard.cloud_projects == projects {
         return false;
     }
     guard.cloud_projects = projects;
@@ -2474,14 +2489,14 @@ async fn run_push_listener(
                 .handshake()
                 .await
                 .map_err(|e| format!("handshake: {e}"))?;
-            if let Some(ref gv) = guest_version {
-                if gv != tillandsias_secure_channel::workspace_version() {
-                    tracing::warn!(
-                        "build version skew: tray={} guest={}",
-                        tillandsias_secure_channel::workspace_version(),
-                        gv
-                    );
-                }
+            if let Some(ref gv) = guest_version
+                && gv != tillandsias_secure_channel::workspace_version()
+            {
+                tracing::warn!(
+                    "build version skew: tray={} guest={}",
+                    tillandsias_secure_channel::workspace_version(),
+                    gv
+                );
             }
             if let Ok(mut guard) = menu_state.lock() {
                 guard.guest_version = guest_version;
@@ -3004,6 +3019,48 @@ mod tests {
         assert!(
             apply_local_projects(Vec::new(), &menu_state),
             "clearing the list is a change and must request a rebuild"
+        );
+    }
+
+    /// M5 pin (598-kibt): a confirmed cloud reply — even an EMPTY one — must
+    /// mark `cloud_projects_loaded` so the submenu renders "(no repos)"
+    /// instead of "(loading repos…)" forever, and a fresh logout must reset
+    /// it so the next login re-shows the loading state. Mirrors the Windows
+    /// wiring (notify_icon::apply_cloud_projects / apply_github_login).
+    #[test]
+    fn apply_cloud_projects_empty_reply_marks_loaded_and_logout_resets() {
+        use tillandsias_host_shell::menu_state::GithubLoginState;
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        assert!(
+            apply_cloud_projects(Vec::new(), &menu_state),
+            "first empty cloud reply must request a rebuild (loading → no repos)"
+        );
+        assert!(
+            menu_state.lock().unwrap().cloud_projects_loaded,
+            "a confirmed empty answer must mark cloud_projects_loaded"
+        );
+        assert!(
+            !apply_cloud_projects(Vec::new(), &menu_state),
+            "identical empty reply must not re-request a rebuild"
+        );
+        // Log in, then out: the logout must clear the loaded flag and list.
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+        apply_login_state(GithubLoginState::LoggedOut, &menu_state);
+        let guard = menu_state.lock().unwrap();
+        assert!(
+            !guard.cloud_projects_loaded,
+            "fresh logout must reset cloud_projects_loaded"
+        );
+        assert!(
+            guard.cloud_projects.is_empty(),
+            "fresh logout must clear the cloud project list"
         );
     }
 
