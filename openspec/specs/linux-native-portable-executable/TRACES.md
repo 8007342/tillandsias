@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build.sh#L42](../../../build.sh#L42)
-- [build.sh#L377](../../../build.sh#L377)
+- [build.sh#L414](../../../build.sh#L414)
 - [.cargo/config.toml#L1](../../../.cargo/config.toml#L1)
 - [crates/tillandsias-headless/build.rs#L1](../../../crates/tillandsias-headless/build.rs#L1)
 - [crates/tillandsias-headless/Cargo.toml#L79](../../../crates/tillandsias-headless/Cargo.toml#L79)

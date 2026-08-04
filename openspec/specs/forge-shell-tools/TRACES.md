@@ -30,4 +30,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L48](../../../images/default/entrypoint-terminal.sh#L48)
 - [images/default/lib-common.sh#L102](../../../images/default/lib-common.sh#L102)
 - [images/default/lib-common.sh#L1111](../../../images/default/lib-common.sh#L1111)
-- [images/default/lib-common.sh#L1935](../../../images/default/lib-common.sh#L1935)
+- [images/default/lib-common.sh#L1937](../../../images/default/lib-common.sh#L1937)

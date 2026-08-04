@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-proxy.sh#L2](../../../build-proxy.sh#L2)
-- [build.sh#L322](../../../build.sh#L322)
+- [build.sh#L359](../../../build.sh#L359)
 - [crates/tillandsias-core/src/container_profile.rs#L210](../../../crates/tillandsias-core/src/container_profile.rs#L210)
 - [crates/tillandsias-core/src/container_profile.rs#L387](../../../crates/tillandsias-core/src/container_profile.rs#L387)
 - [crates/tillandsias-core/src/container_profile.rs#L459](../../../crates/tillandsias-core/src/container_profile.rs#L459)

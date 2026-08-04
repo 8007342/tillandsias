@@ -42,5 +42,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L3939](../../../crates/tillandsias-headless/src/tray/mod.rs#L3939)
 - [crates/tillandsias-headless/src/tray/mod.rs#L6049](../../../crates/tillandsias-headless/src/tray/mod.rs#L6049)
 - [crates/tillandsias-host-shell/src/pty/mod.rs#L240](../../../crates/tillandsias-host-shell/src/pty/mod.rs#L240)
-- [crates/tillandsias-macos-tray/src/diagnose.rs#L947](../../../crates/tillandsias-macos-tray/src/diagnose.rs#L947)
+- [crates/tillandsias-macos-tray/src/diagnose.rs#L948](../../../crates/tillandsias-macos-tray/src/diagnose.rs#L948)
 - [crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L1196](../../../crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L1196)

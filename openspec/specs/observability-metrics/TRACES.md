@@ -21,4 +21,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-metrics/tests/integration_tests.rs#L3](../../../crates/tillandsias-metrics/tests/integration_tests.rs#L3)
 - [scripts/test-convergence-dashboard.sh#L140](../../../scripts/test-convergence-dashboard.sh#L140)
 - [scripts/update-convergence-dashboard.sh#L18](../../../scripts/update-convergence-dashboard.sh#L18)
-- [scripts/update-convergence-dashboard.sh#L281](../../../scripts/update-convergence-dashboard.sh#L281)
+- [scripts/update-convergence-dashboard.sh#L288](../../../scripts/update-convergence-dashboard.sh#L288)

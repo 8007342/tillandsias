@@ -23,5 +23,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/tests/signal_handling.rs#L1](../../../crates/tillandsias-headless/tests/signal_handling.rs#L1)
 - [crates/tillandsias-podman/src/lib.rs#L749](../../../crates/tillandsias-podman/src/lib.rs#L749)
 - [crates/tillandsias-podman/src/lib.rs#L807](../../../crates/tillandsias-podman/src/lib.rs#L807)
-- [scripts/local-ci.sh#L952](../../../scripts/local-ci.sh#L952)
+- [scripts/local-ci.sh#L955](../../../scripts/local-ci.sh#L955)
 - [scripts/run-litmus-test.sh#L35](../../../scripts/run-litmus-test.sh#L35)
