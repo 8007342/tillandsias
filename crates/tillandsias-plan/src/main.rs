@@ -36,6 +36,74 @@ fn capability_tokens() -> Vec<&'static str> {
         .collect()
 }
 
+/// ORDER 583-dv9n. Every subcommand name `main` can dispatch — the DISPATCH
+/// side of the capability surface, where [`capability_tokens`] is the DECLARED
+/// side. The relationship is deliberately one-directional:
+///
+///   manifest → dispatch IS enforced behaviourally:
+///   litmus:expert-capability-skew-honesty invokes every declared token, with a
+///   negative control proving the check can fail.
+///
+///   dispatch → manifest is a WARNING, never a gate. An undeclared arm makes
+///   the expert UNDER-report itself, which is fail-safe by design — the MCP
+///   wrapper refuses to route to it, so nothing breaks, it merely looks
+///   missing. The cost was silence: a subcommand added to the CLI but not to
+///   capabilities.txt worked from the host and was invisible inside every
+///   forge. `capabilities` now reports the omission on stderr (the forge runs
+///   that self-report at every launch probe), so the drift is visible before it
+///   reaches a forge instead of after.
+///
+/// Keep this in sync with the dispatch in `main`. Adding a subcommand there
+/// without naming it here (or in capabilities.txt) is exactly the omission this
+/// order exists to surface.
+const DISPATCH_ARMS: &[&str] = &[
+    "append-event",
+    "answer",
+    "blocked-by",
+    "blocked-closure",
+    "burndown",
+    "capabilities",
+    "check",
+    "compact",
+    "fragments",
+    "grade",
+    "loop-status",
+    "loop-status-append",
+    "loop-status-compact",
+    "loop-status-fragments",
+    "methodology",
+    "methodology-ask",
+    "methodology-index",
+    "next-order",
+    "query",
+    "ready",
+    "spec-envelope",
+    "spec-index",
+    "spec-retrieve",
+    "status",
+    "verify-answer",
+];
+
+/// ORDER 583-dv9n. The dispatch arms an arbitrary declared set omits. Split out
+/// so the detection logic is unit-testable against a synthetic manifest without
+/// rebuilding: the real call sites pass the compiled-in manifest.
+fn manifest_drift_against(declared: &[&str]) -> Vec<&'static str> {
+    let mut drift: Vec<&'static str> = DISPATCH_ARMS
+        .iter()
+        .copied()
+        .filter(|arm| !declared.contains(arm))
+        .collect();
+    drift.sort_unstable();
+    drift
+}
+
+/// ORDER 583-dv9n. Dispatch arms absent from the compiled-in manifest. Empty on
+/// a tree where every arm is declared; a non-empty result is a warning, never a
+/// gate (see [`DISPATCH_ARMS`]).
+fn manifest_drift() -> Vec<&'static str> {
+    manifest_drift_against(&capability_tokens())
+}
+
 const USAGE: &str = concat!(
     "usage: tillandsias-plan [--index <path>] <command>\n",
     "         commands:\n",
@@ -852,6 +920,18 @@ fn main() {
     if args[0] == "capabilities" {
         for token in capability_tokens() {
             emit(token);
+        }
+        // ORDER 583-dv9n. Report dispatch arms the manifest omits — WARNING,
+        // never a gate, on stderr only. stdout still carries exactly the
+        // tokens, so the shell-side shape check (and the fail-safe under-report
+        // the wrapper relies on) are untouched; the omission just stops being
+        // silent. An empty drift here is the audited-clean state.
+        for arm in manifest_drift() {
+            eprintln!(
+                "warning: dispatch arm '{arm}' is not listed in capabilities.txt — the MCP \
+                 wrapper cannot route to it. Declare it in capabilities.txt or justify its \
+                 absence (order 583-dv9n)."
+            );
         }
         return;
     }
@@ -1700,6 +1780,53 @@ mod tests {
                  usage text — agents would never learn it exists"
             );
         }
+    }
+
+    /// ORDER 583-dv9n. Every DISPATCH arm must be documented in usage too, so
+    /// the `main` dispatch, the manifest, and the help text cannot each carry a
+    /// different story. This is the arm-side half of the same pin above.
+    #[test]
+    fn every_dispatch_arm_is_documented_in_usage() {
+        for arm in DISPATCH_ARMS {
+            assert!(
+                USAGE.contains(arm),
+                "dispatch arm {arm:?} is absent from the usage text — a subcommand \
+                 nobody can discover might as well not exist"
+            );
+        }
+    }
+
+    /// ORDER 583-dv9n. The drift DETECTOR is tested against a synthetic declared
+    /// set — the whole point of the split-out helper is that the current tree is
+    /// clean, so a mechanism test over the real manifest could never fail. A
+    /// manifest that omits a dispatch arm must be reported (sorted, by name).
+    #[test]
+    fn manifest_drift_reports_arms_a_synthetic_manifest_omits() {
+        let drift = manifest_drift_against(&["capabilities", "check", "query"]);
+        assert!(
+            drift.contains(&"answer"),
+            "a manifest that omits `answer` must be reported as drifted"
+        );
+        assert!(
+            drift.contains(&"loop-status"),
+            "a manifest that omits `loop-status` must be reported as drifted"
+        );
+        assert!(
+            !drift.contains(&"check"),
+            "a declared arm must not be reported as drifted"
+        );
+        assert!(
+            !drift.contains(&"query"),
+            "a declared arm must not be reported as drifted"
+        );
+        assert_eq!(
+            drift.len(),
+            DISPATCH_ARMS.len() - 3,
+            "the drift set must be exactly the omitted arms"
+        );
+        let mut sorted = drift.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, drift, "the drift set must be reported sorted");
     }
 
     /// ORDER 523 (R2). `answer::verify` existed but nothing on the RUNTIME path

@@ -335,8 +335,9 @@ specs:
   - litmus:expert-groundtruth-harness
   - litmus:expert-refresh-cargo-target-shape
   - litmus:expert-capability-skew-honesty
+  - litmus:capability-manifest-guard
   coverage_ratio: 80
-  last_verified: '2026-08-01'
+  last_verified: '2026-08-04'
 - spec_id: forge-forward-compat
   status: deprecated
   litmus_tests: []
