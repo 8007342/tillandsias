@@ -1,7 +1,7 @@
 # @trace spec:forge-environment-discoverability, spec:inference-container
 #
-# OpenCode and Claude affordances (orders 395 and 568): drift-protection for
-# the forge-plan expert discoverability surface. Pins:
+# OpenCode, Claude, and Codex affordances (orders 395, 568, and 605-u9g5):
+# drift-protection for the forge-plan expert discoverability surface. Pins:
 #
 #   * forge-plan MCP server registration in OpenCode config.json (exit criterion 1:
 #     "fresh OpenCode session lists/queries the experts with zero out-of-band
@@ -13,6 +13,10 @@
 #   * ONE instruction file mentions the forge-plan MCP tools (exit criterion
 #     2: "instructions mention the experts exactly once (discoverable, not
 #     spammy)") — forge-discovery.md is the canonical discoverability surface
+#   * Codex's idempotent `codex mcp add` expert registration (order 605-u9g5):
+#     the helper, its image wiring, its entrypoint invocation after
+#     require_codex and before launch, and the empty/pre-populated double-apply
+#     behavioral fixture
 #
 # Combined with litmus:forge-plan-expert-build-shape (which pins the
 # build+install path, the startup-context grammar, and the probe/binary
@@ -21,8 +25,8 @@ name: litmus:forge-experts-discoverability-shape
 spec: forge-environment-discoverability
 phase: pre-build
 description: >
-  Pin the forge-plan MCP registration for OpenCode and Claude, the MCP server
-  file tool literals, and the single discoverability mention in
+  Pin the forge-plan MCP registration for OpenCode, Claude, and Codex, the MCP
+  server file tool literals, and the single discoverability mention in
   forge-discovery.md.
 severity: high
 size: instant
@@ -31,6 +35,10 @@ preconditions:
   - workspace contains images/default/config-overlay/opencode/config.json
   - workspace contains images/default/config-overlay/claude/mcp.json
   - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - workspace contains images/default/config-overlay/codex/register-experts.sh
+  - workspace contains images/default/entrypoint-forge-codex.sh
+  - workspace contains scripts/test-codex-mcp-registration.sh
+  - workspace contains scripts/fixtures/codex-mcp-stub.sh
   - workspace contains images/default/config-overlay/opencode/instructions/forge-discovery.md
   - shell utilities (grep, jq) are available in PATH
 
@@ -93,6 +101,32 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "plan_blocked_by"
 
+  - step: "Codex expert registration fixture (empty + pre-populated, double apply)"
+    # Order 605-u9g5 exit criteria 2+3: the helper registers forge-plan.sh and
+    # project-info.sh through the supported `codex mcp add` interface, a double
+    # application leaves exactly one entry per server, and auth.json plus
+    # unrelated config keys and MCP servers are preserved. Uses the real Codex
+    # CLI when available and the committed stub otherwise, so it is hermetic on
+    # hosts without Codex.
+    command: "scripts/test-codex-mcp-registration.sh"
+    timeout_ms: 30000
+    expected_behavior: "PASS: Codex expert MCP registration is idempotent, auth/config-preserving, and wired before launch"
+
+  - step: "default image copies and installs the Codex registration helper"
+    # Order 605-u9g5 exit criterion 1a: the executable helper is COPYed into
+    # /usr/local/bin and chmod'd alongside the other Codex binaries.
+    command: "grep -Fq 'COPY config-overlay/codex/register-experts.sh /usr/local/bin/register-codex-experts' images/default/Containerfile && grep -Fq 'register-codex-experts' images/default/Containerfile && echo 'ok: helper installed in image'"
+    timeout_ms: 3000
+    expected_behavior: "ok: helper installed in image"
+
+  - step: "codex entrypoint registers experts after require_codex and before launch"
+    # Order 605-u9g5 exit criterion 1b: entrypoint-forge-codex.sh invokes
+    # register-codex-experts after the CLI is guaranteed present and before
+    # either Codex launch path.
+    command: "reg_line=$(grep -n 'register-codex-experts' images/default/entrypoint-forge-codex.sh | head -1 | cut -d: -f1); require_line=$(grep -n '^require_codex$' images/default/entrypoint-forge-codex.sh | cut -d: -f1); banner_line=$(grep -n '^show_banner \"codex\"$' images/default/entrypoint-forge-codex.sh | cut -d: -f1); test -n \"$reg_line\" && test -n \"$require_line\" && test -n \"$banner_line\" && test \"$reg_line\" -gt \"$require_line\" && test \"$reg_line\" -lt \"$banner_line\" && echo 'ok: codex expert registration precedes launch'"
+    timeout_ms: 3000
+    expected_behavior: "ok: codex expert registration precedes launch"
+
   - step: "instruction file mentions forge-plan MCP tools exactly once"
     # Exit criterion 2: "instructions mention the experts exactly once
     # (discoverable, not spammy)". forge-discovery.md is the canonical
@@ -106,11 +140,11 @@ observability:
   traces:
     - "@trace spec:forge-environment-discoverability"
     - "@trace spec:inference-container"
-  expected_log: "forge-plan MCP registered for OpenCode and Claude, server file present, canonical tools pinned, instruction mention exactly once"
+  expected_log: "forge-plan MCP registered for OpenCode, Claude, and Codex, server file present, canonical tools pinned, instruction mention exactly once"
   log_fields:
     spec: "forge-environment-discoverability"
     test: "forge-experts-discoverability-shape"
-    artifact: "images/default/config-overlay/{opencode/config.json,claude/mcp.json,mcp/forge-plan.sh} + images/default/entrypoint-forge-claude.sh + images/default/lib-common.sh"
+    artifact: "images/default/config-overlay/{opencode/config.json,claude/mcp.json,mcp/forge-plan.sh,codex/register-experts.sh} + images/default/{entrypoint-forge-codex.sh,entrypoint-forge-claude.sh,lib-common.sh} + scripts/test-codex-mcp-registration.sh"
 
 rollback:
   on_failure: >
