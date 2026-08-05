@@ -17,7 +17,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/main.rs#L6716](../../../crates/tillandsias-headless/src/main.rs#L6716)
 - [images/default/config-overlay/ollama/pull-models.sh#L2](../../../images/default/config-overlay/ollama/pull-models.sh#L2)
 - [images/default/config-overlay/ollama/pull-models.sh#L54](../../../images/default/config-overlay/ollama/pull-models.sh#L54)
-- [images/default/Containerfile#L61](../../../images/default/Containerfile#L61)
+- [images/default/Containerfile#L65](../../../images/default/Containerfile#L65)
 - [images/default/entrypoint-forge-opencode.sh#L93](../../../images/default/entrypoint-forge-opencode.sh#L93)
 - [images/default/entrypoint-forge-opencode-web.sh#L81](../../../images/default/entrypoint-forge-opencode-web.sh#L81)
 - [images/default/lib-inference-state.sh#L2](../../../images/default/lib-inference-state.sh#L2)

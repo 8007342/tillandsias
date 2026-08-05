@@ -98,7 +98,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/git-tools.sh#L162](../../../images/default/config-overlay/mcp/git-tools.sh#L162)
 - [images/default/config-overlay/mcp/project-info.sh#L465](../../../images/default/config-overlay/mcp/project-info.sh#L465)
 - [images/default/config-overlay/mcp/project-info.sh#L480](../../../images/default/config-overlay/mcp/project-info.sh#L480)
-- [images/default/Containerfile#L113](../../../images/default/Containerfile#L113)
+- [images/default/Containerfile#L118](../../../images/default/Containerfile#L118)
 - [images/default/lib-common.sh#L2532](../../../images/default/lib-common.sh#L2532)
 - [images/router/Containerfile#L1](../../../images/router/Containerfile#L1)
 - [images/router/Containerfile#L75](../../../images/router/Containerfile#L75)

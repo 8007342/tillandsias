@@ -28749,6 +28749,22 @@ plan_index:
         - status is COMPUTED from last_verified, never trusted from the file
         - a signed manifest gates the image bake, with the trust root pinned outside the image
         - any unmanifested cheatsheet reaching the in-image directory is banner-marked in-body before its content
+      events:
+        - type: progress
+          ts: "2026-08-05T02:45Z"
+          agent_id: "forge-opencode-20260805t021300z"
+          host: forge
+          summary: >
+            Partial slice, operator's "fix or delete" for
+            scripts/check-cheatsheet-staleness.sh executed as DELETE. The checker
+            measured a `**Last updated:**` prose line the corpus abandoned for
+            `last_verified:` frontmatter (215/215 files), then self-attested clean
+            against the 2-file image dir. Deleted with same-commit trace-index
+            regeneration (which also indexed the 605-u9g5 @trace annotations that
+            --check never regenerates). See
+            plan/issues/freshness-cheatsheet-staleness-script-obsoleted-2026-08-05.md.
+            Packet remains ready; exit criteria (computed status, signed manifest,
+            in-body banner) untouched.
 
     - packet_id: brew-token-full-isolation-requires-a-privilege-boundary
       order: 589-y5rd

@@ -53,3 +53,18 @@ Verifiable closure:
 3. missing/non-numeric `--days` and unknown options exit 2 with a named error.
 4. a fixture cheatsheet older than the selected threshold is still reported
    stale with exit 1.
+
+## Superseded 2026-08-05
+
+The component was **obsoleted** (deleted) by the 2026-08-05 freshness audit.
+Even after the option-parser fix, the extractor still measured the
+`**Last updated:**` prose line that the corpus had abandoned for `last_verified:`
+frontmatter — 215/217 source cheatsheets carried frontmatter only — and the
+stamp on line 3 self-attested "ran clean (exit 0, all cheatsheets <=90d)"
+against the 2-file image dir. Per the operator's 2026-08-01 "fix or delete"
+direction (owned by packet `cheatsheet-provenance-make-the-validator-honest-then-sign-a-manifest`,
+order 588-8mh8), the script was deleted; the trace indexes were regenerated in
+the same commit. Staleness now belongs to the source-layer frontmatter tooling
+(`scripts/fetch-cheatsheet-source.sh --max-age-days`, policy-crate
+`check-cheatsheet-sources`). See
+`plan/issues/freshness-cheatsheet-staleness-script-obsoleted-2026-08-05.md`.
