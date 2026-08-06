@@ -57,22 +57,27 @@ assert_build_count() {
 
 assert_squash_policy() {
     local line
+    local token
+    local squash_count
+    local -a tokens
     while IFS= read -r line; do
-        case " $line " in
-            *" --squash "*) ;;
-            *)
-                echo "FAIL: Containerfile build omitted --squash" >&2
-                echo "$line" >&2
-                exit 1
-                ;;
-        esac
-        case " $line " in
-            *" --squash-all "*)
-                echo "FAIL: Containerfile build flattened an inherited shared base" >&2
-                echo "$line" >&2
-                exit 1
-                ;;
-        esac
+        squash_count=0
+        read -r -a tokens <<<"$line"
+        for token in "${tokens[@]}"; do
+            case "$token" in
+                --squash) squash_count=$((squash_count + 1)) ;;
+                --squash-all | --squash-all=*)
+                    echo "FAIL: Containerfile build flattened an inherited shared base" >&2
+                    echo "$line" >&2
+                    exit 1
+                    ;;
+            esac
+        done
+        if [[ "$squash_count" -ne 1 ]]; then
+            echo "FAIL: Containerfile build expected exactly one standalone --squash token, saw $squash_count" >&2
+            echo "$line" >&2
+            exit 1
+        fi
         case " $line " in
             *" --label io.tillandsias.image.layer-policy=squash-new "*) ;;
             *)

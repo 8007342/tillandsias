@@ -104,6 +104,56 @@ removes the fixture. The focused test passed, followed by five internally
 concurrent full tray-feature suites; every run reported 388 passed, zero
 failed, and two ignored in 18.90–19.19 seconds.
 
+## Retry 4 — automated smoke invoked the operator-only host supervisor
+
+- **Commit tested**: `40a8773bec4c1a3356192c02467e574d1f179991`
+- **Run ID**: `20260806T045626Z`
+- **Evidence**: `target/build-install-smoke-e2e/20260806T045626Z/`
+- **Start boundary**: clean; `00-preflight.txt` records the repository root,
+  `host_kind=linux`, `host_branch=linux-next`, and executable `build.sh`.
+- **Source version**: `0.4.260804.1`.
+- **Installed binary**: `/home/tlatoani/.local/bin/tillandsias`,
+  `Tillandsias v0.4.260806.1`, 41 MiB, musl-static.
+- **Verdict**: FAIL at gate 1 (`build_install_exit=1`) during the post-build
+  status smoke; destructive reset, cold init, and the outer forge launch were
+  not reached.
+
+The expensive build portions were green before the first aggregate RED: the
+tray-feature suite reported 388 passed, zero failed, and two ignored; pre-build
+litmus reported 238/238 executed with 96/96 spec coverage; and the aggregate
+build gate reported 17/17. All ten versioned images were constructed and Vault
+bootstrapped. The post-build litmus then failed
+`litmus:opencode-prompt-e2e-shape` step 3:
+
+```text
+repeat: unable to find opencode; set OPENCODE_BIN=/path/to/opencode
+repeat: harness 'opencode' binary unavailable; aborting
+FORGE_EXIT=2
+```
+
+The failure is deterministic contract drift, not an image or provider outage.
+`scripts/litmus-opencode-e2e-launch.sh` still invoked `./repeat --agent
+opencode`, while completed order 594-rukb and the script's own source/header
+declare `./repeat` a human/operator-only host supervisor. This host correctly
+has no native `opencode` on `PATH`; the freshly installed binary and forge image
+provide the product-owned on-demand harness path. The gate must launch
+`TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt ...`, retain its
+full/smoke limiter and delta assertions, and carry a negative regression that
+the automated path cannot call `./repeat`.
+
+This finding is deduplicated to open v0.5 order 404,
+`codex-e2e-smoke-launcher-and-verdict-parity`; completed order 594-rukb is the
+operator-only boundary and is not reopened. The bounded OpenCode repair now
+uses the direct installed-product path, and the rate-limit shape pins both that
+command and absence of an executable `./repeat` call. A live rate-limited smoke
+against the just-built `0.4.260806.1` binary then launched the forge, attached
+OpenCode, cloned through the mirror, printed `MO-SMOKE: PASS`, and returned
+`FORGE_EXIT=0` (`05-launcher-fix-smoke.log`). Order 404 remains open for its
+Codex sibling, shared-stamp, skill-documentation, and verdict-parity criteria.
+
+The install-generated VERSION and crate-manifest/lock bumps were restored
+byte-for-byte after the failure. No Podman reset was attempted.
+
 ## Retry contract
 
 Before retrying, focused compaction tests, the real-ledger compaction test,

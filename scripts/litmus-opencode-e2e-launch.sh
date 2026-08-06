@@ -19,6 +19,9 @@
 # Writes the chosen mode to /tmp/opencode-e2e-mode so litmus steps 4-6 can
 # skip delta assertions for smoke runs (a verify-only cycle pushes nothing).
 # Prints FORGE_EXIT=<rc> as its last line; exit 0 only on a passing run.
+# The agent launch goes through the freshly installed Tillandsias binary;
+# `./repeat` is a human/operator-only supervisor and must not be used by this
+# automated gate (order 594-rukb).
 set -uo pipefail
 
 MODE_FILE=/tmp/opencode-e2e-mode
@@ -44,7 +47,7 @@ else
     HARD=600
 fi
 
-./repeat --times 1 --agent opencode --prompt "$PROMPT" > "$LOG" 2>&1 &
+env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "$PROMPT" > "$LOG" 2>&1 &
 RPID=$!
 S="$(date +%s)"
 while kill -0 "$RPID" 2>/dev/null; do

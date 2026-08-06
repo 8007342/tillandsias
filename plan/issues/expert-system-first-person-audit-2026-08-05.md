@@ -14,6 +14,24 @@ This session's native tool registry exposed neither server (`codex mcp list
 transparent session attachment. OpenCode, Claude, and Codex image wiring exists;
 fresh harness-native validation remains the acceptance boundary.
 
+## Fresh OpenCode forge observation
+
+The live rate-limited smoke after local build run `20260806T045626Z` crossed a
+stronger boundary than the direct-stdio audit. The freshly installed
+`tillandsias . --opencode --prompt ...` path launched the real forge image and
+had persistent `forge-plan.sh`, `project-info.sh`, and `git-tools.sh` MCP child
+processes. The skill completed with `MO-SMOKE: PASS` and the outer launcher
+reported `FORGE_EXIT=0`. This proves automatic OpenCode process attachment for
+that image/run; it does not prove that answers were useful or even selected.
+
+In fact, the cold agent first attempted the unavailable direct
+`tillandsias-plan` CLI, then inspected status/files and ran a broad litmus rather
+than asking the attached expert. `base_state=ok` and `expert_sources=present`
+were truthful, yet availability did not become substitution. This is the
+product gap behind `plan-expert-actionable-next`: the warmed expert needs a
+small natural first action that the harness reliably discovers and prefers,
+not merely a background process an agent may ignore.
+
 ## Reproduction surface
 
 The real server was driven with JSON-RPC frames equivalent to:
@@ -61,6 +79,13 @@ Near-canonical phrasing can be more dangerous than refusal:
 - `query --json` omits `desired_release` and `release_target`, although the TSV
   projection includes release data; MCP consumers cannot preserve the caller's
   release constraint.
+- An initial `plan_blocked_by 579` / `plan_closure 579` returned empty because
+  the winning ledger value really had restored order 451's dependencies to
+  order 322 alone; sibling packets' `blocks:` declarations are not part of the
+  folded dependency graph. After a later fragment reinstated 579 in 451's
+  actual `depends_on`, both tools immediately returned order 451. The expert
+  was correct and exposed a ledger-authoring hole: `blocks:` can look
+  authoritative while the validator and graph ignore it.
 
 The current 17-case ground-truth set does not cover these questions, release
 constraint preservation, criteria-holder exclusion, ranked concision, fragment
@@ -119,6 +144,7 @@ New shaped packets are filed in the 2026-08-06 fragment:
 - `plan-expert-actionable-next`
 - `generic-project-expert-bootstrap-contract`
 - `project-info-jsonrpc-contract-parity`
+- `plan-blocks-dependency-reciprocity-integrity`
 
 Do not duplicate existing owners: 457 owns the cheatsheet inference replacement;
 548/549/552 own spec RAG construction; 557/558 own fresh Claude/Codex validation;

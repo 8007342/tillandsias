@@ -97,6 +97,49 @@ rebuilds may continue using intermediate layer caches.
   load duration, and start-to-ready. It must never reset or prune the shared
   operator store.
 
+## Retry 4 interim image evidence
+
+Local-build run `20260806T045626Z` constructed all ten images for generated
+version `0.4.260806.1` before a later, unrelated post-build OpenCode launcher
+failure stopped the E2E before destructive reset. This is therefore strong
+builder evidence, but not the clean-store init/start completion gate.
+
+| image | pre-change layers | inherited base | built layers | limit | inherited prefix | policy label |
+|---|---:|---:|---:|---:|---|---|
+| proxy | 8 | 1 | 2 | 2 | true | `squash-new` |
+| git | 18 | 1 | 2 | 2 | true | `squash-new` |
+| vault | 17 | 7 | 8 | 8 | true | `squash-new` |
+| inference | 12 | 1 | 2 | 2 | true | `squash-new` |
+| router | 15 | 5 | 6 | 6 | true | `squash-new` |
+| chromium-core | 7 | 1 | 2 | 2 | true | `squash-new` |
+| chromium-framework | 13 | 2 | 3 | 3 | true | `squash-new` |
+| forge-base | 3 | 1 | 2 | 2 | true | `squash-new` |
+| forge | 65 | 2 | 3 | 3 | true | `squash-new` |
+| web | 4 | 1 | 2 | 2 | true | `squash-new` |
+
+Every image also carried matching `io.tillandsias.image.name`, generated
+version, and `source-digest` identity labels. The separate versioned
+`forge-base` and `chromium-core` images remain in each child's inherited layer
+prefix; neither was flattened into its consumer.
+
+Podman's `.Size` became misleading for several squashed images: for example it
+reported the new git image as 1,150,788,573 bytes even though `podman history`
+shows an 8.09 MB Alpine base plus a 571 MB squashed delta. A read-only OCI
+archive comparison against the retained pre-change tags did not reproduce a
+transfer-size regression:
+
+| image | layered OCI archive | squash-new OCI archive | delta |
+|---|---:|---:|---:|
+| proxy | 9,913,344 | 9,896,448 | -16,896 |
+| git | 204,026,368 | 203,780,096 | -246,272 |
+| router | 44,435,968 | 43,534,848 | -901,120 |
+
+Those archives came from the shared build store and are useful paired
+evidence, not an isolated performance benchmark. They show why layer depth,
+`.Size`, transfer bytes, and physical store bytes must not be collapsed into
+one metric. Order 608-ijbt owns the clean isolated A/B so this packet can close
+on product correctness without inventing the missing laptop numbers.
+
 Primary references:
 
 - Podman build options: <https://docs.podman.io/en/stable/markdown/podman-build.1.html#squash>
