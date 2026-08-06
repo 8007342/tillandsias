@@ -75,7 +75,10 @@ if [[ ${#file_list[@]} -eq 0 ]]; then
     exit 0
 fi
 
-manifest=()
+# Non-filesystem build inputs must participate in the same cache identity as
+# tracked context files. Changing the final image layer policy therefore
+# invalidates unsquashed canonical tags exactly once.
+manifest=("layer-policy:squash-new")
 for file in "${file_list[@]}"; do
     rel="${file#"$root"/}"
     path_hash="$(printf '%s' "$rel" | sha256sum | cut -d' ' -f1)"

@@ -1,0 +1,31 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-root-codex-20260806t001750z
+# Supersedes two invalid non-scalar LWW attempts in
+# 20260806t004500z-606-audit-linux-mutable.yaml without editing that fragment.
+status:
+  - packet_id: authenticated-forge-write-transport-impl
+    field: depends_on
+    value: [mirror-authenticated-push-transport]
+    ts: "2026-08-06T01:03:00Z"
+    host: linux-mutable-root-codex-20260806t001750z
+  - packet_id: authenticated-forge-write-transport-impl
+    field: blocked_on
+    value: "order 322 decision record (authenticated transport + per-forge identity design, Tlatoani sign-off)"
+    ts: "2026-08-06T01:03:00Z"
+    host: linux-mutable-root-codex-20260806t001750z
+
+events:
+  - packet_id: authenticated-forge-write-transport-impl
+    event:
+      type: ledger-correction
+      ts: "2026-08-06T01:03:00Z"
+      agent_id: linux-mutable-root-codex-20260806t001750z
+      host: linux_mutable
+      summary: >
+        Restored depends_on and blocked_on to their base values after the audit
+        fragment incorrectly sent a sequence and a folded multi-line string
+        through the scalar-only LWW channel. The audit's prerequisite facts
+        remain append-only: orders 606-bvnp and 606-9wqd both declare that they
+        block this packet, and its security-audit event records the required
+        sequencing. This correction makes real-ledger text compaction eligible
+        again without editing the immutable source fragment.

@@ -30,6 +30,36 @@ The init command MUST maintain a state file at `$HOME/.cache/tillandsias/init-bu
 - **THEN** that image MUST be rebuilt even if the image tag exists
 - **AND** the state file MUST be refreshed with the new digest after a successful build
 
+### Requirement: Final Containerfile instruction layers are squashed
+
+Every Tillandsias Podman build from a Containerfile MUST pass exactly one
+`--squash`, collapsing the layers created by that Containerfile into one final
+new layer. It MUST NOT pass `--squash-all`: inherited images such as
+`forge-base` and `chromium-core` remain independently reusable and shared with
+their final images. Podman's intermediate layer cache MAY remain enabled.
+
+The `squash-new` policy MUST participate in the image content identity and be
+recorded as `io.tillandsias.image.layer-policy=squash-new`, so an image built
+under the previous unsquashed policy cannot be accepted as a current canonical
+image. This requirement applies equally to compiled init, compiled on-demand
+missing-image construction, and the developer `scripts/build-image.sh` path.
+Nix `dockerTools` reference tarballs do not execute Containerfiles and remain
+governed by `spec:nix-builder`.
+
+#### Scenario: Forge final image preserves its shared base
+
+- **WHEN** forge-base and forge are built from their Containerfiles
+- **THEN** forge SHALL contain no more than the forge-base RootFS layer count plus one
+- **AND** forge-base SHALL remain a separately tagged reusable image
+- **AND** neither build command SHALL contain `--squash-all`
+
+#### Scenario: Layer policy migration invalidates an old image
+
+- **WHEN** an otherwise identical image exists without the `squash-new` identity input and label
+- **THEN** the content-addressed canonical identity SHALL differ
+- **AND** init SHALL build the squashed canonical image once instead of treating the old image as a cache hit
+- **AND** subsequent unchanged init runs MAY reuse the squashed image and intermediate build cache
+
 ### Requirement: Debug flag for init command
 The init command MUST accept a `--debug` flag that enables verbose output and failed build log capture.
 

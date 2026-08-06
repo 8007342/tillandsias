@@ -32,6 +32,8 @@ source "$SCRIPT_DIR/common.sh"
 require_podman
 
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+IMAGE_LAYER_POLICY="squash-new"
+IMAGE_LAYER_POLICY_LABEL="io.tillandsias.image.layer-policy"
 # Hash file must survive temp dir cleanup. Prefer a writable user cache, but
 # fall back to the repo-local cache if the host cache is read-only.
 CACHE_DIR=""
@@ -423,6 +425,10 @@ _podman_rootless_diagnostic() {
 # that build containers don't have. Proxy is for runtime containers only.
 # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 BUILD_ARGS+=(--http-proxy=false)
+# Squash only the layers created by this Containerfile. Keep inherited bases
+# separate so forge shares forge-base and chromium-framework shares
+# chromium-core; --squash-all would duplicate those multi-gigabyte roots.
+BUILD_ARGS+=(--squash --label "${IMAGE_LAYER_POLICY_LABEL}=${IMAGE_LAYER_POLICY}")
 
 BUILD_LOG="$ROOT/build-${IMAGE_NAME}.log"
 BUILD_PROGRESS_LOG="$ROOT/build-${IMAGE_NAME}-progress.jsonl"

@@ -229,7 +229,7 @@ pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
             }
         }
 
-        // LWW-Register: scalar field updates, highest (ts, host) wins.
+        // LWW-Register: whole-field updates, highest (ts, host) wins.
         if let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) {
             for u in us {
                 let (Some(pid), Some(field), Some(value)) = (
@@ -593,7 +593,14 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
             let in_merged = merged_packets
                 .iter()
                 .any(|p| p.get("packet_id").and_then(Value::as_str) == Some(pid));
-            in_merged && base_value(&base, pid, field) != Some(value.clone())
+            // A fragment-born packet is rendered from the already-folded
+            // `merged_packets` value above, so its winning LWW fields are
+            // already present in the appended item. Re-applying them as a
+            // targeted base-text edit is redundant. Only packets that existed
+            // in the compacted base need an in-place LWW edit.
+            in_merged
+                && base_packets.contains(pid)
+                && base_value(&base, pid, field) != Some(value.clone())
         })
         .map(|(key, (_, _, value))| {
             let mut parts = key.split('\u{1}');
@@ -669,7 +676,7 @@ pub fn compact_text(index: &Path) -> Result<CompactionText, String> {
     })
 }
 
-/// The value a packet carries for a scalar field, for deciding whether an LWW
+/// The value a packet carries for a whole field, for deciding whether an LWW
 /// win changes the base text. `None` means the field is absent.
 fn base_value(doc: &Value, pid: &str, field: &str) -> Option<Value> {
     let mut ps = Vec::new();
@@ -835,27 +842,35 @@ fn block_scalar(s: &str, indent: usize) -> String {
     out
 }
 
-/// Apply one LWW field win by replacing the field's line inside the target
-/// packet's own span, or inserting the line when the packet has no such field.
-/// Refuses non-scalar values: folding a nested value in place would require a
-/// YAML round-trip, which is exactly what this path exists to avoid.
+/// Apply one LWW field win by replacing that field's exact text span inside the
+/// target packet, or inserting a canonically-rendered field when it is absent.
+///
+/// This remains a targeted text edit rather than a YAML round-trip: continuation
+/// lines belong to the field while they are indented deeper than the six-space
+/// packet-field column. That lets sequences and block strings fold without
+/// touching any other field, comment, or packet byte.
 fn apply_lww(lines: &mut Vec<String>, pid: &str, field: &str, value: &Value) -> Result<(), String> {
     let raw = lines.join("\n");
     let (start, end) = crate::edit::item_span(&raw, pid)
         .ok_or_else(|| format!("LWW target packet_id '{pid}' not found in candidate"))?;
-    let rendered =
-        serde_yaml::to_string(value).map_err(|e| format!("render {pid}.{field}: {e}"))?;
-    let rendered = rendered.trim_end();
-    if rendered.contains('\n') {
-        return Err(format!(
-            "refusing to apply LWW update {pid}.{field}: the value is not a scalar, and a \
-             non-scalar field update cannot be folded in place without a YAML round-trip"
-        ));
-    }
+    let rendered: Vec<String> = emit_field(field, 6, value)
+        .lines()
+        .map(String::from)
+        .collect();
     let key_prefix = format!("      {field}:");
     match (start..end).find(|&i| lines[i].starts_with(&key_prefix)) {
-        Some(li) => lines[li] = format!("{key_prefix} {rendered}"),
-        None => lines.insert(start + 1, format!("{key_prefix} {rendered}")),
+        Some(li) => {
+            let field_end = (li + 1..end)
+                .find(|&i| {
+                    let line = &lines[i];
+                    !line.trim().is_empty() && line.bytes().take_while(|b| *b == b' ').count() <= 6
+                })
+                .unwrap_or(end);
+            lines.splice(li..field_end, rendered);
+        }
+        None => {
+            lines.splice(start + 1..start + 1, rendered);
+        }
     }
     Ok(())
 }
@@ -1467,6 +1482,74 @@ plan_index:
             crate::edit::event_block("note", "2026-03-01T00:00:00Z", "h3", "linux", "after");
         crate::edit::push_event(&c.candidate, "alpha", &block).expect("events still append");
         crate::edit::append_event(&c.candidate, "beta", &block).expect("events still prepend");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn fragment_born_packet_bakes_non_scalar_lww_winners_into_its_new_item() {
+        let d = scratch("fragment-nonscalar-lww");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: beta\n    order: 581-aaaa\n    status: ready\n    depends_on: []\n    next_action: initial\n",
+        )
+        .expect("packet fragment");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0200z-bbbb-h2.yaml"),
+            "status:\n  - packet_id: beta\n    field: depends_on\n    value: [alpha, gamma]\n    ts: \"2026-03-01T00:00:00Z\"\n    host: h2\n  - packet_id: beta\n    field: next_action\n    value: |\n      first line\n      second line\n    ts: \"2026-03-01T00:00:00Z\"\n    host: h2\n",
+        )
+        .expect("non-scalar LWW fragment");
+
+        let c = compact_text(&index).expect("fragment packet compacts");
+        assert!(
+            c.candidate
+                .contains("      depends_on:\n        - alpha\n        - gamma\n"),
+            "the winning sequence must be rendered in the new packet: {}",
+            c.candidate
+        );
+        assert!(
+            c.candidate
+                .contains("      next_action: |\n        first line\n        second line\n"),
+            "the winning multi-line value must be rendered in the new packet: {}",
+            c.candidate
+        );
+        assert_fold_equivalent(&index, COMMITTED);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn base_packet_lww_replaces_only_the_non_scalar_field_span() {
+        let d = scratch("base-nonscalar-lww");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "status:\n  - packet_id: alpha\n    field: depends_on\n    value: [beta, gamma]\n    ts: \"2026-03-01T00:00:00Z\"\n    host: h1\n  - packet_id: alpha\n    field: next_action\n    value: |\n      first line\n      second line\n    ts: \"2026-03-01T00:00:00Z\"\n    host: h1\n",
+        )
+        .expect("non-scalar LWW fragment");
+
+        let c = compact_text(&index).expect("base packet non-scalars compact");
+        assert!(
+            c.candidate
+                .contains("      depends_on:\n        - beta\n        - gamma\n"),
+            "the sequence must be inserted as one field span: {}",
+            c.candidate
+        );
+        assert!(
+            c.candidate
+                .contains("      next_action: |\n        first line\n        second line\n"),
+            "the block string must be inserted as one field span: {}",
+            c.candidate
+        );
+        for comment in COMMITTED
+            .lines()
+            .filter(|l| l.trim_start().starts_with('#'))
+        {
+            assert!(
+                c.candidate.contains(comment),
+                "comment must survive: {comment:?}"
+            );
+        }
+        assert_fold_equivalent(&index, COMMITTED);
         let _ = std::fs::remove_dir_all(&d);
     }
 

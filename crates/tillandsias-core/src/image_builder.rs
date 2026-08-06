@@ -25,6 +25,8 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 pub const SOURCE_DIGEST_LABEL: &str = "io.tillandsias.image.source-digest";
+pub const IMAGE_LAYER_POLICY_LABEL: &str = "io.tillandsias.image.layer-policy";
+pub const IMAGE_LAYER_POLICY: &str = "squash-new";
 
 /// Inputs that determine one container image's immutable identity.
 ///
@@ -96,6 +98,13 @@ pub struct ImageBuildObservation {
 pub fn image_build_identity(
     spec: &ImageBuildSpec,
 ) -> Result<ImageBuildIdentity, ImageBuilderError> {
+    image_build_identity_for_policy(spec, IMAGE_LAYER_POLICY)
+}
+
+fn image_build_identity_for_policy(
+    spec: &ImageBuildSpec,
+    layer_policy: &str,
+) -> Result<ImageBuildIdentity, ImageBuilderError> {
     let context_root = spec
         .context_root
         .canonicalize()
@@ -117,6 +126,7 @@ pub fn image_build_identity(
     let mut hasher = Sha256::new();
     hash_field(&mut hasher, b"schema", b"tillandsias-image-build-v1");
     hash_field(&mut hasher, b"image_name", spec.image_name.as_bytes());
+    hash_field(&mut hasher, b"layer_policy", layer_policy.as_bytes());
     for entry in entries {
         hash_field(&mut hasher, b"path", entry.relative_path.as_bytes());
         hash_field(&mut hasher, b"kind", entry.kind.as_bytes());
@@ -143,6 +153,10 @@ pub fn image_build_identity(
         (
             "io.tillandsias.image.name".to_string(),
             spec.image_name.clone(),
+        ),
+        (
+            IMAGE_LAYER_POLICY_LABEL.to_string(),
+            layer_policy.to_string(),
         ),
         (
             "io.tillandsias.image.version".to_string(),
@@ -546,6 +560,9 @@ impl PodmanDirect {
             "build".to_string(),
             "--format".to_string(),
             "docker".to_string(),
+            "--squash".to_string(),
+            "--label".to_string(),
+            format!("{IMAGE_LAYER_POLICY_LABEL}={IMAGE_LAYER_POLICY}"),
             "--network".to_string(),
             "host".to_string(),
             "--tag".to_string(),
@@ -555,11 +572,26 @@ impl PodmanDirect {
             image_dir.clone(),
         ];
 
-        // Special handling for chromium-framework: inject CHROMIUM_CORE_TAG
+        // Inject the exact sibling chromium-core image reference consumed by
+        // Containerfile.framework.
         if image_name == "chromium-framework" {
-            let _core_tag = image_tag.split(':').next_back().unwrap_or("latest");
-            args.insert(4, "CHROMIUM_CORE_TAG".to_string());
-            args.insert(4, "--build-arg".to_string());
+            let (framework_repository, tag) =
+                image_tag.rsplit_once(':').unwrap_or((image_tag, "latest"));
+            let core_repository = framework_repository
+                .strip_suffix("chromium-framework")
+                .map(|prefix| format!("{prefix}chromium-core"))
+                .unwrap_or_else(|| "localhost/tillandsias-chromium-core".to_string());
+            let containerfile_index = args
+                .iter()
+                .position(|arg| arg == "-f")
+                .expect("the canonical argv always contains -f");
+            args.splice(
+                containerfile_index..containerfile_index,
+                [
+                    "--build-arg".to_string(),
+                    format!("CHROMIUM_CORE_IMAGE={core_repository}:{tag}"),
+                ],
+            );
         }
 
         let call = PodmanCall {
@@ -925,7 +957,57 @@ mod tests {
                 call.args[idx + 1]
             );
             assert!(call.cwd.ends_with(&root_str));
+            assert_eq!(
+                call.args.iter().filter(|arg| *arg == "--squash").count(),
+                1,
+                "every Containerfile builder must squash its new instruction layers"
+            );
+            assert!(
+                !call.args.iter().any(|arg| arg == "--squash-all"),
+                "inherited bases must remain independently reusable"
+            );
+            assert!(
+                call.args
+                    .windows(2)
+                    .any(|pair| pair == ["--label", "io.tillandsias.image.layer-policy=squash-new"]),
+                "the materialized image must expose its layer policy"
+            );
         }
+    }
+
+    #[test]
+    fn chromium_framework_keeps_squash_options_and_the_real_core_image_argument() {
+        let root = temp_image_root();
+        let chromium = root.join("images/chromium");
+        fs::create_dir_all(&chromium).unwrap();
+        fs::write(
+            chromium.join("Containerfile.framework"),
+            "ARG CHROMIUM_CORE_IMAGE\nFROM ${CHROMIUM_CORE_IMAGE}\n",
+        )
+        .unwrap();
+        unsafe {
+            std::env::set_var("HOME", &root);
+        }
+
+        let call = PodmanDirect::new(root.display().to_string())
+            .prepare_build(
+                "chromium-framework",
+                "tillandsias-chromium-framework:v0.5-test",
+            )
+            .unwrap();
+
+        assert!(call.args.windows(2).any(|pair| {
+            pair == [
+                "--build-arg",
+                "CHROMIUM_CORE_IMAGE=tillandsias-chromium-core:v0.5-test",
+            ]
+        }));
+        assert_eq!(call.args.iter().filter(|arg| *arg == "--squash").count(), 1);
+        assert!(
+            call.args.windows(2).any(|pair| {
+                pair == ["--label", "io.tillandsias.image.layer-policy=squash-new"]
+            })
+        );
     }
 
     /// `image_build_paths` is the canonical routing helper that
@@ -1098,6 +1180,21 @@ mod tests {
         );
         let dependency_b = image_build_identity(&spec).unwrap();
         assert_ne!(dependency_a.source_digest, dependency_b.source_digest);
+    }
+
+    #[test]
+    fn image_digest_and_label_include_the_layer_policy() {
+        let temp = TempDir::new().unwrap();
+        let spec = write_digest_fixture(temp.path());
+        let legacy = image_build_identity_for_policy(&spec, "normal").unwrap();
+        let squashed = image_build_identity_for_policy(&spec, IMAGE_LAYER_POLICY).unwrap();
+
+        assert_ne!(legacy.source_digest, squashed.source_digest);
+        assert_ne!(legacy.canonical_tag, squashed.canonical_tag);
+        assert_eq!(
+            squashed.labels.get(IMAGE_LAYER_POLICY_LABEL),
+            Some(&IMAGE_LAYER_POLICY.to_string())
+        );
     }
 
     #[test]

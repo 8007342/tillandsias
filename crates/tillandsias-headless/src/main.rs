@@ -1782,7 +1782,10 @@ pub(crate) fn ensure_image_exists(
 
     if image_name == "chromium-framework" {
         let core_tag = versioned_image_tag("chromium-core", version);
-        if !rt.block_on(client.image_exists(&core_tag)) {
+        if !rt.block_on(async {
+            client.image_exists(&core_tag).await
+                && client.image_uses_managed_layer_policy(&core_tag).await
+        }) {
             ensure_image_exists(root, "chromium-core", &core_tag, debug).map_err(|e| {
                 format!(
                     "Required base image '{}' is absent and failed to build on demand: {}.\n\
@@ -1793,7 +1796,10 @@ pub(crate) fn ensure_image_exists(
         }
     } else if image_name == "forge" {
         let base_tag = versioned_image_tag("forge-base", version);
-        if !rt.block_on(client.image_exists(&base_tag)) {
+        if !rt.block_on(async {
+            client.image_exists(&base_tag).await
+                && client.image_uses_managed_layer_policy(&base_tag).await
+        }) {
             ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
                 format!(
                     "Required base image '{}' is absent and failed to build on demand: {}.\n\
@@ -1824,7 +1830,9 @@ pub(crate) fn ensure_image_exists(
     build_args.push("8.8.8.8".to_string());
 
     rt.block_on(async move {
-        if client.image_exists(image_tag).await {
+        if client.image_exists(image_tag).await
+            && client.image_uses_managed_layer_policy(image_tag).await
+        {
             return Ok(());
         }
 
@@ -6303,6 +6311,10 @@ fn podman_build_argv(
         "build".to_string(),
         "--format".to_string(),
         "docker".to_string(),
+        // Collapse this Containerfile's instruction layers while preserving
+        // inherited forge-base/chromium-core layers for cross-image sharing.
+        // `--squash-all` would duplicate those multi-gigabyte bases.
+        "--squash".to_string(),
         // Proxy-exemption class (orders 116/118/119, 4th instance 2026-07-11):
         // containers.conf bakes http(s)_proxy=proxy:3128 into EVERY container,
         // but build containers are not on the enclave network, so `proxy`
@@ -18556,6 +18568,17 @@ esac
     }
 
     #[test]
+    fn on_demand_image_build_rejects_an_existing_tag_without_the_layer_policy() {
+        let source = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "fn ensure_image_exists(",
+        );
+        assert!(source.contains("image_uses_managed_layer_policy(image_tag)"));
+        assert!(source.contains("image_uses_managed_layer_policy(&core_tag)"));
+        assert!(source.contains("image_uses_managed_layer_policy(&base_tag)"));
+    }
+
+    #[test]
     fn observatorium_web_args_mount_project_read_only_under_source() {
         let args = build_observatorium_web_args(
             Path::new("/tmp/project"),
@@ -19285,6 +19308,15 @@ esac
             argv.contains(&"--http-proxy=false".to_string()),
             "runtime image builds must exempt the containers.conf enclave proxy \
              env (proxy-exemption class; build containers cannot resolve `proxy`): {argv:?}"
+        );
+        assert_eq!(
+            argv.iter().filter(|arg| *arg == "--squash").count(),
+            1,
+            "compiled init must squash each Containerfile's new layers"
+        );
+        assert!(
+            !argv.iter().any(|arg| arg == "--squash-all"),
+            "compiled init must preserve inherited base-image sharing"
         );
     }
 
