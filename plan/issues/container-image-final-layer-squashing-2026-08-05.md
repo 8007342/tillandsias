@@ -185,3 +185,25 @@ Primary references:
 
 - Podman build options: <https://docs.podman.io/en/stable/markdown/podman-build.1.html#squash>
 - Nixpkgs `dockerTools` image functions: <https://nixos.org/manual/nixpkgs/stable/#sec-pkgs-dockerTools>
+
+## 2026-08-06 measured cache correction (supersedes earlier claim)
+
+Order 608-ijbt's isolated Podman 5.8.4 A/B disproved this report's statement
+that `--squash` preserves a usable intermediate cache for ordinary unchanged
+rebuilds. The historical implementation rationale above remains intact, but
+that cache sentence is superseded.
+
+With identical source contexts and separate stores, layered versus squash-new
+median no-op times were git 5.95s versus 69.94s (11.75x), router 1.32s versus
+62.83s (47.60x), chromium-framework 1.47s versus 46.71s (31.78x), and forge
+10.04s versus 11.22s (1.12x). Layered logs used every step cache; squashed logs
+re-executed the Containerfile. `podman build --help` reported `--layers`
+defaulting true, so default intermediate-layer caching did not rescue this
+invocation.
+
+The final layer shape and inherited-base identity remain correct. The product
+decision is now **revise**, not revert the goal blindly: order 617-mxqn must
+prove a cache-preserving squashed materialization path or narrow squashing away
+from incremental developer builds before the unconditional policy ships.
+Quantitative evidence is in
+`plan/issues/optimization/container-image-squash-isolated-ab-benchmark-2026-08-05.md`.

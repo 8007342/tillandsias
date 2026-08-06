@@ -7,8 +7,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-core/tests/forge_shell_tools.rs#L2](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L2)
 - [crates/tillandsias-core/tests/forge_shell_tools.rs#L151](../../../crates/tillandsias-core/tests/forge_shell_tools.rs#L151)
-- [flake.nix#L220](../../../flake.nix#L220)
-- [flake.nix#L285](../../../flake.nix#L285)
+- [flake.nix#L219](../../../flake.nix#L219)
+- [flake.nix#L281](../../../flake.nix#L281)
 - [images/default/Containerfile#L158](../../../images/default/Containerfile#L158)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
 - [images/default/config-overlay/mcp/git-tools.sh#L28](../../../images/default/config-overlay/mcp/git-tools.sh#L28)
