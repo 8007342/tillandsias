@@ -65,6 +65,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "capabilities",
     "check",
     "compact",
+    "dependencies-of",
     "fragments",
     "grade",
     "loop-status",
@@ -125,13 +126,16 @@ const USAGE: &str = concat!(
     "                                     -> order_id_allocation.\n",
     "           status <id|order>         one packet's status line\n",
     "           blocked-by <id|order>     packets directly blocked by X\n",
+    "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
     "           ready [role]              ready packets (optionally for a pickup role)\n",
-    "           query [--status S] [--role R] [--tag T]... [--limit N] [--json]\n",
+    "           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json]\n",
     "                                     ORDER 582-26mm. THE generic filtered reader over the\n",
     "                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only\n",
     "                                     correct way to enumerate packets by status / pickup_role /\n",
-    "                                     capability_tags. project-info plan_query and drain-queue\n",
+    "                                     desired_release / capability_tags. Release matching is exact;\n",
+    "                                     an unknown release is an error, never an ignored constraint.\n",
+    "                                     project-info plan_query and drain-queue\n",
     "                                     both route here; a reader that forgets fragments reports a\n",
     "                                     stale ledger with total confidence. TSV by default\n",
     "                                     (order<TAB>packet_id<TAB>desired_release<TAB>tags); --json\n",
@@ -359,16 +363,155 @@ fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
     format!("{order}\t{status}\t{id}")
 }
 
-/// ORDER 582-26mm. Filter the FOLDED ledger by status (exact), pickup_role
-/// (case-insensitive substring), capability_tags (every given tag must be
-/// present), then cap at `limit`. Reproduces project-info.sh plan_query's
-/// contract so the yq/jq direct reader could be retired without changing what
-/// the MCP tool returns. `limit == 0` is treated as "no cap" so a caller can
-/// ask for every match.
+#[derive(Debug, PartialEq, Eq)]
+struct QueryOptions {
+    status: Option<String>,
+    role: Option<String>,
+    release: Option<String>,
+    tags: Vec<String>,
+    limit: usize,
+    json: bool,
+}
+
+impl Default for QueryOptions {
+    fn default() -> Self {
+        Self {
+            status: None,
+            role: None,
+            release: None,
+            tags: Vec::new(),
+            limit: 20,
+            json: false,
+        }
+    }
+}
+
+/// Parse the closed `query` constraint vocabulary. Missing values and invalid
+/// limits are errors rather than silently disappearing — a dropped constraint
+/// makes a broad result look authoritative, which is worse than a refusal.
+fn parse_query_options(args: &[String]) -> Result<QueryOptions, String> {
+    let mut options = QueryOptions::default();
+    let mut limit_seen = false;
+    let mut i = 0usize;
+    while i < args.len() {
+        let flag = args[i].as_str();
+        let value_after = |at: usize| -> Result<String, String> {
+            let Some(value) = args.get(at + 1) else {
+                return Err(format!("{flag} requires a value"));
+            };
+            if value.starts_with("--") {
+                return Err(format!("{flag} requires a value"));
+            }
+            if value.is_empty() {
+                return Err(format!("{flag} requires a non-empty value"));
+            }
+            Ok(value.clone())
+        };
+        match flag {
+            "--status" => {
+                if options.status.is_some() {
+                    return Err("--status may be specified only once".to_string());
+                }
+                options.status = Some(value_after(i)?);
+                i += 2;
+            }
+            "--role" => {
+                if options.role.is_some() {
+                    return Err("--role may be specified only once".to_string());
+                }
+                options.role = Some(value_after(i)?);
+                i += 2;
+            }
+            "--release" => {
+                if options.release.is_some() {
+                    return Err("--release may be specified only once".to_string());
+                }
+                options.release = Some(value_after(i)?);
+                i += 2;
+            }
+            "--tag" => {
+                options.tags.push(value_after(i)?);
+                i += 2;
+            }
+            "--limit" => {
+                if limit_seen {
+                    return Err("--limit may be specified only once".to_string());
+                }
+                let raw = value_after(i)?;
+                options.limit = raw
+                    .parse::<usize>()
+                    .map_err(|_| format!("--limit requires a non-negative integer, got '{raw}'"))?;
+                limit_seen = true;
+                i += 2;
+            }
+            "--json" => {
+                if options.json {
+                    return Err("--json may be specified only once".to_string());
+                }
+                options.json = true;
+                i += 1;
+            }
+            other => return Err(format!("unknown query constraint: {other}")),
+        }
+    }
+    Ok(options)
+}
+
+fn known_releases(ledger: &Ledger) -> Vec<String> {
+    let mut releases: Vec<String> = ledger
+        .packets
+        .iter()
+        .filter_map(|p| str_field(p, "desired_release"))
+        .map(str::to_string)
+        .collect();
+    releases.sort();
+    releases.dedup();
+    releases
+}
+
+fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    for key in [
+        "packet_id",
+        "order",
+        "title",
+        "status",
+        "kind",
+        "pickup_role",
+        "desired_release",
+        "release_target",
+        "capability_tags",
+        "deliverable",
+        "depends_on",
+    ] {
+        if let Some(value) = packet.get(key) {
+            obj.insert(
+                key.to_string(),
+                serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
+            );
+        }
+    }
+    // These two are the release-query contract, not opportunistic metadata.
+    // A missing field is explicit JSON null so consumers can distinguish
+    // "projected but absent" from "this binary predates the projection".
+    for key in ["desired_release", "release_target"] {
+        obj.entry(key.to_string())
+            .or_insert(serde_json::Value::Null);
+    }
+    serde_json::Value::Object(obj)
+}
+
+/// ORDER 582-26mm + 606-e2hg. Filter the FOLDED ledger by status and
+/// desired_release (exact), pickup_role (case-insensitive substring),
+/// capability_tags (every given tag must be present), then cap at `limit`.
+/// Reproduces project-info.sh plan_query's original contract while making the
+/// previously ignored release constraint first-class. `limit == 0` is treated
+/// as "no cap" so a caller can ask for every match.
 fn query_packets<'a>(
     ledger: &'a Ledger,
     status: Option<&str>,
     role: Option<&str>,
+    release: Option<&str>,
     tags: &[String],
     limit: usize,
 ) -> Vec<&'a serde_yaml::Value> {
@@ -386,6 +529,10 @@ fn query_packets<'a>(
                     .map(|pr| pr.to_ascii_lowercase().contains(&want))
                     .unwrap_or(false)
             }
+            None => true,
+        })
+        .filter(|p| match release {
+            Some(r) => str_field(p, "desired_release") == Some(r),
             None => true,
         })
         .filter(|p| {
@@ -1493,6 +1640,22 @@ fn main() {
                 emit(&line(&ledger, p));
             }
         }
+        "dependencies-of" => {
+            let Some(reference) = args.get(1) else {
+                usage()
+            };
+            if args.len() != 2 {
+                eprintln!("error: dependencies-of accepts exactly one packet id or order");
+                std::process::exit(2);
+            }
+            let Some(packets) = ledger.dependencies_of(reference) else {
+                eprintln!("error: {}", unresolved_reason(&ledger, reference));
+                std::process::exit(1);
+            };
+            for p in packets {
+                emit(&line(&ledger, p));
+            }
+        }
         "query" => {
             // ORDER 582-26mm. The generic filtered reader over the FOLDED
             // ledger — the single correct way to enumerate packets by
@@ -1500,72 +1663,37 @@ fn main() {
             // project-info.sh's plan_query (yq) and drain-queue.sh (awk) both
             // read the BASE only and reported a stale ledger with total
             // confidence; both now route here. The filter semantics below
-            // reproduce plan_query's contract exactly: exact status, pickup_role
-            // as a case-insensitive substring, capability_tags all-must-match,
-            // then a limit.
-            let mut status: Option<String> = None;
-            let mut role: Option<String> = None;
-            let mut tags: Vec<String> = Vec::new();
-            let mut limit: usize = 20;
-            let mut json = false;
-            let mut i = 1;
-            while i < args.len() {
-                match args[i].as_str() {
-                    "--status" => {
-                        i += 1;
-                        status = args.get(i).cloned();
-                    }
-                    "--role" => {
-                        i += 1;
-                        role = args.get(i).cloned();
-                    }
-                    "--tag" => {
-                        i += 1;
-                        if let Some(t) = args.get(i) {
-                            tags.push(t.clone());
-                        }
-                    }
-                    "--limit" => {
-                        i += 1;
-                        if let Some(n) = args.get(i).and_then(|s| s.parse().ok()) {
-                            limit = n;
-                        }
-                    }
-                    "--json" => json = true,
-                    other => {
-                        eprintln!("error: unknown query flag: {other}");
-                        std::process::exit(2);
-                    }
+            // reproduce plan_query's contract exactly: exact status/release,
+            // pickup_role as a case-insensitive substring, capability_tags
+            // all-must-match, then a limit.
+            let options = match parse_query_options(&args[1..]) {
+                Ok(options) => options,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
                 }
-                i += 1;
+            };
+            if let Some(release) = options.release.as_deref() {
+                let releases = known_releases(&ledger);
+                if !releases.iter().any(|known| known == release) {
+                    eprintln!(
+                        "error: unknown release constraint '{release}' (known desired_release values: {})",
+                        releases.join(",")
+                    );
+                    std::process::exit(2);
+                }
             }
-            let matched = query_packets(&ledger, status.as_deref(), role.as_deref(), &tags, limit);
-            if json {
-                let arr: Vec<serde_json::Value> = matched
-                    .iter()
-                    .map(|p| {
-                        let mut obj = serde_json::Map::new();
-                        for key in [
-                            "packet_id",
-                            "order",
-                            "title",
-                            "status",
-                            "kind",
-                            "pickup_role",
-                            "capability_tags",
-                            "deliverable",
-                            "depends_on",
-                        ] {
-                            if let Some(v) = p.get(key) {
-                                obj.insert(
-                                    key.to_string(),
-                                    serde_json::to_value(v).unwrap_or(serde_json::Value::Null),
-                                );
-                            }
-                        }
-                        serde_json::Value::Object(obj)
-                    })
-                    .collect();
+            let matched = query_packets(
+                &ledger,
+                options.status.as_deref(),
+                options.role.as_deref(),
+                options.release.as_deref(),
+                &options.tags,
+                options.limit,
+            );
+            if options.json {
+                let arr: Vec<serde_json::Value> =
+                    matched.iter().map(|p| query_json_projection(p)).collect();
                 println!(
                     "{}",
                     serde_json::to_string(&serde_json::Value::Array(arr))
@@ -2000,46 +2128,111 @@ mod tests {
     }
 
     /// ORDER 582-26mm. The generic filtered reader must reproduce plan_query's
-    /// filter contract EXACTLY: exact status, pickup_role as a case-insensitive
-    /// substring, capability_tags all-must-match, then a limit. These are the
-    /// semantics project-info's yq/jq pipeline used, so routing that surface
-    /// through the CLI changes nothing about what the MCP tool answers.
+    /// filter contract EXACTLY: exact status/release, pickup_role as a
+    /// case-insensitive substring, capability_tags all-must-match, then a
+    /// limit. Release is the order-606 additive constraint; the others retain
+    /// the semantics project-info's yq/jq pipeline used.
     #[test]
     fn query_packets_reproduces_plan_query_filter_semantics() {
         let led = Ledger::parse(
             "plan_index:\n  steps:\n\
-             \x20 - packet_id: p1\n    order: 1\n    status: ready\n    pickup_role: linux\n    capability_tags: [plan, crdt]\n\
-             \x20 - packet_id: p2\n    order: 2\n    status: blocked\n    pickup_role: windows\n    capability_tags: [plan]\n\
-             \x20 - packet_id: p3\n    order: 3\n    status: ready\n    pickup_role: Linux-Mutable\n    capability_tags: [crdt, plan]\n\
+             \x20 - packet_id: p1\n    order: 1\n    status: ready\n    pickup_role: linux\n    desired_release: v0.5\n    release_target: milestone-a\n    capability_tags: [plan, crdt]\n\
+             \x20 - packet_id: p2\n    order: 2\n    status: blocked\n    pickup_role: windows\n    desired_release: v0.6\n    capability_tags: [plan]\n\
+             \x20 - packet_id: p3\n    order: 3\n    status: ready\n    pickup_role: Linux-Mutable\n    desired_release: v0.5\n    capability_tags: [crdt, plan]\n\
              \x20 - packet_id: p4\n    order: 4\n    status: ready\n    capability_tags: []\n",
             Default::default(),
         )
         .expect("parse");
 
         // Exact status only.
-        let ready = query_packets(&led, Some("ready"), None, &[], 0);
+        let ready = query_packets(&led, Some("ready"), None, None, &[], 0);
         assert_eq!(ids(ready), vec!["p1", "p3", "p4"]);
 
         // pickup_role is a case-insensitive SUBSTRING.
-        let linux = query_packets(&led, None, Some("linux"), &[], 0);
+        let linux = query_packets(&led, None, Some("linux"), None, &[], 0);
         assert_eq!(ids(linux), vec!["p1", "p3"]);
 
+        // desired_release is exact; packets without it never match an explicit
+        // release constraint.
+        let v05 = query_packets(&led, None, None, Some("v0.5"), &[], 0);
+        assert_eq!(ids(v05), vec!["p1", "p3"]);
+        assert!(query_packets(&led, None, None, Some("V0.5"), &[], 0).is_empty());
+
         // capability_tags all-must-match, independent of order in the list.
-        let crdt_plan = query_packets(&led, None, None, &["plan".into(), "crdt".into()], 0);
+        let crdt_plan = query_packets(&led, None, None, None, &["plan".into(), "crdt".into()], 0);
         assert_eq!(ids(crdt_plan), vec!["p1", "p3"]);
 
         // Combined filters narrow the set.
-        let combo = query_packets(&led, Some("ready"), Some("linux"), &["crdt".into()], 0);
+        let combo = query_packets(
+            &led,
+            Some("ready"),
+            Some("linux"),
+            Some("v0.5"),
+            &["crdt".into()],
+            0,
+        );
         assert_eq!(ids(combo), vec!["p1", "p3"]);
 
         // Limit caps the result.
-        let limited = query_packets(&led, Some("ready"), None, &[], 2);
+        let limited = query_packets(&led, Some("ready"), None, None, &[], 2);
         assert_eq!(ids(limited), vec!["p1", "p3"]);
 
         // A packet with no capability_tags matches a tag filter only if the
         // filter is empty.
-        let empty_tag = query_packets(&led, Some("ready"), None, &["plan".into()], 0);
+        let empty_tag = query_packets(&led, Some("ready"), None, None, &["plan".into()], 0);
         assert_eq!(ids(empty_tag), vec!["p1", "p3"]);
+
+        let projected = query_json_projection(led.resolve("p1").expect("p1 resolves"));
+        assert_eq!(projected["desired_release"], serde_json::json!("v0.5"));
+        assert_eq!(
+            projected["release_target"],
+            serde_json::json!("milestone-a")
+        );
+        let absent = query_json_projection(led.resolve("p4").expect("p4 resolves"));
+        assert!(absent.get("desired_release").is_some_and(|v| v.is_null()));
+        assert!(absent.get("release_target").is_some_and(|v| v.is_null()));
+    }
+
+    #[test]
+    fn query_constraint_parser_refuses_missing_unknown_and_invalid_values() {
+        let args = [
+            "--status",
+            "ready",
+            "--release",
+            "v0.5",
+            "--tag",
+            "experts",
+            "--limit",
+            "0",
+            "--json",
+        ]
+        .map(str::to_string);
+        let parsed = parse_query_options(&args).expect("valid constraints parse");
+        assert_eq!(parsed.status.as_deref(), Some("ready"));
+        assert_eq!(parsed.release.as_deref(), Some("v0.5"));
+        assert_eq!(parsed.tags, vec!["experts"]);
+        assert_eq!(parsed.limit, 0);
+        assert!(parsed.json);
+
+        for bad in [
+            vec!["--release"],
+            vec!["--release", "--json"],
+            vec!["--role", ""],
+            vec!["--tag", ""],
+            vec!["--status", "ready", "--status", "blocked"],
+            vec!["--role", "linux", "--role", "any"],
+            vec!["--release", "v0.5", "--release", "v0.6"],
+            vec!["--limit", "1", "--limit", "2"],
+            vec!["--json", "--json"],
+            vec!["--limit", "many"],
+            vec!["--not-a-constraint", "value"],
+        ] {
+            let bad: Vec<String> = bad.into_iter().map(str::to_string).collect();
+            assert!(
+                parse_query_options(&bad).is_err(),
+                "invalid constraints must be explicit errors: {bad:?}"
+            );
+        }
     }
 
     fn ids(packets: Vec<&serde_yaml::Value>) -> Vec<String> {

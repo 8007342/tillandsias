@@ -8,6 +8,8 @@
 #   plan_status       — one packet's status line
 #   plan_ready        — ready packets for a pickup role
 #   plan_blocked_by   — packets directly blocked by a given packet
+#   plan_blocked_on   — a packet's direct unsatisfied prerequisites
+#   plan_query        — exact status/role/release/tag projection query
 #   plan_closure      — everything transitively downstream of a packet
 #   plan_burndown     — release-target children with statuses
 #   plan_answer       — the CITED answer envelope (order 394b)
@@ -396,6 +398,33 @@ plan_query() {
     "$PLAN_BIN" --index "$PLAN_INDEX" "$cmd" "$@" 2>&1 || true
 }
 
+# The two order-606 constraint-aware tools need the CLI's EXIT TYPE. Existing
+# tools deliberately use plan_query's fail-soft text contract; changing it
+# would make a non-zero command substitution kill this `set -e` server. This
+# sibling keeps missing/stale expert paths fail-soft, but preserves a real CLI
+# rc=2 so the dispatcher can translate invalid constraints to JSON-RPC -32602.
+plan_query_typed() {
+    local cmd="$1"
+    shift
+    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+    [ -n "$PLAN_INDEX" ] || PLAN_INDEX="$(resolve_plan_index)"
+    if [ -z "$PLAN_BIN" ]; then
+        binary_missing_error
+        return 0
+    fi
+    if [ -z "$PLAN_INDEX" ]; then
+        echo "ERROR: plan/index.yaml not found (probed \$TILLANDSIAS_PLAN_INDEX, \$HOME/src/tillandsias/plan/index.yaml, \$HOME/tillandsias/plan/index.yaml, /opt/cheatsheets/plan-index.yaml)"
+        return 0
+    fi
+    _gap="$(capability_gap "$cmd")"
+    if [ -n "$_gap" ]; then
+        printf 'ERROR: %s\n' "$_gap"
+        printf '  This never affected your session: expert construction is fail-soft by contract.\n'
+        return 0
+    fi
+    "$PLAN_BIN" --index "$PLAN_INDEX" "$cmd" "$@" 2>&1
+}
+
 # ── ORDER 394b: the answer envelope at the WRAPPER boundary ─────────────────
 #
 # `plan_answer` promises the ratified §4 envelope
@@ -735,6 +764,8 @@ while IFS= read -r line; do
                 {"name":"plan_status","description":"Get the status line of a packet by id or order number","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_ready","description":"List ready packets, optionally filtered by pickup role","inputSchema":{"type":"object","properties":{"role":{"type":"string"}}}},
                 {"name":"plan_blocked_by","description":"List packets directly blocked by a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
+                {"name":"plan_blocked_on","description":"List a packet's direct unsatisfied depends_on prerequisites. This is the upstream inverse of plan_blocked_by; completed, obsoleted, and archived prerequisites are omitted.","inputSchema":{"type":"object","properties":{"reference":{"type":"string","minLength":1}},"required":["reference"],"additionalProperties":false}},
+                {"name":"plan_query","description":"Query the folded plan ledger with exact status and desired_release constraints, pickup_role substring matching, all-match capability tags, and a structured JSON projection carrying desired_release and release_target. Unknown releases or arguments are protocol errors, never ignored constraints.","inputSchema":{"type":"object","properties":{"status":{"type":"string","minLength":1},"pickup_role":{"type":"string","minLength":1},"desired_release":{"type":"string","minLength":1},"capability_tags":{"type":"array","items":{"type":"string","minLength":1}},"limit":{"type":"integer","minimum":0}},"additionalProperties":false}},
                 {"name":"plan_closure","description":"List everything transitively downstream of a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_burndown","description":"List all children of a milestone/release-target with their statuses","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_answer","description":"Answer a plan question as the CITED envelope {answer, citations[], freshness, confidence}. Every citation carries a repo-relative path and a line range whose span contains the packet it is offered as evidence for; verify with `tillandsias-plan verify-answer`. An answer with zero citations is returned as confidence=unsupported — the expert refuses rather than guesses.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"what is blocked by 394b\", \"everything downstream of 394\", \"what is ready for linux\", \"status of 394a\""}},"required":["question"]}},
@@ -749,6 +780,10 @@ TOOLS_JSON
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
             args=$(echo "$line" | jq -r '.params.arguments // {}')
+            result=""
+            unknown_tool=0
+            invalid_params=0
+            invalid_message=""
             case "$tool" in
                 "plan_check")
                     result=$(plan_query "check")
@@ -768,6 +803,83 @@ TOOLS_JSON
                 "plan_blocked_by")
                     ref=$(echo "$args" | jq -r '.reference')
                     result=$(plan_query "blocked-by" "$ref")
+                    ;;
+                "plan_blocked_on")
+                    if ! printf '%s' "$args" | jq -e '
+                        type == "object"
+                        and ([keys[] | select(. != "reference")] | length == 0)
+                        and ((.reference | type) == "string")
+                        and ((.reference | length) > 0)
+                    ' >/dev/null 2>&1; then
+                        invalid_params=1
+                        invalid_message="Invalid plan_blocked_on arguments: expected exactly one non-empty string field 'reference'"
+                    else
+                        ref=$(echo "$args" | jq -r '.reference')
+                        if result=$(plan_query_typed "dependencies-of" "$ref"); then
+                            :
+                        else
+                            _typed_rc=$?
+                            if [ "$_typed_rc" = "2" ]; then
+                                invalid_params=1
+                                invalid_message="$result"
+                            fi
+                        fi
+                    fi
+                    ;;
+                "plan_query")
+                    if ! printf '%s' "$args" | jq -e '
+                        type == "object"
+                        and ([keys[] | select(
+                            . != "status"
+                            and . != "pickup_role"
+                            and . != "desired_release"
+                            and . != "capability_tags"
+                            and . != "limit"
+                        )] | length == 0)
+                        and ((has("status") | not) or (
+                            (.status | type) == "string" and (.status | length) > 0
+                        ))
+                        and ((has("pickup_role") | not) or (
+                            (.pickup_role | type) == "string" and (.pickup_role | length) > 0
+                        ))
+                        and ((has("desired_release") | not) or (
+                            (.desired_release | type) == "string" and (.desired_release | length) > 0
+                        ))
+                        and ((has("capability_tags") | not) or (
+                            (.capability_tags | type) == "array"
+                            and all(.capability_tags[]; type == "string" and length > 0)
+                        ))
+                        and ((has("limit") | not) or (
+                            (.limit | type) == "number"
+                            and .limit >= 0
+                            and (.limit | floor) == .limit
+                        ))
+                    ' >/dev/null 2>&1; then
+                        invalid_params=1
+                        invalid_message="Invalid plan_query arguments: use only string status/pickup_role/desired_release, string-array capability_tags, and non-negative integer limit"
+                    else
+                        _pq_args=()
+                        _pq_status=$(echo "$args" | jq -r '.status // empty')
+                        _pq_role=$(echo "$args" | jq -r '.pickup_role // empty')
+                        _pq_release=$(echo "$args" | jq -r '.desired_release // empty')
+                        _pq_limit=$(echo "$args" | jq -r '.limit // 20')
+                        [ -n "$_pq_status" ] && _pq_args+=(--status "$_pq_status")
+                        [ -n "$_pq_role" ] && _pq_args+=(--role "$_pq_role")
+                        [ -n "$_pq_release" ] && _pq_args+=(--release "$_pq_release")
+                        while IFS= read -r _pq_tag; do
+                            [ -n "$_pq_tag" ] && _pq_args+=(--tag "$_pq_tag")
+                        done < <(echo "$args" | jq -r '.capability_tags[]? // empty')
+                        _pq_args+=(--limit "$_pq_limit" --json)
+                        if result=$(plan_query_typed "query" "${_pq_args[@]}"); then
+                            :
+                        else
+                            _typed_rc=$?
+                            if [ "$_typed_rc" = "2" ]; then
+                                invalid_params=1
+                                invalid_message="$result"
+                            fi
+                        fi
+                    fi
                     ;;
                 "plan_closure")
                     ref=$(echo "$args" | jq -r '.reference')
@@ -828,10 +940,14 @@ TOOLS_JSON
             # Order 568: the single chokepoint every tool call passes through,
             # so usage is recorded in ONE place rather than at nine call sites
             # that could each drift.
-            record_expert_call "$tool" "${result:-}" "${unknown_tool:-0}"
+            _telemetry_error="${unknown_tool:-0}"
+            [ "${invalid_params:-0}" = "1" ] && _telemetry_error=1
+            record_expert_call "$tool" "${result:-${invalid_message:-}}" "$_telemetry_error"
             if [ "${unknown_tool:-0}" = "1" ]; then
                 unknown_tool=0
                 rpc_error "$id_json" -32601 "Unknown tool: $tool"
+            elif [ "${invalid_params:-0}" = "1" ]; then
+                rpc_error "$id_json" -32602 "$invalid_message"
             else
                 rpc_result_text "$id_json" "$result"
             fi

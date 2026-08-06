@@ -378,6 +378,37 @@ impl Ledger {
             .collect()
     }
 
+    /// The target packet's direct, unsatisfied `depends_on` prerequisites —
+    /// i.e. what X is blocked ON, rather than the downstream packets X blocks.
+    ///
+    /// `None` means the target reference did not resolve. `Some([])` means the
+    /// target is real and has no outstanding direct prerequisite. Declared
+    /// dependency order is preserved. Archived dependencies and active
+    /// `completed`/`obsoleted` packets are satisfied; every other active status
+    /// remains visible because it still prevents the edge from being satisfied.
+    pub fn dependencies_of(&self, reference: &str) -> Option<Vec<&Value>> {
+        let target = self.resolve(reference)?;
+        let mut seen = BTreeSet::new();
+        let mut result = Vec::new();
+
+        for dependency in str_list(target, "depends_on") {
+            if !seen.insert(dependency.clone()) || self.archived_ids.contains(&dependency) {
+                continue;
+            }
+            let Some(packet) = self.resolve(&dependency) else {
+                // Referential soundness rejects this state in `check`; never
+                // fabricate a row when a malformed live ledger slips through.
+                continue;
+            };
+            if matches!(str_field(packet, "status"), Some("completed" | "obsoleted")) {
+                continue;
+            }
+            result.push(packet);
+        }
+
+        Some(result)
+    }
+
     /// Transitive closure of blocked_by (everything downstream of X).
     pub fn blocked_by_closure(&self, reference: &str) -> Vec<&Value> {
         let mut seen = BTreeSet::new();
@@ -1400,6 +1431,63 @@ steps:
         assert!(
             ledger.blocked_by("delta-packet/slice-b").is_empty(),
             "a leaf packet blocks nothing"
+        );
+    }
+
+    #[test]
+    fn dependencies_of_returns_only_direct_unsatisfied_prerequisites_in_declared_order() {
+        let raw = r#"
+steps:
+  - packet_id: ready-dep
+    order: 910
+    status: ready
+  - packet_id: completed-dep
+    order: 911
+    status: completed
+  - packet_id: obsoleted-dep
+    order: 912
+    status: obsoleted
+  - packet_id: failed-dep
+    order: 913
+    status: failed
+  - packet_id: target
+    order: 914
+    status: pending
+    depends_on: [failed-dep, completed-dep, archived-dep, ready-dep, obsoleted-dep, failed-dep]
+  - packet_id: downstream
+    order: 915
+    status: ready
+    depends_on: [target]
+"#;
+        let archived = ["archived-dep".to_string()].into_iter().collect();
+        let ledger = Ledger::parse(raw, archived).expect("synthetic ledger parses");
+
+        let upstream: Vec<String> = ledger
+            .dependencies_of("target")
+            .expect("target resolves")
+            .iter()
+            .map(|p| ledger.id_of(p))
+            .collect();
+        assert_eq!(upstream, vec!["failed-dep", "ready-dep"]);
+        assert_eq!(
+            ledger
+                .dependencies_of("completed-dep")
+                .expect("leaf resolves")
+                .len(),
+            0,
+            "a real leaf is distinguishable from an unknown target"
+        );
+        assert!(ledger.dependencies_of("not-real").is_none());
+
+        let downstream: Vec<String> = ledger
+            .blocked_by("target")
+            .iter()
+            .map(|p| ledger.id_of(p))
+            .collect();
+        assert_eq!(
+            downstream,
+            vec!["downstream"],
+            "adding the upstream query must not change downstream semantics"
         );
     }
 

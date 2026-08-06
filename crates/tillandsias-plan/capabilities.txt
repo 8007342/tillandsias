@@ -37,6 +37,7 @@ burndown
 capabilities
 check
 compact
+dependencies-of
 fragments
 grade
 loop-status

@@ -184,5 +184,37 @@ audit pinned its bounded scope: exact `--release` filtering and JSON projection,
 a distinct direct-unsatisfied-dependency primitive (without changing existing
 downstream `blocked-by` semantics), `plan_query`/`plan_blocked_on` forge-plan
 schemas, typed invalid-constraint errors, and real-MCP ground truth for the
-operator's v0.5/upstream questions. It is ready, dependency-free, unleased, and
-is a prerequisite for the concise `plan_next` / “what's next?” packet.
+operator's v0.5/upstream questions. At that audit handoff it was ready,
+dependency-free, unleased, and a prerequisite for the concise `plan_next` /
+“what's next?” packet; 606-e2hg was subsequently claimed by the continuation
+recorded below.
+
+## Native-session continuation observations
+
+A 2026-08-06 native Codex continuation confirmed that direct stdio remains a
+diagnostic path with two host-launch footguns: invoking the checkout's
+`forge-plan.sh` directly fails because its mode is `0644`, while `bash
+forge-plan.sh` starts but reports `degraded(not-built)` because the host
+resolver does not probe `target/release`. Supplying explicit
+`TILLANDSIAS_PLAN_BIN=$PWD/target/release/tillandsias-plan` and
+`TILLANDSIAS_PLAN_INDEX=$PWD/plan/index.yaml` made `plan_status` work and report
+606-e2hg `in_progress`. These are observations only; executable mode and host
+resolver behavior are outside 606-e2hg.
+
+The same session successfully used project-info's `project_type`, structured
+`git_status`, and CLI-backed `plan_query`. A ready/Linux/experts query returned
+raw ledger-order rows 392a, 393, 394, 396, and 398 — correct transport and
+filtering, but not a ranked claimable next action. Exact `plan_answer("what is
+next?")` remained an honest `confidence=unsupported` refusal with zero
+citations. Both results reinforce the existing boundary: 606-e2hg owns release
+and dependency primitives; 606-xu52 owns concise ranking and natural
+“what's next?” behavior.
+
+Crucially, those successes required manually driving the shell servers over
+JSON-RPC. This Codex session's native callable-tool registry exposed zero tools
+matching forge-plan, project-info, plan/methodology queries, repository search,
+or git status. The server implementation is therefore usable, but the operator's
+zero-intervention runtime goal is not yet met on this landing path. Existing
+packet 606-z389 owns the generic transparent-bootstrap contract and 606-xu52
+owns the first natural action, so this observation is routed there rather than
+filed as duplicate work.

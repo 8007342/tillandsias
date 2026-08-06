@@ -1,6 +1,7 @@
 # @trace spec:forge-environment-discoverability
 # @trace order:394, order:394d (rung 1, slice 4)
 # @trace order:456 (exit criterion 3 — correct packets for the active release)
+# @trace order:606-e2hg (exact release + direct upstream query semantics)
 # @trace plan/issues/experts-construction-decision-2026-07-17.md (the residual:
 #        "per-tier measurements + ground-truth harness")
 #
@@ -215,6 +216,16 @@ critical_path:
     timeout_ms: 180000
     expected_behavior: "ok: mcp-server-returns-correct-active-release-packets"
 
+  - step: "ORDER 606: the real forge-plan plan_answer grades release wording and upstream direction"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what v0.5 work can I do on linux?\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what blocks forge-local-experts-milestone\"}}}' | TILLANDSIAS_PLAN_BIN=\"$PB\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" TILLANDSIAS_METHODOLOGY_ROOT=\"$PWD\" bash images/default/config-overlay/mcp/forge-plan.sh > /tmp/.litmus-606-answer-frames.jsonl; sed -n '1p' /tmp/.litmus-606-answer-frames.jsonl | jq -r '.result.content[0].text' > /tmp/.litmus-606-release.json; sed -n '2p' /tmp/.litmus-606-answer-frames.jsonl | jq -r '.result.content[0].text' > /tmp/.litmus-606-upstream.json; \"$PB\" grade --root . --case plan-ready-v05-linux-preserves-release --envelope /tmp/.litmus-606-release.json > /tmp/.litmus-606-release-grade.txt 2>&1 || { cat /tmp/.litmus-606-release-grade.txt; exit 1; }; \"$PB\" grade --root . --case plan-upstream-prerequisites-of-experts-milestone --envelope /tmp/.litmus-606-upstream.json > /tmp/.litmus-606-upstream-grade.txt 2>&1 || { cat /tmp/.litmus-606-upstream-grade.txt; exit 1; }; grep -q '^PASS  plan-ready-v05-linux-preserves-release' /tmp/.litmus-606-release-grade.txt && grep -q '^PASS  plan-upstream-prerequisites-of-experts-milestone' /tmp/.litmus-606-upstream-grade.txt && echo 'ok: real-mcp-release-and-upstream-groundtruth'"
+    timeout_ms: 180000
+    expected_behavior: "ok: real-mcp-release-and-upstream-groundtruth"
+
+  - step: "ORDER 606: plan_query/plan_blocked_on schemas are closed and invalid constraints are typed errors"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); rm -f /tmp/.litmus-606-usage.jsonl; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"status\":\"ready\",\"pickup_role\":\"linux\",\"desired_release\":\"v0.5\",\"capability_tags\":[\"experts\"],\"limit\":5}}}' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_blocked_on\",\"arguments\":{\"reference\":\"forge-local-experts-milestone\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"desired_release\":\"v9.9\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"surprise\":true}}}' '{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"desired_release\":\"\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"capability_tags\":[\"\"]}}}' | TILLANDSIAS_PLAN_BIN=\"$PB\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" TILLANDSIAS_EXPERT_USAGE_LOG=/tmp/.litmus-606-usage.jsonl bash images/default/config-overlay/mcp/forge-plan.sh > /tmp/.litmus-606-tools.jsonl; L=$(sed -n '1p' /tmp/.litmus-606-tools.jsonl); printf '%s' \"$L\" | jq -e '([.result.tools[] | select(.name == \"plan_query\" and .inputSchema.additionalProperties == false and .inputSchema.properties.desired_release.minLength == 1 and .inputSchema.properties.capability_tags.items.minLength == 1)] | length) == 1 and ([.result.tools[] | select(.name == \"plan_blocked_on\" and .inputSchema.additionalProperties == false)] | length) == 1' >/dev/null || { echo 'FAIL: order-606 tool schemas absent, open, or accept empty constraints'; exit 1; }; Q=$(sed -n '2p' /tmp/.litmus-606-tools.jsonl | jq -r '.result.content[0].text'); printf '%s' \"$Q\" | jq -e 'length > 0 and all(.[]; .desired_release == \"v0.5\" and has(\"desired_release\") and has(\"release_target\"))' >/dev/null || { echo \"FAIL: release query leaked or lost projection: $Q\"; exit 1; }; U=$(sed -n '3p' /tmp/.litmus-606-tools.jsonl | jq -r '.result.content[0].text'); test \"$(printf '%s\\n' \"$U\" | cut -f1,3)\" = $'437\\tforge-src-tmpfs-topology' || { echo \"FAIL: upstream primitive returned: $U\"; exit 1; }; for n in 4 5 6 7; do test \"$(sed -n \"${n}p\" /tmp/.litmus-606-tools.jsonl | jq -r '.error.code')\" = '-32602' || { echo \"FAIL: request $n was not Invalid params\"; exit 1; }; done; test \"$(wc -l < /tmp/.litmus-606-usage.jsonl)\" = 6 || { echo 'FAIL: one telemetry row per tool call was not recorded'; exit 1; }; test \"$(tail -n 4 /tmp/.litmus-606-usage.jsonl | jq -s '[.[] | select(.tool == \"plan_query\" and .outcome == \"error\")] | length')\" = 4 || { echo 'FAIL: invalid multi-request calls inherited stale results or were not recorded as errors'; exit 1; }; echo 'ok: closed-release-upstream-tools-and-typed-errors'"
+    timeout_ms: 180000
+    expected_behavior: "ok: closed-release-upstream-tools-and-typed-errors"
+
   - step: "ORDER 456 FALSIFIABILITY: a dead-on-arrival server is graded RED, not skipped"
     # The exact regression order 456 shipped with: the wrapper probed for a
     # binary nothing produced and every call came back with a diagnostic. That
@@ -251,6 +262,7 @@ observability:
     - "@trace order:394"
     - "@trace order:394d"
     - "@trace order:456"
+    - "@trace order:606-e2hg"
   expected_log: "Expert ground truth graded: committed query set GREEN at HEAD inside the 60s in-forge budget, five seeded wrong expected answers RED, empty/misspelled/duplicated query sets refused, format proven corpus-agnostic for orders 457 and 400, and the forge-plan MCP server proven to return the correct packets for the active release"
   log_fields:
     spec: "forge-environment-discoverability"

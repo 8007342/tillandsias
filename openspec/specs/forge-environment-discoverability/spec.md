@@ -99,6 +99,35 @@ all reference the same tool family.
 - **THEN** it documents `publish_local`, `service_status`, and `service_stop`
 - **AND** it explains the safety model (project attribution from session, not request)
 
+### Requirement: Plan expert preserves release constraints and dependency direction
+
+@trace order:606-e2hg
+
+The forge plan expert MUST expose deterministic release-aware and
+dependency-direction-aware queries. An explicit desired-release constraint MUST
+be matched exactly and MUST survive in structured output; it MUST NOT be treated
+as optional natural-language decoration. Upstream prerequisites and downstream
+consumers MUST remain separate query primitives.
+
+#### Scenario: Agent filters the active release
+- **WHEN** an agent queries plan work with `desired_release: v0.5`
+- **THEN** every returned packet has exactly `desired_release: v0.5`
+- **AND** the JSON projection includes both `desired_release` and `release_target`
+- **AND** a known release with no rows after the other constraints returns an empty result
+
+#### Scenario: Agent asks what blocks a milestone
+- **WHEN** an agent asks `what blocks forge-local-experts-milestone`
+- **THEN** the expert returns that milestone's own direct unsatisfied `depends_on` prerequisites
+- **AND** completed, obsoleted, and archived prerequisites are omitted as satisfied
+- **AND** downstream packets that depend on the milestone are not returned
+- **AND** the existing downstream `blocked-by` and closure primitives retain their direction
+
+#### Scenario: Unsupported constraints fail explicitly
+- **WHEN** an agent supplies an unknown release, unknown argument, missing value, or invalid argument type
+- **THEN** the CLI returns a typed non-zero usage error
+- **AND** the forge-plan MCP surface returns JSON-RPC `-32602 Invalid params`
+- **AND** neither surface silently executes a broader unconstrained query
+
 ## Litmus Tests
 
 ### Test: tillandsias-inventory command completeness
@@ -135,6 +164,13 @@ all reference the same tool family.
 - **Signal**: All help texts follow same template (usage, subcommands, examples)
 - **Pass**: Consistent format across all commands; examples are runnable
 - **Fail**: Inconsistent format, missing subcommands, or examples contain typos
+
+### Test: Plan expert release and upstream query semantics
+- **Setup**: Build the real `tillandsias-plan` binary and launch `forge-plan.sh` over stdio
+- **Action**: Query v0.5 Linux work, query the experts milestone's blockers, and seed unknown release/argument constraints
+- **Signal**: Structured release fields, exact release rows, direct unsatisfied prerequisites, and typed JSON-RPC errors
+- **Pass**: No result leaks another release or reverses the dependency direction; every seeded invalid constraint is refused
+- **Fail**: A constraint is ignored, a downstream consumer is returned as an upstream prerequisite, or the MCP wrapper reports invalid parameters as a successful tool result
 
 ## Implementation Notes
 

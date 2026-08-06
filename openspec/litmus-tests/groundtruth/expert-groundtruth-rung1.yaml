@@ -199,6 +199,55 @@ cases:
         - status: completed
         - status: obsoleted
 
+  - id: plan-ready-v05-linux-preserves-release
+    engine: plan.answer
+    query: "what v0.5 work can I do on linux?"
+    why: >
+      ORDER 606-e2hg. This is the exact cold-agent wording that previously
+      returned unsupported; its near-phrase silently discarded v0.5 and
+      returned every Linux-ready release. The authority constraints prove the
+      release survived classification and filtering rather than being treated
+      as decoration.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 1
+      citations_include:
+        - desired_release: v0.5
+      citations_exclude:
+        - desired_release: v0.4
+        - desired_release: v0.6
+        - desired_release: v0.7
+      answer_contains:
+        - "ready packets for pickup_role 'linux' in desired_release 'v0.5'"
+
+  - id: plan-upstream-prerequisites-of-experts-milestone
+    engine: plan.answer
+    query: "what blocks forge-local-experts-milestone"
+    why: >
+      ORDER 606-e2hg. `what blocks X` asks for X's own unsatisfied upstream
+      prerequisites. Before this packet the broad `blocks` classifier reversed
+      the edge and returned downstream consumers 403 and 537. The milestone's
+      completed direct dependency 443 is satisfied and must also be omitted.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: plan/index.yaml
+          packet_id: forge-src-tmpfs-topology
+          order: "437"
+          desired_release: v0.5
+          span_contains:
+            - "packet_id: forge-src-tmpfs-topology"
+      citations_exclude:
+        - packet_id: zeroclaw-reintroduction-roadmap
+        - packet_id: v06-automation-milestone
+        - packet_id: concurrent-forges-shared-stack-safety
+      answer_contains:
+        - "direct unsatisfied prerequisites blocking 'forge-local-experts-milestone'"
+
   - id: plan-refuses-an-unknown-packet
     engine: plan.answer
     query: "status of no-such-packet-xyz"

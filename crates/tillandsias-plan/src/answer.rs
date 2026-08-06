@@ -392,15 +392,49 @@ fn truncate(s: &str, n: usize) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Intent {
     BlockedBy(String),
+    DependenciesOf(String),
     Closure(String),
     Status(String),
-    Ready(Option<String>),
+    Ready {
+        role: Option<String>,
+        release: Option<String>,
+    },
     Burndown(String),
+    UnsupportedConstraint(String),
 }
 
 /// Strip the punctuation an agent types around a reference.
 fn clean_token(t: &str) -> &str {
     t.trim_matches(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-')))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DependencyDirection {
+    Upstream,
+    Downstream,
+}
+
+/// Infer edge direction from word order around the resolved packet token.
+///
+/// `what is blocked by X` asks for consumers downstream of X, while `what is
+/// X blocked by` asks for X's prerequisites. Treating the shared phrase as an
+/// unordered keyword reverses one of those questions with total confidence.
+fn dependency_direction(
+    tokens: &[String],
+    reference_at: Option<usize>,
+    phrase: &[&str],
+) -> Option<DependencyDirection> {
+    let reference_at = reference_at?;
+    let phrase_at = tokens
+        .windows(phrase.len())
+        .position(|window| window.iter().map(String::as_str).eq(phrase.iter().copied()))?;
+    if phrase_at < reference_at {
+        Some(DependencyDirection::Downstream)
+    } else if reference_at < phrase_at {
+        Some(DependencyDirection::Upstream)
+    } else {
+        None
+    }
 }
 
 /// Deterministic intent classification. NO model, NO fuzzy matching: keyword
@@ -409,25 +443,59 @@ fn clean_token(t: &str) -> &str {
 /// than answered about some nearby packet.
 pub fn classify(ledger: &Ledger, question: &str) -> Option<Intent> {
     let lower = question.to_ascii_lowercase();
-    let reference = question
+    let tokens: Vec<&str> = question
         .split_whitespace()
         .map(clean_token)
-        .find(|t| !t.is_empty() && ledger.resolve(t).is_some())
-        .map(str::to_string);
+        .filter(|t| !t.is_empty())
+        .collect();
+    let resolved = tokens
+        .iter()
+        .enumerate()
+        .find(|(_, token)| ledger.resolve(token).is_some());
+    let reference_at = resolved.map(|(at, _)| at);
+    let reference = resolved.map(|(_, token)| (*token).to_string());
+    let lower_tokens: Vec<String> = tokens
+        .iter()
+        .map(|token| token.to_ascii_lowercase())
+        .collect();
+    let blocked_by_direction =
+        dependency_direction(&lower_tokens, reference_at, &["blocked", "by"]);
+    let waiting_on_direction =
+        dependency_direction(&lower_tokens, reference_at, &["waiting", "on"]);
+    let depends_on_direction =
+        dependency_direction(&lower_tokens, reference_at, &["depends", "on"])
+            .or_else(|| dependency_direction(&lower_tokens, reference_at, &["depend", "on"]));
 
     let wants_closure = lower.contains("closure")
         || lower.contains("downstream")
         || lower.contains("transitive")
         || lower.contains("everything blocked by");
-    let wants_blocked = lower.contains("blocked by")
-        || lower.contains("blocks")
-        || lower.contains("blocked-by")
-        || lower.contains("waiting on");
+    let wants_blocked = matches!(blocked_by_direction, Some(DependencyDirection::Downstream))
+        || matches!(waiting_on_direction, Some(DependencyDirection::Downstream))
+        || matches!(depends_on_direction, Some(DependencyDirection::Downstream))
+        || lower.contains("blocked-by");
+    let wants_dependencies = lower.contains("what blocks")
+        || lower.contains("blocked on")
+        || lower.contains("blocked-on")
+        || lower.contains("dependencies of")
+        || lower.contains("prerequisites of")
+        || matches!(blocked_by_direction, Some(DependencyDirection::Upstream))
+        || matches!(waiting_on_direction, Some(DependencyDirection::Upstream))
+        || matches!(depends_on_direction, Some(DependencyDirection::Upstream));
     let wants_burndown = lower.contains("burndown")
         || lower.contains("children of")
         || lower.contains("milestone")
         || lower.contains("release target");
-    let wants_ready = lower.contains("ready") || lower.contains("what can i pick up");
+    let wants_ready = lower.contains("ready")
+        || lower.contains("what can i pick up")
+        || lower.contains("work can i do")
+        || lower.contains("work can i pick up");
+
+    let release = match release_in(ledger, question) {
+        Ok(release) => release,
+        Err(constraint) if wants_ready => return Some(Intent::UnsupportedConstraint(constraint)),
+        Err(_) => None,
+    };
 
     if let Some(r) = reference {
         if wants_closure {
@@ -436,18 +504,71 @@ pub fn classify(ledger: &Ledger, question: &str) -> Option<Intent> {
         if wants_blocked {
             return Some(Intent::BlockedBy(r));
         }
+        if wants_dependencies {
+            return Some(Intent::DependenciesOf(r));
+        }
         if wants_burndown {
             return Some(Intent::Burndown(r));
         }
         if wants_ready {
-            return Some(Intent::Ready(role_in(ledger, &lower)));
+            return Some(Intent::Ready {
+                role: role_in(ledger, &lower),
+                release,
+            });
         }
         return Some(Intent::Status(r));
     }
     if wants_ready {
-        return Some(Intent::Ready(role_in(ledger, &lower)));
+        return Some(Intent::Ready {
+            role: role_in(ledger, &lower),
+            release,
+        });
     }
     None
+}
+
+fn release_in(ledger: &Ledger, question: &str) -> Result<Option<String>, String> {
+    let mut releases: Vec<String> = ledger
+        .packets
+        .iter()
+        .filter_map(|p| p.get("desired_release").and_then(serde_yaml::Value::as_str))
+        .map(str::to_string)
+        .collect();
+    releases.sort();
+    releases.dedup();
+
+    let mut selected: Option<String> = None;
+    for raw in question.split_whitespace().map(clean_token) {
+        if let Some(release) = releases.iter().find(|release| release.as_str() == raw) {
+            if let Some(first) = selected.as_deref()
+                && first != release
+            {
+                return Err(format!(
+                    "multiple release constraints are unsupported ('{first}' and '{release}')"
+                ));
+            }
+            selected = Some(release.clone());
+            continue;
+        }
+        if looks_like_release(raw) {
+            return Err(format!(
+                "unknown release constraint '{raw}' (known desired_release values: {})",
+                releases.join(",")
+            ));
+        }
+    }
+    Ok(selected)
+}
+
+fn looks_like_release(token: &str) -> bool {
+    let Some(version) = token.strip_prefix('v').or_else(|| token.strip_prefix('V')) else {
+        return false;
+    };
+    let parts: Vec<&str> = version.split('.').collect();
+    parts.len() >= 2
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
 }
 
 /// Roles are read out of the ledger's own `pickup_role` values, so the
@@ -490,10 +611,18 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
         );
     };
 
+    if let Intent::UnsupportedConstraint(reason) = &intent {
+        return Envelope::unsupported(reason, freshness);
+    }
+
     let (headline, packets): (String, Vec<&serde_yaml::Value>) = match &intent {
         Intent::BlockedBy(r) => (
             format!("packets directly blocked by '{r}'"),
             ledger.blocked_by(r),
+        ),
+        Intent::DependenciesOf(r) => (
+            format!("direct unsatisfied prerequisites blocking '{r}'"),
+            ledger.dependencies_of(r).unwrap_or_default(),
         ),
         Intent::Closure(r) => (
             format!("packets transitively downstream of '{r}'"),
@@ -503,17 +632,31 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
             format!("release-target children of '{r}'"),
             ledger.milestone_children(r),
         ),
-        Intent::Ready(role) => (
-            match role {
-                Some(r) => format!("ready packets for pickup_role '{r}'"),
-                None => "ready packets".to_string(),
-            },
-            ledger.ready(role.as_deref()),
-        ),
+        Intent::Ready { role, release } => {
+            let mut packets = ledger.ready(role.as_deref());
+            if let Some(release) = release {
+                packets.retain(|p| {
+                    p.get("desired_release").and_then(serde_yaml::Value::as_str)
+                        == Some(release.as_str())
+                });
+            }
+            let headline = match (role, release) {
+                (Some(role), Some(release)) => {
+                    format!("ready packets for pickup_role '{role}' in desired_release '{release}'")
+                }
+                (Some(role), None) => format!("ready packets for pickup_role '{role}'"),
+                (None, Some(release)) => {
+                    format!("ready packets in desired_release '{release}'")
+                }
+                (None, None) => "ready packets".to_string(),
+            };
+            (headline, packets)
+        }
         Intent::Status(r) => (
             format!("status of '{r}'"),
             ledger.resolve(r).into_iter().collect(),
         ),
+        Intent::UnsupportedConstraint(_) => unreachable!("handled before query execution"),
     };
 
     if packets.is_empty() {
@@ -528,7 +671,7 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
         );
     }
 
-    let mut body = String::from("order\tstatus\tpacket_id\n");
+    let mut body = String::from("order\tstatus\tdesired_release\trelease_target\tpacket_id\n");
     let mut citations = Vec::new();
     let mut uncitable = Vec::new();
     for p in &packets {
@@ -545,6 +688,14 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
             .get("status")
             .and_then(serde_yaml::Value::as_str)
             .unwrap_or("?");
+        let desired_release = p
+            .get("desired_release")
+            .and_then(serde_yaml::Value::as_str)
+            .unwrap_or("-");
+        let release_target = p
+            .get("release_target")
+            .and_then(serde_yaml::Value::as_str)
+            .unwrap_or("-");
         let Some((line_start, line_end)) = ledger.span_of(&id) else {
             // A row we cannot point at is a row we do not report. Reporting it
             // uncited would be an unsupported claim smuggled into a supported
@@ -552,11 +703,19 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
             uncitable.push(id);
             continue;
         };
-        body.push_str(&format!("{order}\t{status}\t{id}\n"));
+        body.push_str(&format!(
+            "{order}\t{status}\t{desired_release}\t{release_target}\t{id}\n"
+        ));
         let mut authority = BTreeMap::new();
         authority.insert("packet_id".to_string(), id.clone());
         authority.insert("order".to_string(), order);
         authority.insert("status".to_string(), status.to_string());
+        if desired_release != "-" {
+            authority.insert("desired_release".to_string(), desired_release.to_string());
+        }
+        if release_target != "-" {
+            authority.insert("release_target".to_string(), release_target.to_string());
+        }
         citations.push(Citation::new(
             source_rel.to_string(),
             line_start,
@@ -678,6 +837,16 @@ mod tests {
 
     fn fresh() -> Freshness {
         Freshness::new("deadbeef".into(), "2026-07-29T00:00:00Z".into())
+    }
+
+    fn fixture_ledger(name: &str, raw: &str) -> (Ledger, PathBuf) {
+        let path = std::env::temp_dir().join(format!(
+            "tillandsias-plan-answer-{name}-{}.yaml",
+            std::process::id()
+        ));
+        std::fs::write(&path, raw).expect("write answer fixture");
+        let ledger = Ledger::load(&path).expect("load answer fixture");
+        (ledger, path)
     }
 
     /// EXIT CRITERION (ii). The fixture query returns at least one citation,
@@ -982,15 +1151,138 @@ mod tests {
             Some(Intent::BlockedBy(_))
         ));
         assert!(matches!(
+            classify(&ledger, "what blocks forge-local-experts-milestone"),
+            Some(Intent::DependenciesOf(_))
+        ));
+        assert!(matches!(
             classify(&ledger, "everything downstream of 394a"),
             Some(Intent::Closure(_))
         ));
         assert!(matches!(
             classify(&ledger, "what is ready for linux"),
-            Some(Intent::Ready(Some(r))) if r == "linux"
+            Some(Intent::Ready { role: Some(r), release: None }) if r == "linux"
+        ));
+        assert!(matches!(
+            classify(&ledger, "what v0.5 work can I do on linux?"),
+            Some(Intent::Ready { role: Some(r), release: Some(v) })
+                if r == "linux" && v == "v0.5"
+        ));
+        assert!(matches!(
+            classify(&ledger, "what v9.9 work can I do on linux?"),
+            Some(Intent::UnsupportedConstraint(reason))
+                if reason.contains("unknown release constraint 'v9.9'")
+        ));
+        assert!(matches!(
+            classify(&ledger, "what V0.5 work can I do on linux?"),
+            Some(Intent::UnsupportedConstraint(reason))
+                if reason.contains("unknown release constraint 'V0.5'")
+        ));
+        assert!(matches!(
+            classify(&ledger, "what v0.5 v9.9 work can I do on linux?"),
+            Some(Intent::UnsupportedConstraint(reason))
+                if reason.contains("unknown release constraint 'v9.9'")
+        ));
+        assert!(matches!(
+            classify(&ledger, "what v0.5 v0.6 work can I do on linux?"),
+            Some(Intent::UnsupportedConstraint(reason))
+                if reason.contains("multiple release constraints are unsupported")
         ));
         assert!(matches!(classify(&ledger, "394a"), Some(Intent::Status(_))));
         assert!(classify(&ledger, "how do I feel today").is_none());
+    }
+
+    #[test]
+    fn dependency_word_order_preserves_upstream_and_downstream_direction() {
+        let ledger = live_ledger();
+        for question in [
+            "what is forge-local-experts-milestone blocked by?",
+            "what is forge-local-experts-milestone waiting on?",
+            "what does forge-local-experts-milestone depend on?",
+        ] {
+            assert!(
+                matches!(classify(&ledger, question), Some(Intent::DependenciesOf(_))),
+                "packet-before-relation wording must query upstream: {question}"
+            );
+        }
+        for question in [
+            "what is blocked by forge-local-experts-milestone?",
+            "what is waiting on forge-local-experts-milestone?",
+            "what depends on forge-local-experts-milestone?",
+        ] {
+            assert!(
+                matches!(classify(&ledger, question), Some(Intent::BlockedBy(_))),
+                "relation-before-packet wording must query downstream: {question}"
+            );
+        }
+    }
+
+    #[test]
+    fn release_ready_answer_never_leaks_another_release() {
+        let (ledger, path) = fixture_ledger(
+            "release-filter",
+            "steps:\n  - packet_id: v05-ready\n    order: 1\n    status: ready\n    pickup_role: linux\n    desired_release: v0.5\n  - packet_id: v06-ready\n    order: 2\n    status: ready\n    pickup_role: linux\n    desired_release: v0.6\n",
+        );
+        let env = answer_question(&ledger, "what v0.5 work can I do on linux?", "fixture.yaml");
+        assert_eq!(env.confidence(), Confidence::Exact, "{}", env.answer());
+        assert!(!env.citations().is_empty());
+        for citation in env.citations() {
+            assert_eq!(
+                citation
+                    .authority()
+                    .get("desired_release")
+                    .map(String::as_str),
+                Some("v0.5"),
+                "every cited row must retain the exact release constraint: {:?}",
+                citation.authority()
+            );
+        }
+        assert!(env.answer().contains("v05-ready"));
+        assert!(!env.answer().contains("v06-ready"));
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn milestone_upstream_answer_excludes_satisfied_and_downstream_packets() {
+        let (ledger, path) = fixture_ledger(
+            "upstream",
+            "steps:\n  - packet_id: open-prerequisite\n    order: 1\n    status: in_progress\n  - packet_id: satisfied-prerequisite\n    order: 2\n    status: completed\n  - packet_id: target-milestone\n    order: 3\n    status: ready\n    depends_on: [open-prerequisite, satisfied-prerequisite]\n  - packet_id: downstream-consumer\n    order: 4\n    status: ready\n    depends_on: [target-milestone]\n",
+        );
+        for question in [
+            "what blocks target-milestone",
+            "what is target-milestone blocked by?",
+            "what is target-milestone waiting on?",
+        ] {
+            let env = answer_question(&ledger, question, "fixture.yaml");
+            assert_eq!(env.confidence(), Confidence::Exact, "{}", env.answer());
+            let ids: Vec<&str> = env
+                .citations()
+                .iter()
+                .filter_map(|c| c.authority().get("packet_id").map(String::as_str))
+                .collect();
+            assert_eq!(ids, vec!["open-prerequisite"], "{question}");
+            assert!(!env.answer().contains("satisfied-prerequisite"));
+            assert!(!env.answer().contains("downstream-consumer"));
+        }
+
+        let downstream = answer_question(
+            &ledger,
+            "what is blocked by target-milestone?",
+            "fixture.yaml",
+        );
+        assert_eq!(
+            downstream.confidence(),
+            Confidence::Exact,
+            "{}",
+            downstream.answer()
+        );
+        let ids: Vec<&str> = downstream
+            .citations()
+            .iter()
+            .filter_map(|c| c.authority().get("packet_id").map(String::as_str))
+            .collect();
+        assert_eq!(ids, vec!["downstream-consumer"]);
+        assert!(!downstream.answer().contains("open-prerequisite"));
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]
