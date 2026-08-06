@@ -43,3 +43,31 @@ Evidence: `01-build-install.log:1552-1566`.
 - For 584-e8pe, run the tray-feature suite under repeated shuffled/concurrent
   execution while inventorying the marker directory and process-global test
   locks; make the fixture hermetic before retrying the full E2E gate.
+
+## Resolution checkpoint — 2026-08-06
+
+Order 584-e8pe now runs the launch-marker lifecycle assertion in an exact
+self-reexecuted child with a private temporary `XDG_RUNTIME_DIR`. This removes
+the host-global lock directory, unrelated suite forks, and process-global env
+mutation from the fixture while preserving the immediate post-drop assertion.
+The parent requires the child transcript to report one passed test, and
+explicit TempDir removal proves no marker/lock state survives. Verification:
+
+```text
+cargo test -p tillandsias-headless --bin tillandsias --features tray \
+  tests::shared_stack_launch_marker_lifecycle_and_own_exclusion -- --exact --nocapture
+=> 1 passed, 0 failed, 389 filtered out
+
+5 × cargo test -p tillandsias-headless --bin tillandsias --features tray
+=> each: 388 passed, 0 failed, 2 ignored (18.90–19.19s)
+```
+
+Order 584-2qq2's original regeneration-before-CI behavior was already present
+at the retry checkpoint. Its uncovered residual was stamp authority:
+`./build.sh --check` could certify a tree without asking the non-mutating trace
+freshness question. `_write_gate_stamp` now requires
+`generate-traces.sh --check` and fails closed before writing when stale,
+regardless of the writer-suppression override. The existing six-step
+`litmus:build-trace-index-dispatch-coverage` now pins clean
+`trace-check,stamp` and stale `trace-check`-only transcripts while preserving
+the `traces,gate` order; all six steps pass.

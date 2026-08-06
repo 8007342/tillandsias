@@ -72,10 +72,44 @@ retry 3. The residual is recorded on existing order 584-2qq2; the related
 post-commit dashboard side effect is recorded on existing order 489, avoiding
 duplicate packets.
 
+## Retry 3 — recurring launch-marker suite race
+
+- **Commit tested**: `a10a23364762ab44026172ae9c706bf290f91257`
+- **Run ID**: `20260806T015251Z`
+- **Evidence**: `target/build-install-smoke-e2e/20260806T015251Z/`
+- **Verdict**: FAIL at gate 1 (`build_install_exit=141`); the run was
+  interrupted immediately after the aggregate test gate turned red.
+- **Installed binary**: unchanged at `Tillandsias v0.4.260804.1`.
+- **Reset/init/forge**: **NOT REACHED**.
+
+Trace freshness was clean, but the 390-test tray-feature run reproduced the
+existing order 584-e8pe race at
+`tests::shared_stack_launch_marker_lifecycle_and_own_exclusion`: 387 passed,
+one failed, and two were ignored in 19.15 seconds. The dropped guard's lock
+was still visible at the assertion. The exact test passed immediately alone,
+and an unchanged full-suite retry passed all 388 runnable tests in 20.04
+seconds. This matches the 2026-08-01 residual rather than opening a duplicate.
+
+The failure is consistent with the fork-to-exec inherited-fd window already
+documented by the resource-lock unit test: another suite test can fork while
+the guard fd is open, and `O_CLOEXEC` takes effect only at exec. The failure
+log does not identify the holder, so that remains an evidence-backed inference
+rather than a proven per-process fd trace.
+
+Order 584-e8pe was repaired without weakening the immediate-release contract.
+The test re-execs exactly itself in an isolated child with a private temporary
+`XDG_RUNTIME_DIR`, asserts that the child executed one test (preventing a
+vacuous `--exact` pass), keeps the immediate post-drop assertion, and explicitly
+removes the fixture. The focused test passed, followed by five internally
+concurrent full tray-feature suites; every run reported 388 passed, zero
+failed, and two ignored in 18.90–19.19 seconds.
+
 ## Retry contract
 
 Before retrying, focused compaction tests, the real-ledger compaction test,
 image-squashing unit tests, the init incremental-build litmus,
 `scripts/generate-traces.sh --check`, and `./build.sh --check` must be green.
-The full build/install is then rerun from a clean pushed checkpoint. Podman
-reset remains forbidden unless that gate and installation succeed.
+Order 584-e8pe must additionally pass focused, repeated full-suite, and
+concurrent verification. The full build/install is then rerun from a clean
+pushed checkpoint. Podman reset remains forbidden unless that gate and
+installation succeed.

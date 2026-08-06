@@ -15823,6 +15823,44 @@ mod tests {
     /// process, and vanish the moment the guard drops (flock-on-death).
     #[test]
     fn shared_stack_launch_marker_lifecycle_and_own_exclusion() {
+        const CHILD_ENV: &str = "TILLANDSIAS_LAUNCH_MARKER_LIFECYCLE_CHILD";
+        const TEST_NAME: &str = "tests::shared_stack_launch_marker_lifecycle_and_own_exclusion";
+
+        // The full suite concurrently spawns commands. A fork can briefly
+        // inherit another test thread's flock fd before O_CLOEXEC takes effect
+        // at exec, making an immediate post-drop scan conservatively read
+        // "held". Re-exec this one test into its own process so no unrelated
+        // suite thread can fork while the marker is live. This keeps the
+        // immediate-release assertion meaningful instead of hiding a real
+        // leaked guard behind a timing retry (order 584-e8pe).
+        if std::env::var(CHILD_ENV).as_deref() != Ok("isolated-child") {
+            let lock_runtime = tempfile::tempdir().expect("isolated lock runtime");
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("resolve current test executable"),
+            )
+            .env(CHILD_ENV, "isolated-child")
+            .env("XDG_RUNTIME_DIR", lock_runtime.path())
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .output()
+            .expect("re-exec isolated launch-marker lifecycle test");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let cleanup = lock_runtime.close();
+            assert!(
+                output.status.success(),
+                "isolated launch-marker lifecycle test failed (status {}):\nstdout:\n{}\nstderr:\n{}",
+                output.status,
+                stdout,
+                stderr
+            );
+            assert!(
+                stdout.contains("1 passed; 0 failed"),
+                "isolated child matched no test (libtest exits zero for that); expected one execution:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+            );
+            cleanup.expect("isolated launch-marker fixture cleanup");
+            return;
+        }
+
         let project = format!("marker-test-{}", std::process::id());
         let (marker, guard) =
             acquire_launch_in_flight_marker(&project, false).expect("marker acquires");

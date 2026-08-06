@@ -89,7 +89,12 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 
 ### Build integration
 
-`build.sh` MUST invoke `generate-traces.sh` on every build that is not a test-only or check-only invocation, so `TRACES.md` stays current without a separate manual step.
+`build.sh` MUST invoke `generate-traces.sh` in regeneration mode on every build
+that is not a test-only or check-only invocation, so `TRACES.md` stays current
+without a separate manual step. Before writing a pre-push gate stamp,
+`build.sh` MUST invoke `generate-traces.sh --check` and MUST refuse the stamp
+when the committed indexes are stale. Validation mode MUST NOT modify tracked
+files.
 
 #### Scenario: Auto-regeneration on build
 - **WHEN** a developer runs `./build.sh` or `./build.sh --release`
@@ -98,8 +103,17 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 
 #### Scenario: Skipped on test/check
 - **WHEN** a developer runs `./build.sh --test` or `./build.sh --check`
-- **THEN** `generate-traces.sh` SHALL NOT run
+- **THEN** `generate-traces.sh` SHALL NOT run in regeneration mode
 - **AND** the existing `TRACES.md` SHALL remain unchanged
+- **AND** a gate-bearing `--check` invocation SHALL validate freshness with
+  `generate-traces.sh --check` before writing its gate stamp
+
+#### Scenario: Stale indexes cannot earn a gate stamp
+- **GIVEN** the committed `TRACES.md` evidence does not match the current
+  `@trace` annotations
+- **WHEN** a gate-bearing `build.sh` invocation otherwise passes
+- **THEN** the invocation SHALL fail before writing the pre-push gate stamp
+- **AND** it SHALL print the non-mutating trace-check remedy
 
 ### Requirement: Project observatorium view
 
