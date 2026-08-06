@@ -32,6 +32,31 @@ product gap behind `plan-expert-actionable-next`: the warmed expert needs a
 small natural first action that the harness reliably discovers and prefers,
 not merely a background process an agent may ignore.
 
+## Clean-store full OpenCode observation
+
+Local-build run `20260806T085959Z` repeated the test after a destructive empty
+Podman reset and cold rebuild of the forge image. The bare full-mode launch
+automatically attached the plan expert: OpenCode invoked `plan_ready`,
+`plan_status`, and `plan_answer` without any user registration step. This is
+the first observation in this audit where the cold agent both had the server
+and chose it, so OpenCode attachment is now proven rather than inferred.
+
+The result also makes the remaining substitution gap concrete. Queries against
+base-ledger packets worked, but requests about fragment-born orders 611-kqpf
+and 600-c266 were refused or incomplete, after which the agent fell back to
+`grep` and direct YAML reads. A direct live reproduction showed the folded
+`status` command can see 600-c266 while `append-event` still returns
+`packet_id ... not found`; that remains the existing 600-c266 owner, while
+fragment citations/freshness remain the `expert-fragment-provenance-and-freshness`
+packet. The new run therefore confirms both transparent process availability
+and why availability alone does not yet meet the “never read the ledger” goal.
+
+The outer full launch ultimately returned zero without completing its own
+boundary/push contract; order 614-2gqx owns that independent terminal
+attestation gap. Native MCP attachment in this Codex session remains absent,
+so the product currently has one verified automatic harness (OpenCode), image
+wiring for the others, and outstanding native-harness acceptance work.
+
 ## Reproduction surface
 
 The real server was driven with JSON-RPC frames equivalent to:
@@ -152,3 +177,12 @@ Do not duplicate existing owners: 457 owns the cheatsheet inference replacement;
 600-c266 owns append-event's fragment read path. Existing harness acceptance
 must be ratcheted so direct stdio is diagnostic evidence only, never a substitute
 for a harness-native tool call.
+
+The next recommended implementation packet is 606-e2hg,
+`plan-expert-release-and-upstream-query-primitives`. A read-only continuation
+audit pinned its bounded scope: exact `--release` filtering and JSON projection,
+a distinct direct-unsatisfied-dependency primitive (without changing existing
+downstream `blocked-by` semantics), `plan_query`/`plan_blocked_on` forge-plan
+schemas, typed invalid-constraint errors, and real-MCP ground truth for the
+operator's v0.5/upstream questions. It is ready, dependency-free, unleased, and
+is a prerequisite for the concise `plan_next` / “what's next?” packet.

@@ -84,7 +84,7 @@ FLAG_NO_CACHE="${TILLANDSIAS_BUILD_NO_CACHE:-false}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault|nanoclawv2)
+        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -98,7 +98,7 @@ while [[ $# -gt 0 ]]; do
             FLAG_TAG="$1"
             ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault|nanoclawv2] [--force] [--no-cache] [--tag <tag>]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault] [--force] [--no-cache] [--tag <tag>]"
             echo ""
             echo "Build a container image using podman (Containerfile-based, reproducible)."
             echo ""
@@ -111,7 +111,6 @@ while [[ $# -gt 0 ]]; do
             echo "  chromium-core      Build the secure browser container (minimal)"
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  vault              Build the HashiCorp Vault enclave container (Phase 3 POC)"
-            echo "  nanoclawv2         Build the NanoClawV2 orchestration container"
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --no-cache         Diagnostic rebuild with podman layer cache disabled"
             echo "  --tag <tag>        Override the canonical image tag (default: content hash)"
@@ -158,7 +157,6 @@ case "$IMAGE_NAME" in
     chromium-core) CONTAINERFILE="$ROOT/images/chromium/Containerfile.core" ;;
     chromium-framework) CONTAINERFILE="$ROOT/images/chromium/Containerfile.framework" ;;
     vault)     CONTAINERFILE="$ROOT/images/vault/Containerfile" ;;
-    nanoclawv2) CONTAINERFILE="$ROOT/images/nanoclawv2/Containerfile" ;;
     *)         CONTAINERFILE="$ROOT/images/default/Containerfile" ;;
 esac
 
@@ -433,16 +431,14 @@ BUILD_ARGS+=(--squash --label "${IMAGE_LAYER_POLICY_LABEL}=${IMAGE_LAYER_POLICY}
 BUILD_LOG="$ROOT/build-${IMAGE_NAME}.log"
 BUILD_PROGRESS_LOG="$ROOT/build-${IMAGE_NAME}-progress.jsonl"
 rm -f "$BUILD_LOG" "$BUILD_PROGRESS_LOG"
-if [[ "$IMAGE_NAME" == "forge" || "$IMAGE_NAME" == "nanoclawv2" ]]; then
-    _step "Refreshing cheatsheets and/or skills in build context..."
+if [[ "$IMAGE_NAME" == "forge" ]]; then
+    _step "Refreshing cheatsheets and skills in build context..."
     rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills"
-    if [[ "$IMAGE_NAME" == "forge" ]]; then
-        # Cheatsheet staging lives in ONE place so the tree litmus:
-        # cheatsheet-host-image-sync verifies is the tree the image receives
-        # (order 448). Do not inline the copy here again.
-        "$SCRIPT_DIR/stage-image-cheatsheets.sh" --stage >/dev/null
-        cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
-    fi
+    # Cheatsheet staging lives in ONE place so the tree litmus:
+    # cheatsheet-host-image-sync verifies is the tree the image receives
+    # (order 448). Do not inline the copy here again.
+    "$SCRIPT_DIR/stage-image-cheatsheets.sh" --stage >/dev/null
+    cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
     cp -rp "$ROOT/skills" "$IMAGE_DIR/skills"
 fi
 # Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration

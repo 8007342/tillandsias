@@ -15,11 +15,11 @@ The init command MUST maintain a state file at `$HOME/.cache/tillandsias/init-bu
 
 #### Scenario: First run with no state file
 - **WHEN** `tillandsias --init` is run and no state file exists
-- **THEN** all images MUST be built in sequence (proxy, git, inference, router, chromium-core, chromium-framework, forge, web)
+- **THEN** all images MUST be built in sequence (proxy, git, vault, inference, router, chromium-core, chromium-framework, forge-base, forge, web)
 
 #### Scenario: Re-run after partial failure
 - **WHEN** `tillandsias --init` is run and the state file shows proxy=success, forge=failed
-- **THEN** proxy MUST be skipped (image exists check), forge MUST be rebuilt, git, inference, chromium-core, chromium-framework MUST proceed normally
+- **THEN** proxy MUST be skipped (image exists check), forge MUST be rebuilt, and git, vault, inference, router, chromium-core, chromium-framework, forge-base, and web MUST proceed normally
 
 #### Scenario: Image deleted after successful build
 - **WHEN** `tillandsias --init` is run, state shows forge=success, but `podman image exists tillandsias-forge:vX.Y.Z` returns false

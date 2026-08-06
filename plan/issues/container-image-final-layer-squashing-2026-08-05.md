@@ -140,6 +140,47 @@ evidence, not an isolated performance benchmark. They show why layer depth,
 one metric. Order 608-ijbt owns the clean isolated A/B so this packet can close
 on product correctness without inventing the missing laptop numbers.
 
+## Retry 5 clean-store acceptance
+
+Run `20260806T085959Z` tested commit
+`c9ebd3f594da262594ea81ccb29e68fbd72d3d7c` through the complete local build and
+install gate, then reset the shared Podman store only after that gate returned
+zero. The immediate receipt showed zero containers, images, and volumes plus
+zero teardown zombies/orphans. Cold `tillandsias --init --debug` rebuilt all ten
+images and returned zero.
+
+Direct image inspection then proved, for every image:
+
+- the version alias and source-digest canonical alias resolve to the same image;
+- `io.tillandsias.image.layer-policy=squash-new`, exact image name/version, and
+  a valid source digest are present;
+- the RootFS layer list begins with the exact direct-base layer list;
+- the current Containerfile contributes exactly one new layer.
+
+The clean counts were `proxy 1→2`, `git 1→2`, `vault 7→8`, `inference 1→2`,
+`router 5→6`, `chromium-core 1→2`, `chromium-framework 2→3`, `forge-base 1→2`,
+`forge 2→3`, and `web 1→2`. In particular, the framework and forge prefixes
+match their separately tagged local bases; `--squash-all` was not used.
+
+The hardened Chromium image emitted the expected DOM with the switch required
+by its existing container sandbox policy, and the newly built forge launched,
+cloned through the mirror, attached OpenCode, and exercised the plan expert.
+The E2E found separate pre-existing terminal/probe defects (orders 612-nvf3 and
+614-2gqx); neither changes the layer graph or invalidates the successful image
+construction/start evidence.
+
+The acceptance audit also removed a stale `nanoclawv2` developer selector from
+`scripts/build-image.sh` and `scripts/hash-image-sources.sh`: its image directory
+was already deleted, so it could only promise a target that failed
+Containerfile discovery. The active init spec now names the actual ten-image
+cold sequence, and the default-image shape litmus fails if a retired
+NanoClaw/ZeroClaw selector returns. This cleanup is within order 607's image
+builder/spec scope and changes no UX surface.
+
+Order 607's product-correctness closure is now satisfied. The quantitative,
+isolated storage/load/startup experiment remains intentionally separate as
+ready order 608-ijbt.
+
 Primary references:
 
 - Podman build options: <https://docs.podman.io/en/stable/markdown/podman-build.1.html#squash>

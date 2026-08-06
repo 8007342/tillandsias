@@ -29,11 +29,6 @@ case "$image_name" in
         copied_source_rels+=(skills cheatsheets cheatsheet-sources)
         source_dirs+=("$root/skills" "$root/cheatsheets" "$root/cheatsheet-sources")
         ;;
-    nanoclawv2)
-        source_rels+=(skills)
-        copied_source_rels+=(skills)
-        source_dirs+=("$root/skills")
-        ;;
 esac
 
 file_list=()

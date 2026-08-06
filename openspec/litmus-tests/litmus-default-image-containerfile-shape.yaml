@@ -146,6 +146,11 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "forge|web"
 
+  - step: "Req Retired image selectors: developer build and source hashing expose no removed NanoClaw/ZeroClaw target"
+    command: "if grep -Ein 'nanoclawv2|zeroclaw' scripts/build-image.sh scripts/hash-image-sources.sh; then echo 'FAIL: retired image selector remains'; exit 1; fi; echo 'ok: retired image selectors absent'"
+    timeout_ms: 3000
+    expected_behavior: "ok: retired image selectors absent"
+
   - step: "Req Content-hash identity: build-image.sh tags with content-hash + version alias"
     # Spec § Req mandates `tillandsias-forge:<CONTENT_HASH>`
     # canonical tag + `v<version>` + `:latest` aliases. The

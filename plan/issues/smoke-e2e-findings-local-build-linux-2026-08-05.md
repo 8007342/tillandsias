@@ -154,6 +154,85 @@ Codex sibling, shared-stamp, skill-documentation, and verdict-parity criteria.
 The install-generated VERSION and crate-manifest/lock bumps were restored
 byte-for-byte after the failure. No Podman reset was attempted.
 
+## Retry 5 — clean-store image acceptance passed; full-cycle exit attestation failed
+
+- **Commit tested**: `c9ebd3f594da262594ea81ccb29e68fbd72d3d7c`
+- **Run ID**: `20260806T085959Z`
+- **Evidence**: `target/build-install-smoke-e2e/20260806T085959Z/`
+- **Installed binary**: `/home/tlatoani/.local/bin/tillandsias`,
+  `Tillandsias v0.4.260806.1`, 41 MiB, musl-static.
+- **Overall verdict**: **FAIL at the full meta-orchestration terminal contract**;
+  build/install, destructive reset, cold init, image squashing, OpenCode smoke,
+  and forge transport all passed.
+
+The mandatory build/install gate returned zero. Rust, clippy, tray (388 passed,
+zero failed, two ignored), signal tests, 239 executed pre-build litmus checks,
+17 aggregate gates, 11 post-build checks, and five runtime residual checks were
+green. The evidence bundle reported 255 litmus passes and zero failures. The
+post-build OpenCode path used the installed product (not `./repeat`), emitted
+`MO-SMOKE: PASS`, and satisfied all seven launcher/delta checks.
+
+Only after that success did the destructive gate run. `podman system reset
+--force` returned zero; the immediate audit found zero containers, images, and
+volumes, and the teardown probe found zero zombies/orphans. Cold
+`tillandsias --init --debug` then built all ten images and bootstrapped Vault
+from the empty store with `init_exit=0`.
+
+### Squash-new clean-store matrix
+
+Each version alias, content-digest alias, image identity label, and inherited
+RootFS prefix was checked directly. Every Containerfile contributed exactly one
+new RootFS layer; no inherited base was flattened.
+
+| image | base layers | image layers | delta | prefix | labels/canonical alias |
+|---|---:|---:|---:|---|---|
+| proxy | 1 | 2 | 1 | PASS | PASS |
+| git | 1 | 2 | 1 | PASS | PASS |
+| vault | 7 | 8 | 1 | PASS | PASS |
+| inference | 1 | 2 | 1 | PASS | PASS |
+| router | 5 | 6 | 1 | PASS | PASS |
+| chromium-core | 1 | 2 | 1 | PASS | PASS |
+| chromium-framework | 2 | 3 | 1 | PASS | PASS |
+| forge-base | 1 | 2 | 1 | PASS | PASS |
+| forge | 2 | 3 | 1 | PASS | PASS |
+| web | 1 | 2 | 1 | PASS | PASS |
+
+The audit also found a stale developer-only `nanoclawv2` selector whose
+Containerfile no longer exists and corrected the order-607-owned build/hash
+surfaces. The active init spec's cold sequence was corrected from eight to the
+actual ten images. A focused default-image run passed 9/9 tests, including the
+new retired-selector regression.
+
+### Chromium start exposed a pre-existing probe bug
+
+The rebuilt framework image emitted the expected DOM with network disabled,
+read-only root, all capabilities dropped, `no-new-privileges`, keep-id, bounded
+PIDs, and ephemeral state when Chromium received `--no-sandbox`. Without that
+explicit caller argument, its entrypoint's help-text probe omitted the required
+switch and Chromium exited 139 in the zygote host. The first harness attempt
+also recorded Podman exit 125 because this Podman rejects `uid=` as a tmpfs
+option; the corrected `/tmp`-profile command isolates that harness mistake from
+the product defect. Order 612-nvf3 owns the real false-negative probe.
+
+### Full forge transport passed, but the skill did not complete
+
+The final installed-product launch cloned through the mirror, attached
+OpenCode, passed all startup guards, and actually called the plan expert. It
+reproduced order 600-c266: the folded expert can see a fragment-only packet,
+while `append-event` still edits only the base and returns “packet_id not
+found”. This is useful live expert evidence and not a duplicate packet.
+
+The agent then made local commit `4a1410a2` for its generated OpenSpec sync and
+stopped during implementation analysis. It did not emit a full-cycle verdict,
+verify its startup boundary, write a cycle result, or push. Teardown discarded
+the clone and commit, yet the provider and outer launcher returned
+`forge_exit=0`; `origin/linux-next` remained `c9ebd3f5`. Order 614-2gqx now owns
+the missing full-mode terminal attestation. Process exit zero is recorded as a
+transport result, not a meta-orchestration PASS.
+
+The install-generated VERSION and crate-manifest/lock bumps were again restored
+byte-for-byte. No release is warranted from this run.
+
 ## Retry contract
 
 Before retrying, focused compaction tests, the real-ledger compaction test,

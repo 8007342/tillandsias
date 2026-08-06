@@ -18,6 +18,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/lib-common.sh#L1111](../../../images/default/lib-common.sh#L1111)
 - [images/default/lib-common.sh#L1159](../../../images/default/lib-common.sh#L1159)
 - [images/default/lib-common.sh#L1181](../../../images/default/lib-common.sh#L1181)
-- [scripts/build-image.sh#L236](../../../scripts/build-image.sh#L236)
+- [scripts/build-image.sh#L234](../../../scripts/build-image.sh#L234)
 - [scripts/test-cache-semantics.sh#L3](../../../scripts/test-cache-semantics.sh#L3)
 - [scripts/test-image-build-convergence.sh#L2](../../../scripts/test-image-build-convergence.sh#L2)

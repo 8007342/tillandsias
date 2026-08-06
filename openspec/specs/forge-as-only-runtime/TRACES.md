@@ -11,7 +11,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/main.rs#L11671](../../../crates/tillandsias-headless/src/main.rs#L11671)
 - [crates/tillandsias-podman/src/client.rs#L28](../../../crates/tillandsias-podman/src/client.rs#L28)
 - [crates/tillandsias-policy/src/main.rs#L1611](../../../crates/tillandsias-policy/src/main.rs#L1611)
-- [scripts/build-image.sh#L385](../../../scripts/build-image.sh#L385)
+- [scripts/build-image.sh#L383](../../../scripts/build-image.sh#L383)
 - [scripts/check-launch-artifacts-untracked.sh#L2](../../../scripts/check-launch-artifacts-untracked.sh#L2)
 - [scripts/distill-forge-diagnostics.sh#L2](../../../scripts/distill-forge-diagnostics.sh#L2)
 - [scripts/forge-diagnostics-annex.sh#L2](../../../scripts/forge-diagnostics-annex.sh#L2)
