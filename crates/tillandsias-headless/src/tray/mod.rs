@@ -1782,6 +1782,19 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
         .env("NO_PROXY", no_proxy)
         .env("PATH", "/usr/local/bin:/usr/bin");
 
+    // Order 570: this legacy path remains reachable by the root maintenance
+    // terminal and in tests. Keep its harness identity aligned with the live
+    // per-project launch path; Observatorium is not an agent harness.
+    spec = match kind {
+        LaunchKind::OpenCode => spec.env("TILLANDSIAS_AGENT", "opencode"),
+        LaunchKind::OpenCodeWeb => spec.env("TILLANDSIAS_AGENT", "opencode-web"),
+        LaunchKind::Claude => spec.env("TILLANDSIAS_AGENT", "claude"),
+        LaunchKind::Codex => spec.env("TILLANDSIAS_AGENT", "codex"),
+        LaunchKind::Antigravity => spec.env("TILLANDSIAS_AGENT", "antigravity"),
+        LaunchKind::Maintenance => spec.env("TILLANDSIAS_AGENT", "terminal"),
+        LaunchKind::Observatorium => spec,
+    };
+
     if ca_cert.exists() {
         spec = spec.bind_mount(
             ca_cert.display().to_string(),
@@ -5408,6 +5421,7 @@ mod tests {
         assert!(args.contains(&"--init".to_string()));
         assert!(args.contains(&"--name".to_string()));
         assert!(args.contains(&"tillandsias-alpha-claude".to_string()));
+        assert!(args.contains(&"TILLANDSIAS_AGENT=claude".to_string()));
         assert!(args.contains(&"--hostname".to_string()));
         assert!(args.contains(&"forge-alpha".to_string()));
         assert!(args.contains(&"--entrypoint".to_string()));
@@ -5488,6 +5502,7 @@ mod tests {
         assert!(args.contains(&"--init".to_string()));
         assert!(args.contains(&"--entrypoint".to_string()));
         assert!(args.contains(&"/usr/local/bin/entrypoint-forge-opencode-web.sh".to_string()));
+        assert!(args.contains(&"TILLANDSIAS_AGENT=opencode-web".to_string()));
         assert!(args.contains(&"--security-opt=label=disable".to_string()));
         assert!(args.contains(&"tillandsias-forge:v0.1.260506.6".to_string()));
     }

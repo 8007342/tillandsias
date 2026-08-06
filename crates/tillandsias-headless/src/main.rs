@@ -4909,6 +4909,18 @@ enum ForgeMode {
     Web,
 }
 
+impl ForgeMode {
+    /// Stable in-container harness identity consumed by forge-local expert
+    /// routing. This is deliberately separate from entrypoint selection so a
+    /// launcher cannot silently fall back to a different harness identity.
+    fn agent_identity(self) -> &'static str {
+        match self {
+            Self::Cli => "opencode",
+            Self::Web => "opencode-web",
+        }
+    }
+}
+
 /// Order 342: guest-owned checkout isolation for host-shared (virtiofs)
 /// project trees. When the launcher exports
 /// `TILLANDSIAS_FORGE_SRC_ISOLATION=clone`, the operator's checkout is
@@ -5009,6 +5021,8 @@ fn build_opencode_forge_args(
         format!("PROJECT={project_name}"),
         "--env".into(),
         format!("TILLANDSIAS_PROJECT={project_name}"),
+        "--env".into(),
+        format!("TILLANDSIAS_AGENT={}", mode.agent_identity()),
         "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
@@ -10543,6 +10557,19 @@ impl ForgeAgentMode {
         }
     }
 
+    /// Stable in-container harness identity. Keep this distinct from `slug`:
+    /// the maintenance lane's historical container name is `maintenance`,
+    /// while the runtime environment contract calls that lane `terminal`.
+    fn agent_identity(self) -> &'static str {
+        match self {
+            ForgeAgentMode::Claude => "claude",
+            ForgeAgentMode::Codex => "codex",
+            ForgeAgentMode::OpenCode => "opencode",
+            ForgeAgentMode::Antigravity => "antigravity",
+            ForgeAgentMode::Maintenance => "terminal",
+        }
+    }
+
     fn window_title(self, project_name: &str) -> String {
         format!("Tillandsias — {} — {}", project_name, self.slug())
     }
@@ -11127,6 +11154,10 @@ fn build_forge_agent_run_args_with_vault(
         .env("USER", "forge")
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
+        // Order 570: forge-local expert selection and harness validation must
+        // observe the lane that was actually launched, never an entrypoint
+        // fallback. Every launch path injects this exact identity.
+        .env("TILLANDSIAS_AGENT", mode.agent_identity())
         // Order 392: agents (and the startup context) learn the host's
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
@@ -17529,6 +17560,59 @@ esac
         assert!(body.contains("std::env::current_exe()"));
         assert!(body.contains("format!(\"--{}\", mode.slug())"));
         assert!(body.contains("canonical.display().to_string()"));
+    }
+
+    /// Order 570: the variable consumed by forge-local expert routing must
+    /// identify the harness selected by the launcher. Cover both launch
+    /// builders and every direct agent lane; checking the built argv pins the
+    /// exact environment that Podman places inside the container.
+    #[test]
+    fn forge_launch_args_export_exact_harness_identity() {
+        let project = PathBuf::from("/tmp/project");
+        let certs = PathBuf::from("/tmp/ca");
+
+        for (mode, expected) in [
+            (ForgeAgentMode::Claude, "claude"),
+            (ForgeAgentMode::Codex, "codex"),
+            (ForgeAgentMode::OpenCode, "opencode"),
+            (ForgeAgentMode::Antigravity, "antigravity"),
+            (ForgeAgentMode::Maintenance, "terminal"),
+        ] {
+            let args = build_forge_agent_run_args(&project, "alpha", &certs, "1.2.3", mode, false);
+            let identity = format!("TILLANDSIAS_AGENT={expected}");
+            assert!(
+                has_arg(&args, &identity),
+                "{mode:?} launch must carry {identity}; args={args:?}"
+            );
+            assert_eq!(
+                args.iter()
+                    .filter(|arg| arg.starts_with("TILLANDSIAS_AGENT="))
+                    .count(),
+                1,
+                "{mode:?} launch must inject exactly one harness identity"
+            );
+        }
+
+        for (mode, expected) in [
+            (ForgeMode::Cli, "opencode"),
+            (ForgeMode::Web, "opencode-web"),
+        ] {
+            let args = build_opencode_forge_args(
+                &project, "alpha", None, &certs, "1.2.3", mode, None, false, false,
+            );
+            let identity = format!("TILLANDSIAS_AGENT={expected}");
+            assert!(
+                has_arg(&args, &identity),
+                "{mode:?} launch must carry {identity}; args={args:?}"
+            );
+            assert_eq!(
+                args.iter()
+                    .filter(|arg| arg.starts_with("TILLANDSIAS_AGENT="))
+                    .count(),
+                1,
+                "{mode:?} launch must inject exactly one harness identity"
+            );
+        }
     }
 
     #[test]
