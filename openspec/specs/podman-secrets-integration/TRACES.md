@@ -7,8 +7,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-headless/src/main.rs#L7020](../../../crates/tillandsias-headless/src/main.rs#L7020)
 - [images/default/entrypoint-forge-claude.sh#L74](../../../images/default/entrypoint-forge-claude.sh#L74)
-- [images/git/entrypoint.sh#L23](../../../images/git/entrypoint.sh#L23)
-- [images/git/entrypoint.sh#L77](../../../images/git/entrypoint.sh#L77)
+- [images/git/entrypoint.sh#L29](../../../images/git/entrypoint.sh#L29)
+- [images/git/entrypoint.sh#L83](../../../images/git/entrypoint.sh#L83)
 - [images/inference/entrypoint.sh#L333](../../../images/inference/entrypoint.sh#L333)
 - [images/proxy/entrypoint.sh#L17](../../../images/proxy/entrypoint.sh#L17)
 - [images/proxy/entrypoint.sh#L25](../../../images/proxy/entrypoint.sh#L25)

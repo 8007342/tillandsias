@@ -172,7 +172,15 @@ MIRROR="$WORK/mirror.git"
 "$REAL_GIT" init -q --bare "$MIRROR"
 "$REAL_GIT" -C "$MIRROR" remote add origin \
     https://github.example.invalid/org/repo.git
-RECORD="0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 refs/heads/main"
+EMPTY_TREE="$("$REAL_GIT" -C "$MIRROR" mktree </dev/null)"
+DUMMY_SHA="$(
+    GIT_AUTHOR_NAME=fixture GIT_AUTHOR_EMAIL=fixture@example.invalid \
+    GIT_COMMITTER_NAME=fixture GIT_COMMITTER_EMAIL=fixture@example.invalid \
+        "$REAL_GIT" -C "$MIRROR" commit-tree "$EMPTY_TREE" -m relay-fixture
+)"
+OID_SAMPLE="$("$REAL_GIT" -C "$MIRROR" hash-object --stdin </dev/null)"
+ZERO_SHA="$(printf '%*s' "${#OID_SAMPLE}" '' | tr ' ' '0')"
+RECORD="$ZERO_SHA $DUMMY_SHA refs/heads/main"
 
 run_relay() {
     printf '%s\n' "$RECORD" | (cd "$MIRROR" && "$RELAY")

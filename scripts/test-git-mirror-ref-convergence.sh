@@ -115,10 +115,10 @@ retry_case() {
     # Replicate the entrypoint retry sequence: reconcile fetch, then push each
     # local head/tag by explicit refspec.
     git -C "$d/mirror" fetch origin >/dev/null 2>&1 || true
-    local updates="" ref newsha zero="0000000000000000000000000000000000000000"
+    local updates="" ref newsha
     for ref in $(git -C "$d/mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
         newsha="$(git -C "$d/mirror" rev-parse "$ref")"
-        updates="${updates}${zero} ${newsha} ${ref}
+        updates="${updates}${newsha} ${newsha} ${ref}
 "
     done
     printf '%s' "$updates" | (cd "$d/mirror" && hooks/tillandsias-relay-refs) >/dev/null 2>&1 || true

@@ -4,9 +4,10 @@
 
 The current write boundary is unauthenticated, and the relay makes the blast
 radius larger than "mirror-local refs." Any enclave peer can reach anonymous
-`git://` receive-pack, create or fast-forward arbitrary refs, and delete
-unprotected upstream refs in repeatable batches while the mirror authenticates
-upstream with its privileged Vault-backed credential.
+`git://` receive-pack and create or fast-forward arbitrary refs while the mirror
+authenticates upstream with its privileged Vault-backed credential. At audit
+time it could also delete upstream refs in repeatable batches; order 579's
+containment below now rejects deletion before relay.
 
 Network placement limits reachability but is not identity. This conflicts with
 the operator's zero-trust requirement and with NIST's zero-trust model. Git's
@@ -20,15 +21,15 @@ only when every peer is trusted:
 
 - `images/git/entrypoint.sh` starts `git daemon` on `0.0.0.0:9418` with
   `--enable=receive-pack`.
-- `images/git/relay-refs.sh` converts a zero new object ID directly into an
-  upstream deletion refspec. It rejects only transactions containing more than
-  ten deletions, so repeated batches bypass the guard.
+- At audit time, `images/git/relay-refs.sh` converted a zero new object ID
+  directly into an upstream deletion refspec and rejected only transactions
+  containing more than ten deletions, so repeated batches bypassed the guard.
 - The same relay then pushes the supplied refspecs atomically with the mirror's
   upstream credential.
-- Deletions bypass content validation; new branch grammar is warning-only.
-- Fresh repositories configure `receive.denyDeletes=false` and
-  `receive.denyNonFastforwards=false`; existing volumes do not receive future
-  hardening because configuration is inside the fresh-init branch.
+- At audit time, deletions bypassed content validation and fresh repositories
+  configured `receive.denyDeletes=false` / `receive.denyNonFastforwards=false`;
+  existing volumes skipped configuration inside the fresh-init branch. Order
+  579 replaces that behavior below. New branch grammar remains warning-only.
 - A successfully relayed malicious fast-forward can later be consumed by clean
   host auto-sync.
 
@@ -88,9 +89,10 @@ this audit does not forge a signature for it.
    and host policies, unique service identity, TTL renewal, and fail-closed
    behavior. Add 579 and the cross-project identity packet as prerequisites of
    451.
-2. Execute 579 first: apply `denyNonFastForwards=true`, `denyDeletes=true`, and
-   `fsckObjects=true` on every start, with an existing-volume upgrade fixture.
-   This contains deletion/rewind risk but does not authenticate the boundary.
+2. Deploy and live-verify the implemented order-579 containment:
+   `denyNonFastForwards=true`, `denyDeletes=true`, and `fsckObjects=true` now
+   apply on every start and the existing-volume fixture is bound. This contains
+   ref deletion/branch-rewind risk but does not authenticate the boundary.
 3. Prove non-root `sshd` in the actual git image under `--read-only`,
    `--cap-drop=ALL`, uid 1000, high port 2222 before production wiring.
 4. Prove project A cannot sign for or connect to project B, and persist audit.
@@ -103,3 +105,42 @@ New non-duplicate packets:
 
 - `git-mirror-cross-project-service-identity`
 - `git-mirror-egress-network-spec-drift`
+
+## Containment implementation — order 579 (2026-08-06)
+
+The smallest pre-authentication containment slice is now implemented:
+
+- every entrypoint start applies `receive.denyNonFastForwards=true`,
+  `receive.denyDeletes=true`, and `receive.fsckObjects=true`, including named
+  volumes created by an older image;
+- pre-receive rejects every ref deletion and non-fast-forward branch updates
+  before the privileged upstream relay runs, closing the reproduced ordering
+  bug where upstream changed and the mirror then rejected locally;
+- `scripts/test-git-mirror-existing-volume-hardening.sh` runs the exact
+  entrypoint setup path twice against a permissive existing bare repository,
+  instruments relay invocation, compares complete ref snapshots, proves
+  branch/tag/custom/mixed deletions and branch rewind are non-mutating, proves
+  stale old IDs, non-canonical/invalid refs, and non-commit branch tips stop
+  before relay, proves the relay helper independently refuses deletion and
+  whitespace-smuggled delete/`--force` argv, exercises derived SHA-256 zero-ID
+  handling, and proves a valid fast-forward still converges both repositories.
+
+This immediate validation does not prove that every native receive-pack check
+or ref-lock race has been reproduced before relay. P0 packet
+`git-mirror-pre-receive-native-validation-relay-gap` (610-txvr) owns replacing
+that open-ended equivalence assumption with a transaction boundary that cannot
+mutate upstream and then lose the local decision.
+
+This does not authenticate port 9418. Anonymous enclave peers can still create
+and fast-forward refs and thereby use the mirror's upstream authority. The
+active spec and the historically named
+`litmus:git-mirror-no-anonymous-daemon-write` now state that limitation instead
+of describing network placement or the service's Vault credential as client
+identity.
+
+The all-ref-delete policy intentionally conflicts with ready orders 502/504,
+whose proposed lane-exit/garbage-collection flows delete `agent/*` branches.
+Those flows must depend on a future authenticated, policy-authorized deletion
+mechanism; they must not reopen anonymous branch deletion to satisfy their
+current design. The former ten-delete threshold and
+`TILLANDSIAS_ALLOW_BULK_DELETE` escape hatch are intentionally superseded.

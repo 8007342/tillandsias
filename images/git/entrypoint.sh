@@ -13,10 +13,16 @@ set -e
 SLOG=/strategic/service.log
 { echo "$(date -Is) [git-service] starting git daemon on port 9418" >> "$SLOG"; } 2>/dev/null || SLOG=/dev/null
 
+# The production launcher leaves these unset.  The root/share overrides make
+# the exact startup configuration path executable in an offline fixture; they
+# do not weaken any receive policy.
+GIT_SERVICE_ROOT="${TILLANDSIAS_GIT_SERVICE_ROOT:-/srv/git}"
+GIT_SERVICE_SHARE="${TILLANDSIAS_GIT_SERVICE_SHARE:-/usr/local/share/git-service}"
+
 echo "========================================"
 echo "  tillandsias git service"
 echo "  listening on :9418"
-echo "  base-path: /srv/git"
+echo "  base-path: $GIT_SERVICE_ROOT"
 echo "========================================"
 
 # GitHub token credential discovery.
@@ -136,16 +142,10 @@ fi
 # don't exist yet. The bare repo lives on a named podman volume mounted at
 # /srv/git so committed objects survive container restarts.
 if [ -n "$PROJECT" ]; then
-    PROJECT_REPO=/srv/git/"$PROJECT"
+    PROJECT_REPO="$GIT_SERVICE_ROOT/$PROJECT"
     if [ ! -d "$PROJECT_REPO" ]; then
         echo "[git-service] initializing bare repo at $PROJECT_REPO"
         git init --bare "$PROJECT_REPO"
-        # Accept whatever the forge pushes — initial syncs from a host clone
-        # often look like force-pushes from the bare repo's perspective. The
-        # pre-receive hook atomically forwards only the changed refs upstream
-        # before this sparse mirror accepts the same transaction.
-        git -C "$PROJECT_REPO" config receive.denyNonFastforwards false
-        git -C "$PROJECT_REPO" config receive.denyDeletes false
         # @trace spec:git-mirror-service
         # Unborn-HEAD fix (2026-07-20): `git init --bare` points HEAD at
         # refs/heads/master (Alpine default). Upstream may have NO master, so
@@ -161,6 +161,18 @@ if [ -n "$PROJECT" ]; then
             echo "[git-service] HEAD -> refs/heads/$TILLANDSIAS_PROJECT_DEFAULT_BRANCH (launcher default branch)"
         fi
     fi
+    # @trace spec:git-mirror-service
+    # Receive policy is an EVERY-START migration, not one-time initialization.
+    # The bare repository is a persistent named volume, so placing these writes
+    # in the creation branch silently left every pre-existing mirror permissive.
+    # Pre-receive enforces stronger all-ref delete plus branch non-fast-forward
+    # policy before the privileged relay; receive-pack evaluates these config
+    # keys only after the hook and denyDeletes is branch-scoped in practice, so
+    # repo config alone cannot prevent upstream/local split-brain.
+    git -C "$PROJECT_REPO" config receive.denyNonFastForwards true
+    git -C "$PROJECT_REPO" config receive.denyDeletes true
+    git -C "$PROJECT_REPO" config receive.fsckObjects true
+    echo "[git-service] enforced receive hardening on $PROJECT_REPO (deny ref deletes/branch rewinds; fsck objects)"
     # http.receivepack is deliberately NOT enabled (order 423/426). Git
     # documents it as enabling push "for all users, including anonymous users",
     # and the mirror serves no authenticated HTTP. All forge transport is
@@ -192,13 +204,21 @@ if [ -n "$PROJECT" ]; then
     # Hooks are Tillandsias-owned runtime code. Refresh them on every start so
     # existing named volumes cannot retain obsolete ack semantics after an
     # image upgrade.
-    cp /usr/local/share/git-service/post-receive-hook.sh "$PROJECT_REPO/hooks/post-receive"
-    cp /usr/local/share/git-service/pre-receive-hook.sh "$PROJECT_REPO/hooks/pre-receive"
-    cp /usr/local/share/git-service/relay-refs.sh "$PROJECT_REPO/hooks/tillandsias-relay-refs"
+    cp "$GIT_SERVICE_SHARE/post-receive-hook.sh" "$PROJECT_REPO/hooks/post-receive"
+    cp "$GIT_SERVICE_SHARE/pre-receive-hook.sh" "$PROJECT_REPO/hooks/pre-receive"
+    cp "$GIT_SERVICE_SHARE/relay-refs.sh" "$PROJECT_REPO/hooks/tillandsias-relay-refs"
     chmod +x "$PROJECT_REPO/hooks/post-receive" \
         "$PROJECT_REPO/hooks/pre-receive" \
         "$PROJECT_REPO/hooks/tillandsias-relay-refs"
     echo "[git-service] refreshed relay-verified receive hooks at $PROJECT_REPO/hooks"
+fi
+
+# Offline regression seam: execute the same existing-volume migration and hook
+# refresh as a real start, then stop before Vault/daemon startup. The production
+# launcher never sets this variable.
+if [ "${TILLANDSIAS_GIT_SERVICE_SETUP_ONLY:-0}" = "1" ]; then
+    echo "[git-service] setup-only startup complete"
+    exit 0
 fi
 
 # @trace spec:git-mirror-service
@@ -272,7 +292,7 @@ start_mirror_reconciler() {
     (
         while true; do
             sleep "$MIRROR_RECONCILE_INTERVAL"
-            for m in /srv/git/*; do
+            for m in "$GIT_SERVICE_ROOT"/*; do
                 [ -d "$m" ] || continue
                 OUT="$("$RECONCILE_HEADS" "$m" 2>&1)" || true
                 [ -n "$OUT" ] && retry_msg "[git-mirror] periodic: $OUT"
@@ -339,23 +359,19 @@ start_mirror_reconciler
 # every forge push broke ("access denied or repository not exported"). Diagnosed
 # by Hy3 in-forge 2026-07-20.
 #
-# Why re-enabling is acceptable HERE (and why 423 over-corrected for this
-# service): the daemon serves ONLY the enclave (--internal network, no internet
-# route), so the internet-anonymous-write threat git-daemon(1) warns about does
-# not apply. Every container that can reach it is one of the operator's own
-# forge agents, which legitimately push by design. The REAL boundaries are
-# downstream and unchanged: the pre-receive relay authenticates to GitHub with
-# the Vault-held token, and relay-refs.sh never uses --mirror/--all and guards
-# bulk deletes — so a rogue push cannot destroy upstream. Order 322 (per-agent
-# authenticated smart HTTP) remains the proper fix for a multi-tenant future;
-# until then, receive-pack on the internal-only daemon is the working push path.
+# The daemon remains anonymous inside the enclave: any reachable peer can still
+# create branches or fast-forward them and make the privileged relay carry those
+# updates upstream. Order 579 contains ref deletion/branch-rewind damage before that
+# relay, but it is NOT client authentication or authorization. Order 322/451's
+# per-agent authenticated transport remains the zero-trust fix; until then,
+# receive-pack on the internal-only daemon is only the working interim path.
 # The order-423 LIGHTTPD/git-http-backend removal stays — that WAS dead code and
 # a genuine anonymous path; only this live daemon push path is restored.
 git daemon \
     --reuseaddr \
     --export-all \
     --enable=receive-pack \
-    --base-path=/srv/git \
+    --base-path="$GIT_SERVICE_ROOT" \
     --listen=0.0.0.0 \
     --port=9418 \
     --verbose &
@@ -367,7 +383,7 @@ echo "$(date -Is) [git-service] daemon listening on 9418 (clones available; star
 # Safety: build an explicit refspec list from this mirror's local refs.
 # Anything not in /srv/git/<project>/refs/ is NOT touched upstream. We never
 # pass `--mirror` or `--all` here because the mirror is sparse by design.
-for mirror in /srv/git/*; do
+for mirror in "$GIT_SERVICE_ROOT"/*; do
     [ -d "$mirror" ] || continue
     # Repair an unborn HEAD on ANY mirror before transport work — including
     # local-only mirrors (no origin) that skip the fetch paths below but
@@ -398,10 +414,9 @@ for mirror in /srv/git/*; do
     # Vault-backed, atomic relay helper as live pushes.
     UPDATE_RECORDS=""
     REF_COUNT=0
-    ZERO_SHA="0000000000000000000000000000000000000000"
     for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
         NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
-        UPDATE_RECORDS="${UPDATE_RECORDS}${ZERO_SHA} ${NEWSHA} ${ref}
+        UPDATE_RECORDS="${UPDATE_RECORDS}${NEWSHA} ${NEWSHA} ${ref}
 "
         REF_COUNT=$((REF_COUNT + 1))
     done
@@ -459,7 +474,10 @@ for mirror in /srv/git/*; do
     stranded=""
     for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
         NEWSHA="$(git -C "$mirror" rev-parse "$ref")"
-        RECORD="${ZERO_SHA} ${NEWSHA} ${ref}"
+        # This is a startup recovery relay, not a receive-pack creation. Using
+        # current==old lets the privileged helper verify the local ref exactly
+        # before it constructs an upstream refspec.
+        RECORD="${NEWSHA} ${NEWSHA} ${ref}"
         if OUTPUT="$(printf '%s\n' "$RECORD" | (cd "$mirror" && "${RELAY_REF}") 2>&1)"; then
             retry_msg "[git-mirror] Startup retry-push OK: $ref"
         else

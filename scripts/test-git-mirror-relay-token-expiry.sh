@@ -62,8 +62,11 @@ git init -q --bare "$MIRROR"
 git -C "$MIRROR" config core.hooksPath "$MIRROR/hooks"
 git -C "$MIRROR" remote add origin https://github.example.invalid/org/repo.git
 
-DUMMY_SHA="1111111111111111111111111111111111111111"
-RECORD="0000000000000000000000000000000000000000 $DUMMY_SHA refs/heads/main"
+EMPTY_TREE="$(git -C "$MIRROR" mktree </dev/null)"
+DUMMY_SHA="$(git -C "$MIRROR" commit-tree "$EMPTY_TREE" -m relay-fixture)"
+OID_SAMPLE="$(git -C "$MIRROR" hash-object --stdin </dev/null)"
+ZERO_SHA="$(printf '%*s' "${#OID_SAMPLE}" '' | tr ' ' '0')"
+RECORD="$ZERO_SHA $DUMMY_SHA refs/heads/main"
 
 run_relay() {
     # Run the relay from inside the mirror repo with a synthetic receive record.
