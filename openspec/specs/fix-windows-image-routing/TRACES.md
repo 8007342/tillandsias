@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/src/image_builder.rs#L7](../../../crates/tillandsias-core/src/image_builder.rs#L7)
-- [crates/tillandsias-core/src/image_builder.rs#L302](../../../crates/tillandsias-core/src/image_builder.rs#L302)
-- [crates/tillandsias-core/src/image_builder.rs#L939](../../../crates/tillandsias-core/src/image_builder.rs#L939)
-- [crates/tillandsias-core/src/image_builder.rs#L995](../../../crates/tillandsias-core/src/image_builder.rs#L995)
+- [crates/tillandsias-core/src/image_builder.rs#L316](../../../crates/tillandsias-core/src/image_builder.rs#L316)
+- [crates/tillandsias-core/src/image_builder.rs#L1021](../../../crates/tillandsias-core/src/image_builder.rs#L1021)
+- [crates/tillandsias-core/src/image_builder.rs#L1077](../../../crates/tillandsias-core/src/image_builder.rs#L1077)
 - [crates/tillandsias-podman/src/launch.rs#L1](../../../crates/tillandsias-podman/src/launch.rs#L1)

@@ -44,14 +44,38 @@ authority verification, and folded-corpus freshness criteria remain open.
 The checkout entered the smoke with newly added traces whose generated
 `TRACES.md` indexes were not yet committed. The build correctly regenerated
 them, then `litmus:local-ci-self-clean-evidence` rejected the resulting dirty
-generated-evidence paths. The generated version/trace outputs are checkpointed
-with their source changes before the retry so the next clean-tree gate can
-distinguish a real nondeterministic mutation from expected source evolution.
+generated-evidence paths. The generated trace outputs are checkpointed with
+their source changes before retry. Local build-version bumps are deliberately
+restored instead of entering `linux-next`; the pre-push version guard reserves
+those commits for the release flow on `main`.
+
+## Retry 2 — stale trace indexes passed the advertised pre-push gate
+
+- **Commit tested**: `1bf1047b11eac5ac0cd98ab3680a97af84bc422f`
+- **Run ID**: `20260806T014047Z`
+- **Evidence**: `target/build-install-smoke-e2e/20260806T014047Z/`
+- **Verdict**: FAIL at gate 1 (`build_install_exit=141`); the run was
+  interrupted immediately after the first aggregate RED was captured.
+- **Installed binary**: unchanged at `Tillandsias v0.4.260804.1`.
+- **Reset/init/forge**: **NOT REACHED**.
+
+The required `./build.sh --check` passed and the pre-push hook accepted the
+exact checkpoint, but neither ran `scripts/generate-traces.sh --check`. The
+subsequent full build regenerated 61 stale trace indexes whose line numbers
+had moved during the final reviewed fixes, then
+`litmus:local-ci-self-clean-evidence` failed at step 4 with
+`fail:generated-evidence-dirt` (`01-build-install.log:1948-2018`). The existing
+order 490 intentionally proves that check-only mode does not *generate*
+indexes; it does not prove that the advertised pre-push gate *rejects* stale
+ones. The regenerated indexes are deterministic and are checkpointed before
+retry 3. The residual is recorded on existing order 584-2qq2; the related
+post-commit dashboard side effect is recorded on existing order 489, avoiding
+duplicate packets.
 
 ## Retry contract
 
 Before retrying, focused compaction tests, the real-ledger compaction test,
-image-squashing unit tests, the init incremental-build litmus, and
-`./build.sh --check` must be green. The full build/install is then rerun from a
-clean pushed checkpoint. Podman reset remains forbidden unless that gate and
-installation succeed.
+image-squashing unit tests, the init incremental-build litmus,
+`scripts/generate-traces.sh --check`, and `./build.sh --check` must be green.
+The full build/install is then rerun from a clean pushed checkpoint. Podman
+reset remains forbidden unless that gate and installation succeed.
