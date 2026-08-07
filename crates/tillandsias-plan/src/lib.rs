@@ -90,6 +90,38 @@ pub struct Ledger {
     /// name a path a reader can open; `parse` (used for candidate validation)
     /// has no file, so this is `None` there and citation emission refuses.
     source_path: Option<PathBuf>,
+    /// ORDER 606-h9vy — per-packet WINNING-SOURCE attribution for the fragment
+    /// overlay. SIDECAR STATE on purpose: injecting provenance keys into the
+    /// packet Values would violate the open-world round-trip and leak into the
+    /// edit/compaction text paths. Empty for a base-only load.
+    ///
+    /// packet_id -> span of the fragment item that CREATED a fragment-born
+    /// packet. Base packets never appear here (base always wins the G-Set).
+    origin_sources: BTreeMap<String, FieldSource>,
+    /// `packet_id\u{1}field` -> span of the fragment status entry that WON the
+    /// LWW fold for that field. Exactly the winner `fragments::fold` picked,
+    /// including its first-wins-on-tie behavior.
+    field_sources: BTreeMap<String, FieldSource>,
+    /// Every fragment file beside the index (parseable or not) at load time.
+    /// Freshness is derived over base PLUS this set, so adding a fragment
+    /// changes `indexed_at` even before anything reads its content.
+    corpus_files: Vec<PathBuf>,
+}
+
+/// One winning source for a folded packet or field: the fragment FILE (by
+/// name, so the caller can render it relative to whatever label it uses for
+/// the index) plus the 1-indexed inclusive line span that substantiates the
+/// value. The span always contains the `packet_id: <id>` line, mirroring the
+/// base-span invariant citations rely on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldSource {
+    /// Fragment FILENAME (e.g. `20260807t000000z-x-linux.yaml`), not a path:
+    /// the repo-relative rendering depends on the caller's index label.
+    pub fragment_name: String,
+    /// 1-indexed, inclusive.
+    pub line_start: usize,
+    /// 1-indexed, inclusive.
+    pub line_end: usize,
 }
 
 pub fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
@@ -217,6 +249,9 @@ impl Ledger {
             archived_ids,
             spans: packet_spans(raw),
             source_path: None,
+            origin_sources: BTreeMap::new(),
+            field_sources: BTreeMap::new(),
+            corpus_files: Vec::new(),
         })
     }
 
@@ -227,6 +262,41 @@ impl Ledger {
     /// can never point at a region that does not say what the answer claims.
     pub fn span_of(&self, packet_id: &str) -> Option<(usize, usize)> {
         self.spans.get(packet_id).copied()
+    }
+
+    /// ORDER 606-h9vy — the fragment item that CREATED a fragment-born packet,
+    /// or `None` for base packets (whose citable origin is `span_of`). The two
+    /// are disjoint by construction: the G-Set never lets a fragment overwrite
+    /// a base packet, so a packet has a base span or a fragment origin, never
+    /// both.
+    pub fn origin_source_of(&self, packet_id: &str) -> Option<&FieldSource> {
+        self.origin_sources.get(packet_id)
+    }
+
+    /// ORDER 606-h9vy — the fragment status entry that WON the LWW fold for
+    /// `field` on `packet_id`, or `None` when the current value comes from the
+    /// packet's own block (base or fragment-born). An exact answer must cite
+    /// this winner for the field, never the stale base span.
+    pub fn field_source_of(&self, packet_id: &str, field: &str) -> Option<&FieldSource> {
+        self.field_sources.get(&format!("{packet_id}\u{1}{field}"))
+    }
+
+    /// Every fragment file that was beside the index at load time, parseable
+    /// or not. Empty for a base-only load. Freshness derives from base plus
+    /// this whole set — a malformed fragment still changes the corpus.
+    pub fn corpus_files(&self) -> &[PathBuf] {
+        &self.corpus_files
+    }
+
+    pub(crate) fn set_fragment_sources(
+        &mut self,
+        origin_sources: BTreeMap<String, FieldSource>,
+        field_sources: BTreeMap<String, FieldSource>,
+        corpus_files: Vec<PathBuf>,
+    ) {
+        self.origin_sources = origin_sources;
+        self.field_sources = field_sources;
+        self.corpus_files = corpus_files;
     }
 
     /// Rebuild the lookup indexes from the current `packets`, leaving `spans`

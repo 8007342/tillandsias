@@ -1,0 +1,31 @@
+# ORDER 606-h9vy — COMMITTED FIXTURE CORPUS for fragment-provenance grading.
+#
+# @trace spec:forge-environment-discoverability
+# @trace order:606, order:606-h9vy
+#
+# A tiny, IMMUTABLE base-plus-fragments ledger. The real plan/index.d comes and
+# goes (compaction folds fragments into the base), so committed ground-truth
+# cases about fragment citations cannot run against the live ledger — they
+# would go stale on the first compaction. This corpus never compacts: it exists
+# so `expert-groundtruth-fragment-provenance.yaml` can pin, forever and at any
+# HEAD, that
+#
+#   * a fragment-born packet is cited to the fragment that created it,
+#   * an LWW-overridden field is cited to the winning fragment entry and the
+#     stale base value is never claimed,
+#   * no folded row is omitted for lack of a source span.
+#
+# Do not add real work packets here. Orders 900+ are fixture-reserved and the
+# `desired_release: v9.9` bucket is deliberately unshippable.
+plan_index:
+  steps:
+    - packet_id: fixture-base-overridden
+      order: 900
+      status: ready
+      desired_release: v9.9
+      title: "Base packet whose status is overridden by an LWW fragment"
+    - packet_id: fixture-base-untouched
+      order: 901
+      status: ready
+      desired_release: v9.9
+      title: "Base packet no fragment touches"

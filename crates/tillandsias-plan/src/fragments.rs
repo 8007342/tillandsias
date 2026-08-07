@@ -80,6 +80,10 @@ pub struct Fragment {
     pub name: String,
     pub path: PathBuf,
     pub doc: Value,
+    /// The file's raw text, retained because serde_yaml discards positions:
+    /// winning-source spans (order 606-h9vy) are recovered from this text by
+    /// the same list-item scanning discipline base spans use.
+    pub raw: String,
 }
 
 /// Every fragment beside `index`, in deterministic fold order.
@@ -105,6 +109,7 @@ pub fn load_all(index: &Path) -> Vec<Fragment> {
                 name: p.file_name()?.to_string_lossy().to_string(),
                 path: p,
                 doc,
+                raw,
             })
         })
         .collect();
@@ -139,6 +144,77 @@ pub fn malformed(index: &Path) -> Vec<PathBuf> {
     bad
 }
 
+/// ORDER 606-h9vy — the 1-indexed INCLUSIVE line span of the list item under
+/// the top-level `section:` key whose block contains `packet_id: <packet_id>`
+/// and every needle in `must_contain`. This is how winning-source spans are
+/// recovered from a fragment file: serde_yaml discards positions, so the span
+/// comes from the same text-scanning discipline base spans use (`packet_spans`
+/// / `edit::item_span`).
+///
+/// The returned span always contains the `packet_id: <id>` line — the same
+/// load-bearing property base spans guarantee — so a citation built from it
+/// can never point at a region that does not name the packet it claims.
+pub fn fragment_item_span(
+    raw: &str,
+    section: &str,
+    packet_id: &str,
+    must_contain: &[&str],
+) -> Option<(usize, usize)> {
+    let lines: Vec<&str> = raw.lines().collect();
+    let header = format!("{section}:");
+    let section_start = lines.iter().position(|l| l.trim_end() == header.as_str())?;
+
+    // Items are `- ` list entries indented under the section header; the first
+    // one seen fixes the item indent for the whole section. The section ends at
+    // the next non-blank line at column 0 (the next top-level key).
+    let mut item_indent: Option<usize> = None;
+    let mut items: Vec<(usize, usize)> = Vec::new(); // 0-indexed inclusive
+    let mut current_start: Option<usize> = None;
+    let mut section_end = lines.len();
+    for (i, line) in lines.iter().enumerate().skip(section_start + 1) {
+        let trimmed = line.trim_start();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let indent = line.len() - trimmed.len();
+        if indent == 0 {
+            section_end = i;
+            break;
+        }
+        if trimmed.starts_with("- ") {
+            match item_indent {
+                None => item_indent = Some(indent),
+                Some(want) if indent != want => continue,
+                Some(_) => {}
+            }
+            if let Some(start) = current_start.take() {
+                items.push((start, i - 1));
+            }
+            current_start = Some(i);
+        }
+    }
+    if let Some(start) = current_start {
+        items.push((start, section_end - 1));
+    }
+
+    let id_needle = format!("packet_id: {packet_id}");
+    for (start, end) in items {
+        // Trim trailing blank lines so the span stays tight around real text.
+        let mut end = end;
+        while end > start && lines[end].trim().is_empty() {
+            end -= 1;
+        }
+        let block = lines[start..=end].join("\n");
+        let names_packet = block
+            .lines()
+            .any(|l| l.trim_start().trim_start_matches("- ").trim_end() == id_needle);
+        if names_packet && must_contain.iter().all(|n| block.contains(n)) {
+            return Some((start + 1, end + 1));
+        }
+    }
+    None
+}
+
 /// Stable identity of an event, for idempotent folding.
 ///
 /// Two copies of the same event — which a re-applied fragment or a retried
@@ -161,11 +237,33 @@ fn event_identity(packet_id: &str, event: &Value) -> String {
     )
 }
 
+/// ORDER 606-h9vy — which fragment WON each folded decision. Side-band output
+/// of [`fold_with_sources`]: recording it cannot perturb the merged Value, so
+/// the fold's purity/commutativity/idempotence pins are untouched.
+#[derive(Debug, Clone, Default)]
+pub struct FoldProvenance {
+    /// packet_id -> index (into the fold's fragment slice) of the fragment
+    /// that CREATED a fragment-born packet.
+    pub new_packets: std::collections::BTreeMap<String, usize>,
+    /// `packet_id\u{1}field` -> (fragment index, winning ts, winning host) of
+    /// the LWW entry that won that field. Exactly the winner the fold applied,
+    /// including first-wins-on-tie for equal `(ts, host)`.
+    pub lww_wins: std::collections::BTreeMap<String, (usize, String, String)>,
+}
+
 /// Apply every fragment to a base document, returning the merged document.
 ///
 /// PURE: same inputs always yield the same output, which is what lets any host
 /// compact and get a result every other host agrees with.
 pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
+    fold_with_sources(base, fragments).0
+}
+
+/// [`fold`] plus the provenance of every winning decision. The merged Value is
+/// byte-for-byte the one `fold` returns; provenance is sidecar state consumed
+/// by `Ledger::load_with_fragments` to attribute citations (order 606-h9vy).
+pub fn fold_with_sources(base: &Value, fragments: &[Fragment]) -> (Value, FoldProvenance) {
+    let mut provenance = FoldProvenance::default();
     let mut merged = base.clone();
 
     // Identities already present in the base, so re-folding an already-compacted
@@ -189,14 +287,15 @@ pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
     }
 
     // LWW state, resolved across ALL fragments before anything is written, so
-    // the winner does not depend on application order.
-    let mut lww: std::collections::BTreeMap<String, (String, String, Value)> =
+    // the winner does not depend on application order. The fragment index
+    // rides along so provenance records the same winner the fold applies.
+    let mut lww: std::collections::BTreeMap<String, (String, String, Value, usize)> =
         std::collections::BTreeMap::new();
 
     let mut new_packets: Vec<Value> = Vec::new();
     let mut new_events: Vec<(String, Value)> = Vec::new();
 
-    for frag in fragments {
+    for (frag_idx, frag) in fragments.iter().enumerate() {
         // G-Set: new packets. A packet_id already present anywhere WINS from the
         // base — re-adding is a no-op, never an overwrite, because overwriting
         // would make the result depend on fold order.
@@ -209,6 +308,7 @@ pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
                         .any(|q| q.get("packet_id").and_then(Value::as_str) == Some(id))
                 {
                     new_packets.push(p.clone());
+                    provenance.new_packets.insert(id.to_string(), frag_idx);
                 }
             }
         }
@@ -252,27 +352,33 @@ pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
                 let key = format!("{pid}\u{1}{field}");
                 let better = match lww.get(&key) {
                     None => true,
-                    Some((prev_ts, prev_host, _)) => {
+                    Some((prev_ts, prev_host, _, _)) => {
                         (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
                     }
                 };
                 if better {
-                    lww.insert(key, (ts, host, value.clone()));
+                    lww.insert(key, (ts, host, value.clone(), frag_idx));
                 }
             }
         }
     }
 
+    for (key, (ts, host, _, frag_idx)) in &lww {
+        provenance
+            .lww_wins
+            .insert(key.clone(), (*frag_idx, ts.clone(), host.clone()));
+    }
+
     append_packets(&mut merged, new_packets);
     apply_to_packets(&mut merged, &new_events, &lww);
-    merged
+    (merged, provenance)
 }
 
 /// Walk the document applying event appends and LWW field wins in place.
 fn apply_to_packets(
     doc: &mut Value,
     events: &[(String, Value)],
-    lww: &std::collections::BTreeMap<String, (String, String, Value)>,
+    lww: &std::collections::BTreeMap<String, (String, String, Value, usize)>,
 ) {
     match doc {
         Value::Mapping(m) => {
@@ -284,7 +390,7 @@ fn apply_to_packets(
                     .unwrap_or("")
                     .to_string();
 
-                for (key, (_, _, value)) in lww {
+                for (key, (_, _, value, _)) in lww {
                     let mut parts = key.split('\u{1}');
                     if parts.next() == Some(id.as_str())
                         && let Some(field) = parts.next()
@@ -957,7 +1063,25 @@ impl Ledger {
         // TOP of it.
         let mut ledger = Self::load(path)?;
         let fragments = load_all(path);
+        // Freshness input set: EVERY fragment file beside the index, parseable
+        // or not — a malformed fragment still changes the corpus, and hiding it
+        // from freshness would make its absence from answers look current.
+        let mut corpus_files: Vec<PathBuf> = std::fs::read_dir(fragment_dir(path))
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("yaml"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        corpus_files.sort();
         if fragments.is_empty() {
+            ledger.set_fragment_sources(
+                std::collections::BTreeMap::new(),
+                std::collections::BTreeMap::new(),
+                corpus_files,
+            );
             return Ok(ledger);
         }
 
@@ -966,7 +1090,7 @@ impl Ledger {
                 .map_err(|e| format!("read {}: {e}", path.display()))?;
             serde_yaml::from_str(&raw).map_err(|e| format!("parse: {e}"))?
         };
-        let merged = fold(&base_doc, &fragments);
+        let (merged, provenance) = fold_with_sources(&base_doc, &fragments);
 
         // Replace the packet list with the folded one so queries see everything,
         // while `spans` and `source_path` remain those of the base parse.
@@ -980,21 +1104,66 @@ impl Ledger {
         // parse applies (duplicates are dropped, never resolved arbitrarily).
         ledger.reindex();
 
-        // CITABILITY IS DELIBERATELY NOT EXTENDED TO FRAGMENT CONTENT.
+        // ORDER 606-h9vy — CITABILITY NOW EXTENDS TO FRAGMENT CONTENT via
+        // per-packet source attribution. `span_of` still returns None for a
+        // fragment-only packet (base spans stay byte-exact against the real
+        // plan/index.yaml, the order-523 invariant), but the ledger now carries
+        // a sidecar source map naming the WINNING fragment file and span:
         //
-        // A packet that exists only in a fragment has no span in plan/index.yaml,
-        // so `span_of` returns None and the answer engine declines to cite it
-        // rather than inventing a line range. That is the correct trade: the
-        // packet is fully queryable (status / ready / check / blocked-by), and it
-        // becomes citable the moment compaction folds it into the base and it
-        // acquires a real span.
+        //   * a fragment-born packet's origin is the fragment item that
+        //     created it (`origin_source_of`);
+        //   * an LWW-overridden field's source is the fragment status entry
+        //     that won the fold (`field_source_of`) — never the stale base
+        //     span, which still shows the value the fragment replaced.
         //
-        // The alternative — citing the fragment file — is a genuine improvement
-        // and needs per-packet source attribution, which `Ledger` does not carry
-        // (`source_path` is one path for the whole ledger). Tracked by packet
-        // format-preserving-ledger-compaction. Until then, refusing to cite is
-        // honest; a citation that does not resolve is worse than no citation, and
-        // the verifier would reject it anyway.
+        // Spans are recovered from the fragment's retained raw text and always
+        // contain the `packet_id: <id>` line, so the order-523 verifier can
+        // substantiate them exactly like base spans.
+        let mut origin_sources = std::collections::BTreeMap::new();
+        for (pid, idx) in &provenance.new_packets {
+            let frag = &fragments[*idx];
+            if let Some((start, end)) = fragment_item_span(&frag.raw, "packets", pid, &[]) {
+                origin_sources.insert(
+                    pid.clone(),
+                    crate::FieldSource {
+                        fragment_name: frag.name.clone(),
+                        line_start: start,
+                        line_end: end,
+                    },
+                );
+            }
+        }
+        let mut field_sources = std::collections::BTreeMap::new();
+        for (key, (idx, ts, host)) in &provenance.lww_wins {
+            let frag = &fragments[*idx];
+            let mut parts = key.split('\u{1}');
+            let (Some(pid), Some(field)) = (parts.next(), parts.next()) else {
+                continue;
+            };
+            // Disambiguate between entries for the same (packet, field) inside
+            // one fragment by requiring the winning ts/host to appear in the
+            // block. Empty ts/host (legal, they default to "" in the fold)
+            // cannot be required — the field needle alone identifies the entry.
+            let field_needle = format!("field: {field}");
+            let mut needles: Vec<&str> = vec![field_needle.as_str()];
+            if !ts.is_empty() {
+                needles.push(ts.as_str());
+            }
+            if !host.is_empty() {
+                needles.push(host.as_str());
+            }
+            if let Some((start, end)) = fragment_item_span(&frag.raw, "status", pid, &needles) {
+                field_sources.insert(
+                    key.clone(),
+                    crate::FieldSource {
+                        fragment_name: frag.name.clone(),
+                        line_start: start,
+                        line_end: end,
+                    },
+                );
+            }
+        }
+        ledger.set_fragment_sources(origin_sources, field_sources, corpus_files);
         Ok(ledger)
     }
 }
@@ -1024,6 +1193,7 @@ packets:
             name: name.to_string(),
             path: PathBuf::from(name),
             doc: serde_yaml::from_str(yaml).expect("fragment parses"),
+            raw: yaml.to_string(),
         }
     }
 
@@ -1325,9 +1495,10 @@ plan_index:
     #[test]
     fn a_fragment_only_packet_is_queryable_but_carries_no_fabricated_span() {
         // Queryable is required — otherwise filing to a fragment loses the work.
-        // A SPAN is deliberately absent: the packet is not in plan/index.yaml, so
-        // any line range would be fiction. It becomes citable once compaction
-        // folds it into the base and it acquires a real span.
+        // A BASE span is deliberately absent: the packet is not in
+        // plan/index.yaml, so any line range there would be fiction. Since
+        // order 606-h9vy its citable origin is the FRAGMENT file instead —
+        // see `a_fragment_only_packet_cites_the_fragment_that_created_it`.
         let d = scratch("frag");
         let index = d.join("plan/index.yaml");
         std::fs::write(
@@ -1380,6 +1551,290 @@ plan_index:
                 "order {order} must resolve through the overlay"
             );
         }
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // ── ORDER 606-h9vy: winning-source attribution ──────────────────────────
+
+    fn frag(name: &str, yaml: &str) -> Fragment {
+        Fragment {
+            name: name.to_string(),
+            path: PathBuf::from(name),
+            doc: serde_yaml::from_str(yaml).expect("fragment parses"),
+            raw: yaml.to_string(),
+        }
+    }
+
+    #[test]
+    fn fold_provenance_records_the_same_winner_the_fold_applies() {
+        let base = serde_yaml::from_str(BASE_FILE).expect("base parses");
+        let frags = vec![
+            frag(
+                "20260801t0100z-aaaa-h1.yaml",
+                "status:\n  - packet_id: alpha\n    field: status\n    value: in_progress\n    ts: \"2026-08-01T01:00:00Z\"\n    host: h1\n",
+            ),
+            frag(
+                "20260801t0200z-bbbb-h2.yaml",
+                "status:\n  - packet_id: alpha\n    field: status\n    value: completed\n    ts: \"2026-08-01T02:00:00Z\"\n    host: h2\npackets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+            ),
+        ];
+        let (merged, prov) = fold_with_sources(&base, &frags);
+
+        // The later ts wins the fold; provenance must name the SAME fragment.
+        let mut ps = Vec::new();
+        crate::collect_packets(&merged, &mut ps);
+        let alpha = ps
+            .iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+            .expect("alpha folded");
+        assert_eq!(
+            alpha.get("status").and_then(Value::as_str),
+            Some("completed")
+        );
+        let (idx, ts, host) = prov
+            .lww_wins
+            .get("alpha\u{1}status")
+            .expect("winner recorded");
+        assert_eq!(
+            (*idx, ts.as_str(), host.as_str()),
+            (1, "2026-08-01T02:00:00Z", "h2")
+        );
+        assert_eq!(prov.new_packets.get("gamma"), Some(&1));
+
+        // Tie on (ts, host): the FIRST fragment in name-sorted order keeps the
+        // slot, and provenance must record that same first-wins choice.
+        let tie = vec![
+            frag(
+                "20260801t0100z-aaaa-h1.yaml",
+                "status:\n  - packet_id: alpha\n    field: status\n    value: blocked\n    ts: \"2026-08-01T03:00:00Z\"\n    host: same\n",
+            ),
+            frag(
+                "20260801t0200z-bbbb-h2.yaml",
+                "status:\n  - packet_id: alpha\n    field: status\n    value: obsoleted\n    ts: \"2026-08-01T03:00:00Z\"\n    host: same\n",
+            ),
+        ];
+        let (tied, prov) = fold_with_sources(&base, &tie);
+        let mut ps = Vec::new();
+        crate::collect_packets(&tied, &mut ps);
+        let alpha = ps
+            .iter()
+            .find(|p| p.get("packet_id").and_then(Value::as_str) == Some("alpha"))
+            .expect("alpha folded");
+        assert_eq!(alpha.get("status").and_then(Value::as_str), Some("blocked"));
+        let (idx, _, _) = prov
+            .lww_wins
+            .get("alpha\u{1}status")
+            .expect("tie winner recorded");
+        assert_eq!(*idx, 0, "provenance must record the first-wins tie choice");
+    }
+
+    #[test]
+    fn fragment_item_span_locates_items_and_always_contains_the_id_line() {
+        let raw = "\
+# fragment header comment
+status:
+  - packet_id: alpha
+    field: status
+    value: in_progress
+    ts: \"2026-08-01T01:00:00Z\"
+    host: h1
+  - packet_id: alpha
+    field: owned_files
+    value: []
+    ts: \"2026-08-01T01:00:00Z\"
+    host: h1
+
+packets:
+  - packet_id: gamma
+    order: 102
+    status: ready
+";
+        let (s, e) =
+            fragment_item_span(raw, "status", "alpha", &["field: status"]).expect("status entry");
+        let block: Vec<&str> = raw.lines().collect();
+        let span = block[s - 1..e].join("\n");
+        assert!(span.contains("packet_id: alpha"));
+        assert!(span.contains("field: status"));
+        assert!(
+            !span.contains("owned_files"),
+            "the span must be the ONE entry that substantiates the field, not the whole section"
+        );
+
+        let (s, e) = fragment_item_span(raw, "packets", "gamma", &[]).expect("packet item");
+        let span = block[s - 1..e].join("\n");
+        assert!(span.contains("packet_id: gamma"));
+        assert!(span.contains("status: ready"));
+
+        assert_eq!(
+            fragment_item_span(raw, "status", "nonexistent", &[]),
+            None,
+            "an absent packet must locate nothing rather than a nearby block"
+        );
+    }
+
+    #[test]
+    fn a_fragment_only_packet_cites_the_fragment_that_created_it() {
+        let d = scratch("origin");
+        let index = d.join("plan/index.yaml");
+        let frag_name = "20260801t0100z-aaaa-h1.yaml";
+        std::fs::write(
+            d.join("plan/index.d").join(frag_name),
+            "packets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+        )
+        .expect("write fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("overlay loads");
+        let src = l
+            .origin_source_of("gamma")
+            .expect("fragment-born packet must carry its winning origin");
+        assert_eq!(src.fragment_name, frag_name);
+        // The load-bearing property, identical to base spans: the span must
+        // contain the packet's own id line IN THE REAL FRAGMENT FILE.
+        let raw = std::fs::read_to_string(d.join("plan/index.d").join(frag_name)).expect("read");
+        let lines: Vec<&str> = raw.lines().collect();
+        assert!(
+            lines[src.line_start - 1..src.line_end]
+                .iter()
+                .any(|l| l.contains("packet_id: gamma")),
+            "the origin span must contain the id it is offered as evidence for"
+        );
+        assert!(
+            l.origin_source_of("alpha").is_none(),
+            "a base packet's origin is its base span, never a fragment"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn an_lww_override_cites_the_winning_fragment_never_the_stale_base_span() {
+        let d = scratch("lww");
+        let index = d.join("plan/index.yaml");
+        let frag_name = "20260801t0100z-aaaa-h1.yaml";
+        std::fs::write(
+            d.join("plan/index.d").join(frag_name),
+            "status:\n  - packet_id: alpha\n    field: status\n    value: in_progress\n    ts: \"2026-08-01T01:00:00Z\"\n    host: h1\n",
+        )
+        .expect("write fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("overlay loads");
+        let src = l
+            .field_source_of("alpha", "status")
+            .expect("the overridden field must carry its winning source");
+        assert_eq!(src.fragment_name, frag_name);
+
+        // End to end: the exact answer must cite the fragment for status and
+        // must NOT claim the contradictory base value anywhere.
+        let envelope = crate::answer::answer_question(&l, "status of alpha", "plan/index.yaml");
+        assert_eq!(envelope.confidence(), crate::answer::Confidence::Exact);
+        assert!(envelope.answer().contains("in_progress"));
+        let frag_rel = format!("plan/index.d/{frag_name}");
+        assert!(
+            envelope.citations().iter().any(|c| c.path() == frag_rel
+                && c.authority().get("status").map(String::as_str) == Some("in_progress")),
+            "status must be cited to the winning fragment; citations: {:?}",
+            envelope
+                .citations()
+                .iter()
+                .map(|c| (c.path().to_string(), c.authority().clone()))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            !envelope
+                .citations()
+                .iter()
+                .any(|c| c.authority().get("status").map(String::as_str) == Some("ready")),
+            "no citation may claim the stale base value for an overridden field"
+        );
+        // And the whole envelope must survive the order-523 verifier against
+        // the real files on disk.
+        let violations = crate::answer::verify(&envelope, &d);
+        assert!(
+            violations.is_empty(),
+            "the provenance-cited envelope must verify: {violations:?}"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn answers_over_a_folded_corpus_omit_no_rows() {
+        // The zero-omitted-row property: with winning-source attribution there
+        // is no longer any folded packet the answer engine cannot point at, so
+        // the "row(s) omitted" NOTE must never fire for a folded corpus.
+        let d = scratch("omit");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+        )
+        .expect("write fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("overlay loads");
+        let envelope = crate::answer::answer_question(&l, "what is ready?", "plan/index.yaml");
+        assert_eq!(envelope.confidence(), crate::answer::Confidence::Exact);
+        assert!(
+            !envelope.answer().contains("omitted"),
+            "no row may be omitted for lack of a source span: {}",
+            envelope.answer()
+        );
+        for id in ["alpha", "beta", "gamma"] {
+            assert!(
+                envelope.answer().contains(id),
+                "{id} must be reported in the ready answer"
+            );
+            assert!(
+                envelope.citations().iter().any(|c| c
+                    .authority()
+                    .get("packet_id")
+                    .map(String::as_str)
+                    == Some(id)),
+                "{id} must be cited"
+            );
+        }
+        let violations = crate::answer::verify(&envelope, &d);
+        assert!(violations.is_empty(), "must verify: {violations:?}");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn freshness_is_derived_from_base_plus_fragments() {
+        let d = scratch("fresh");
+        let index = d.join("plan/index.yaml");
+
+        // Age the base file so the fragment's mtime is strictly newer.
+        let old = std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        std::fs::File::options()
+            .write(true)
+            .open(&index)
+            .expect("open base")
+            .set_modified(old)
+            .expect("age base");
+
+        let before = Ledger::load_with_fragments(&index).expect("loads");
+        let f0 = crate::answer::answer_question(&before, "status of alpha", "plan/index.yaml")
+            .freshness()
+            .clone();
+
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "status:\n  - packet_id: alpha\n    field: status\n    value: in_progress\n    ts: \"2026-08-01T01:00:00Z\"\n    host: h1\n",
+        )
+        .expect("write fragment");
+
+        let after = Ledger::load_with_fragments(&index).expect("loads");
+        let f1 = crate::answer::answer_question(&after, "status of alpha", "plan/index.yaml")
+            .freshness()
+            .clone();
+        assert_ne!(
+            f0.indexed_at(),
+            f1.indexed_at(),
+            "adding a fragment must change the corpus freshness"
+        );
+        assert!(
+            f1.indexed_at() > f0.indexed_at(),
+            "the folded corpus is NEWER than the base alone: {} -> {}",
+            f0.indexed_at(),
+            f1.indexed_at()
+        );
         let _ = std::fs::remove_dir_all(&d);
     }
 }

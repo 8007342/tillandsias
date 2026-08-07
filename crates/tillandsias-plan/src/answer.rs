@@ -38,7 +38,7 @@
 use crate::Ledger;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 /// The `confidence` vocabulary is CLOSED (§4). `Unsupported` is not a lower
 /// grade of answer — it is the refusal to answer.
@@ -178,9 +178,26 @@ impl Freshness {
     /// be determined is reported as the literal `unknown` — an honest hole,
     /// never a fabricated sha or a synthesized "now".
     pub fn for_source(source: &Path) -> Self {
+        Self::for_corpus(source, &[])
+    }
+
+    /// ORDER 606-h9vy — freshness over the FOLDED corpus: the base index plus
+    /// every fragment beside it. `indexed_at` is the NEWEST mtime across the
+    /// whole set, so writing a fragment advances it exactly like editing the
+    /// base — a fragment-only change can no longer masquerade as an old
+    /// corpus. The keys stay `source_commit`/`indexed_at`: consumers pin that
+    /// exact shape, and "when was this corpus last written" is still the one
+    /// honest meaning of `indexed_at`.
+    pub fn for_corpus(source: &Path, fragments: &[PathBuf]) -> Self {
+        let indexed_at = std::iter::once(source.to_path_buf())
+            .chain(fragments.iter().cloned())
+            .filter_map(|p| file_mtime_epoch(&p))
+            .max()
+            .map(epoch_to_iso8601)
+            .unwrap_or_else(|| "unknown".to_string());
         Self {
             source_commit: git_head_sha(source).unwrap_or_else(|| "unknown".to_string()),
-            indexed_at: file_mtime_iso8601(source).unwrap_or_else(|| "unknown".to_string()),
+            indexed_at,
         }
     }
 
@@ -365,6 +382,24 @@ pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
                 }
             }
         }
+        // ORDER 606-h9vy — every authority VALUE must be substantiated by the
+        // cited span, not merely accompany a span that names the packet. This
+        // is what turns a fabricated status/order, or a stale base span cited
+        // for a fragment-won field, into a hard rejection instead of a
+        // well-formed lie. `packet_id` is already covered by `span_key` above.
+        if c.kind == CitationKind::Plan {
+            for (key, value) in &c.authority {
+                if key == "packet_id" {
+                    continue;
+                }
+                if !span_substantiates(&span, key, value) {
+                    violations.push(format!(
+                        "{}:{}-{}: cited span does not substantiate authority {}={} — TAMPERED or stale authority",
+                        c.path, c.line_start, c.line_end, key, value
+                    ));
+                }
+            }
+        }
         if let Some(claim) = c.claim_key()
             && !envelope.answer.contains(&claim)
         {
@@ -383,6 +418,29 @@ fn truncate(s: &str, n: usize) -> String {
         return s.to_string();
     }
     s.chars().take(n).collect::<String>() + "…"
+}
+
+/// ORDER 606-h9vy — does `span` substantiate `key = value`? Two grammars are
+/// accepted, matching the two shapes a plan value legitimately lives in: a
+/// packet-block field line (`status: ready`, optionally quoted, optionally
+/// carrying a trailing comment) and a fragment LWW status entry
+/// (`field: status` on one line, `value: ready` on another).
+fn span_substantiates(span: &str, key: &str, value: &str) -> bool {
+    let has_field_line = |k: &str, v: &str| {
+        let forms = [
+            format!("{k}: {v}"),
+            format!("{k}: '{v}'"),
+            format!("{k}: \"{v}\""),
+        ];
+        span.lines().any(|l| {
+            let t = l.trim_start().trim_start_matches("- ").trim_end();
+            forms.iter().any(|f| {
+                t == f.as_str()
+                    || (t.starts_with(f.as_str()) && t[f.len()..].trim_start().starts_with('#'))
+            })
+        })
+    };
+    has_field_line(key, value) || (has_field_line("field", key) && has_field_line("value", value))
 }
 
 // ── question -> deterministic query ─────────────────────────────────────────
@@ -598,7 +656,7 @@ fn role_in(ledger: &Ledger, lower_question: &str) -> Option<String> {
 pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Envelope {
     let freshness = ledger
         .source_path()
-        .map(Freshness::for_source)
+        .map(|p| Freshness::for_corpus(p, ledger.corpus_files()))
         .unwrap_or_else(|| Freshness::new("unknown".into(), "unknown".into()));
 
     let Some(intent) = classify(ledger, question) else {
@@ -696,7 +754,24 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
             .get("release_target")
             .and_then(serde_yaml::Value::as_str)
             .unwrap_or("-");
-        let Some((line_start, line_end)) = ledger.span_of(&id) else {
+        // ORDER 606-h9vy — cite the source that actually WON each folded
+        // field. The packet's origin span (base block, or the fragment item
+        // that created a fragment-born packet) substantiates every field the
+        // fold did not override; each LWW-overridden field is cited to the
+        // fragment status entry that won it, NEVER to the stale base span.
+        let origin = ledger
+            .span_of(&id)
+            .map(|(s, e)| (source_rel.to_string(), s, e))
+            .or_else(|| {
+                ledger.origin_source_of(&id).map(|src| {
+                    (
+                        fragment_rel(source_rel, &src.fragment_name),
+                        src.line_start,
+                        src.line_end,
+                    )
+                })
+            });
+        let Some((origin_path, line_start, line_end)) = origin else {
             // A row we cannot point at is a row we do not report. Reporting it
             // uncited would be an unsupported claim smuggled into a supported
             // envelope.
@@ -706,22 +781,44 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
         body.push_str(&format!(
             "{order}\t{status}\t{desired_release}\t{release_target}\t{id}\n"
         ));
-        let mut authority = BTreeMap::new();
-        authority.insert("packet_id".to_string(), id.clone());
-        authority.insert("order".to_string(), order);
-        authority.insert("status".to_string(), status.to_string());
+        let mut fields: Vec<(&str, String)> =
+            vec![("order", order), ("status", status.to_string())];
         if desired_release != "-" {
-            authority.insert("desired_release".to_string(), desired_release.to_string());
+            fields.push(("desired_release", desired_release.to_string()));
         }
         if release_target != "-" {
-            authority.insert("release_target".to_string(), release_target.to_string());
+            fields.push(("release_target", release_target.to_string()));
+        }
+        let mut origin_authority = BTreeMap::new();
+        origin_authority.insert("packet_id".to_string(), id.clone());
+        for (field, value) in fields {
+            match ledger.field_source_of(&id, field) {
+                Some(src) => {
+                    // The winning fragment entry substantiates exactly this
+                    // field; it gets its own citation so the origin span is
+                    // never claimed to say a value it does not contain.
+                    let mut authority = BTreeMap::new();
+                    authority.insert("packet_id".to_string(), id.clone());
+                    authority.insert(field.to_string(), value);
+                    citations.push(Citation::new(
+                        fragment_rel(source_rel, &src.fragment_name),
+                        src.line_start,
+                        src.line_end,
+                        CitationKind::Plan,
+                        authority,
+                    ));
+                }
+                None => {
+                    origin_authority.insert(field.to_string(), value);
+                }
+            }
         }
         citations.push(Citation::new(
-            source_rel.to_string(),
+            origin_path,
             line_start,
             line_end,
             CitationKind::Plan,
-            authority,
+            origin_authority,
         ));
     }
 
@@ -776,25 +873,64 @@ fn head_sha_in(git_dir: &Path) -> Option<String> {
         // Detached HEAD: the file already holds the sha.
         return Some(head.to_string());
     };
-    if let Ok(sha) = std::fs::read_to_string(git_dir.join(reference)) {
-        return Some(sha.trim().to_string());
+    // A linked worktree's private gitdir holds HEAD but shares refs and
+    // packed-refs through the COMMON directory named by its `commondir` file
+    // (order 606-h9vy). Resolve the ref against the private dir first, then
+    // the common one — the layouts where each applies are disjoint.
+    let common = std::fs::read_to_string(git_dir.join("commondir"))
+        .ok()
+        .map(|raw| {
+            let p = Path::new(raw.trim());
+            if p.is_absolute() {
+                p.to_path_buf()
+            } else {
+                git_dir.join(p)
+            }
+        });
+    let ref_dirs = std::iter::once(git_dir.to_path_buf()).chain(common);
+    let mut packed_candidates = Vec::new();
+    for dir in ref_dirs {
+        if let Ok(sha) = std::fs::read_to_string(dir.join(reference)) {
+            return Some(sha.trim().to_string());
+        }
+        packed_candidates.push(dir.join("packed-refs"));
     }
-    let packed = std::fs::read_to_string(git_dir.join("packed-refs")).ok()?;
-    packed.lines().find_map(|l| {
-        let (sha, name) = l.split_once(' ')?;
-        (name.trim() == reference).then(|| sha.trim().to_string())
+    packed_candidates.into_iter().find_map(|packed_path| {
+        let packed = std::fs::read_to_string(packed_path).ok()?;
+        packed.lines().find_map(|l| {
+            let (sha, name) = l.split_once(' ')?;
+            (name.trim() == reference).then(|| sha.trim().to_string())
+        })
     })
 }
 
-fn file_mtime_iso8601(path: &Path) -> Option<String> {
-    let secs = std::fs::metadata(path)
-        .ok()?
-        .modified()
-        .ok()?
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs();
-    Some(epoch_to_iso8601(secs as i64))
+fn file_mtime_epoch(path: &Path) -> Option<i64> {
+    Some(
+        std::fs::metadata(path)
+            .ok()?
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs() as i64,
+    )
+}
+
+/// ORDER 606-h9vy — the repo-relative path of a fragment, derived from the
+/// label the citations use for the index it sits beside:
+/// `plan/index.yaml` + `20260807t0-x-h.yaml` -> `plan/index.d/20260807t0-x-h.yaml`.
+/// Mirrors `fragments::fragment_dir`, which derives the directory from the
+/// index file stem.
+fn fragment_rel(source_rel: &str, fragment_name: &str) -> String {
+    let (dir, file) = match source_rel.rsplit_once('/') {
+        Some((dir, file)) => (Some(dir), file),
+        None => (None, source_rel),
+    };
+    let stem = file.strip_suffix(".yaml").unwrap_or(file);
+    match dir {
+        Some(dir) => format!("{dir}/{stem}.d/{fragment_name}"),
+        None => format!("{stem}.d/{fragment_name}"),
+    }
 }
 
 /// Unix seconds -> `YYYY-MM-DDTHH:MM:SSZ`. Hinnant's civil-from-days, so the
@@ -1033,6 +1169,109 @@ mod tests {
                 .iter()
                 .any(|v| v.contains("must not escape the checkout"))
         );
+    }
+
+    /// ORDER 606-h9vy — shape (g): a REAL span that names the packet must
+    /// still be refused when an authority VALUE is fabricated. Before this,
+    /// verify substantiated only the packet_id line, so `status: whatever`
+    /// rode along unchecked — a well-formed lie.
+    #[test]
+    fn fabricated_authority_values_are_refused_even_on_a_real_span() {
+        let ledger = live_ledger();
+        let env = answer_question(&ledger, "status of 394a", "plan/index.yaml");
+        assert_eq!(env.confidence(), Confidence::Exact);
+        let good = &env.citations()[0];
+        let root = repo_root();
+
+        for (key, forged) in [
+            ("status", "definitely-not-what-the-span-says"),
+            ("order", "999999-zzzz"),
+        ] {
+            let mut tampered = good.authority().clone();
+            tampered.insert(key.to_string(), forged.to_string());
+            let bad = Envelope::supported(
+                env.answer(),
+                vec![Citation::new(
+                    good.path().into(),
+                    good.line_start(),
+                    good.line_end(),
+                    CitationKind::Plan,
+                    tampered,
+                )],
+                Confidence::Exact,
+                fresh(),
+            );
+            assert!(
+                verify(&bad, &root)
+                    .iter()
+                    .any(|v| v.contains("does not substantiate authority")),
+                "a fabricated authority {key} must be refused"
+            );
+        }
+    }
+
+    /// ORDER 606-h9vy — the two substantiation grammars, and the prefix trap.
+    #[test]
+    fn span_substantiation_accepts_both_grammars_and_rejects_prefixes() {
+        // Packet-block grammar, with and without a trailing stamp comment.
+        assert!(span_substantiates("      status: ready", "status", "ready"));
+        assert!(span_substantiates(
+            "      status: ready  # freshness: audited",
+            "status",
+            "ready"
+        ));
+        assert!(span_substantiates("      order: '394'", "order", "394"));
+        // Fragment LWW-entry grammar.
+        assert!(span_substantiates(
+            "  - packet_id: x\n    field: status\n    value: in_progress",
+            "status",
+            "in_progress"
+        ));
+        // A value prefix is NOT substantiation.
+        assert!(!span_substantiates("      status: ready", "status", "read"));
+        // A contradictory value is not substantiation either.
+        assert!(!span_substantiates(
+            "      status: ready",
+            "status",
+            "in_progress"
+        ));
+        // The LWW grammar needs BOTH halves — a lone `field:` line proves
+        // nothing about the value.
+        assert!(!span_substantiates(
+            "    field: status\n    other: x",
+            "status",
+            "in_progress"
+        ));
+    }
+
+    /// ORDER 606-h9vy — freshness must resolve the HEAD sha through a linked
+    /// worktree's `commondir` indirection: the private gitdir holds HEAD, but
+    /// the ref it names lives in the shared common directory.
+    #[test]
+    fn head_sha_resolves_through_a_worktree_commondir_layout() {
+        let d = std::env::temp_dir().join(format!("tilland-commondir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let sha = "1234567890abcdef1234567890abcdef12345678";
+        std::fs::create_dir_all(d.join("main/.git/refs/heads")).expect("mkdir");
+        std::fs::create_dir_all(d.join("main/.git/worktrees/wt")).expect("mkdir");
+        std::fs::create_dir_all(d.join("wt/plan")).expect("mkdir");
+        std::fs::write(d.join("main/.git/refs/heads/b"), format!("{sha}\n")).expect("ref");
+        std::fs::write(d.join("main/.git/worktrees/wt/HEAD"), "ref: refs/heads/b\n").expect("head");
+        std::fs::write(d.join("main/.git/worktrees/wt/commondir"), "../..\n").expect("commondir");
+        std::fs::write(
+            d.join("wt/.git"),
+            format!("gitdir: {}\n", d.join("main/.git/worktrees/wt").display()),
+        )
+        .expect("gitfile");
+        std::fs::write(d.join("wt/plan/index.yaml"), "packets: []\n").expect("index");
+
+        let f = Freshness::for_source(&d.join("wt/plan/index.yaml"));
+        assert_eq!(
+            f.source_commit(),
+            sha,
+            "the ref named by the worktree HEAD resolves in the COMMON dir"
+        );
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     /// THE LOAD-BEARING RULE. Zero citations renders as `unsupported`, and no

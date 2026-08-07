@@ -1,4 +1,5 @@
 # @trace spec:forge-environment-discoverability
+# freshness: auditor=linux-tlatoani-claude-20260807t013000z date=2026-08-07 verdict=updated scope=extended with 606-h9vy fragment-provenance grading, tamper-negative verify-answer, and corpus-freshness steps; full quick suite re-validated green on linux_immutable
 # @trace order:394, order:394d (rung 1, slice 4)
 # @trace order:456 (exit criterion 3 — correct packets for the active release)
 # @trace order:606-e2hg (exact release + direct upstream query semantics)
@@ -236,12 +237,40 @@ critical_path:
     timeout_ms: 180000
     expected_behavior: "ok: dead-on-arrival-server-is-red"
 
+  # ── ORDER 606-h9vy: fragment provenance, tampering, freshness ────────────
+  - step: "ORDER 606-h9vy: the fragment-provenance query set grades GREEN against its committed fixture corpus"
+    # Graded against the immutable fixture corpus, NEVER the live ledger:
+    # compaction folds live fragments into the base, which would stale any
+    # committed case naming a real fragment file. The fixture never compacts.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); FIX=openspec/litmus-tests/groundtruth/fixtures/fragment-provenance; \"$PB\" --index \"$FIX/plan/index.yaml\" grade openspec/litmus-tests/groundtruth/expert-groundtruth-fragment-provenance.yaml > /tmp/.litmus-606-h9vy-fix.txt 2>&1 || { echo 'FAIL: fragment-provenance ground truth is RED'; cat /tmp/.litmus-606-h9vy-fix.txt; exit 1; }; grep -q '^PASS  frag-born-packet-cites-its-fragment' /tmp/.litmus-606-h9vy-fix.txt && grep -q '^PASS  frag-lww-override-cites-the-winning-fragment' /tmp/.litmus-606-h9vy-fix.txt && grep -q '^PASS  frag-zero-omitted-rows-over-a-folded-corpus' /tmp/.litmus-606-h9vy-fix.txt && grep -q 'fail=0' /tmp/.litmus-606-h9vy-fix.txt && echo 'ok: fragment-provenance-groundtruth-green'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fragment-provenance-groundtruth-green"
+
+  - step: "ORDER 606-h9vy TAMPER-NEGATIVE: verify-answer refuses fabricated authority and a stale base span"
+    # The envelope is REAL (produced by the engine over the fixture corpus);
+    # each tamper is one jq edit. (a) a fabricated status VALUE on the winning
+    # fragment citation; (b) the folded status claimed against the STALE BASE
+    # span — the exact pre-606-h9vy behaviour, now a hard rejection; (c) the
+    # untampered envelope still verifies, so the checks reject tampering, not
+    # the envelope shape.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); FIX=openspec/litmus-tests/groundtruth/fixtures/fragment-provenance; \"$PB\" --index \"$FIX/plan/index.yaml\" answer status of fixture-base-overridden > /tmp/.litmus-606-h9vy-env.json; jq '(.citations[] | select(.authority.status == \"in_progress\") | .authority.status) = \"completed\"' /tmp/.litmus-606-h9vy-env.json | \"$PB\" verify-answer > /tmp/.litmus-606-h9vy-a.txt 2>&1 && { echo 'FAIL: a fabricated authority status was verified'; exit 1; }; grep -q 'does not substantiate authority' /tmp/.litmus-606-h9vy-a.txt || { echo 'FAIL: wrong rejection reason for fabricated status'; cat /tmp/.litmus-606-h9vy-a.txt; exit 1; }; BASE_SPAN=$(jq '[.citations[] | select(.path == \"plan/index.yaml\")][0]' /tmp/.litmus-606-h9vy-env.json); jq --argjson b \"$BASE_SPAN\" '.citations = [(.citations[] | select(.authority.status == \"in_progress\") | .path = $b.path | .line_start = $b.line_start | .line_end = $b.line_end)]' /tmp/.litmus-606-h9vy-env.json | \"$PB\" verify-answer > /tmp/.litmus-606-h9vy-b.txt 2>&1 && { echo 'FAIL: a stale base span was verified for a fragment-won field'; exit 1; }; grep -q 'does not substantiate authority' /tmp/.litmus-606-h9vy-b.txt || { echo 'FAIL: wrong rejection reason for stale base span'; cat /tmp/.litmus-606-h9vy-b.txt; exit 1; }; \"$PB\" verify-answer < /tmp/.litmus-606-h9vy-env.json > /tmp/.litmus-606-h9vy-c.txt 2>&1 || { echo 'FAIL: the untampered envelope no longer verifies'; cat /tmp/.litmus-606-h9vy-c.txt; exit 1; }; grep -q '^ok: envelope verified' /tmp/.litmus-606-h9vy-c.txt && echo 'ok: tampered-authority-and-stale-span-are-refused'"
+    timeout_ms: 120000
+    expected_behavior: "ok: tampered-authority-and-stale-span-are-refused"
+
+  - step: "ORDER 606-h9vy FRESHNESS: adding a fragment beside the fixture base advances indexed_at"
+    # Freshness must be derived from base PLUS fragments. The probe copies the
+    # fixture corpus to a scratch dir, records indexed_at, drops in one more
+    # fragment (strictly newer mtime), and requires indexed_at to CHANGE.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); FIX=openspec/litmus-tests/groundtruth/fixtures/fragment-provenance; d=$(mktemp -d); cp -r \"$FIX/plan\" \"$d/plan\"; touch -d '2026-01-01T00:00:00Z' \"$d/plan/index.yaml\" \"$d/plan/index.d\"/*.yaml; T0=$(\"$PB\" --index \"$d/plan/index.yaml\" answer status of fixture-base-untouched | jq -r '.freshness.indexed_at'); printf 'status:\\n  - packet_id: fixture-base-untouched\\n    field: status\\n    value: in_progress\\n    ts: \"2026-08-06T00:02:00Z\"\\n    host: fixture-host\\n' > \"$d/plan/index.d/20260806t000002z-lww1-fixture.yaml\"; T1=$(\"$PB\" --index \"$d/plan/index.yaml\" answer status of fixture-base-untouched | jq -r '.freshness.indexed_at'); rm -rf \"$d\"; test \"$T0\" != 'unknown' || { echo 'FAIL: baseline freshness unknown'; exit 1; }; test \"$T0\" != \"$T1\" || { echo \"FAIL: adding a fragment did not change indexed_at ($T0)\"; exit 1; }; echo 'ok: fragment-addition-advances-corpus-freshness'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fragment-addition-advances-corpus-freshness"
+
   # ── the crate's own pins ─────────────────────────────────────────────────
   - step: "the harness's own unit pins are GREEN — named, not counted"
     # Named rather than counted: a bare 'N passed' breaks the day someone adds
     # test N+1, and a bare '0 failed' passes on an empty run. Each named test
     # here is one of the four exit criteria expressed inside the crate.
-    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && { echo 'FAIL: the crate test suite is red'; exit 1; }; for t in the_committed_query_set_is_green_at_head both_corpora_are_represented_in_the_committed_set a_wrong_expected_span_turns_a_passing_case_red a_misspelled_expectation_key_is_refused_not_ignored an_empty_query_set_is_an_error_not_a_pass an_unknown_engine_names_the_registration_site grading_works_on_a_corpus_this_crate_does_not_own; do printf '%s' \"$out\" | grep -q \"groundtruth::tests::$t ... ok\" || { echo \"FAIL: missing unit pin $t\"; exit 1; }; done; echo 'ok: groundtruth-unit-pins-green'"
+    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && { echo 'FAIL: the crate test suite is red'; exit 1; }; for t in the_committed_query_set_is_green_at_head the_fragment_provenance_query_set_is_green_at_head both_corpora_are_represented_in_the_committed_set a_wrong_expected_span_turns_a_passing_case_red a_misspelled_expectation_key_is_refused_not_ignored an_empty_query_set_is_an_error_not_a_pass an_unknown_engine_names_the_registration_site grading_works_on_a_corpus_this_crate_does_not_own; do printf '%s' \"$out\" | grep -q \"groundtruth::tests::$t ... ok\" || { echo \"FAIL: missing unit pin $t\"; exit 1; }; done; for t in fragments::overlay_citation_tests::fold_provenance_records_the_same_winner_the_fold_applies fragments::overlay_citation_tests::a_fragment_only_packet_cites_the_fragment_that_created_it fragments::overlay_citation_tests::an_lww_override_cites_the_winning_fragment_never_the_stale_base_span fragments::overlay_citation_tests::answers_over_a_folded_corpus_omit_no_rows fragments::overlay_citation_tests::freshness_is_derived_from_base_plus_fragments answer::tests::fabricated_authority_values_are_refused_even_on_a_real_span answer::tests::head_sha_resolves_through_a_worktree_commondir_layout; do printf '%s' \"$out\" | grep -q \"$t ... ok\" || { echo \"FAIL: missing 606-h9vy unit pin $t\"; exit 1; }; done; echo 'ok: groundtruth-unit-pins-green'"
     timeout_ms: 300000
     expected_behavior: "ok: groundtruth-unit-pins-green"
 
