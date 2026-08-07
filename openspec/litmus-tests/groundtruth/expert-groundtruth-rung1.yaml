@@ -203,11 +203,13 @@ cases:
     engine: plan.answer
     query: "what v0.5 work can I do on linux?"
     why: >
-      ORDER 606-e2hg. This is the exact cold-agent wording that previously
-      returned unsupported; its near-phrase silently discarded v0.5 and
-      returned every Linux-ready release. The authority constraints prove the
-      release survived classification and filtering rather than being treated
-      as decoration.
+      ORDER 606-e2hg, repointed by ORDER 606-xu52. This is the exact
+      cold-agent wording that previously returned unsupported; its
+      near-phrase silently discarded v0.5 and returned every Linux-ready
+      release. Since 606-xu52 the phrase is one of plan_next's two natural
+      aliases, so it now returns the RANKED claimable surface — still
+      release-exact (the original regression this case exists to catch) and
+      now capped at five cited rows.
     expect:
       confidence: exact
       citation_kind: plan
@@ -219,7 +221,9 @@ cases:
         - desired_release: v0.6
         - desired_release: v0.7
       answer_contains:
-        - "ready packets for pickup_role 'linux' in desired_release 'v0.5'"
+        - "next claimable work for pickup_role 'linux' in desired_release 'v0.5'"
+      answer_excludes:
+        - "omitted"
 
   - id: plan-upstream-prerequisites-of-experts-milestone
     engine: plan.answer

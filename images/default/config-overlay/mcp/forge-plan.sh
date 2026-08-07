@@ -508,6 +508,42 @@ plan_answer_envelope() {
     fi
 }
 
+# ── ORDER 606-xu52: the cold-start selector at the WRAPPER boundary ─────────
+#
+# `plan_next` promises the same §4 envelope on EVERY path as plan_answer,
+# including the degraded ones: at most five cited claimable packets ranked
+# deterministically, or the typed `unsupported: no claimable work ...`
+# refusal. Constraint violations never reach this function — the dispatcher's
+# closed-schema validator translates them to JSON-RPC -32602 first.
+plan_next_envelope() {
+    local state out
+    [ -n "$PLAN_BIN" ] || PLAN_BIN="$(resolve_plan_bin)"
+    [ -n "$PLAN_INDEX" ] || PLAN_INDEX="$(resolve_plan_index)"
+    state="$(experts_state_line)"
+    if [ -z "$PLAN_BIN" ]; then
+        unsupported_envelope "the plan expert cannot rank next work — experts state: ${state}. Same recovery triage as plan_answer: the binary is produced by lib-common.sh::ensure_forge_experts."
+        return 0
+    fi
+    if [ -z "$PLAN_INDEX" ]; then
+        unsupported_envelope "no plan/index.yaml was found to select next work from — experts state: ${state}"
+        return 0
+    fi
+    _gap="$(capability_gap "next")"
+    if [ -n "$_gap" ]; then
+        unsupported_envelope "the plan expert cannot rank next work — ${_gap}"
+        return 0
+    fi
+    out="$("$PLAN_BIN" --index "$PLAN_INDEX" next "$@" 2>/dev/null || true)"
+    # Anything that is not an envelope is DOWNGRADED rather than forwarded,
+    # for the same reason as plan_answer: prose from a tool that promises
+    # JSON is how a diagnostic gets read as a finding.
+    if printf '%s' "$out" | jq -e 'type == "object" and has("answer") and has("citations") and has("confidence")' >/dev/null 2>&1; then
+        printf '%s\n' "$out"
+    else
+        unsupported_envelope "the plan expert returned no envelope for plan_next — experts state: ${state}"
+    fi
+}
+
 # ── ORDER 394c: the methodology L0 path query ───────────────────────────────
 #
 # A DIFFERENT corpus from the plan ledger: methodology.yaml plus
@@ -769,6 +805,7 @@ while IFS= read -r line; do
                 {"name":"plan_closure","description":"List everything transitively downstream of a given packet","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_burndown","description":"List all children of a milestone/release-target with their statuses","inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"required":["reference"]}},
                 {"name":"plan_answer","description":"Answer a plan question as the CITED envelope {answer, citations[], freshness, confidence}. Every citation carries a repo-relative path and a line range whose span contains the packet it is offered as evidence for; verify with `tillandsias-plan verify-answer`. An answer with zero citations is returned as confidence=unsupported — the expert refuses rather than guesses.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"what is blocked by 394b\", \"everything downstream of 394\", \"what is ready for linux\", \"status of 394a\""}},"required":["question"]}},
+                {"name":"plan_next","description":"ORDER 606-xu52. Cold-start selector: at most FIVE cited, release-aware, role-compatible, dependency-clear, unleased claimable packets, ranked deterministically (priority, release-targeted first, order), each with why it ranked and its concrete next action. Release defaults from the folded '## ACTIVE RELEASE' heading beside the index; milestones and criteria holders are never offered as claims; no matching work returns the typed refusal 'unsupported: no claimable work ...'. Natural-language aliases via plan_answer: \"what's next?\" and \"what v0.5 work can I do on linux?\".","inputSchema":{"type":"object","properties":{"pickup_role":{"type":"string","minLength":1},"desired_release":{"type":"string","minLength":1},"limit":{"type":"integer","minimum":1,"maximum":5}},"additionalProperties":false}},
                 {"name":"methodology_path","description":"METHODOLOGY EXPERT (L0). Look up a YAML path in methodology.yaml and methodology/**/*.yaml and return the matched block plus a resolvable file:line, in the same CITED envelope as plan_answer. Query by full dotted path (methodology.runtime_language_policy.tlatoani_hard_no_python.rule), by path suffix (forge_cycle_budget.rule), or with * wildcards. An unknown path returns confidence=unsupported with zero citations — never the nearest key, never a guess.","inputSchema":{"type":"object","properties":{"path":{"type":"string","description":"e.g. \"forge_cycle_budget.rule\", \"bar_raise_governance.authority\", \"multi_host_development.pull_merge_cadence.pre_push_gate.rule\""}},"required":["path"]}},
                 {"name":"methodology_ask","description":"METHODOLOGY EXPERT (L0). Route a canonical discipline question to its YAML path and answer it in the CITED envelope. Deterministic routing only: a question matching no route, or two routes, is refused as confidence=unsupported and the refusal lists the routed forms so you can re-ask methodology_path directly.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"may a forge cycle drain two packets?\", \"may I embed a script in base64?\", \"who may raise the scan bar?\", \"what happens to a dead mechanism with a live intent?\", \"which branch does macOS checkpoint to?\""}},"required":["question"]}},
                 {"name":"spec_answer","description":"FAT SPEC EXPERT (L1 RAG, orders 547/548). Answer a cross-cutting question about the whole spec corpus (openspec/specs + cheatsheets + methodology, ~950k tokens — too big for any context) as the same CITED envelope {answer, citations[], freshness, confidence=retrieved}. Retrieves the top spec sections (cosine over a local embedding index), synthesizes prose grounded ONLY in them, and keeps ONLY citations the answer actually used — verify with `tillandsias-plan verify-answer`. Use for JOIN-across-specs questions the deterministic plan/methodology experts refuse; those single-node lookups still go to plan_answer/methodology_ask. Fail-soft: returns confidence=unsupported (never a guess) when the index or an inference endpoint is unavailable.","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"e.g. \"how does the forge stay isolated from the host and control outbound network access?\", \"which specs govern async inference launch?\", \"how do the browser isolation specs interact with the enclave CA?\""}},"required":["question"]}},
@@ -895,6 +932,41 @@ TOOLS_JSON
                     # every path, including the degraded ones.
                     question=$(echo "$args" | jq -r '.question // ""')
                     result=$(plan_answer_envelope "$question")
+                    ;;
+                "plan_next")
+                    # Order 606-xu52. Envelope on every path like plan_answer;
+                    # invalid constraints are protocol errors like plan_query.
+                    if ! printf '%s' "$args" | jq -e '
+                        type == "object"
+                        and ([keys[] | select(
+                            . != "pickup_role"
+                            and . != "desired_release"
+                            and . != "limit"
+                        )] | length == 0)
+                        and ((has("pickup_role") | not) or (
+                            (.pickup_role | type) == "string" and (.pickup_role | length) > 0
+                        ))
+                        and ((has("desired_release") | not) or (
+                            (.desired_release | type) == "string" and (.desired_release | length) > 0
+                        ))
+                        and ((has("limit") | not) or (
+                            (.limit | type) == "number"
+                            and .limit >= 1 and .limit <= 5
+                            and (.limit | floor) == .limit
+                        ))
+                    ' >/dev/null 2>&1; then
+                        invalid_params=1
+                        invalid_message="Invalid plan_next arguments: use only string pickup_role, string desired_release, and integer limit in 1..=5 — plan_next is capped at five on purpose"
+                    else
+                        _pn_args=()
+                        _pn_role=$(echo "$args" | jq -r '.pickup_role // empty')
+                        _pn_release=$(echo "$args" | jq -r '.desired_release // empty')
+                        _pn_limit=$(echo "$args" | jq -r '.limit // empty')
+                        [ -n "$_pn_role" ] && _pn_args+=("$_pn_role")
+                        [ -n "$_pn_release" ] && _pn_args+=(--release "$_pn_release")
+                        [ -n "$_pn_limit" ] && _pn_args+=(--limit "$_pn_limit")
+                        result=$(plan_next_envelope "${_pn_args[@]}")
+                    fi
                     ;;
                 "methodology_path")
                     # Order 394c. Envelope on every path, same as plan_answer.

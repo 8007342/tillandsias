@@ -589,6 +589,33 @@ mod tests {
         )
     }
 
+    /// ORDER 606-xu52 — the plan_next query set is GREEN at HEAD, graded
+    /// against its committed immutable fixture corpus (the live ready set
+    /// churns with every claim, so ordering can only be pinned there). The
+    /// adjacency needles inside the set are the deterministic-ordering proof.
+    #[test]
+    fn the_plan_next_query_set_is_green_at_head() {
+        let root = repo_root().join("openspec/litmus-tests/groundtruth/fixtures/plan-next");
+        let mut harness = Harness::new(
+            root.clone(),
+            root.join("plan/index.yaml"),
+            "plan/index.yaml".to_string(),
+        );
+        let sets =
+            load_all(&[repo_root()
+                .join("openspec/litmus-tests/groundtruth/expert-groundtruth-plan-next.yaml")])
+            .expect("the plan-next query set loads");
+        let outcomes = grade_all(&mut harness, &sets).expect("every engine is registered");
+        let red: Vec<&Outcome> = outcomes.iter().filter(|o| !o.passed()).collect();
+        assert!(
+            red.is_empty(),
+            "plan-next ground truth is RED: {:?}",
+            red.iter()
+                .map(|o| format!("{}: {}", o.id, o.failures.join(" | ")))
+                .collect::<Vec<_>>()
+        );
+    }
+
     /// ORDER 606-h9vy — the fragment-provenance query set is GREEN at HEAD,
     /// graded against its own committed immutable fixture corpus (never the
     /// live ledger, whose fragments compaction folds away).

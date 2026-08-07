@@ -75,6 +75,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "methodology",
     "methodology-ask",
     "methodology-index",
+    "next",
     "next-order",
     "query",
     "ready",
@@ -129,6 +130,16 @@ const USAGE: &str = concat!(
     "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
     "           ready [role]              ready packets (optionally for a pickup role)\n",
+    "           next [role] [--release V] [--limit N]\n",
+    "                                     ORDER 606-xu52. The cold-start selector: at most FIVE\n",
+    "                                     cited, release-aware, role-compatible, dependency-clear,\n",
+    "                                     unleased claimable packets, ranked deterministically\n",
+    "                                     (priority, release-targeted first, order). Release\n",
+    "                                     defaults from the folded '## ACTIVE RELEASE' heading;\n",
+    "                                     no release anywhere is a typed refusal. Milestones and\n",
+    "                                     criteria holders are never offered as claims. Natural\n",
+    "                                     aliases via `answer`: \"what's next?\" and\n",
+    "                                     \"what v0.5 work can I do on linux?\".\n",
     "           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json]\n",
     "                                     ORDER 582-26mm. THE generic filtered reader over the\n",
     "                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only\n",
@@ -1763,6 +1774,62 @@ fn main() {
             // paths were built relative to. This is the exact disagreement that
             // was observed — an index reached through a probe path yielded
             // confidence=exact with a citation `verify-answer` refused.
+            emit_verified_envelope(envelope, &root);
+        }
+        "next" => {
+            // ORDER 606-xu52. The cold-start selector: at most five cited,
+            // release-aware, role-compatible, dependency-clear, unleased
+            // claimable packets, ranked deterministically. Same envelope
+            // discipline as `answer`: exit 0 even when the typed no-work
+            // refusal comes back — the envelope IS the signal.
+            let mut role: Option<String> = None;
+            let mut release: Option<String> = None;
+            let mut limit: Option<usize> = None;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--release" => {
+                        i += 1;
+                        release = args.get(i).cloned();
+                    }
+                    "--limit" => {
+                        i += 1;
+                        let raw = args.get(i).cloned().unwrap_or_default();
+                        match raw.parse::<usize>() {
+                            Ok(n) if (1..=answer::NEXT_LIMIT_MAX).contains(&n) => limit = Some(n),
+                            _ => {
+                                eprintln!(
+                                    "error: --limit must be an integer in 1..={} (got {raw:?}) — plan_next is capped at five on purpose",
+                                    answer::NEXT_LIMIT_MAX
+                                );
+                                std::process::exit(2);
+                            }
+                        }
+                    }
+                    other if other.starts_with('-') => {
+                        eprintln!(
+                            "error: unknown option {other:?} for `next` (known: [role], --release <vX.Y>, --limit <1..=5>)"
+                        );
+                        std::process::exit(2);
+                    }
+                    other => {
+                        if role.is_some() {
+                            eprintln!("error: `next` takes at most one positional pickup_role");
+                            std::process::exit(2);
+                        }
+                        role = Some(other.to_string());
+                    }
+                }
+                i += 1;
+            }
+            let root = root_for(&index);
+            let envelope = answer::answer_next(
+                &ledger,
+                role.as_deref(),
+                release.as_deref(),
+                limit,
+                &citation_path(&index, &root),
+            );
             emit_verified_envelope(envelope, &root);
         }
         "append-event" => {

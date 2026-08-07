@@ -285,6 +285,34 @@ pub fn fold_text(base_raw: &str, fragments: &[Fragment]) -> Result<String, Strin
     Ok(out)
 }
 
+/// ORDER 606-xu52 — the release the coordination loop currently targets, read
+/// from the FOLDED loop status (base plus fragments, the same view every host
+/// sees). The heading grammar is `## ACTIVE RELEASE: vX.Y …` — the first
+/// `vN.N`-shaped token after the colon is the release; trailing prose (ship
+/// history, parentheticals) is ignored. Returns `None` when the file or the
+/// heading is absent — callers refuse rather than guess a release.
+///
+/// READ-ONLY on purpose: truth-gating and rendering of this heading belong to
+/// packet 606-46x9, not here.
+pub fn active_release(base: &Path) -> Option<String> {
+    let base_raw = std::fs::read_to_string(base).ok()?;
+    let folded = fold_text(&base_raw, &load_all(base)).unwrap_or(base_raw);
+    for line in folded.lines() {
+        let Some(rest) = line.trim().strip_prefix("## ACTIVE RELEASE:") else {
+            continue;
+        };
+        return rest.split_whitespace().find_map(|token| {
+            let token = token.trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '.'));
+            let mut chars = token.chars();
+            (chars.next() == Some('v')
+                && chars.clone().next().is_some_and(|c| c.is_ascii_digit())
+                && chars.all(|c| c.is_ascii_digit() || c == '.'))
+            .then(|| token.to_string())
+        });
+    }
+    None
+}
+
 /// The drift summary for the loop_status overlay, mirroring `fragments::drift`.
 pub struct Drift {
     pub fragment_count: usize,
