@@ -30584,7 +30584,7 @@ plan_index:
 
     - packet_id: expert-fragment-provenance-and-freshness
       order: 606-h9vy
-      status: ready
+      status: in_progress
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       priority: p0
@@ -30617,6 +30617,8 @@ plan_index:
         - crates/tillandsias-plan/src/fragments.rs
         - crates/tillandsias-plan/src/answer.rs
         - crates/tillandsias-plan/src/groundtruth.rs
+        - crates/tillandsias-plan/src/lib.rs
+        - openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml
         - openspec/litmus-tests/litmus-expert-groundtruth-harness.yaml
       events:
         - type: progress
@@ -30635,6 +30637,14 @@ plan_index:
           summary: |
             Clarification for the wording in the 01:03 correction fragment: whole-field LWW values may be sequences or block strings, and the text-preserving compactor now supports those shapes. The two order-451 audit updates were invalid semantically because they replaced canonical dependency/blocker fields with additive audit sequencing, and they also exposed the then-missing non-scalar text-compaction implementation; a non-scalar YAML shape alone is not schema-invalid.
 
+        - type: claim
+          ts: 2026-08-07T01:35:00Z
+          agent_id: linux-tlatoani-claude-20260807t013000z
+          host: linux_immutable
+          lease_id: expert-provenance-606-h9vy-20260807t013000z
+          expires_at: 2026-08-07T05:35:00Z
+          summary: |
+            Claimed the remaining 606-h9vy scope under the operator EXPERTS direction: per-packet/per-field winning-source map over the folded corpus so exact answers cite the fragment that actually won, verify-answer rejection of fabricated authority values and non-substantiating spans, freshness derived from base plus every folded fragment, and fragment-only/LWW-override/tamper-negative ground-truth fixtures. The compaction-LWW half of this packet already landed via the 2026-08-06 progress event; ledger was text-compacted at e47f17b6 immediately before this claim.
     - packet_id: plan-expert-release-and-upstream-query-primitives
       order: 606-e2hg
       status: completed
