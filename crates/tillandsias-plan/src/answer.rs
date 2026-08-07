@@ -1040,7 +1040,7 @@ pub fn answer_next(
                 && crate::str_field(p, "kind") != Some("milestone")
                 && !criteria_holders.contains(&id)
                 && ledger.dependencies_of(&id).is_some_and(|d| d.is_empty())
-                && !p.get("lease").is_some_and(|v| !v.is_null())
+                && p.get("lease").is_none_or(|v| v.is_null())
                 && !crate::str_list(p, "owned_files")
                     .iter()
                     .any(|f| claimed_files.contains(f))

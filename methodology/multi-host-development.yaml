@@ -322,23 +322,22 @@ multi_host_development:
 
   plan_write_discipline:
     rule: >
-      ALL writes to `plan/`, `methodology/`, `openspec/`, and `cheatsheets/`
-      land on `linux-next` regardless of which host or agent authored them.
-      The integration loop merges sibling-branch CODE work into
-      `linux-next`; SHARED-state writes go directly. See §2 of
-      `plan/issues/branch-and-coordination-canon-2026-05-25.md` for the
-      full destination matrix.
+      All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider
+      `linux-next` their canonical home. However, agents working on platform
+      branches (`windows-next`, `osx-next`) commit and push all edits (including
+      plan fragments in `plan/index.d/` and loop_status fragments in `plan/loop_status.d/`)
+      directly to their active platform branch. The Linux coordinator merges sibling-branch
+      work into `linux-next` during the coordination pass.
     rationale: >
-      One ledger branch eliminates merge conflicts on coordination state.
-      Sibling branches stay focused on platform-specific code, not on
-      cross-host narrative.
+      Append-only fragments (`plan/index.d/`, `plan/loop_status.d/`) eliminate
+      merge conflicts on ledger state across hosts. Sibling branches stay focused
+      and committable on their active platform branch without branch context switching.
     procedure:
-      - "git fetch origin && git checkout linux-next && git pull --ff-only"
-      - "Edit target plan/methodology/openspec file using stable-ID-keyed semantic upsert."
+      - "git fetch origin && git checkout <active-branch> && git pull --ff-only"
+      - "Append plan edits as fragments in `plan/index.d/` (via `tillandsias-plan append-event` or new fragment files) and status edits via `tillandsias-plan loop-status-append`."
       - "git add ONLY the intended files (never `git add -A` from a dirty tree)."
       - "git commit with `chore(plan): <subject>` or `docs(plan): <subject>`."
-      - "git push origin linux-next. On rejection: `git fetch && git rebase origin/linux-next && ./build.sh --check` and retry up to 3 times."
-      - "Switch back to your code branch (windows-next / osx-next) when done."
+      - "git push origin <active-branch>. On rejection: `git fetch && git rebase origin/<active-branch> && ./build.sh --check` and retry up to 3 times."
       - "Do not exit a skill successfully with local-only commits or uncommitted tracked changes."
       - "Incomplete but coherent work must be checkpoint-committed, pushed, and recorded in the owning plan item."
       - "Prefer separate `git worktree` directories for concurrent platform branches instead of switching branches with dirty state."

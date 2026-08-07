@@ -29902,6 +29902,18 @@ plan_index:
             The linux-next-checkout contradiction is resolved in ONE direction and the losing text is deleted, not left to be reconciled by the reader.
 
       events:
+        - type: completed
+          ts: "2026-08-07T08:07:43Z"
+          agent_id: "linux-mutable-macuahuitl-gemini-20260807"
+          host: linux_mutable
+          summary: >
+            DONE: instruction files updated to enforce fragment overlay and active branch writes; check-plan-ledger-readers.sh scan expanded to skills/ and methodology/
+        - type: claim
+          ts: "2026-08-07T08:06:05Z"
+          agent_id: "linux-mutable-macuahuitl-gemini-20260807"
+          host: linux_mutable
+          summary: >
+            Claimed packet 598-c4ug for implementation
         - type: filed
           ts: 2026-08-03T20:30:00Z
           agent_id: linux-mutable-macuahuitl-opus5-20260803

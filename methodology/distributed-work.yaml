@@ -542,9 +542,9 @@ distributed_work:
           Compose agent_id = "<host>-<workstation>-<harness>-<utc-stamp>".
       - id: 2_fetch_canonical_state
         action: >
-          `git fetch origin --prune` then `git checkout linux-next && git
-          pull --ff-only`. Plan ledger reads must come from the latest
-          origin/linux-next.
+          `git fetch origin --prune` then `git checkout <active-branch> && git
+          pull --ff-only`. Plan ledger reads must be overlay-aware (`tillandsias-plan` CLI
+          or project-plan MCP).
       - id: 3_filter_eligible
         action: >
           Walk plan/steps + plan/issues + openspec/changes. Filter where
