@@ -1,5 +1,7 @@
 # spec: forge-environment-discoverability
 
+<!-- # freshness: auditor=linux-tlatoani-claude-20260807t021700z date=2026-08-07 verdict=updated scope=full re-read during 606-xu52/606-z389; added plan_next selector requirement+Test and the generic-project bootstrap quartet; retro-created Implementation Notes now outdated in part (the spec actively governs the EXPERTS surface) -->
+
 ## Status
 
 active
@@ -128,6 +130,110 @@ consumers MUST remain separate query primitives.
 - **AND** the forge-plan MCP surface returns JSON-RPC `-32602 Invalid params`
 - **AND** neither surface silently executes a broader unconstrained query
 
+### Requirement: Plan expert ranks claimable next work deterministically
+
+@trace order:606-xu52
+
+The plan expert MUST expose a `plan_next` selector returning at most FIVE
+cited, release-aware, role-compatible, dependency-clear, unleased claimable
+packets, ranked by the committed tuple (priority, release-targeted first,
+order). The release MUST default from the folded `## ACTIVE RELEASE`
+declaration; milestones and criteria holders MUST never be offered as claims;
+an empty result MUST be the typed `unsupported: no claimable work` refusal.
+The natural aliases are exactly `what's next?` and the
+`what <release> work can I do on <role>?` family, and the rendered answer
+MUST stay within the committed byte budget.
+
+#### Scenario: Cold agent asks what's next
+- **WHEN** an agent with a fresh context asks `what's next?`
+- **THEN** at most five ready packets are returned in deterministic tuple order
+- **AND** every row is cited to its winning source and carries a ranking reason and a concrete next action
+- **AND** packets with unmet dependencies, live leases, claimed file scopes, incompatible roles, milestone kinds, or criteria-holder status are excluded
+
+#### Scenario: No claimable work is a typed refusal
+- **WHEN** the filters leave zero eligible packets
+- **THEN** the answer is `unsupported: no claimable work ...` naming the release and role constraints
+- **AND** no unscoped or widened query runs silently
+
+### Requirement: Generic project expert bootstrap is zero-intervention
+
+@trace order:606-z389
+
+The forge MUST bootstrap a project expert surface for an ARBITRARY mounted
+project without manual registration, configuration, or repository-type
+knowledge from the caller. The canonical project location is resolved in
+order: `TILLANDSIAS_PROJECT_PATH` when set; else
+`/home/forge/src/${TILLANDSIAS_PROJECT}`; else the working directory. Git-ness
+MUST be a detected, reported property — never a precondition. The Tillandsias
+plan expert remains an additive specialization: its presence upgrades the
+surface, its absence never degrades the generic contract below C2-C5 of the
+design record.
+
+#### Scenario: Fresh non-Tillandsias project gets a warmed surface
+- **WHEN** a forge launches with `TILLANDSIAS_PROJECT_PATH` naming a project with no `crates/tillandsias-plan`
+- **THEN** the generic discovery pass indexes the checkout without any manual step
+- **AND** `project_answer` returns cited project type, structured status, discovered commands, and next actions
+- **AND** the plan-expert state remains the honest `degraded(no-plan-crate)` without making the generic surface unavailable
+
+#### Scenario: Non-git directory is a supported shape
+- **WHEN** the project path is a readable directory that is not a git repository
+- **THEN** discovery completes and reports a named not-a-git-repository property
+- **AND** no bootstrap step fails or blocks on the absence of git metadata
+
+### Requirement: Project index is ephemeral and rebuilt from the active checkout
+
+@trace order:606-z389
+
+The generic project index MUST live under the tmpfs experts state directory,
+MUST be built at launch, MUST refresh on commit where a git hook path exists
+and at every launch for all project shapes, and MUST die with the container.
+No learned or discovered project state may persist across sessions, land on
+persistent per-project volumes, or leak into images.
+
+#### Scenario: Index dies with the container
+- **WHEN** a forge shuts down and a new one launches on the same project
+- **THEN** the new session's index is rebuilt from the freshly mounted checkout
+- **AND** no stale discovery survives from the previous session
+
+### Requirement: Generic expert readiness is machine-readable and never blocks launch
+
+@trace order:606-z389
+
+The generic engine MUST publish its own state line
+`project-expert: ready | building(<n>s) | degraded(<reason>)` with a CLOSED
+reason vocabulary (`no-project-path`, `unreadable-path`, `index-failed`,
+`not-built`), parallel to and never mutating the pinned plan-expert grammar.
+Harness launch and user prompts MUST NOT wait on discovery; overruns render
+the same abandoned-build degradation the plan expert uses.
+
+#### Scenario: Discovery failure is a named state, not a hang
+- **WHEN** the project path is unreadable or discovery fails
+- **THEN** the state renders `project-expert: degraded(<reason>)` from the closed vocabulary
+- **AND** the harness session proceeds normally with the degraded state visible to agents
+
+### Requirement: project_answer is one uniform cited surface with a deterministic fallback
+
+@trace order:606-z389
+
+A single `project_answer` surface MUST answer project questions in the
+ratified envelope for every project shape, routing internally to the
+specialized plan/methodology engines when present and to the generic index
+otherwise — the caller never selects a project-specific tool. When local
+inference is unavailable, the deterministic subset (type, status, commands,
+layout, actions) MUST still answer from the index alone; everything else is
+the typed refusal. Citations are deterministic-layer products in every
+configuration.
+
+#### Scenario: One question, any project
+- **WHEN** an agent asks `what's next?` through `project_answer`
+- **THEN** a Tillandsias-shaped project answers via plan_next and any other project answers from the generic index
+- **AND** both answers are cited envelopes verifiable with `verify-answer`
+
+#### Scenario: Inference outage keeps the deterministic subset
+- **WHEN** no local inference endpoint is available
+- **THEN** deterministic questions still answer with citations
+- **AND** questions needing synthesis return `unsupported:` rather than an uncited guess
+
 ## Litmus Tests
 
 ### Test: tillandsias-inventory command completeness
@@ -172,12 +278,21 @@ consumers MUST remain separate query primitives.
 - **Pass**: No result leaks another release or reverses the dependency direction; every seeded invalid constraint is refused
 - **Fail**: A constraint is ignored, a downstream consumer is returned as an upstream prerequisite, or the MCP wrapper reports invalid parameters as a successful tool result
 
+### Test: Plan next deterministic selector
+- **Setup**: Build the real `tillandsias-plan` binary; use the committed fixture corpus at `openspec/litmus-tests/groundtruth/fixtures/plan-next/` and the live ledger
+- **Action**: Grade `expert-groundtruth-plan-next.yaml` against the fixture; call `plan_next` through `forge-plan.sh` with a valid role/limit, an over-cap limit, and an unknown argument
+- **Signal**: Adjacency-ordered rows matching the committed ranking tuple, a five-row cap against six eligible packets, a typed no-work refusal, a verifiable served envelope, and JSON-RPC `-32602` on invalid constraints
+- **Pass**: All fixture cases green; the served exact envelope verifies; every invalid constraint is a protocol error with one telemetry row per call
+- **Fail**: Row order varies between runs, an excluded class (milestone, criteria holder, lease, claimed file scope, unmet dependency, foreign release, incompatible role) is offered as a claim, or the cap or refusal grammar breaks
+
 ## Implementation Notes
 
-This spec is created retroactively as part of the traces-audit refactor. It may represent:
-- An abandoned initiative that was never fully spec'd
-- A feature whose spec was lost or mishandled
-- A trace annotation that should have been corrected instead
+Originally created retroactively during the traces-audit refactor; since the
+2026-08 EXPERTS wave (orders 606-e2hg, 606-xu52, 606-z389) this spec ACTIVELY
+governs the forge expert surface: release/dependency query semantics, the
+deterministic plan_next selector, and the generic-project bootstrap contract.
+The design record for the generic contract is
+`plan/issues/generic-project-expert-bootstrap-design-2026-08-07.md`.
 
 ## Sources of Truth
 
