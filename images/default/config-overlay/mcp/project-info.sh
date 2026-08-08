@@ -141,7 +141,7 @@ discover_sibling_projects() {
 }
 
 # ── Plan ledger resolution ────────────────────────────────────
-# @trace spec:plan-ledger-fragment-overlay
+# @trace spec:layered-tools-overlay, spec:forge-environment-discoverability
 # ORDER 582-26mm. plan_query must see the FOLDED ledger (base ⊕ plan/index.d/
 # fragments), never the base alone — a reader that forgets fragments reports a
 # stale ledger with total confidence, and if plan_answer says a packet exists

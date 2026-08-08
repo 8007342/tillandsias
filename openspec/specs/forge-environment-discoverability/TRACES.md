@@ -19,6 +19,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/mcp/project-info.sh#L43](../../../images/default/config-overlay/mcp/project-info.sh#L43)
 - [images/default/config-overlay/mcp/project-info.sh#L52](../../../images/default/config-overlay/mcp/project-info.sh#L52)
 - [images/default/config-overlay/mcp/project-info.sh#L102](../../../images/default/config-overlay/mcp/project-info.sh#L102)
+- [images/default/config-overlay/mcp/project-info.sh#L144](../../../images/default/config-overlay/mcp/project-info.sh#L144)
 - [images/default/config-overlay/mcp/project-info.sh#L274](../../../images/default/config-overlay/mcp/project-info.sh#L274)
 - [images/default/config-overlay/mcp/project-info.sh#L311](../../../images/default/config-overlay/mcp/project-info.sh#L311)
 - [images/default/config-overlay/mcp/project-info.sh#L317](../../../images/default/config-overlay/mcp/project-info.sh#L317)
