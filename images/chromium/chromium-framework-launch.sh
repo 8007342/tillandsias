@@ -15,9 +15,14 @@ find_chromium() {
 
 accepts_no_sandbox() {
     local bin="$1"
-    # Some Chromium wrappers reject unknown switches before launching. Keep the
-    # hardening fallback only where the binary advertises the flag.
-    "$bin" --help 2>&1 | grep -q -- '--no-sandbox'
+    # Some Chromium wrappers reject unknown switches before launching.
+    # Probe directly with a bounded timeout; Fedora Chromium accepts --no-sandbox
+    # but does not advertise it in --help.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout --kill-after=1s 5s "$bin" --no-sandbox --version >/dev/null 2>&1
+    else
+        return 1
+    fi
 }
 
 CHROMIUM_BIN="$(find_chromium || true)"
