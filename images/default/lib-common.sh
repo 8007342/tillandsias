@@ -997,6 +997,93 @@ _forge_experts_source_hash() {
     return 0
 }
 
+_generic_project_set_state() {
+    local state="$1" reason="${2:-}"
+    mkdir -p "$FORGE_EXPERTS_STATE_DIR" 2>/dev/null || true
+    if [ "$state" = "building" ]; then
+        date +%s > "$FORGE_EXPERTS_STATE_DIR/generic_started_at" 2>/dev/null || true
+        printf 'building\n' > "$FORGE_EXPERTS_STATE_DIR/generic_state" 2>/dev/null || true
+    elif [ "$state" = "ready" ]; then
+        printf 'ready\n' > "$FORGE_EXPERTS_STATE_DIR/generic_state" 2>/dev/null || true
+    elif [ "$state" = "degraded" ]; then
+        printf 'degraded:%s\n' "${reason:-not-built}" > "$FORGE_EXPERTS_STATE_DIR/generic_state" 2>/dev/null || true
+    fi
+}
+
+# generic_project_state_line — return project-expert state token (C3)
+# Grammar: ready | building(<n>s) | degraded(<reason>)
+# Closed vocabulary: no-project-path | unreadable-path | index-failed | not-built
+generic_project_state_line() {
+    local state="" started=0 now=0 elapsed=0
+    if [ -r "$FORGE_EXPERTS_STATE_DIR/generic_state" ]; then
+        state="$(cat "$FORGE_EXPERTS_STATE_DIR/generic_state" 2>/dev/null || true)"
+    fi
+    case "$state" in
+        ready)
+            printf 'ready\n'
+            ;;
+        building)
+            started="$(cat "$FORGE_EXPERTS_STATE_DIR/generic_started_at" 2>/dev/null || echo 0)"
+            case "$started" in
+                '' | *[!0-9]*) started=0 ;;
+            esac
+            now="$(date +%s 2>/dev/null || echo 0)"
+            elapsed=$((now - started))
+            [ "$elapsed" -ge 0 ] || elapsed=0
+            budget="${FORGE_EXPERTS_BUILD_BUDGET_SECS:-300}"
+            if [ "$elapsed" -gt "$budget" ]; then
+                printf 'degraded(build-abandoned-after-%ss)\n' "$elapsed"
+            else
+                printf 'building(%ss)\n' "$elapsed"
+            fi
+            ;;
+        degraded:*)
+            printf 'degraded(%s)\n' "${state#degraded:}"
+            ;;
+        *)
+            printf 'degraded(not-built)\n'
+            ;;
+    esac
+    return 0
+}
+
+# discover_generic_project — build project index under tmpfs (C1, C2)
+discover_generic_project() {
+    local project_path=""
+    if [ -n "${TILLANDSIAS_PROJECT_PATH:-}" ]; then
+        project_path="$TILLANDSIAS_PROJECT_PATH"
+    elif [ -n "${TILLANDSIAS_PROJECT:-}" ]; then
+        project_path="/home/forge/src/${TILLANDSIAS_PROJECT}"
+    fi
+    [ -n "$project_path" ] || project_path="$PWD"
+
+    if [ -z "$project_path" ]; then
+        _generic_project_set_state degraded no-project-path
+        return 0
+    fi
+    if [ ! -d "$project_path" ] || [ ! -r "$project_path" ]; then
+        _generic_project_set_state degraded unreadable-path
+        return 0
+    fi
+
+    local index_dir="$FORGE_EXPERTS_STATE_DIR/project-index"
+    mkdir -p "$index_dir" 2>/dev/null || true
+
+    local types=""
+    types="$(detect_project_types "$project_path" 2>/dev/null || echo "unknown")"
+    local meta=""
+    meta="$(get_project_metadata "$project_path" 2>/dev/null || echo "{}")"
+
+    if [ -z "$meta" ] || [ "$meta" = "{}" ]; then
+        _generic_project_set_state degraded index-failed
+        return 0
+    fi
+
+    printf '{"path":"%s","types":"%s","meta":%s}\n' "$project_path" "$types" "$meta" > "$index_dir/index.json" 2>/dev/null || true
+    _generic_project_set_state ready
+    return 0
+}
+
 # start_forge_experts_async — publish `building` SYNCHRONOUSLY, then fork.
 #
 # Publishing before the fork removes the race where inject_startup_context
@@ -1004,12 +1091,16 @@ _forge_experts_source_hash() {
 # to report something ambiguous. After this returns, the state file always
 # exists and always carries a truthful token.
 start_forge_experts_async() {
-    if [ -z "${TILLANDSIAS_PROJECT:-}" ]; then
+    if [ -z "${TILLANDSIAS_PROJECT:-}" ] && [ -z "${TILLANDSIAS_PROJECT_PATH:-}" ]; then
         # Non-project session: nothing was cloned, so there is nothing to build.
         return 0
     fi
     _forge_experts_set_state building
-    ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 &
+    _generic_project_set_state building
+    (
+        discover_generic_project >>/tmp/forge-lifecycle.log 2>&1 || true
+        ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 || true
+    ) &
     return 0
 }
 
@@ -3289,6 +3380,28 @@ inject_startup_context() {
             ;;
     esac
 
+    local _project_experts_status _project_experts_state _project_experts_reason _project_experts_elapsed
+    _project_experts_status="$(generic_project_state_line)"
+    case "$_project_experts_status" in
+        ready)
+            _project_experts_state="ready"
+            _project_experts_reason="-"
+            _project_experts_elapsed="-"
+            ;;
+        building*)
+            _project_experts_state="building"
+            _project_experts_reason="-"
+            _project_experts_elapsed="${_project_experts_status#building(}"
+            _project_experts_elapsed="${_project_experts_elapsed%s)}"
+            ;;
+        *)
+            _project_experts_state="degraded"
+            _project_experts_reason="${_project_experts_status#degraded(}"
+            _project_experts_reason="${_project_experts_reason%)}"
+            _project_experts_elapsed="-"
+            ;;
+    esac
+
     # Order 569 EXTENSION (capability skew). `experts_state=ready` above answers
     # "did the build finish". It has never answered the question an agent
     # actually has, which is three questions:
@@ -3441,6 +3554,9 @@ inject_startup_context() {
   - ${_cap_advice}
   - \`experts_state\` is \`ready\` only once \`tillandsias-plan\` is built and installed on PATH. \`building\` carries elapsed seconds and is TRANSIENT — retry the MCP tool. \`degraded\` always names a reason from a closed set: \`no-plan-crate\` (this project has no plan expert — expected off-tillandsias), \`no-checkout\`, \`no-cargo\`, \`build-failed\`, \`build-timeout\`, \`binary-missing\`, \`install-failed\`, \`not-built\`. There is no indeterminate "may still be building" state.
   - Experts are OPTIONAL: the build is backgrounded right after the project clone and never gates this session. Details: \`/tmp/forge-lifecycle.log\`.
+- **Generic Project Index** — \`project-expert: ${_project_experts_status}\`. Query via the \`project-info\` MCP server (\`project_answer\`, \`project_metadata\`, \`project_structure\`).
+  - Machine-readable (branch on this, do not parse the prose): \`project_expert_state=${_project_experts_state} project_expert_reason=${_project_experts_reason} project_expert_elapsed=${_project_experts_elapsed}\`
+  - \`project-expert\` is \`ready\` when the generic project index is built into tmpfs (\`$FORGE_EXPERTS_STATE_DIR/project-index/index.json\`).
 - **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.
 
 You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA certs.

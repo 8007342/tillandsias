@@ -9839,16 +9839,12 @@ fn build_project_browser_spec(
     display: &BrowserDisplayContext,
     container_name: &str,
 ) -> Result<ContainerSpec, String> {
-    // NOTE: rootfs is intentionally writable (no `.read_only()`). Chromium's
-    // crashpad handler aborts on a read-only rootfs because it cannot create
-    // its database directory, exiting 133 immediately on launch. The remaining
-    // hardening (--cap-drop=ALL, no-new-privileges, --userns=keep-id, tmpfs
-    // mounts for /tmp + chromium dirs + /dev/shm) keeps the blast radius
-    // tight.
+    // @trace spec:browser-isolation-framework, spec:browser-isolation-tray-integration
+    // Hardened browser boundary: read-only rootfs, CAP_DROP=ALL, no-new-privileges,
+    // userns=keep-id, and HOME/config/cache redirected to bounded tmpfs mounts.
     let mut spec = ContainerSpec::new(format!("tillandsias-chromium-framework:v{version}"))
         .pull_never()
-        .cap_add("SYS_CHROOT")
-        .network("host")
+        .read_only()
         .name(container_name)
         .detached()
         .volume(
@@ -9861,6 +9857,7 @@ fn build_project_browser_spec(
             "/etc/tillandsias/ca.crt",
             true,
         )
+        .env("HOME", "/tmp")
         .env("TILLANDSIAS_CA_BUNDLE", "/etc/tillandsias/ca.crt")
         .env("SSL_CERT_FILE", "/etc/tillandsias/ca.crt")
         .env("XDG_CONFIG_HOME", "/tmp/chromium-config")
@@ -18303,17 +18300,19 @@ esac
         let args = spec.build_run_args();
 
         assert!(has_arg(&args, "--pull=never"));
-        // Intentionally NOT --read-only: Chromium crashpad aborts on
-        // a read-only rootfs because it cannot create its database dir,
-        // exiting 133 immediately. See build_opencode_web_browser_spec.
-        assert!(!has_arg(&args, "--read-only"));
-        assert!(has_arg(&args, "--cap-add"));
-        assert!(has_arg(&args, "SYS_CHROOT"));
-        assert!(has_arg(&args, "--network"));
-        assert!(has_arg(&args, "host"));
+        assert!(has_arg(&args, "--read-only"));
+        assert!(has_arg(&args, "--cap-drop=ALL"));
+        assert!(has_arg(&args, "--security-opt=no-new-privileges"));
+        assert!(has_arg(&args, "--userns=keep-id"));
+        assert!(!has_arg(&args, "--cap-add"));
+        assert!(!has_arg(&args, "SYS_CHROOT"));
+        assert!(!has_arg(&args, "host"));
         assert!(has_arg(&args, "-d"));
         assert!(has_arg(&args, "--name"));
         assert!(has_arg(&args, "tillandsias-browser-visual-chess"));
+        assert!(has_arg(&args, "HOME=/tmp"));
+        assert!(has_arg(&args, "XDG_CONFIG_HOME=/tmp/chromium-config"));
+        assert!(has_arg(&args, "XDG_CACHE_HOME=/tmp/chromium-cache"));
         assert!(args.iter().any(|arg| {
             arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
         }));
