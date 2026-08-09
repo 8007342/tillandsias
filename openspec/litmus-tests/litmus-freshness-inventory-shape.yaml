@@ -34,6 +34,29 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: 2026-07-15 incident components stamped"
 
+  - step: "Req: the report names the next audit target"
+    command: "scripts/freshness-inventory.sh | grep -qE '^freshness-next: [^ ]+ source=(unstamped|stale) seed=[^ ]+$' && echo 'ok: next-target grammar'"
+    timeout_ms: 60000
+    expected_behavior: "ok: next-target grammar"
+
+  - step: "ANTI-STARVATION: below full coverage the next target is an UNSTAMPED component"
+    # Order 636-* (windows host 2026-08-09). This is the regression guard for a
+    # closed loop, not a style preference. `freshness-stale:` is only emitted for
+    # files that already carry a stamp, so an audit queue fed from staleness can
+    # only ever re-offer the files it has already audited. Measured: 969
+    # components / 8 stamped / 0% on 2026-07-31, and 1021 / 8 / 0% on 2026-08-09
+    # — nine days, +52 components, +0 stamps. The class was not slow, it was
+    # closed. If this step ever fails while coverage is under 100%, the path from
+    # "never audited" to "audited" has been severed again.
+    command: "out=$(scripts/freshness-inventory.sh); pct=$(printf '%s' \"$out\" | grep '^freshness-coverage:' | sed 's/[^0-9]//g'); [ \"$pct\" -ge 100 ] && { echo 'ok: coverage complete, stale fallback correct'; exit 0; }; printf '%s' \"$out\" | grep -qE '^freshness-next: .* source=unstamped ' && echo 'ok: unstamped component reachable'"
+    timeout_ms: 60000
+    expected_behavior: "ok: unstamped component reachable"
+
+  - step: "REPRODUCIBLE: a fixed seed selects the same next target"
+    command: "a=$(FRESHNESS_SEED=litmus-fixed scripts/freshness-inventory.sh | grep '^freshness-next:'); b=$(FRESHNESS_SEED=litmus-fixed scripts/freshness-inventory.sh | grep '^freshness-next:'); [ -n \"$a\" ] && [ \"$a\" = \"$b\" ] && echo 'ok: next target reproducible'"
+    timeout_ms: 120000
+    expected_behavior: "ok: next target reproducible"
+
 observability:
   traces:
     - "@trace spec:spec-traceability"
