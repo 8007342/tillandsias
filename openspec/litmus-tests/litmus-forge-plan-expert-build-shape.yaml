@@ -57,10 +57,18 @@ critical_path:
     expected_behavior: "ok: build-and-install-step-present"
 
   - step: "the launch path invokes it, BACKGROUNDED and fail-soft"
-    # `&` keeps it off the critical path; `|| true` keeps a failure in the
-    # starter from propagating into the clone's exit status. Losing either
+    # Backgrounding keeps it off the critical path; `|| true` keeps a failure in
+    # the starter from propagating into the clone's exit status. Losing either
     # turns an optional expert into a launch gate.
-    command: "grep -q 'start_forge_experts_async || true' images/default/lib-common.sh && grep -q 'ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 &' images/default/lib-common.sh && echo 'ok: hook-backgrounded-failsoft'"
+    #
+    # Order 621-2re2: this used to grep for the literal
+    # `ensure_forge_experts >>/tmp/forge-lifecycle.log 2>&1 &`. Order 619-vwau
+    # legitimately moved the `&` onto a subshell so the generic-project index
+    # could be discovered in the same background fork — both properties still
+    # held, and the guard went RED anyway because it pinned an EXPRESSION rather
+    # than the property. Assert the properties instead: the call is fail-soft,
+    # and whatever construct contains it is backgrounded.
+    command: "grep -q 'start_forge_experts_async || true' images/default/lib-common.sh && grep -qE 'ensure_forge_experts >>/tmp/forge-lifecycle\\.log 2>&1 (&|\\|\\| true)' images/default/lib-common.sh && awk '/^start_forge_experts_async\\(\\)/,/^}/' images/default/lib-common.sh | grep -qE '(^[[:space:]]*\\)[[:space:]]*&|ensure_forge_experts .*&$)' && echo 'ok: hook-backgrounded-failsoft'"
     timeout_ms: 5000
     expected_behavior: "ok: hook-backgrounded-failsoft"
 

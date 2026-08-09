@@ -85,9 +85,20 @@ critical_path:
     # Enumerates the region's real redirection targets (comments excluded) and
     # rejects anything outside the ephemeral set. A new persisted index file
     # cannot be added without either being ephemeral or turning this RED.
-    command: "bad=$(sed -n '/^# ── Forge EXPERTS: launch-time build/,/^# ── Cache directory structure/p' images/default/lib-common.sh | grep -v '^[[:space:]]*#' | grep -oE '(^|[[:space:]])>>?[[:space:]]*\"?[^\"|&; )]+' | sed -E 's/^[[:space:]]*>>?[[:space:]]*\"?//' | sort -u | grep -vE '^(/dev/null|/tmp/|\\$FORGE_EXPERTS_STATE_DIR/|\\$stamp$)'); test -z \"$bad\" && echo 'ok: writes-confined-to-ephemeral-surfaces' || { echo \"REGRESSION: experts region writes to non-ephemeral target(s): $bad\"; exit 1; }"
+    command: "bad=$(sed -n '/^# ── Forge EXPERTS: launch-time build/,/^# ── Cache directory structure/p' images/default/lib-common.sh | grep -v '^[[:space:]]*#' | grep -oE '(^|[[:space:]])>>?[[:space:]]*\"?[^\"|&; )]+' | sed -E 's/^[[:space:]]*>>?[[:space:]]*\"?//' | sort -u | grep -vE '^(/dev/null|/tmp/|\\$FORGE_EXPERTS_STATE_DIR/|\\$stamp$|\\$index_dir/)'); test -z \"$bad\" && echo 'ok: writes-confined-to-ephemeral-surfaces' || { echo \"REGRESSION: experts region writes to non-ephemeral target(s): $bad\"; exit 1; }"
     timeout_ms: 10000
     expected_behavior: "ok: writes-confined-to-ephemeral-surfaces"
+
+  # Order 621-2re2: every name allowlisted above must be PROVEN to resolve into
+  # tmpfs by its own step. Allowlisting a name without that proof is how a
+  # persistent surface would slip in behind a local variable — the enumeration
+  # cannot follow one level of indirection, so each indirection pays for itself
+  # with an explicit assertion. $stamp has done this since the step was written;
+  # $index_dir (the generic-project index, order 619-vwau) now does too.
+  - step: "the generic-project index dir — an indirect write target — is itself in tmpfs"
+    command: "grep -q 'local index_dir=\"$FORGE_EXPERTS_STATE_DIR/project-index\"' images/default/lib-common.sh && echo 'ok: project-index-in-tmpfs'"
+    timeout_ms: 5000
+    expected_behavior: "ok: project-index-in-tmpfs"
 
   - step: "the idempotency stamp — the one indirect write target — is itself in tmpfs"
     # $stamp is accepted by the step above by name; prove the name resolves into

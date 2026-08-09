@@ -27,10 +27,49 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: stable + grammar"
 
-  - step: "installers honor TILLANDSIAS_RELEASE_BASE, defaulting to stable /releases/latest"
-    command: "grep -Fq 'TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download' scripts/install.sh && grep -Fq 'TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download' scripts/install-macos.sh && echo 'ok: installer override'"
+  # Order 621-2re2 replaced a literal-string grep for the old one-line default
+  # with a BEHAVIORAL assertion. The grep pinned an expression, not a property,
+  # so introducing the unstable channel broke it while every property it was
+  # meant to protect still held. These steps run the resolution instead.
+  - step: "installers default to the stable channel (/releases/latest)"
+    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(scripts/check-installer-channel.sh \"$s\")\" = 'base:https://github.com/8007342/tillandsias/releases/latest/download' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: default stable'"
     timeout_ms: 3000
-    expected_behavior: "ok: installer override"
+    expected_behavior: "ok: default stable"
+
+  - step: "TILLANDSIAS_CHANNEL=unstable selects the rolling unstable channel"
+    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(scripts/check-installer-channel.sh \"$s\" unstable)\" = 'base:https://github.com/8007342/tillandsias/releases/download/unstable' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: unstable channel'"
+    timeout_ms: 3000
+    expected_behavior: "ok: unstable channel"
+
+  - step: "TILLANDSIAS_RELEASE_BASE still overrides the channel (smoke pins one release)"
+    command: "for s in scripts/install.sh scripts/install-macos.sh; do test \"$(TILLANDSIAS_RELEASE_BASE=https://example.invalid/pinned scripts/check-installer-channel.sh \"$s\" unstable)\" = 'base:https://example.invalid/pinned' || { echo \"FAIL $s\"; exit 1; }; done; echo 'ok: base override wins'"
+    timeout_ms: 3000
+    expected_behavior: "ok: base override wins"
+
+  - step: "NEGATIVE CONTROL: an unknown channel is refused, not silently defaulted"
+    command: "scripts/check-installer-channel.sh scripts/install.sh bogus >/dev/null 2>&1 && { echo 'FAIL: bogus channel accepted'; exit 1; }; scripts/check-installer-channel.sh scripts/install.sh bogus 2>&1 | grep -q '^refused:unknown-channel:' && echo 'ok: bogus refused'"
+    timeout_ms: 3000
+    expected_behavior: "ok: bogus refused"
+
+  - step: "the Windows installer carries the same two channels and stays pure ASCII"
+    command: "grep -Fq 'TILLANDSIAS_CHANNEL' scripts/install-windows.ps1 && grep -Fq 'releases/download/unstable' scripts/install-windows.ps1 && grep -Fq 'releases/latest/download' scripts/install-windows.ps1 && ! grep -qP '[^\\x00-\\x7F]' scripts/install-windows.ps1 && echo 'ok: windows channels ascii'"
+    timeout_ms: 3000
+    expected_behavior: "ok: windows channels ascii"
+
+  - step: "every installer warns before installing an unstable build"
+    command: "grep -Fq 'UNSTABLE channel' scripts/install.sh && grep -Fq 'UNSTABLE channel' scripts/install-macos.sh && grep -Fq 'UNSTABLE channel' scripts/install-windows.ps1 && echo 'ok: unstable banner'"
+    timeout_ms: 3000
+    expected_behavior: "ok: unstable banner"
+
+  - step: "the release workflow republishes the rolling unstable channel every daily"
+    command: "grep -Fq 'gh release delete unstable' .github/workflows/release.yml && grep -Fq 'gh release create unstable' .github/workflows/release.yml && test \"$(grep -cF 'gh release upload unstable' .github/workflows/release.yml)\" -eq 2 && echo 'ok: unstable channel published'"
+    timeout_ms: 3000
+    expected_behavior: "ok: unstable channel published"
+
+  - step: "the landing page can link Windows portables (version-stable aliases exist and are checksummed)"
+    command: "grep -Fq 'cp \"${ZIP}\" tillandsias-windows-x64.zip' .github/workflows/release.yml && grep -Fq 'sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe >> SHA256SUMS-windows' .github/workflows/release.yml && grep -Fq 'latest/download/tillandsias-windows-x64.zip' README.md && grep -Fq 'latest/download/Tillandsias.dmg' README.md && echo 'ok: portable aliases linkable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: portable aliases linkable"
 
   - step: "promotion prompts the one-shot stable smoke"
     command: "grep -Fq 'SMOKE_CHANNEL=stable' scripts/promote-stable.sh && echo 'ok: promotion smoke hint'"

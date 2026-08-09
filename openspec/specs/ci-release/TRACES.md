@@ -6,6 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [scripts/build-guest-binaries.sh#L2](../../../scripts/build-guest-binaries.sh#L2)
+- [scripts/check-installer-channel.sh#L2](../../../scripts/check-installer-channel.sh#L2)
 - [scripts/install.sh#L4](../../../scripts/install.sh#L4)
 - [scripts/local-ci.sh#L3](../../../scripts/local-ci.sh#L3)
 - [scripts/local-ci.sh#L888](../../../scripts/local-ci.sh#L888)
