@@ -475,6 +475,22 @@ impl WslLifecycle {
                     self.write_import_complete_marker().await;
                     progress.report_phase(ProvisionPhase::StartingVm);
                     self.runtime.start().await?;
+                    // The exec probe proves the distro can run /bin/true — not
+                    // that its Tillandsias wiring matches THIS tray. A distro
+                    // survives tray upgrades, and injection historically ran
+                    // only on first provision, so an adopted guest can carry a
+                    // stale headless binary (older wire revision → silently
+                    // dropped Hello → permanent "handshake: early eof", the
+                    // order-282 class) and stale units/modules (pre-312 guests
+                    // lack the vsock_loopback modules-load the socat bridge
+                    // needs). Reconcile before spending the connect budget.
+                    if let Err(e) = self.reconcile_adopted_guest(&progress).await {
+                        tracing::warn!(
+                            error = %e,
+                            "adopted-guest reconciliation failed; connecting \
+                             with existing guest wiring"
+                        );
+                    }
                     progress.report_phase(ProvisionPhase::Connecting);
                     const CW_PORT: u32 =
                         tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
@@ -599,6 +615,109 @@ impl WslLifecycle {
         if let Err(e) = tokio::fs::write(Self::import_complete_marker_path(), content).await {
             tracing::warn!(error = %e, "could not write import-complete marker");
         }
+    }
+
+    /// Version reported by the adopted guest's installed headless binary,
+    /// normalized to the bare workspace version (`"0.4.260804.1"`). `None`
+    /// when the binary is absent, non-executable, or the probe times out —
+    /// all of which equally demand re-injection.
+    async fn adopted_guest_headless_version(&self) -> Option<String> {
+        let mut cmd = wsl_cmd();
+        cmd.kill_on_drop(true);
+        let fut = cmd
+            .args([
+                "-d",
+                self.distro_name(),
+                "-u",
+                "root",
+                "--",
+                "/usr/local/bin/tillandsias-headless",
+                "--version",
+            ])
+            .output();
+        match tokio::time::timeout(Duration::from_secs(30), fut).await {
+            Ok(Ok(output)) if output.status.success() => {
+                parse_headless_version(&String::from_utf8_lossy(&output.stdout))
+            }
+            _ => None,
+        }
+    }
+
+    /// Re-run the (idempotent) bootstrap injection when the adopted guest's
+    /// headless version differs from this tray's `WORKSPACE_VERSION` or the
+    /// binary is missing entirely. Heals every stale-wiring lane at once:
+    /// the guest binary (embedded asset or version-pinned fetch script), the
+    /// systemd units (retired `NoNewPrivileges` hardening made rootful podman
+    /// select rootless mode and fail uid_map writes), and the
+    /// `vsock_loopback` modules-load entry the non-elevated socat bridge
+    /// requires. Version-equal guests are left untouched, so the fast path
+    /// stays fast on healthy installs.
+    async fn reconcile_adopted_guest(
+        &self,
+        progress: &Arc<dyn ProvisionProgress>,
+    ) -> Result<(), String> {
+        let workspace = env!("WORKSPACE_VERSION");
+        let guest = self.adopted_guest_headless_version().await;
+        if guest.as_deref() == Some(workspace) {
+            return Ok(());
+        }
+        tracing::info!(
+            guest_version = guest.as_deref().unwrap_or("<absent>"),
+            tray_version = %workspace,
+            "adopted guest wiring is stale — re-injecting bootstrap logic"
+        );
+        progress.report_message("\u{1F504} Updating Tillandsias guest components…");
+        self.ensure_base_packages().await?;
+        // A provision interrupted between ensure_base_packages and
+        // configure_recipe_distro leaves an adopted guest that boots WITHOUT
+        // systemd (no wsl.conf flip) — inject's `systemctl enable --now`
+        // cannot work there (Esmeralda field repro, 2026-08-09: the 300s dnf
+        // ceiling fired mid-provision and the next launch adopted the
+        // half-provisioned import). Detect via the canonical
+        // /run/systemd/system marker and finish the configure step first.
+        let systemd_booted = wsl_cmd()
+            .args([
+                "-d",
+                self.distro_name(),
+                "-u",
+                "root",
+                "--",
+                "test",
+                "-d",
+                "/run/systemd/system",
+            ])
+            .status()
+            .await
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !systemd_booted {
+            tracing::info!(
+                "adopted guest is not systemd-booted — completing the \
+                 configure step before injection"
+            );
+            self.runtime
+                .configure_recipe_distro()
+                .await
+                .map_err(|e| format!("configure adopted guest failed: {e}"))?;
+            self.runtime.start().await?;
+        }
+        // Stop the stale listener first: overwriting a running ELF fails
+        // with ETXTBSY, and the old unit may carry the retired hardening.
+        self.wsl_root_sh(
+            "systemctl stop tillandsias-headless.service \
+             tillandsias-headless-fetch.service 2>/dev/null || true",
+        )
+        .await?;
+        self.inject_bootstrap_logic().await?;
+        // inject's `enable --now` starts the stopped units; restart is
+        // belt-and-braces so the fresh binary + unit definitions are live
+        // even if systemd considered a unit still active.
+        self.wsl_root_sh(
+            "systemctl restart tillandsias-headless-fetch.service \
+             tillandsias-headless.service",
+        )
+        .await?;
+        Ok(())
     }
 
     /// Resolve a registered distro without conflating missing evidence with
@@ -1000,10 +1119,18 @@ rpm -q systemd podman dbus-broker libcap shadow-utils openssl \
 for b in /usr/bin/newuidmap /usr/sbin/newuidmap; do [ -e "$b" ] && setcap cap_setuid+ep "$b" || true; done
 for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_setgid+ep "$b" || true; done
 "#;
-        tokio::time::timeout(Duration::from_secs(300), self.wsl_root_sh(SETUP))
+        // 25 min, not 5: on N100-class hosts with cold dnf metadata the base
+        // set legitimately takes ~10 min (Esmeralda field evidence,
+        // 2026-08-08: DNS verified healthy, dnf still mid-transaction when
+        // the old 300s ceiling fired — the orphaned dnf then finished in the
+        // guest after the tray had already declared failure). rpm -q
+        // short-circuits when everything is installed, so retries are cheap.
+        tokio::time::timeout(Duration::from_secs(1500), self.wsl_root_sh(SETUP))
             .await
             .map_err(|_| {
-                "Package installation timed out after 5 min — WSL2 DNS may be broken".to_string()
+                "Package installation timed out after 25 min — the WSL2 network may be \
+                 broken, or the host/link is too slow even for the low-end budget"
+                    .to_string()
             })?
     }
 
@@ -1084,6 +1211,40 @@ install -D -m 0755 "$TMP" "$DEST"
             .await?;
         }
 
+        // 1b. github-login.sh — the interactive login wrapper the tray's
+        // GitHub Login terminal runs. Exists so the terminal argv is a single
+        // bare path with NO shell metacharacters: the previous inline
+        // `bash -lc '<script with quotes/${}/&&/()>'` had to survive BOTH
+        // std::process MSVC quoting AND wt.exe's own re-parse, and arrived
+        // mangled (Esmeralda field crash, 2026-08-09 — the window died
+        // instantly and its error text carried terminal-hostile escapes).
+        // All output is tee'd to a guest-side log so failures are readable
+        // without copying from a terminal. stdin stays the tty (the
+        // interactive-mode gate checks stdin only).
+        let github_login_wrapper = r#"#!/usr/bin/env bash
+set -u
+export HOME="${HOME:-/root}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+install -d -m 0700 "$XDG_RUNTIME_DIR"
+export TILLANDSIAS_VAULT_API_BASE_URL="${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}"
+LOG_DIR="$HOME/.cache/tillandsias"
+LOG="$LOG_DIR/github-login-last.log"
+install -d -m 0700 "$LOG_DIR"
+tillandsias-headless --github-login 2>&1 | tee "$LOG"
+rc=${PIPESTATUS[0]}
+if [ "$rc" -ne 0 ]; then
+  printf '\n[tillandsias] github-login exited %s; full output saved to %s\n' "$rc" "$LOG"
+  sleep 10
+fi
+exit "$rc"
+"#;
+        self.wsl_root_write(
+            "/usr/local/lib/tillandsias/github-login.sh",
+            github_login_wrapper,
+            true,
+        )
+        .await?;
+
         // 2. headless-preflight.sh
         let preflight_script = r#"#!/usr/bin/env bash
 set -euo pipefail
@@ -1149,7 +1310,25 @@ WantedBy=multi-user.target
         // on "securing vault" forever. Confining the vsock listener is a
         // separate packet (split units / socket delegation); see
         // plan/issues/headless-podman-events-watcher-rootless-wedge-2026-07-12.md.
-        let headless_unit = r#"[Unit]
+        // Low-end-host kill switch (N100 field host, 2026-08-08): when the
+        // TRAY's environment carries TILLANDSIAS_NO_LOCAL_INFERENCE, forward
+        // it into the guest service so lane launches skip the
+        // tillandsias-inference container (~2.1GB ollama self-install +
+        // resident serve). The guest-side gate lives in tillandsias-headless
+        // main.rs (local_inference_disabled).
+        let low_power_env = if std::env::var("TILLANDSIAS_NO_LOCAL_INFERENCE")
+            .map(|v| {
+                let v = v.trim();
+                !v.is_empty() && v != "0"
+            })
+            .unwrap_or(false)
+        {
+            "Environment=TILLANDSIAS_NO_LOCAL_INFERENCE=1\n"
+        } else {
+            ""
+        };
+        let headless_unit = format!(
+            r#"[Unit]
 Description=Tillandsias headless (in-VM vsock control wire)
 After=network-online.target podman.socket tillandsias-headless-fetch.service
 Wants=network-online.target podman.socket
@@ -1162,17 +1341,18 @@ ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
 Environment=HOME=/root
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
-ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
+{low_power_env}ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
 StandardOutput=journal+console
 StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
-"#;
+"#
+        );
         self.wsl_root_write(
             "/etc/systemd/system/tillandsias-headless.service",
-            headless_unit,
+            &headless_unit,
             false,
         )
         .await?;
@@ -1270,6 +1450,15 @@ WantedBy=multi-user.target
 fi"#,
         )
         .await?;
+
+        // In-VM marker: WSL distros inherit the Windows hostname, so the
+        // headless' hostname-based in-VM detection never fires here and bare
+        // CLI lanes (e.g. --github-login shells without the unit's env)
+        // misclassified as a native Linux host — probing vault at the
+        // TLS-hanging 127.0.0.1:8201 port-forward (Esmeralda, 2026-08-09).
+        // vault_bootstrap::is_running_in_vm checks this marker.
+        self.wsl_root_sh("mkdir -p /etc/tillandsias && touch /etc/tillandsias/in-vm")
+            .await?;
 
         // Persist vsock_loopback so it survives WSL2 restarts.
         // CONFIG_VSOCKETS_LOOPBACK=m (confirmed: WSL2 kernel 6.6.114.1).
@@ -1482,9 +1671,36 @@ pub fn recipe_rootfs_artifact(manifest: &Manifest) -> Result<RemoteArtifact, Str
     })
 }
 
+/// `"Tillandsias v0.3.260712.1"` → `"0.3.260712.1"`. Tolerates surrounding
+/// whitespace/extra lines and a bare version without the product prefix.
+/// `None` on empty output — the caller treats that as "binary absent".
+fn parse_headless_version(stdout: &str) -> Option<String> {
+    let line = stdout.lines().find(|l| !l.trim().is_empty())?.trim();
+    let v = line.strip_prefix("Tillandsias v").unwrap_or(line).trim();
+    (!v.is_empty()).then(|| v.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_headless_version_extracts_bare_version() {
+        assert_eq!(
+            parse_headless_version("Tillandsias v0.3.260712.1\n"),
+            Some("0.3.260712.1".to_string())
+        );
+        assert_eq!(
+            parse_headless_version("\n  Tillandsias v0.4.260804.1  \n"),
+            Some("0.4.260804.1".to_string())
+        );
+        assert_eq!(
+            parse_headless_version("0.4.260804.1"),
+            Some("0.4.260804.1".to_string())
+        );
+        assert_eq!(parse_headless_version(""), None);
+        assert_eq!(parse_headless_version("   \n \n"), None);
+    }
 
     #[test]
     fn inconclusive_probe_errors_refuse_destructive_self_heal() {

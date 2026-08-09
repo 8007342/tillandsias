@@ -3494,10 +3494,22 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     };
     // Default geometry until the tray owns a real terminal surface to size from.
     let spec = launch_spec(&intent, project.as_deref(), 24, 80);
+    // GitHub Login runs the INJECTED wrapper (bare path, zero shell
+    // metacharacters): the inline `bash -lc '<script>'` argv had to survive
+    // both std::process MSVC quoting AND wt.exe's own re-parse, and arrived
+    // mangled (Esmeralda field crash, 2026-08-09). The wrapper also tees all
+    // login output to /root/.cache/tillandsias/github-login-last.log so a
+    // failure never has to be copied out of a terminal. Written by
+    // inject_bootstrap_logic, so provision AND adopt-reconcile deploy it.
+    let argv = if matches!(intent, PtyIntent::GithubLogin) {
+        vec!["/usr/local/lib/tillandsias/github-login.sh".to_string()]
+    } else {
+        spec.argv.clone()
+    };
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
     let title = terminal_title(&intent, project.as_deref());
-    match spawn_wsl_terminal(distro, &title, &spec.argv) {
-        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?spec.argv,
+    match spawn_wsl_terminal(distro, &title, &argv) {
+        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
