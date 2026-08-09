@@ -3562,12 +3562,12 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // looking for matching '"'`, exit 2, instantly on every project click. wt is
     // therefore allowed only for argv that needs no quoting at all.
     // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
-    let spawn_result = if matches!(intent, PtyIntent::GithubLogin) || !argv_survives_wt_reparse(&argv)
-    {
-        spawn_wsl_console(distro, &argv)
-    } else {
-        spawn_wsl_terminal(distro, &title, &argv)
-    };
+    let spawn_result =
+        if matches!(intent, PtyIntent::GithubLogin) || !argv_survives_wt_reparse(&argv) {
+            spawn_wsl_console(distro, &argv)
+        } else {
+            spawn_wsl_terminal(distro, &title, &argv)
+        };
     match spawn_result {
         Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),

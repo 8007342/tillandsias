@@ -502,6 +502,19 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         "pickup_role",
         "desired_release",
         "release_target",
+        // Order 627-cx24, found by the macOS lane. `priority` was absent from
+        // this projection, so scripts/select-work-batch.sh — whose minimax score
+        // is 2*urgency + 1.5*blocking + neglect — read `.priority // "p3"` and
+        // got "p3" for EVERY packet on EVERY platform. Urgency was a constant 0
+        // and the term contributed nothing to any selection ever made.
+        //
+        // The failure was silent by construction: the selector's `// "p3"`
+        // default is indistinguishable from a genuine p3, so the scoring looked
+        // like it worked and every batch was ranked on blocking+neglect alone.
+        // A projection that silently drops a field a consumer scores on is the
+        // same class of defect as an expression-pinned guard (622-rmit): it
+        // fails in a direction nothing observes.
+        "priority",
         "capability_tags",
         "deliverable",
         "depends_on",
@@ -513,10 +526,10 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
             );
         }
     }
-    // These two are the release-query contract, not opportunistic metadata.
+    // These are the release-query contract, not opportunistic metadata.
     // A missing field is explicit JSON null so consumers can distinguish
     // "projected but absent" from "this binary predates the projection".
-    for key in ["desired_release", "release_target"] {
+    for key in ["desired_release", "release_target", "priority"] {
         obj.entry(key.to_string())
             .or_insert(serde_json::Value::Null);
     }
