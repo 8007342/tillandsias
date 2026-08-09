@@ -503,6 +503,28 @@ Canonical: `methodology/distributed-work.yaml` → `mcp_first_read_path`.
 
 ## Worker Drain
 
+### Stranded-claim sweep (coordinator, every cycle)
+
+```bash
+scripts/check-stranded-in-progress.sh
+```
+
+A packet in `in_progress` is invisible in BOTH directions: `ready` queries skip
+it so nobody claims it, and burndown does not count it so nobody notices it is
+unfinished. 21 packets were in that state on 2026-08-09 — ~9% of the live
+ledger, oldest at order 153 — every one with no progress event ever recorded
+(641-e2qa).
+
+Report the `summary:` line in the handoff. If the count is rising cycle over
+cycle, claims are outliving their cycles and that is the thing to fix, not the
+individual packets.
+
+Advisory, never a gate: a packet legitimately in flight right now is
+indistinguishable from one abandoned an hour ago. **Do not bulk-close what it
+reports.** Closing a packet requires checking its exit criteria against the
+tree; guessing marks unfinished work done, which is strictly worse than leaving
+it stranded.
+
 ### Cycle batch triage — decide the batch BEFORE draining
 
 ```bash
