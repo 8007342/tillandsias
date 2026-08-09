@@ -473,18 +473,110 @@ ${preview}"
                                 result='{"answer":"the project expert cannot answer this question","citations":[],"freshness":"now","confidence":"unsupported"}'
                             fi
                         else
-                            # Generic project index lane
+                            # Generic project index lane.
+                            #
+                            # Order 619-pfsj. Two defects fixed here, both of which made
+                            # this lane LOOK correct while failing the project's own
+                            # contract:
+                            #
+                            # 1. CITATIONS WERE BARE STRINGS ("./README.md:1-5"). The
+                            #    canonical envelope requires a Citation STRUCT
+                            #    {path,line_start,line_end,kind}, so
+                            #    `tillandsias-plan verify-answer` REFUSED every envelope
+                            #    this lane produced — on both the Tillandsias repo and the
+                            #    generic fixture — with "invalid type: string, expected
+                            #    struct Citation". The plan lane above returns
+                            #    tillandsias-plan's own envelope and verifies clean, so the
+                            #    two lanes were emitting incompatible shapes under one tool
+                            #    name. Exit criterion 1 of 619-pfsj is exactly
+                            #    "verify-answer-clean on a Tillandsias and a non-Tillandsias
+                            #    fixture", and it was failing on both.
+                            #
+                            # 2. `description` was the README's first line verbatim, which
+                            #    on this repo is the opening ``` of an ASCII-art block — the
+                            #    answer literally read 'Description: ```text'. A fenced or
+                            #    empty first line is not a description; fall back to the
+                            #    directory name rather than emit fence syntax as prose.
+                            #
+                            # confidence stays "high" only when a real description was
+                            # found; a name-only answer is "partial", because reporting
+                            # high confidence in a fallback is the same silent-default
+                            # failure as 627-cx24.
                             _p_types=$(detect_project_types ".")
                             _p_meta=$(get_project_metadata ".")
+                            _readme=""
+                            for _c in README.md readme.md README; do
+                                [ -f "./$_c" ] && { _readme="$_c"; break; }
+                            done
+                            _desc=$(printf '%s' "$_p_meta" | jq -r '.description // ""')
+                            case "$_desc" in
+                                '```'*|'~~~'*|'') _desc="" ;;
+                            esac
+                            # The canonical envelope: citations are structs with an
+                            # `authority` map, `freshness` is a struct (NOT the string
+                            # "now"), `confidence` is a lowercase enum, and `citation_root`
+                            # anchors relative paths so the verifier can resolve them.
+                            # This lane emitted a hand-rolled approximation of all four.
+                            _root=$(pwd -P)
+                            _commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+                            _now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
                             result=$(jq -n \
-                                --arg question "$_q" \
                                 --arg types "$_p_types" \
+                                --arg readme "$_readme" \
+                                --arg desc "$_desc" \
+                                --arg root "$_root" \
+                                --arg commit "$_commit" \
+                                --arg now "$_now" \
                                 --argjson meta "$_p_meta" \
                                 '{
-                                    answer: ("Project type: " + $types + "\nName: " + $meta.name + "\nPath: " + $meta.path + "\nDescription: " + ($meta.description // "none")),
-                                    citations: [($meta.path + "/README.md:1-5")],
-                                    freshness: "now",
-                                    confidence: "high"
+                                    # A TYPED REFUSAL when nothing citable was found
+                                    # (exit criterion 2). The verifier enforces that an
+                                    # `unsupported` answer render as "unsupported: <reason>"
+                                    # — it may not dress an uncited guess as a fact.
+                                    #
+                                    # Type detection is by marker-file EXISTENCE, so it has
+                                    # no citable span: there is no text in Cargo.toml that
+                                    # "rust" appears in. Reporting the types is therefore
+                                    # part of the REASON, not an evidenced claim.
+                                    answer: (if ($readme == "" or $desc == "") then
+                                                 ("unsupported: no citable project description"
+                                                  + (if $readme == "" then " (no README found)"
+                                                     else " (README line 1 is a fence or empty)" end)
+                                                  + "; marker files indicate types: "
+                                                  + (if $types == "" then "none" else $types end)
+                                                  + " — detection is by file existence and carries no citable span")
+                                             else
+                                                 ("Project type: " + $types
+                                                  + "\nName: " + $meta.name
+                                                  + "\nPath: " + $meta.path
+                                                  + "\nDescription: " + $desc)
+                                             end),
+                                    # A citation is emitted ONLY when there is a claim the
+                                    # cited span actually supports. verify-answer requires
+                                    # authority.key on a non-plan citation — the text that
+                                    # must appear inside the span — precisely so a citation
+                                    # cannot be decorative. With no description there is no
+                                    # README-backed claim, so citing it would be exactly the
+                                    # unverifiable gesture that rule forbids: the type/name
+                                    # facts come from marker files and the directory, not
+                                    # from the README.
+                                    citations: (if ($readme == "" or $desc == "") then [] else [{
+                                        path: $readme,
+                                        line_start: 1,
+                                        line_end: 5,
+                                        kind: "code",
+                                        authority: {
+                                            key: $desc,
+                                            project: $meta.name,
+                                            types: $types
+                                        }
+                                    }] end),
+                                    freshness: {
+                                        source_commit: $commit,
+                                        indexed_at: $now
+                                    },
+                                    confidence: (if ($readme == "" or $desc == "") then "unsupported" else "exact" end),
+                                    citation_root: $root
                                 }')
                         fi
                     fi
