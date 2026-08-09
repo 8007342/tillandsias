@@ -157,3 +157,58 @@ thing on the list — it is a gate over the matrix file, buildable today.
 
 **Recommended order: 628-r2vk first.** It stops the bleeding (no NEW drift)
 while the larger refactors land, and it does not need the string layer to exist.
+
+---
+
+## Addendum 2026-08-09: operator ruling on "GitHub", and the terminology dictionary
+
+The operator ruled:
+
+> *"'🔑 GitHub Login' is correct, 'GitHub' is the correct spelling to be used
+> wherever GitHub is referenced, we might even need a dictionary now that we're
+> adding language work packets, to make sure language is consistent throughout
+> our application."*
+
+Recorded on **628-w9sm** as the first canonical-spelling ruling. The dictionary
+is filed as **629-t6bx**.
+
+### The ruling's blast radius is much smaller than it looks — measure before acting
+
+`grep -rn "Github"` hits 15 files, which reads alarming. It is not:
+
+- **No user-visible string misspells it.** A search for `Github` inside menu
+  labels, locale values, and printed output returns **nothing**. The corpus and
+  the trays already say "GitHub".
+- **Every hit is a Rust identifier** — `GithubLoginState`,
+  `GithubLoginStatusRequest`, `GithubLoginStatusReply` — or the `kind()`
+  diagnostic string those types produce.
+- **The one real user-visible defect is a missing space**, not a capital:
+  `crates/tillandsias-headless/src/tray/mod.rs:3240` renders
+  `"\u{1F511} GitHubLogin"`. That is the Linux tray, and it is the drift already
+  tracked in 628-w9sm.
+
+So the ruling closes exactly one user-visible item. Read literally — "wherever
+GitHub is referenced" — it would also rename ~15 files of identifiers, and
+`"GithubLoginStatusRequest"` is a `kind()` value appearing 6 times in dispatch
+tables and error text, i.e. protocol-adjacent. That is a separate decision with
+real blast radius and it is deliberately NOT bundled: see 629-t6bx's two tiers.
+
+### Second finding: the locale corpus is unequal, not just unwired
+
+Key counts per locale file:
+
+| locales | keys |
+|---|---|
+| `de`, `es` | 169 |
+| `en` | 168 |
+| the other **14** (`ar fr hi it ja ko nah pt ro ru ta te zh-Hans zh-Hant`) | 143 |
+
+Fourteen locales are ~26 keys behind. `sign_in_github` is one of the missing
+ones — it is defined in **only 3 of 17** files (`en`, `de`, `es`). Two of those
+three are translated (`🔑 Iniciar sesión en GitHub`,
+`🔑 GitHub-Anmeldung`), so the corpus is real work, just unfinished.
+
+This matters for 628-c7qd: the string layer's missing-key behaviour is not an
+edge case to design for later, it is the **majority** case on day one for 14 of
+17 languages. Fallback-to-`en` must be specified and tested before anything
+resolves through it.
