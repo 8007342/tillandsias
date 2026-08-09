@@ -73,6 +73,53 @@ while IFS=$'\t' read -r pid want; do
     fi
 done <<< "$declared"
 
+# SECOND CLASS: a terminal EVENT with no matching status transition.
+#
+# The first pass above catches "declared terminal under `packets:`, discarded by
+# the G-Set". It cannot see the other way a completion goes missing: recording
+# `type: completed` as an EVENT and never writing the `status:` LWW entry.
+# Nothing is discarded there, so nothing looks wrong — the packet simply stays
+# claimable forever.
+#
+# Observed on three hosts. The macOS close-out on 2026-08-09 reported 624-q4jj
+# ALL-PASS with a full evidence file, wrote `type: completed`, carried no
+# `status:` block, and the packet was still being offered as work. Windows filed
+# the naming half of the same trap as 642-fedr the same day. Three hosts
+# independently is a write-path defect, not three mistakes.
+event_violations=""
+declared_events="$(awk '
+    # Reset at every file boundary. Without this, a packet_id that is the LAST
+    # entry in one fragment inherits the first `type: completed` in the NEXT
+    # fragment — awk carries variables across files. That false-positived on
+    # 598-kibt, whose real event is `type: progress` and whose macOS verdict was
+    # explicitly "M6 green / M3 partial". A checker that invents completions is
+    # worse than no checker: acting on it would have closed partial work.
+    FNR == 1 { pid = "" }
+    /^  - packet_id:/ { pid = $3; next }
+    # Only look inside the event block that directly follows, and stop at the
+    # next sibling key, so a `type:` further down cannot be misattributed.
+    pid != "" && (/type: completed/ || /event: completed/) { print pid; pid = ""; next }
+    pid != "" && /^  [a-z_]+:/ { pid = "" }
+' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
+
+if [ -n "$declared_events" ]; then
+    while IFS= read -r pid; do
+        [ -n "$pid" ] || continue
+        got="$("$PLAN" status "$pid" 2>/dev/null | awk '{print $2}')"
+        [ -n "$got" ] || continue
+        case "$got" in
+            completed|done|retired|obsolete) ;;
+            *)
+                event_violations="${event_violations}${pid}: has a 'completed' EVENT but folds as '${got}'"$'\n'
+                ;;
+        esac
+    done <<< "$declared_events"
+fi
+
+if [ -n "$event_violations" ]; then
+    violations="${violations}${event_violations}"
+fi
+
 if [ -n "$violations" ]; then
     n="$(printf '%s' "$violations" | grep -c .)"
     echo "violation:fragment-status-loss:${n}"
