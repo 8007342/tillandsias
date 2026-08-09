@@ -54,3 +54,29 @@ the observed fragment-only append failure remains order 600-c266.
   full-mode attestation does not convert routine smoke runs into full cycles.
 - The dated smoke report records both transport exit and skill-contract verdict
   as separate fields.
+
+## Resolution (order 614-2gqx, implemented 2026-08-09)
+
+Closed by the full-mode terminal attestation gate:
+
+- **Marker grammar** (`skills/meta-orchestration/SKILL.md`, "Full-Mode Terminal
+  Attestation"): a full cycle's FINAL output line MUST be
+  `MO-FULL: <COMPLETE|BLOCKED> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>`, emitted only
+  after boundary verification, `./build.sh --check`, commit, and push. Smoke
+  mode keeps its `MO-SMOKE:` grammar and the shared 4h rate limit unchanged.
+- **Validator** (`scripts/mo-full-attest.sh`): parses the marker, enforces
+  `LOCAL_SHA == REMOTE_SHA` (no unpushed local commit claim), matches the
+  branch, and waits (bounded) for `git ls-remote` to converge on the claimed
+  remote head — so a normal provider exit between tool calls can no longer
+  return green. Exit 1 = marker missing/malformed/inconsistent, exit 2 =
+  valid marker whose remote head never converged.
+- **Launcher wiring** (`scripts/litmus-opencode-e2e-launch.sh`): full-mode
+  runs that exit zero without a valid, converging marker now return
+  `FORGE_EXIT=127/128` with the reason — mirroring the existing smoke-mode
+  `126` gate.
+- **Hermetic fixture** (`scripts/test-mo-full-attest.sh` →
+  `scripts/mo-full-attest.sh fixture`): reproduces the early-provider-exit-
+  after-local-commit breach shape plus malformed, unpushed-commit,
+  branch-mismatch, and relay-lost scenarios against a fake remote probe, and a
+  clean pass. Runs as the first critical-path step of
+  `litmus:opencode-prompt-e2e-shape`.

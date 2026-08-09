@@ -31479,7 +31479,7 @@ plan_index:
 
     - packet_id: meta-orchestration-full-mode-exit-attestation-gap
       order: 614-2gqx
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p0
       title: Full meta-orchestration exits zero without boundary/push attestation and discards local commits
@@ -31517,6 +31517,12 @@ plan_index:
           host: linux_mutable
           summary: |
             Fresh-product full launch returned forge_exit=0 but emitted no terminal verdict, skipped final boundary verification/push, and teardown lost local commit 4a1410a2. Remote linux-next remained c9ebd3f5.
+        - type: completed
+          ts: 2026-08-09T16:30:00Z
+          agent_id: forge-opencode-20260809t161400z
+          host: forge
+          summary: |
+            Full-mode terminal attestation implemented. scripts/mo-full-attest.sh defines the `MO-FULL: <COMPLETE|BLOCKED> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>` marker grammar and enforces (a) LOCAL_SHA == REMOTE_SHA so no marker may follow an unpushed local commit, (b) branch matches the host's current branch, (c) `git ls-remote` converges on the claimed remote head within the bounded relay window. scripts/litmus-opencode-e2e-launch.sh rejects full-mode exit zero without a valid, converging marker (FORGE_EXIT=127 marker-level, 128 remote-head), mirroring the smoke-mode 126 gate; MO-SMOKE grammar and the 4h full-cycle rate limit are unchanged. Hermetic fixture scripts/test-mo-full-attest.sh / `scripts/mo-full-attest.sh fixture` reproduces the early-provider-exit-after-local-commit breach plus malformed, unpushed-commit, branch-mismatch, and relay-lost scenarios against a fake remote probe, and a clean pass — 6/6 green. skills/meta-orchestration/SKILL.md now documents the grammar, the emission rule (final output line, after finalization steps 1-8), and the no-marker-on-failed-push rule. openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml runs the fixture as its first critical-path step and documents FORGE_EXIT=127/128 in rollback. ./build.sh --check green; bash -n clean on all touched scripts.
 
     - packet_id: browser-compiled-launch-hardening-contract-drift
       order: 615-x3b8

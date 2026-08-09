@@ -4,6 +4,12 @@
 # Asserts forge_exit=0, new commit since smoke start, at least one
 # plan/ file updated, and remote branch HEAD advanced via git ls-remote.
 #
+# Full-mode runs additionally require the typed `MO-FULL:` terminal marker
+# (order 614-2gqx): the launch step rejects exit zero when the marker is
+# absent, malformed, claims an unpushed local commit, or the claimed remote
+# head is never reached. The hermetic fixture (scripts/test-mo-full-attest.sh)
+# proves that gate fails loud for each breach shape before any launch happens.
+#
 # NOTE: Requires forge image built, tillandsias on PATH, and git-mirror
 # running (forge-push-credential-channel post-receive relay). Gating points
 # assert the full commit+push lifecycle, not just launch.
@@ -14,7 +20,9 @@ description: >
   Launch the freshly installed Tillandsias forge lane with
   `tillandsias . --opencode --prompt "Use the /meta-orchestration skill"`,
   let the agent run one cycle, and verify it committed and pushed findings.
-  Failures indicate a break in the unattended commit+push path.
+  Full-mode success additionally requires a valid, converging `MO-FULL:`
+  terminal marker. Failures indicate a break in the unattended commit+push
+  path or in the full-mode terminal attestation gate.
 severity: high
 size: e2e
 
@@ -22,8 +30,17 @@ preconditions:
   - tillandsias binary is installed and on PATH
   - forge image is built and available locally
   - git remote origin is reachable and credential channel is active
+  - scripts/mo-full-attest.sh and scripts/test-mo-full-attest.sh exist
 
 critical_path:
+  # Hermetic fixture (order 614-2gqx): reproduce the early-normal-provider-
+  # exit breach shapes and prove the gate fails loud on each — before any
+  # live launch. Uses a fake remote probe; never touches a remote.
+  - step: "run full-mode terminal attestation fixture"
+    command: "scripts/test-mo-full-attest.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: mo-full-attest fixture 6/6"
+
   - step: "record pre-smoke HEAD for delta comparison"
     command: "git rev-parse HEAD > /tmp/opencode-e2e-head-before && echo \"ok: recorded $(cat /tmp/opencode-e2e-head-before)\""
     timeout_ms: 5000
@@ -46,7 +63,9 @@ critical_path:
   # class full-meta); rate-limited runs downgrade to the skill's Smoke Mode
   # (verify-only, no plan drain, must print `MO-SMOKE: PASS`). The mode is
   # written to /tmp/opencode-e2e-mode so the delta steps below can skip for
-  # smoke runs, which by design commit and push nothing.
+  # smoke runs, which by design commit and push nothing. Full-mode runs
+  # additionally require the `MO-FULL:` terminal marker with a converging
+  # remote head (order 614-2gqx) — see scripts/mo-full-attest.sh.
   - step: "launch forge with meta-orchestration prompt (full-or-smoke, rate-limited, liveness-extended)"
     command: "scripts/litmus-opencode-e2e-launch.sh"
     timeout_ms: 1560000
@@ -91,7 +110,8 @@ observability:
   expected_log: >
     OpenCode-prompt E2E smoke: forge launched (exit=0), HEAD advanced
     with new commit in plan/, and remote HEAD advanced via git push
-    relay through git-mirror.
+    relay through git-mirror. Full-mode runs also emitted a valid,
+    converging `MO-FULL:` terminal marker.
   log_fields:
     spec: "meta-orchestration"
     test: "opencode-prompt-e2e-shape"
@@ -103,4 +123,8 @@ rollback:
     (scripts/build-image.sh forge), git remote origin is reachable,
     and the credential channel is active (scripts/check-credential-channel.sh).
     If the binary is stale, rebuild with ./build.sh --release --install.
+    A full-mode FORGE_EXIT=127/128 means the cycle exited without a valid
+    `MO-FULL:` marker or without a converging remote head — inspect
+    /tmp/opencode-e2e-forge.log for the marker and the claimed head before
+    relaunching.
   command: "git log --oneline -5 && echo '---remote---' && git ls-remote origin HEAD && echo '---credential---' && scripts/check-credential-channel.sh"

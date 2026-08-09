@@ -81,5 +81,26 @@ if [ "$MODE" = smoke ] && [ "$rc" -eq 0 ]; then
     fi
 fi
 
+# Full mode (order 614-2gqx): a green run MUST carry the typed MO-FULL
+# terminal marker emitted only after boundary verification and durable
+# commit/push obligations. Reject exit zero when the marker is absent,
+# malformed, claims an unpushed local commit, or the claimed remote head is
+# never reached — a normal provider exit between tool calls must not discard
+# local work as success. The remote-head check polls the async git-mirror
+# relay with the same bounded window as the litmus delta steps below.
+if [ "$MODE" = full ] && [ "$rc" -eq 0 ]; then
+    ATT_OUT="$(scripts/mo-full-attest.sh check "$LOG" 2>&1)"
+    att_rc=$?
+    printf '%s\n' "$ATT_OUT"
+    if [ "$att_rc" -ne 0 ]; then
+        reason="$(printf '%s\n' "$ATT_OUT" | grep -E '^MO-FULL: FAIL' | tail -1)"
+        reason="${reason#MO-FULL: FAIL }"
+        code=127
+        [ "$att_rc" -ne 1 ] && code=128
+        echo "FORGE_EXIT=$code (full run exited 0 without valid MO-FULL terminal attestation: $reason)"
+        exit 1
+    fi
+fi
+
 echo "FORGE_EXIT=$rc"
 [ "$rc" -eq 0 ]
