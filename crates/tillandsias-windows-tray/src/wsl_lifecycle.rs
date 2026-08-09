@@ -1221,6 +1221,22 @@ install -D -m 0755 "$TMP" "$DEST"
         // All output is tee'd to a guest-side log so failures are readable
         // without copying from a terminal. stdin stays the tty (the
         // interactive-mode gate checks stdin only).
+        //
+        // The pipeline is SAFE, but only because of a binary-side fix. Running
+        // the login here — through a pipeline or any other non-`exec` form —
+        // means it is not a session leader, so its startup `setpgid(0, 0)`
+        // actually succeeds and moves it into a background process group; the
+        // `podman exec --tty` that collects the token then touches the
+        // controlling terminal from that background group, the kernel stops it
+        // (SIGTTIN/SIGTTOU), and the window stays blank forever behind a
+        // 0-byte log. That was the v0.4.260809.2 field failure. The fix is
+        // `should_own_process_group` in tillandsias-headless `main()`, which
+        // keeps an interactive lane in the launching shell's foreground group.
+        // Do NOT "fix" a future recurrence by de-piping this wrapper: piping is
+        // not the mechanism (a non-interactive bash pipeline does not change
+        // process groups), and dropping the tee only costs the log that makes
+        // the next failure legible.
+        // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
         let github_login_wrapper = r#"#!/usr/bin/env bash
 set -u
 export HOME="${HOME:-/root}"
@@ -1230,7 +1246,7 @@ export TILLANDSIAS_VAULT_API_BASE_URL="${TILLANDSIAS_VAULT_API_BASE_URL:-https:/
 LOG_DIR="$HOME/.cache/tillandsias"
 LOG="$LOG_DIR/github-login-last.log"
 install -d -m 0700 "$LOG_DIR"
-tillandsias-headless --github-login 2>&1 | tee "$LOG"
+/usr/local/bin/tillandsias-headless --github-login 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 if [ "$rc" -ne 0 ]; then
   printf '\n[tillandsias] github-login exited %s; full output saved to %s\n' "$rc" "$LOG"
@@ -1683,6 +1699,43 @@ fn parse_headless_version(stdout: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The 0-byte `github-login-last.log` is what made the v0.4.260809.2 blank
+    /// terminal so hard to read: it proved the login produced no output at all.
+    /// Keep the full-output tee — the terminal-safety half of that fix lives in
+    /// tillandsias-headless `should_own_process_group`, not here.
+    ///
+    /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    #[test]
+    fn github_login_wrapper_captures_full_output_for_diagnosis() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let start = source
+            .find("let github_login_wrapper = r#\"")
+            .expect("the GitHub-Login wrapper must exist");
+        let body = &source[start..start + 900];
+        let launch = body
+            .lines()
+            .find(|l| l.contains("tillandsias-headless --github-login"))
+            .expect("the wrapper must launch tillandsias-headless --github-login");
+
+        // Every other injected artifact calls the guest binary by absolute
+        // path; a bare name makes a PATH without /usr/local/bin fail with a
+        // `command not found` indistinguishable from the blank-terminal hang.
+        assert!(
+            launch.contains("/usr/local/bin/tillandsias-headless"),
+            "the wrapper must invoke the guest binary by absolute path: {launch}"
+        );
+
+        assert!(
+            launch.contains("2>&1 | tee"),
+            "both streams must reach the guest-side log, or the next failure is \
+             undiagnosable again: {launch}"
+        );
+        assert!(
+            body.contains("rc=${PIPESTATUS[0]}"),
+            "the login's own exit code must survive the pipeline, not tee's"
+        );
+    }
 
     #[test]
     fn parse_headless_version_extracts_bare_version() {

@@ -3108,12 +3108,19 @@ mod tests {
 
     /// `apply_cloud_projects` reports a rebuild exactly on change
     /// (full-replacement list semantics) and is idempotent on repeat.
+    /// "Change" includes the `cloud_projects_loaded` flip: the FIRST
+    /// confirmed reply — even an empty one — must rebuild so the submenu
+    /// leaves "(loading repos…)" (tray-parity required row; see
+    /// `apply_cloud_projects_empty_reply_marks_loaded_and_logout_resets`).
     #[test]
     fn apply_cloud_projects_reports_rebuild_only_on_change() {
         use tillandsias_host_shell::menu_state::ProjectEntry;
         let menu_state = Arc::new(Mutex::new(
             tillandsias_host_shell::menu_state::MenuState::initial(),
         ));
+        // First confirmed reply: the loaded flip is itself a change.
+        assert!(apply_cloud_projects(Vec::new(), &menu_state));
+        // Identical empty repeat: loaded already set, list unchanged.
         assert!(!apply_cloud_projects(Vec::new(), &menu_state));
         let projects = vec![ProjectEntry {
             name: "tillandsias".into(),

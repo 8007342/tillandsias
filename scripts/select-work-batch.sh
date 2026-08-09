@@ -138,6 +138,10 @@ fi
 case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac
 [ "$BUDGET" -ge 1 ] || { echo "refused:bad-role:budget must be >= 1"; exit 1; }
 
+# ${arr[@]+"${arr[@]}"} guards the expansions below: under set -u, bash < 4.4
+# (stock macOS ships 3.2) treats "${arr[@]}" on an empty array as an unbound
+# variable — and REL_ARG is empty on every skill-driven call (no --release).
+# Same argv-guard shape as build-image.sh NO_CACHE_ARGS.
 REL_ARG=()
 [ -n "$RELEASE" ] && REL_ARG=(--release "$RELEASE")
 
@@ -145,17 +149,20 @@ if [ -z "$SEED" ]; then
     SEED="${TILLANDSIAS_HOST_KIND:-host}-$(date -u +%Y%m%d)"
 fi
 
-raw="$("$PLAN" query --status ready --role "$ROLE" "${REL_ARG[@]}" --limit 400 --json 2>/dev/null)"
+# jq, not yq: the input is tillandsias-plan --json (pure JSON), macOS hosts
+# ship jq but not yq, and the forge image installs both — Fedora's yq is the
+# jq wrapper, so the swap is behavior-identical on Linux.
+raw="$("$PLAN" query --status ready --role "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
 [ -n "$raw" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
 
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
 # packet can be the thing a macos packet is waiting on, and that downstream
 # weight is exactly the "residual it is holding up" minimax asks us to maximise.
-allraw="$("$PLAN" query --status ready "${REL_ARG[@]}" --limit 400 --json 2>/dev/null)"
-depcounts="$(printf '%s' "$allraw" | yq -r '.[] | .depends_on[]?' 2>/dev/null | sort | uniq -c | awk '{print $2"\t"$1}')"
+allraw="$("$PLAN" query --status ready "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
+depcounts="$(printf '%s' "$allraw" | jq -r '.[] | .depends_on[]?' 2>/dev/null | sort | uniq -c | awk '{print $2"\t"$1}')"
 
 # Flatten to: priority_rank \t epic \t order \t packet_id \t priority
-rows="$(printf '%s' "$raw" | yq -r '
+rows="$(printf '%s' "$raw" | jq -r '
   .[]
   | [ (.priority // "p3"), (.release_target // "UNGROUPED"), (.order|tostring), .packet_id, (.desired_release // "?") ]
   | @tsv' 2>/dev/null \
@@ -184,11 +191,15 @@ release="$(printf '%s\n' "$rows" | head -1 | cut -f6)"
 # how much work has no epic, so the coverage gap gets FIXED rather than absorbed.
 maxorder="$(printf '%s\n' "$rows" | awk -F'\t' '{gsub(/[^0-9].*$/,"",$3); if ($3+0>m) m=$3+0} END{print m+0}')"
 
-scored="$(printf '%s\n' "$rows" \
-    | awk -F'\t' -v maxo="$maxorder" -v deps="$depcounts" '
-      BEGIN {
-          n = split(deps, dl, "\n");
-          for (i = 1; i <= n; i++) { split(dl[i], kv, "\t"); if (kv[1] != "") dep[kv[1]] = kv[2] + 0; }
+# depcounts rides the input stream behind a marker line, NOT awk -v: BSD awk
+# (macOS) rejects -v values containing literal newlines ("newline in string"),
+# GNU awk merely tolerates them. Same dep[] map either way.
+scored="$({ printf '%s\n' "$depcounts"; printf '==ROWS==\n'; printf '%s\n' "$rows"; } \
+    | awk -F'\t' -v maxo="$maxorder" '
+      $0 == "==ROWS==" { in_rows = 1; next }
+      !in_rows {
+          if ($1 != "") dep[$1] = $2 + 0;
+          next
       }
       {
           e = $2; rank = $1 + 0; pid = $4;

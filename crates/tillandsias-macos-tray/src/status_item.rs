@@ -112,9 +112,9 @@ pub fn run() -> ! {
     let initial = tillandsias_host_shell::menu_state::build(&initial_state);
     let status_item = install_status_item(mtm, &initial, &action_host);
 
-    // Spawn the VM lifecycle on a background thread — see vz_lifecycle.
-    // Skipped here pending the macOS-host integration in the follow-up
-    // wave; the bin still produces a working menu bar UI for manual probe.
+    // The VM lifecycle is owned by `action_host` — auto-boot was spawned
+    // above via `boot_vm_async("Auto-boot")`, which provisions through
+    // `VzRuntime::fetch_fedora_cloud_image` and boots via `vz.start()`.
     let _ = &status_item;
     let _ = &action_host;
 
@@ -370,6 +370,26 @@ fn default_image_root() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The VM state dir is the top level of `…/tillandsias` — NOT a `vm/`
+    /// subdir. `provision_main`/`--diagnose`/auto-boot all write/read there,
+    /// so `default_image_root` must agree. Guards
+    /// macos-tray/image-root-vm-subdir-divergence; relocated from the
+    /// deleted `vz_lifecycle` module (order 606-r42f).
+    #[test]
+    fn image_root_is_top_level_not_vm_subdir() {
+        let root = default_image_root();
+        assert!(
+            root.ends_with("Library/Application Support/tillandsias"),
+            "image_root must be the top-level state dir, got {}",
+            root.display()
+        );
+        assert!(
+            root.file_name().and_then(|s| s.to_str()) != Some("vm"),
+            "image_root must not nest a vm/ subdir: {}",
+            root.display()
+        );
+    }
 
     /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
     #[test]

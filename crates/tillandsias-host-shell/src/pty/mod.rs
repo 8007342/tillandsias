@@ -607,10 +607,11 @@ pub trait PtyMaster: Send + 'static {
 /// first successful read/write, bounded by this window, rather than tearing
 /// the session down (which SIGHUP'd the guest child and made every macOS
 /// tray PTY attach flash-and-die). Linux blocks pre-attach and never hits
-/// this path, so behavior there is unchanged. (Note: today `split()` also
-/// retains a slave fd, which masks this path entirely — see
-/// plan/issues/host-pty-slave-retention-eof-teardown-2026-07-27.md.)
-/// @trace plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md
+/// this path, so behavior there is unchanged. Since order 492 `split()`
+/// drops the bootstrap slave, so this grace window is live on the
+/// no-client fallback lane; measured Darwin behavior there is EOF (n=0),
+/// not EIO — see `raw_termios_survives_zero_slave_window`.
+/// @trace plan/archive/macos-tray-github-login-blank-terminal-2026-06-21.md
 const ATTACH_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
 /// Backoff between pre-attach EIO retries inside [`ATTACH_GRACE`].
 const EIO_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
@@ -675,6 +676,23 @@ pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::Joi
                 }
             }
         }
+        // Terminal side is gone (clean EOF now that split() drops the
+        // bootstrap slave — order 492 — or a post-attach error): tell the
+        // guest to reap the child instead of leaking the harness. Bounded;
+        // idempotent with the session-socket detach teardown, which can
+        // race this on window close. The guest's confirming PtyClose flows
+        // back as SessionEvent::Closed and ends the output task.
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            transport.send_lossless(ControlMessage::PtyClose {
+                session_id,
+                exit: PtyExit {
+                    code: 0,
+                    signal: Some(1),
+                },
+            }),
+        )
+        .await;
     });
 
     // Output task: guest output → local terminal; terminal close ends both.
@@ -1328,6 +1346,65 @@ mod tests {
                     if *session_id == sid && bytes == b"x"
             )),
             "input task must tolerate pre-attach EIO and forward the eventual byte"
+        );
+    }
+
+    /// Order 492: once the terminal side EOFs (the attach client exited and
+    /// `split()` no longer retains a slave to mask it), the input task must
+    /// send a wire `PtyClose` so the guest reaps the child instead of
+    /// leaking the harness. Master yields one byte then EOF.
+    #[tokio::test]
+    async fn pump_input_eof_sends_pty_close() {
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+        use tokio::io::ReadBuf;
+
+        struct DataThenEof {
+            data: Option<Vec<u8>>,
+        }
+        impl tokio::io::AsyncRead for DataThenEof {
+            fn poll_read(
+                mut self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+                buf: &mut ReadBuf<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                if let Some(d) = self.data.take() {
+                    buf.put_slice(&d);
+                    return Poll::Ready(Ok(()));
+                }
+                Poll::Ready(Ok(())) // EOF
+            }
+        }
+        struct EofMaster {
+            reader: DataThenEof,
+        }
+        impl PtyMaster for EofMaster {
+            type Reader = DataThenEof;
+            type Writer = tokio::io::Sink;
+            fn split(self) -> (Self::Reader, Self::Writer) {
+                (self.reader, tokio::io::sink())
+            }
+        }
+
+        let t = Arc::new(FakeTransport::default());
+        let r = PtyRouter::new();
+        let a = SessionIdAllocator::new();
+        let session = PtySession::open(t.clone(), &a, &r, &opts("/bin/bash")).unwrap();
+        let sid = session.session_id;
+        let master = EofMaster {
+            reader: DataThenEof {
+                data: Some(b"x".to_vec()),
+            },
+        };
+        let _handle = pump_io(session, master);
+
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert!(
+            t.sent.lock().unwrap().iter().any(|m| matches!(
+                m,
+                ControlMessage::PtyClose { session_id, .. } if *session_id == sid
+            )),
+            "input-task EOF must send a wire PtyClose so the guest child is reaped"
         );
     }
 }

@@ -4,8 +4,10 @@
 #
 # Curl-installs Tillandsias.app to /Applications/ (or ~/Applications/ if the
 # system path requires sudo). Verifies SHA-256, registers as a Login Item if
-# --login-item is passed, prints the Gatekeeper right-click-Open hint (v0.0.1
-# is ad-hoc signed, not notarized), and opens the app.
+# --login-item is passed, prints the Gatekeeper right-click-Open hint only
+# when the installed app actually carries com.apple.quarantine (the curl
+# path never does; the app is ad-hoc signed, not notarized), and opens the
+# app.
 #
 # Usage:
 #   curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
@@ -167,19 +169,30 @@ EOF
 fi
 
 # ── Gatekeeper hint + launch ────────────────────────────────────────────
-cat <<EOF
+say ""
+say "Installed: $DEST"
+# curl downloads never carry com.apple.quarantine, so this installer's
+# curl+tar path launches cleanly on first open — Gatekeeper's first-launch
+# assessment only fires on quarantined bundles (browser/DMG/zip provenance,
+# or a tarball whose members carry the xattr: bsdtar restores archived
+# xattrs). Probe the installed bundle and only warn when the warning is
+# true (order 421). Note `xattr -p` also exits non-zero if xattr itself is
+# unavailable; in that unlikely case we stay quiet and Gatekeeper's own
+# dialog still guides the user.
+if xattr -p com.apple.quarantine "$DEST" >/dev/null 2>&1; then
+    cat <<EOF
 
-  Installed: $DEST
-
-  Tillandsias v0.0.1 is ad-hoc signed. On first launch macOS Gatekeeper
-  may block it with "Tillandsias is from an unidentified developer."
+  This Tillandsias.app carries the com.apple.quarantine xattr, and
+  Tillandsias is ad-hoc signed - so on first launch macOS Gatekeeper
+  will block it with "Tillandsias is from an unidentified developer."
 
   To bypass:
-      Finder → $INSTALL_DIR → right-click Tillandsias.app → Open → Open
+      Finder -> $INSTALL_DIR -> right-click Tillandsias.app -> Open -> Open
 
   After the first bypass, double-clicking works normally.
 
 EOF
+fi
 # ── post-install sanity check ───────────────────────────────────────────
 # Invoke the bundled `--diagnose --json` to confirm the install bits
 # are sound (version baked, manifest pin present, the binary can run)
@@ -220,6 +233,6 @@ else
 fi
 
 say "Launching Tillandsias (--init / VM provisioning runs automatically on first launch)..."
-open -a "$DEST" || say "warning: open returned non-zero — try the right-click Open above"
+open -a "$DEST" || say "warning: open returned non-zero — right-click Tillandsias.app in $INSTALL_DIR and choose Open"
 say "Tray started. Look for the Tillandsias icon in the menu bar."
 say "(Provisioning runs in the background on first launch — no extra step needed.)"

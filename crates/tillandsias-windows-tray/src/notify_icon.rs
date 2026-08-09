@@ -1624,6 +1624,7 @@ fn should_poll_local_projects(push_stream_healthy: bool, fast_poll_burst: bool) 
 /// `apply_vm_status`).
 fn apply_github_login(logged_in: bool, handle: Option<String>) {
     let state = github_login_state_from_reply(logged_in, handle);
+    let mut transition: Option<(&'static str, &'static str)> = None;
     if let Ok(mut guard) = MENU_STATE.lock() {
         // A confirmed probe reply ALWAYS overwrites the local transitional
         // `LoggingIn` state (windows-260719-2): success flips to LoggedIn
@@ -1631,6 +1632,9 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
         // to LoggedOut's actionable "GitHub Login" leaf — never a stale
         // in-progress or logged-in rendering.
         let menu = guard.get_or_insert_with(MenuState::initial);
+        if menu.login != state {
+            transition = Some((login_state_label(&menu.login), login_state_label(&state)));
+        }
         if menu.login != state && state == GithubLoginState::LoggedOut {
             // Fresh logout: the next login must re-fetch cloud projects, so
             // its submenu shows "(loading repos…)" rather than a stale
@@ -1639,6 +1643,32 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
             menu.cloud_projects = Vec::new();
         }
         menu.login = state;
+    }
+    // Sign-in state gates the ENTIRE project body, and until now every
+    // observation of it landed at DEBUG — so a release tray's log could not
+    // answer "when did sign-in resolve?". A field log showing Ready at
+    // T+0 and the first project click at T+113s could not distinguish a slow
+    // probe from a probe that never ran (2026-08-09 field report). Transitions
+    // only: steady-state re-observations stay at DEBUG so this cannot become
+    // per-push spam. Diagnostic surface, not end-user UX (spec:tray-ux allows
+    // engineering discipline on logs).
+    if let Some((from, to)) = transition {
+        tracing::info!(from, to, "github sign-in state resolved");
+    }
+}
+
+/// Stable one-word label for a [`GithubLoginState`], for lifecycle logging.
+/// Diagnostic surface only — these strings are never rendered in the menu,
+/// so they are free of the UX-curation governance that binds menu labels.
+fn login_state_label(state: &GithubLoginState) -> &'static str {
+    match state {
+        // Distinct from signed-out on purpose (order 626-r7kq): a field log
+        // that cannot tell "never asked" from "asked, answer was no" cannot
+        // measure how long the tray spent in the unresolved window.
+        GithubLoginState::Unknown => "unknown",
+        GithubLoginState::LoggedOut => "signed-out",
+        GithubLoginState::LoggingIn => "signing-in",
+        GithubLoginState::LoggedIn { .. } => "signed-in",
     }
 }
 
@@ -1649,12 +1679,22 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
 fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]) -> usize {
     let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
     let n = mapped.len();
+    let mut first_answer = false;
     if let Ok(mut guard) = MENU_STATE.lock() {
         let state = guard.get_or_insert_with(MenuState::initial);
+        // Before this observation the submenu was still showing
+        // "(loading repos…)"; this is the moment the list becomes real.
+        first_answer = !state.cloud_projects_loaded;
         state.cloud_projects = mapped;
         // A confirmed answer (even an empty one) flips the cloud submenu
         // from "(loading repos…)" to real entries / "(no repos)".
         state.cloud_projects_loaded = true;
+    }
+    // Companion to the sign-in transition above: the pair of INFO lines is
+    // what lets a field log time the startup handoff end to end. First
+    // confirmed answer only — subsequent pushes stay at DEBUG.
+    if first_answer {
+        tracing::info!(count = n, "cloud projects resolved");
     }
     n
 }
@@ -3508,12 +3548,67 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     };
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
     let title = terminal_title(&intent, project.as_deref());
-    match spawn_wsl_terminal(distro, &title, &argv) {
+    // The credential-critical login lane bypasses wt.exe ENTIRELY: two field
+    // crashes (Esmeralda, 2026-08-09) reached bash with an unbalanced quote
+    // through the wt re-parse chain, and wt offers no verbatim-args contract.
+    // The plain-console spawn hands argv straight to CreateProcess — there is
+    // no second parser to mangle it.
+    //
+    // Restricting that to GithubLogin was too narrow: the PROJECT lanes carry a
+    // whole inline `bash -lc "export … && exec tillandsias-headless --cloud
+    // 'owner/repo' --opencode"` — strictly MORE quoting than the login argv that
+    // already crashed twice — and they died on the very same error on the peke
+    // field host (2026-08-09): `/bin/bash: -c: line 1: unexpected EOF while
+    // looking for matching '"'`, exit 2, instantly on every project click. wt is
+    // therefore allowed only for argv that needs no quoting at all.
+    // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    let spawn_result =
+        if matches!(intent, PtyIntent::GithubLogin) || !argv_survives_wt_reparse(&argv) {
+            spawn_wsl_console(distro, &argv)
+        } else {
+            spawn_wsl_terminal(distro, &title, &argv)
+        };
+    match spawn_result {
         Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
     }
+}
+
+/// Can every token of `argv` cross wt.exe's re-parser unchanged?
+///
+/// `std::process` quotes any argument containing spaces or quotes for
+/// CreateProcess; wt.exe then re-parses that whole command line with its own
+/// rules and hands the remainder to `wsl.exe`, which joins it into a single
+/// `bash -c` string. Anything that had to be quoted can lose a delimiter on the
+/// way. Only fully quote-free tokens are safe; everything else must take the
+/// plain-console path, where argv reaches CreateProcess verbatim.
+///
+/// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+fn argv_survives_wt_reparse(argv: &[String]) -> bool {
+    argv.iter().all(|arg| {
+        !arg.is_empty()
+            && arg.chars().all(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '/' | '\\' | '.' | '-' | '_' | ':' | '=')
+            })
+    })
+}
+
+/// Plain-console spawn: `wsl.exe` in its own fresh conhost window, argv passed
+/// verbatim via CreateProcess — no wt.exe command-line re-parse in the chain.
+/// Used for the login lane; identical to `spawn_wsl_terminal`'s fallback arm.
+fn spawn_wsl_console(distro: &str, in_vm_argv: &[String]) -> std::io::Result<()> {
+    use std::process::Command;
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    Command::new("wsl.exe")
+        .arg("-d")
+        .arg(distro)
+        .arg("--")
+        .args(in_vm_argv)
+        .creation_flags(CREATE_NEW_CONSOLE)
+        .spawn()
+        .map(|_| ())
 }
 
 fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {
@@ -3621,6 +3716,47 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every project lane died instantly on `/bin/bash: -c: line 1: unexpected
+    /// EOF while looking for matching '"'` because its inline script went
+    /// through wt.exe's re-parser (peke field host, 2026-08-09). Pin that the
+    /// real launch argv is classified unsafe, so it takes the plain console.
+    ///
+    /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    #[test]
+    fn project_lane_argv_is_never_routed_through_wt() {
+        // Verbatim from tray.log, the argv of a cloud project click.
+        let project_argv = vec![
+            "/bin/bash".to_string(),
+            "-lc".to_string(),
+            "export HOME=\"${HOME:-/root}\" && exec tillandsias-headless \
+             --cloud '8007342/tillandsias' --opencode"
+                .to_string(),
+        ];
+        assert!(
+            !argv_survives_wt_reparse(&project_argv),
+            "a quoted inline script must never be handed to wt.exe"
+        );
+
+        // The injected login wrapper is a bare path — quote-free — but the
+        // login lane is pinned to the console independently of this predicate.
+        assert!(argv_survives_wt_reparse(&[
+            "/usr/local/lib/tillandsias/github-login.sh".to_string()
+        ]));
+
+        // A plain podman argv stays eligible for the nicer wt tab.
+        assert!(argv_survives_wt_reparse(&[
+            "podman".to_string(),
+            "exec".to_string(),
+            "-it".to_string(),
+            "tillandsias-proj-forge".to_string(),
+            "/bin/bash".to_string(),
+        ]));
+
+        // Spaces alone force quoting, so they are disqualifying.
+        assert!(!argv_survives_wt_reparse(&["two words".to_string()]));
+        assert!(!argv_survives_wt_reparse(&[String::new()]));
+    }
 
     /// Order 420: credential-shaped words never survive into the shareable
     /// diagnostics bundle; ordinary text passes through untouched.
