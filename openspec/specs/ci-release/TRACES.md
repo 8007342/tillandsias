@@ -13,3 +13,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/promote-stable.sh#L2](../../../scripts/promote-stable.sh#L2)
 - [scripts/release-preflight-local.sh#L3](../../../scripts/release-preflight-local.sh#L3)
 - [scripts/resolve-smoke-release.sh#L2](../../../scripts/resolve-smoke-release.sh#L2)
+- [scripts/scan-litmus-expression-pinning.sh#L2](../../../scripts/scan-litmus-expression-pinning.sh#L2)
