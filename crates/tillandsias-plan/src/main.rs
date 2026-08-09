@@ -7,7 +7,8 @@
 
 use std::path::{Path, PathBuf};
 use tillandsias_plan::{
-    Ledger, Schema, answer, edit, groundtruth, loop_status, methodology, spec, str_field, str_list,
+    Ledger, Schema, answer, count_release, edit, groundtruth, loop_status, methodology, spec,
+    str_field, str_list,
 };
 
 /// ORDER 569. The capability manifest, embedded from the crate's own
@@ -72,6 +73,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "loop-status-append",
     "loop-status-compact",
     "loop-status-fragments",
+    "loop-status-verify",
     "methodology",
     "methodology-ask",
     "methodology-index",
@@ -192,6 +194,15 @@ const USAGE: &str = concat!(
     "                                     (base ⊕ loop_status.d/ fragments). The only correct way to\n",
     "                                     read loop_status — a reader that forgets fragments reports\n",
     "                                     a stale status with total confidence.\n",
+    "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
+    "                                     fragments, malformed ones, and whether compaction is eligible\n",
+    "           loop-status-verify [--ledger P] [--render]\n",
+    "                                     ORDER 626-zmhz. The deterministic ACTIVE-RELEASE + count gate:\n",
+    "                                     cross-checks the FOLDED loop_status prose (exactly one ACTIVE\n",
+    "                                     RELEASE heading, exactly one `— ACTIVE` bullet, and that bullet\n",
+    "                                     IS the active release) against the FOLDED ledger's release\n",
+    "                                     counts, and fails loud on stale prose. --ledger overrides\n",
+    "                                     plan/index.yaml; --render prints the canonical count line.\n",
     "           loop-status-append [--ts ISO] [--host H] [--suffix S] [--file F]\n",
     "                                     ORDER 582-nqw5. Append ONE `## Cycle …` section (stdin or\n",
     "                                     --file) as a NEW fragment file — concurrent hosts each write\n",
@@ -849,6 +860,109 @@ fn run_loop_status(args: &[String], base: &Path) {
                 emit(&format!("malformed: {}", bad.display()));
             }
         }
+        "loop-status-verify" => {
+            // ORDER 626-zmhz. The deterministic ACTIVE-RELEASE + count gate:
+            // READ-ONLY, so a coordinator runs it every cycle and it fails loud
+            // the moment the operator-owned release prose contradicts the FOLDED
+            // truth. Two truths are cross-checked:
+            //   - the FOLDED loop_status prose: exactly one `## ACTIVE RELEASE:`
+            //     heading, exactly one `— ACTIVE`-labeled release bullet, and
+            //     that bullet IS the active release;
+            //   - the FOLDED plan ledger: the active release's `(N open / M
+            //     total tagged)` counts must equal `count_release` over base
+            //     plus index.d fragments.
+            // `--ledger <path>` overrides the default plan/index.yaml so an
+            // isolated fixture can stage both corpora; `--render` prints the
+            // canonical count line (the splice a coordinator pastes into the
+            // release bullet) even when the check fails.
+            let mut ledger_path = PathBuf::from("plan/index.yaml");
+            if let Some(i) = args.iter().position(|a| a == "--ledger")
+                && let Some(p) = args.get(i + 1)
+            {
+                ledger_path = PathBuf::from(p);
+            }
+            let render_only = args.iter().any(|a| a == "--render");
+
+            let raw = match std::fs::read_to_string(base) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {}: {e}", base.display());
+                    std::process::exit(1);
+                }
+            };
+            let folded = match loop_status::fold_text(&raw, &loop_status::load_all(base)) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("error: fold {}: {e}", base.display());
+                    std::process::exit(1);
+                }
+            };
+            let active = loop_status::active_release(base).unwrap_or_default();
+            let mut problems = loop_status::verify_active_release(&folded, &active);
+
+            let (open, total) = match Ledger::load_with_fragments(&ledger_path) {
+                Ok(l) => count_release(&l, &active),
+                Err(e) => {
+                    eprintln!(
+                        "error: load ledger {} for the folded counts: {e}",
+                        ledger_path.display()
+                    );
+                    std::process::exit(1);
+                }
+            };
+            let canonical = loop_status::render_count_line(open, total);
+
+            let headings = loop_status::active_release_headings(&folded);
+            let actives = loop_status::release_bullets(&folded)
+                .iter()
+                .filter(|b| b.active)
+                .count();
+            let mut count_ok = true;
+            if render_only {
+                // `--render` is not a gate: emit the canonical line so a
+                // coordinator can splice it, and leave consistency checking to a
+                // bare run.
+                println!("{canonical}");
+                return;
+            }
+            if let Some(b) = loop_status::release_bullets(&folded)
+                .iter()
+                .find(|b| b.version == active)
+            {
+                match (b.open, b.total) {
+                    (Some(o), Some(t)) if o == open && t == total => {}
+                    (Some(o), Some(t)) => {
+                        count_ok = false;
+                        problems.push(format!(
+                            "active release {active} count is stale — committed ({o} open / {t} total tagged) should be {canonical}"
+                        ));
+                    }
+                    _ => {
+                        count_ok = false;
+                        problems.push(format!(
+                            "active release {active} bullet has no parseable count — should be {canonical}"
+                        ));
+                    }
+                }
+            }
+
+            let verdict = if problems.is_empty() { "ok" } else { "fail" };
+            println!(
+                "loop_status: verify active_release={} headings={} actives={} count_ok={} counts=\"{}\" verdict={}",
+                if active.is_empty() { "-" } else { &active },
+                headings,
+                actives,
+                if count_ok { "yes" } else { "no" },
+                canonical,
+                verdict
+            );
+            for p in &problems {
+                eprintln!("problem: {p}");
+            }
+            if !problems.is_empty() {
+                std::process::exit(1);
+            }
+        }
         "loop-status-compact" => {
             // Fold every fragment into the base and delete EXACTLY the ones
             // folded — the same delete-by-name contract as `compact`: never a
@@ -1377,7 +1491,11 @@ fn main() {
     // named something else explicitly.
     if matches!(
         args[0].as_str(),
-        "loop-status" | "loop-status-append" | "loop-status-compact" | "loop-status-fragments"
+        "loop-status"
+            | "loop-status-append"
+            | "loop-status-compact"
+            | "loop-status-fragments"
+            | "loop-status-verify"
     ) {
         let base = if index_explicit {
             index.clone()

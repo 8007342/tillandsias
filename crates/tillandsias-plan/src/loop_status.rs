@@ -329,6 +329,154 @@ pub fn active_release(base: &Path) -> Option<String> {
     None
 }
 
+/// One `- **vX.Y … (N open / M total tagged)` release-list bullet from the
+/// operator-owned release section of the loop_status base (ORDER 626-zmhz).
+///
+/// Parsed as-is, never validated: a bullet may lack the `— ACTIVE` label or a
+/// parseable count, and [`verify_active_release`] decides what that means.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseBullet {
+    /// The version token, `vN.N…`, exactly as `active_release` renders it.
+    pub version: String,
+    /// Whether the bullet carried the inlined `— ACTIVE` label.
+    pub active: bool,
+    /// The committed `N` from `(N open / M total tagged)`, when parseable.
+    pub open: Option<u64>,
+    /// The committed `M` from `(N open / M total tagged)`, when parseable.
+    pub total: Option<u64>,
+}
+
+/// Parse the release-list bullets out of folded loop-status text. Matches
+/// `- **vN.N…[ — ACTIVE][ (N open / M total tagged)]` lines and ignores
+/// everything else — prose, headings, and bullets for other release names.
+pub fn release_bullets(text: &str) -> Vec<ReleaseBullet> {
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let t = line.trim();
+        let Some(rest) = t.strip_prefix("- **v") else {
+            continue;
+        };
+        let digits: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || *c == '.')
+            .collect();
+        if digits.is_empty() || !digits.starts_with(|c: char| c.is_ascii_digit()) {
+            continue;
+        }
+        let version = format!("v{digits}");
+        let mut after = &rest[digits.len()..];
+        // A version token runs until the first non-digit/dot, and what follows
+        // must be whitespace — `v0.9x` is a bogus bullet, not `v0.9` plus junk.
+        if !after.starts_with(' ') {
+            continue;
+        }
+        let mut active = false;
+        for sep in ["—", "–", "-"] {
+            if let Some(tail) = after.strip_prefix(&format!(" {sep} ACTIVE")) {
+                active = true;
+                after = tail;
+                break;
+            }
+        }
+        // A release bullet's remainder opens the count parenthetical — anything
+        // else (`- **v0.5 work seeded** …`) is prose wearing a bullet marker.
+        if !after.trim_start().starts_with('(') {
+            continue;
+        }
+        let mut open = None;
+        let mut total = None;
+        if let Some(par) = after.split('(').nth(1)
+            && let Some(close) = par.find(')')
+            && let Some((a, b)) = par[..close].trim().split_once(" open / ")
+            && let Ok(a) = a.trim().parse::<u64>()
+            && let Ok(b) = b
+                .strip_suffix(" total tagged")
+                .unwrap_or("")
+                .trim()
+                .parse::<u64>()
+        {
+            open = Some(a);
+            total = Some(b);
+        }
+        out.push(ReleaseBullet {
+            version,
+            active,
+            open,
+            total,
+        });
+    }
+    out
+}
+
+/// Count `## ACTIVE RELEASE:` heading declarations in folded loop-status text.
+pub fn active_release_headings(text: &str) -> usize {
+    text.lines()
+        .filter(|l| l.trim().starts_with("## ACTIVE RELEASE:"))
+        .count()
+}
+
+/// The canonical count parenthetical for the release-list prose, e.g.
+/// `(217 open / 298 total tagged)`.
+pub fn render_count_line(open: u64, total: u64) -> String {
+    format!("({open} open / {total} total tagged)")
+}
+
+/// ORDER 626-zmhz — the deterministic ACTIVE-RELEASE truth check over the
+/// FOLDED loop-status prose. One contradiction per returned line; an empty
+/// vector means the prose is consistent:
+///
+/// 1. exactly one `## ACTIVE RELEASE:` heading;
+/// 2. exactly one release bullet carries the `— ACTIVE` label;
+/// 3. that bullet IS the active release (version matches), and the active
+///    release's own bullet is the one labeled ACTIVE — a stale `v0.4 — ACTIVE`
+///    while the register says v0.5 is a contradiction this catches.
+pub fn verify_active_release(folded: &str, active: &str) -> Vec<String> {
+    let mut problems = Vec::new();
+    let headings = active_release_headings(folded);
+    if headings == 0 {
+        problems.push("no `## ACTIVE RELEASE:` heading in the folded loop status".to_string());
+    } else if headings > 1 {
+        problems.push(format!(
+            "{headings} `## ACTIVE RELEASE:` headings — exactly one is allowed"
+        ));
+    }
+    if active.is_empty() {
+        if headings > 0 {
+            problems.push("active release could not be parsed from the heading".to_string());
+        }
+        return problems;
+    }
+    let bullets = release_bullets(folded);
+    let for_active: Vec<&ReleaseBullet> = bullets.iter().filter(|b| b.version == active).collect();
+    let labeled: Vec<&ReleaseBullet> = bullets.iter().filter(|b| b.active).collect();
+    if for_active.is_empty() {
+        problems.push(format!(
+            "no release-list bullet for the active release {active}"
+        ));
+    } else if for_active.len() > 1 {
+        problems.push(format!(
+            "{} release-list bullets claim the active release {active}",
+            for_active.len()
+        ));
+    } else if !for_active[0].active {
+        problems.push(format!(
+            "active release {active} bullet is not labeled `— ACTIVE`"
+        ));
+    }
+    if labeled.is_empty() {
+        problems.push(format!(
+            "no release bullet carries the `— ACTIVE` label (expected {active})"
+        ));
+    } else if labeled.len() > 1 || labeled[0].version != active {
+        let offenders: Vec<String> = labeled.iter().map(|b| b.version.clone()).collect();
+        problems.push(format!(
+            "release bullet(s) {} are labeled ACTIVE but the register names {active}",
+            offenders.join(", ")
+        ));
+    }
+    problems
+}
+
 /// The drift summary for the loop_status overlay, mirroring `fragments::drift`.
 pub struct Drift {
     pub fragment_count: usize,
@@ -834,5 +982,110 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── ORDER 626-zmhz: the folded-loop-status release-truth gate ──────────
+
+    const RELEASE_SECTION: &str = "# Multi-Host Coordination Loop Status\n\
+                                   \n\
+                                   ## ACTIVE RELEASE: v0.5 (v0.4 SHIPPED)\n\
+                                   \n\
+                                   - **v0.4 — ACTIVE (13 open / 53 total tagged): \"stale\"**\n\
+                                   - **v0.5 (87 open / 94 total tagged): \"stale too\"**\n";
+
+    #[test]
+    fn release_bullets_parse_version_label_and_counts() {
+        let bullets = release_bullets(RELEASE_SECTION);
+        assert_eq!(bullets.len(), 2);
+        assert_eq!(bullets[0].version, "v0.4");
+        assert!(bullets[0].active);
+        assert_eq!(bullets[0].open, Some(13));
+        assert_eq!(bullets[0].total, Some(53));
+        assert_eq!(bullets[1].version, "v0.5");
+        assert!(
+            !bullets[1].active,
+            "v0.5 bullet currently lacks the ACTIVE label"
+        );
+        assert_eq!(bullets[1].open, Some(87));
+        assert_eq!(bullets[1].total, Some(94));
+    }
+
+    #[test]
+    fn release_bullets_ignore_non_bullet_lines() {
+        let text = "## ACTIVE RELEASE: v0.5\n\n- not a **v bullet\n- **v0.9x (1 open / 2 total tagged)\n- **v0.5 work seeded**: packet prose\n- **v1.0 (0 open / 1 total tagged)\n";
+        let bullets = release_bullets(text);
+        assert_eq!(bullets.len(), 1, "only the well-formed bullet parses");
+        assert_eq!(bullets[0].version, "v1.0");
+    }
+
+    #[test]
+    fn verify_active_release_flags_the_known_stale_shape() {
+        // The pre-fix release section: v0.4 carries the ACTIVE label while the
+        // register names v0.5, and v0.5's bullet is neither labeled nor current.
+        let problems = verify_active_release(RELEASE_SECTION, "v0.5");
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("not labeled `— ACTIVE`")),
+            "must flag the ACTIVE bullet missing its label: {problems:?}"
+        );
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("are labeled ACTIVE") && p.contains("v0.4")),
+            "must flag the stale v0.4 — ACTIVE bullet: {problems:?}"
+        );
+    }
+
+    #[test]
+    fn verify_active_release_passes_a_consistent_section() {
+        let text = "# Multi-Host Coordination Loop Status\n\
+                    \n\
+                    ## ACTIVE RELEASE: v0.5 (v0.4 SHIPPED)\n\
+                    \n\
+                    - **v0.4 (13 open / 53 total tagged): \"shipped\"**\n\
+                    - **v0.5 — ACTIVE (217 open / 298 total tagged): \"experts\"**\n";
+        let problems = verify_active_release(text, "v0.5");
+        assert!(problems.is_empty(), "consistent section: {problems:?}");
+        let headings = active_release_headings(text);
+        assert_eq!(headings, 1);
+    }
+
+    #[test]
+    fn verify_active_release_refuses_duplicate_headings() {
+        let text = "## ACTIVE RELEASE: v0.5\n\n## ACTIVE RELEASE: v0.6\n";
+        let problems = verify_active_release(text, "v0.5");
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("exactly one is allowed")),
+            "duplicate headings must be a contradiction: {problems:?}"
+        );
+    }
+
+    #[test]
+    fn render_count_line_is_the_spliceable_parenthetical() {
+        assert_eq!(render_count_line(217, 298), "(217 open / 298 total tagged)");
+    }
+
+    #[test]
+    fn stale_bullet_counts_fail_against_a_fresher_render() {
+        // Exit criterion 3 at the prose level: a committed count that no longer
+        // matches the folded truth must be distinguishable from a current one,
+        // and the renderer must produce the canonical replacement.
+        let committed = RELEASE_SECTION.replace(
+            "(87 open / 94 total tagged)",
+            "(217 open / 298 total tagged)",
+        );
+        let canonical = render_count_line(217, 298);
+        assert!(committed.contains(&canonical));
+        // Simulate the fold moving on: a fresher count line is the replacement a
+        // coordinator splices in; the committed text at the old count still
+        // differs from the canonical output.
+        assert_ne!(
+            render_count_line(87, 94),
+            canonical,
+            "the stale count must not render identically to the fresh one"
+        );
     }
 }

@@ -44,6 +44,7 @@ loop-status
 loop-status-append
 loop-status-compact
 loop-status-fragments
+loop-status-verify
 methodology
 methodology-ask
 methodology-index
