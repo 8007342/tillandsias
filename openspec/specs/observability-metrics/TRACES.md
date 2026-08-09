@@ -5,11 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L12206](../../../crates/tillandsias-headless/src/main.rs#L12206)
-- [crates/tillandsias-headless/src/main.rs#L12236](../../../crates/tillandsias-headless/src/main.rs#L12236)
-- [crates/tillandsias-headless/src/main.rs#L12334](../../../crates/tillandsias-headless/src/main.rs#L12334)
-- [crates/tillandsias-headless/src/main.rs#L12804](../../../crates/tillandsias-headless/src/main.rs#L12804)
-- [crates/tillandsias-headless/src/main.rs#L12830](../../../crates/tillandsias-headless/src/main.rs#L12830)
+- [crates/tillandsias-headless/src/main.rs#L12270](../../../crates/tillandsias-headless/src/main.rs#L12270)
+- [crates/tillandsias-headless/src/main.rs#L12300](../../../crates/tillandsias-headless/src/main.rs#L12300)
+- [crates/tillandsias-headless/src/main.rs#L12398](../../../crates/tillandsias-headless/src/main.rs#L12398)
+- [crates/tillandsias-headless/src/main.rs#L12868](../../../crates/tillandsias-headless/src/main.rs#L12868)
+- [crates/tillandsias-headless/src/main.rs#L12894](../../../crates/tillandsias-headless/src/main.rs#L12894)
 - [crates/tillandsias-headless/src/metrics_server.rs#L1](../../../crates/tillandsias-headless/src/metrics_server.rs#L1)
 - [crates/tillandsias-metrics/Cargo.toml#L9](../../../crates/tillandsias-metrics/Cargo.toml#L9)
 - [crates/tillandsias-metrics/src/dashboard.rs#L8](../../../crates/tillandsias-metrics/src/dashboard.rs#L8)

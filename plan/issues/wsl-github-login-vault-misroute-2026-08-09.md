@@ -50,6 +50,24 @@ enclave URL, and the validation gate are all sound.
   the observed 20-minute wedge was two concurrent diagnostic logins
   serialized on the vault resource lock, not an unbounded probe.
 
+## Second field crash + third root cause (2026-08-09, after the wrapper landed)
+
+The operator's retry with the wrapper-launching tray STILL died instantly:
+`/bin/bash: -c: line 1: unexpected EOF while looking for matching '"'`
+(exit 2). tray.log proved the launched argv was the metacharacter-free
+`["/usr/local/lib/tillandsias/github-login.sh"]` — isolating the ONLY quoted
+token left on the wt command line: the window title
+`"Tillandsias — GitHub Login"` (spaces + em-dash force std::process quoting;
+wt.exe's re-parser bleeds a dangling quote into the trailing args, which
+wsl.exe joins into ONE `bash -c` string). Fix: `wt_safe_title` sanitizes
+titles to single unquoted ASCII tokens at the wt argv boundary (raw display
+titles unchanged); tests pin that no sanitized title ever needs quoting.
+windows-next commit 2ae0e470 (pushed as cace9cd1 after merging linux-next
+938459cb). Positive control after fix: relaunched tray reaches wire Ready on
+attempt 1. Note the crash also validated the detachment work: the failing
+terminal took down nothing else this time, and the error was plain
+copyable text.
+
 ## Exit criteria
 
 - [x] Dummy-token flow reaches GitHub validation and fails 401 in seconds

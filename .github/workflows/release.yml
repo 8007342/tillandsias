@@ -303,6 +303,49 @@ jobs:
           git tag -f -a latest -m "Rolling tag: latest release v${VERSION}" "${GITHUB_SHA}"
           git push origin refs/tags/latest --force
           echo "Updated rolling tag: latest -> ${GITHUB_SHA}"
+          # `unstable` is the rolling UNSTABLE channel: it always points at the
+          # newest daily, promoted or not. The README's Unstable Releases
+          # section curl-installs from it (plan order 621-*).
+          git tag -f -a unstable -m "Rolling tag: unstable channel v${VERSION}" "${GITHUB_SHA}"
+          git push origin refs/tags/unstable --force
+          echo "Updated rolling tag: unstable -> ${GITHUB_SHA}"
+
+      - name: Refresh unstable channel release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # The UNSTABLE channel is a single rolling GitHub prerelease tagged
+          # `unstable`, so every platform has one URL that never changes:
+          #   https://github.com/8007342/tillandsias/releases/download/unstable/<asset>
+          #
+          # It is DELETED and recreated on every daily, deliberately. Clobbering
+          # in place would leave a stale macOS/Windows asset behind whenever a
+          # platform job fails, and the channel would then serve a mismatched
+          # artifact set that still looked current. The macos-release and
+          # windows-release jobs re-upload their halves from this same run.
+          gh release delete unstable --yes --cleanup-tag=false 2>/dev/null || true
+          gh release create unstable \
+            release-artifacts/* \
+            --target "${GITHUB_SHA}" \
+            --title "Unstable channel (rolling) — v${VERSION}" \
+            --prerelease \
+            --notes "**UNSTABLE — not a promoted release.** Rolling pointer at the newest daily build, currently \`v${VERSION}\` (\`${GITHUB_SHA}\`).
+
+          This channel exists so Tillandsias operators and opt-in testers can run the newest build on real hosts before it is promoted to stable. Expect breakage; report it as a \`plan/issues/\` packet.
+
+          Install (all three platforms):
+          \`\`\`bash
+          curl -fsSL https://github.com/8007342/tillandsias/releases/download/unstable/install.sh | bash -s -- --channel unstable
+          \`\`\`
+          \`\`\`bash
+          curl -fsSL https://github.com/8007342/tillandsias/releases/download/unstable/install-macos.sh | bash -s -- --channel unstable
+          \`\`\`
+          \`\`\`powershell
+          \$env:TILLANDSIAS_CHANNEL='unstable'; irm https://github.com/8007342/tillandsias/releases/download/unstable/install-windows.ps1 | iex
+          \`\`\`
+
+          The stable channel lives at [/releases/latest](https://github.com/8007342/tillandsias/releases/latest) and moves only via \`scripts/promote-stable.sh\`."
+          echo "Unstable channel now serves v${VERSION}"
 
   # @trace spec:macos-tray-build-and-release, spec:macos-native-tray
   # macOS Apple-Silicon tray release: builds Tillandsias.app via the same
@@ -416,6 +459,10 @@ jobs:
           # add the macOS assets via --clobber so a re-run is idempotent.
           gh release upload "v${VERSION}" release-artifacts/* --clobber
           echo "Uploaded macOS assets to v${VERSION}"
+          # Mirror into the rolling UNSTABLE channel the Linux job recreated
+          # this run, so /releases/download/unstable carries the macOS half.
+          gh release upload unstable release-artifacts/* --clobber
+          echo "Mirrored macOS assets to the unstable channel"
 
   windows-release:
     name: Build, sign, and publish Windows tray
@@ -486,6 +533,31 @@ jobs:
           scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
           Get-ChildItem release-artifacts
 
+      - name: Stage version-stable portable aliases
+        shell: bash
+        run: |
+          # The packaged zip carries the version in its NAME, so it can never be
+          # linked from /releases/latest/download/<asset> — that URL form needs a
+          # filename that is identical across releases. The README landing page
+          # advertises the portable Windows download as a primary installer, so
+          # publish unversioned aliases alongside the versioned artifacts.
+          #
+          # These are byte-identical copies, and their checksums are appended to
+          # SHA256SUMS-windows BEFORE the signing step below, so the alias a user
+          # actually downloads is covered by the signed checksum file.
+          VERSION="${{ steps.version.outputs.version }}"
+          cd release-artifacts
+          ZIP="tillandsias-tray-${VERSION}-windows-x64.zip"
+          test -s "${ZIP}" || { echo "missing ${ZIP}"; exit 1; }
+          cp "${ZIP}" tillandsias-windows-x64.zip
+          # Also publish the bare tray exe for operators who want a single
+          # portable file with no unzip step.
+          unzip -o -j "${ZIP}" 'tillandsias-tray.exe' -d .
+          test -s tillandsias-tray.exe || { echo "zip carried no tillandsias-tray.exe"; exit 1; }
+          sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe >> SHA256SUMS-windows
+          echo "Staged version-stable aliases:"
+          ls -la tillandsias-windows-x64.zip tillandsias-tray.exe
+
       - name: Install Cosign
         uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
@@ -522,3 +594,7 @@ jobs:
           # assets via --clobber so re-runs are idempotent.
           gh release upload "v${VERSION}" release-artifacts/* --clobber
           echo "Uploaded Windows assets to v${VERSION}"
+          # Mirror into the rolling UNSTABLE channel the Linux job recreated
+          # this run, so /releases/download/unstable carries the Windows half.
+          gh release upload unstable release-artifacts/* --clobber
+          echo "Mirrored Windows assets to the unstable channel"
