@@ -966,6 +966,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan order uniqueness passed"
 
+    # Order 635-i6vm. `tillandsias-plan check` validates the ledger's SCHEMA and
+    # references; it cannot see a status transition the fold discarded, because
+    # the discarded result is itself perfectly valid. Re-declaring a packet under
+    # `packets:` with a new status parses, validates, reviews correctly — and is
+    # a no-op, because `packets:` is a G-Set. 11 of 21 fragment-recorded
+    # completions were being thrown away when this was found, and the batch
+    # selector was handing already-completed packets back out as next work.
+    _step "Checking for fragment status transitions the fold discards..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+        _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
+        exit 1
+    fi
+    _info "Fragment status-loss check passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while
