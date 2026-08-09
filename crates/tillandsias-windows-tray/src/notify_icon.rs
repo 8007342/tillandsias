@@ -3552,8 +3552,18 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // crashes (Esmeralda, 2026-08-09) reached bash with an unbalanced quote
     // through the wt re-parse chain, and wt offers no verbatim-args contract.
     // The plain-console spawn hands argv straight to CreateProcess — there is
-    // no second parser to mangle it. Other intents keep the nicer wt tab.
-    let spawn_result = if matches!(intent, PtyIntent::GithubLogin) {
+    // no second parser to mangle it.
+    //
+    // Restricting that to GithubLogin was too narrow: the PROJECT lanes carry a
+    // whole inline `bash -lc "export … && exec tillandsias-headless --cloud
+    // 'owner/repo' --opencode"` — strictly MORE quoting than the login argv that
+    // already crashed twice — and they died on the very same error on the peke
+    // field host (2026-08-09): `/bin/bash: -c: line 1: unexpected EOF while
+    // looking for matching '"'`, exit 2, instantly on every project click. wt is
+    // therefore allowed only for argv that needs no quoting at all.
+    // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    let spawn_result = if matches!(intent, PtyIntent::GithubLogin) || !argv_survives_wt_reparse(&argv)
+    {
         spawn_wsl_console(distro, &argv)
     } else {
         spawn_wsl_terminal(distro, &title, &argv)
@@ -3564,6 +3574,25 @@ fn launch_open_shell_terminal(action: &MenuAction) {
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
     }
+}
+
+/// Can every token of `argv` cross wt.exe's re-parser unchanged?
+///
+/// `std::process` quotes any argument containing spaces or quotes for
+/// CreateProcess; wt.exe then re-parses that whole command line with its own
+/// rules and hands the remainder to `wsl.exe`, which joins it into a single
+/// `bash -c` string. Anything that had to be quoted can lose a delimiter on the
+/// way. Only fully quote-free tokens are safe; everything else must take the
+/// plain-console path, where argv reaches CreateProcess verbatim.
+///
+/// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+fn argv_survives_wt_reparse(argv: &[String]) -> bool {
+    argv.iter().all(|arg| {
+        !arg.is_empty()
+            && arg.chars().all(|c| {
+                c.is_ascii_alphanumeric() || matches!(c, '/' | '\\' | '.' | '-' | '_' | ':' | '=')
+            })
+    })
 }
 
 /// Plain-console spawn: `wsl.exe` in its own fresh conhost window, argv passed
@@ -3687,6 +3716,47 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Every project lane died instantly on `/bin/bash: -c: line 1: unexpected
+    /// EOF while looking for matching '"'` because its inline script went
+    /// through wt.exe's re-parser (peke field host, 2026-08-09). Pin that the
+    /// real launch argv is classified unsafe, so it takes the plain console.
+    ///
+    /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    #[test]
+    fn project_lane_argv_is_never_routed_through_wt() {
+        // Verbatim from tray.log, the argv of a cloud project click.
+        let project_argv = vec![
+            "/bin/bash".to_string(),
+            "-lc".to_string(),
+            "export HOME=\"${HOME:-/root}\" && exec tillandsias-headless \
+             --cloud '8007342/tillandsias' --opencode"
+                .to_string(),
+        ];
+        assert!(
+            !argv_survives_wt_reparse(&project_argv),
+            "a quoted inline script must never be handed to wt.exe"
+        );
+
+        // The injected login wrapper is a bare path — quote-free — but the
+        // login lane is pinned to the console independently of this predicate.
+        assert!(argv_survives_wt_reparse(&[
+            "/usr/local/lib/tillandsias/github-login.sh".to_string()
+        ]));
+
+        // A plain podman argv stays eligible for the nicer wt tab.
+        assert!(argv_survives_wt_reparse(&[
+            "podman".to_string(),
+            "exec".to_string(),
+            "-it".to_string(),
+            "tillandsias-proj-forge".to_string(),
+            "/bin/bash".to_string(),
+        ]));
+
+        // Spaces alone force quoting, so they are disqualifying.
+        assert!(!argv_survives_wt_reparse(&["two words".to_string()]));
+        assert!(!argv_survives_wt_reparse(&[String::new()]));
+    }
 
     /// Order 420: credential-shaped words never survive into the shareable
     /// diagnostics bundle; ordinary text passes through untouched.
