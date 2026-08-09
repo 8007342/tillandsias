@@ -19,7 +19,7 @@ critical_path:
     timeout_ms: 5000
 
   - step: "validate canonical forge trace annotations"
-    command: "grep -F '@trace spec:forge-standalone' build-forge.sh run-forge-standalone.sh images/default/Containerfile openspec/specs/forge-standalone/spec.md openspec/specs/forge-standalone/TRACES.md"
+    command: "grep -F '@trace spec:forge-standalone' build-forge.sh run-forge-standalone.sh images/default/Containerfile openspec/specs/forge-standalone/spec.md"
     timeout_ms: 5000
 
   - step: "validate the standalone launcher fails fast on missing image"

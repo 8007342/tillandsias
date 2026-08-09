@@ -1,7 +1,15 @@
+# @tombstone held:observatorium
+# HELD 2026-08-09 (operator directive). The Observatorium is on hold and is not
+# planned for any release; the 171 rendered TRACES.md files this test asserted
+# over were removed the same day. Held rather than deleted: if the Observatorium
+# resumes, this test is the record of what the trace index was contracted to do.
+# Ghost-trace detection — the one property here that was load-bearing — moved to
+# scripts/trace-coverage.sh --gate and is enforced on every build.
 # @trace spec:clickable-trace-index
 name: litmus:clickable-trace-index-observatorium-skeleton
 spec: clickable-trace-index
-phase: pre-build
+phase: retired
+status: retired
 description: Verify the local observatorium launcher serves project source under /source and exposes the minimal three-pane shell
 severity: medium
 size: quick
