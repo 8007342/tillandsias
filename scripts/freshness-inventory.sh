@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# freshness: auditor=forge-antigravity-20260731 date=2026-07-31 verdict=refreshed scope=revalidated inventory coverage (969 components, 8 stamped, 961 unstamped — 0% stamped), stale-report grammar, and advisory output contract; same findings as prior audit — no new drift detected in the stamped set
+# freshness: auditor=windows-claude-20260809t212955z date=2026-08-09 verdict=updated scope=coverage stuck at 0% for 9+ days because the advisory could only rank STAMPED files, so the audit queue re-offered the same 8 and the 1013 unstamped were unreachable; added freshness-next: to draw the next target from the unstamped set
 # =============================================================================
 # freshness-inventory.sh — FRESHNESS rung 2: component inventory + coverage
 #
@@ -24,6 +24,34 @@
 #   freshness-stamp: <relpath> <verdict> <date> <auditor>
 #   freshness-unstamped: <relpath>
 #   freshness-stale: <relpath> <age_days> <verdict> <date>
+#   freshness-next: <relpath> <source=unstamped|stale> seed=<seed>
+#
+# WHY freshness-next EXISTS (order 636-*, windows host 2026-08-09)
+# ---------------------------------------------------------------
+# The standing FRESHNESS audit class asks each cycle to re-validate "the top
+# component the freshness-advisory phase flagged". That phase ranks
+# `freshness-stale:` lines by age (local-ci.sh, `sort -t' ' -k3,3nr`), and a
+# `freshness-stale:` line is only ever emitted for a file that ALREADY carries a
+# stamp. Unstamped files cannot be stale, because staleness is measured from a
+# stamp they do not have.
+#
+# So the audit queue was drawn from the stamped set — 8 files — and re-offered
+# those same 8 forever. Every cycle dutifully audited one, re-stamped it, and
+# coverage did not move. The measurements say it plainly:
+#
+#   2026-07-31 audit:   969 components,  8 stamped,  0%
+#   2026-08-09 audit:  1021 components,  8 stamped,  0%
+#
+# Nine days, +52 components, +0 stamps. The class was not slow, it was closed:
+# no path existed from "unstamped" to "audited". This script was itself the top
+# stale component on both dates, which is how the loop was caught — it was being
+# asked to audit itself a second time while a thousand files had never been
+# looked at once.
+#
+# freshness-next: names the next audit target and draws it from the UNSTAMPED set
+# first, falling back to the oldest stamped file only when coverage is complete.
+# The seed is printed so a cycle can be replayed, and rotates by UTC date so
+# consecutive cycles on one host do not re-audit one file.
 #
 # A `# freshness:` record line looks like (one of):
 #   # freshness: auditor=<agent-id> date=<ISO-date> verdict=<refreshed|updated|obsoleted> scope=<one-line>
@@ -121,5 +149,36 @@ for rel in "${UNSTAMPED_LINES[@]:-}"; do
     [ -z "$rel" ] && continue
     echo "freshness-unstamped: $rel"
 done
+
+# --- next audit target -------------------------------------------------------
+# Unstamped first: at 0% coverage the stamped set is not a sample of the system,
+# it is a sample of what previous audits happened to touch. Ranking within it
+# answers "which of the 8 files we have looked at is oldest", which is not the
+# question the audit class is asking.
+FRESHNESS_SEED="${FRESHNESS_SEED:-$(date -u +%Y%m%d)}"
+next_rel=""
+next_src=""
+
+if [ "${#UNSTAMPED_LINES[@]}" -gt 0 ] && [ -n "${UNSTAMPED_LINES[0]:-}" ]; then
+    # Deterministic rotation: same seed + same inventory -> same target, so a
+    # cycle is replayable, while consecutive days advance through the backlog.
+    n="${#UNSTAMPED_LINES[@]}"
+    idx="$(printf '%s' "$FRESHNESS_SEED" | cksum | cut -d' ' -f1)"
+    idx=$((idx % n))
+    next_rel="${UNSTAMPED_LINES[$idx]}"
+    next_src="unstamped"
+elif [ "${#STAMP_LINES[@]}" -gt 0 ] && [ -n "${STAMP_LINES[0]:-}" ]; then
+    # Coverage is complete — fall back to the oldest stamp.
+    next_rel="$(for line in "${STAMP_LINES[@]}"; do
+        [ -z "$line" ] && continue
+        IFS='|' read -r rel _verdict fdate _auditor <<< "$line"
+        printf '%s %s\n' "$fdate" "$rel"
+    done | sort | head -1 | cut -d' ' -f2)"
+    next_src="stale"
+fi
+
+if [ -n "$next_rel" ]; then
+    echo "freshness-next: $next_rel source=$next_src seed=$FRESHNESS_SEED"
+fi
 
 exit 0
