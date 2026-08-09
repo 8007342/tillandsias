@@ -47,7 +47,7 @@ critical_path:
   - step: "MINIMAX DOMINATES ENTROPY: the top-scoring epic wins the plurality of seeds"
     # Guards the exact regression that uniform-over-top-K would reintroduce:
     # chasing a low-residual obligation while the maximum sits unresolved.
-    command: "top=$(scripts/select-work-batch.sh linux --seed probe | grep -P '^frontier\t' | head -1 | cut -f3); hits=0; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do e=$(scripts/select-work-batch.sh linux --seed \"seed$i\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); [ \"$e\" = \"$top\" ] && hits=$((hits+1)); done; if [ \"$hits\" -lt 6 ]; then echo \"FAIL: top-residual epic won only $hits/12 — entropy is outvoting minimax\"; exit 1; fi; echo \"ok: top epic won $hits/12\""
+    command: "top=$(scripts/select-work-batch.sh linux --seed probe | grep \"^frontier$(printf '\\t')\" | head -1 | cut -f3); hits=0; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do e=$(scripts/select-work-batch.sh linux --seed \"seed$i\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); [ \"$e\" = \"$top\" ] && hits=$((hits+1)); done; if [ \"$hits\" -lt 6 ]; then echo \"FAIL: top-residual epic won only $hits/12 — entropy is outvoting minimax\"; exit 1; fi; echo \"ok: top epic won $hits/12\""
     timeout_ms: 180000
     expected_behavior: "ok: top epic won"
 

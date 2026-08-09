@@ -27,7 +27,7 @@
 - [ ] 3.6 Detect + cleanly stop a running previous tray; back up existing `.app` to `.app.bak`.
 - [ ] 3.7 Extract tarball to install location.
 - [ ] 3.8 Optional `--login-item` flag wires `osascript` to add to System Events login items.
-- [ ] 3.9 Print Gatekeeper right-click-Open hint.
+- [x] 3.9 Print Gatekeeper right-click-Open hint (quarantine-gated since order 421: only when the installed .app carries com.apple.quarantine).
 - [ ] 3.10 `open -a Tillandsias.app`.
 - [ ] 3.11 Add `--verify-cosign` opt-in flag that downloads the .cosign.bundle and runs `cosign verify-blob`; skip with informative message if cosign not installed.
 

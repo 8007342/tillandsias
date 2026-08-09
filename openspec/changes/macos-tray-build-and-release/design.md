@@ -32,7 +32,10 @@ The Linux release flow (`scripts/install.sh`, `.github/workflows/release.yml`) i
 - Developer ID ($99/yr, plus cert management in CI) — meaningful UX improvement (Gatekeeper allows on first launch) but adds release-engineering complexity and recurring cost the alpha audience doesn't justify.
 - Notarized ($99/yr + per-release `notarytool submit`) — best UX but adds ~10 min wall-clock per release.
 
-The install script must explicitly print the Gatekeeper workaround so users aren't confused.
+The install script must print the Gatekeeper workaround when (and only when)
+it applies: the installed bundle carries `com.apple.quarantine`. The curl
+path never quarantines, so an unconditional warning would scare users whose
+install launches cleanly (order 421).
 
 ### D2: `.tar.gz` distribution, not `.dmg`
 
@@ -75,7 +78,7 @@ Use the existing Cosign keyless OIDC step from `release.yml` (already in use for
 ## Risks / Trade-offs
 
 - **[R1] Apple Silicon-only excludes Intel Mac users.** → Documented in install-macos.sh's arch-gate; the gate prints "Intel Macs are not supported in v0.0.1 — see GitHub issue #X for status." (X to be filed.) Intel support is a separate post-v0.0.1 change if demand materializes.
-- **[R2] Ad-hoc signing UX hiccup on first launch.** → install-macos.sh ends with a clear "If Gatekeeper blocks: right-click Tillandsias in /Applications/ and choose Open" message. Acceptable for alpha.
+- **[R2] Ad-hoc signing UX hiccup on first launch.** → install-macos.sh prints a clear "If Gatekeeper blocks: right-click Tillandsias in /Applications/ and choose Open" message when the installed bundle is actually quarantined (curl installs are not, and launch cleanly — order 421). Acceptable for alpha.
 - **[R3] `runs-on: macos-latest` minutes are expensive.** → Build job is gated to `linux-next` push + PR; release job only on `workflow_dispatch`. Owner is the only PR contributor today. Monthly burn estimate: ~$5–10. Bearable.
 - **[R4] `objc2-virtualization` version drift between dev host and CI.** → Cargo.toml pins the patch version under `[target.'cfg(target_os = "macos")']`. `Cargo.lock` is committed to the repo.
 - **[R5] CI hosts may have an older Xcode CLT that lacks the codesign flags we use.** → `actions/setup-xcode` step pins a Xcode version. Document the minimum (Xcode 15+).
