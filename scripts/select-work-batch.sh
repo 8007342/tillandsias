@@ -78,6 +78,15 @@
 # absolutely; it was never a property of always choosing the same work.
 # Default seed = host kind + UTC date, so one host varies day to day and two
 # hosts on the same day diverge.
+#
+# KNOWN TRADEOFF of the date-based default: every cycle on one host that day
+# picks the SAME epic until its packets drain. That is mostly a FEATURE — it
+# gives cohesion ACROSS cycles, not just within one, so an epic gets driven
+# toward done instead of being hopped between. The cost is that a day seeded
+# onto a low-residual epic spends the day there. Squared weighting holds that
+# at roughly 1 day in 10; pass --seed explicitly to override when it happens.
+# Do not "fix" this by reseeding per cycle without replacing the cross-cycle
+# cohesion it provides.
 
 set -uo pipefail
 
@@ -229,7 +238,13 @@ seed_num="$(printf '%s' "$SEED" | cksum | cut -d' ' -f1)"
 # a vote on what matters most.
 pick="$(printf '%s\n' "$scored" | head -n "$k" \
     | awk -F'\t' -v seed="$seed_num" '
-        { s[NR] = $1 + 0; total += s[NR]; }
+        # SQUARED weights. Linear weighting over scores 19.7/8.5/5.9 leaves a
+        # 17% chance of working the smallest residual — more entropy than "a
+        # little", and enough to look like the shiny-packet trap in any single
+        # cycle an operator happens to watch. Squaring sharpens toward the
+        # maximum (~78%/15%/7% on the same frontier) while keeping every epic
+        # strictly reachable, which is all anti-starvation requires.
+        { s[NR] = ($1 + 0) * ($1 + 0); total += s[NR]; }
         END {
             if (total <= 0) { print 1; exit }
             # Deterministic point in [0,total) from the seed.
