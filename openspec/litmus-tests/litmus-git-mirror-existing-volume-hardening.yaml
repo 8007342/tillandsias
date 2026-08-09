@@ -1,0 +1,52 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-existing-volume-hardening
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  Offline functional regression for order 579. It starts the production
+  entrypoint setup path twice against a permissive pre-existing bare-repo
+  volume, then drives the production pre-receive and relay helpers through
+  receive-pack. Mandatory config must migrate idempotently; rejected branch,
+  tag, custom, and mixed deletions plus branch rewind must never invoke relay or
+  change either repository's refs; an allowed fast-forward must relay exactly
+  once and converge. Fabricated stale-old, short/invalid-ref, extra-field, and
+  non-commit-as-branch records must stop before relay; direct relay invocation must
+  independently reject deletion and whitespace-smuggled delete/--force argv;
+  and a SHA-256 repo must recognize its derived 64-hex zero object ID.
+
+preconditions:
+  - workspace contains images/git/entrypoint.sh and images/git/pre-receive-hook.sh
+  - workspace contains scripts/test-git-mirror-existing-volume-hardening.sh
+
+critical_path:
+  - step: "existing-volume migration, pre-relay rejection, and fast-forward convergence all pass"
+    command: "scripts/test-git-mirror-existing-volume-hardening.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: git mirror existing-volume receive hardening fixture (order 579)"
+
+  - step: "entrypoint reapplies all mandatory receive keys outside one-time initialization"
+    command: "grep -Fq 'config receive.denyNonFastForwards true' images/git/entrypoint.sh && grep -Fq 'config receive.denyDeletes true' images/git/entrypoint.sh && grep -Fq 'config receive.fsckObjects true' images/git/entrypoint.sh && echo 'ok: every-start receive hardening present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: every-start receive hardening present"
+
+  - step: "production paths derive zero object IDs instead of assuming SHA-1"
+    command: "grep -Fq 'hash-object --stdin' images/git/pre-receive-hook.sh && grep -Fq 'hash-object --stdin' images/git/relay-refs.sh && grep -Fq 'RECORD=\"${NEWSHA} ${NEWSHA} ${ref}\"' images/git/entrypoint.sh && ! grep -Fq '0000000000000000000000000000000000000000' images/git/pre-receive-hook.sh images/git/relay-refs.sh images/git/entrypoint.sh && echo 'ok: object-format-derived zero OIDs'"
+    timeout_ms: 5000
+    expected_behavior: "ok: object-format-derived zero OIDs"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "idempotent migration, transaction validation, all-delete/rewind rejection, SHA-256 zero handling, and fast-forward convergence pass"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-existing-volume-hardening"
+
+rollback:
+  on_failure: >
+    Do not move receive config back into the fresh-init branch and do not rely
+    on receive-pack config alone: pre-receive runs first and can otherwise relay
+    a destructive ref transaction upstream before rejecting it locally.
+  command: "scripts/test-git-mirror-existing-volume-hardening.sh"

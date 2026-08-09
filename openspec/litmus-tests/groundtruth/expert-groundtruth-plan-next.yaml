@@ -1,0 +1,122 @@
+# ORDER 606-xu52 — GROUND TRUTH for the deterministic plan_next selector.
+#
+# @trace spec:forge-environment-discoverability
+# @trace order:606, order:606-xu52
+#
+# Graded against the COMMITTED fixture corpus at
+# `openspec/litmus-tests/groundtruth/fixtures/plan-next/` — never the live
+# ledger, whose ready set churns with every claim:
+#
+#   tillandsias-plan \
+#     --index openspec/litmus-tests/groundtruth/fixtures/plan-next/plan/index.yaml \
+#     grade openspec/litmus-tests/groundtruth/expert-groundtruth-plan-next.yaml
+#
+# The multi-line answer_contains needles are the ORDERING proof: a needle that
+# spans the end of one row and the start of the next can only match when the
+# two rows are ADJACENT IN THAT ORDER, which is what "deterministic ranking"
+# means and what a set-membership assertion cannot express.
+
+version: 1
+name: expert-groundtruth-plan-next
+description: >
+  Deterministic plan_next ground truth: the ranking tuple (priority,
+  release-targeted first, order) renders identical rows in identical order on
+  every run; the release defaults from the fixture's folded ACTIVE RELEASE;
+  every exclusion class (milestone/criteria holder, live lease, claimed file
+  scope, unmet dependency, foreign release, incompatible role) stays out; the
+  five-row cap holds against a sixth eligible packet; and no matching work is
+  a typed refusal, never a guess or a dump.
+
+cases:
+
+  - id: next-fixture-deterministic-ranking
+    engine: plan.answer
+    query: "what's next?"
+    why: >
+      EXIT CRITERIA 1, 3 and 5 of 606-xu52 in one case. "what's next?" is the
+      first exact natural alias; the release must default from the fixture's
+      folded '## ACTIVE RELEASE: v9.9'; the five rows must render in the
+      committed tuple order (adjacency needles below); the sixth eligible
+      packet proves the cap; and every exclusion class is pinned absent.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 5
+      answer_contains:
+        - "next claimable work in desired_release 'v9.9' (top 5 of 6 eligible)"
+        - "1. 903\tfixture-next-first\twhy: priority p0, targets fixture-next-milestone, deps clear, unleased"
+        - "   next: Do the first thing.\n2. 901\tfixture-next-second"
+        - "   next: Do the second thing.\n3. 904\tfixture-next-wrong-role"
+        - "   next: Do the macos thing.\n4. 900\tfixture-next-third"
+        - "   next: Do the third thing.\n5. 905\tfixture-next-unmarked"
+      # fixture-next-milestone is deliberately NOT in answer_excludes: it
+      # appears in row 1's "targets ..." reason, which is legitimate — the
+      # citations_exclude pin below is what proves it is never OFFERED as a
+      # claim.
+      answer_excludes:
+        - "fixture-next-sixth"
+        - "fixture-next-leased"
+        - "fixture-next-dep-unclear"
+        - "fixture-next-file-claimed"
+        - "fixture-next-other-release"
+        - "omitted"
+      citations_include:
+        - path: plan/index.yaml
+          packet_id: fixture-next-first
+          status: ready
+          order: "903"
+          release_target: fixture-next-milestone
+        - path: plan/index.yaml
+          packet_id: fixture-next-unmarked
+          status: ready
+      citations_exclude:
+        - packet_id: fixture-next-sixth
+        - packet_id: fixture-next-milestone
+        - packet_id: fixture-next-leased
+        - packet_id: fixture-next-dep-unclear
+        - packet_id: fixture-next-file-claimed
+        - packet_id: fixture-next-other-release
+
+  - id: next-fixture-role-filter-is-exact
+    engine: plan.answer
+    query: "what v9.9 work can I do on linux?"
+    why: >
+      EXIT CRITERIA 1-3 of 606-xu52. The second exact natural alias, with an
+      explicit release and role. The macos-role packet must drop out, pulling
+      the p3 sixth packet into the fifth slot — proving the role filter and
+      the cap interact deterministically.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 5
+      answer_contains:
+        - "next claimable work for pickup_role 'linux' in desired_release 'v9.9' (top 5 of 5 eligible)"
+        - "1. 903\tfixture-next-first"
+        - "   next: Do the second thing.\n3. 900\tfixture-next-third"
+        - "5. 906\tfixture-next-sixth"
+      answer_excludes:
+        - "fixture-next-wrong-role"
+        - "omitted"
+      citations_include:
+        - path: plan/index.yaml
+          packet_id: fixture-next-sixth
+          status: ready
+          order: "906"
+      citations_exclude:
+        - packet_id: fixture-next-wrong-role
+        - packet_id: fixture-next-milestone
+
+  - id: next-fixture-no-work-is-a-typed-refusal
+    engine: plan.answer
+    query: "what v8.8 work can I do on linux?"
+    why: >
+      EXIT CRITERION 5 of 606-xu52. v8.8 exists in the release vocabulary but
+      its only packet is role-incompatible, so the honest result is the TYPED
+      no-work refusal — never an empty confident table, never a silently
+      widened search.
+    expect:
+      confidence: unsupported
+      answer_contains:
+        - "unsupported: no claimable work for pickup_role 'linux' in desired_release 'v8.8'"
+      answer_excludes:
+        - "fixture-next-other-release"

@@ -1,0 +1,11 @@
+# ORDER 606-h9vy fixture fragment — IMMUTABLE, never compacted.
+# The LWW status entry below is the WINNING source the graded citation must
+# point at: the base still says `status: ready`, and citing that base span for
+# the folded `in_progress` value is exactly the stale-citation bug this
+# fixture pins closed.
+status:
+  - packet_id: fixture-base-overridden
+    field: status
+    value: in_progress
+    ts: "2026-08-06T00:00:00Z"
+    host: fixture-host

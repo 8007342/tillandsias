@@ -108,7 +108,7 @@ while IFS= read -r file; do
       violations=$((violations + 1))
     fi
   done < <(grep -n 'plan/index\.yaml' "$file" || true)
-done < <(grep -rl 'plan/index\.yaml' scripts/ images/ crates/ 2>/dev/null || true)
+done < <(grep -rl 'plan/index\.yaml' scripts/ images/ crates/ skills/ methodology/ 2>/dev/null || true)
 
 if [[ "$violations" -gt 0 ]]; then
   echo "blocked: $violations unprotected direct reader(s) of plan/index.yaml — route them through 'tillandsias-plan query' (or document them as base-only-with-reason)"

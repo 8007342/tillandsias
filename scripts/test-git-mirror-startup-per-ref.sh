@@ -61,7 +61,7 @@ source_log="$ENTRY/sweep.log"
 relay_one() { # $1=mirror $2=ref
   local mirror="$1" ref="$2" newsha
   newsha="$(git -C "$mirror" rev-parse "$ref")"
-  RECORD="0000000000000000000000000000000000000000 ${newsha} ${ref}"
+  RECORD="${newsha} ${newsha} ${ref}"
   if printf '%s\n' "$RECORD" | (cd "$mirror" && "$RELAY_REF") 2>"$ENTRY/err"; then
     echo "[git-mirror] Startup retry-push OK: $ref" >>"$source_log"
   else

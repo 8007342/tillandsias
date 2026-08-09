@@ -46,6 +46,8 @@ available, and SHALL survive git service container restarts.
 - **WHEN** a mirror already exists for the project
 - **THEN** the git service SHALL preserve existing refs and objects
 - **AND** SHALL refresh the mirror's `origin` remote from the launcher-provided URL when one is available
+- **AND** SHALL re-apply the mandatory receive configuration and refresh the
+  Tillandsias-owned hooks on every service start
 
 ### Requirement: Git daemon serves mirrors on enclave network
 The git service container SHALL run `git daemon` with `--export-all --enable=receive-pack` on the enclave network. Forge containers SHALL clone from `git://git-service/<project>` where `git-service` resolves via the enclave network DNS.
@@ -61,6 +63,13 @@ The git service container SHALL run `git daemon` with `--export-all --enable=rec
 - **AND** the mirror has a configured upstream
 - **THEN** the push SHALL succeed only after the upstream atomically accepts the proposed refs
 - **AND** the commits SHALL then be persisted in the bare mirror volume
+
+The `git://` receive-pack listener is an interim anonymous enclave write path.
+Network placement SHALL NOT be described as client authentication: any enclave
+peer can still create or fast-forward refs and cause the privileged relay to
+carry them upstream. The receive hardening below contains ref-deletion and
+branch-rewind risk; orders 322/451 own the authenticated, authorized
+replacement.
 
 #### Scenario: Forge launcher installs one standard global Git config
 - **WHEN** any forge agent launcher starts a container
@@ -82,6 +91,75 @@ The git service container SHALL run `git daemon` with `--export-all --enable=rec
 - **WHEN** two forge containers clone the same project mirror
 - **THEN** each SHALL have an independent working tree
 - **AND** pushes from one SHALL be visible to the other after fetch
+
+### Requirement: Existing-volume receive hardening
+On every service start, including when the named mirror volume already exists,
+the git service SHALL set `receive.denyNonFastForwards=true`,
+`receive.denyDeletes=true`, and `receive.fsckObjects=true`. Because receive-pack
+runs `pre-receive` before it applies its branch receive configuration, the hook
+SHALL reject every ref deletion and every non-fast-forward branch update before
+invoking the privileged upstream relay. `receive.denyDeletes` is branch-scoped
+in practice, so it remains a final defense for heads rather than a substitute
+for the all-ref pre-relay decision.
+
+Before relay, the hook SHALL also validate every transaction record against the
+repository's actual object format and ref state: records contain exactly three
+fields; object IDs have the derived SHA-1/SHA-256 width and hexadecimal grammar;
+refnames are canonical full `refs/*` names accepted by `git check-ref-format`;
+each ref appears at most once; every nonzero new object exists; every proposed
+branch tip resolves to a commit; and each old object ID exactly equals the
+current ref (or a zero old ID names a ref that does not yet exist). Native
+receive-pack repeats validation after pre-receive. These checks contain the
+enumerated malformed/stale-input classes; they do not prove that no later
+native validation or ref-lock race can reject after relay. Packet 610-txvr owns
+eliminating that remaining transaction-boundary gap.
+
+This containment deliberately makes ref deletion unavailable through the
+anonymous daemon path. Any lane-exit or garbage-collection feature that needs
+to delete `agent/*` branches or other refs SHALL use a separately authenticated,
+policy-authorized mechanism and MUST NOT weaken this gate.
+
+@trace spec:git-mirror-service
+
+#### Scenario: Existing permissive mirror is restarted
+- **WHEN** a named volume contains a mirror configured by an older image with
+  permissive or missing receive settings
+- **THEN** the next service start SHALL set all three mandatory receive keys to
+  `true` without changing existing refs or objects
+- **AND** a second start SHALL produce the same configuration and ref state
+
+#### Scenario: Ref deletion is rejected before relay
+- **WHEN** a push proposes a zero new object ID for any ref, including a branch,
+  tag, custom namespace, or one member of a mixed transaction
+- **THEN** pre-receive SHALL reject the complete transaction before invoking
+  the relay helper
+- **AND** the mirror and upstream ref sets SHALL remain byte-identical
+
+#### Scenario: Branch rewind is rejected before relay
+- **WHEN** a push proposes an update to `refs/heads/*` whose old object is not
+  an ancestor of its new object
+- **THEN** pre-receive SHALL reject the complete transaction before invoking
+  the relay helper
+- **AND** the mirror and upstream ref sets SHALL remain byte-identical
+
+#### Scenario: Fabricated transaction state is rejected before relay
+- **WHEN** a transaction supplies a stale old object ID that differs from the
+  current ref even if that stale object is an ancestor of the proposed update
+- **OR** it supplies an invalid, non-`refs/*`, or duplicate refname, malformed
+  object ID, unavailable proposed object, extra field, or non-commit branch tip
+- **THEN** pre-receive SHALL reject the complete transaction before relay
+- **AND** the mirror and upstream ref sets SHALL remain byte-identical
+
+#### Scenario: SHA-256 deletion uses the repository's zero object ID
+- **WHEN** the bare repository uses SHA-256 object IDs
+- **AND** a transaction supplies its 64-hex zero new object ID
+- **THEN** pre-receive SHALL classify it as deletion and reject before relay
+- **AND** production hook/relay/startup code SHALL NOT assume a 40-hex zero ID
+
+#### Scenario: Ordinary fast-forward remains available
+- **WHEN** a push proposes a valid fast-forward branch update
+- **THEN** pre-receive SHALL invoke the relay exactly once
+- **AND** the acknowledged push SHALL converge the mirror and upstream refs
 
 ### Requirement: Pre-receive relay verifies acknowledgement durability
 The bare mirror SHALL preserve receive-pack's complete `oldsha newsha refname`
@@ -114,11 +192,20 @@ the update as durable local-only state.
   upstream ref except `refs/heads/feature-a`
 - **AND** the hook source SHALL contain a guard explaining that `--mirror` is forbidden
 
-#### Scenario: Bulk deletes are guarded
-- **WHEN** a forge push deletes more than ten refs in one receive transaction
-- **THEN** the relay helper SHALL reject those deletions unless
-  `TILLANDSIAS_ALLOW_BULK_DELETE=1`
-- **AND** the local ref transaction SHALL remain unchanged
+#### Scenario: Relay helper independently refuses deletion
+- **WHEN** the relay helper receives any deletion directly or as one member of
+  a mixed transaction
+- **THEN** it SHALL reject the complete transaction without invoking upstream
+- **AND** no environment override SHALL enable deletion through the service
+  credential
+
+#### Scenario: Relay helper cannot reinterpret transaction text as push argv
+- **WHEN** a direct caller appends whitespace plus a delete refspec, `--force`,
+  or any fourth field to a nominal update record
+- **THEN** the helper SHALL reject the record as malformed before fetch or push
+- **AND** the helper SHALL independently repeat ref/OID/current-state validation
+- **AND** SHALL construct each refspec as one quoted positional argument and run
+  `git push --atomic` with quoted `"$@"`, never an unquoted aggregate string
 
 #### Scenario: Push to local-only mirror
 - **WHEN** a forge container pushes to the mirror
@@ -409,7 +496,10 @@ disabled while loose refs are shared with a private `packed-refs` snapshot.
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation` — Verify git service is enclave-only and credentials never leak
 - `litmus:git-mirror-relay-verified-ack` — Verify missing credentials fail the client push, successful relay converges, and multi-ref rejection is atomic.
-- `litmus:git-mirror-safe-refspec-push` — Verify pre-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
+- `litmus:git-mirror-safe-refspec-push` — Verify pre-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and reject deletion.
+- `litmus:git-mirror-existing-volume-hardening` — Verify an existing permissive
+  mirror is hardened on two idempotent starts, ref deletion/branch rewind stops
+  before relay with byte-identical refs, and an ordinary fast-forward converges.
 - `litmus:git-mirror-ref-convergence` — Verify the reconcile fetch lands in remote-tracking refs only (one push converges mirror + upstream; startup retry forwards a stranded commit; empty-mirror seeding stays cloneable).
 - `litmus:git-mirror-vault-agent-auto-auth` — Verify AppRole material stays
   off argv/env, a relay consumes a refreshed Agent token after the original
@@ -423,6 +513,8 @@ Gating points:
 - Pre-receive relays only changed refs atomically and fails acknowledgement when the configured upstream fails
 - Post-receive performs bookkeeping only and cannot establish relay success
 - Startup retry uses the same Vault-backed atomic relay helper, never `--mirror` or `--all`
+- Every startup applies mandatory receive hardening; pre-receive rejects all ref
+  deletion and branch rewind before relay while ordinary fast-forwards converge
 - Reconcile fetch maps upstream into `refs/remotes/origin/*` only; empty mirrors seeded with an explicit heads/tags refspec (one push converges mirror + upstream)
 - Vault Agent auto-auth through the dedicated `git-mirror-agent` role is the
   only long-running mirror credential path (legacy keyring fallback removed in v0.3)

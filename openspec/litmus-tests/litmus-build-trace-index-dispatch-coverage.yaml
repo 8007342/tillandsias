@@ -45,11 +45,11 @@ preconditions:
 
 critical_path:
   - step: "build a stubbed build.sh sandbox that counts generate-traces.sh invocations"
-    command: "set -e; S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; rm -rf $S; mkdir -p $S/scripts $S/bin $S/target/debug; cp build.sh $S/build.sh; : > $S/scripts/with-tillandsias-builder.sh; : > $S/scripts/with-wsl2-builder.sh; printf 'require_podman() { return 0; }\\npodman_runtime_health_probe() { return 1; }\\n' > $S/scripts/common.sh; for s in setup-podman-registries.sh build-guest-binaries.sh generate-evidence-bundle.sh; do printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/$s; chmod +x $S/scripts/$s; done; printf '#!/bin/sh\\ncase \"$1\" in --check) exit 0 ;; esac\\necho traces >> $TRACE_LOG\\n' > $S/scripts/generate-traces.sh; printf '#!/bin/sh\\necho gate >> $TRACE_LOG\\n' > $S/scripts/local-ci.sh; printf '#!/bin/sh\\necho litmus >> $TRACE_LOG\\n' > $S/scripts/run-litmus-test.sh; printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/tillandsias-podman; chmod +x $S/scripts/generate-traces.sh $S/scripts/local-ci.sh $S/scripts/run-litmus-test.sh $S/scripts/tillandsias-podman; for t in cargo rustc rustfmt clippy-driver gcc pkg-config file; do printf '#!/bin/sh\\nexit 0\\n' > $S/bin/$t; chmod +x $S/bin/$t; done; printf '#!/bin/sh\\necho x86_64-unknown-linux-musl\\n' > $S/bin/rustup; chmod +x $S/bin/rustup; printf '#!/bin/sh\\nexit 0\\n' > $S/target/debug/tillandsias; chmod +x $S/target/debug/tillandsias; echo ok:sandbox-ready"
+    command: "set -e; S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; rm -rf $S; mkdir -p $S/scripts $S/bin $S/target/debug; cp build.sh $S/build.sh; : > $S/scripts/with-tillandsias-builder.sh; : > $S/scripts/with-wsl2-builder.sh; printf 'require_podman() { return 0; }\\npodman_runtime_health_probe() { return 1; }\\n' > $S/scripts/common.sh; for s in setup-podman-registries.sh build-guest-binaries.sh generate-evidence-bundle.sh; do printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/$s; chmod +x $S/scripts/$s; done; printf '#!/bin/sh\\ncase \"$1\" in --check) if [ \"${TRACE_CHECK_LOG:-0}\" = 1 ]; then echo trace-check >> \"$TRACE_LOG\"; fi; [ \"${TRACE_STALE:-0}\" = 1 ] && exit 1; exit 0 ;; esac\\necho traces >> \"$TRACE_LOG\"\\n' > $S/scripts/generate-traces.sh; printf '#!/bin/sh\\necho gate >> \"$TRACE_LOG\"\\n' > $S/scripts/local-ci.sh; printf '#!/bin/sh\\necho stamp >> \"$TRACE_LOG\"\\n' > $S/scripts/gate-stamp.sh; printf '#!/bin/sh\\necho litmus >> \"$TRACE_LOG\"\\n' > $S/scripts/run-litmus-test.sh; printf '#!/bin/sh\\nexit 0\\n' > $S/scripts/tillandsias-podman; chmod +x $S/scripts/generate-traces.sh $S/scripts/gate-stamp.sh $S/scripts/local-ci.sh $S/scripts/run-litmus-test.sh $S/scripts/tillandsias-podman; for t in cargo rustc rustfmt clippy-driver gcc pkg-config file; do printf '#!/bin/sh\\nexit 0\\n' > $S/bin/$t; chmod +x $S/bin/$t; done; printf '#!/bin/sh\\necho x86_64-unknown-linux-musl\\n' > $S/bin/rustup; chmod +x $S/bin/rustup; printf '#!/bin/sh\\nexit 0\\n' > $S/target/debug/tillandsias; chmod +x $S/target/debug/tillandsias; echo ok:sandbox-ready"
     success_pattern: "^ok:sandbox-ready$"
     timeout_ms: 20000
 
-  - step: "every build-producing dispatch regenerates exactly once; test-only and check-only never do; combined flags dedupe"
+  - step: "every build-producing dispatch regenerates exactly once; test-only and check-only never regenerate; combined flags dedupe"
     command: "S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; n() { : > $S/log; ( cd $S && env TRACE_LOG=$S/log PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S TILLANDSIAS_SKIP_TRACE_INDEX=${SKIP:-0} bash ./build.sh $@ ) >/dev/null 2>&1 || true; grep -c '^traces$' $S/log || true; }; r=$(n)-$(n --release)-$(n --install)-$(n --observatorium .)-$(n --init)-$(n --test)-$(n --check)-$(n --clean --release --install); if [ $r = 1-1-1-1-1-0-0-1 ]; then echo ok:dispatch-coverage; else echo observed:$r expected:1-1-1-1-1-0-0-1 order:debug,release,install,observatorium,init,test,check,combined; echo 'remedy: every build-producing build.sh dispatch must call _regenerate_trace_indexes (openspec/specs/clickable-trace-index/spec.md Build integration)'; echo fail:dispatch-coverage; exit 1; fi"
     success_pattern: "^ok:dispatch-coverage$"
     failure_pattern: "^fail:dispatch-coverage$"
@@ -61,10 +61,10 @@ critical_path:
     failure_pattern: "^fail:skip-honored$"
     timeout_ms: 30000
 
-  - step: "order 495: every gate-bearing invocation regenerates before its CI gate, never between a clean gate and the post-build forge"
-    command: "S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; o() { : > $S/log; ( cd $S && env TRACE_LOG=$S/log PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S bash ./build.sh $@ ) >/dev/null 2>&1 || true; tr '\\n' ',' < $S/log; }; bad=none; for m in ci-full-install ci-install release; do case $m in ci-full-install) r=$(o --ci-full --install) ;; ci-install) r=$(o --ci --install) ;; release) r=$(o --release) ;; esac; case $r in traces,gate,*) ;; *) bad=$bad+$m:$r ;; esac; done; if [ $bad = none ]; then rm -rf $S; echo ok:regeneration-before-gate; else echo observed:$bad expected-prefix:traces,gate; echo 'remedy: regenerate trace indexes ahead of every CI gate (order 495) so the post-build forge dirty-start guard has nothing to refuse'; echo fail:regeneration-before-gate; exit 1; fi"
-    success_pattern: "^ok:regeneration-before-gate$"
-    failure_pattern: "^fail:regeneration-before-gate$"
+  - step: "orders 495/584: regeneration precedes CI and a stamp requires a clean non-mutating trace check"
+    command: "S=${TMPDIR:-/tmp}/tillandsias-litmus-trace-dispatch; o() { : > $S/log; ( cd $S && env TRACE_LOG=$S/log PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S bash ./build.sh $@ ) >/dev/null 2>&1 || true; grep -E '^(traces|gate)$' $S/log | tr '\\n' ','; }; bad=none; for m in ci-full-install ci-install release; do case $m in ci-full-install) r=$(o --ci-full --install) ;; ci-install) r=$(o --ci --install) ;; release) r=$(o --release) ;; esac; case $r in traces,gate,*) ;; *) bad=$bad+$m:$r ;; esac; done; : > $S/log; ( cd $S && env TRACE_LOG=$S/log TRACE_CHECK_LOG=1 TRACE_STALE=0 PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S bash ./build.sh --check ) >/dev/null 2>&1; clean_rc=$?; clean_log=$(tr '\\n' ',' < $S/log); : > $S/log; ( cd $S && env TRACE_LOG=$S/log TRACE_CHECK_LOG=1 TRACE_STALE=1 PATH=$S/bin:$PATH TILLANDSIAS_NO_PROXY=1 HOME=$S bash ./build.sh --check ) >/dev/null 2>&1; stale_rc=$?; stale_log=$(tr '\\n' ',' < $S/log); if [ $bad = none ] && [ \"$clean_rc:$clean_log\" = '0:trace-check,stamp,' ] && [ \"$stale_rc:$stale_log\" = '1:trace-check,' ]; then rm -rf $S; echo ok:regeneration-and-stamp-authority; else echo ordering=$bad clean=\"$clean_rc:$clean_log\" stale=\"$stale_rc:$stale_log\" expected-clean='0:trace-check,stamp,' expected-stale='1:trace-check,'; echo 'remedy: regenerate ahead of CI and run non-mutating trace freshness validation before every gate stamp'; echo fail:regeneration-or-stamp-authority; exit 1; fi"
+    success_pattern: "^ok:regeneration-and-stamp-authority$"
+    failure_pattern: "^fail:regeneration-or-stamp-authority$"
     timeout_ms: 90000
 
   - step: "order 495: the post-build and runtime litmus phases run with regeneration suppressed"
@@ -82,8 +82,8 @@ critical_path:
 gating_points:
   - success: "ok:dispatch-coverage"
   - failure: "fail:dispatch-coverage"
-  - success: "ok:regeneration-before-gate"
-  - failure: "fail:regeneration-before-gate"
+  - success: "ok:regeneration-and-stamp-authority"
+  - failure: "fail:regeneration-or-stamp-authority"
 
 observability:
   traces:

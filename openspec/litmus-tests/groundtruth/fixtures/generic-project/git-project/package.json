@@ -1,0 +1,11 @@
+{
+  "name": "sample-git-project",
+  "version": "1.0.0",
+  "description": "Sample project for generic discovery testing",
+  "main": "index.js",
+  "scripts": {
+    "build": "make build",
+    "test": "make test"
+  },
+  "license": "MIT"
+}

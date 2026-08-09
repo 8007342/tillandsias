@@ -79,7 +79,34 @@ done
 current_version="$(cat "$VERSION_FILE" 2>/dev/null)" || exit 0
 main_version="$(git show origin/main:VERSION 2>/dev/null || git show main:VERSION 2>/dev/null)" || main_version=""
 
-if [[ "$version_touched" == true ]]; then
+# TWO LEGITIMATE VERSION CHANGES OFF main. Both were discovered by this guard
+# deadlocking the v0.4.260804.1 release on 2026-08-04, and both must be allowed
+# or the only way to release is `--no-verify` — which also disables the local
+# gate that replaced push CI.
+#
+#   1. SYNC-FORWARD. After a release, main carries the new VERSION and the
+#      integration branch does not. scripts/release-preflight.sh then refuses
+#      that branch for monotonicity ("VERSION is LESS than latest release"), so
+#      merging main back is REQUIRED, not optional. The resulting VERSION equals
+#      main's — it is a catch-up, not a divergent bump.
+#
+#   2. THE RELEASE BUMP BRANCH itself. main is PR-only, so the bump lands on a
+#      short-lived branch first. There VERSION deliberately differs from main,
+#      because proposing the new value is the branch's entire purpose.
+#
+# What stays refused is the case the guard was written for: an ordinary work
+# branch quietly carrying a VERSION different from main's.
+version_sync_forward=false
+if [[ -n "$main_version" && "$current_version" == "$main_version" ]]; then
+    version_sync_forward=true
+fi
+version_bump_branch=false
+case "$branch" in
+    release/version-bump-*) version_bump_branch=true ;;
+esac
+
+if [[ "$version_touched" == true && "$version_sync_forward" == false \
+      && "$version_bump_branch" == false ]]; then
     # Check if we're pushing to main
     if [[ "$branch" != "main" ]]; then
         echo "" >&2

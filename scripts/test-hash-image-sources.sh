@@ -23,6 +23,10 @@ git -C "$repo" add .
 git -C "$repo" commit -qm baseline
 
 before="$($HASHER forge "$repo/images/default" "$repo")"
+grep -Fq 'layer-policy:squash-new' "$HASHER" || {
+    echo "FAIL: squash-new policy is absent from the shell image cache key" >&2
+    exit 1
+}
 git clone -q "$repo" "$WORK/clone"
 clone_hash="$($HASHER forge "$WORK/clone/images/default" "$WORK/clone")"
 [[ "$before" == "$clone_hash" ]] || {

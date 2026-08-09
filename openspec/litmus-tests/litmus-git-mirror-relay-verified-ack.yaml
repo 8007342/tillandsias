@@ -28,7 +28,7 @@ critical_path:
     expected_behavior: "ok: non-forced reconcile shape"
 
   - step: "must-succeed relay is pre-receive, atomic, and explicit-ref only"
-    command: "grep -Fq 'tillandsias-relay-refs' images/git/pre-receive-hook.sh && grep -Fq 'git push --atomic \"$PUSH_URL\" $REFSPECS' images/git/relay-refs.sh && ! grep -Eq 'git push (--mirror|--all)' images/git/relay-refs.sh && echo 'ok: relay ack shape'"
+    command: "grep -Fq 'tillandsias-relay-refs' images/git/pre-receive-hook.sh && grep -Fq 'git push --atomic \"$PUSH_URL\" \"$@\"' images/git/relay-refs.sh && ! grep -Eq 'git push (--mirror|--all)' images/git/relay-refs.sh && echo 'ok: relay ack shape'"
     timeout_ms: 5000
     expected_behavior: "ok: relay ack shape"
 

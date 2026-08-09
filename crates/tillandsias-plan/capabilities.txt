@@ -37,6 +37,7 @@ burndown
 capabilities
 check
 compact
+dependencies-of
 fragments
 grade
 loop-status
@@ -46,6 +47,7 @@ loop-status-fragments
 methodology
 methodology-ask
 methodology-index
+next
 next-order
 query
 ready

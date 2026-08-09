@@ -259,9 +259,10 @@ specs:
   - litmus:environment-isolation
   - litmus:enclave-isolation
   - litmus:ephemeral-guarantee
+  - litmus:forge-harness-identity
   - litmus:podman-idiomatic-launch-routing
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-08-05'
 - spec_id: external-logs-layer
   status: active
   litmus_tests:
@@ -419,6 +420,7 @@ specs:
   - litmus:enclave-isolation
   - litmus:git-mirror-safe-refspec-push
   - litmus:git-mirror-ref-convergence
+  - litmus:git-mirror-existing-volume-hardening
   - litmus:git-mirror-yaml-gate-shape
   - litmus:git-mirror-relay-verified-ack
   - litmus:git-mirror-vault-agent-auto-auth

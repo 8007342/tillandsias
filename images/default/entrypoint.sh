@@ -16,5 +16,8 @@ case "${TILLANDSIAS_AGENT:-claude}" in
     opencode-web) exec /usr/local/bin/entrypoint-forge-opencode-web.sh "$@" ;;
     opencode) exec /usr/local/bin/entrypoint-forge-opencode.sh "$@" ;;
     claude)   exec /usr/local/bin/entrypoint-forge-claude.sh "$@" ;;
+    codex)    exec /usr/local/bin/entrypoint-forge-codex.sh "$@" ;;
+    antigravity) exec /usr/local/bin/entrypoint-forge-antigravity.sh "$@" ;;
+    terminal|maintenance) exec /usr/local/bin/entrypoint-terminal.sh "$@" ;;
     *)        exec /usr/local/bin/entrypoint-terminal.sh "$@" ;;
 esac

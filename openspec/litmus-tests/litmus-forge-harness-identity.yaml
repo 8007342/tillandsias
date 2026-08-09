@@ -1,0 +1,61 @@
+# @trace spec:environment-runtime
+# @trace order:570
+name: litmus:forge-harness-identity
+spec: environment-runtime
+phase: pre-build
+size: quick
+severity: high
+description: >
+  Pin the exact TILLANDSIAS_AGENT identity that the real Rust launch builders
+  place inside every forge lane, keep the legacy tray builder aligned, and
+  prevent deprecated entrypoint/profile compatibility defaults from silently
+  disagreeing. Forge-local expert routing consumes this signal.
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains crates/tillandsias-headless/src/tray/mod.rs
+  - workspace contains images/default/entrypoint.sh
+  - workspace contains images/default/config-overlay/mcp/agent-profile.sh
+
+critical_path:
+  - step: "all live launch builders inject exactly the selected harness identity"
+    command: "cargo test -q -p tillandsias-headless forge_launch_args_export_exact_harness_identity && echo 'ok: live harness identities reach container argv'"
+    timeout_ms: 120000
+    expected_behavior: "ok: live harness identities reach container argv"
+
+  - step: "legacy tray launch specs stay aligned for Claude and OpenCode Web"
+    command: "cargo test -q -p tillandsias-headless --features tray launch_command_targets_the_forge_image_and_project_mount && cargo test -q -p tillandsias-headless --features tray launch_command_opencode_web_is_detached_and_persistent && echo 'ok: legacy launch identities aligned'"
+    timeout_ms: 120000
+    expected_behavior: "ok: legacy launch identities aligned"
+
+  - step: "deprecated dispatcher recognises every active harness identity"
+    command: "E=images/default/entrypoint.sh; for pair in 'opencode entrypoint-forge-opencode.sh' 'opencode-web entrypoint-forge-opencode-web.sh' 'claude entrypoint-forge-claude.sh' 'codex entrypoint-forge-codex.sh' 'antigravity entrypoint-forge-antigravity.sh' 'terminal entrypoint-terminal.sh'; do value=${pair%% *}; target=${pair#* }; grep -E \"^[[:space:]]*${value}(\\|maintenance)?\\).*${target}\" \"$E\" >/dev/null || { echo \"FAIL: dispatcher missing $value -> $target\"; exit 1; }; done; echo 'ok: deprecated dispatcher identities aligned'"
+    timeout_ms: 5000
+    expected_behavior: "ok: deprecated dispatcher identities aligned"
+
+  - step: "agent profile consumes explicit Codex identity and shares the Claude compatibility default"
+    command: "P=images/default/config-overlay/mcp/agent-profile.sh; TILLANDSIAS_AGENT=codex bash -c 'source \"$1\"; test \"$AGENT_PROFILE\" = codex' _ \"$P\" && env -u TILLANDSIAS_AGENT bash -c 'source \"$1\"; test \"$AGENT_PROFILE\" = claude' _ \"$P\" && grep -Fq 'TILLANDSIAS_AGENT:-claude' images/default/entrypoint.sh && echo 'ok: profile identity and fallback aligned'"
+    timeout_ms: 5000
+    expected_behavior: "ok: profile identity and fallback aligned"
+
+  - step: "active environment contract names the closed launch identity set"
+    command: "S=openspec/specs/environment-runtime/spec.md; grep -Fq 'Forge launchers export the exact active harness identity' \"$S\" && for value in opencode opencode-web claude codex antigravity terminal; do grep -Fq \"$value\" \"$S\" || exit 1; done; echo 'ok: launch identity contract is durable'"
+    timeout_ms: 5000
+    expected_behavior: "ok: launch identity contract is durable"
+
+observability:
+  traces:
+    - "@trace spec:environment-runtime"
+    - "@trace order:570"
+  expected_log: "Every forge launcher places one exact active-harness identity inside the container"
+  log_fields:
+    spec: "environment-runtime"
+    test: "forge-harness-identity"
+    env: "TILLANDSIAS_AGENT"
+
+rollback:
+  on_failure: >
+    Restore the explicit identity injection in both Rust launch builders and
+    the legacy tray builder. Do not replace it with entrypoint inference: the
+    experts need the selected harness before any helper fallback runs.
+  command: "rg -n 'TILLANDSIAS_AGENT|agent_identity' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/tray/mod.rs images/default/entrypoint.sh images/default/config-overlay/mcp/agent-profile.sh"

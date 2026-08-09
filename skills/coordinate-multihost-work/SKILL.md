@@ -16,7 +16,7 @@ This skill is also the active runtime orchestrator. If a sibling branch has elig
 Before a successful exit, push every coordination update to `origin/linux-next`.
 The local worktree must be clean and not ahead of upstream. If a push cannot be
 completed after three fetch/rebase retries, record the failed push as a blocker
-in `plan/loop_status.md` and stop.
+via `tillandsias-plan loop-status-append` and stop.
 
 ---
 
@@ -32,8 +32,8 @@ in `plan/loop_status.md` and stop.
    - `methodology/distributed-work.yaml`
    - `methodology/convergence.yaml`
    - `plan.yaml`
-   - `plan/index.yaml`
-    - `plan/loop_status.md`
+   - `plan/index.yaml` (or via `tillandsias-plan query` / `project-plan` MCP tools)
+    - `plan/loop_status.md` (or via `tillandsias-plan loop-status` folded view)
     -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
         thematic direction) and reduce cross-host coordination priorities against
         it; cite the direction in coordination ledger entries (order 381).
@@ -57,7 +57,7 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
 *   **Detection**: A sibling is implementing code or plans that deviate from active specs, bypass reverse-proxy constraints, or violate the nonblocking/yield-returning policy.
 *   **Mediation**:
     -   Freeze the sibling's current lease.
-    -   Document the spec gap or divergence in `plan/loop_status.md` and the host's queue file.
+    -   Document the spec gap or divergence via `tillandsias-plan loop-status-append` and the host's queue file.
     -   Force-assign a corrective "Spec Alignment & Litmus Verification" packet as the next primary task.
 
 ### 3. Thrashing (Undo-Loops / Write-Write Collisions)

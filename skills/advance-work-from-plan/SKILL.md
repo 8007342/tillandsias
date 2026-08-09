@@ -14,8 +14,8 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 1.  **Git Check**: Run:
     ```bash
     git fetch origin
-    git checkout linux-next
-    git pull --ff-only origin linux-next
+    git checkout <active-branch>  # linux-next, windows-next, or osx-next per host table
+    git pull --ff-only origin <active-branch>
     scripts/check-committable-branch.sh
     ```
     The last line is the executable Committable Branch Guard (order 476,
@@ -87,19 +87,10 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 ## 3 — Claim the Lease
 
 1.  **Mint Lease ID**: Mint a content-stable lease ID.
-2.  **Emit Claim Event**: Update the task's YAML block to append a `claim` event under `events:`:
-    ```yaml
-    - type: claim
-      ts: "<ISO-8601-UTC>"
-      agent_id: "<your-agent-id>"
-      host: "<linux|windows|macos>"
-      lease_id: "<your-lease-id>"
-      expires_at: "<acquired-at + 4 hours>"
-    ```
-    Change the task's top-level status to `claimed`.
-3.  **Commit & Push**: Commit ONLY the plan file edits, and push them to your active branch:
+2.  **Emit Claim Event**: Append a `claim` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> claim "<summary>" --ts "<ISO-8601-UTC>" --agent "<your-agent-id>" --host "<host>"` or by creating an append-only fragment in `plan/index.d/<utc>-<suffix>-<host>.yaml`.
+3.  **Commit & Push**: Commit ONLY the plan fragment edits, and push them to your active platform branch:
     ```bash
-    git add plan/
+    git add plan/index.d/
     git commit -m "chore(plan): claim lease for <task-id>"
     git push origin <active-branch>
     ```
@@ -155,7 +146,7 @@ Hard rules:
 
 ## 6 — Commit, Push & Checkpoint
 
-1.  **Durable Checkpointing**: At meaningful milestones (every 30–45 minutes), write an `agent_status_packet` as a `progress` or `checkpoint` event to the plan file, and commit/push it to `linux-next`.
+1.  **Durable Checkpointing**: At meaningful milestones (every 30–45 minutes), write an `agent_status_packet` as a `progress` or `checkpoint` event to a `plan/index.d/` fragment via `tillandsias-plan append-event <packet-id> progress ...` or fragment file, and commit/push it to your host's `<active-branch>`.
     -   *Schema requirement*: Include current plan, touched files, partial evidence, and next checkpoint.
 2.  **targeted git add**: ONLY stage the intended files:
     ```bash
@@ -247,11 +238,8 @@ status `ready`. The packet closes only when every agent named in
     Report `experts_substitution` as `unknown` — it is not derivable in-repo and
     must never be estimated.
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
-2.  **Emit Completed Event**: Update the task's YAML block:
-    -   Append a `completed` event to `events:` listing all commit SHAs and validation log paths.
-    -   Flip the task status to `done` in the item header.
-    -   Update any local dependency mirror tables in the same pass.
-3.  **Commit & Push Ledger**: Commit and push the final plan edits to `origin/<active-branch>`.
+2.  **Emit Completed Event**: Append a `completed` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> completed "<summary>" ...` or by writing an append-only fragment file in `plan/index.d/` setting status `done` and listing commit SHAs and validation log paths.
+3.  **Commit & Push Ledger**: Commit and push the final plan fragment edits to `origin/<active-branch>`.
 
 ### Mandatory Exit Discipline
 

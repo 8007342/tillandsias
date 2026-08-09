@@ -1782,7 +1782,10 @@ pub(crate) fn ensure_image_exists(
 
     if image_name == "chromium-framework" {
         let core_tag = versioned_image_tag("chromium-core", version);
-        if !rt.block_on(client.image_exists(&core_tag)) {
+        if !rt.block_on(async {
+            client.image_exists(&core_tag).await
+                && client.image_uses_managed_layer_policy(&core_tag).await
+        }) {
             ensure_image_exists(root, "chromium-core", &core_tag, debug).map_err(|e| {
                 format!(
                     "Required base image '{}' is absent and failed to build on demand: {}.\n\
@@ -1793,7 +1796,10 @@ pub(crate) fn ensure_image_exists(
         }
     } else if image_name == "forge" {
         let base_tag = versioned_image_tag("forge-base", version);
-        if !rt.block_on(client.image_exists(&base_tag)) {
+        if !rt.block_on(async {
+            client.image_exists(&base_tag).await
+                && client.image_uses_managed_layer_policy(&base_tag).await
+        }) {
             ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
                 format!(
                     "Required base image '{}' is absent and failed to build on demand: {}.\n\
@@ -1824,7 +1830,9 @@ pub(crate) fn ensure_image_exists(
     build_args.push("8.8.8.8".to_string());
 
     rt.block_on(async move {
-        if client.image_exists(image_tag).await {
+        if client.image_exists(image_tag).await
+            && client.image_uses_managed_layer_policy(image_tag).await
+        {
             return Ok(());
         }
 
@@ -3055,8 +3063,44 @@ fn nvidia_cdi_available() -> bool {
 ///
 /// Returns `Ok(())` once ready, or `Err` after a bounded wait with a truthful
 /// reason (container not running, ollama not yet up, or API error).
+/// Pure form of the local-inference kill-switch parse: set-and-not-"0" wins.
+/// Split from the env read so the truth table is unit-testable without
+/// process-global env mutation.
+fn inference_disable_flag(value: Option<&str>) -> bool {
+    value.is_some_and(|v| {
+        let v = v.trim();
+        !v.is_empty() && v != "0"
+    })
+}
+
+/// Operator kill switch for the local-inference container on low-end hosts
+/// (filed from the 2026-08-08 Intel N100 field host: the ~2.1GB ollama
+/// self-install + resident `ollama serve` are unaffordable there). When
+/// `TILLANDSIAS_NO_LOCAL_INFERENCE` is set (any value except "0"), lane
+/// launches skip creating `tillandsias-inference` and the readiness wait
+/// short-circuits. Safe by construction: local ollama is a future
+/// expert-system feature nothing consumes yet, and every consumer (tellme
+/// howto, forge startup context, opencode entrypoints) already degrades
+/// cleanly when the endpoint is absent.
+fn local_inference_disabled() -> bool {
+    inference_disable_flag(
+        std::env::var("TILLANDSIAS_NO_LOCAL_INFERENCE")
+            .ok()
+            .as_deref(),
+    )
+}
+
 async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<(), String> {
     use std::time::Duration;
+    if local_inference_disabled() {
+        if debug {
+            eprintln!(
+                "[tillandsias] [forge-launch] local inference disabled \
+                 (TILLANDSIAS_NO_LOCAL_INFERENCE); skipping readiness wait"
+            );
+        }
+        return Ok(());
+    }
     const MAX_ATTEMPTS: u32 = 60; // 60 * 1s = 60s budget for a cold ollama boot
     let mut last = String::from("no probe attempted");
     for attempt in 1..=MAX_ATTEMPTS {
@@ -4909,6 +4953,18 @@ enum ForgeMode {
     Web,
 }
 
+impl ForgeMode {
+    /// Stable in-container harness identity consumed by forge-local expert
+    /// routing. This is deliberately separate from entrypoint selection so a
+    /// launcher cannot silently fall back to a different harness identity.
+    fn agent_identity(self) -> &'static str {
+        match self {
+            Self::Cli => "opencode",
+            Self::Web => "opencode-web",
+        }
+    }
+}
+
 /// Order 342: guest-owned checkout isolation for host-shared (virtiofs)
 /// project trees. When the launcher exports
 /// `TILLANDSIAS_FORGE_SRC_ISOLATION=clone`, the operator's checkout is
@@ -5009,6 +5065,8 @@ fn build_opencode_forge_args(
         format!("PROJECT={project_name}"),
         "--env".into(),
         format!("TILLANDSIAS_PROJECT={project_name}"),
+        "--env".into(),
+        format!("TILLANDSIAS_AGENT={}", mode.agent_identity()),
         "--env".into(),
         "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
         "--tmpfs".into(),
@@ -6289,6 +6347,10 @@ fn podman_build_argv(
         "build".to_string(),
         "--format".to_string(),
         "docker".to_string(),
+        // Collapse this Containerfile's instruction layers while preserving
+        // inherited forge-base/chromium-core layers for cross-image sharing.
+        // `--squash-all` would duplicate those multi-gigabyte bases.
+        "--squash".to_string(),
         // Proxy-exemption class (orders 116/118/119, 4th instance 2026-07-11):
         // containers.conf bakes http(s)_proxy=proxy:3128 into EVERY container,
         // but build containers are not on the enclave network, so `proxy`
@@ -6806,15 +6868,22 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .await
             .map_err(|e| e.to_string())?;
 
-        client
-            .run_container_observed(
-                "status-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(&certs_dir, &inference_image, true),
-                debug,
-            )
-            .await
-            .map_err(|e| e.to_string())?;
+        if local_inference_disabled() {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 status-check runs without tillandsias-inference"
+            );
+        } else {
+            client
+                .run_container_observed(
+                    "status-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(&certs_dir, &inference_image, true),
+                    debug,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+        }
 
         let status_args =
             build_status_check_forge_args(root.as_path(), project_name, &certs_dir, version);
@@ -9285,19 +9354,26 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             )
             .await
             .map_err(|e| format!("[OpenCode] failed to start git: {e}"))?;
-        client
-            .run_container_observed(
-                "opencode-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
-                    &certs_dir,
-                    &versioned_image_tag("inference", version),
-                    false,
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
+        if local_inference_disabled() {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 OpenCode lane launches without tillandsias-inference"
+            );
+        } else {
+            client
+                .run_container_observed(
+                    "opencode-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(
+                        &certs_dir,
+                        &versioned_image_tag("inference", version),
+                        false,
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
+        }
 
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
         // terminal (run_container_attached_observed below). Tailing the SUPPORT
@@ -9813,16 +9889,12 @@ fn build_project_browser_spec(
     display: &BrowserDisplayContext,
     container_name: &str,
 ) -> Result<ContainerSpec, String> {
-    // NOTE: rootfs is intentionally writable (no `.read_only()`). Chromium's
-    // crashpad handler aborts on a read-only rootfs because it cannot create
-    // its database directory, exiting 133 immediately on launch. The remaining
-    // hardening (--cap-drop=ALL, no-new-privileges, --userns=keep-id, tmpfs
-    // mounts for /tmp + chromium dirs + /dev/shm) keeps the blast radius
-    // tight.
+    // @trace spec:browser-isolation-framework, spec:browser-isolation-tray-integration
+    // Hardened browser boundary: read-only rootfs, CAP_DROP=ALL, no-new-privileges,
+    // userns=keep-id, and HOME/config/cache redirected to bounded tmpfs mounts.
     let mut spec = ContainerSpec::new(format!("tillandsias-chromium-framework:v{version}"))
         .pull_never()
-        .cap_add("SYS_CHROOT")
-        .network("host")
+        .read_only()
         .name(container_name)
         .detached()
         .volume(
@@ -9835,6 +9907,7 @@ fn build_project_browser_spec(
             "/etc/tillandsias/ca.crt",
             true,
         )
+        .env("HOME", "/tmp")
         .env("TILLANDSIAS_CA_BUNDLE", "/etc/tillandsias/ca.crt")
         .env("SSL_CERT_FILE", "/etc/tillandsias/ca.crt")
         .env("XDG_CONFIG_HOME", "/tmp/chromium-config")
@@ -10372,25 +10445,32 @@ pub(crate) fn run_opencode_web_mode(
             "started",
             Some(&versioned_image_tag("git", version)),
         )?;
-        client
-            .run_container_observed(
-                "opencode-web-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
-                    &certs_dir,
-                    &versioned_image_tag("inference", version),
-                    false,
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
-        emit_opencode_web_event(
-            project_name,
-            "inference",
-            "started",
-            Some(&versioned_image_tag("inference", version)),
-        )?;
+        if local_inference_disabled() {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 OpenCode Web lane launches without tillandsias-inference"
+            );
+        } else {
+            client
+                .run_container_observed(
+                    "opencode-web-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(
+                        &certs_dir,
+                        &versioned_image_tag("inference", version),
+                        false,
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
+            emit_opencode_web_event(
+                project_name,
+                "inference",
+                "started",
+                Some(&versioned_image_tag("inference", version)),
+            )?;
+        }
 
         // Use the canonical absolute path so the bind-mount source is
         // unambiguous even when the user passed "." or another relative
@@ -10540,6 +10620,19 @@ impl ForgeAgentMode {
             ForgeAgentMode::OpenCode => "opencode",
             ForgeAgentMode::Antigravity => "antigravity",
             ForgeAgentMode::Maintenance => "maintenance",
+        }
+    }
+
+    /// Stable in-container harness identity. Keep this distinct from `slug`:
+    /// the maintenance lane's historical container name is `maintenance`,
+    /// while the runtime environment contract calls that lane `terminal`.
+    fn agent_identity(self) -> &'static str {
+        match self {
+            ForgeAgentMode::Claude => "claude",
+            ForgeAgentMode::Codex => "codex",
+            ForgeAgentMode::OpenCode => "opencode",
+            ForgeAgentMode::Antigravity => "antigravity",
+            ForgeAgentMode::Maintenance => "terminal",
         }
     }
 
@@ -10998,7 +11091,14 @@ async fn ensure_shared_git_and_inference_for_launch(
     // Order 443: inference is nearly stateless but --replacing it on every
     // launch drops loaded models and interrupts a sibling's inference.
     // Recreate-if-not-running (ephemerality/idempotency), not always.
-    if crate::vault_bootstrap::container_running("tillandsias-inference") {
+    if local_inference_disabled() {
+        if debug {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 not starting tillandsias-inference"
+            );
+        }
+    } else if crate::vault_bootstrap::container_running("tillandsias-inference") {
         if debug {
             eprintln!("[tillandsias] inference already running; reusing (order 443)");
         }
@@ -11127,6 +11227,10 @@ fn build_forge_agent_run_args_with_vault(
         .env("USER", "forge")
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
+        // Order 570: forge-local expert selection and harness validation must
+        // observe the lane that was actually launched, never an entrypoint
+        // fallback. Every launch path injects this exact identity.
+        .env("TILLANDSIAS_AGENT", mode.agent_identity())
         // Order 392: agents (and the startup context) learn the host's
         // EFFECTIVE inference tier (hardware truth AND podman deliverability)
         // without probing hardware they cannot see.
@@ -13129,6 +13233,20 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
+
+    #[test]
+    fn inference_disable_flag_truth_table() {
+        // Unset / explicit zero / whitespace-only leave inference enabled.
+        assert!(!inference_disable_flag(None));
+        assert!(!inference_disable_flag(Some("0")));
+        assert!(!inference_disable_flag(Some(" 0 ")));
+        assert!(!inference_disable_flag(Some("")));
+        assert!(!inference_disable_flag(Some("   ")));
+        // Any other set value disables it.
+        assert!(inference_disable_flag(Some("1")));
+        assert!(inference_disable_flag(Some("true")));
+        assert!(inference_disable_flag(Some(" yes ")));
+    }
 
     fn fake_podman_output(status: i32, stdout: &str) -> CommandOutput {
         CommandOutput {
@@ -15780,6 +15898,44 @@ mod tests {
     /// process, and vanish the moment the guard drops (flock-on-death).
     #[test]
     fn shared_stack_launch_marker_lifecycle_and_own_exclusion() {
+        const CHILD_ENV: &str = "TILLANDSIAS_LAUNCH_MARKER_LIFECYCLE_CHILD";
+        const TEST_NAME: &str = "tests::shared_stack_launch_marker_lifecycle_and_own_exclusion";
+
+        // The full suite concurrently spawns commands. A fork can briefly
+        // inherit another test thread's flock fd before O_CLOEXEC takes effect
+        // at exec, making an immediate post-drop scan conservatively read
+        // "held". Re-exec this one test into its own process so no unrelated
+        // suite thread can fork while the marker is live. This keeps the
+        // immediate-release assertion meaningful instead of hiding a real
+        // leaked guard behind a timing retry (order 584-e8pe).
+        if std::env::var(CHILD_ENV).as_deref() != Ok("isolated-child") {
+            let lock_runtime = tempfile::tempdir().expect("isolated lock runtime");
+            let output = std::process::Command::new(
+                std::env::current_exe().expect("resolve current test executable"),
+            )
+            .env(CHILD_ENV, "isolated-child")
+            .env("XDG_RUNTIME_DIR", lock_runtime.path())
+            .args(["--exact", TEST_NAME, "--nocapture", "--test-threads=1"])
+            .output()
+            .expect("re-exec isolated launch-marker lifecycle test");
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let cleanup = lock_runtime.close();
+            assert!(
+                output.status.success(),
+                "isolated launch-marker lifecycle test failed (status {}):\nstdout:\n{}\nstderr:\n{}",
+                output.status,
+                stdout,
+                stderr
+            );
+            assert!(
+                stdout.contains("1 passed; 0 failed"),
+                "isolated child matched no test (libtest exits zero for that); expected one execution:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+            );
+            cleanup.expect("isolated launch-marker fixture cleanup");
+            return;
+        }
+
         let project = format!("marker-test-{}", std::process::id());
         let (marker, guard) =
             acquire_launch_in_flight_marker(&project, false).expect("marker acquires");
@@ -17531,6 +17687,59 @@ esac
         assert!(body.contains("canonical.display().to_string()"));
     }
 
+    /// Order 570: the variable consumed by forge-local expert routing must
+    /// identify the harness selected by the launcher. Cover both launch
+    /// builders and every direct agent lane; checking the built argv pins the
+    /// exact environment that Podman places inside the container.
+    #[test]
+    fn forge_launch_args_export_exact_harness_identity() {
+        let project = PathBuf::from("/tmp/project");
+        let certs = PathBuf::from("/tmp/ca");
+
+        for (mode, expected) in [
+            (ForgeAgentMode::Claude, "claude"),
+            (ForgeAgentMode::Codex, "codex"),
+            (ForgeAgentMode::OpenCode, "opencode"),
+            (ForgeAgentMode::Antigravity, "antigravity"),
+            (ForgeAgentMode::Maintenance, "terminal"),
+        ] {
+            let args = build_forge_agent_run_args(&project, "alpha", &certs, "1.2.3", mode, false);
+            let identity = format!("TILLANDSIAS_AGENT={expected}");
+            assert!(
+                has_arg(&args, &identity),
+                "{mode:?} launch must carry {identity}; args={args:?}"
+            );
+            assert_eq!(
+                args.iter()
+                    .filter(|arg| arg.starts_with("TILLANDSIAS_AGENT="))
+                    .count(),
+                1,
+                "{mode:?} launch must inject exactly one harness identity"
+            );
+        }
+
+        for (mode, expected) in [
+            (ForgeMode::Cli, "opencode"),
+            (ForgeMode::Web, "opencode-web"),
+        ] {
+            let args = build_opencode_forge_args(
+                &project, "alpha", None, &certs, "1.2.3", mode, None, false, false,
+            );
+            let identity = format!("TILLANDSIAS_AGENT={expected}");
+            assert!(
+                has_arg(&args, &identity),
+                "{mode:?} launch must carry {identity}; args={args:?}"
+            );
+            assert_eq!(
+                args.iter()
+                    .filter(|arg| arg.starts_with("TILLANDSIAS_AGENT="))
+                    .count(),
+                1,
+                "{mode:?} launch must inject exactly one harness identity"
+            );
+        }
+    }
+
     #[test]
     fn forge_agent_run_args_export_debug_when_requested() {
         let args = build_forge_agent_run_args(
@@ -18169,17 +18378,19 @@ esac
         let args = spec.build_run_args();
 
         assert!(has_arg(&args, "--pull=never"));
-        // Intentionally NOT --read-only: Chromium crashpad aborts on
-        // a read-only rootfs because it cannot create its database dir,
-        // exiting 133 immediately. See build_opencode_web_browser_spec.
-        assert!(!has_arg(&args, "--read-only"));
-        assert!(has_arg(&args, "--cap-add"));
-        assert!(has_arg(&args, "SYS_CHROOT"));
-        assert!(has_arg(&args, "--network"));
-        assert!(has_arg(&args, "host"));
+        assert!(has_arg(&args, "--read-only"));
+        assert!(has_arg(&args, "--cap-drop=ALL"));
+        assert!(has_arg(&args, "--security-opt=no-new-privileges"));
+        assert!(has_arg(&args, "--userns=keep-id"));
+        assert!(!has_arg(&args, "--cap-add"));
+        assert!(!has_arg(&args, "SYS_CHROOT"));
+        assert!(!has_arg(&args, "host"));
         assert!(has_arg(&args, "-d"));
         assert!(has_arg(&args, "--name"));
         assert!(has_arg(&args, "tillandsias-browser-visual-chess"));
+        assert!(has_arg(&args, "HOME=/tmp"));
+        assert!(has_arg(&args, "XDG_CONFIG_HOME=/tmp/chromium-config"));
+        assert!(has_arg(&args, "XDG_CACHE_HOME=/tmp/chromium-cache"));
         assert!(args.iter().any(|arg| {
             arg == "type=bind,source=/tmp/tillandsias/ca/intermediate.crt,target=/etc/tillandsias/ca.crt,relabel=shared,readonly=true"
         }));
@@ -18469,6 +18680,17 @@ esac
             .find(".build_image(")
             .expect("image build call must remain present");
         assert!(announce < build, "announcement must precede buffered build");
+    }
+
+    #[test]
+    fn on_demand_image_build_rejects_an_existing_tag_without_the_layer_policy() {
+        let source = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "fn ensure_image_exists(",
+        );
+        assert!(source.contains("image_uses_managed_layer_policy(image_tag)"));
+        assert!(source.contains("image_uses_managed_layer_policy(&core_tag)"));
+        assert!(source.contains("image_uses_managed_layer_policy(&base_tag)"));
     }
 
     #[test]
@@ -19201,6 +19423,15 @@ esac
             argv.contains(&"--http-proxy=false".to_string()),
             "runtime image builds must exempt the containers.conf enclave proxy \
              env (proxy-exemption class; build containers cannot resolve `proxy`): {argv:?}"
+        );
+        assert_eq!(
+            argv.iter().filter(|arg| *arg == "--squash").count(),
+            1,
+            "compiled init must squash each Containerfile's new layers"
+        );
+        assert!(
+            !argv.iter().any(|arg| arg == "--squash-all"),
+            "compiled init must preserve inherited base-image sharing"
         );
     }
 

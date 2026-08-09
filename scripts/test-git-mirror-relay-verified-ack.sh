@@ -94,8 +94,8 @@ for ref in accepted rejected; do
     git -C "$MIRROR" rev-parse --verify --quiet "refs/heads/$ref" >/dev/null 2>&1 \
         && fail "rejected local transaction partially created $ref"
 done
-grep -Fq 'git push --atomic "$PUSH_URL" $REFSPECS' "$ROOT/images/git/relay-refs.sh" \
-    || fail "relay source does not invoke git push --atomic with explicit refspecs"
+grep -Fq 'git push --atomic "$PUSH_URL" "$@"' "$ROOT/images/git/relay-refs.sh" \
+    || fail "relay source does not invoke git push --atomic with safely quoted explicit refspec argv"
 ! grep -Eq 'git push (--mirror|--all)' "$ROOT/images/git/relay-refs.sh" \
     || fail "relay invoked an unsafe broad push"
 echo "case 3 ok: rejected multi-ref relay is atomic on both repositories"

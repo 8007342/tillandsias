@@ -11,9 +11,10 @@ name: litmus:opencode-prompt-e2e-shape
 spec: meta-orchestration
 phase: post-build
 description: >
-  Launch the forge with `./repeat --prompt "Use the /meta-orchestration
-  skill"`, let the agent run one cycle, and verify it committed and pushed
-  findings. Failures indicate a break in the unattended commit+push path.
+  Launch the freshly installed Tillandsias forge lane with
+  `tillandsias . --opencode --prompt "Use the /meta-orchestration skill"`,
+  let the agent run one cycle, and verify it committed and pushed findings.
+  Failures indicate a break in the unattended commit+push path.
 severity: high
 size: e2e
 

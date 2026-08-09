@@ -1,0 +1,120 @@
+# ORDER 606-xu52 — COMMITTED FIXTURE CORPUS for deterministic plan_next
+# grading.
+#
+# @trace spec:forge-environment-discoverability
+# @trace order:606, order:606-xu52
+#
+# A tiny IMMUTABLE ledger whose packets exercise every exclusion class and pin
+# the ranking tuple (priority, release-targeted first, order prefix, order
+# token, packet_id). The live ledger churns with every claim, so ordering can
+# only be pinned here. Orders 900+ are fixture-reserved; `v9.9`/`v8.8` are
+# deliberately unshippable buckets. The sibling loop_status.md declares
+# `## ACTIVE RELEASE: v9.9` so the release-defaulting path is graded too.
+#
+# Expected no-role ranking (top 5 of 6 eligible):
+#   1. 903 fixture-next-first      p0 + release-targeted (beats lower orders)
+#   2. 901 fixture-next-second     p0, order 901
+#   3. 904 fixture-next-wrong-role p0, order 904 (role filter drops it)
+#   4. 900 fixture-next-third      p1
+#   5. 905 fixture-next-unmarked   p2, unmarked -> defaults to active release
+#   --   906 fixture-next-sixth    p3 — capped out at five
+# Excluded entirely: the milestone/criteria holder, the leased packet, the
+# unmet-dependency packet, the file-claimed packet, and the v8.8 packet.
+plan_index:
+  steps:
+    - packet_id: fixture-next-milestone
+      order: 899
+      status: ready
+      desired_release: v9.9
+      kind: milestone
+      pickup_role: linux
+      title: "Milestone criteria holder — never offered as a claim"
+    - packet_id: fixture-next-third
+      order: 900
+      status: ready
+      desired_release: v9.9
+      priority: p1
+      pickup_role: linux
+      title: "Third by priority p1"
+      next_action: "Do the third thing."
+    - packet_id: fixture-next-second
+      order: 901
+      status: ready
+      desired_release: v9.9
+      priority: p0
+      pickup_role: linux
+      title: "Second: p0 without a release target"
+      next_action: "Do the second thing."
+    - packet_id: fixture-next-dep-unclear
+      order: 902
+      status: ready
+      desired_release: v9.9
+      priority: p0
+      pickup_role: linux
+      depends_on: [fixture-next-unfinished]
+      title: "Excluded: its dependency is not terminal"
+    - packet_id: fixture-next-first
+      order: 903
+      status: ready
+      desired_release: v9.9
+      priority: p0
+      release_target: fixture-next-milestone
+      pickup_role: linux
+      title: "First: p0 and release-targeted"
+      next_action: "Do the first thing."
+    - packet_id: fixture-next-wrong-role
+      order: 904
+      status: ready
+      desired_release: v9.9
+      priority: p0
+      pickup_role: macos
+      title: "Included without a role filter; dropped for linux"
+      next_action: "Do the macos thing."
+    - packet_id: fixture-next-unmarked
+      order: 905
+      status: ready
+      priority: p2
+      pickup_role: linux
+      title: "Unmarked packet — defaults into the active release"
+      next_action: "Do the unmarked thing."
+    - packet_id: fixture-next-sixth
+      order: 906
+      status: ready
+      desired_release: v9.9
+      priority: p3
+      pickup_role: linux
+      title: "Sixth eligible — proves the five-row cap"
+      next_action: "Do the sixth thing."
+    - packet_id: fixture-next-unfinished
+      order: 907
+      status: in_progress
+      desired_release: v9.9
+      priority: p0
+      pickup_role: linux
+      owned_files:
+        - shared/contested-file.rs
+      title: "In flight — blocks the dep-unclear packet and claims a file scope"
+    - packet_id: fixture-next-file-claimed
+      order: 908
+      status: ready
+      desired_release: v9.9
+      priority: p0
+      pickup_role: linux
+      owned_files:
+        - shared/contested-file.rs
+      title: "Excluded: its file scope intersects an active claim"
+    - packet_id: fixture-next-leased
+      order: 909
+      status: ready
+      desired_release: v9.9
+      priority: p0
+      pickup_role: linux
+      lease: fixture-live-lease
+      title: "Excluded: carries a live lease"
+    - packet_id: fixture-next-other-release
+      order: 910
+      status: ready
+      desired_release: v8.8
+      priority: p0
+      pickup_role: windows
+      title: "Excluded from v9.9; role-incompatible within v8.8"

@@ -1,7 +1,8 @@
 # @trace spec:browser-isolation-telemetry
 # External telemetry manifest for Chromium containers.
 # Logs CDP (Chrome DevTools Protocol) interactions and page load metrics.
-# Reference: openspec/changes/chromium-browser-isolation/design.md
+# References: openspec/specs/external-logs-layer/spec.md and
+# openspec/specs/browser-isolation-core/spec.md
 
 role: chromium-telemetry
 description: "Chromium headless renderer telemetry — CDP console logs, page events, rendering metrics"

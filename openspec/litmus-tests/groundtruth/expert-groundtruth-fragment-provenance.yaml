@@ -1,0 +1,113 @@
+# ORDER 606-h9vy — GROUND TRUTH for fragment provenance and winning-source
+# citations.
+#
+# @trace spec:forge-environment-discoverability
+# @trace order:606, order:606-h9vy
+#
+# Graded against the COMMITTED fixture corpus at
+# `openspec/litmus-tests/groundtruth/fixtures/fragment-provenance/` — never
+# against the live ledger, whose fragments are folded away by compaction and
+# would stale these cases on the first fold:
+#
+#   tillandsias-plan \
+#     --index openspec/litmus-tests/groundtruth/fixtures/fragment-provenance/plan/index.yaml \
+#     grade openspec/litmus-tests/groundtruth/expert-groundtruth-fragment-provenance.yaml
+#
+# Every case runs the order-523 verifier too (`verify: true` is the default),
+# so a citation that resolves but does not substantiate its authority — the
+# exact bug class 606-h9vy closes — turns the case red twice over.
+
+version: 1
+name: expert-groundtruth-fragment-provenance
+description: >
+  Fragment-provenance ground truth: a fragment-born packet is cited to the
+  fragment that created it; an LWW-overridden field is cited to the winning
+  fragment entry while the stale base value is never claimed; and answers over
+  a folded corpus omit no rows. Pinned against an immutable committed fixture
+  corpus so compaction of the live ledger can never stale these cases.
+
+cases:
+
+  - id: frag-born-packet-cites-its-fragment
+    engine: plan.answer
+    query: "status of fixture-fragment-born"
+    why: >
+      EXIT CRITERION 1 of 606-h9vy. A packet that exists only in a fragment
+      used to be silently OMITTED from exact answers ("no source span could be
+      located"). It must now be answered and cited to the fragment item that
+      created it, with a span that really contains the packet's own lines.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      answer_contains:
+        - "fixture-fragment-born"
+        - "ready"
+      citations_include:
+        - path: plan/index.d/20260806t000001z-born0-fixture.yaml
+          packet_id: fixture-fragment-born
+          status: ready
+          order: "902"
+          span_contains:
+            - "packet_id: fixture-fragment-born"
+            - "status: ready"
+
+  - id: frag-lww-override-cites-the-winning-fragment
+    engine: plan.answer
+    query: "status of fixture-base-overridden"
+    why: >
+      EXIT CRITERION 2 of 606-h9vy. The base block says `status: ready`; the
+      fragment's LWW entry won the fold with `in_progress`. The status
+      authority must ride on a citation into the WINNING fragment entry, the
+      base citation keeps only the fields the fold did not override, and no
+      citation anywhere claims the contradictory base value.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      answer_contains:
+        - "fixture-base-overridden"
+        - "in_progress"
+      answer_excludes:
+        - "omitted"
+      citations_include:
+        - path: plan/index.d/20260806t000000z-lww0-fixture.yaml
+          packet_id: fixture-base-overridden
+          status: in_progress
+          span_contains:
+            - "field: status"
+            - "value: in_progress"
+        - path: plan/index.yaml
+          packet_id: fixture-base-overridden
+          order: "900"
+          span_contains:
+            - "packet_id: fixture-base-overridden"
+            - "order: 900"
+      citations_exclude:
+        - status: ready
+
+  - id: frag-zero-omitted-rows-over-a-folded-corpus
+    engine: plan.answer
+    query: "what is ready?"
+    why: >
+      EXIT CRITERION 5 of 606-h9vy (the zero-omitted-row fixture). Before the
+      source map, a ready-list over a folded corpus reported fragment-born
+      rows as "N row(s) omitted — no source span could be located". With
+      winning-source attribution there is nothing left the engine cannot point
+      at: every folded row is reported AND cited.
+    expect:
+      confidence: exact
+      citation_kind: plan
+      min_citations: 2
+      answer_contains:
+        - "fixture-base-untouched"
+        - "fixture-fragment-born"
+      answer_excludes:
+        - "omitted"
+      citations_include:
+        - path: plan/index.yaml
+          packet_id: fixture-base-untouched
+          status: ready
+        - path: plan/index.d/20260806t000001z-born0-fixture.yaml
+          packet_id: fixture-fragment-born
+          status: ready
+      citations_exclude:
+        - packet_id: fixture-base-overridden

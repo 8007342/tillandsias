@@ -544,8 +544,9 @@ Gating points:
 - Unknown MCP methods return JSON-RPC error `-32601 Method not found`
 - `images/default/config-overlay/opencode/config.json` still points the forge
   MCP runtime at `/home/forge/.config-overlay/mcp/host-browser.sh`
-- `images/default/entrypoint-forge-opencode-web.sh` still launches
-  `tillandsias-mcp-browser` for the OpenCode Web path
+- `images/default/entrypoint-forge-opencode-web.sh` remains free of a legacy
+  in-container MCP daemon; the configured `host-browser.sh` bridge is invoked
+  on demand by the MCP runtime
 - `browser.open` with valid URL returns a `window_id`
 - `browser.screenshot` captures PNG and returns base64 with width/height
 - `browser.click` and `browser.type` modify DOM and return `{ ok: boolean }`

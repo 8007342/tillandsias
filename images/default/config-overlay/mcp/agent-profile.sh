@@ -19,7 +19,10 @@ set -euo pipefail
 
 # Determine agent profile from TILLANDSIAS_AGENT env var
 # (set by Tillandsias launcher from config -> container profile)
-AGENT_PREFERENCE="${TILLANDSIAS_AGENT:-opencode-web}"
+# Live launchers always set TILLANDSIAS_AGENT. Keep the compatibility fallback
+# aligned with deprecated entrypoint.sh for cached images instead of silently
+# identifying every unset harness as OpenCode Web.
+AGENT_PREFERENCE="${TILLANDSIAS_AGENT:-claude}"
 
 # Export agent preference for downstream tools
 export AGENT_PREFERENCE
@@ -43,6 +46,12 @@ case "${AGENT_PREFERENCE}" in
         export AGENT_PROFILE="claude"
         export AGENT_SUPPORTS_WEB="no"
         export AGENT_DISPLAY_NAME="Claude"
+        ;;
+    codex)
+        # Codex: OpenAI's CLI coding agent
+        export AGENT_PROFILE="codex"
+        export AGENT_SUPPORTS_WEB="no"
+        export AGENT_DISPLAY_NAME="Codex"
         ;;
     antigravity)
         # Google Antigravity: Gemini-powered coding agent

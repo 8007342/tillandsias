@@ -112,7 +112,24 @@ if [ -z "${CODEX_API_KEY:-}" ]; then
     /usr/local/bin/codex-oauth-vault restore
 fi
 
-# ── Banner ──────────────────────────────────────────────────
+# ── Expert MCP registration ────────────────────────────────────
+# @trace order:605-u9g5, spec:forge-environment-discoverability
+# Register forge-plan and project-info as Codex stdio MCP servers through the
+# supported `codex mcp add` interface, so a fresh Codex session lists the
+# expert tools with zero out-of-band setup. Runs after require_codex (the CLI
+# must exist) and before either launch path below. Fail-soft on purpose: a
+# registration defect must never block a forge launch — it only costs this
+# session the expert tools, and the lifecycle log records why.
+if [ -x /usr/local/bin/register-codex-experts ]; then
+    if /usr/local/bin/register-codex-experts >>/tmp/forge-lifecycle.log 2>&1; then
+        : # registered (or already registered)
+    else
+        printf '%s\n' "[codex-mcp] expert registration failed; continuing without forge-plan/project-info tools" \
+            >>/tmp/forge-lifecycle.log
+    fi
+fi
+
+# ── Banner ──────────────────────────────────────────────────────
 show_banner "codex"
 
 # ── Launch Codex ────────────────────────────────────────────

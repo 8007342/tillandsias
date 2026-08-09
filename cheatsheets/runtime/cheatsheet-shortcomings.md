@@ -65,7 +65,16 @@ I cited `https://www.reactive-streams.org/` claiming it's the official spec — 
 
 I wrote `**Last updated:** 2026-04-25` in 10 files. Tomorrow they're "current". 90 days later they'd be "stale" by spec — but nothing surfaces this. The MCP design promises a `cheatsheet.stale_check()` tool; until it exists, staleness is invisible.
 
-**Fix:** Same `scripts/check-cheatsheet-staleness.sh` now belongs to the cheatsheet tooling/source-layer split. Just hasn't been fully wired everywhere yet. Half a day.
+**Fix:** OBSOLETED 2026-08-05. The shell staleness checker
+(`scripts/check-cheatsheet-staleness.sh`) measured a `**Last updated:**` prose
+line that the corpus abandoned for `last_verified:` frontmatter, so it reported
+217/217 stale then self-attested clean against the 2-file image dir. Deleted
+per the operator's 2026-08-01 "fix or delete" direction. Staleness now belongs
+to the source-layer frontmatter tooling (`fetch-cheatsheet-source.sh
+--max-age-days`, policy-crate `check-cheatsheet-sources`); the signed-manifest
+verification that finally drives `last_verified` is packet
+`cheatsheet-provenance-make-the-validator-honest-then-sign-a-manifest`
+(order 588-8mh8).
 
 ### 6. Granularity guideline is fuzzy ("split when approaching 200 lines")
 

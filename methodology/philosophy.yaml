@@ -1,5 +1,5 @@
 
-# freshness: auditor=forge-antigravity-20260721 date=2026-07-21 verdict=refreshed scope=core_principle+runtime_ephemerality
+# freshness: auditor=forge-tillandsias-codex-20260804t032604z date=2026-08-04 verdict=updated scope=multi_version_convergence+capability_ladder+cross-file-math-consistency
 
 philosophy:
   core_principle: >
@@ -76,11 +76,13 @@ philosophy:
     statement: >
       Convergence is asymptotic across versions, not terminal within one.
       Write T_v for the target (the specs at version v), I_v for the
-      implementation, and d(I_v, T_v) for residual distance. Because the specs
-      themselves evolve, T is a MOVING target and no final convergent state
-      exists. The guarantee is therefore not "d reaches 0 at some version" but
-      lim(v -> infinity) d(I_v, T_v) -> 0: every release gets closer, so the
-      sequence converges even though the target keeps moving.
+      implementation, and d_v = d(I_v, T_v) >= 0 for residual distance.
+      Because the specs themselves evolve, T is a MOVING target and no final
+      target state exists. Release-over-release non-increase of d_v guarantees
+      convergence to some residual floor d_* >= 0; it does not by itself prove
+      d_* = 0. A zero-floor claim would additionally require a validated
+      progress premise that excludes positive residual fixed points (or a
+      proven contraction, which the methodology does not currently claim).
     within_a_release: >
       Inside release v the bar B_v is FIXED. The reduction engine converges to
       a fixed point of the refinement operator at B_v; zero residual at B_v is
@@ -93,12 +95,13 @@ philosophy:
       self-escalation by the loop (forbidden) but discrete, operator-gated
       events (a release is cut by The Tlatoani).
     enforceable_guarantee: >
-      lim() is not mechanically checkable, but its per-step precondition is:
-      d must be NON-INCREASING from release to release. That is what the
-      technical-debt ceiling measures and enforces — a countable proxy vector
-      for d, compared release-over-release. Monotone non-increase at every
-      Lamport tick is exactly the discrete condition that makes the limit
-      claim honest rather than aspirational.
+      The mechanically checkable release-boundary rule is that d_v must be
+      NON-INCREASING. The technical-debt ceiling measures a countable proxy
+      vector for d_v and compares it release-over-release. Monotone
+      non-increase at every Lamport tick proves no measured debt accretion and
+      convergence to a residual floor. Declared finite obligations and their
+      ranking functions supply local descent evidence; neither rule alone is
+      promoted into an unproved asymptotic-zero claim.
     corollary_no_debt_accretion: >
       "More feature rich with no regressions, and less debt than the previous
       release" is the operational reading of the same inequality: the feature

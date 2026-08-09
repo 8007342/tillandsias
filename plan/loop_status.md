@@ -1,5 +1,418 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-06T09:48Z (linux-mutable — v0.5 image squash clean-store closure + EXPERTS handoff)
+
+- **Host/branch**: Linux mutable (`macuahuitl`), `linux-next`; startup at `318fb7ba`, final implementation checkpoint `a0ed671f`. Sibling heads observed after fetch: main `7491caf2`, windows-next/osx-next `936c1899`, all ancestors of linux-next.
+- **Order 607-vbbt COMPLETED**: every compiled/shell Containerfile build uses exactly `--squash` (never `--squash-all`) with `squash-new` cache identity/labels. Full build/install passed; destructive reset proved zero containers/images/volumes and zero stragglers; cold init built all ten images. Direct RootFS inspection proved exact inherited prefixes and delta=1 for all ten. Retired NanoClaw developer selectors and the stale 8-image spec list were removed; focused default-image litmus passed 9/9. Quantitative isolated A/B remains ready order 608-ijbt.
+- **EXPERTS live audit**: fresh OpenCode attached and actually called the plan MCP automatically, but fragment-born queries forced direct YAML fallback. Live `status` sees order 600-c266 while `append-event` says packet not found. Packet 606-e2hg now has a concrete release/upstream implementation handoff and is the recommended next EXPERTS packet; 600-c266 remains ready.
+- **New bounded findings**: 612-nvf3 (Chromium `--help` false-negative for required internal `--no-sandbox`), 613-uy82 (active NanoClaw UX spec/runtime drift, explicitly operator-gated with no UX changed), and 614-2gqx (full meta-orchestration returned zero after losing local commit `4a1410a2` without boundary/push attestation). OpenCode transport was healthy, but full-cycle skill verdict was FAIL/incomplete; order 404's verified OpenCode slice was released ready for its remaining Codex parity work.
+- **Verification**: clean generated-version run `20260806T085959Z`; 255 accumulated litmus passes/0 fails in build evidence; hash fixture PASS; default-image instant 9/9; plan ledger 575 unique/live-sound; final `./build.sh --check` PASS at `a0ed671f`. Install-generated version edits restored byte-for-byte.
+- **Coordination/release**: no sibling drift to merge and no v0.5 release warranted while P0 EXPERTS/terminal/browser and zero-trust work remain. Next non-security priority: 606-e2hg, then 606-xu52 natural `what's next?`; 608-ijbt may benchmark in isolated stores.
+
+## Cycle 2026-08-05T02:32Z (forge — order 605-u9g5 Codex expert MCP registration DONE)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next` (started on `main`, moved to `linux-next` after the committable-
+  branch guard refused); credential `ok:forge-git-mirror`, branch
+  `ok:branch-linux-next`, opsx dirt `ok:clean-tree`, expert base
+  `ok:expert-base-ready`. Clean startup boundary snapshot before any work.
+  Direction cited: EXPERTS / forge-local-experts-milestone (order 391) —
+  release-targeted harness-mcp-expert-validation cluster.
+- **Order 605-u9g5 DONE (`codex-mcp-config-merge-fixture`)**: the shaping child
+  of order 600-xrqk, implemented under the one-packet forge contract.
+  `images/default/config-overlay/codex/register-experts.sh` registers
+  forge-plan + project-info as Codex stdio MCP servers via the supported
+  `codex mcp add` interface (live-verified against codex-cli 0.146.0),
+  pre-checks `codex mcp list --json`, and creates a missing `$CODEX_HOME`
+  (0.146.0 refuses to list into an absent root). Image COPY + chmod wired;
+  entrypoint-forge-codex.sh invokes it after `require_codex` and before either
+  launch path, fail-soft into /tmp/forge-lifecycle.log. Fixture
+  `scripts/test-codex-mcp-registration.sh` proves empty + pre-populated double
+  application leaves exactly one entry per server, auth.json byte-preserved,
+  and unrelated config keys + a custom MCP server survive; it runs against the
+  real codex CLI (0.146.0) AND the committed hermetic model
+  `scripts/fixtures/codex-mcp-stub.sh` — both PASS. Discoverability litmus
+  extended to 13/13 (fixture + two wire steps); `./build.sh --check` green.
+- **Verification**: fixture PASS (real codex + stub legs), bash -n clean on all
+  touched scripts, `litmus:forge-experts-discoverability-shape` 13/13,
+  `./build.sh --check` exit 0. No live forge launched this cycle (budget kept
+  to the one implementation packet).
+- **Next**: order 558 (codex-mcp-expert-validation) is pending on both this
+  packet and order 570 (`forge-launch-sets-tillandsias-agent`); a pristine
+  Codex forge re-runs 558 once both land. v0.5 remains active, not
+  release-ready.
+
+- **Freshness audit (order 372)**: `scripts/check-cheatsheet-staleness.sh`
+  disposition **obsoleted** (deleted 2026-08-05). Operator 2026-08-01 said "fix or
+  delete" for this exact script; the field it measured (`**Last updated:**`
+  prose) was abandoned for `last_verified:` frontmatter (215/215 files), and it
+  self-attested "ran clean" against the 2-file image dir. No wired callers;
+  superseded by the source-layer tooling (`fetch-cheatsheet-source.sh
+  --max-age-days`, policy-crate `check-cheatsheet-sources`). Deleted with
+  same-commit regeneration of the trace indexes — which also repaired an
+  independent miss: the 605-u9g5 `@trace` annotations were never indexed
+  (`--check` does not regenerate traces). Finding:
+  `plan/issues/freshness-cheatsheet-staleness-script-obsoleted-2026-08-05.md`;
+  `progress` event on packet 588-8mh8.
+
+## Cycle 2026-08-04T03:45Z (forge — v0.5 Codex expert registration shaping)
+
+The one-packet forge contract selected release-targeted order 600-xrqk after a
+folded-ledger and lease audit. Full completion was not honest inside the
+600-second launch envelope: its two-hour estimate combines deterministic config
+work with three criteria that require a newly built, pristine Codex forge.
+Following the mandatory shape-first rule, 600-xrqk is now a completed parent
+split into order 605-u9g5 (config merge + preservation fixtures) and existing
+order 558 (fresh-launch discovery + verified expert calls).
+
+**Dependency truth repaired.** Order 558 is pending on both 605-u9g5 and order
+570, which supplies the launch-time `TILLANDSIAS_AGENT=codex` identity. The new
+implementation child is ready, one hour, release-targeted, and owns an exact
+file boundary. Its next action uses Codex's supported `mcp add` interface rather
+than an ad-hoc TOML editor; both the current official Codex manual and the
+installed CLI were checked before shaping it.
+
+**Freshness updated.** The top stale methodology component claimed that a
+nonnegative, non-increasing cross-release residual must tend to zero. That is
+false without an extra progress premise and contradicted the project's explicit
+no-contraction boundary. `methodology/philosophy.yaml` and the matching
+`methodology/convergence.yaml` wording now guarantee convergence to a residual
+floor and reserve a zero-floor claim for future proof. The dated optimization
+audit records why the component was retained and updated.
+
+**Disk evidence preserved, not duplicated.** A current-source Rust build with a
+fresh cycle-local target filled the 250G forge overlay and failed at link time;
+using the shared project target succeeded. Exact scratch removal returned the
+filesystem to 18G used / 231G available (7%). This was appended to existing
+order 597-fmm2, which already owns the missing disk-headroom preflight.
+
+**Gate state.** The current-source expert folds 554 packets with unique IDs and
+sound live references. YAML parsing, the plan integrity checker, strict Rust
+format/type/clippy checks, and `./build.sh --check` are green. The installed
+launch-time expert is stale at 535 packets; cycle telemetry therefore shows
+three honestly degraded expert calls and no fabricated answers.
+
+**Next.** Linux implements 605-u9g5; after both it and order 570 land, a pristine
+Codex forge reruns 558. v0.5 remains active and is not release-ready.
+
+## Cycle 2026-08-04T03:00Z (linux_mutable — v0.4.260804.1 smoke, crash reproduced)
+
+Ran the curl-install e2e to earn promotion evidence. It did not earn it, and
+that is the correct outcome.
+
+**The substrate is healthy.** Curl-install from the published release, full
+`podman system reset --force`, `--init` from pristine (14 images rebuilt), forge
+lane launch, and the order-298 egress assertion all came back clean. The forge
+lane launching matters: it had been failing FORGE_EXIT=125 while this host sat
+at 96% disk, now 59%. Suggestive for 597-fmm2, not proof.
+
+**Lane 1 verdict was MO-SMOKE: FAIL, and every failure was a test defect.**
+Three environmental (no nested podman in the forge — correctly classified by the
+in-forge agent), plus two real ones now fixed:
+  - `default-image-containerfile-shape` pinned a literal ARG default that commit
+    4da9bb12 intentionally changed on 2026-06-13 — failing on every
+    podman-hosting Linux host for seven weeks. The in-forge agent classified it
+    BACKWARDS as Containerfile drift; acting on that would have "fixed" a healthy
+    file. The launcher always passes BASE_IMAGE as a build-arg, so the default is
+    never read.
+  - `test-opencode-entrypoint-prompt.sh` inherited two env vars the forge lane
+    exports, flipping two cases and reporting a regression that did not exist.
+    Sanitized at script level — my first fix was per-case and the second leak
+    survived it.
+Instant suite now 182/182, 96/96 specs.
+
+**Lane 2 segfaulted — and left a coredump.** Status 139. This is BigPickie's
+crash, reproduced on x86_64, on a REPEAT session (lane 1 completed fine 20
+minutes earlier). Not disk pressure: 59% used, 393G free.
+
+The unlock: BigPickie's trail listed coredump capture as an OPEN question,
+because opencode is PID 1 and the container dies with it. Capture is VERIFIED —
+a 91.3MB dump landed on the HOST and survived, preserved at
+target/smoke-e2e/preserved/. Stack is abort-at-top over an unnamed JIT frame,
+matching the 2026-07-27 arm64 sighting. First symbolicatable artifact this crash
+has produced. Filed 604-vmcg.
+
+**Also spotted, unrelated and unwatched:** three squid SIGSEGV coredumps
+(08-01 x2, 08-03). The enclave proxy has been crashing and nobody was looking.
+
+**Promotion WITHHELD.** promote-stable still returns refused:no-evidence, and the
+findings doc was written specifically not to trip its grep — a document that
+reads as a pass would be the same false-green class this cycle spent its time
+removing. v0.4.260804.1 stays a prerelease; v0.4.260728.2 remains latest.
+
+## Cycle 2026-08-04T01:50Z (linux_mutable — v0.4.260804.1 release, trial by fire)
+
+Released **v0.4.260804.1**. The release procedure was exercised end to end for
+the first time since push CI was removed, and it broke in four places — none of
+which were visible from reading the code.
+
+**Both sibling hosts drained their bundles.** Windows (598-yhu5): six verdicts,
+one staging defect fixed. macOS (598-kibt): M1-M5 evidence, 8 accel_probe lints
+Linux could not enumerate, 11 macos-tray lints, `cloud_projects_loaded` wired
+(the M5 empty-repo bug), a 13-failure litmus truth sweep, and 600-c266 filed.
+Tray-parity is now **0 gaps on required rows across all three platforms**.
+
+**macOS found a real bug in my gate-stamp, and it was worse than reported.**
+`xargs ... 2>/dev/null` swallowed "Is a directory" for all 45 tracked directory
+symlinks, so the stamp did not fail — it hashed a tree with 45 entries missing
+and called it validated. My fixture used regular files only. Both hosts fixed it
+independently; kept the single-pass version with explicit failures over the
+multi-pass one with four suppressed-stderr sites.
+
+**What the release run exposed, in order of appearance:**
+- `litmus:local-ci-self-clean-evidence` was UNSATISFIABLE — the convergence
+  dashboard embeds a wall-clock stamp and was written unconditionally, so
+  `--ci-full` failed on dirt it had just created, forever. Now publishes only on
+  substantive change.
+- `--ci-full` (17 checks, 237 litmus) did NOT write the gate stamp; `--check`
+  (6 checks) did. Passing more left you less able to push. One helper now.
+- The VERSION guard and the release preflight DEADLOCKED: the preflight requires
+  linux-next to carry main's post-release VERSION, the guard refused any commit
+  touching VERSION there. Only exit was `--no-verify`, at the release, on the
+  gate that replaced CI. Guard now names sync-forward and the bump branch.
+- The release SKILL still said "wait for CI". `gh pr checks --watch` exits **0**
+  on "no checks reported" — so it would have merged unverified while reading as
+  a passing gate. Corrected an earlier claim of mine that it would refuse.
+
+**Answer to "is the methodology up to date?"** It was not. It is now: step 3 of
+`merge-to-main-and-release` gates on `./build.sh --ci-full` +
+`scripts/release-preflight.sh`, `--auto` is dropped (it waits forever on a check
+that never reports), and step 4's claims about required contexts are corrected.
+
+**Filed:** 601-f6ci, 601-462g, 602-tfzg, 602-68gf (all Linux, closed except the
+runbook audit), 603-wdu7 + 603-jn5m for Windows and macOS.
+
+**Open:** the release build is still running; a Nix cache miss is expected now
+that nix-cache-warm is gone. `600-c266` (append-event blind to fragment packets)
+is real and unclaimed.
+
+## Cycle 2026-08-03T21:56Z (forge — Codex EXPERTS v0.5 validation)
+
+Claimed the one Codex-affinity packet permitted by the forge cycle contract:
+order 558 (`codex-mcp-expert-validation`). Launch evidence is RED and durable in
+`plan/issues/codex-mcp-expert-validation-2026-08-03.md`. Codex reports no MCP
+servers, its config contains no forge expert registration, and its running tool
+surface cannot discover forge-plan or project-info. Direct stdio proves the
+forge-plan server itself is healthy and advertises the expert tools; the
+launch-installed binary correctly degrades with
+`stale-binary:pre-capability-manifest` rather than fabricating cited answers.
+Order 558 returns to ready for a fresh-launch rerun.
+
+**Shaped:** order 600-xrqk (`codex-mcp-config-registration`) is ready for Linux
+and blocks order 558. It owns an idempotent Codex config merge plus empty and
+pre-populated config fixtures. Order 570 separately owns the missing
+`TILLANDSIAS_AGENT` launch-routing signal; both must land before 558 can pass.
+
+**Local enforcement repaired:** `gate-stamp.sh` now hashes tracked directory
+symlinks without following them, and `install-hooks.sh` installs into Git's
+effective `core.hooksPath`. The release-gate litmus passes all 15 steps. This is
+a completed Linux/forge slice of order 599-4wzr; Windows and macOS evidence
+remains.
+
+**Freshness:** revalidated `scripts/test-support/podman-mock.sh` and corrected
+the advisory sorter to rank age field 3 numerically. Syntax, vault-handover
+refusal, the exact remote-project preflight test, and mock-relevant Podman
+litmuses pass. The real-runtime path remains ENV-FAIL on the already-owned
+`podman unresponsive (>5s)` incident; no duplicate packet was filed.
+
+**Queue at handoff:** the current-source expert validates 544 folded packets.
+The v0.5 set has 187 nonterminal packets: 155 ready, 17 pending, 12 in progress,
+2 needs clarification, and 1 blocked. Thirty-one v0.5 packets appear in the
+strict forge/any ready view, but this forge invocation stops after its single
+claimed packet as required. `cycle-metrics.sh` observed three expert calls, all
+honestly degraded due to launch skew; the installed plan CLI remains
+launch-stale and reports the pre-overlay base, so the current-source expert is
+the authoritative count for this cycle.
+
+**Next:** Linux should implement 600-xrqk, then a pristine Codex launch should
+rerun 558 after order 570. Release coordination remains a linux_mutable
+responsibility; v0.5 is not release-ready.
+
+## Cycle 2026-08-03T21:30Z (linux_mutable — v0.5 cross-platform readiness)
+
+Prepared the Windows and macOS hosts for their v0.5 validation cycles, and
+cleared two release blockers this project had created for itself.
+
+**Cloud minutes — the purge was incomplete and I did not notice at the time.**
+The 2026-08-03 Actions removal only ever touched `linux-next`. `ci.yml` was still
+live on `windows-next` and `osx-next`, and `nix-cache-warm.yml` still sat on
+`main` — the DEFAULT branch, which is the only branch GitHub schedules cron from.
+It fired 2026-08-02T06:35, after the purge. Siblings were cleaned by
+fast-forwarding them to `linux-next` (both 0 ahead, verified ancestors); `main`
+by PR #86. All four branches now carry `release.yml` alone, and no push- or
+schedule-triggered run has fired since 2026-08-02T04:50.
+
+**`main` was frozen, not protected.** Branch protection required three status
+contexts that were the verbatim job names of the deleted `ci.yml`, with
+`enforce_admins: true` — so no `linux-next → main` PR could ever become
+mergeable. Operator chose to clear the contexts; the PR requirement and admin
+enforcement are unchanged, and the prior state is recorded for reversal. Proven
+by PR #86 merging CLEAN with 0 checks.
+
+**The local gate is already earning its keep.** `./build.sh --check` refused with
+`clippy::overly_complex_bool_expr`: `query_packets` carried
+`.filter(|_| limit == 0 || true)`, landed on `linux-next` in the query-overlay
+work on the same day push CI was removed. Fixed. First concrete instance of the
+gate being the only thing between an agent and a broken trunk — and it was found
+by an agent that happened to run it, not by one the loop instructed to.
+
+**First real ledger compaction.** 28 fragments folded into the base with 120
+comment lines preserved, 535 packets preserved, and a `plan/index.yaml` diff of
+1021 added and ZERO removed lines. Corrected the skill and methodology, which
+both still told agents compaction refuses by design.
+
+**Filed:** 598-yhu5 (windows bundle, 6 scoped items), 598-kibt (macos bundle, 6),
+598-c4ug (worker skills still teach in-place ledger edits — p0, two cycles are
+about to follow them), 598-znuv (loop skill never names the local gate),
+597-fmm2 / 597-pr4x (no disk-headroom preflight; the order-281 self-heal destroys
+the git mirror and forge cache, and a full disk produces the signature that
+triggers it).
+
+**Open:** `litmus:opencode-prompt-e2e-shape` step 3 still red (FORGE_EXIT=125).
+Host is at 96% disk, which is a live candidate but not yet established as the
+cause. BigPickie's crash trail on `linux-next-debug` (Bun v1.3.14 as PID 1,
+`pids.max=512`) is the other open thread.
+
+## Cycle 2026-08-03T21:05Z (macos — v0.5 validation bundle 598-kibt)
+
+First macOS cycle after the Actions purge. Sibling heads at start: main
+1526fb29, linux-next = windows-next = osx-next 9e291df3 (1:1 parity, nothing
+to merge). OpenCode e2e smoke EXCLUDED this cycle by operator directive
+(token budget low ~24h); everything below ran without it.
+
+**Why macOS "often has fmt and clippy errors" — both suspected causes were
+real, and there was a third.** (1) `.git/hooks/` was EMPTY here, same as the
+linux finding in 599-w5jd; `./build.sh --check` now installs them. (2)
+cfg-gated macOS code is structurally invisible to Linux linting — M1
+reproduced the predicted 7 accel_probe.rs errors plus exactly one
+unenumerable extra (main.rs:2967 needless_return), and 11 more in the
+macos-tray crate. All fixed; gate GREEN end to end. (3) Even with hooks
+installed, **the stamp could never be recorded on macOS**: gate-stamp.sh
+hashed THROUGH the committed symlink-to-directory skill links, sha256sum
+exited "Is a directory", and every push would have been refused
+stale:never-run despite a green gate. Fixed (symlinks fold in as their
+target string — git's own content model); write→stale→revert cycle proven at
+~0.5s. plan/issues/gate-stamp-symlink-macos-2026-08-03.md carries a Linux
+question: how did stamped pushes ever succeed there?
+
+**Bundle:** M1 GREEN (fix-to-green done), M2 PASS (tarball + DMG with
+background; first tray-crate compile since 07-27), M3 EXPECTED-CORRECT
+(guest: cpu-only, 4-core clamp, guest RAM; no Vulkan_GPU false positive;
+virtiofs ~/src mount proven live bidirectionally — it was just empty),
+M4 PASS (GNU timeout + md5sum present; nothing vacuous), M5 CODE-COMPLETE
+(cloud_projects_loaded wired on macOS mirroring Windows incl. logout reset,
+unit-test pinned; zero-repo runtime proof needs an operator account),
+M6 pending (PTY-load needs interactive attach; partial exec-wire load test
+this cycle if the guest frees up).
+
+**Litmus truth on macOS:** 171/183 → 181/182 after fixing all 13 diagnosed
+failures (4 product-script bash-3.2/GNU-dialect bugs, 5 litmus dialect bugs
+incl. a new mf_touch_age_minutes stdlib helper, 1 purge-stale litmus fixed,
+1 purge-stale litmus retired/tombstoned, 1 flaky stress test fixed per its
+pre-filed shape). The last red (opsx-sync-merge) flips green once this
+checkpoint lands — the runner clones HEAD.
+
+**Filed:** 600-c266 (`tillandsias-plan append-event` is blind to
+fragment-born packets — claims/annotations on freshly filed work fail until
+compaction; fragments written by hand this cycle per README). Also noted:
+plan/loop_status.d/README.md is counted as a malformed fragment by
+`loop-status-fragments`.
+
+## Cycle 2026-08-03T20:34Z (forge — order 569 completed & local experts system verification)
+
+- **Host**: `forge` (`TILLANDSIAS_HOST_KIND=forge`), branch `linux-next`. Preflight credential guard `ok:forge-git-mirror`, committable guard `ok:branch-linux-next`. Clean boundary snapshot recorded.
+- **Worker Drain (order 569 completed)**: Verified and completed packet `forge-experts-capability-honesty` (order 569) under `forge-local-experts-milestone`.
+- **Litmus Fix & Pass**: Fixed false positive substring match in `litmus:expert-capability-skew-honesty` step 5 (`case $out in *'error: unknown subcommand'*` vs `*'unknown subcommand'*`). All 28/28 behavioral steps passed cleanly.
+- **Local Experts System Progress**: Exercised and validated `tillandsias-plan` binary subcommands (`query`, `burndown`, `capabilities`, `answer`, `verify-answer`, `spec-index`, `spec-retrieve`, `spec-envelope`) locally on host.
+- **Verification**: `cargo test -p tillandsias-plan` (89 lib + 5 main green), `tillandsias-plan check` ok, `./build.sh --check` green.
+
+## Cycle 2026-08-03T19:30Z (windows — v0.5 validation bundle 598-yhu5 drained)
+
+Drained `windows-v05-validation-bundle` (598-yhu5), the six-check readiness
+bundle the Linux sibling filed for this host. windows-next was fast-forwarded
+127 commits to e81819f0 (= origin/linux-next, verified identical heads), so no
+merge was needed.
+
+**W1 — native msvc typecheck: PASS; tests green after restaging.**
+`cargo check -p tillandsias-windows-tray --all-features --all-targets` exit 0.
+`cargo test`: first run 74/75 with exactly one red —
+`embedded_guest_headless_matches_workspace_version`, the order-282 staleness
+litmus correctly refusing a v0.4.260728-era embedded guest against workspace
+0.4.260802.1. Green after W3 restaging: final 86 passed / 0 failed / 8 ignored.
+Smart App Control did not block the fresh test exes this run. Evidence appended
+to plan/issues/cfg-gated-tray-code-never-typechecked-2026-07-21.md.
+
+**W2 — local gate: PASS.** `./build.sh --check` re-execed into the
+tillandsias-build WSL distro; fmt, workspace check, clippy strict, clippy
+listen-vsock, ledger integrity (541 packets, ids unique, references sound), and
+plan-order uniqueness all green. None of the three named fail modes occurred.
+
+**W3 — guest staging: PASS, and it caught a real defect.**
+build-guest-binaries.sh's cargo fallback compiled into $CARGO_TARGET_DIR (the
+with-wsl2-builder redirect) but staged from a hardcoded $ROOT/target — silently
+installing a stale 2026-07-15 artifact (v0.3.260715.6) as if current; only
+verify_binaries' version check caught it. Fixed this cycle (stage from
+`${CARGO_TARGET_DIR:-$ROOT/target}`). Restaged both arches; staged x86_64 is a
+statically linked ELF x86-64 carrying 0.4.260802.1 (NOTE: cargo fallback links
+static non-PIE where the Nix build produces static-pie — recorded, not treated
+as a failure; the script's own verify accepts both). Tray assets/ refreshed.
+
+**W4 — accel probe: cpu-only is the only reachable verdict on this host.**
+Inside the runtime distro: /dev/dri ABSENT, /sys/class/accel ABSENT, no
+nvidia-smi, 16 CPUs, /run/WSL present. The feared GPU-PV false positive
+(bare /dev/dri -> workstation-gpu/Vulkan_GPU) cannot trigger here — the
+hardware answer is that the trigger condition does not exist on this box. No
+cached capabilities.json (probe has never run here). Forge-lane
+$TILLANDSIAS_ACCEL_ENVELOPE read deferred to 599-3b9h: measuring it against the
+stale guest binary would validate retired code.
+
+**W5 — provenance: FAIL, as the packet suspected.** The runtime distro's
+/usr/local/bin/tillandsias-headless reports v0.4.260728.1; the token-removal
+fix 82160687 landed 2026-08-01, so the installed guest predates it and still
+runs order-359 behaviour. Configured env of the three (exited) infra containers
+carries no GH_TOKEN/GITHUB_TOKEN/HOMEBREW_* — but the live forge-lane grep only
+means something after reprovision with the fresh guest. Remediation +
+lane verification filed as 599-3b9h.
+
+**W6 — tools recorded; the bare litmus number is a host-awareness measurement,
+not a regression signal.** Natively resolving: `timeout`, `md5sum` (so the
+run-litmus-test.sh:825 timeout wrapper works); absent: jq, yq, ruby,
+tillandsias-policy. `--phase pre-build --size quick --compact` bare on this
+host: 181 PASS / 55 FAIL / 114 SKIP, 76%, status FAIL. Every one of the 30
+fails captured with step context is environmental — 15× the documented
+accel_probe E0381 native-compile wall, the rest Linux-substrate fixtures
+(podman, forge lanes, git-mirror offline fixtures, expert MCP). Two possibly
+GENUINE reds routed to Linux for confirmation: litmus:ci-release-toolchain-shape
+asserts "ci.yml is check-only" but the purge deleted ci.yml from every branch
+(PR #86), and litmus:local-ci-self-clean-evidence fails alongside it — if red
+on Linux too, that is purge residue in the litmus corpus, the exact 598-u97y
+class. Filed: plan/issues/litmus-corpus-not-host-aware-windows-2026-08-03.md.
+
+**E2E gates: deliberately not run this cycle; dated skip verdict.** Preflight
+said `eligible` and the 4h rate limiter said `allow:full-cycle`, but (a) the
+operator embargoed the OpenCode leg (`litmus:opencode-prompt-e2e-shape`) until
+2026-08-04T19:00Z — OpenCode is out of tokens; (b) the destructive local-build
+e2e unregisters the runtime distro, and W3's gate only cleared mid-cycle;
+(c) a freshly built unsigned tray exe risks a Smart App Control launch block
+mid-reprovision, which needs an interactive allowance. The staged binary,
+fixed staging script, and 599-3b9h leave the next cycle everything it needs to
+run the e2e minus the embargoed leg.
+
+**Freshness audit (order 372):** scripts/test-support/podman-mock.sh (top stale
+component, score 16). Structural: client.rs:1795-1797 still deserializes the
+Names/State ps shape the mock replays; 6 live consumers. Behavioral run
+(litmus:podman-build-command-shape) was not reached on this host — corpus needs
+Linux substrate. Disposition: refreshed on structural evidence; stamp updated
+in-file with the caveat and a next-Linux-cycle confirm ask.
+
+**Filed:** 599-3b9h (reprovision runtime distro with the 0.4.260802.1 guest,
+then complete the deferred W4 envelope read + W5 live token grep);
+plan/issues/litmus-corpus-not-host-aware-windows-2026-08-03.md (enhancement:
+host-eligibility gating for the litmus corpus + two ci-release shape tests for
+Linux to confirm as purge residue).
+**Fixed:** build-guest-binaries.sh staging-path defect (see W3).
+**Claimed/released:** windows-v05-validation-bundle via claim-ledger-node.sh.
+
 ## Cycle 2026-08-03T00:08Z (forge/opencode — packet 582-4wdi DONE: format-preserving compaction)
 
 - **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch

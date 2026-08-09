@@ -55,6 +55,40 @@ assert_build_count() {
     fi
 }
 
+assert_squash_policy() {
+    local line
+    local token
+    local squash_count
+    local -a tokens
+    while IFS= read -r line; do
+        squash_count=0
+        read -r -a tokens <<<"$line"
+        for token in "${tokens[@]}"; do
+            case "$token" in
+                --squash) squash_count=$((squash_count + 1)) ;;
+                --squash-all | --squash-all=*)
+                    echo "FAIL: Containerfile build flattened an inherited shared base" >&2
+                    echo "$line" >&2
+                    exit 1
+                    ;;
+            esac
+        done
+        if [[ "$squash_count" -ne 1 ]]; then
+            echo "FAIL: Containerfile build expected exactly one standalone --squash token, saw $squash_count" >&2
+            echo "$line" >&2
+            exit 1
+        fi
+        case " $line " in
+            *" --label io.tillandsias.image.layer-policy=squash-new "*) ;;
+            *)
+                echo "FAIL: Containerfile build omitted the squash-new OCI label" >&2
+                echo "$line" >&2
+                exit 1
+                ;;
+        esac
+    done < <(grep 'podman build --format' "$LITMUS_PODMAN_CALLS_FILE" || true)
+}
+
 latest_hash() {
     find "$HOME" -path "*/build-hashes/.last-build-${IMAGE_NAME}.sha256" -print -quit |
         xargs cat
@@ -62,6 +96,7 @@ latest_hash() {
 
 "$ROOT/scripts/build-image.sh" "$IMAGE_NAME" >/dev/null
 assert_build_count 1 "first source digest builds once"
+assert_squash_policy
 
 "$ROOT/scripts/build-image.sh" "$IMAGE_NAME" >/dev/null
 assert_build_count 1 "second invocation skips"
@@ -86,5 +121,6 @@ assert_build_count 2 "missing canonical image retags from alias"
 
 "$ROOT/scripts/build-image.sh" "$IMAGE_NAME" --force >/dev/null
 assert_build_count 3 "force rebuild is explicit"
+assert_squash_policy
 
 echo "ok: image build convergence sequence"

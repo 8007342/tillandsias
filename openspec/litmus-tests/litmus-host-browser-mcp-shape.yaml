@@ -24,6 +24,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "host-browser-mcp bridge present"
 
+  - step: "legacy browser MCP artifacts and dangling active-design references are absent"
+    command: "test ! -e images/default/mcp-server-browser.js && test ! -e images/default/tillandsias-mcp-browser && ! grep -Fq 'forgeMcpBrowser' flake.nix && ! grep -Fq 'tillandsias-mcp-browser' flake.nix && ! grep -R -Fq 'openspec/changes/chromium-browser-isolation/' images/chromium && grep -Fq 'openspec/specs/browser-isolation-core/spec.md' images/chromium/Containerfile.core && grep -Fq 'openspec/specs/external-logs-layer/spec.md' images/chromium/chromium-external-logs.yaml && echo 'stale browser MCP artifacts and design references absent'"
+    timeout_ms: 5000
+    expected_behavior: "stale browser MCP artifacts and design references absent"
+
 observability:
   traces:
     - "@trace spec:host-browser-mcp"

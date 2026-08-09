@@ -315,6 +315,7 @@ pub struct WslStdioBridge {
     child: tokio::process::Child,
     stdin: tokio::process::ChildStdin,
     stdout: tokio::process::ChildStdout,
+    stderr_buf: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
 }
 
 impl tokio::io::AsyncRead for WslStdioBridge {
@@ -323,7 +324,35 @@ impl tokio::io::AsyncRead for WslStdioBridge {
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<io::Result<()>> {
-        std::pin::Pin::new(&mut self.stdout).poll_read(cx, buf)
+        let before = buf.filled().len();
+        let poll = std::pin::Pin::new(&mut self.stdout).poll_read(cx, buf);
+        if matches!(&poll, std::task::Poll::Ready(Ok(()))) && buf.filled().len() == before {
+            // EOF. A socat that fails AFTER the startup grace — wsl.exe
+            // launch latency alone exceeds it on low-end hosts — otherwise
+            // surfaces as the handshake's bare "early eof". If the child is
+            // already reapable with a non-zero status, name the cause with
+            // its exit + captured stderr. Best-effort: a child that has not
+            // been reaped yet leaves the clean EOF standing.
+            if let Ok(Some(status)) = self.child.try_wait()
+                && !status.success()
+            {
+                let captured = self
+                    .stderr_buf
+                    .lock()
+                    .map(|b| {
+                        String::from_utf8_lossy(&b)
+                            .replace('\u{0}', "")
+                            .trim()
+                            .to_string()
+                    })
+                    .unwrap_or_default();
+                return std::task::Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    format!("wsl stdio bridge exited ({status}): {captured}"),
+                )));
+            }
+        }
+        poll
     }
 }
 
@@ -438,6 +467,7 @@ pub async fn open_wsl_stdio_bridge(port: u32) -> io::Result<WslStdioBridge> {
         child,
         stdin,
         stdout,
+        stderr_buf,
     })
 }
 

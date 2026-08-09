@@ -90,6 +90,38 @@ pub struct Ledger {
     /// name a path a reader can open; `parse` (used for candidate validation)
     /// has no file, so this is `None` there and citation emission refuses.
     source_path: Option<PathBuf>,
+    /// ORDER 606-h9vy — per-packet WINNING-SOURCE attribution for the fragment
+    /// overlay. SIDECAR STATE on purpose: injecting provenance keys into the
+    /// packet Values would violate the open-world round-trip and leak into the
+    /// edit/compaction text paths. Empty for a base-only load.
+    ///
+    /// packet_id -> span of the fragment item that CREATED a fragment-born
+    /// packet. Base packets never appear here (base always wins the G-Set).
+    origin_sources: BTreeMap<String, FieldSource>,
+    /// `packet_id\u{1}field` -> span of the fragment status entry that WON the
+    /// LWW fold for that field. Exactly the winner `fragments::fold` picked,
+    /// including its first-wins-on-tie behavior.
+    field_sources: BTreeMap<String, FieldSource>,
+    /// Every fragment file beside the index (parseable or not) at load time.
+    /// Freshness is derived over base PLUS this set, so adding a fragment
+    /// changes `indexed_at` even before anything reads its content.
+    corpus_files: Vec<PathBuf>,
+}
+
+/// One winning source for a folded packet or field: the fragment FILE (by
+/// name, so the caller can render it relative to whatever label it uses for
+/// the index) plus the 1-indexed inclusive line span that substantiates the
+/// value. The span always contains the `packet_id: <id>` line, mirroring the
+/// base-span invariant citations rely on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldSource {
+    /// Fragment FILENAME (e.g. `20260807t000000z-x-linux.yaml`), not a path:
+    /// the repo-relative rendering depends on the caller's index label.
+    pub fragment_name: String,
+    /// 1-indexed, inclusive.
+    pub line_start: usize,
+    /// 1-indexed, inclusive.
+    pub line_end: usize,
 }
 
 pub fn str_field<'a>(packet: &'a Value, key: &str) -> Option<&'a str> {
@@ -217,6 +249,9 @@ impl Ledger {
             archived_ids,
             spans: packet_spans(raw),
             source_path: None,
+            origin_sources: BTreeMap::new(),
+            field_sources: BTreeMap::new(),
+            corpus_files: Vec::new(),
         })
     }
 
@@ -227,6 +262,41 @@ impl Ledger {
     /// can never point at a region that does not say what the answer claims.
     pub fn span_of(&self, packet_id: &str) -> Option<(usize, usize)> {
         self.spans.get(packet_id).copied()
+    }
+
+    /// ORDER 606-h9vy — the fragment item that CREATED a fragment-born packet,
+    /// or `None` for base packets (whose citable origin is `span_of`). The two
+    /// are disjoint by construction: the G-Set never lets a fragment overwrite
+    /// a base packet, so a packet has a base span or a fragment origin, never
+    /// both.
+    pub fn origin_source_of(&self, packet_id: &str) -> Option<&FieldSource> {
+        self.origin_sources.get(packet_id)
+    }
+
+    /// ORDER 606-h9vy — the fragment status entry that WON the LWW fold for
+    /// `field` on `packet_id`, or `None` when the current value comes from the
+    /// packet's own block (base or fragment-born). An exact answer must cite
+    /// this winner for the field, never the stale base span.
+    pub fn field_source_of(&self, packet_id: &str, field: &str) -> Option<&FieldSource> {
+        self.field_sources.get(&format!("{packet_id}\u{1}{field}"))
+    }
+
+    /// Every fragment file that was beside the index at load time, parseable
+    /// or not. Empty for a base-only load. Freshness derives from base plus
+    /// this whole set — a malformed fragment still changes the corpus.
+    pub fn corpus_files(&self) -> &[PathBuf] {
+        &self.corpus_files
+    }
+
+    pub(crate) fn set_fragment_sources(
+        &mut self,
+        origin_sources: BTreeMap<String, FieldSource>,
+        field_sources: BTreeMap<String, FieldSource>,
+        corpus_files: Vec<PathBuf>,
+    ) {
+        self.origin_sources = origin_sources;
+        self.field_sources = field_sources;
+        self.corpus_files = corpus_files;
     }
 
     /// Rebuild the lookup indexes from the current `packets`, leaving `spans`
@@ -376,6 +446,37 @@ impl Ledger {
             .iter()
             .filter(|p| str_list(p, "depends_on").contains(&target))
             .collect()
+    }
+
+    /// The target packet's direct, unsatisfied `depends_on` prerequisites —
+    /// i.e. what X is blocked ON, rather than the downstream packets X blocks.
+    ///
+    /// `None` means the target reference did not resolve. `Some([])` means the
+    /// target is real and has no outstanding direct prerequisite. Declared
+    /// dependency order is preserved. Archived dependencies and active
+    /// `completed`/`obsoleted` packets are satisfied; every other active status
+    /// remains visible because it still prevents the edge from being satisfied.
+    pub fn dependencies_of(&self, reference: &str) -> Option<Vec<&Value>> {
+        let target = self.resolve(reference)?;
+        let mut seen = BTreeSet::new();
+        let mut result = Vec::new();
+
+        for dependency in str_list(target, "depends_on") {
+            if !seen.insert(dependency.clone()) || self.archived_ids.contains(&dependency) {
+                continue;
+            }
+            let Some(packet) = self.resolve(&dependency) else {
+                // Referential soundness rejects this state in `check`; never
+                // fabricate a row when a malformed live ledger slips through.
+                continue;
+            };
+            if matches!(str_field(packet, "status"), Some("completed" | "obsoleted")) {
+                continue;
+            }
+            result.push(packet);
+        }
+
+        Some(result)
     }
 
     /// Transitive closure of blocked_by (everything downstream of X).
@@ -1400,6 +1501,63 @@ steps:
         assert!(
             ledger.blocked_by("delta-packet/slice-b").is_empty(),
             "a leaf packet blocks nothing"
+        );
+    }
+
+    #[test]
+    fn dependencies_of_returns_only_direct_unsatisfied_prerequisites_in_declared_order() {
+        let raw = r#"
+steps:
+  - packet_id: ready-dep
+    order: 910
+    status: ready
+  - packet_id: completed-dep
+    order: 911
+    status: completed
+  - packet_id: obsoleted-dep
+    order: 912
+    status: obsoleted
+  - packet_id: failed-dep
+    order: 913
+    status: failed
+  - packet_id: target
+    order: 914
+    status: pending
+    depends_on: [failed-dep, completed-dep, archived-dep, ready-dep, obsoleted-dep, failed-dep]
+  - packet_id: downstream
+    order: 915
+    status: ready
+    depends_on: [target]
+"#;
+        let archived = ["archived-dep".to_string()].into_iter().collect();
+        let ledger = Ledger::parse(raw, archived).expect("synthetic ledger parses");
+
+        let upstream: Vec<String> = ledger
+            .dependencies_of("target")
+            .expect("target resolves")
+            .iter()
+            .map(|p| ledger.id_of(p))
+            .collect();
+        assert_eq!(upstream, vec!["failed-dep", "ready-dep"]);
+        assert_eq!(
+            ledger
+                .dependencies_of("completed-dep")
+                .expect("leaf resolves")
+                .len(),
+            0,
+            "a real leaf is distinguishable from an unknown target"
+        );
+        assert!(ledger.dependencies_of("not-real").is_none());
+
+        let downstream: Vec<String> = ledger
+            .blocked_by("target")
+            .iter()
+            .map(|p| ledger.id_of(p))
+            .collect();
+        assert_eq!(
+            downstream,
+            vec!["downstream"],
+            "adding the upstream query must not change downstream semantics"
         );
     }
 

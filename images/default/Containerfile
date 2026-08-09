@@ -54,6 +54,10 @@ COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 COPY codex-device-auth.sh /usr/local/bin/codex-device-auth
 COPY codex-oauth-vault.sh /usr/local/bin/codex-oauth-vault
 COPY codex-oauth-session.sh /usr/local/bin/codex-oauth-session
+# @trace order:605-u9g5
+# Idempotent Codex expert-MCP registration (forge-plan + project-info as stdio
+# servers through the supported `codex mcp add` interface).
+COPY config-overlay/codex/register-experts.sh /usr/local/bin/register-codex-experts
 COPY provider-device-auth.sh /usr/local/bin/provider-device-auth
 COPY provider-oauth-vault.sh /usr/local/bin/provider-oauth-vault
 # @trace spec:error-message-localization
@@ -91,6 +95,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/codex-device-auth \
              /usr/local/bin/codex-oauth-vault \
              /usr/local/bin/codex-oauth-session \
+             /usr/local/bin/register-codex-experts \
              /usr/local/bin/provider-device-auth \
              /usr/local/bin/provider-oauth-vault \
              /usr/local/bin/sse-keepalive-proxy.js

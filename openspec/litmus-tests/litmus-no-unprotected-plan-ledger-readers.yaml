@@ -60,10 +60,10 @@ critical_path:
     expected_behavior: "ok: drain-queue-routes-through-cli"
 
   # ── (c) a fragment-only packet is visible through the overlay-aware readers ──
-  - step: "BEHAVIOURAL: `query --json` sees a packet that EXISTS ONLY as a fragment (a base-only reader is guaranteed to miss it)"
-    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/index.d\"; printf '%s\\n' 'packets: []' > \"$W/plan/index.yaml\"; printf '%s\\n' 'packets:' '  - packet_id: frag-only-probe' '    order: 999-zzz' '    title: fragment only' '    status: ready' '    kind: fix' '    pickup_role: linux' '    capability_tags: [probe]' '    deliverable: probe' '    depends_on: []' > \"$W/plan/index.d/20260803t010000z-frag-probe-linux.yaml\"; J=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/index.yaml\" query --status ready --tag probe --limit 1 --json 2>&1); rc=$?; cd /; rm -rf \"$W\"; test $rc -eq 0 && printf '%s' \"$J\" | grep -q 'frag-only-probe' && printf '%s' \"$J\" | grep -q '999-zzz' && echo 'ok: fragment-only-packet-visible-through-query-json'"
+  - step: "BEHAVIOURAL: release-aware `query --json` sees a packet that EXISTS ONLY as a fragment and preserves its release projection"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/index.d\"; printf '%s\\n' 'packets: []' > \"$W/plan/index.yaml\"; printf '%s\\n' 'packets:' '  - packet_id: frag-only-probe' '    order: 999-zzz' '    title: fragment only' '    status: ready' '    kind: fix' '    pickup_role: linux' '    desired_release: v0.5' '    release_target: probe-milestone' '    capability_tags: [probe]' '    deliverable: probe' '    depends_on: []' > \"$W/plan/index.d/20260803t010000z-frag-probe-linux.yaml\"; J=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/index.yaml\" query --status ready --release v0.5 --tag probe --limit 1 --json 2>&1); rc=$?; cd /; rm -rf \"$W\"; test $rc -eq 0 && printf '%s' \"$J\" | jq -e 'length == 1 and .[0].packet_id == \"frag-only-probe\" and .[0].order == \"999-zzz\" and .[0].desired_release == \"v0.5\" and .[0].release_target == \"probe-milestone\"' >/dev/null && echo 'ok: fragment-only-packet-visible-through-release-query-json'"
     timeout_ms: 300000
-    expected_behavior: "ok: fragment-only-packet-visible-through-query-json"
+    expected_behavior: "ok: fragment-only-packet-visible-through-release-query-json"
 
   - step: "NEGATIVE CONTROL: the same packet is INVISIBLE to a base-only yq read — the disagreement the overlay exists to kill"
     command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/index.d\"; printf '%s\\n' 'packets: []' > \"$W/plan/index.yaml\"; printf '%s\\n' 'packets:' '  - packet_id: frag-only-probe' '    order: 999-zzz' '    title: fragment only' '    status: ready' '    kind: fix' '    pickup_role: linux' '    capability_tags: [probe]' '    deliverable: probe' '    depends_on: []' > \"$W/plan/index.d/20260803t010000z-frag-probe-linux.yaml\"; B=$(yq '.packets[] | .packet_id' \"$W/plan/index.yaml\" 2>/dev/null || true); cd /; rm -rf \"$W\"; if [ -z \"$B\" ] || ! printf '%s' \"$B\" | grep -q 'frag-only-probe'; then echo 'ok: base-only-reader-cannot-see-fragment'; else echo 'FAIL: base-only reader saw the fragment (fixture wrong)'; exit 1; fi"
@@ -85,7 +85,7 @@ failure_modes:
   - "a new direct reader of plan/index.yaml appears (yq/awk/ruby) and reports the base-only ledger with total confidence"
   - "project-info plan_query regresses to a yq read, so forge-plan and project-info disagree about what the plan says"
   - "drain-queue regresses to an awk parse, so a fragment-only ready packet is never drained"
-  - "the `query` subcommand's filter semantics drift from plan_query's contract (exact status, substring role, all-match tags, limit)"
+  - "the `query` subcommand's filter semantics drift from plan_query's contract (exact status/release, substring role, all-match tags, limit)"
   - "the CLI forgets to fold plan/index.d/ fragments, so every reader above silently reports a stale ledger"
 
 observability:

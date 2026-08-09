@@ -15,7 +15,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/audit-cheatsheet-sources.sh#L22](../../../scripts/audit-cheatsheet-sources.sh#L22)
 - [scripts/bind-provenance-local-paths.sh#L4](../../../scripts/bind-provenance-local-paths.sh#L4)
 - [scripts/check-cheatsheet-sources.sh#L25](../../../scripts/check-cheatsheet-sources.sh#L25)
-- [scripts/check-cheatsheet-staleness.sh#L2](../../../scripts/check-cheatsheet-staleness.sh#L2)
 - [scripts/hooks/pre-commit-openspec.sh#L3](../../../scripts/hooks/pre-commit-openspec.sh#L3)
 - [scripts/hooks/pre-commit-openspec.sh#L191](../../../scripts/hooks/pre-commit-openspec.sh#L191)
 - [scripts/refresh-cheatsheet-sources.sh#L4](../../../scripts/refresh-cheatsheet-sources.sh#L4)

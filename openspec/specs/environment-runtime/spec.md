@@ -94,6 +94,28 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 - **WHEN** `TILLANDSIAS_AGENT` is any value not in the recognised set
 - **THEN** existing fallback behaviour MUST remain unchanged
 
+### Requirement: Forge launchers export the exact active harness identity
+
+Every forge launcher MUST inject `TILLANDSIAS_AGENT` into the container with
+the identity of the harness it actually launches. The stable values are
+`opencode`, `opencode-web`, `claude`, `codex`, `antigravity`, and `terminal`.
+Launcher-provided identity MUST take precedence over compatibility defaults in
+deprecated entrypoint/profile helpers.
+
+#### Scenario: Agent launch carries its own identity
+- **WHEN** a user launches any supported forge agent lane
+- **THEN** the container environment MUST contain the matching stable value
+- **AND** forge-local expert routing MUST be able to select that harness without a fallback
+
+#### Scenario: Maintenance launch is identified as terminal
+- **WHEN** a user launches the maintenance shell
+- **THEN** the container environment MUST contain `TILLANDSIAS_AGENT=terminal`
+- **AND** the historical `maintenance` container-name suffix MUST remain unchanged
+
+#### Scenario: Compatibility defaults do not disagree
+- **WHEN** a cached launcher reaches the deprecated dispatcher without an identity
+- **THEN** the dispatcher and agent-profile helper MUST both default to `claude`
+
 ## Litmus Tests
 
 ### test_linux_config_path (binding: litmus:enclave-isolation)
@@ -161,6 +183,12 @@ The runtime environment contract MUST recognise `TILLANDSIAS_AGENT=opencode-web`
 **Signal**: Entrypoint routing decision
 **Pass**: Fallback behavior remains unchanged (likely defaults to terminal or CLI opencode)
 **Fail**: Entrypoint crashes or ignores unknown value without safe fallback
+
+### test_forge_harness_identity (binding: litmus:forge-harness-identity)
+**Setup**: Build the Podman launch arguments for every forge harness and the maintenance lane
+**Signal**: The environment placed inside the launched container
+**Pass**: Exactly one `TILLANDSIAS_AGENT` value is present and matches the selected harness; compatibility helpers share the same default
+**Fail**: The identity is absent, duplicated, names a different harness, or depends on a divergent fallback
 
 ### test_config_hierarchy_resolution (binding: litmus:ephemeral-guarantee)
 **Setup**: Create both global and per-project config files with conflicting values for a setting (e.g., `timeout`)

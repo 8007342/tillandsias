@@ -1,8 +1,9 @@
 #!/bin/sh
 # @trace spec:git-mirror-service, spec:secrets-management
-# Synchronous relay invoked only by pre-receive. stdin is receive-pack's
-# `<oldsha> <newsha> <refname>` transaction. Success means the configured
-# upstream durably accepted the complete atomic ref set.
+# Synchronous relay invoked by pre-receive and startup recovery. stdin is an
+# exact `<oldsha> <newsha> <refname>` transaction; startup recovery represents
+# its current local ref as old==new. Success means the configured upstream
+# durably accepted the complete atomic ref set.
 
 LOG_CANDIDATES="/var/log/tillandsias/git-push.log $HOME/.cache/tillandsias/git-push.log /tmp/git-push.log"
 LOG_FILE=""
@@ -24,39 +25,137 @@ log_msg() {
     echo "[relay] $1" >&2
 }
 
-REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
-if [ -z "$REMOTE_URL" ]; then
-    log_msg "No upstream configured; accepting as a durable local-only mirror update"
-    exit 0
-fi
+TMPDIR_WORK="$(mktemp -d 2>/dev/null || mktemp -d -t 'git-relay-refs')"
+trap 'rm -rf "$TMPDIR_WORK"' EXIT
+UPDATES_FILE="$TMPDIR_WORK/updates"
+SEEN_REFS="$TMPDIR_WORK/seen-refs"
+cat > "$UPDATES_FILE"
+: > "$SEEN_REFS"
 
-REFSPECS=""
 DELETE_COUNT=0
 CREATE_UPDATE_COUNT=0
-ZERO_SHA="0000000000000000000000000000000000000000"
+OID_SAMPLE="$(git hash-object --stdin </dev/null 2>/dev/null)" || {
+    log_msg "Cannot determine repository object format; refusing relay"
+    exit 1
+}
+OID_LENGTH="${#OID_SAMPLE}"
+ZERO_SHA="$(printf '%*s' "$OID_LENGTH" '' | tr ' ' '0')"
 
-# OLDSHA is part of receive-pack's pinned transaction grammar even though the
-# relay needs only the proposed value and ref name.
-# shellcheck disable=SC2034
-while read -r OLDSHA NEWSHA REFNAME; do
-    [ -n "$REFNAME" ] || continue
-    if [ "$NEWSHA" = "$ZERO_SHA" ]; then
-        REFSPECS="$REFSPECS :$REFNAME"
-        DELETE_COUNT=$((DELETE_COUNT + 1))
-    else
-        REFSPECS="$REFSPECS $NEWSHA:$REFNAME"
-        CREATE_UPDATE_COUNT=$((CREATE_UPDATE_COUNT + 1))
+# The relay is privileged independently of its caller. Re-validate the exact
+# three-field receive grammar and repository state here rather than trusting
+# pre-receive: alternate/direct callers must not gain a parser-smuggling bypass.
+REJECTED=0
+while read -r OLDSHA NEWSHA REFNAME EXTRA; do
+    if [ -z "$OLDSHA" ] || [ -z "$NEWSHA" ] || [ -z "$REFNAME" ] || [ -n "${EXTRA:-}" ]; then
+        log_msg "SAFETY: malformed receive transaction record"
+        REJECTED=1
+        continue
     fi
-done
+    if [ "${#OLDSHA}" -ne "$OID_LENGTH" ] || [ "${#NEWSHA}" -ne "$OID_LENGTH" ]; then
+        log_msg "SAFETY: object ID width does not match repository object format"
+        REJECTED=1
+        continue
+    fi
+    case "$OLDSHA$NEWSHA" in
+        *[!0-9a-f]*)
+            log_msg "SAFETY: object ID is not lowercase hexadecimal"
+            REJECTED=1
+            continue
+            ;;
+    esac
+    case "$REFNAME" in
+        refs/*) ;;
+        *)
+            log_msg "SAFETY: refname is outside refs/*"
+            REJECTED=1
+            continue
+            ;;
+    esac
+    if ! git check-ref-format "$REFNAME" >/dev/null 2>&1; then
+        log_msg "SAFETY: invalid refname in receive transaction"
+        REJECTED=1
+        continue
+    fi
+    if grep -Fqx "$REFNAME" "$SEEN_REFS"; then
+        log_msg "SAFETY: duplicate ref in receive transaction: $REFNAME"
+        REJECTED=1
+        continue
+    fi
+    printf '%s\n' "$REFNAME" >> "$SEEN_REFS"
 
-if [ -z "$REFSPECS" ]; then
+    ACTUAL_SHA="$(git rev-parse --verify "$REFNAME" 2>/dev/null || true)"
+    if [ "$OLDSHA" = "$ZERO_SHA" ]; then
+        if [ -n "$ACTUAL_SHA" ]; then
+            log_msg "SAFETY: stale old object ID does not match current ref: $REFNAME"
+            REJECTED=1
+            continue
+        fi
+    elif [ "$ACTUAL_SHA" != "$OLDSHA" ]; then
+        log_msg "SAFETY: stale old object ID does not match current ref: $REFNAME"
+        REJECTED=1
+        continue
+    fi
+
+    if [ "$NEWSHA" = "$ZERO_SHA" ]; then
+        DELETE_COUNT=$((DELETE_COUNT + 1))
+        continue
+    fi
+    if ! git cat-file -e "$NEWSHA" 2>/dev/null; then
+        log_msg "SAFETY: proposed object is unavailable: $REFNAME"
+        REJECTED=1
+        continue
+    fi
+    case "$REFNAME" in
+        refs/heads/*)
+            if [ "$(git cat-file -t "$NEWSHA" 2>/dev/null || true)" != "commit" ]; then
+                log_msg "SAFETY: proposed branch tip is not a commit: $REFNAME"
+                REJECTED=1
+                continue
+            fi
+            if [ "$OLDSHA" != "$ZERO_SHA" ] \
+               && ! git merge-base --is-ancestor "$OLDSHA" "$NEWSHA" 2>/dev/null; then
+                log_msg "SAFETY: non-fast-forward branch update is disabled: $REFNAME"
+                REJECTED=1
+                continue
+            fi
+            ;;
+    esac
+    CREATE_UPDATE_COUNT=$((CREATE_UPDATE_COUNT + 1))
+done < "$UPDATES_FILE"
+
+if [ "$REJECTED" -ne 0 ]; then
+    log_msg "SAFETY: refusing malformed or stale relay transaction"
+    exit 1
+fi
+
+# Defense in depth for direct/helper callers: the live pre-receive path rejects
+# every deletion before invoking this privileged relay, but no alternate caller
+# may turn the mirror's service credential into delete authority either.
+if [ "$DELETE_COUNT" -gt 0 ]; then
+    log_msg "SAFETY: refusing $DELETE_COUNT upstream ref deletion(s); authenticated policy-aware cleanup is required"
+    exit 1
+fi
+
+if [ "$CREATE_UPDATE_COUNT" -eq 0 ]; then
     log_msg "No refs supplied; nothing to relay"
     exit 0
 fi
 
-if [ "$DELETE_COUNT" -gt 10 ] && [ "${TILLANDSIAS_ALLOW_BULK_DELETE:-0}" != "1" ]; then
-    log_msg "SAFETY: refusing $DELETE_COUNT upstream deletions (set TILLANDSIAS_ALLOW_BULK_DELETE=1 to override)"
-    exit 1
+# Build one argv element per validated refspec. Never concatenate and unquoted-
+# expand an attacker-influenced string: shell word splitting allowed an extra
+# field such as `:refs/heads/victim` to become a second destructive refspec.
+set --
+while read -r OLDSHA NEWSHA REFNAME EXTRA; do
+    if [ "$NEWSHA" != "$ZERO_SHA" ]; then
+        set -- "$@" "$NEWSHA:$REFNAME"
+    fi
+done < "$UPDATES_FILE"
+
+REMOTE_URL="$(git remote get-url origin 2>/dev/null || true)"
+
+if [ -z "$REMOTE_URL" ]; then
+    log_msg "No upstream configured; accepting as a durable local-only mirror update"
+    exit 0
 fi
 
 # @trace spec:tillandsias-vault, spec:git-mirror-service
@@ -104,8 +203,8 @@ case "$REMOTE_URL" in
         # Configure the helper via the ENVIRONMENT, not `git -c`, so the
         # relay's command shape stays exactly as pinned by
         # litmus:git-mirror-relay-verified-ack — that grep proves the push is
-        # --atomic with explicit refspecs and never --mirror/--all, which is
-        # the invariant that stops a repack from deleting upstream branches.
+        # --atomic with one safely quoted argv element per validated refspec and
+        # never --mirror/--all.
         # Credential wiring must not cost us that proof.
         #
         # GIT_CONFIG_COUNT/KEY/VALUE is git's documented env form. The empty
@@ -164,8 +263,7 @@ fi
 # GIT_ALTERNATE_OBJECT_DIRECTORIES. Keep Git's quarantine marker intact here:
 # an HTTPS/SSH upstream cannot inherit the local hook environment, and local
 # transport fixtures must sanitize the receiver side explicitly.
-# shellcheck disable=SC2086
-if OUTPUT="$(GIT_TERMINAL_PROMPT=0 git push --atomic "$PUSH_URL" $REFSPECS 2>&1)"; then
+if OUTPUT="$(GIT_TERMINAL_PROMPT=0 git push --atomic "$PUSH_URL" "$@" 2>&1)"; then
     log_msg "Atomic push to $REMOTE_URL_REDACTED succeeded"
     unset PUSH_URL BARE_URL
     exit 0

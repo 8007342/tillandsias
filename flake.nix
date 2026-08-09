@@ -131,7 +131,6 @@
         forgeShellConfigs = ./images/default/shell;
         forgeWelcome = ./images/default/forge-welcome.sh;
         forgeLocales = ./images/default/locales;
-        forgeMcpBrowser = ./images/default/tillandsias-mcp-browser;
         forgeCliCommands = ./images/default/cli;
         forgeShellHelpers = ./images/default/config-overlay/shell-helpers.sh;
         webEntrypoint = ./images/web/entrypoint.sh;
@@ -249,9 +248,6 @@
               chmod +x ./usr/local/bin/entrypoint-forge-claude.sh
               chmod +x ./usr/local/bin/entrypoint-forge-codex.sh
               chmod +x ./usr/local/bin/entrypoint-terminal.sh
-              cp ${forgeMcpBrowser} ./usr/local/bin/tillandsias-mcp-browser
-              chmod +x ./usr/local/bin/tillandsias-mcp-browser
-
               # Copy legacy entrypoint (backward compat redirect)
               cp ${forgeEntrypoint} ./usr/local/bin/tillandsias-entrypoint.sh
               chmod +x ./usr/local/bin/tillandsias-entrypoint.sh

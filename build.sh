@@ -478,7 +478,9 @@ _require_host_build_tools() {
 # on every build that is not a test-only or check-only invocation. Every
 # build-producing dispatch below calls this helper; the latch makes combined
 # flags (e.g. --clean --release --install) regenerate exactly once, and the
-# test/check dispatches never call it at all.
+# test/check dispatches never regenerate. A gate-bearing check may still run
+# `generate-traces.sh --check`, which writes only to a throwaway directory and
+# refuses to certify stale committed evidence.
 #
 # Ordering rule (order 495, litmus:local-ci-self-clean-evidence): the tracked
 # trace indexes are deterministic, so regeneration is a no-op whenever the
@@ -681,6 +683,19 @@ _run_litmus_phase() {
 # release push on 2026-08-04.
 _write_gate_stamp() {
     [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]] || return 0
+
+    # Order 584-2qq2: a stamp is authority for the pre-push hook, so it must
+    # cover generated trace evidence as well as Rust/ledger checks. Keep this
+    # validation non-mutating: check/test-only invocations still never rewrite
+    # TRACES.md, and TILLANDSIAS_SKIP_TRACE_INDEX continues to suppress every
+    # regeneration. It does not grant authority to stamp stale evidence.
+    local trace_status
+    if ! trace_status="$("$SCRIPT_DIR/scripts/generate-traces.sh" --check 2>&1)"; then
+        _error "Trace-index freshness check failed — gate stamp NOT recorded"
+        printf '%s\n' "$trace_status" >&2
+        return 1
+    fi
+
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
     else

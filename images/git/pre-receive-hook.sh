@@ -268,23 +268,133 @@ REJECT_MARKER="$TMPDIR_WORK/rejected"
 cat > "$UPDATES_FILE"
 
 REJECTED=0
+OID_SAMPLE="$(git hash-object --stdin </dev/null 2>/dev/null)" || {
+    log_msg "Push rejected: cannot determine repository object format"
+    exit 1
+}
+OID_LENGTH="${#OID_SAMPLE}"
+ZERO_SHA="$(printf '%*s' "$OID_LENGTH" '' | tr ' ' '0')"
+SEEN_REFS="$TMPDIR_WORK/seen-refs"
+: > "$SEEN_REFS"
+
+# --- Validate transaction + enforce policy before privileged relay (order 579) ---
+# @trace spec:git-mirror-service
+# receive-pack runs pre-receive BEFORE it evaluates receive.denyDeletes and
+# receive.denyNonFastForwards. Relying on repo config alone can therefore relay
+# a destructive transaction upstream and reject it only afterwards locally.
+# Validate the same load-bearing transaction facts receive-pack applies later:
+# refname grammar, object-ID width/existence, uniqueness, and exact old-value
+# match. Without this, a fabricated stale OLDSHA or invalid refname can reach
+# upstream first and then fail local receive-pack validation, splitting refs.
+# Apply the zero-trust containment policy here while both repositories are still
+# unchanged: reject every ref deletion, plus non-fast-forward branch updates.
+# Git's receive.denyDeletes is branch-scoped in practice, so the explicit hook
+# check is what protects tag and custom namespaces. New ref creation remains
+# allowed.
+RECEIVE_POLICY_REJECTED=0
+while read -r OLDSHA NEWSHA REFNAME EXTRA; do
+    if [ -z "$OLDSHA" ] || [ -z "$NEWSHA" ] || [ -z "$REFNAME" ] || [ -n "${EXTRA:-}" ]; then
+        log_msg "REJECT: malformed receive transaction record"
+        RECEIVE_POLICY_REJECTED=1
+        continue
+    fi
+
+    if [ "${#OLDSHA}" -ne "$OID_LENGTH" ] || [ "${#NEWSHA}" -ne "$OID_LENGTH" ]; then
+        log_msg "REJECT: object ID width does not match repository object format"
+        RECEIVE_POLICY_REJECTED=1
+        continue
+    fi
+    case "$OLDSHA$NEWSHA" in
+        *[!0-9a-f]*)
+            log_msg "REJECT: object ID is not lowercase hexadecimal"
+            RECEIVE_POLICY_REJECTED=1
+            continue
+            ;;
+    esac
+
+    case "$REFNAME" in
+        refs/*) ;;
+        *)
+            log_msg "REJECT: refname is outside refs/*"
+            RECEIVE_POLICY_REJECTED=1
+            continue
+            ;;
+    esac
+    if ! git check-ref-format "$REFNAME" >/dev/null 2>&1; then
+        log_msg "REJECT: invalid refname in receive transaction"
+        RECEIVE_POLICY_REJECTED=1
+        continue
+    fi
+    if grep -Fqx "$REFNAME" "$SEEN_REFS"; then
+        log_msg "REJECT: duplicate ref in receive transaction: $REFNAME"
+        RECEIVE_POLICY_REJECTED=1
+        continue
+    fi
+    printf '%s\n' "$REFNAME" >> "$SEEN_REFS"
+
+    ACTUAL_SHA="$(git rev-parse --verify "$REFNAME" 2>/dev/null || true)"
+    if [ "$OLDSHA" = "$ZERO_SHA" ]; then
+        if [ -n "$ACTUAL_SHA" ]; then
+            log_msg "REJECT: stale old object ID does not match current ref: $REFNAME"
+            RECEIVE_POLICY_REJECTED=1
+            continue
+        fi
+    elif [ "$ACTUAL_SHA" != "$OLDSHA" ]; then
+        log_msg "REJECT: stale old object ID does not match current ref: $REFNAME"
+        RECEIVE_POLICY_REJECTED=1
+        continue
+    fi
+
+    if [ "$NEWSHA" = "$ZERO_SHA" ]; then
+        log_msg "REJECT: ref deletion is disabled: $REFNAME"
+        RECEIVE_POLICY_REJECTED=1
+        continue
+    fi
+
+    if ! git cat-file -e "$NEWSHA" 2>/dev/null; then
+        log_msg "REJECT: proposed object is unavailable: $REFNAME"
+        RECEIVE_POLICY_REJECTED=1
+        continue
+    fi
+
+    case "$REFNAME" in
+        refs/heads/*)
+            if [ "$(git cat-file -t "$NEWSHA" 2>/dev/null || true)" != "commit" ]; then
+                log_msg "REJECT: proposed branch tip is not a commit: $REFNAME"
+                RECEIVE_POLICY_REJECTED=1
+                continue
+            fi
+            ;;
+    esac
+
+    case "$REFNAME" in
+        refs/heads/*)
+            if [ "$OLDSHA" != "$ZERO_SHA" ] \
+               && ! git merge-base --is-ancestor "$OLDSHA" "$NEWSHA" 2>/dev/null; then
+                log_msg "REJECT: non-fast-forward branch update is disabled: $REFNAME"
+                RECEIVE_POLICY_REJECTED=1
+            fi
+            ;;
+    esac
+done < "$UPDATES_FILE"
+
+if [ "$RECEIVE_POLICY_REJECTED" -eq 1 ]; then
+    log_msg "Push rejected: transaction or receive hardening policy failed before upstream relay"
+    exit 1
+fi
 
 # Read stdin: one line per ref as "<oldsha> <newsha> <refname>"
 while read -r OLDSHA NEWSHA REFNAME; do
     [ -n "$REFNAME" ] || continue
 
-    # Skip deletions (newsha is zero)
-    case "$NEWSHA" in
-        0000000000000000000000000000000000000000) continue ;;
-    esac
+    # Deletions were rejected in the pre-relay transaction pass above.
+    [ "$NEWSHA" = "$ZERO_SHA" ] && continue
 
     # Rung 2 (order 500): warn-only name grammar applies to NEW branch
     # creations only (zero oldsha). Never rejects; no-op without config.
-    case "$OLDSHA" in
-        0000000000000000000000000000000000000000)
-            warn_if_outside_branch_grammar "$REFNAME"
-            ;;
-    esac
+    if [ "$OLDSHA" = "$ZERO_SHA" ]; then
+        warn_if_outside_branch_grammar "$REFNAME"
+    fi
 
     # Rung 2 (order 500, repair B4): a ref matching a config-supplied exempt
     # pattern skips the ledger-YAML gate entirely — a blocked agent must be
@@ -298,7 +408,7 @@ while read -r OLDSHA NEWSHA REFNAME; do
 
     # Determine the set of changed files to validate
     case "$OLDSHA" in
-        0000000000000000000000000000000000000000)
+        "$ZERO_SHA")
             # New branch or tag: find a diff-base ancestor to avoid validating
             # the entire inherited tree (which includes frozen legacy archive
             # files that intentionally have invalid YAML).

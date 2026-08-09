@@ -141,7 +141,7 @@ discover_sibling_projects() {
 }
 
 # ── Plan ledger resolution ────────────────────────────────────
-# @trace spec:plan-ledger-fragment-overlay
+# @trace spec:layered-tools-overlay, spec:forge-environment-discoverability
 # ORDER 582-26mm. plan_query must see the FOLDED ledger (base ⊕ plan/index.d/
 # fragments), never the base alone — a reader that forgets fragments reports a
 # stale ledger with total confidence, and if plan_answer says a packet exists
@@ -193,19 +193,22 @@ resolve_plan_bin() {
 
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
+    [ -n "$line" ] || continue
     method=$(echo "$line" | jq -r '.method // empty')
-    id=$(echo "$line" | jq -r '.id // empty')
+    id_json=$(printf '%s' "$line" | jq -c '.id // null')
 
     case "$method" in
         "initialize")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
+            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"project-info","version":"1.0.0"}}}'
             ;;
         "tools/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files (glob supports path patterns)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"find_files","description":"Find files by glob pattern (recursive, path-aware)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern e.g. **/*.sh, plan/index.yaml"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"grep_code","description":"Search for a pattern across source files with path-aware glob","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"include":{"type":"string","description":"File glob pattern (default: *)"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"git_status","description":"Show working tree status as structured JSON data","inputSchema":{"type":"object","properties":{}}},{"name":"read_file","description":"Read a file with offset and limit support","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"number","description":"Line number to start from (1-indexed, default: 0 for beginning)"},"limit":{"type":"number","description":"Number of lines to read (default: all)"}},"required":["path"]}},{"name":"plan_query","description":"Query plan/index.yaml for matching work packets by status, role, or capability tags","inputSchema":{"type":"object","properties":{"status":{"type":"string","description":"Filter by status (ready, pending, in_progress, blocked, completed, etc.)"},"pickup_role":{"type":"string","description":"Filter by pickup_role substring"},"capability_tags":{"type":"array","items":{"type":"string"},"description":"Filter by capability tags (all must match)"},"limit":{"type":"number","description":"Max results (default: 20)"}}}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
+            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"tools":[{"name":"project_structure","description":"List project files (max depth 3, max 100 files)","inputSchema":{"type":"object","properties":{"depth":{"type":"number","default":3}}}},{"name":"file_summary","description":"Show line count and first lines of a file","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"lines":{"type":"number","default":5}},"required":["path"]}},{"name":"search_code","description":"Search for a pattern across source files (glob supports path patterns)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"glob":{"type":"string","default":"*"}},"required":["pattern"]}},{"name":"find_files","description":"Find files by glob pattern (recursive, path-aware)","inputSchema":{"type":"object","properties":{"pattern":{"type":"string","description":"Glob pattern e.g. **/*.sh, plan/index.yaml"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"grep_code","description":"Search for a pattern across source files with path-aware glob","inputSchema":{"type":"object","properties":{"pattern":{"type":"string"},"include":{"type":"string","description":"File glob pattern (default: *)"},"path":{"type":"string","description":"Root directory (default: .)"}},"required":["pattern"]}},{"name":"git_status","description":"Show working tree status as structured JSON data","inputSchema":{"type":"object","properties":{}}},{"name":"read_file","description":"Read a file with offset and limit support","inputSchema":{"type":"object","properties":{"path":{"type":"string"},"offset":{"type":"number","description":"Line number to start from (1-indexed, default: 0 for beginning)"},"limit":{"type":"number","description":"Number of lines to read (default: all)"}},"required":["path"]}},{"name":"plan_query","description":"Query plan/index.yaml for matching work packets by status, role, or capability tags","inputSchema":{"type":"object","properties":{"status":{"type":"string","description":"Filter by status (ready, pending, in_progress, blocked, completed, etc.)"},"pickup_role":{"type":"string","description":"Filter by pickup_role substring"},"capability_tags":{"type":"array","items":{"type":"string"},"description":"Filter by capability tags (all must match)"},"limit":{"type":"number","description":"Max results (default: 20)"}}}},{"name":"project_answer","description":"Query project knowledge, architecture, or status with cited response envelope","inputSchema":{"type":"object","properties":{"question":{"type":"string","description":"Question about project structure, build, status, or plan"}},"required":["question"]}},{"name":"project_list","description":"Discover available projects in ~/src/ (git repos)","inputSchema":{"type":"object","properties":{}}},{"name":"sibling_projects","description":"Discover sibling projects in parent directory","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_info","description":"Get detailed info about a project at a path","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_type","description":"Detect project type from marker files","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."}},"required":[]}},{"name":"project_metadata","description":"Get structured metadata about a project","inputSchema":{"type":"object","properties":{"path":{"type":"string","default":"."},"name":{"type":"string"}},"required":[]}}]}}'
             ;;
         "tools/call")
-            tool=$(echo "$line" | jq -r '.params.name')
-            args=$(echo "$line" | jq -r '.params.arguments // {}')
+            tool=$(echo "$line" | jq -r '.params.name // empty')
+            args=$(echo "$line" | jq -c '.params.arguments // {}')
+            error_code=""
+            error_msg=""
             case "$tool" in
                 "project_structure")
                     depth=$(echo "$args" | jq -r '.depth // 3')
@@ -453,25 +456,66 @@ ${preview}"
                     fi
                     ;;
 
+                "project_answer")
+                    _q=$(echo "$args" | jq -r '.question // empty')
+                    if [ -z "$_q" ]; then
+                        error_code=-32602
+                        error_msg="Invalid params for tool 'project_answer': missing required 'question'"
+                    else
+                        # Two-lane routing (C4): specialized plan expert lane if available, else generic project index lane
+                        _pbin="$(resolve_plan_bin)"
+                        _pidx="$(resolve_plan_index)"
+                        if [ -n "$_pbin" ] && [ -n "$_pidx" ]; then
+                            _ans=$("$_pbin" --index "$_pidx" answer "$_q" 2>/dev/null || true)
+                            if [ -n "$_ans" ]; then
+                                result="$_ans"
+                            else
+                                result='{"answer":"the project expert cannot answer this question","citations":[],"freshness":"now","confidence":"unsupported"}'
+                            fi
+                        else
+                            # Generic project index lane
+                            _p_types=$(detect_project_types ".")
+                            _p_meta=$(get_project_metadata ".")
+                            result=$(jq -n \
+                                --arg question "$_q" \
+                                --arg types "$_p_types" \
+                                --argjson meta "$_p_meta" \
+                                '{
+                                    answer: ("Project type: " + $types + "\nName: " + $meta.name + "\nPath: " + $meta.path + "\nDescription: " + ($meta.description // "none")),
+                                    citations: [($meta.path + "/README.md:1-5")],
+                                    freshness: "now",
+                                    confidence: "high"
+                                }')
+                        fi
+                    fi
+                    ;;
+
                 *)
-                    result="Unknown tool: $tool"
+                    error_code=-32601
+                    error_msg="Unknown tool: $tool"
                     ;;
             esac
-            # Escape the result for JSON
-            escaped=$(echo "$result" | jq -Rs .)
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
+
+            if [ -n "$error_code" ]; then
+                _err_escaped=$(printf '%s' "$error_msg" | jq -Rs .)
+                echo '{"jsonrpc":"2.0","id":'"$id_json"',"error":{"code":'"$error_code"',"message":'"$_err_escaped"'}}'
+            else
+                # Escape the result for JSON
+                escaped=$(echo "$result" | jq -Rs .)
+                echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"content":[{"type":"text","text":'"$escaped"'}]}}'
+            fi
             ;;
         "prompts/list")
             # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
             # MCP spec: respond to prompts/list even when no prompts exist.
             # Silence here hangs OpenCode's /command endpoint for 60s.
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"prompts":[]}}'
+            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"prompts":[]}}'
             ;;
         "resources/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resources":[]}}'
+            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"resources":[]}}'
             ;;
         "resources/templates/list")
-            echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"resourceTemplates":[]}}'
+            echo '{"jsonrpc":"2.0","id":'"$id_json"',"result":{"resourceTemplates":[]}}'
             ;;
         "notifications/initialized")
             # Client acknowledgment - no response needed
@@ -479,10 +523,9 @@ ${preview}"
         *)
             # @trace spec:browser-isolation-tray-integration, spec:opencode-web-session-otp
             # Respond to unknown methods with MCP's "method not found" error
-            # so OpenCode doesn't stall 60s waiting for a reply that never
-            # comes.
-            if [ -n "$id" ]; then
-                echo '{"jsonrpc":"2.0","id":"'"$id"'","error":{"code":-32601,"message":"Method not found: '"$method"'"}}'
+            # so OpenCode doesn't stall 60s waiting for a reply that never comes.
+            if [ -n "$id_json" ] && [ "$id_json" != "null" ]; then
+                echo '{"jsonrpc":"2.0","id":'"$id_json"',"error":{"code":-32601,"message":"Method not found: '"$method"'"}}'
             fi
             ;;
     esac

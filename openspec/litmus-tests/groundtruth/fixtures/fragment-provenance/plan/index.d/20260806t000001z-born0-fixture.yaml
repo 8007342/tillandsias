@@ -1,0 +1,10 @@
+# ORDER 606-h9vy fixture fragment — IMMUTABLE, never compacted.
+# The packet below exists ONLY here. Its cited origin must be this file's own
+# item span — before 606-h9vy the answer engine silently omitted such rows
+# ("N row(s) omitted — no source span could be located").
+packets:
+  - packet_id: fixture-fragment-born
+    order: 902
+    status: ready
+    desired_release: v9.9
+    title: "Packet that exists only in this fragment"

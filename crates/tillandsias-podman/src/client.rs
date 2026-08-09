@@ -2,6 +2,7 @@
 use std::process::Stdio;
 use std::sync::Arc;
 
+use tillandsias_core::image_builder::{IMAGE_LAYER_POLICY, IMAGE_LAYER_POLICY_LABEL};
 use tokio::io::AsyncReadExt;
 use tracing::{debug, info, instrument, warn};
 
@@ -699,6 +700,11 @@ impl PodmanClient {
         build_args: &[String],
     ) -> Result<(), PodmanError> {
         debug!(tag, containerfile, context_dir, "Building image");
+        if let Some(argument) = Self::layer_policy_override(build_args) {
+            return Err(PodmanError::CommandFailed(format!(
+                "image build argument {argument:?} conflicts with the managed {IMAGE_LAYER_POLICY} layer policy"
+            )));
+        }
         // Proxy-exemption class (orders 116/118/119; 4th instance 2026-07-11):
         // containers.conf bakes http(s)_proxy=proxy:3128 into every container,
         // but build containers are not on the enclave network, so `proxy`
@@ -708,6 +714,9 @@ impl PodmanClient {
         let mut args = vec![
             "build".into(),
             "--http-proxy=false".into(),
+            "--squash".into(),
+            "--label".into(),
+            format!("{IMAGE_LAYER_POLICY_LABEL}={IMAGE_LAYER_POLICY}"),
             "-t".into(),
             tag.into(),
         ];
@@ -724,6 +733,65 @@ impl PodmanClient {
         }
     }
 
+    fn layer_policy_override(build_args: &[String]) -> Option<&str> {
+        for (index, argument) in build_args.iter().enumerate() {
+            if argument == "--squash"
+                || argument.starts_with("--squash=")
+                || argument == "--squash-all"
+                || argument.starts_with("--squash-all=")
+            {
+                return Some(argument);
+            }
+
+            let inline_label = argument
+                .strip_prefix("--label=")
+                .or_else(|| argument.strip_prefix("-l="));
+            if inline_label.is_some_and(is_layer_policy_label) {
+                return Some(argument);
+            }
+            if (argument == "--label" || argument == "-l")
+                && build_args
+                    .get(index + 1)
+                    .is_some_and(|label| is_layer_policy_label(label))
+            {
+                return build_args.get(index + 1).map(String::as_str);
+            }
+        }
+        None
+    }
+
+    /// Whether an existing Podman-built image carries the current managed
+    /// layer policy. Missing, malformed, or stale metadata fails closed so an
+    /// old unsquashed version tag is rebuilt instead of silently reused.
+    pub async fn image_uses_managed_layer_policy(&self, image: &str) -> bool {
+        #[cfg(target_os = "windows")]
+        {
+            // Windows runtime artifacts are flattened WSL distros, not Podman
+            // Containerfile images, so the OCI layer-policy label is inapplicable.
+            return self.image_exists(image).await;
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let Ok(raw) = self.image_inspect(image).await else {
+                return false;
+            };
+            let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
+                return false;
+            };
+            let image = value
+                .as_array()
+                .and_then(|items| items.first())
+                .unwrap_or(&value);
+            image
+                .pointer("/Config/Labels")
+                .or_else(|| image.get("Labels"))
+                .and_then(|labels| labels.get(IMAGE_LAYER_POLICY_LABEL))
+                .and_then(serde_json::Value::as_str)
+                == Some(IMAGE_LAYER_POLICY)
+        }
+    }
+
     /// Build image only if it doesn't already exist.
     #[instrument(skip(self), fields(image.tag = %tag))]
     pub async fn ensure_image_built(
@@ -732,7 +800,7 @@ impl PodmanClient {
         containerfile: &str,
         context_dir: &str,
     ) -> Result<(), PodmanError> {
-        if self.image_exists(tag).await {
+        if self.image_exists(tag).await && self.image_uses_managed_layer_policy(tag).await {
             debug!(tag, "Image already exists, skipping build");
             return Ok(());
         }
@@ -1812,6 +1880,13 @@ pub enum PodmanError {
     CommandFailure(CommandFailure),
 }
 
+fn is_layer_policy_label(label: &str) -> bool {
+    label == IMAGE_LAYER_POLICY_LABEL
+        || label
+            .strip_prefix(IMAGE_LAYER_POLICY_LABEL)
+            .is_some_and(|rest| rest.starts_with('='))
+}
+
 impl PodmanError {
     /// Classify whether this error is transient (retry-safe) or permanent (propagate).
     ///
@@ -2352,6 +2427,18 @@ mod tests {
         }
     }
 
+    fn fake_success(stdout: &str) -> CommandOutput {
+        CommandOutput {
+            operation: OperationKind::Image,
+            argv: Vec::new(),
+            redacted_argv: Vec::new(),
+            status: Some(0),
+            stdout: stdout.to_string(),
+            stderr: String::new(),
+            duration: Duration::ZERO,
+        }
+    }
+
     /// Order 494 interim guard: the non-force removal variant maps
     /// `podman rm` exit codes onto leak-not-destroy outcomes — a RUNNING
     /// container is refused (exit 2), never SIGKILLed, and the argv must
@@ -2403,6 +2490,141 @@ mod tests {
                 "non-force removal must be plain `rm <name>` — no -f/--force"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn image_build_squashes_new_layers_and_labels_the_policy() {
+        let backend = std::sync::Arc::new(crate::backend::FakeBackend::default());
+        let client = PodmanClient::with_backend(backend.clone());
+
+        client
+            .build_image(
+                "/repo/images/proxy/Containerfile",
+                "localhost/tillandsias-proxy:test",
+                "/repo/images/proxy",
+                &["--dns".to_string(), "8.8.8.8".to_string()],
+            )
+            .await
+            .expect("fake image build succeeds");
+
+        let seen = backend.seen();
+        assert_eq!(seen.len(), 1);
+        let argv = &seen[0].1;
+        assert_eq!(
+            argv.iter().filter(|arg| *arg == "--squash").count(),
+            1,
+            "the on-demand/CLI builder must pass exactly one --squash"
+        );
+        assert!(!argv.iter().any(|arg| arg == "--squash-all"));
+        assert!(
+            argv.windows(2).any(|pair| {
+                pair == ["--label", "io.tillandsias.image.layer-policy=squash-new"]
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn image_build_rejects_caller_overrides_of_the_managed_layer_policy() {
+        let cases = [
+            vec!["--squash".to_string()],
+            vec!["--squash=false".to_string()],
+            vec!["--squash-all".to_string()],
+            vec!["--squash-all=true".to_string()],
+            vec![
+                "--label".to_string(),
+                "io.tillandsias.image.layer-policy=legacy".to_string(),
+            ],
+            vec!["--label=io.tillandsias.image.layer-policy=legacy".to_string()],
+        ];
+
+        for build_args in cases {
+            let backend = std::sync::Arc::new(crate::backend::FakeBackend::default());
+            let client = PodmanClient::with_backend(backend.clone());
+            let error = client
+                .build_image(
+                    "/repo/images/proxy/Containerfile",
+                    "localhost/tillandsias-proxy:test",
+                    "/repo/images/proxy",
+                    &build_args,
+                )
+                .await
+                .expect_err("callers cannot override the managed layer policy");
+            assert!(
+                error
+                    .to_string()
+                    .contains("conflicts with the managed squash-new")
+            );
+            assert!(
+                backend.seen().is_empty(),
+                "invalid argv must not reach Podman"
+            );
+        }
+
+        let backend = std::sync::Arc::new(crate::backend::FakeBackend::default());
+        let client = PodmanClient::with_backend(backend.clone());
+        client
+            .build_image(
+                "/repo/images/proxy/Containerfile",
+                "localhost/tillandsias-proxy:test",
+                "/repo/images/proxy",
+                &["--label=io.tillandsias.image.layer-policy-note=allowed".to_string()],
+            )
+            .await
+            .expect("a neighboring label name is not a policy override");
+        assert_eq!(backend.seen().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn existing_unsquashed_or_mislabeled_image_is_rebuilt_once() {
+        for inspect_json in [
+            r#"[{"Config":{"Labels":{}}}]"#,
+            r#"[{"Config":{"Labels":{"io.tillandsias.image.layer-policy":"legacy"}}}]"#,
+        ] {
+            let backend = std::sync::Arc::new(crate::backend::FakeBackend::default());
+            backend.push(Ok(fake_success("")));
+            backend.push(Ok(fake_success(inspect_json)));
+            let client = PodmanClient::with_backend(backend.clone());
+
+            client
+                .ensure_image_built(
+                    "localhost/tillandsias-proxy:test",
+                    "/repo/images/proxy/Containerfile",
+                    "/repo/images/proxy",
+                )
+                .await
+                .expect("stale image is rebuilt");
+
+            let seen = backend.seen();
+            assert_eq!(seen.len(), 3, "exists, inspect, then build");
+            assert_eq!(seen[2].1.first().map(String::as_str), Some("build"));
+        }
+    }
+
+    #[tokio::test]
+    async fn existing_squashed_image_remains_an_on_demand_cache_hit() {
+        let backend = std::sync::Arc::new(crate::backend::FakeBackend::default());
+        backend.push(Ok(fake_success("")));
+        backend.push(Ok(fake_success(
+            r#"[{"Config":{"Labels":{"io.tillandsias.image.layer-policy":"squash-new"}}}]"#,
+        )));
+        let client = PodmanClient::with_backend(backend.clone());
+
+        client
+            .ensure_image_built(
+                "localhost/tillandsias-proxy:test",
+                "/repo/images/proxy/Containerfile",
+                "/repo/images/proxy",
+            )
+            .await
+            .expect("current image is reused");
+
+        let seen = backend.seen();
+        assert_eq!(seen.len(), 2, "exists and inspect only");
+        assert!(
+            !seen
+                .iter()
+                .any(|(_, argv)| argv.first().is_some_and(|arg| arg == "build"))
+        );
     }
 
     #[test]

@@ -454,7 +454,12 @@ impl Harness {
 
     fn ledger(&mut self) -> Result<&Ledger, String> {
         if self.ledger.is_none() {
-            self.ledger = Some(Ledger::load(&self.index)?);
+            // ORDER 606-h9vy — the FOLDED loader, exactly like the CLI answer
+            // path. A base-only harness grades an expert against a ledger no
+            // agent actually sees: fragment-born packets are invisible and LWW
+            // overrides read stale, which is the stale-reader divergence
+            // `load_with_fragments`' own doc warns about.
+            self.ledger = Some(Ledger::load_with_fragments(&self.index)?);
         }
         Ok(self.ledger.as_ref().expect("just loaded"))
     }
@@ -582,6 +587,60 @@ mod tests {
             repo_root().join("plan/index.yaml"),
             "plan/index.yaml".to_string(),
         )
+    }
+
+    /// ORDER 606-xu52 — the plan_next query set is GREEN at HEAD, graded
+    /// against its committed immutable fixture corpus (the live ready set
+    /// churns with every claim, so ordering can only be pinned there). The
+    /// adjacency needles inside the set are the deterministic-ordering proof.
+    #[test]
+    fn the_plan_next_query_set_is_green_at_head() {
+        let root = repo_root().join("openspec/litmus-tests/groundtruth/fixtures/plan-next");
+        let mut harness = Harness::new(
+            root.clone(),
+            root.join("plan/index.yaml"),
+            "plan/index.yaml".to_string(),
+        );
+        let sets =
+            load_all(&[repo_root()
+                .join("openspec/litmus-tests/groundtruth/expert-groundtruth-plan-next.yaml")])
+            .expect("the plan-next query set loads");
+        let outcomes = grade_all(&mut harness, &sets).expect("every engine is registered");
+        let red: Vec<&Outcome> = outcomes.iter().filter(|o| !o.passed()).collect();
+        assert!(
+            red.is_empty(),
+            "plan-next ground truth is RED: {:?}",
+            red.iter()
+                .map(|o| format!("{}: {}", o.id, o.failures.join(" | ")))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// ORDER 606-h9vy — the fragment-provenance query set is GREEN at HEAD,
+    /// graded against its own committed immutable fixture corpus (never the
+    /// live ledger, whose fragments compaction folds away).
+    #[test]
+    fn the_fragment_provenance_query_set_is_green_at_head() {
+        let root =
+            repo_root().join("openspec/litmus-tests/groundtruth/fixtures/fragment-provenance");
+        let mut harness = Harness::new(
+            root.clone(),
+            root.join("plan/index.yaml"),
+            "plan/index.yaml".to_string(),
+        );
+        let sets = load_all(&[repo_root().join(
+            "openspec/litmus-tests/groundtruth/expert-groundtruth-fragment-provenance.yaml",
+        )])
+        .expect("the fragment-provenance query set loads");
+        let outcomes = grade_all(&mut harness, &sets).expect("every engine is registered");
+        let red: Vec<&Outcome> = outcomes.iter().filter(|o| !o.passed()).collect();
+        assert!(
+            red.is_empty(),
+            "fragment-provenance ground truth is RED: {:?}",
+            red.iter()
+                .map(|o| format!("{}: {}", o.id, o.failures.join(" | ")))
+                .collect::<Vec<_>>()
+        );
     }
 
     /// EXIT (ii): the committed query set is GREEN at HEAD.

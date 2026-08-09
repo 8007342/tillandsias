@@ -43,7 +43,7 @@ critical_path:
     expected_behavior: "ok: usage-grammar"
 
   - step: "opencode e2e litmus launches through the rate-limited wrapper"
-    command: "grep -Fq 'scripts/litmus-opencode-e2e-launch.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml && grep -Fq 'forge-e2e-rate-limit.sh check full-meta' scripts/litmus-opencode-e2e-launch.sh && grep -Fq 'forge-e2e-rate-limit.sh record full-meta' scripts/litmus-opencode-e2e-launch.sh && echo 'ok: e2e-wired'"
+    command: "grep -Fq 'scripts/litmus-opencode-e2e-launch.sh' openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml && grep -Fq 'forge-e2e-rate-limit.sh check full-meta' scripts/litmus-opencode-e2e-launch.sh && grep -Fq 'forge-e2e-rate-limit.sh record full-meta' scripts/litmus-opencode-e2e-launch.sh && grep -Fq 'env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt \"$PROMPT\"' scripts/litmus-opencode-e2e-launch.sh && ! grep -Eq '^[[:space:]]*\\./repeat([[:space:]]|$)' scripts/litmus-opencode-e2e-launch.sh && echo 'ok: e2e-wired'"
     timeout_ms: 3000
     expected_behavior: "ok: e2e-wired"
 

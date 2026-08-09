@@ -1,6 +1,8 @@
 # @trace spec:forge-environment-discoverability
+# freshness: auditor=linux-tlatoani-claude-20260807t013000z date=2026-08-07 verdict=updated scope=extended with 606-h9vy fragment-provenance grading, tamper-negative verify-answer, and corpus-freshness steps; full quick suite re-validated green on linux_immutable
 # @trace order:394, order:394d (rung 1, slice 4)
 # @trace order:456 (exit criterion 3 — correct packets for the active release)
+# @trace order:606-e2hg (exact release + direct upstream query semantics)
 # @trace plan/issues/experts-construction-decision-2026-07-17.md (the residual:
 #        "per-tier measurements + ground-truth harness")
 #
@@ -215,6 +217,16 @@ critical_path:
     timeout_ms: 180000
     expected_behavior: "ok: mcp-server-returns-correct-active-release-packets"
 
+  - step: "ORDER 606: the real forge-plan plan_answer grades release wording and upstream direction"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what v0.5 work can I do on linux?\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what blocks forge-local-experts-milestone\"}}}' | TILLANDSIAS_PLAN_BIN=\"$PB\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" TILLANDSIAS_METHODOLOGY_ROOT=\"$PWD\" bash images/default/config-overlay/mcp/forge-plan.sh > /tmp/.litmus-606-answer-frames.jsonl; sed -n '1p' /tmp/.litmus-606-answer-frames.jsonl | jq -r '.result.content[0].text' > /tmp/.litmus-606-release.json; sed -n '2p' /tmp/.litmus-606-answer-frames.jsonl | jq -r '.result.content[0].text' > /tmp/.litmus-606-upstream.json; \"$PB\" grade --root . --case plan-ready-v05-linux-preserves-release --envelope /tmp/.litmus-606-release.json > /tmp/.litmus-606-release-grade.txt 2>&1 || { cat /tmp/.litmus-606-release-grade.txt; exit 1; }; \"$PB\" grade --root . --case plan-upstream-prerequisites-of-experts-milestone --envelope /tmp/.litmus-606-upstream.json > /tmp/.litmus-606-upstream-grade.txt 2>&1 || { cat /tmp/.litmus-606-upstream-grade.txt; exit 1; }; grep -q '^PASS  plan-ready-v05-linux-preserves-release' /tmp/.litmus-606-release-grade.txt && grep -q '^PASS  plan-upstream-prerequisites-of-experts-milestone' /tmp/.litmus-606-upstream-grade.txt && echo 'ok: real-mcp-release-and-upstream-groundtruth'"
+    timeout_ms: 180000
+    expected_behavior: "ok: real-mcp-release-and-upstream-groundtruth"
+
+  - step: "ORDER 606: plan_query/plan_blocked_on schemas are closed and invalid constraints are typed errors"
+    command: "PB=$(cat /tmp/.litmus-394d-bin); rm -f /tmp/.litmus-606-usage.jsonl; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"status\":\"ready\",\"pickup_role\":\"linux\",\"desired_release\":\"v0.5\",\"capability_tags\":[\"experts\"],\"limit\":5}}}' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_blocked_on\",\"arguments\":{\"reference\":\"forge-local-experts-milestone\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"desired_release\":\"v9.9\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"surprise\":true}}}' '{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"desired_release\":\"\"}}}' '{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_query\",\"arguments\":{\"capability_tags\":[\"\"]}}}' | TILLANDSIAS_PLAN_BIN=\"$PB\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" TILLANDSIAS_EXPERT_USAGE_LOG=/tmp/.litmus-606-usage.jsonl bash images/default/config-overlay/mcp/forge-plan.sh > /tmp/.litmus-606-tools.jsonl; L=$(sed -n '1p' /tmp/.litmus-606-tools.jsonl); printf '%s' \"$L\" | jq -e '([.result.tools[] | select(.name == \"plan_query\" and .inputSchema.additionalProperties == false and .inputSchema.properties.desired_release.minLength == 1 and .inputSchema.properties.capability_tags.items.minLength == 1)] | length) == 1 and ([.result.tools[] | select(.name == \"plan_blocked_on\" and .inputSchema.additionalProperties == false)] | length) == 1' >/dev/null || { echo 'FAIL: order-606 tool schemas absent, open, or accept empty constraints'; exit 1; }; Q=$(sed -n '2p' /tmp/.litmus-606-tools.jsonl | jq -r '.result.content[0].text'); printf '%s' \"$Q\" | jq -e 'length > 0 and all(.[]; .desired_release == \"v0.5\" and has(\"desired_release\") and has(\"release_target\"))' >/dev/null || { echo \"FAIL: release query leaked or lost projection: $Q\"; exit 1; }; U=$(sed -n '3p' /tmp/.litmus-606-tools.jsonl | jq -r '.result.content[0].text'); test \"$(printf '%s\\n' \"$U\" | cut -f1,3)\" = $'437\\tforge-src-tmpfs-topology' || { echo \"FAIL: upstream primitive returned: $U\"; exit 1; }; for n in 4 5 6 7; do test \"$(sed -n \"${n}p\" /tmp/.litmus-606-tools.jsonl | jq -r '.error.code')\" = '-32602' || { echo \"FAIL: request $n was not Invalid params\"; exit 1; }; done; test \"$(wc -l < /tmp/.litmus-606-usage.jsonl)\" = 6 || { echo 'FAIL: one telemetry row per tool call was not recorded'; exit 1; }; test \"$(tail -n 4 /tmp/.litmus-606-usage.jsonl | jq -s '[.[] | select(.tool == \"plan_query\" and .outcome == \"error\")] | length')\" = 4 || { echo 'FAIL: invalid multi-request calls inherited stale results or were not recorded as errors'; exit 1; }; echo 'ok: closed-release-upstream-tools-and-typed-errors'"
+    timeout_ms: 180000
+    expected_behavior: "ok: closed-release-upstream-tools-and-typed-errors"
+
   - step: "ORDER 456 FALSIFIABILITY: a dead-on-arrival server is graded RED, not skipped"
     # The exact regression order 456 shipped with: the wrapper probed for a
     # binary nothing produced and every call came back with a diagnostic. That
@@ -225,12 +237,59 @@ critical_path:
     timeout_ms: 180000
     expected_behavior: "ok: dead-on-arrival-server-is-red"
 
+  # ── ORDER 606-h9vy: fragment provenance, tampering, freshness ────────────
+  - step: "ORDER 606-h9vy: the fragment-provenance query set grades GREEN against its committed fixture corpus"
+    # Graded against the immutable fixture corpus, NEVER the live ledger:
+    # compaction folds live fragments into the base, which would stale any
+    # committed case naming a real fragment file. The fixture never compacts.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); FIX=openspec/litmus-tests/groundtruth/fixtures/fragment-provenance; \"$PB\" --index \"$FIX/plan/index.yaml\" grade openspec/litmus-tests/groundtruth/expert-groundtruth-fragment-provenance.yaml > /tmp/.litmus-606-h9vy-fix.txt 2>&1 || { echo 'FAIL: fragment-provenance ground truth is RED'; cat /tmp/.litmus-606-h9vy-fix.txt; exit 1; }; grep -q '^PASS  frag-born-packet-cites-its-fragment' /tmp/.litmus-606-h9vy-fix.txt && grep -q '^PASS  frag-lww-override-cites-the-winning-fragment' /tmp/.litmus-606-h9vy-fix.txt && grep -q '^PASS  frag-zero-omitted-rows-over-a-folded-corpus' /tmp/.litmus-606-h9vy-fix.txt && grep -q 'fail=0' /tmp/.litmus-606-h9vy-fix.txt && echo 'ok: fragment-provenance-groundtruth-green'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fragment-provenance-groundtruth-green"
+
+  - step: "ORDER 606-h9vy TAMPER-NEGATIVE: verify-answer refuses fabricated authority and a stale base span"
+    # The envelope is REAL (produced by the engine over the fixture corpus);
+    # each tamper is one jq edit. (a) a fabricated status VALUE on the winning
+    # fragment citation; (b) the folded status claimed against the STALE BASE
+    # span — the exact pre-606-h9vy behaviour, now a hard rejection; (c) the
+    # untampered envelope still verifies, so the checks reject tampering, not
+    # the envelope shape.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); FIX=openspec/litmus-tests/groundtruth/fixtures/fragment-provenance; \"$PB\" --index \"$FIX/plan/index.yaml\" answer status of fixture-base-overridden > /tmp/.litmus-606-h9vy-env.json; jq '(.citations[] | select(.authority.status == \"in_progress\") | .authority.status) = \"completed\"' /tmp/.litmus-606-h9vy-env.json | \"$PB\" verify-answer > /tmp/.litmus-606-h9vy-a.txt 2>&1 && { echo 'FAIL: a fabricated authority status was verified'; exit 1; }; grep -q 'does not substantiate authority' /tmp/.litmus-606-h9vy-a.txt || { echo 'FAIL: wrong rejection reason for fabricated status'; cat /tmp/.litmus-606-h9vy-a.txt; exit 1; }; BASE_SPAN=$(jq '[.citations[] | select(.path == \"plan/index.yaml\")][0]' /tmp/.litmus-606-h9vy-env.json); jq --argjson b \"$BASE_SPAN\" '.citations = [(.citations[] | select(.authority.status == \"in_progress\") | .path = $b.path | .line_start = $b.line_start | .line_end = $b.line_end)]' /tmp/.litmus-606-h9vy-env.json | \"$PB\" verify-answer > /tmp/.litmus-606-h9vy-b.txt 2>&1 && { echo 'FAIL: a stale base span was verified for a fragment-won field'; exit 1; }; grep -q 'does not substantiate authority' /tmp/.litmus-606-h9vy-b.txt || { echo 'FAIL: wrong rejection reason for stale base span'; cat /tmp/.litmus-606-h9vy-b.txt; exit 1; }; \"$PB\" verify-answer < /tmp/.litmus-606-h9vy-env.json > /tmp/.litmus-606-h9vy-c.txt 2>&1 || { echo 'FAIL: the untampered envelope no longer verifies'; cat /tmp/.litmus-606-h9vy-c.txt; exit 1; }; grep -q '^ok: envelope verified' /tmp/.litmus-606-h9vy-c.txt && echo 'ok: tampered-authority-and-stale-span-are-refused'"
+    timeout_ms: 120000
+    expected_behavior: "ok: tampered-authority-and-stale-span-are-refused"
+
+  - step: "ORDER 606-h9vy FRESHNESS: adding a fragment beside the fixture base advances indexed_at"
+    # Freshness must be derived from base PLUS fragments. The probe copies the
+    # fixture corpus to a scratch dir, records indexed_at, drops in one more
+    # fragment (strictly newer mtime), and requires indexed_at to CHANGE.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); FIX=openspec/litmus-tests/groundtruth/fixtures/fragment-provenance; d=$(mktemp -d); cp -r \"$FIX/plan\" \"$d/plan\"; touch -d '2026-01-01T00:00:00Z' \"$d/plan/index.yaml\" \"$d/plan/index.d\"/*.yaml; T0=$(\"$PB\" --index \"$d/plan/index.yaml\" answer status of fixture-base-untouched | jq -r '.freshness.indexed_at'); printf 'status:\\n  - packet_id: fixture-base-untouched\\n    field: status\\n    value: in_progress\\n    ts: \"2026-08-06T00:02:00Z\"\\n    host: fixture-host\\n' > \"$d/plan/index.d/20260806t000002z-lww1-fixture.yaml\"; T1=$(\"$PB\" --index \"$d/plan/index.yaml\" answer status of fixture-base-untouched | jq -r '.freshness.indexed_at'); rm -rf \"$d\"; test \"$T0\" != 'unknown' || { echo 'FAIL: baseline freshness unknown'; exit 1; }; test \"$T0\" != \"$T1\" || { echo \"FAIL: adding a fragment did not change indexed_at ($T0)\"; exit 1; }; echo 'ok: fragment-addition-advances-corpus-freshness'"
+    timeout_ms: 120000
+    expected_behavior: "ok: fragment-addition-advances-corpus-freshness"
+
+  # ── ORDER 606-xu52: the deterministic plan_next selector ─────────────────
+  - step: "ORDER 606-xu52: the plan_next query set grades GREEN against its committed fixture corpus"
+    # Deterministic ordering is provable only on an immutable corpus — the
+    # live ready set churns with every claim. The set's multi-line adjacency
+    # needles are the ordering proof; the fixture's sixth eligible packet is
+    # the five-row-cap proof; the v8.8 case is the typed no-work refusal.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); FIX=openspec/litmus-tests/groundtruth/fixtures/plan-next; \"$PB\" --index \"$FIX/plan/index.yaml\" grade openspec/litmus-tests/groundtruth/expert-groundtruth-plan-next.yaml > /tmp/.litmus-606-xu52-fix.txt 2>&1 || { echo 'FAIL: plan-next ground truth is RED'; cat /tmp/.litmus-606-xu52-fix.txt; exit 1; }; grep -q '^PASS  next-fixture-deterministic-ranking' /tmp/.litmus-606-xu52-fix.txt && grep -q '^PASS  next-fixture-role-filter-is-exact' /tmp/.litmus-606-xu52-fix.txt && grep -q '^PASS  next-fixture-no-work-is-a-typed-refusal' /tmp/.litmus-606-xu52-fix.txt && grep -q 'fail=0' /tmp/.litmus-606-xu52-fix.txt && echo 'ok: plan-next-groundtruth-green'"
+    timeout_ms: 120000
+    expected_behavior: "ok: plan-next-groundtruth-green"
+
+  - step: "ORDER 606-xu52: the real forge-plan plan_next is a closed-schema envelope tool with typed refusals"
+    # The SERVER's behavior, not the library's: the tool is registered with a
+    # closed 1..=5-capped schema, a valid call returns a verifiable envelope
+    # whose answer is the ranked surface, an over-cap limit is JSON-RPC
+    # -32602, and telemetry records one row per call.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); rm -f /tmp/.litmus-606-xu52-usage.jsonl; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_next\",\"arguments\":{\"pickup_role\":\"linux\",\"limit\":3}}}' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_next\",\"arguments\":{\"limit\":9}}}' '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_next\",\"arguments\":{\"surprise\":true}}}' | TILLANDSIAS_PLAN_BIN=\"$PB\" TILLANDSIAS_PLAN_INDEX=\"$PWD/plan/index.yaml\" TILLANDSIAS_EXPERT_USAGE_LOG=/tmp/.litmus-606-xu52-usage.jsonl bash images/default/config-overlay/mcp/forge-plan.sh > /tmp/.litmus-606-xu52-mcp.jsonl; sed -n '1p' /tmp/.litmus-606-xu52-mcp.jsonl | jq -e '([.result.tools[] | select(.name == \"plan_next\" and .inputSchema.additionalProperties == false and .inputSchema.properties.limit.maximum == 5 and .inputSchema.properties.limit.minimum == 1)] | length) == 1' >/dev/null || { echo 'FAIL: plan_next schema absent, open, or uncapped'; exit 1; }; sed -n '2p' /tmp/.litmus-606-xu52-mcp.jsonl | jq -r '.result.content[0].text' > /tmp/.litmus-606-xu52-env.json; jq -e 'type == \"object\" and has(\"answer\") and has(\"citations\") and (.confidence == \"exact\" or .confidence == \"unsupported\")' /tmp/.litmus-606-xu52-env.json >/dev/null || { echo 'FAIL: plan_next did not return an envelope'; exit 1; }; if [ \"$(jq -r '.confidence' /tmp/.litmus-606-xu52-env.json)\" = 'exact' ]; then jq -r '.answer' /tmp/.litmus-606-xu52-env.json | head -1 | grep -q \"next claimable work for pickup_role 'linux'\" || { echo 'FAIL: exact plan_next answer is not the ranked surface'; exit 1; }; \"$PB\" verify-answer < /tmp/.litmus-606-xu52-env.json >/dev/null || { echo 'FAIL: the served envelope does not verify'; exit 1; }; fi; for n in 3 4; do test \"$(sed -n \"${n}p\" /tmp/.litmus-606-xu52-mcp.jsonl | jq -r '.error.code')\" = '-32602' || { echo \"FAIL: request $n was not Invalid params\"; exit 1; }; done; test \"$(wc -l < /tmp/.litmus-606-xu52-usage.jsonl)\" = 3 || { echo 'FAIL: one telemetry row per plan_next call was not recorded'; exit 1; }; echo 'ok: plan-next-mcp-closed-schema-envelope'"
+    timeout_ms: 180000
+    expected_behavior: "ok: plan-next-mcp-closed-schema-envelope"
+
   # ── the crate's own pins ─────────────────────────────────────────────────
   - step: "the harness's own unit pins are GREEN — named, not counted"
     # Named rather than counted: a bare 'N passed' breaks the day someone adds
     # test N+1, and a bare '0 failed' passes on an empty run. Each named test
     # here is one of the four exit criteria expressed inside the crate.
-    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && { echo 'FAIL: the crate test suite is red'; exit 1; }; for t in the_committed_query_set_is_green_at_head both_corpora_are_represented_in_the_committed_set a_wrong_expected_span_turns_a_passing_case_red a_misspelled_expectation_key_is_refused_not_ignored an_empty_query_set_is_an_error_not_a_pass an_unknown_engine_names_the_registration_site grading_works_on_a_corpus_this_crate_does_not_own; do printf '%s' \"$out\" | grep -q \"groundtruth::tests::$t ... ok\" || { echo \"FAIL: missing unit pin $t\"; exit 1; }; done; echo 'ok: groundtruth-unit-pins-green'"
+    command: "out=$(cargo test -p tillandsias-plan 2>&1); printf '%s' \"$out\" | grep -q 'FAILED' && { echo 'FAIL: the crate test suite is red'; exit 1; }; for t in the_committed_query_set_is_green_at_head the_fragment_provenance_query_set_is_green_at_head the_plan_next_query_set_is_green_at_head both_corpora_are_represented_in_the_committed_set a_wrong_expected_span_turns_a_passing_case_red a_misspelled_expectation_key_is_refused_not_ignored an_empty_query_set_is_an_error_not_a_pass an_unknown_engine_names_the_registration_site grading_works_on_a_corpus_this_crate_does_not_own; do printf '%s' \"$out\" | grep -q \"groundtruth::tests::$t ... ok\" || { echo \"FAIL: missing unit pin $t\"; exit 1; }; done; for t in fragments::overlay_citation_tests::fold_provenance_records_the_same_winner_the_fold_applies fragments::overlay_citation_tests::a_fragment_only_packet_cites_the_fragment_that_created_it fragments::overlay_citation_tests::an_lww_override_cites_the_winning_fragment_never_the_stale_base_span fragments::overlay_citation_tests::answers_over_a_folded_corpus_omit_no_rows fragments::overlay_citation_tests::freshness_is_derived_from_base_plus_fragments answer::tests::fabricated_authority_values_are_refused_even_on_a_real_span answer::tests::head_sha_resolves_through_a_worktree_commondir_layout answer::tests::plan_next_is_bounded_deterministic_and_release_defaulted; do printf '%s' \"$out\" | grep -q \"$t ... ok\" || { echo \"FAIL: missing 606-h9vy unit pin $t\"; exit 1; }; done; echo 'ok: groundtruth-unit-pins-green'"
     timeout_ms: 300000
     expected_behavior: "ok: groundtruth-unit-pins-green"
 
@@ -251,6 +310,7 @@ observability:
     - "@trace order:394"
     - "@trace order:394d"
     - "@trace order:456"
+    - "@trace order:606-e2hg"
   expected_log: "Expert ground truth graded: committed query set GREEN at HEAD inside the 60s in-forge budget, five seeded wrong expected answers RED, empty/misspelled/duplicated query sets refused, format proven corpus-agnostic for orders 457 and 400, and the forge-plan MCP server proven to return the correct packets for the active release"
   log_fields:
     spec: "forge-environment-discoverability"

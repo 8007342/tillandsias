@@ -3494,10 +3494,22 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     };
     // Default geometry until the tray owns a real terminal surface to size from.
     let spec = launch_spec(&intent, project.as_deref(), 24, 80);
+    // GitHub Login runs the INJECTED wrapper (bare path, zero shell
+    // metacharacters): the inline `bash -lc '<script>'` argv had to survive
+    // both std::process MSVC quoting AND wt.exe's own re-parse, and arrived
+    // mangled (Esmeralda field crash, 2026-08-09). The wrapper also tees all
+    // login output to /root/.cache/tillandsias/github-login-last.log so a
+    // failure never has to be copied out of a terminal. Written by
+    // inject_bootstrap_logic, so provision AND adopt-reconcile deploy it.
+    let argv = if matches!(intent, PtyIntent::GithubLogin) {
+        vec!["/usr/local/lib/tillandsias/github-login.sh".to_string()]
+    } else {
+        spec.argv.clone()
+    };
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
     let title = terminal_title(&intent, project.as_deref());
-    match spawn_wsl_terminal(distro, &title, &spec.argv) {
-        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?spec.argv,
+    match spawn_wsl_terminal(distro, &title, &argv) {
+        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
@@ -3509,6 +3521,34 @@ fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {
         (PtyIntent::GithubLogin, _) => "Tillandsias \u{2014} GitHub Login".to_string(),
         (_, Some(p)) => format!("Tillandsias \u{2014} {p}"),
         _ => "Tillandsias shell".to_string(),
+    }
+}
+
+/// wt.exe re-parses its ENTIRE command line with its own quote rules, so any
+/// argument std::process has to quote is a mangling hazard: the quoted
+/// `"Tillandsias — GitHub Login"` title bled a dangling `"` into the trailing
+/// `wsl.exe` command line, which wsl joins into ONE `bash -c` string — the
+/// guest shell then died with `unexpected EOF while looking for matching '"'`
+/// (Esmeralda field crash, 2026-08-09, reproduced with a metacharacter-free
+/// in-VM argv, isolating the title as the only quoted token). Titles handed
+/// to wt are therefore single ASCII tokens that never need quoting.
+fn wt_safe_title(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut last_dash = false;
+    for c in raw.chars() {
+        if c.is_ascii_alphanumeric() || c == '_' || c == '.' {
+            out.push(c);
+            last_dash = false;
+        } else if !last_dash && !out.is_empty() {
+            out.push('-');
+            last_dash = true;
+        }
+    }
+    let trimmed = out.trim_end_matches('-');
+    if trimmed.is_empty() {
+        "Tillandsias".to_string()
+    } else {
+        trimmed.to_string()
     }
 }
 
@@ -3525,7 +3565,7 @@ fn wt_terminal_argv(distro: &str, title: &str, in_vm_argv: &[String]) -> Vec<Str
         "new".to_string(),
         "new-tab".to_string(),
         "--title".to_string(),
-        title.to_string(),
+        wt_safe_title(title),
         "wsl.exe".to_string(),
         "-d".to_string(),
         distro.to_string(),
@@ -4513,6 +4553,31 @@ mod tests {
     }
 
     #[test]
+    fn wt_safe_title_never_needs_quoting() {
+        for (raw, want) in [
+            (
+                "Tillandsias \u{2014} GitHub Login",
+                "Tillandsias-GitHub-Login",
+            ),
+            ("Tillandsias \u{2014} foo", "Tillandsias-foo"),
+            ("Tillandsias shell", "Tillandsias-shell"),
+            ("has \"quotes\" & specials;|", "has-quotes-specials"),
+            ("\u{2014}\u{2014}", "Tillandsias"),
+            ("", "Tillandsias"),
+        ] {
+            let got = wt_safe_title(raw);
+            assert_eq!(got, want, "raw={raw:?}");
+            // The invariant that matters: std::process would pass this token
+            // verbatim (no quoting), so wt.exe's re-parser cannot split it.
+            assert!(
+                got.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)),
+                "sanitized title contains a quoting-hazard char: {got:?}"
+            );
+        }
+    }
+
+    #[test]
     fn wt_terminal_argv_wraps_in_vm_argv_under_wsl() {
         let in_vm = vec![
             "podman".to_string(),
@@ -4530,7 +4595,10 @@ mod tests {
                 "new",
                 "new-tab",
                 "--title",
-                "Tillandsias \u{2014} foo",
+                // Sanitized to a single ASCII token: wt.exe re-parses its
+                // command line, and a title that needs quoting bleeds quote
+                // characters into the joined `bash -c` string (2026-08-09).
+                "Tillandsias-foo",
                 "wsl.exe",
                 "-d",
                 "tillandsias",

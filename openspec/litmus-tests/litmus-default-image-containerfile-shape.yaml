@@ -45,7 +45,21 @@ critical_path:
     # current LTS-equivalent; a regression to a different distro
     # (Alpine/Debian) would silently break the microdnf + glibc +
     # bash + useradd contract documented in the file-head note.
-    command: "grep -F 'FROM registry.fedoraproject.org/fedora-minimal:44' images/default/Containerfile.base && grep -F 'ARG BASE_IMAGE=localhost/tillandsias-forge-base:latest' images/default/Containerfile"
+    # The second clause asserts the CONTRACT (the forge builds FROM the
+    # forge-base image, through a build-arg) rather than the ARG's default
+    # value. It used to pin the literal
+    # `ARG BASE_IMAGE=localhost/tillandsias-forge-base:latest`; commit 4da9bb12
+    # (2026-06-13) intentionally dropped the `:latest` suffix and this test was
+    # not updated, so it failed on every podman-hosting Linux host for seven
+    # weeks. Found 2026-08-04 by the in-forge smoke on v0.4.260804.1.
+    #
+    # The default is not the thing worth pinning: the launcher ALWAYS supplies
+    # `--build-arg BASE_IMAGE=<versioned tag>` (main.rs:1518 canonical_tag,
+    # :1818 versioned_image_tag), so the fallback is never used on the real
+    # build path, and a bare name resolves to `:latest` anyway. What must stay
+    # true is that the ARG exists and the FROM consumes it — which is also what
+    # scripts/check-container-bases.sh:60 has been asserting all along.
+    command: "grep -F 'FROM registry.fedoraproject.org/fedora-minimal:44' images/default/Containerfile.base && grep -Eq '^ARG BASE_IMAGE=localhost/tillandsias-forge-base(:[A-Za-z0-9._-]+)?$' images/default/Containerfile && grep -Fq 'FROM ${BASE_IMAGE}' images/default/Containerfile && echo 'fedora-minimal:44'"
     timeout_ms: 3000
     expected_behavior: "fedora-minimal:44"
 
@@ -131,6 +145,11 @@ critical_path:
     command: "grep -F 'forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault' scripts/build-image.sh"
     timeout_ms: 3000
     expected_behavior: "forge|web"
+
+  - step: "Req Retired image selectors: developer build and source hashing expose no removed NanoClaw/ZeroClaw target"
+    command: "if grep -Ein 'nanoclawv2|zeroclaw' scripts/build-image.sh scripts/hash-image-sources.sh; then echo 'FAIL: retired image selector remains'; exit 1; fi; echo 'ok: retired image selectors absent'"
+    timeout_ms: 3000
+    expected_behavior: "ok: retired image selectors absent"
 
   - step: "Req Content-hash identity: build-image.sh tags with content-hash + version alias"
     # Spec § Req mandates `tillandsias-forge:<CONTENT_HASH>`
