@@ -87,7 +87,7 @@ A new shell script `scripts/install-macos.sh` SHALL exist that performs an idemp
 7. If a previous `Tillandsias.app` exists at the install location: stop the running tray (`osascript -e 'tell application "tillandsias-tray" to quit'` with a 5-second wait, then `pkill -f tillandsias-tray`), back up to `Tillandsias.app.bak`, remove the old version.
 8. Extract the .tar.gz to the install location.
 9. If invoked with `--login-item`, register the .app as a Login Item via `osascript -e 'tell application "System Events" to make login item ...'`.
-10. Print the Gatekeeper hint: `On first launch, macOS Gatekeeper may block the app. Right-click Tillandsias.app in /Applications/ and choose Open to bypass.`
+10. Print the Gatekeeper right-click-Open hint ONLY when the installed `Tillandsias.app` actually carries the `com.apple.quarantine` xattr (probe with `xattr -p`). A curl-fetched tarball never does — files fetched by `curl` are not quarantined, so Gatekeeper's first-launch assessment does not fire and the warning would be misleading there. Quarantined provenance (browser/DMG/zip, or a tarball whose members carry the xattr) still gets the full hint. (Order 421.)
 11. `open -a Tillandsias.app` to launch and drop the menubar icon.
 
 @trace spec:macos-tray-build-and-release
