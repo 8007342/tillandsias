@@ -389,6 +389,7 @@ fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
 struct QueryOptions {
     status: Option<String>,
     role: Option<String>,
+    claimable_by: Option<String>,
     release: Option<String>,
     tags: Vec<String>,
     limit: usize,
@@ -400,6 +401,7 @@ impl Default for QueryOptions {
         Self {
             status: None,
             role: None,
+            claimable_by: None,
             release: None,
             tags: Vec::new(),
             limit: 20,
@@ -442,6 +444,19 @@ fn parse_query_options(args: &[String]) -> Result<QueryOptions, String> {
                     return Err("--role may be specified only once".to_string());
                 }
                 options.role = Some(value_after(i)?);
+                i += 2;
+            }
+            "--claimable-by" => {
+                if options.claimable_by.is_some() {
+                    return Err("--claimable-by may be specified only once".to_string());
+                }
+                if options.role.is_some() {
+                    return Err(
+                        "--role and --claimable-by ask different questions; specify only one"
+                            .to_string(),
+                    );
+                }
+                options.claimable_by = Some(value_after(i)?);
                 i += 2;
             }
             "--release" => {
@@ -546,6 +561,7 @@ fn query_packets<'a>(
     ledger: &'a Ledger,
     status: Option<&str>,
     role: Option<&str>,
+    claimable_by: Option<&str>,
     release: Option<&str>,
     tags: &[String],
     limit: usize,
@@ -557,14 +573,44 @@ fn query_packets<'a>(
             Some(s) => str_field(p, "status") == Some(s),
             None => true,
         })
-        .filter(|p| match role {
-            Some(r) => {
+        // ORDER 632-39p3. `--role` is a SUBSTRING FILTER ON THE FIELD, and both
+        // MCP servers document it that way. `next <role>` answers a different
+        // question — "what may a host of this role CLAIM" — which additionally
+        // includes `pickup_role: any`.
+        //
+        // Both were being used as if they answered the same question, and the
+        // gap was silent and expensive: `query --role macos` returned 13 packets
+        // while `next macos` saw 32, so scripts/select-work-batch.sh handed a
+        // Windows cycle ONE packet while 56 `any` packets sat unreachable by it.
+        // The Linux lane never noticed, because its own role tag covers 131.
+        //
+        // Resolved by ADDING the missing question rather than redefining the
+        // existing one: `--claimable-by` is claimability (role OR `any`),
+        // `--role` keeps the documented substring semantics its consumers rely
+        // on. Silently widening `--role` would have changed what plan_query
+        // reports to every other surface — the same class of unobserved change
+        // this packet exists to close.
+        .filter(|p| {
+            let matches_field = |r: &str| {
                 let want = r.to_ascii_lowercase();
                 str_field(p, "pickup_role")
                     .map(|pr| pr.to_ascii_lowercase().contains(&want))
                     .unwrap_or(false)
+            };
+            match (role, claimable_by) {
+                (Some(r), _) => matches_field(r),
+                (None, Some(c)) => {
+                    matches_field(c) || {
+                        // `any` must be the WHOLE field, not a substring: a
+                        // pickup_role of "company-lane" contains "any" and is
+                        // emphatically not claimable by everyone.
+                        str_field(p, "pickup_role")
+                            .map(|pr| pr.trim().eq_ignore_ascii_case("any"))
+                            .unwrap_or(false)
+                    }
+                }
+                (None, None) => true,
             }
-            None => true,
         })
         .filter(|p| match release {
             Some(r) => str_field(p, "desired_release") == Some(r),
@@ -1829,6 +1875,7 @@ fn main() {
                 &ledger,
                 options.status.as_deref(),
                 options.role.as_deref(),
+                options.claimable_by.as_deref(),
                 options.release.as_deref(),
                 &options.tags,
                 options.limit,
@@ -2343,21 +2390,29 @@ mod tests {
         .expect("parse");
 
         // Exact status only.
-        let ready = query_packets(&led, Some("ready"), None, None, &[], 0);
+        let ready = query_packets(&led, Some("ready"), None, None, None, &[], 0);
         assert_eq!(ids(ready), vec!["p1", "p3", "p4"]);
 
         // pickup_role is a case-insensitive SUBSTRING.
-        let linux = query_packets(&led, None, Some("linux"), None, &[], 0);
+        let linux = query_packets(&led, None, Some("linux"), None, None, &[], 0);
         assert_eq!(ids(linux), vec!["p1", "p3"]);
 
         // desired_release is exact; packets without it never match an explicit
         // release constraint.
-        let v05 = query_packets(&led, None, None, Some("v0.5"), &[], 0);
+        let v05 = query_packets(&led, None, None, None, Some("v0.5"), &[], 0);
         assert_eq!(ids(v05), vec!["p1", "p3"]);
-        assert!(query_packets(&led, None, None, Some("V0.5"), &[], 0).is_empty());
+        assert!(query_packets(&led, None, None, None, Some("V0.5"), &[], 0).is_empty());
 
         // capability_tags all-must-match, independent of order in the list.
-        let crdt_plan = query_packets(&led, None, None, None, &["plan".into(), "crdt".into()], 0);
+        let crdt_plan = query_packets(
+            &led,
+            None,
+            None,
+            None,
+            None,
+            &["plan".into(), "crdt".into()],
+            0,
+        );
         assert_eq!(ids(crdt_plan), vec!["p1", "p3"]);
 
         // Combined filters narrow the set.
@@ -2365,6 +2420,7 @@ mod tests {
             &led,
             Some("ready"),
             Some("linux"),
+            None,
             Some("v0.5"),
             &["crdt".into()],
             0,
@@ -2372,12 +2428,12 @@ mod tests {
         assert_eq!(ids(combo), vec!["p1", "p3"]);
 
         // Limit caps the result.
-        let limited = query_packets(&led, Some("ready"), None, None, &[], 2);
+        let limited = query_packets(&led, Some("ready"), None, None, None, &[], 2);
         assert_eq!(ids(limited), vec!["p1", "p3"]);
 
         // A packet with no capability_tags matches a tag filter only if the
         // filter is empty.
-        let empty_tag = query_packets(&led, Some("ready"), None, None, &["plan".into()], 0);
+        let empty_tag = query_packets(&led, Some("ready"), None, None, None, &["plan".into()], 0);
         assert_eq!(ids(empty_tag), vec!["p1", "p3"]);
 
         let projected = query_json_projection(led.resolve("p1").expect("p1 resolves"));

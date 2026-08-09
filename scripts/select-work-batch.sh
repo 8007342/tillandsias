@@ -206,14 +206,12 @@ fi
 # ONE packet while 56 `any` packets sat unclaimable by it. Union them, dedup by
 # packet_id. The query/next divergence itself is filed as its own defect; this
 # does not paper over it, it stops the selector being wrong while it is decided.
-raw_role="$("$PLAN" query --status ready --role "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
-if [ "$ROLE" = "any" ]; then
-    raw="$raw_role"
-else
-    raw_any="$("$PLAN" query --status ready --role any "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
-    raw="$(printf '%s\n%s' "${raw_role:-[]}" "${raw_any:-[]}" \
-        | jq -s 'add | unique_by(.packet_id)' 2>/dev/null)"
-fi
+# `--claimable-by` (order 632-39p3) asks the question this script actually has:
+# "what may a host of this role CLAIM", which is its own role OR `any`. It
+# replaces a two-query jq union that lived here while the semantics were being
+# decided. `--role` remains a substring filter on the field, which is what the
+# MCP servers document and what plan_query's other consumers rely on.
+raw="$("$PLAN" query --status ready --claimable-by "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
 [ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
 
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
