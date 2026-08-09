@@ -45,8 +45,24 @@
 #   ^packet\t<order>\t<packet_id>\t<priority>$
 #   ^triage: eligible=<n> grouped=<n> ungrouped=<n> epics=<n>$
 # or exactly one refusal line:
-#   ^refused:(no-eligible-work|no-plan-binary|bad-role):.*$
+#   ^refused:(no-eligible-work|no-plan-binary|missing-tool|parse-failure|bad-role):.*$
 # Exit 0 on a batch, 1 on refusal.
+#
+# "NO WORK" MUST MEAN NO WORK (order 631-*, Windows host 2026-08-09)
+# -----------------------------------------------------------------
+# Every jq call below is a hard dependency, and jq is NOT installed on the
+# Windows host (`plan/issues/litmus-corpus-not-host-aware-windows-2026-08-03.md`
+# already records it missing there alongside yq and ruby). With `2>/dev/null` on
+# the flatten, an absent jq made `rows` empty and the script reported
+# `refused:no-eligible-work` — indistinguishable from a genuinely drained
+# ledger. A greedy `/meta-orchestration` loop on that host reads the refusal,
+# concludes the plan is empty, and idles for hours while ready packets for its
+# own role sit claimable (7 of them at the time this was found).
+#
+# That is the precise failure class this repo calls a silent misclassification:
+# an environment fault wearing the costume of a legitimate terminal state. The
+# two preflights below make the fault its own refusal token, so the caller can
+# branch on it instead of believing it.
 #
 # MINIMAX, NOT SHINY (methodology/convergence.yaml -> minimax_convergence_strategy)
 # --------------------------------------------------------------------------
@@ -124,6 +140,18 @@ for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(co
     [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
 done
 [ -n "$PLAN" ] || { echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"; exit 1; }
+
+# jq is load-bearing for every projection below. Absence is an environment
+# fault, never a statement about the ledger — refuse with its own token.
+#
+# TILLANDSIAS_JQ exists so the litmus can exercise the absent-jq path without
+# emptying PATH (which kills the shebang before the script ever runs). It names
+# the binary only; the script never invokes it by that variable, so it cannot be
+# used to smuggle in a different projector.
+command -v "${TILLANDSIAS_JQ:-jq}" >/dev/null 2>&1 || {
+    echo "refused:missing-tool:jq is not on PATH (required to project tillandsias-plan --json); this is NOT a drained ledger"
+    exit 1
+}
 
 # DEFAULT BUDGET. Forge cycles take at most ONE packet — decided by The Tlatoani
 # 2026-07-10 (order 264) because a litmus-launched forge lives inside a 600s
@@ -204,7 +232,17 @@ rows="$(printf '%s' "$raw" | jq -r '
         print rank "\t" $2 "\t" $3 "\t" $4 "\t" $1 "\t" $5;
     }')"
 
-[ -n "$rows" ] || { echo "refused:no-eligible-work:no ready packets for role ${ROLE}"; exit 1; }
+if [ -z "$rows" ]; then
+    # Distinguish "the query returned an empty array" (a real terminal state)
+    # from "the query returned packets and the projection dropped them" (a
+    # tooling fault). `[]` is 2 bytes; anything longer carried packets.
+    if [ "${#raw}" -gt 2 ]; then
+        echo "refused:parse-failure:tillandsias-plan returned ${#raw} bytes for role ${ROLE} but the jq projection yielded no rows"
+        exit 1
+    fi
+    echo "refused:no-eligible-work:no ready packets for role ${ROLE}"
+    exit 1
+fi
 
 eligible="$(printf '%s\n' "$rows" | grep -c .)"
 ungrouped="$(printf '%s\n' "$rows" | awk -F'\t' '$2=="UNGROUPED"' | grep -c .)"

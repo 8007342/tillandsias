@@ -73,6 +73,16 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: bad budget refused"
 
+  - step: "NEGATIVE CONTROL: a missing jq refuses as missing-tool, NOT as no-eligible-work"
+    # Order 631-* (Windows host 2026-08-09). jq is absent on Windows, so the
+    # selector reported an environment fault as a drained ledger and a greedy
+    # loop idled on a host with 7 claimable packets for its own role. The
+    # assertion is deliberately two-sided: the right token must appear AND the
+    # wrong one must not, because only the second half catches the regression.
+    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: missing jq reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -q '^refused:missing-tool:' && echo 'ok: environment fault refused on its own token'"
+    timeout_ms: 15000
+    expected_behavior: "ok: environment fault refused on its own token"
+
   - step: "selection writes nothing to the worktree"
     command: "before=\"$(git status --porcelain)\"; scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
     timeout_ms: 30000
