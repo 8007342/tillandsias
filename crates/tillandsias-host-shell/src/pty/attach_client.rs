@@ -163,6 +163,18 @@ mod engine {
         };
         let slave_fd = slave_w.as_raw_fd();
 
+        // Re-raw the pair (order 492). The tray raw-modes the slave at
+        // openpty time, but Darwin RESETS pty termios to cooked whenever the
+        // last slave closes (measured — see unix.rs
+        // raw_termios_survives_zero_slave_window), and since split() drops
+        // the tray's bootstrap slave there can be a zero-slave window before
+        // this open. Idempotent when the pair is already raw; without it a
+        // reset pair resurrects the 8c6c8d05 echo-loop/ISIG corruption. Must
+        // run before the byte pumps start.
+        if let Err(e) = fd_set_raw(slave_fd) {
+            eprintln!("tillandsias attach-pty: slave raw mode failed: {e}");
+        }
+
         // Session socket: geometry events out, disconnect = detach signal.
         // A missing tray listener degrades to a pump-only session (bytes
         // still flow; the tray falls back to its bounded Hello timeout).
