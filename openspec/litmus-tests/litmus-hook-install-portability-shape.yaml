@@ -1,0 +1,63 @@
+# @trace spec:spec-traceability, spec:versioning
+name: litmus:hook-install-portability-shape
+spec: spec-traceability
+phase: pre-build
+description: Generated git hooks resolve the repo root at run time and bake no host-specific path
+severity: high
+size: instant
+
+# Order 632-retq (Windows host 2026-08-09). scripts/install-hooks.sh interpolated
+# the INSTALLING shell's absolute repo path into every generated hook. One
+# checkout has more than one true path — WSL sees /mnt/c/Users/..., Git Bash sees
+# /c/Users/... for the same bytes — so hooks installed from WSL made every
+# `git commit` from the Windows shell die with "No such file or directory", with
+# no commit and no push on a host whose exit contract requires one.
+#
+# The assertion is structural, not behavioural: an absolute path in a generated
+# hook is the defect, whether or not it happens to resolve on the host running
+# the test. A test that only checked "does commit work here" would pass on the
+# machine that installed the hooks and miss the bug entirely.
+
+preconditions:
+  - workspace contains scripts/install-hooks.sh
+  - the checkout is a git repository
+
+critical_path:
+  - step: "installer is syntactically valid"
+    command: "bash -n scripts/install-hooks.sh && echo 'ok: installer parses'"
+    timeout_ms: 15000
+    expected_behavior: "ok: installer parses"
+
+  - step: "installation is idempotent and reports success"
+    command: "scripts/install-hooks.sh >/dev/null && scripts/install-hooks.sh >/dev/null && echo 'ok: idempotent'"
+    timeout_ms: 60000
+    expected_behavior: "ok: idempotent"
+
+  - step: "NO BAKED HOST PATH: generated hooks contain no absolute filesystem path"
+    # The core assertion. Matches a leading-slash path anywhere in the hook body,
+    # which covers /mnt/c (WSL), /c and /home (Git Bash / Linux), /Users (macOS),
+    # and any container mount prefix.
+    command: "d=$(git rev-parse --path-format=absolute --git-path hooks); bad=0; for h in pre-commit pre-push post-commit; do [ -f \"$d/$h\" ] || continue; if grep -qE '(bash|sh)[[:space:]]+\"?/' \"$d/$h\"; then echo \"FAIL: $h invokes an absolute path\"; bad=1; fi; done; [ \"$bad\" -eq 0 ] && echo 'ok: no baked host paths'"
+    timeout_ms: 15000
+    expected_behavior: "ok: no baked host paths"
+
+  - step: "hooks resolve the repo root at run time"
+    command: "d=$(git rev-parse --path-format=absolute --git-path hooks); miss=0; for h in pre-commit pre-push post-commit; do [ -f \"$d/$h\" ] || continue; grep -q 'HOOK_ROOT=\"$(git rev-parse --show-toplevel)\"' \"$d/$h\" || { echo \"FAIL: $h does not resolve the root at run time\"; miss=1; }; done; [ \"$miss\" -eq 0 ] && echo 'ok: run-time root resolution'"
+    timeout_ms: 15000
+    expected_behavior: "ok: run-time root resolution"
+
+  - step: "the scripts each hook delegates to actually exist"
+    command: "root=$(git rev-parse --show-toplevel); for s in scripts/hooks/pre-commit-openspec.sh scripts/hooks/pre-push-version-guard.sh scripts/hooks/pre-push-local-gate.sh scripts/hooks/post-commit-dashboard-refresh.sh; do [ -f \"$root/$s\" ] || { echo \"FAIL: missing $s\"; exit 1; }; done; echo 'ok: delegates present'"
+    timeout_ms: 15000
+    expected_behavior: "ok: delegates present"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "Generated hooks are path-view independent: one checkout, many path vocabularies, one working hook"
+  log_fields:
+    spec: "spec-traceability"
+    test: "hook-install-portability-shape"
+
+rollback:
+  on_failure: "restore scripts/install-hooks.sh from git history and re-run it to regenerate the hooks"
