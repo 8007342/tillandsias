@@ -22,13 +22,13 @@ critical_path:
     expected_behavior: "ok: batch grammar"
 
   - step: "the batch never exceeds its budget"
-    command: "for b in 1 2 5; do n=$(scripts/select-work-batch.sh linux --budget $b | grep -cP '^packet\t'); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: budget $b returned $n packets\"; exit 1; fi; done; echo 'ok: budget respected'"
+    command: "for b in 1 2 5; do n=$(scripts/select-work-batch.sh linux --budget $b | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: budget $b returned $n packets\"; exit 1; fi; done; echo 'ok: budget respected'"
     timeout_ms: 60000
     expected_behavior: "ok: budget respected"
 
   - step: "COHESION: every packet in a batch belongs to the announced epic"
     # The whole point. A batch spanning epics is the scatter this replaces.
-    command: "out=$(scripts/select-work-batch.sh linux --budget 5); epic=$(printf '%s' \"$out\" | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); n=$(printf '%s' \"$out\" | grep -cP '^packet\t'); if [ \"$n\" -lt 1 ]; then echo 'FAIL: empty batch'; exit 1; fi; echo \"ok: cohesive batch of $n from $epic\""
+    command: "out=$(scripts/select-work-batch.sh linux --budget 5); epic=$(printf '%s' \"$out\" | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); n=$(printf '%s' \"$out\" | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -lt 1 ]; then echo 'FAIL: empty batch'; exit 1; fi; echo \"ok: cohesive batch of $n from $epic\""
     timeout_ms: 30000
     expected_behavior: "ok: cohesive batch"
 
