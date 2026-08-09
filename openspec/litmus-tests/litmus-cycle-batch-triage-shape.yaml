@@ -39,17 +39,24 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: reproducible"
 
-  - step: "ENTROPY: across many seeds more than one epic is reachable (nothing starves)"
-    command: "seen=$(for i in 1 2 3 4 5 6 7 8 9 10 11 12; do scripts/select-work-batch.sh linux --seed \"seed$i\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'; done | sort -u | grep -c .); if [ \"$seen\" -lt 2 ]; then echo \"FAIL: only $seen epic(s) reachable across 12 seeds — starvation\"; exit 1; fi; echo \"ok: epics reachable count=$seen\""
-    timeout_ms: 180000
-    expected_behavior: "ok: epics reachable"
+  # Both entropy properties are asserted from the PRINTED PROBABILITIES, not by
+  # sampling seeds. The sampling versions were inherently flaky: once
+  # release-scoping widened the score gap to ~6x, the top epic legitimately held
+  # ~95% and twelve consecutive seeds all chose it, so the test failed on correct
+  # behaviour. A test that fails 15% of the time for the right reason still
+  # trains people to re-run it. The properties that matter — a floor exists, and
+  # minimax still dominates — are exact, not statistical.
+  - step: "ENTROPY FLOOR: no frontier epic is starved"
+    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null); n=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$n\" -lt 2 ]; then echo \"ok: entropy floor n/a (single-epic frontier)\"; exit 0; fi; min=$(printf '%s\\n' \"$out\" | grep \"^frontier$(printf '\\t')\" | sed 's/.*p=//' | sort -g | head -1); awk -v m=\"$min\" 'BEGIN { if (m+0 < 0.02) { print \"FAIL: frontier epic starved at p=\" m; exit 1 } print \"ok: entropy floor min_p=\" m }'"
+    timeout_ms: 60000
+    expected_behavior: "ok: entropy floor"
 
-  - step: "MINIMAX DOMINATES ENTROPY: the top-scoring epic wins the plurality of seeds"
-    # Guards the exact regression that uniform-over-top-K would reintroduce:
-    # chasing a low-residual obligation while the maximum sits unresolved.
-    command: "top=$(scripts/select-work-batch.sh linux --seed probe | grep \"^frontier$(printf '\\t')\" | head -1 | cut -f3); hits=0; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do e=$(scripts/select-work-batch.sh linux --seed \"seed$i\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); [ \"$e\" = \"$top\" ] && hits=$((hits+1)); done; if [ \"$hits\" -lt 6 ]; then echo \"FAIL: top-residual epic won only $hits/12 — entropy is outvoting minimax\"; exit 1; fi; echo \"ok: top epic won $hits/12\""
-    timeout_ms: 180000
-    expected_behavior: "ok: top epic won"
+  - step: "MINIMAX DOMINATES: the top-residual epic holds the majority of probability"
+    # The opposite regression from the step above — the floor must not become the
+    # tail wagging the dog, which is what uniform-over-top-K did.
+    command: "top=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^frontier$(printf '\\t')\" | head -1 | sed 's/.*p=//'); awk -v t=\"$top\" 'BEGIN { if (t+0 <= 0.5) { print \"FAIL: top-residual epic holds only p=\" t \" — entropy is outvoting minimax\"; exit 1 } print \"ok: minimax dominant p=\" t }'"
+    timeout_ms: 60000
+    expected_behavior: "ok: minimax dominant"
 
   - step: "reports epic coverage so the ungrouped gap cannot hide"
     command: "scripts/select-work-batch.sh linux | grep -qE '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+$' && echo 'ok: triage line'"

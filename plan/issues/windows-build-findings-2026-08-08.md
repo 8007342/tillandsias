@@ -115,3 +115,44 @@ the builder-init musl deps are shared-scope.
 vsock_loopback preflight assert + import-surface litmus) and the follow-ups
 listed in plan/issues/low-end-no-local-inference-gate-2026-08-08.md
 (spec delta, accel-probe auto-detection, PRELOAD plumbing, KEEP_ALIVE knob).
+
+---
+
+### 20260809T044500Z — ok (curl-install e2e gate, meta-orchestration cycle)
+
+- agent_id: windows-esmeralda-claude-fable-20260808t235000z
+- release under test: v0.4.260809.2 (c3b5b633) — includes this host's fixes
+  through cace9cd1 (reconciliation, in-VM marker, inference gate, login
+  wrapper, wt title sanitizer); only e1aef8b8 (plain-console login lane)
+  postdates it and rides windows-next for the next release.
+
+**Curl install** (`irm releases/latest/download/install-windows.ps1 | iex`,
+fresh-user path, unauthenticated):
+- resolve latest -> download zip -> SHA-256 ok
+  (9560ff210abcbc834b80b2ab38021b80c240f30dc562fef696516389a83de7e6) ->
+  backup prior install -> extract -> Start Menu + Installed Software
+  registration -> `--version` = 0.4.260809.2 (c3b5b633) -> auto-launch.
+- All release asset URLs answered HTTP 200 without any token — the install
+  path needs NO auth.
+- The release tray ADOPTED the local guest (0.4.260809.1), version-mismatch
+  reconciliation fired, and the guest healed to 0.4.260809.2. Post-install
+  `--diagnose --json`: exit 0, wire.reachable=true, phase=Ready,
+  podman_ready=true, guest_version=0.4.260809.2. The shipped reconcile path
+  is field-verified on the lowest-end host in the fleet.
+
+**Auth findings** (the operator's "missing a good auth token" hunch):
+- Install path: no token needed (public assets).
+- gh CLI/push channel: BROKEN mid-session — keyring token invalidated
+  between 03:47Z (successful push of e1aef8b8) and 04:10Z;
+  `check-credential-channel.sh` -> missing:no-credential-channel; blocker
+  filed (plan/issues/windows-esmeralda-no-credential-channel-2026-08-09.md).
+  Operator action: `gh auth refresh -h github.com`, then push this file and
+  the blocker (both queued locally, uncommitted, per the guard).
+- Vault GitHub token: still absent (dummy-token 401 was the last write
+  attempt) — cloud features stay dark until the operator's real-token login.
+
+**Cycle notes**: committable-branch guard ok (windows-next); startup boundary
+carried operator-owned dirt (` M VERSION` local dev bump, preserved
+byte-identical, now superseded by the official .2 release and safe to revert
+at the operator's discretion). Local console-lane build backed up at
+%LOCALAPPDATA%\Programs\Tillandsias.bak and in the session scratchpad.

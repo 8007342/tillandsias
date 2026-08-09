@@ -453,6 +453,27 @@ successful cycle — not an excuse to escalate unprompted.
 See `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` for a worked
 example of capture → reduce → promote.
 
+## Reads Go Through MCP First
+
+Before draining anything: **do not read whole ledgers.** `plan/index.yaml` is
+31,678 lines and `plan/loop_status.md` is 7,875; pulling either in full to learn
+one fact is the largest single consumer of orchestrator context in this loop, and
+it is paid again by every agent on every host every cycle.
+
+Ask `forge-plan` / `project-plan` (`plan_answer`, `plan_next`, `plan_query`,
+`plan_status`, `plan_blocked_by`, `methodology_ask`, `spec_answer`) and
+`project-info` (`search_code`, `grep_code`, `find_files`, `read_file`). Answers
+are cited — keep the citations.
+
+Drop to the filesystem for exactly three reasons, and name the one that applies:
+**unavailable** (MCP down or `confidence=unsupported` — fall back and keep going,
+then record it so a systematically-refusing expert stays visible);
+**verification** (before any irreversible act, read the CITED SPAN, not the
+file); **not exposed** (no tool covers it — and if the loop needs it repeatedly,
+that is a missing tool, so file a packet).
+
+Canonical: `methodology/distributed-work.yaml` → `mcp_first_read_path`.
+
 ## Worker Drain
 
 ### Cycle batch triage — decide the batch BEFORE draining

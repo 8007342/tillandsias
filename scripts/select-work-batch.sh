@@ -142,6 +142,22 @@ case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive 
 # (stock macOS ships 3.2) treats "${arr[@]}" on an empty array as an unbound
 # variable — and REL_ARG is empty on every skill-driven call (no --release).
 # Same argv-guard shape as build-image.sh NO_CACHE_ARGS.
+# DEFAULT TO THE ACTIVE RELEASE. Without --release, `query` returns every
+# release, and the selector was ranking v0.5, v0.6 and v0.7 work against each
+# other — then printing whichever release the first row happened to carry, which
+# read like a filter that was never applied. On 2026-08-09 that surfaced as
+# `release=v0.7` in a header while the active release was v0.5.
+#
+# Selecting v0.7 work while v0.5 is the active bundle is precisely the
+# "agents work obsolete/not-yet-relevant packets" failure this selector exists to
+# prevent. `tillandsias-plan next` already defaults from the folded ACTIVE
+# RELEASE heading; match it. --release still overrides for deliberate cross-release
+# passes.
+if [ -z "$RELEASE" ]; then
+    RELEASE="$("$PLAN" next "$ROLE" --limit 1 2>/dev/null \
+        | grep -o "in desired_release '[^']*'" | head -1 \
+        | sed "s/.*'\(.*\)'/\1/")"
+fi
 REL_ARG=()
 [ -n "$RELEASE" ] && REL_ARG=(--release "$RELEASE")
 
@@ -152,8 +168,25 @@ fi
 # jq, not yq: the input is tillandsias-plan --json (pure JSON), macOS hosts
 # ship jq but not yq, and the forge image installs both — Fedora's yq is the
 # jq wrapper, so the swap is behavior-identical on Linux.
-raw="$("$PLAN" query --status ready --role "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
-[ -n "$raw" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
+# A host can claim its OWN role's packets AND anything marked `any`. `query
+# --role` matches the field, so it excludes `any`; `tillandsias-plan next` gets
+# this right and reports a different (larger) eligible set from the same ledger.
+#
+# The selector used the narrow one, and it starved the sibling hosts: measured
+# 2026-08-09, `query --role macos` returned 13 packets while `next macos` saw 32,
+# and windows saw 7 against a budget of 3 — so a Windows cycle was being handed
+# ONE packet while 56 `any` packets sat unclaimable by it. Union them, dedup by
+# packet_id. The query/next divergence itself is filed as its own defect; this
+# does not paper over it, it stops the selector being wrong while it is decided.
+raw_role="$("$PLAN" query --status ready --role "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
+if [ "$ROLE" = "any" ]; then
+    raw="$raw_role"
+else
+    raw_any="$("$PLAN" query --status ready --role any "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
+    raw="$(printf '%s\n%s' "${raw_role:-[]}" "${raw_any:-[]}" \
+        | jq -s 'add | unique_by(.packet_id)' 2>/dev/null)"
+fi
+[ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
 
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
 # packet can be the thing a macos packet is waiting on, and that downstream
@@ -247,22 +280,42 @@ seed_num="$(printf '%s' "$SEED" | cksum | cut -d' ' -f1)"
 # residual the most likely choice by a wide margin, while leaving the smaller
 # ones reachable so nothing starves. Entropy spreads coverage; it does not get
 # a vote on what matters most.
-pick="$(printf '%s\n' "$scored" | head -n "$k" \
+# Selection probability per frontier epic: squared weights, then mixed with a
+# uniform floor.
+#
+# SQUARED weights keep minimax dominant — linear weighting over a 19.7/8.5/5.9
+# frontier left a 17% chance of working the SMALLEST residual, which is the
+# shiny-packet trap wearing a different hat.
+#
+# The EPSILON FLOOR is what stops the sharpening from becoming starvation. Once
+# release-scoping narrowed the frontier to 23.8 / 4.0 / 3.9, squared weights sent
+# 94.6% to the top epic and twelve consecutive seeds all chose it — the
+# anti-starvation litmus caught exactly that. Mixing in a uniform component
+# guarantees every epic on the frontier a floor of EPS/k, so coverage over time
+# is a property of the algorithm rather than an accident of the current score
+# spread. This is plain epsilon-mixing: exploitation dominated by residual,
+# exploration bounded below.
+EPS="0.15"
+probs="$(printf '%s\n' "$scored" | head -n "$k" \
+    | awk -F'\t' -v eps="$EPS" -v k="$k" '
+        { s[NR] = ($1 + 0) * ($1 + 0); name[NR] = $2; total += s[NR]; }
+        END {
+            for (i = 1; i <= NR; i++) {
+                w = (total > 0) ? s[i] / total : 1.0 / NR;
+                p = (1.0 - eps) * w + eps / k;
+                printf "%.6f\t%s\n", p, name[i];
+            }
+        }')"
+
+pick="$(printf '%s\n' "$probs" \
     | awk -F'\t' -v seed="$seed_num" '
-        # SQUARED weights. Linear weighting over scores 19.7/8.5/5.9 leaves a
-        # 17% chance of working the smallest residual — more entropy than "a
-        # little", and enough to look like the shiny-packet trap in any single
-        # cycle an operator happens to watch. Squaring sharpens toward the
-        # maximum (~78%/15%/7% on the same frontier) while keeping every epic
-        # strictly reachable, which is all anti-starvation requires.
-        { s[NR] = ($1 + 0) * ($1 + 0); total += s[NR]; }
+        { p[NR] = $1 + 0; total += p[NR]; }
         END {
             if (total <= 0) { print 1; exit }
-            # Deterministic point in [0,total) from the seed.
-            r = (seed % 100000) / 100000.0 * total;
+            r = (seed % 1000000) / 1000000.0 * total;
             acc = 0;
             for (i = 1; i <= NR; i++) {
-                acc += s[i];
+                acc += p[i];
                 if (r < acc) { print i; exit }
             }
             print NR;
@@ -290,5 +343,6 @@ printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s\n' \
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do
-    printf 'frontier\t%s\t%s\tpackets=%s\tblocking=%s\tneglect=%s\n' "$sc" "$e" "$c" "$b" "$n"
+    p="$(printf '%s\n' "$probs" | awk -F'\t' -v e="$e" '$2==e {printf "%.3f", $1}')"
+    printf 'frontier\t%s\t%s\tpackets=%s\tblocking=%s\tneglect=%s\tp=%s\n' "$sc" "$e" "$c" "$b" "$n" "${p:-?}"
 done
