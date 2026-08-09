@@ -373,6 +373,22 @@ struct TrayUiState {
     /// any click of the GitHubLogin entry; never polled.
     /// @trace spec:tray-minimal-ux, spec:gh-auth-script
     is_authenticated: bool,
+    /// Order 627-m3vp / 626-r7kq: has the auth probe reported AT ALL yet?
+    ///
+    /// `is_authenticated` is a bool, so `false` collapses two very different
+    /// facts: "we have not asked yet" and "we asked and the answer was no".
+    /// The launch default is `false` and the confirming probe is
+    /// `is_github_logged_in` — a CONTAINER RUN — so the menu spent that whole
+    /// window rendering an ENABLED sign-in row at users who were already
+    /// signed in. That is the same defect the Windows and macOS trays carried
+    /// through `GithubLoginState::LoggedOut` being the initial state; they got
+    /// a fourth `Unknown` variant, and this flag is the Linux equivalent.
+    ///
+    /// Set by the background probe on BOTH outcomes — a negative observation is
+    /// still an observation, and before this the probe only ever recorded
+    /// success, so a genuine sign-out never became distinguishable from
+    /// "still checking".
+    login_observed: bool,
     /// windows-260719-2: TRUE from the instant the GitHubLogin entry is
     /// clicked (a purely local signal — no wire/probe round-trip) until the
     /// confirming Vault probe settles. Renders the login row as a disabled
@@ -1367,6 +1383,9 @@ impl TrayUiState {
             forge_available,
             podman_available,
             is_authenticated,
+            // Nothing has been observed at construction time. See the field
+            // doc: claiming "signed out" before asking is the defect.
+            login_observed: false,
             login_in_progress: false,
             enclave_status,
             revision: 1,
@@ -3233,11 +3252,33 @@ fn build_menu(state: &TrayUiState) -> MenuNode {
             ]),
             Vec::new(),
         )));
-    } else {
+    } else if !state.login_observed {
+        // Order 627-m3vp: the probe has not reported yet, so we do NOT know the
+        // user is signed out — only that we have not asked. Disabled is the
+        // load-bearing part: a sign-in we have not ruled out must never be
+        // offered as an action. Operator-approved copy 2026-08-09T08:33Z, the
+        // same string the Windows and macOS trays render for this state.
         children.push(child(node(
             20,
             props(vec![
-                ("label".to_string(), ov_str("\u{1F511} GitHubLogin")),
+                (
+                    "label".to_string(),
+                    ov_str("\u{1F504} Checking your account\u{2026}"),
+                ),
+                ("enabled".to_string(), ov(Value::from(false))),
+                ("visible".to_string(), ov(Value::from(true))),
+            ]),
+            Vec::new(),
+        )));
+    } else {
+        // Confirmed signed out — the ONLY state that earns an actionable row.
+        // Operator ruling 2026-08-09T09:04Z: "GitHub" is the canonical
+        // spelling; this label was "GitHubLogin" (no space) and diverged from
+        // the other two trays and from locales/en.toml's `sign_in_github`.
+        children.push(child(node(
+            20,
+            props(vec![
+                ("label".to_string(), ov_str("\u{1F511} GitHub Login")),
                 ("enabled".to_string(), ov(Value::from(true))),
                 ("visible".to_string(), ov(Value::from(true))),
             ]),
@@ -3957,11 +3998,30 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         if service
             .task_executor
             .spawn_task(move || {
-                if crate::remote_projects::is_github_logged_in(debug) {
+                let signed_in = crate::remote_projects::is_github_logged_in(debug);
+                if !signed_in {
+                    // Order 627-m3vp: a NEGATIVE result is still an
+                    // observation. Before this the probe only ever recorded
+                    // success, so `login_observed` would never flip on a
+                    // genuine sign-out and the menu would sit on "Checking
+                    // your account…" forever instead of offering the login
+                    // row. Record it and rebuild.
                     {
                         let mut state = state_handle.lock().expect("tray state lock");
-                        if !state.is_authenticated {
+                        if !state.login_observed {
+                            state.login_observed = true;
+                            state.bump_revision();
+                        }
+                    }
+                    let _ =
+                        futures::executor::block_on(service_for_probe.rebuild_after_state_change());
+                }
+                if signed_in {
+                    {
+                        let mut state = state_handle.lock().expect("tray state lock");
+                        if !state.is_authenticated || !state.login_observed {
                             state.is_authenticated = true;
+                            state.login_observed = true;
                             state.bump_revision();
                         }
                     }
@@ -4735,6 +4795,11 @@ mod tests {
             forge_available,
             podman_available: true,
             is_authenticated: false,
+            // Existing fixtures mean "confirmed signed out", not "not asked
+            // yet" — they assert the actionable login row. Defaulting to
+            // observed preserves that meaning; the unobserved state has its
+            // own dedicated test.
+            login_observed: true,
             login_in_progress: false,
             enclave_status,
             revision: 1,
@@ -4788,6 +4853,7 @@ mod tests {
         forge_available: bool,
         podman_available: bool,
         is_authenticated: bool,
+        login_observed: bool,
         login_in_progress: bool,
         enclave_status: EnclaveStatus,
         projects: Vec<ProjectEntry>,
@@ -4802,6 +4868,10 @@ mod tests {
                 forge_available: false,
                 podman_available: true,
                 is_authenticated: false,
+                // Builder states represent a CONFIRMED answer by default, so
+                // `authenticated(false)` keeps meaning "signed out" in every
+                // existing test rather than silently becoming "not asked yet".
+                login_observed: true,
                 login_in_progress: false,
                 enclave_status: EnclaveStatus::Verifying,
                 projects: vec![ProjectEntry {
@@ -4836,6 +4906,11 @@ mod tests {
 
         fn login_in_progress(mut self, value: bool) -> Self {
             self.login_in_progress = value;
+            self
+        }
+
+        fn login_observed(mut self, value: bool) -> Self {
+            self.login_observed = value;
             self
         }
 
@@ -4882,6 +4957,10 @@ mod tests {
                 forge_available: self.forge_available,
                 podman_available: self.podman_available,
                 is_authenticated: self.is_authenticated,
+                // See the other fixture: builder-made states represent a
+                // CONFIRMED auth answer. `unobserved_login_*` sets this
+                // explicitly to exercise the not-yet-asked path.
+                login_observed: self.login_observed,
                 login_in_progress: self.login_in_progress,
                 enclave_status: self.enclave_status,
                 revision: 1,
@@ -4927,8 +5006,8 @@ mod tests {
             label_list
         );
         assert!(
-            label_list.iter().any(|l| l.contains("GitHubLogin")),
-            "Missing GitHubLogin entry"
+            label_list.iter().any(|l| l.contains("GitHub Login")),
+            "Missing GitHub Login entry"
         );
         assert!(
             label_list
@@ -5001,6 +5080,83 @@ mod tests {
         );
     }
 
+    /// Order 627-m3vp, the Linux half of 626-r7kq's regression pin: before the
+    /// auth probe has reported AT ALL, the id=20 row must be a DISABLED
+    /// "Checking your account…" — never the actionable login row.
+    ///
+    /// `is_authenticated` is a bool defaulted false at launch, and the probe
+    /// that flips it is `is_github_logged_in`, a CONTAINER RUN. For that whole
+    /// window the menu used to offer an actionable sign-in to users who were
+    /// already signed in — the same defect the Windows and macOS trays carried
+    /// and fixed via `GithubLoginState::Unknown` (operator field log
+    /// 2026-08-09T06:10:51Z).
+    ///
+    /// This test fails if anyone defaults `login_observed` to true in the live
+    /// constructor or makes the unobserved row clickable.
+    ///
+    /// @trace spec:tray-ux, spec:tray-minimal-ux
+    #[test]
+    fn unobserved_login_renders_disabled_checking_row() {
+        let state = TrayStateBuilder::new()
+            .forge_available(false)
+            .enclave_status(EnclaveStatus::Verifying)
+            .authenticated(false)
+            .login_observed(false)
+            .build();
+        let menu = build_menu(&state);
+        let label_list = labels(&menu);
+        assert!(
+            label_list
+                .iter()
+                .any(|l| l.contains("Checking your account")),
+            "unobserved sign-in must render the Checking-your-account row. labels={label_list:?}"
+        );
+        assert!(
+            !label_list.iter().any(|l| l.contains("GitHub Login")),
+            "an actionable sign-in must NOT be offered before the probe reports. labels={label_list:?}"
+        );
+        // The auth-gated body must not leak: unknown is not signed-in either.
+        assert!(!label_list.iter().any(|l| l.contains("~/src")));
+        assert!(!label_list.iter().any(|l| l.contains("Cloud")));
+
+        // Disabled is the load-bearing part.
+        let mut flat = Vec::new();
+        flatten_layout(&menu, &mut flat);
+        let (_, props) = flat
+            .iter()
+            .find(|(id, _)| *id == 20)
+            .expect("login row id=20 must be present while unobserved");
+        let enabled = props
+            .get("enabled")
+            .and_then(|v| v.try_clone().ok())
+            .and_then(|v| bool::try_from(v).ok())
+            .unwrap_or(true);
+        assert!(!enabled, "the unobserved sign-in row must not be clickable");
+    }
+
+    /// Operator ruling 2026-08-09T09:04Z: "GitHub" is the canonical spelling.
+    /// The Linux row read "GitHubLogin" (no space), diverging from the Windows
+    /// and macOS trays AND from `locales/en.toml`'s `sign_in_github`. Pinned so
+    /// the three surfaces cannot drift apart again.
+    ///
+    /// @trace spec:tray-ux
+    #[test]
+    fn confirmed_signed_out_row_uses_canonical_github_spelling() {
+        let state = TrayStateBuilder::new()
+            .authenticated(false)
+            .login_observed(true)
+            .build();
+        let label_list = labels(&build_menu(&state));
+        assert!(
+            label_list.iter().any(|l| l.contains("GitHub Login")),
+            "confirmed signed-out must offer the canonical 'GitHub Login'. labels={label_list:?}"
+        );
+        assert!(
+            !label_list.iter().any(|l| l.contains("GitHubLogin")),
+            "the un-spaced 'GitHubLogin' spelling is retired. labels={label_list:?}"
+        );
+    }
+
     /// windows-260719-2: while the login flow is in flight the id=20 row
     /// renders as a DISABLED "Logging in…" — same collapsed shape as
     /// logged-out (the project body stays auth-gated), no actionable
@@ -5057,7 +5213,7 @@ mod tests {
         // (1) LoggedOut: actionable GitHubLogin.
         let logged_out = TrayStateBuilder::new().authenticated(false).build();
         let labels_out = labels(&build_menu(&logged_out));
-        assert!(labels_out.iter().any(|l| l.contains("GitHubLogin")));
+        assert!(labels_out.iter().any(|l| l.contains("GitHub Login")));
 
         // (2) LoggingIn: transitional row.
         let logging_in = TrayStateBuilder::new()
@@ -5074,7 +5230,7 @@ mod tests {
             .build();
         let labels_failed = labels(&build_menu(&probe_failed));
         assert!(
-            labels_failed.iter().any(|l| l.contains("GitHubLogin")),
+            labels_failed.iter().any(|l| l.contains("GitHub Login")),
             "a failed probe must fall back to the actionable login row"
         );
         assert!(!labels_failed.iter().any(|l| l.contains("Logging in")));
@@ -5773,7 +5929,7 @@ mod tests {
         assert_eq!(menu.2.len(), 5, "Unauthenticated top-level must be 5 items");
 
         let label_list = labels(&menu);
-        assert!(label_list.iter().any(|l| l.contains("GitHubLogin")));
+        assert!(label_list.iter().any(|l| l.contains("GitHub Login")));
         assert!(!label_list.iter().any(|l| l.contains("~/src")));
         assert!(!label_list.iter().any(|l| l.contains("Cloud")));
         assert!(!label_list.contains(&"project-alpha".to_string()));
