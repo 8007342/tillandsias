@@ -97,8 +97,12 @@ Getting there surfaced two more product findings (follow-up packets welcome):
 - [x] Dummy-token flow reaches GitHub validation and fails 401 in seconds
       (2026-08-09, evidence above).
 - [ ] Real-token login succeeds on this host (operator retry pending).
-- [ ] Tray-menu GitHub Login opens the wrapper, works, and leaves a readable
-      `github-login-last.log` in the guest.
+- [x] Tray-menu GitHub Login opens the wrapper and leaves a readable
+      `github-login-last.log` — VERIFIED by the sibling 626 report's F2
+      evidence (2026-08-09): the menu click ran the injected wrapper and the
+      log exists; it is 0 bytes because the preflight is silent, which is
+      626's first-run-long-work-is-silent-across-surfaces packet, not a
+      wrapper defect.
 - [ ] Follow-up: known limitation — same-VERSION wiring changes do not
       redeploy through reconciliation (version string is the contract);
       dev hosts force it by removing the guest binary. Consider a wiring
