@@ -996,6 +996,82 @@ distributed_work:
         role: "mutable-Linux coordinator host nickname"
     provenance: plan/issues/agent-fleet-and-zeroclaw-roadmap-2026-07-17.md
 
+  mcp_first_read_path:
+    purpose: >
+      Reads go through the local MCP servers FIRST. The filesystem is the
+      fallback — for MCP failure, for verification, and for content MCP does not
+      expose — not the default.
+    authority: >
+      Operator directive 2026-08-09. Identified as the cheapest available
+      velocity win by the 630-vpmq skill audit: it recovers most of the same
+      orchestrator context that agent delegation would, without spawning
+      anything.
+    the_problem: >
+      Skills name whole files to read. Those files are:
+
+        plan/index.yaml        31,678 lines
+        plan/loop_status.md     7,875 lines
+        plan/issues/              405 files
+        plan/index.d/              41 fragments
+
+      `advance-work-from-plan` step 1.6 instructs the orchestrator to read four
+      of those directly, to extract what amounts to a paragraph: the active
+      Direction, this host's branch, a handful of packet ids, and any blocker
+      naming this host. Tens of thousands of lines are imported to produce
+      twenty. That import is permanent for the rest of the session, and it is
+      paid again by every agent on every host on every cycle.
+
+      MCP already answers all of it in a bounded, cited envelope. The servers
+      exist, are wired, and are sub-100ms — they were simply offered as an
+      option rather than required, so the expensive path stayed the default.
+    rule: >
+      Prefer MCP for every read that has an MCP answer. Drop to the filesystem
+      only for one of the three reasons named in `filesystem_fallback` below,
+      and say which one.
+    tool_map:
+      plan_and_methodology: >
+        `forge-plan` / `project-plan`: plan_answer, plan_next, plan_query,
+        plan_ready, plan_status, plan_blocked_by, plan_blocked_on, plan_closure,
+        plan_burndown, plan_check, methodology_ask, methodology_path,
+        spec_answer, expert_capability.
+      repo_and_code: >
+        `project-info`: read_file, search_code, grep_code, find_files,
+        file_summary, project_answer, project_info, project_structure,
+        project_metadata, git_status.
+      note: >
+        `read_file` through MCP is still preferable to shelling `cat` — it is
+        bounded and the result is addressable. The rule is about not hauling
+        whole ledgers into context, not about avoiding file reads as such.
+    filesystem_fallback:
+      unavailable: >
+        MCP is absent, erroring, or the expert answers `confidence=unsupported`.
+        Fall back immediately and CONTINUE — an unavailable expert is a degraded
+        read path, never a blocked cycle. Record the fallback in the cycle's
+        loop-status entry so a systematically-refusing expert is visible rather
+        than quietly routed around (this is the order-531 failure mode: truthful
+        `experts: ready` while every answer was unsupported).
+      verification: >
+        Before an IRREVERSIBLE act that depends on an MCP answer — a commit, a
+        status flip, a deletion, a release — read the CITED SPAN to confirm it.
+        Expert answers carry citations precisely so this check is cheap: read the
+        span, not the file. Verification is the one case where the filesystem is
+        not a fallback but a requirement.
+      not_exposed: >
+        Content no MCP tool covers. Read it directly and, if it is content the
+        loop needs repeatedly, file a packet to expose it — a recurring direct
+        read is a missing tool, not a habit.
+    anti_patterns:
+      - >
+        Reading plan/index.yaml, plan/loop_status.md, or a directory of
+        plan/issues/ in full when a plan_query or plan_answer would answer the
+        question. This is the specific waste the rule exists to remove.
+      - >
+        Treating an MCP answer as verified evidence for a destructive step
+        without reading its citation. Cited is not the same as checked.
+      - >
+        Stalling a cycle because MCP is down. "'Tis broken? keep goin'" — fall
+        back, note it, continue.
+
   cycle_batch_triage:
     purpose: >
       Decide what ONE orchestration cycle takes, so that consecutive

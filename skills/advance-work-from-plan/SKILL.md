@@ -36,19 +36,50 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
 4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
-5.  **Use Local MCP Servers for Instant Context**:
-    - **`project-plan` (`forge-plan`)**: Call `plan_query`, `plan_ready`, `plan_status`, `plan_answer`, `methodology_path`, `methodology_ask` for fast sub-60ms cited envelopes over `plan/` and `methodology/`.
-    - **`project-info`**: Call `read_file`, `search_code`, `git_status`, `project_structure` for fast sub-90ms repo navigation without heavy context load.
-6.  **Read Authoritative Ledgers**: Read:
-    -   `methodology.yaml`
-    -   `methodology/distributed-work.yaml`
-    -   `plan.yaml`
-    -   `plan/index.yaml` (or via `project-plan` / `forge-plan` MCP tools)
-    -   `plan/loop_status.md`
-    -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
-        thematic direction). Reduce your packet selection against that theme
-        rather than inventing new direction; cite the direction in your work-queue
-        ledger entry (order 381).
+5.  **Orient via MCP — do NOT read whole ledgers.** This is a rule, not a
+    suggestion. Canonical: `methodology/distributed-work.yaml` →
+    `mcp_first_read_path`.
+
+    The files this step used to tell you to read are `plan/index.yaml` (31,678
+    lines), `plan/loop_status.md` (7,875 lines), `plan.yaml`, and two methodology
+    files — imported in full to extract what amounts to a paragraph. That import
+    is permanent for the rest of your session, it is the single largest
+    consumer of orchestrator context in the loop, and every agent on every host
+    pays it again every cycle.
+
+    Ask instead, and stop when you have the answer:
+
+    | You need | Ask |
+    |---|---|
+    | the operator's active theme | `plan_answer "what is the current Direction?"` |
+    | what to work on | `plan_next <role>` / `plan_ready <role>` (then §2.0) |
+    | one packet's state | `plan_status <id\|order>` |
+    | why something is stuck | `plan_blocked_by` / `plan_blocked_on` / `plan_closure` |
+    | a methodology rule | `methodology_ask "<question>"` / `methodology_path` |
+    | a spec's content | `spec_answer` |
+    | repo/code navigation | `project-info`: `search_code`, `grep_code`, `find_files`, `file_summary`, `read_file` |
+
+    Every answer is CITED. Keep the citations — §5 and §7 need them.
+
+    **Fall back to the filesystem for exactly three reasons, and say which:**
+
+    - **Unavailable** — MCP absent, erroring, or answering
+      `confidence=unsupported`. Fall back and *keep going*; a degraded read path
+      is never a blocked cycle. Note it in your loop-status entry, so an expert
+      that systematically refuses becomes visible instead of being quietly
+      routed around (order 531: launch state truthfully reported `experts:
+      ready` while every answer was unsupported).
+    - **Verification** — before anything irreversible (commit, status flip,
+      delete, release) that rests on an MCP answer, read the **cited span** to
+      confirm it. The span, not the file. Cited is not the same as checked.
+    - **Not exposed** — no tool covers it. Read it directly, and if the loop
+      needs it repeatedly, file a packet: a recurring direct read is a missing
+      tool, not a habit.
+
+6.  **Direction still binds.** However you obtained it, reduce your packet
+    selection against the operator-owned `## Direction` theme rather than
+    inventing new direction, and cite it in your work-queue ledger entry
+    (order 381).
 
 ---
 

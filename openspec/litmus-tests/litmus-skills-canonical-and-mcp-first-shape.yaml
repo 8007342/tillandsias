@@ -1,0 +1,81 @@
+# @trace spec:project-bootstrap-readme
+name: litmus:skills-canonical-and-mcp-first-shape
+spec: project-bootstrap-readme
+phase: pre-build
+description: Skills have exactly one source of truth, and the loop's read path is MCP-first with a named filesystem fallback
+severity: high
+size: instant
+
+# Order 631-wpkd + the mcp_first_read_path directive (operator, 2026-08-09).
+# Two rules that were both stated as doctrine and both untrue in practice:
+# ".claude/ and others should not have exclusive skills" (10 symlinks vs 14 real
+# directories) and "use MCP for instant context" (offered as optional while the
+# skill went on to name whole 31k-line ledgers to read).
+
+preconditions:
+  - workspace contains scripts/check-skill-canonicalization.sh
+  - workspace contains skills/
+
+critical_path:
+  - step: "every non-generated skill is a symlink into canonical skills/"
+    command: "scripts/check-skill-canonicalization.sh | grep -qE '^ok:skills-canonical:[0-9]+ entries checked across [0-9]+ harnesses$' && echo 'ok: canonical'"
+    timeout_ms: 10000
+    expected_behavior: "ok: canonical"
+
+  - step: "NEGATIVE CONTROL: a hand-written harness-exclusive skill is caught"
+    command: "d=.claude/skills/litmus-probe-exclusive; mkdir -p \"$d\"; printf -- '---\\nname: probe\\n---\\n' > \"$d/SKILL.md\"; out=$(scripts/check-skill-canonicalization.sh 2>&1); rc=$?; rm -rf \"$d\"; if [ $rc -eq 0 ]; then echo 'FAIL: exclusive skill accepted'; exit 1; fi; printf '%s' \"$out\" | grep -q '^violation:harness-exclusive-skill:' && echo 'ok: exclusive refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: exclusive refused"
+
+  - step: "NEGATIVE CONTROL: the generated-skill exemption cannot be borrowed by hand-written content"
+    # The exemption requires BOTH the openspec- prefix AND the generator's own
+    # marker. Prefix alone must not buy an exemption, or the carve-out becomes a
+    # way to smuggle any harness-exclusive skill past the guard.
+    command: "d=.claude/skills/openspec-litmus-probe; mkdir -p \"$d\"; printf -- '---\\nname: probe\\n---\\n' > \"$d/SKILL.md\"; out=$(scripts/check-skill-canonicalization.sh 2>&1); rc=$?; rm -rf \"$d\"; if [ $rc -eq 0 ]; then echo 'FAIL: prefix alone bought an exemption'; exit 1; fi; echo 'ok: prefix without marker refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: prefix without marker refused"
+
+  - step: "the three formerly harness-exclusive skills now live in canonical skills/"
+    command: "for s in build-macos-tray haiku-delegate diagnose-forge; do test -f \"skills/$s/SKILL.md\" || { echo \"FAIL: skills/$s missing\"; exit 1; }; done; echo 'ok: canonicalized'"
+    timeout_ms: 5000
+    expected_behavior: "ok: canonicalized"
+
+  - step: "build-macos-tray is reachable from a non-Claude harness"
+    # The concrete defect: a macOS BUILD skill that only Claude-harness agents
+    # could see, so what a host could do depended on which harness launched it.
+    command: "test -L .opencode/skills/build-macos-tray || test -L .codex/skills/build-macos-tray || test -L .gemini/skills/build-macos-tray || { echo 'FAIL: build-macos-tray still reachable only from .claude'; exit 1; }; echo 'ok: cross-harness'"
+    timeout_ms: 5000
+    expected_behavior: "ok: cross-harness"
+
+  - step: "the MCP-first read rule is declared in methodology, not only in a skill"
+    command: "yq -e '.distributed_work.mcp_first_read_path.rule' methodology/distributed-work.yaml >/dev/null 2>&1 && yq -e '.distributed_work.mcp_first_read_path.filesystem_fallback.verification' methodology/distributed-work.yaml >/dev/null 2>&1 && echo 'ok: rule declared'"
+    timeout_ms: 5000
+    expected_behavior: "ok: rule declared"
+
+  - step: "all three fallback reasons are named, so 'fell back' is never unexplained"
+    command: "for k in unavailable verification not_exposed; do yq -e \".distributed_work.mcp_first_read_path.filesystem_fallback.$k\" methodology/distributed-work.yaml >/dev/null 2>&1 || { echo \"FAIL: fallback reason '$k' missing\"; exit 1; }; done; echo 'ok: three reasons'"
+    timeout_ms: 5000
+    expected_behavior: "ok: three reasons"
+
+  - step: "the worker skill no longer instructs a full read of the big ledgers"
+    # The regression this guards: step 1.6 used to list plan/index.yaml and
+    # plan/loop_status.md as files to read outright.
+    command: "if grep -qE '^\\s+-\\s+`plan/(index\\.yaml|loop_status\\.md)`\\s*$' skills/advance-work-from-plan/SKILL.md; then echo 'FAIL: skill still lists whole ledgers as files to read'; exit 1; fi; grep -q 'mcp_first_read_path' skills/advance-work-from-plan/SKILL.md && echo 'ok: mcp-first'"
+    timeout_ms: 5000
+    expected_behavior: "ok: mcp-first"
+
+  - step: "meta-orchestration carries the same rule"
+    command: "grep -q 'mcp_first_read_path' skills/meta-orchestration/SKILL.md && echo 'ok: loop wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: loop wired"
+
+observability:
+  traces:
+    - "@trace spec:project-bootstrap-readme"
+  expected_log: "Skills canonical under skills/; reads are MCP-first with unavailable/verification/not-exposed fallback"
+  log_fields:
+    spec: "project-bootstrap-readme"
+    test: "skills-canonical-and-mcp-first-shape"
+
+rollback:
+  on_failure: "restore scripts/check-skill-canonicalization.sh, the skills/ moves, and methodology/distributed-work.yaml -> mcp_first_read_path from git history"
