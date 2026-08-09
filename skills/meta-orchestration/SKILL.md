@@ -627,12 +627,18 @@ Before exit:
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
    Its presence on PATH is not permission. The forge startup context lists what
    is actually available.
-4. Commit targeted files only.
-5. Push the relevant branch.
-6. If a startup boundary was recorded, run the guard's `verify` mode. A guard
+4. Run the local pre-push gate: `./build.sh --check` and fix what it reports.
+   An unparseable or unformatted push poisons every downstream clone. Push CI
+   no longer exists on any working branch — only the manually-dispatched
+   release workflow remains (litmus:github-actions-budget) — so this gate is
+   the ONLY trunk protection. Do not push past a red gate (evidence case:
+   `plan/issues/local-gate-evidence-query-packets-clippy-2026-08-09.md`).
+5. Commit targeted files only.
+6. Push the relevant branch.
+7. If a startup boundary was recorded, run the guard's `verify` mode. A guard
    failure is a blocker: do not attempt destructive Git cleanup. After a
    successful verification, remove only the unique external `$boundary_dir`;
    finalization never deletes, restores, or resets a worktree path.
-7. Confirm there are no uncommitted changes created by this cycle and the
+8. Confirm there are no uncommitted changes created by this cycle and the
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.

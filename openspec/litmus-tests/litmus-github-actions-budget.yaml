@@ -52,6 +52,20 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: local obligation stated"
 
+  # ORDER 598-znuv: the loop skill every host runs must NAME the gate as a
+  # Finalization obligation with the command, not merely an advisory. The
+  # sed-scoped grep keeps this RED if the only mention is the --ci freshness
+  # advisory further up the skill.
+  - step: "the loop skill names the local gate in Finalization as an obligation with the command"
+    command: "sed -n '/^## Finalization/,$p' skills/meta-orchestration/SKILL.md | grep -Fq './build.sh --check' && echo 'ok: loop skill names the gate'"
+    timeout_ms: 5000
+    expected_behavior: "ok: loop skill names the gate"
+
+  - step: "AGENTS.md no longer cites push CI as a safety net"
+    command: "if grep -Fq 'CI workflow will mark it red' AGENTS.md || grep -Fq 'the CI workflow will mark it red' AGENTS.md; then echo 'AGENTS.md still cites push CI as a safety net'; else echo 'ok: no push-CI claim'; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok: no push-CI claim"
+
 failure_modes:
   - "a push or pull_request trigger is added to any workflow, so every agent push burns cloud minutes again"
   - "a scheduled job is added, burning minutes on a timer with nobody watching"
