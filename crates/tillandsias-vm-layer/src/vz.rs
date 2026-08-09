@@ -950,47 +950,12 @@ impl std::fmt::Display for OpenVsockError {
 #[cfg(target_os = "macos")]
 impl std::error::Error for OpenVsockError {}
 
-/// Default values for the VZ guest config; surfaced as a struct so tests can
-/// assert on them without spinning up a real VM.
-///
-/// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VzGuestConfig {
-    /// Logical CPU count. Capped at `min(4, host_cores)`.
-    pub cpu_count: u32,
-    /// Memory size in bytes (4 GiB default).
-    pub memory_bytes: u64,
-    /// Stable vsock CID for the guest.
-    pub vsock_cid: u32,
-    /// Vsock port the in-VM headless listens on.
-    pub vsock_port: u32,
-    /// Host directory shared into the guest (typically `~/src/`).
-    pub shared_host_dir: PathBuf,
-    /// virtio-fs share tag — must match the guest's `/etc/fstab` entry.
-    pub share_tag: String,
-}
-
-impl VzGuestConfig {
-    /// Build a default config from the manifest. Caps CPU count at
-    /// `min(4, host_cores)` so we never starve the host.
-    pub fn from_manifest(manifest: &ProvisionManifest) -> Self {
-        let host_cores = std::thread::available_parallelism()
-            .map(|n| n.get() as u32)
-            .unwrap_or(2);
-        Self {
-            cpu_count: host_cores.clamp(1, 4),
-            memory_bytes: 4 * 1024 * 1024 * 1024,
-            vsock_cid: manifest.vsock_cid,
-            vsock_port: manifest.vsock_port,
-            shared_host_dir: manifest.shared_host_dir.clone(),
-            share_tag: "home-src".to_string(),
-        }
-    }
-}
-
 // ---------------------------------------------------------------------------
-// macOS: real VZ bodies start in phase 5. Provision now does the cache +
-// idempotency dance; boot/exec are still stubbed pending a macOS host.
+// macOS: the live VZ backend. Provisioning is the Fedora Cloud qcow2 path
+// (`fetch_fedora_cloud_image` + qemu-img convert/resize); boot/exec/vsock are
+// real Virtualization.framework bodies. The legacy tarball-import path and
+// its `VzGuestConfig` builder were removed (order 606-r42f) — the boot spec
+// is `boot::VzBootConfig`, built inline in `start()`.
 // @trace spec:vm-idiomatic-layer, spec:vm-provisioning-lifecycle
 // ---------------------------------------------------------------------------
 
@@ -1338,66 +1303,23 @@ pub mod boot {
 }
 
 #[cfg(target_os = "macos")]
-mod vz_real {
-    use super::*;
-
-    /// Convert a downloaded Fedora rootfs tarball into the raw ext4 image
-    /// VZ expects. macOS cannot mkfs.ext4 natively; see the cheatsheet for
-    /// the production approach (installer-VM sidecar). For now this is an
-    /// explicit `unimplemented!` so callers fail loudly.
-    pub(super) fn convert_rootfs_to_disk_image(
-        _tarball: &Path,
-        _image: &Path,
-    ) -> Result<(), VmError> {
-        unimplemented!(
-            "rootfs-to-disk conversion deferred — see \
-             cheatsheets/runtime/vz-framework-provisioning.md \
-             'Converting Fedora 44 to a VZ-bootable image'"
-        )
-    }
-
-    /// Extract `vmlinuz` and `initramfs.img` from the Fedora kernel-core
-    /// RPM packaged inside the rootfs tarball. Same deferral as the disk
-    /// conversion above — placeholder until the installer-VM path lands.
-    pub(super) fn extract_kernel_artifacts(
-        _tarball: &Path,
-        _image_root: &Path,
-    ) -> Result<(), VmError> {
-        unimplemented!(
-            "kernel/initrd extraction deferred — see \
-             cheatsheets/runtime/vz-framework-provisioning.md"
-        )
-    }
-}
-
-#[cfg(target_os = "macos")]
 #[async_trait::async_trait]
 impl VmRuntime for VzRuntime {
-    async fn provision(&self, manifest: &ProvisionManifest) -> Result<(), VmError> {
+    async fn provision(&self, _manifest: &ProvisionManifest) -> Result<(), VmError> {
         // Idempotency short-circuit per
         // vm-provisioning-lifecycle.provision.idempotency@v1.
         if self.is_provisioned() {
             return Ok(());
         }
-        tokio::fs::create_dir_all(&self.image_root)
-            .await
-            .map_err(|e| format!("create image_root failed: {e}"))?;
-        if !manifest.rootfs_tarball.exists() {
-            return Err(format!(
-                "rootfs tarball missing at {}",
-                manifest.rootfs_tarball.display()
-            ));
-        }
-        // Build the guest config eagerly so any config-shape bugs surface
-        // before we touch the slow filesystem operations.
-        let _guest_cfg = VzGuestConfig::from_manifest(manifest);
-        // Extract kernel + initrd, then convert the rootfs tarball into a
-        // raw ext4 disk image. Both are `unimplemented!` for now — see
-        // the cheatsheet for the production approach (installer-VM sidecar
-        // or hdiutil + mkfs via a helper container).
-        vz_real::extract_kernel_artifacts(&manifest.rootfs_tarball, &self.image_root)?;
-        vz_real::convert_rootfs_to_disk_image(&manifest.rootfs_tarball, &self.rootfs_image_path())?;
-        Ok(())
+        // The legacy tarball import path never existed on macOS: this trait
+        // method used to reach two `unimplemented!` placeholders. macOS
+        // provisions through `VzRuntime::fetch_fedora_cloud_image` (Fedora
+        // Cloud qcow2 download + qemu-img convert/resize), driven by
+        // `action_host::run_start` and `diagnose::provision_main`.
+        Err("tarball provisioning is not a macOS path — provision via \
+             VzRuntime::fetch_fedora_cloud_image (qcow2), as \
+             action_host::run_start and diagnose::provision_main do"
+            .to_string())
     }
 
     async fn start(&self) -> Result<(), VmError> {
@@ -1987,25 +1909,6 @@ impl VmRuntime for VzRuntime {
 mod tests {
     use super::*;
 
-    fn manifest() -> ProvisionManifest {
-        ProvisionManifest {
-            rootfs_tarball: PathBuf::from("/tmp/fedora-44.tar.xz"),
-            tillandsias_binary: PathBuf::from("/tmp/tillandsias-linux-x86_64"),
-            vsock_cid: 7,
-            vsock_port: 42420,
-            shared_host_dir: PathBuf::from("/home/user/src"),
-        }
-    }
-
-    /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
-    #[test]
-    fn vz_guest_config_caps_cpu_at_4_and_carries_4gib_memory() {
-        let cfg = VzGuestConfig::from_manifest(&manifest());
-        assert!(cfg.cpu_count >= 1, "cpu_count must be at least 1");
-        assert!(cfg.cpu_count <= 4, "cpu_count must be capped at 4");
-        assert_eq!(cfg.memory_bytes, 4 * 1024 * 1024 * 1024);
-    }
-
     /// 2026-07-11: the raw disk MUST be grown past the ~5 GB Fedora Cloud
     /// default before first boot, or the forge-base image build runs the
     /// root filesystem out of space and every agent attach dies with a
@@ -2042,19 +1945,44 @@ mod tests {
         );
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
+    /// Order 606-r42f: the macOS provisioning surface must never regain a
+    /// panicking placeholder. The two legacy `vz_real` helpers reached
+    /// `unimplemented!` from `VmRuntime::provision`; both were deleted, and
+    /// the trait contract (lib.rs `VmRuntime` doc) forbids panicking on
+    /// caller-recoverable errors. Whole-file source scan; the needles are
+    /// concatenated so this test cannot match its own literals.
     #[test]
-    fn vz_guest_config_uses_share_tag_home_src() {
-        let cfg = VzGuestConfig::from_manifest(&manifest());
-        assert_eq!(cfg.share_tag, "home-src");
+    fn no_unimplemented_or_todo_placeholders_in_vz() {
+        let source = include_str!("vz.rs");
+        let unimpl = format!("unimpl{}!(", "emented");
+        let todo = format!("to{}!(", "do");
+        assert!(
+            !source.contains(&unimpl) && !source.contains(&todo),
+            "vz.rs must not contain panicking placeholders — the macOS \
+             provisioning path is fetch_fedora_cloud_image (order 606-r42f)"
+        );
     }
 
-    /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
+    /// Order 606-r42f: the live boot spec (built inline in `start()`) must
+    /// keep the host-protecting clamps the deleted `VzGuestConfig` used to
+    /// pin: CPU capped at 4 and 4 GiB guest memory. Source scan of the
+    /// `VzBootConfig` construction site.
     #[test]
-    fn vz_guest_config_pins_vsock_cid_from_manifest() {
-        let cfg = VzGuestConfig::from_manifest(&manifest());
-        assert_eq!(cfg.vsock_cid, 7);
-        assert_eq!(cfg.vsock_port, 42420);
+    fn live_boot_spec_caps_cpu_at_4_and_carries_4gib_memory() {
+        let source = include_str!("vz.rs");
+        let window = source
+            .split("let spec = boot::VzBootConfig {")
+            .nth(1)
+            .and_then(|t| t.split("};").next())
+            .expect("start() must build a boot::VzBootConfig spec inline");
+        assert!(
+            window.contains(".min(4)"),
+            "boot spec must cap cpu_count at 4 (host-starvation guard)"
+        );
+        assert!(
+            window.contains("memory_bytes: 4 * 1024 * 1024 * 1024"),
+            "boot spec must carry the 4 GiB guest memory default"
+        );
     }
 
     /// @trace spec:vm-provisioning-lifecycle.provision.idempotency@v1
@@ -2063,6 +1991,43 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(7, tmp.path().to_path_buf());
         assert!(!rt.is_provisioned());
+    }
+
+    /// Order 606-r42f cold-provision lifecycle smoke — the LIVE macOS
+    /// provisioning body (`fetch_fedora_cloud_image`: SHA-verify + qemu-img
+    /// convert + resize) run end-to-end against a temp image root, proving a
+    /// cold root goes !provisioned → provisioned through the qcow2 path.
+    ///
+    /// Ignored by default: it is slow (qemu-img convert of a ~600 MB image)
+    /// and needs a seed. Run it on a macOS host with:
+    ///   TILLANDSIAS_SMOKE_QCOW2="$HOME/Library/Application Support/tillandsias/rootfs.qcow2" \
+    ///     cargo test -p tillandsias-vm-layer --release --features recipe,download \
+    ///     -- --ignored cold_provision
+    /// The seed pre-populates `download_verified`'s cache-hit path (the file
+    /// is still SHA-verified against the bundled manifest pin); without a
+    /// seed the test performs the real 528 MB download.
+    #[cfg(all(target_os = "macos", feature = "recipe", feature = "download"))]
+    #[tokio::test]
+    #[ignore = "slow cold-provision smoke; seed via TILLANDSIAS_SMOKE_QCOW2"]
+    async fn cold_provision_via_qcow2_path_flips_is_provisioned() {
+        let manifest =
+            crate::recipe::Manifest::from_toml(include_str!("../../../images/vm/manifest.toml"))
+                .expect("bundled manifest parses");
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(7, tmp.path().to_path_buf());
+        assert!(!rt.is_provisioned(), "temp root must start cold");
+        if let Ok(seed) = std::env::var("TILLANDSIAS_SMOKE_QCOW2") {
+            let dest = rt.rootfs_image_path().with_extension("qcow2");
+            std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            std::fs::copy(&seed, &dest).expect("seed qcow2 copies into temp root");
+        }
+        rt.fetch_fedora_cloud_image(&manifest, &|phase| eprintln!("[smoke] {phase}"))
+            .await
+            .expect("cold provision through the live qcow2 path succeeds");
+        assert!(
+            rt.is_provisioned(),
+            "fetch_fedora_cloud_image must leave the root provisioned"
+        );
     }
 
     /// windows-260717-4 (intentional ephemeral reset): wiping a provisioned

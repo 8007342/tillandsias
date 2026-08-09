@@ -29,8 +29,6 @@ mod main_thread;
 mod pty_vsock_bridge;
 #[cfg(target_os = "macos")]
 mod status_item;
-#[cfg(target_os = "macos")]
-mod vz_lifecycle;
 
 // These modules compile on every target: their public surface is host-shell
 // data + plain Rust formatting that we want to test from the Linux dev box.
@@ -273,6 +271,37 @@ mod tests {
         assert!(
             guard_idx < appkit_idx,
             "AppKit tray mode must acquire the singleton guard before launch"
+        );
+    }
+
+    /// Order 606-r42f pin: both macOS provisioning surfaces — the tray's
+    /// auto-boot worker and the `--provision`/`--reset-guest` CLI — must
+    /// drive the LIVE qcow2 path (`VzRuntime::fetch_fedora_cloud_image`).
+    /// The legacy `VzLifecycle`/`VmRuntime::provision` tarball path was
+    /// removed after order 598-kibt found it dead and panicking. Source
+    /// scan (platform-independent `include_str!`) because both files are
+    /// `cfg(target_os = "macos")` and invisible to Linux `cargo check`.
+    #[test]
+    fn provisioning_surfaces_use_live_qcow2_path() {
+        let action_host = include_str!("action_host.rs");
+        assert!(
+            action_host.contains("fetch_fedora_cloud_image"),
+            "tray auto-boot (run_start) must provision via \
+             VzRuntime::fetch_fedora_cloud_image (order 606-r42f)"
+        );
+        let diagnose = include_str!("diagnose.rs");
+        assert!(
+            diagnose.contains("fetch_fedora_cloud_image"),
+            "--provision (provision_main) must provision via \
+             VzRuntime::fetch_fedora_cloud_image (order 606-r42f)"
+        );
+        let main_src = include_str!("main.rs");
+        // Needle built by concatenation so this test can't match its own
+        // literal in the include_str! source.
+        let dead_mod = format!("mod vz_{};", "lifecycle");
+        assert!(
+            !main_src.contains(&dead_mod),
+            "the dead VzLifecycle wrapper must stay removed (order 606-r42f)"
         );
     }
 
