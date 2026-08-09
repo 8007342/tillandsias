@@ -3508,12 +3508,38 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     };
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
     let title = terminal_title(&intent, project.as_deref());
-    match spawn_wsl_terminal(distro, &title, &argv) {
+    // The credential-critical login lane bypasses wt.exe ENTIRELY: two field
+    // crashes (Esmeralda, 2026-08-09) reached bash with an unbalanced quote
+    // through the wt re-parse chain, and wt offers no verbatim-args contract.
+    // The plain-console spawn hands argv straight to CreateProcess — there is
+    // no second parser to mangle it. Other intents keep the nicer wt tab.
+    let spawn_result = if matches!(intent, PtyIntent::GithubLogin) {
+        spawn_wsl_console(distro, &argv)
+    } else {
+        spawn_wsl_terminal(distro, &title, &argv)
+    };
+    match spawn_result {
         Ok(()) => tracing::info!(?intent, project = ?project, argv = ?argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
     }
+}
+
+/// Plain-console spawn: `wsl.exe` in its own fresh conhost window, argv passed
+/// verbatim via CreateProcess — no wt.exe command-line re-parse in the chain.
+/// Used for the login lane; identical to `spawn_wsl_terminal`'s fallback arm.
+fn spawn_wsl_console(distro: &str, in_vm_argv: &[String]) -> std::io::Result<()> {
+    use std::process::Command;
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+    Command::new("wsl.exe")
+        .arg("-d")
+        .arg(distro)
+        .arg("--")
+        .args(in_vm_argv)
+        .creation_flags(CREATE_NEW_CONSOLE)
+        .spawn()
+        .map(|_| ())
 }
 
 fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {
