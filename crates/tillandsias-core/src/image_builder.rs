@@ -870,6 +870,38 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
+    /// Serializes the tests that mutate process-global state.
+    ///
+    /// Two of the tests below `set_var("HOME", ...)` — a PROCESS-wide mutation —
+    /// and both call `temp_image_root()`, which keys its directory on
+    /// `process::id()` and then `remove_dir_all`s it. Cargo runs tests in one
+    /// binary CONCURRENTLY, so those two raced on both resources at once: one
+    /// test could wipe the other's fixture directory mid-run, and either could
+    /// observe the other's HOME.
+    ///
+    /// Diagnosed 2026-08-09 as the cause of an intermittent `rust-tests` /
+    /// `tray-contract` gate failure that had been dismissed twice as an
+    /// unexplained flake. It reproduced roughly 1 run in 4 across the full
+    /// workspace and never when the crate was run alone — the signature of a
+    /// cross-test race rather than a bad assertion.
+    ///
+    /// A lock is the minimal correct fix here. The better fix is for these tests
+    /// not to touch global state at all (inject the home path), tracked as its
+    /// own packet along with the ten other `set_var("HOME")` sites in the
+    /// workspace.
+    static ENV_AND_FIXTURE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Take the lock, surviving a poisoned mutex.
+    ///
+    /// A panicking test poisons the mutex, and propagating that would turn ONE
+    /// real failure into a cascade of misleading secondary failures in every
+    /// test that came after it — hiding the actual defect behind noise.
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        ENV_AND_FIXTURE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     fn temp_image_root() -> PathBuf {
         let root =
             std::env::temp_dir().join(format!("tillandsias-image-routing-{}", std::process::id()));
@@ -922,6 +954,7 @@ mod tests {
 
     #[test]
     fn build_routing_uses_type_specific_containerfiles() {
+        let _env = env_guard();
         let root = temp_image_root();
         unsafe {
             std::env::set_var("HOME", &root);
@@ -977,6 +1010,7 @@ mod tests {
 
     #[test]
     fn chromium_framework_keeps_squash_options_and_the_real_core_image_argument() {
+        let _env = env_guard();
         let root = temp_image_root();
         let chromium = root.join("images/chromium");
         fs::create_dir_all(&chromium).unwrap();

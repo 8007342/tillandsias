@@ -453,6 +453,33 @@ successful cycle — not an excuse to escalate unprompted.
 See `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` for a worked
 example of capture → reduce → promote.
 
+## When the Gate Fails, Read check-logs.jsonl FIRST
+
+`target/convergence/check-logs.jsonl` holds a per-run verdict for every check,
+going back weeks. It is the authoritative record of what failed and when.
+
+Do NOT diagnose from terminal scrollback. The next run overwrites the per-check
+logs under `target/convergence/check-logs/`, and re-running to "get a better
+look" is what destroys the evidence — the re-run may pass, and then the failure
+is gone.
+
+```bash
+jq -r 'select(.status != "pass") | "\(.ci_run_id)\t\(.check_id)\t\(.status)"' \
+  target/convergence/check-logs.jsonl | tail -20
+```
+
+`scripts/local-ci.sh` also prints a `Failed checks:` block naming each failure.
+If you pipe the gate through `tail -N` or a grep filter, you will cut that block
+off and lose the names — this host did exactly that twice on 2026-08-09, spent
+two cycles calling an intermittent failure "unexplained", and filed a packet on
+the false premise that the names were unrecoverable (637-df4z, closed
+mis-diagnosed). The answer had been on disk the whole time: `rust-tests` and
+`tray-contract`, two parallel tests racing on `$HOME` and a shared fixture
+directory (638-ehzi).
+
+An intermittent failure is a defect with a schedule, not noise. Treating it as
+noise is how it survives.
+
 ## Reads Go Through MCP First
 
 Before draining anything: **do not read whole ledgers.** `plan/index.yaml` is
