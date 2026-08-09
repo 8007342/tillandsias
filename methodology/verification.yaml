@@ -143,6 +143,8 @@ verification:
       - dependency_lock_hash
       - environment_profile
       - litmus_run_ids_and_results
+      # Produced by `scripts/trace-coverage.sh --json` since 2026-08-09; see the
+      # note on the same field in methodology/convergence.yaml.
       - trace_coverage_summary
       - litmus_chain_reference
       - ci_run_id

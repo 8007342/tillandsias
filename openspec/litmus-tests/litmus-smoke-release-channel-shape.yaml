@@ -71,6 +71,16 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: portable aliases linkable"
 
+  # v0.4.260809.1 shipped a SHA256SUMS-windows whose last two entries were
+  # merged into one unreadable line: the packaging script writes the file with
+  # no trailing newline, so appending the alias checksums concatenated the first
+  # new entry onto the last existing one. It corrupted a PRE-EXISTING entry that
+  # had verified fine, and nothing in the pipeline noticed.
+  - step: "alias checksums are newline-normalized and the sums file is verified before publish"
+    command: "grep -Fq 'tail -c1 SHA256SUMS-windows | wc -l' .github/workflows/release.yml && awk '/Stage version-stable portable aliases/,/Install Cosign/' .github/workflows/release.yml | grep -Eq '^[[:space:]]*sha256sum -c SHA256SUMS-windows[[:space:]]*$' && echo 'ok: sums-normalized-and-verified'"
+    timeout_ms: 3000
+    expected_behavior: "ok: sums-normalized-and-verified"
+
   - step: "promotion prompts the one-shot stable smoke"
     command: "grep -Fq 'SMOKE_CHANNEL=stable' scripts/promote-stable.sh && echo 'ok: promotion smoke hint'"
     timeout_ms: 3000
