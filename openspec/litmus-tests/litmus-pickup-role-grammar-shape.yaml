@@ -70,6 +70,24 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: portable toolchain only"
 
+  - step: "READS THE FOLD: the live path never greps the raw ledger text"
+    # Order 635-qpx8 (2026-08-09). The first version of this checker grepped
+    # `pickup_role:` out of plan/index.yaml + plan/index.d/*.yaml. That is the
+    # PRE-FOLD text: a correction sent through the LWW channel (a `status:` entry
+    # with `field: pickup_role`) changes what every reader sees while leaving the
+    # overridden base line untouched on disk. The checker therefore kept
+    # reporting three offenders that had already been corrected — an instance of
+    # the very defect it exists to report. Structural assertion, because a
+    # behavioural one passes on any ledger with no pending LWW corrections.
+    command: "grep -nE \"grep .*plan/index(\\\\.yaml|\\\\.d)\" scripts/check-pickup-role-grammar.sh | grep -v '^[0-9]*:#' && { echo 'FAIL: checker reads the raw ledger text instead of the fold'; exit 1; }; grep -q 'query --limit 0 --json' scripts/check-pickup-role-grammar.sh && echo 'ok: reads the folded ledger'"
+    timeout_ms: 15000
+    expected_behavior: "ok: reads the folded ledger"
+
+  - step: "NEGATIVE CONTROL: an empty projection is refused, not read as a clean ledger"
+    command: "f=$(mktemp); : > \"$f\"; out=$(TILLANDSIAS_PICKUP_ROLE_INPUT=\"$f\" scripts/check-pickup-role-grammar.sh 2>&1); rc=$?; rm -f \"$f\"; printf '%s' \"$out\" | grep -q 'verdict=ok:canonical-roles' && { echo 'FAIL: empty input read as a clean ledger'; exit 1; }; echo \"ok: empty projection not mistaken for clean (rc=$rc)\""
+    timeout_ms: 15000
+    expected_behavior: "ok: empty projection not mistaken for clean"
+
   - step: "the checker writes nothing to the worktree"
     command: "before=\"$(git status --porcelain)\"; scripts/check-pickup-role-grammar.sh >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: checker mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
     timeout_ms: 60000
