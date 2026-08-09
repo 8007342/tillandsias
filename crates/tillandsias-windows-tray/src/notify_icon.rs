@@ -1662,6 +1662,10 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
 /// so they are free of the UX-curation governance that binds menu labels.
 fn login_state_label(state: &GithubLoginState) -> &'static str {
     match state {
+        // Distinct from signed-out on purpose (order 626-r7kq): a field log
+        // that cannot tell "never asked" from "asked, answer was no" cannot
+        // measure how long the tray spent in the unresolved window.
+        GithubLoginState::Unknown => "unknown",
         GithubLoginState::LoggedOut => "signed-out",
         GithubLoginState::LoggingIn => "signing-in",
         GithubLoginState::LoggedIn { .. } => "signed-in",
