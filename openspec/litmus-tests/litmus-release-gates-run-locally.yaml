@@ -78,7 +78,14 @@ critical_path:
     expected_behavior: "ok: release.yml is the only workflow"
 
   - step: "the pre-push hook composes FAIL-FAST (a masked exit code is the bug this replaced)"
-    command: "grep -Fq '|| exit' scripts/install-hooks.sh && grep -Fq 'tillandsias-pre-push-v3' scripts/install-hooks.sh && echo 'ok: fail-fast composition'"
+    # 2026-08-09: this pinned the literal `tillandsias-pre-push-v3`. The hook
+    # marker was legitimately bumped to v4, and the step went red although both
+    # properties it guards — fail-fast composition, and a VERSIONED marker so
+    # older hooks can be recognised and upgraded — were intact. Fourth instance
+    # of the 622-rmit expression-pinning class in a week, and the one that best
+    # shows the shape: pinning a VERSION token guarantees a false red on the next
+    # bump, which is a scheduled failure, not a risk. Assert the pattern.
+    command: "grep -Fq '|| exit' scripts/install-hooks.sh && grep -qE 'tillandsias-pre-push-v[0-9]+' scripts/install-hooks.sh && echo 'ok: fail-fast composition'"
     timeout_ms: 5000
     expected_behavior: "ok: fail-fast composition"
 
