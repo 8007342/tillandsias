@@ -142,23 +142,26 @@ fn should_own_process_group(terminal_foreground_pgrp: Option<i32>, our_pgrp: i32
     }
 }
 
-/// The foreground process group of our controlling terminal, or `None` if none
-/// of our standard descriptors is a terminal.
+/// The foreground process group of our controlling terminal, or `None` when we
+/// have no controlling terminal at all.
+///
+/// This asks for the controlling terminal directly (`/dev/tty`) rather than
+/// inspecting fds 0/1/2: a lane can hold one while having all three redirected
+/// (`< /dev/tty > log 2>&1`, or a wrapper that pipes every stream), and reading
+/// only the standard descriptors would call that "no terminal" and put us back
+/// in a background group — the exact hang this guards against.
 #[cfg(unix)]
 fn terminal_foreground_pgrp() -> Option<i32> {
-    for fd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
-        // SAFETY: both calls only read kernel state for a descriptor we own.
-        unsafe {
-            if libc::isatty(fd) != 1 {
-                continue;
-            }
-            let pgrp = libc::tcgetpgrp(fd);
-            if pgrp >= 0 {
-                return Some(pgrp);
-            }
+    // SAFETY: open/tcgetpgrp/close on a path we own; the fd never escapes.
+    unsafe {
+        let fd = libc::open(c"/dev/tty".as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC);
+        if fd < 0 {
+            return None;
         }
+        let pgrp = libc::tcgetpgrp(fd);
+        libc::close(fd);
+        if pgrp >= 0 { Some(pgrp) } else { None }
     }
-    None
 }
 
 fn main() {
@@ -13168,9 +13171,17 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
         }
     }
 
-    // 5. Force-terminate the process group to clean up any remaining stray children
-    // (like orphaned tillandsias-podman-cli instances).
+    // 5. Force-terminate the process group to clean up any remaining stray
+    // children (like orphaned tillandsias-podman-cli instances).
+    //
+    // KNOWN GAP: this only fires when we LEAD our group, which an interactive
+    // lane deliberately does not (see `should_own_process_group`). Those lanes
+    // therefore get no group sweep — accepted, because the alternative is
+    // SIGTERM'ing the operator's shell. The durable answer is to put spawned
+    // children in a group of their own (`CommandExt::process_group(0)`) and
+    // sweep that instead of ours; filed in the deliverable below.
     // @trace spec:graceful-shutdown
+    // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
     #[cfg(unix)]
     unsafe {
         // Only sweep a group we LEAD. An interactive lane deliberately stays in

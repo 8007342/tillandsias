@@ -1246,7 +1246,7 @@ export TILLANDSIAS_VAULT_API_BASE_URL="${TILLANDSIAS_VAULT_API_BASE_URL:-https:/
 LOG_DIR="$HOME/.cache/tillandsias"
 LOG="$LOG_DIR/github-login-last.log"
 install -d -m 0700 "$LOG_DIR"
-tillandsias-headless --github-login 2>&1 | tee "$LOG"
+/usr/local/bin/tillandsias-headless --github-login 2>&1 | tee "$LOG"
 rc=${PIPESTATUS[0]}
 if [ "$rc" -ne 0 ]; then
   printf '\n[tillandsias] github-login exited %s; full output saved to %s\n' "$rc" "$LOG"
@@ -1715,8 +1715,16 @@ mod tests {
         let body = &source[start..start + 900];
         let launch = body
             .lines()
-            .find(|l| l.trim_start().starts_with("tillandsias-headless --github-login"))
+            .find(|l| l.contains("tillandsias-headless --github-login"))
             .expect("the wrapper must launch tillandsias-headless --github-login");
+
+        // Every other injected artifact calls the guest binary by absolute
+        // path; a bare name makes a PATH without /usr/local/bin fail with a
+        // `command not found` indistinguishable from the blank-terminal hang.
+        assert!(
+            launch.contains("/usr/local/bin/tillandsias-headless"),
+            "the wrapper must invoke the guest binary by absolute path: {launch}"
+        );
 
         assert!(
             launch.contains("2>&1 | tee"),

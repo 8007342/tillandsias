@@ -157,10 +157,33 @@ from `PATH`. `Command::new("wt.exe")` then fails to resolve and
 verbatim-argv path. Confirmed on peke: `where wt.exe` returns 1 under the
 filtered PATH.
 
+**Workaround verified in the field.** With the PATH-filtered tray, a project
+click opened a forge, cloned, and launched an agent — the lane that had been
+dying instantly minutes earlier:
+
+```
+tillandsias-router                         Up 7 minutes
+tillandsias-git-tillandsias                Up 7 minutes
+tillandsias-tillandsias-forge-antigravity  Up 5 minutes   <- meta-orchestration cycle
+```
+
 ---
 
 ## Open asks / follow-ups
 
+- **The stray-child group sweep is now inert on interactive lanes.** Gating
+  `kill(-getpgrp(), SIGTERM)` on leading the group is required for safety, but
+  it means the lanes that stay in the launching shell's group get no sweep at
+  all. The durable answer is to put spawned children in their own group
+  (`CommandExt::process_group(0)`) and sweep *that*, instead of relying on our
+  own. Until then the comment at the sweep site records the gap honestly.
+- **New tray + old guest binary is still broken.** The wrapper forks, so the
+  entire fix is binary-side. When no guest asset is embedded (the documented CI
+  case) the tray writes `fetch-headless.sh`, whose first line is
+  `if [[ -x "$DEST" ]]; then exit 0; fi` — a stale binary is never replaced. A
+  release that ships the tray without a staged guest binary therefore ships this
+  bug intact. Either always embed, or make the wrapper `exec` (structurally
+  immune to guest version, at the cost of the trailing failure message).
 - **Re-evaluate the forge CLI amputation.** `build_opencode_forge_args` drops
   `--interactive --tty` with the comment "so podman does not attempt to claim
   the terminal (which causes SIGTTIN/SIGTTOU / stopped T state when the parent
