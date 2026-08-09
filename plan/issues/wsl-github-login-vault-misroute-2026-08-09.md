@@ -68,6 +68,30 @@ attempt 1. Note the crash also validated the detachment work: the failing
 terminal took down nothing else this time, and the error was plain
 copyable text.
 
+## Real-token login VERIFIED + two more field findings (2026-08-09 ~05:4xZ)
+
+Operator's real token (gh keyring, `gho_`/40) authenticated end-to-end:
+`[tillandsias] GitHub authentication complete for 8007342`, and
+`--list-cloud-projects` subsequently returned the operator's real repository
+list — login → vault → consumer → GitHub proven on the field host.
+
+Getting there surfaced two more product findings (follow-up packets welcome):
+
+1. **UTF-8 BOM token poisoning**: PowerShell 5.1 pipes prefix the first line
+   with EF BB BF, so `gh auth token | wsl … --with-token` delivers a 43-byte
+   token and GitHub returns the same `401 Bad credentials` a wrong token
+   would. Probe evidence: guest read len=43, prefix=BOM+`g`. Workaround:
+   route the pipe through cmd.exe (raw bytes) and scrub
+   `sed s/^\xEF\xBB\xBF// | tr -d '\r'` guest-side. HARDENING ASK:
+   GH_LOGIN_STDIN_TOKEN_SCRIPT should strip BOM/CR before `gh auth login
+   --with-token`; Windows operator docs should show the cmd-pipe form.
+2. **git-identity preflight dead-end**: `--with-token` refuses without an
+   existing git user.name, but the runtime distro ships NO git binary and the
+   error's "configure it" has no documented path (identity was hand-written
+   to /root/.gitconfig, which read_git_identity_defaults parses directly).
+   HARDENING ASK: accept identity via env/flags on --with-token, or reuse
+   the tray's git-identity propagation.
+
 ## Exit criteria
 
 - [x] Dummy-token flow reaches GitHub validation and fails 401 in seconds
