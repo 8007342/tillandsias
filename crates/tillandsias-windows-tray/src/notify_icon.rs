@@ -1624,6 +1624,7 @@ fn should_poll_local_projects(push_stream_healthy: bool, fast_poll_burst: bool) 
 /// `apply_vm_status`).
 fn apply_github_login(logged_in: bool, handle: Option<String>) {
     let state = github_login_state_from_reply(logged_in, handle);
+    let mut transition: Option<(&'static str, &'static str)> = None;
     if let Ok(mut guard) = MENU_STATE.lock() {
         // A confirmed probe reply ALWAYS overwrites the local transitional
         // `LoggingIn` state (windows-260719-2): success flips to LoggedIn
@@ -1631,6 +1632,9 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
         // to LoggedOut's actionable "GitHub Login" leaf — never a stale
         // in-progress or logged-in rendering.
         let menu = guard.get_or_insert_with(MenuState::initial);
+        if menu.login != state {
+            transition = Some((login_state_label(&menu.login), login_state_label(&state)));
+        }
         if menu.login != state && state == GithubLoginState::LoggedOut {
             // Fresh logout: the next login must re-fetch cloud projects, so
             // its submenu shows "(loading repos…)" rather than a stale
@@ -1639,6 +1643,28 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
             menu.cloud_projects = Vec::new();
         }
         menu.login = state;
+    }
+    // Sign-in state gates the ENTIRE project body, and until now every
+    // observation of it landed at DEBUG — so a release tray's log could not
+    // answer "when did sign-in resolve?". A field log showing Ready at
+    // T+0 and the first project click at T+113s could not distinguish a slow
+    // probe from a probe that never ran (2026-08-09 field report). Transitions
+    // only: steady-state re-observations stay at DEBUG so this cannot become
+    // per-push spam. Diagnostic surface, not end-user UX (spec:tray-ux allows
+    // engineering discipline on logs).
+    if let Some((from, to)) = transition {
+        tracing::info!(from, to, "github sign-in state resolved");
+    }
+}
+
+/// Stable one-word label for a [`GithubLoginState`], for lifecycle logging.
+/// Diagnostic surface only — these strings are never rendered in the menu,
+/// so they are free of the UX-curation governance that binds menu labels.
+fn login_state_label(state: &GithubLoginState) -> &'static str {
+    match state {
+        GithubLoginState::LoggedOut => "signed-out",
+        GithubLoginState::LoggingIn => "signing-in",
+        GithubLoginState::LoggedIn { .. } => "signed-in",
     }
 }
 
@@ -1649,12 +1675,22 @@ fn apply_github_login(logged_in: bool, handle: Option<String>) {
 fn apply_cloud_projects(projects: &[tillandsias_control_wire::CloudProjectEntry]) -> usize {
     let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
     let n = mapped.len();
+    let mut first_answer = false;
     if let Ok(mut guard) = MENU_STATE.lock() {
         let state = guard.get_or_insert_with(MenuState::initial);
+        // Before this observation the submenu was still showing
+        // "(loading repos…)"; this is the moment the list becomes real.
+        first_answer = !state.cloud_projects_loaded;
         state.cloud_projects = mapped;
         // A confirmed answer (even an empty one) flips the cloud submenu
         // from "(loading repos…)" to real entries / "(no repos)".
         state.cloud_projects_loaded = true;
+    }
+    // Companion to the sign-in transition above: the pair of INFO lines is
+    // what lets a field log time the startup handoff end to end. First
+    // confirmed answer only — subsequent pushes stay at DEBUG.
+    if first_answer {
+        tracing::info!(count = n, "cloud projects resolved");
     }
     n
 }
