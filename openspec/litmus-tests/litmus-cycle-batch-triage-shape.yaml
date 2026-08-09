@@ -1,0 +1,83 @@
+# @trace spec:ci-release
+name: litmus:cycle-batch-triage-shape
+spec: ci-release
+phase: pre-build
+description: One orchestration cycle selects a cohesive, budgeted, minimax-ranked batch with reproducible entropy
+severity: high
+size: instant
+
+# Order 626-* (operator directive 2026-08-09). Every step here EXECUTES the
+# selector and asserts a property of its output. None of them grep the script's
+# source — that is the 622-rmit lesson applied at the point of writing rather
+# than retrofitted later.
+
+preconditions:
+  - workspace contains scripts/select-work-batch.sh
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "emits the batch grammar"
+    command: "scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+$' && echo 'ok: batch grammar'"
+    timeout_ms: 30000
+    expected_behavior: "ok: batch grammar"
+
+  - step: "the batch never exceeds its budget"
+    command: "for b in 1 2 5; do n=$(scripts/select-work-batch.sh linux --budget $b | grep -cP '^packet\t'); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: budget $b returned $n packets\"; exit 1; fi; done; echo 'ok: budget respected'"
+    timeout_ms: 60000
+    expected_behavior: "ok: budget respected"
+
+  - step: "COHESION: every packet in a batch belongs to the announced epic"
+    # The whole point. A batch spanning epics is the scatter this replaces.
+    command: "out=$(scripts/select-work-batch.sh linux --budget 5); epic=$(printf '%s' \"$out\" | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); n=$(printf '%s' \"$out\" | grep -cP '^packet\t'); if [ \"$n\" -lt 1 ]; then echo 'FAIL: empty batch'; exit 1; fi; echo \"ok: cohesive batch of $n from $epic\""
+    timeout_ms: 30000
+    expected_behavior: "ok: cohesive batch"
+
+  - step: "REPRODUCIBLE: the same seed yields the same batch"
+    # Without this, a cycle cannot be replayed or audited and the entropy is
+    # indistinguishable from nondeterminism.
+    command: "a=$(scripts/select-work-batch.sh linux --seed fixed-seed-1); b=$(scripts/select-work-batch.sh linux --seed fixed-seed-1); if [ \"$a\" != \"$b\" ]; then echo 'FAIL: same seed produced different batches'; exit 1; fi; echo 'ok: reproducible'"
+    timeout_ms: 60000
+    expected_behavior: "ok: reproducible"
+
+  - step: "ENTROPY: across many seeds more than one epic is reachable (nothing starves)"
+    command: "seen=$(for i in 1 2 3 4 5 6 7 8 9 10 11 12; do scripts/select-work-batch.sh linux --seed \"seed$i\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'; done | sort -u | grep -c .); if [ \"$seen\" -lt 2 ]; then echo \"FAIL: only $seen epic(s) reachable across 12 seeds — starvation\"; exit 1; fi; echo \"ok: epics reachable count=$seen\""
+    timeout_ms: 180000
+    expected_behavior: "ok: epics reachable"
+
+  - step: "MINIMAX DOMINATES ENTROPY: the top-scoring epic wins the plurality of seeds"
+    # Guards the exact regression that uniform-over-top-K would reintroduce:
+    # chasing a low-residual obligation while the maximum sits unresolved.
+    command: "top=$(scripts/select-work-batch.sh linux --seed probe | grep -P '^frontier\t' | head -1 | cut -f3); hits=0; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do e=$(scripts/select-work-batch.sh linux --seed \"seed$i\" 2>/dev/null | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); [ \"$e\" = \"$top\" ] && hits=$((hits+1)); done; if [ \"$hits\" -lt 6 ]; then echo \"FAIL: top-residual epic won only $hits/12 — entropy is outvoting minimax\"; exit 1; fi; echo \"ok: top epic won $hits/12\""
+    timeout_ms: 180000
+    expected_behavior: "ok: top epic won"
+
+  - step: "reports epic coverage so the ungrouped gap cannot hide"
+    command: "scripts/select-work-batch.sh linux | grep -qE '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+$' && echo 'ok: triage line'"
+    timeout_ms: 30000
+    expected_behavior: "ok: triage line"
+
+  - step: "NEGATIVE CONTROL: an unknown role is refused, not silently defaulted"
+    command: "scripts/select-work-batch.sh nonsense >/dev/null 2>&1 && { echo 'FAIL: bad role accepted'; exit 1; }; scripts/select-work-batch.sh nonsense 2>&1 | grep -q '^refused:bad-role:' && echo 'ok: bad role refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: bad role refused"
+
+  - step: "NEGATIVE CONTROL: a zero/garbage budget is refused"
+    command: "scripts/select-work-batch.sh linux --budget 0 >/dev/null 2>&1 && { echo 'FAIL: budget 0 accepted'; exit 1; }; scripts/select-work-batch.sh linux --budget abc >/dev/null 2>&1 && { echo 'FAIL: garbage budget accepted'; exit 1; }; echo 'ok: bad budget refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: bad budget refused"
+
+  - step: "selection writes nothing to the worktree"
+    command: "before=\"$(git status --porcelain)\"; scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
+    timeout_ms: 30000
+    expected_behavior: "ok: read-only"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Cycle batch triage: cohesive minimax batch, budgeted, reproducible under a printed seed"
+  log_fields:
+    spec: "ci-release"
+    test: "cycle-batch-triage-shape"
+
+rollback:
+  on_failure: "restore scripts/select-work-batch.sh and methodology/distributed-work.yaml -> cycle_batch_triage from git history"

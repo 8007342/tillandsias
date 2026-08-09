@@ -415,6 +415,30 @@ example of capture → reduce → promote.
 
 ## Worker Drain
 
+### Cycle batch triage — decide the batch BEFORE draining
+
+```bash
+scripts/select-work-batch.sh <linux|macos|windows|any>
+```
+
+Run this once, at the top of the drain, and take the batch it prints. It selects
+ONE epic (`release_target`) and at most `budget` packets from it, so a cycle
+drains a coherent slice instead of five unrelated subsystems — the scatter that
+made small packets cost more in orientation than in work.
+
+It is minimax-ranked (largest residual first, per `convergence.yaml` →
+`minimax_convergence_strategy`), with score-weighted entropy over the top-3 so
+coverage spreads over time and two concurrent hosts do not collide on one epic.
+The seed is printed; record it in the loop-status entry so the cycle can be
+replayed. Budget is 1 on forge (order 264) and 3 elsewhere.
+
+The `triage:` line reports `ungrouped=N` — eligible packets with no
+`release_target`. That number is the health of the epic tier itself: when it is
+large, selection is degrading toward flat priority order regardless of what this
+script does. Surface it in the handoff.
+
+Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triage`.
+
 When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `./plan` friendly way in fresh cycles until one of these is true:
 
 - no eligible ready work remains for this host;
