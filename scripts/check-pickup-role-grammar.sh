@@ -92,17 +92,60 @@ if [ -n "${TILLANDSIAS_PICKUP_ROLE_INPUT:-}" ]; then
     fi
     values="$(grep -v '^ *$' "$TILLANDSIAS_PICKUP_ROLE_INPUT")"
 else
-    # Fold base + fragments the same way a reader does. Values may be quoted or bare.
-    values="$(grep -h '^ *pickup_role:' plan/index.yaml plan/index.d/*.yaml 2>/dev/null \
-        | sed 's/^ *pickup_role: *//' \
-        | sed 's/^"//; s/"$//' \
-        | sed "s/^'//; s/'$//" \
+    # READ THE FOLDED LEDGER, NOT THE RAW TEXT.
+    #
+    # This script's first version grepped `pickup_role:` out of plan/index.yaml
+    # plus plan/index.d/*.yaml. That is the pre-fold text, and it is the wrong
+    # population: a correction sent through the LWW channel (a `status:` entry
+    # with `field: pickup_role`) changes what every READER sees while leaving the
+    # base line it overrides untouched on disk. So the grep kept reporting values
+    # that no consumer had seen for hours.
+    #
+    # Caught immediately, and in the most direct way available: this cycle
+    # normalized three pickup_role values through that channel, confirmed via
+    # `tillandsias-plan query` that the folded values had changed and that the
+    # Windows claimable queue had dropped from 7 to 6 — and this checker still
+    # reported all three as offenders.
+    #
+    # Which makes it an instance of the exact defect it was written to report:
+    # active, internally consistent, and measuring a population the system does
+    # not use. Reading the fold is not an optimization here, it is the only way
+    # the number means anything.
+    PLAN=""
+    for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \
+             ./target/release/tillandsias-plan.exe ./target/debug/tillandsias-plan.exe \
+             "$(command -v tillandsias-plan 2>/dev/null)"; do
+        [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
+    done
+    if [ -z "$PLAN" ]; then
+        # Refuse rather than fall back to the raw grep. A fallback that silently
+        # measures a different population is precisely what this script exists to
+        # catch, and it would report a stale number as a current one.
+        echo "pickup-role: refused:no-plan-binary:cannot read the folded ledger (build with cargo build --release -p tillandsias-plan)"
+        exit 2
+    fi
+
+    # Only pickup_role is extracted, so splitting records on `},{` is safe: the
+    # field is a short role string with no braces or escaped quotes. No jq — see
+    # the portability note above.
+    values="$("$PLAN" query --limit 0 --json 2>/dev/null \
+        | sed 's/},{/}\n{/g' \
+        | sed -n 's/.*"pickup_role":"\([^"]*\)".*/\1/p' \
         | grep -v '^ *$')"
+
+    if [ -z "$values" ]; then
+        echo "pickup-role: refused:empty-projection:the plan binary returned no pickup_role values"
+        exit 2
+    fi
 fi
 
 if [ -z "$values" ]; then
-    echo "pickup-role: total=0 canonical=0 prose=0 misrouted=0 verdict=ok:canonical-roles"
-    exit 0
+    # An empty set is NOT a clean ledger. A checker that reports "no problems
+    # found" when it in fact found nothing to inspect converts every future
+    # breakage of its input into a passing run — the same silent-misclassification
+    # class this script reports on.
+    echo "pickup-role: refused:empty-projection:no pickup_role values to inspect"
+    exit 2
 fi
 
 total="$(printf '%s\n' "$values" | grep -c .)"
