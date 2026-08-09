@@ -115,8 +115,13 @@ if ! echo 'test -f /root/.cache/tillandsias/wsl2-builder-initialized' \
     # and arrive shredded (order-326 live repro, 2026-07-15).
     wsl.exe -d "$BUILD_DISTRO" -u root -- sh <<'WSL2_INIT'
 set -eu
+# musl-gcc/musl-devel/musl-libc-static: the cargo fallback in
+# scripts/build-guest-binaries.sh cross-compiles the musl guest binary, and
+# ring's build script hard-requires x86_64-linux-musl-gcc (first hit on the
+# Esmeralda Windows host, 2026-08-08).
 dnf install -y \
     gcc pkg-config file cmake make \
+    musl-gcc musl-devel musl-libc-static \
     openssl-devel systemd-devel \
     ruby perl-FindBin \
     procps-ng findutils diffutils \

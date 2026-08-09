@@ -169,6 +169,16 @@ pub fn is_running_in_vm() -> bool {
     {
         return true;
     }
+    // Provisioning-owned guest marker. WSL distros inherit the WINDOWS
+    // hostname (Esmeralda field failure, 2026-08-09: a bare `--github-login`
+    // shell had no delivered credentials, no TILLANDSIAS_HOST_KIND, and a
+    // non-"tillandsias-vm" hostname, misclassified as a native Linux host,
+    // and probed vault at the 127.0.0.1:8201 port-forward — the known
+    // WSL2/netavark TLS-hang). The Windows tray's inject_bootstrap_logic
+    // writes this marker so every in-guest lane classifies correctly.
+    if std::path::Path::new("/etc/tillandsias/in-vm").exists() {
+        return true;
+    }
     false
 }
 

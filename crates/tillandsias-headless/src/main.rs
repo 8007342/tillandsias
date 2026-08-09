@@ -3063,8 +3063,40 @@ fn nvidia_cdi_available() -> bool {
 ///
 /// Returns `Ok(())` once ready, or `Err` after a bounded wait with a truthful
 /// reason (container not running, ollama not yet up, or API error).
+/// Pure form of the local-inference kill-switch parse: set-and-not-"0" wins.
+/// Split from the env read so the truth table is unit-testable without
+/// process-global env mutation.
+fn inference_disable_flag(value: Option<&str>) -> bool {
+    value.is_some_and(|v| {
+        let v = v.trim();
+        !v.is_empty() && v != "0"
+    })
+}
+
+/// Operator kill switch for the local-inference container on low-end hosts
+/// (filed from the 2026-08-08 Intel N100 field host: the ~2.1GB ollama
+/// self-install + resident `ollama serve` are unaffordable there). When
+/// `TILLANDSIAS_NO_LOCAL_INFERENCE` is set (any value except "0"), lane
+/// launches skip creating `tillandsias-inference` and the readiness wait
+/// short-circuits. Safe by construction: local ollama is a future
+/// expert-system feature nothing consumes yet, and every consumer (tellme
+/// howto, forge startup context, opencode entrypoints) already degrades
+/// cleanly when the endpoint is absent.
+fn local_inference_disabled() -> bool {
+    inference_disable_flag(std::env::var("TILLANDSIAS_NO_LOCAL_INFERENCE").ok().as_deref())
+}
+
 async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<(), String> {
     use std::time::Duration;
+    if local_inference_disabled() {
+        if debug {
+            eprintln!(
+                "[tillandsias] [forge-launch] local inference disabled \
+                 (TILLANDSIAS_NO_LOCAL_INFERENCE); skipping readiness wait"
+            );
+        }
+        return Ok(());
+    }
     const MAX_ATTEMPTS: u32 = 60; // 60 * 1s = 60s budget for a cold ollama boot
     let mut last = String::from("no probe attempted");
     for attempt in 1..=MAX_ATTEMPTS {
@@ -6832,15 +6864,22 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .await
             .map_err(|e| e.to_string())?;
 
-        client
-            .run_container_observed(
-                "status-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(&certs_dir, &inference_image, true),
-                debug,
-            )
-            .await
-            .map_err(|e| e.to_string())?;
+        if local_inference_disabled() {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 status-check runs without tillandsias-inference"
+            );
+        } else {
+            client
+                .run_container_observed(
+                    "status-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(&certs_dir, &inference_image, true),
+                    debug,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+        }
 
         let status_args =
             build_status_check_forge_args(root.as_path(), project_name, &certs_dir, version);
@@ -9311,19 +9350,26 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             )
             .await
             .map_err(|e| format!("[OpenCode] failed to start git: {e}"))?;
-        client
-            .run_container_observed(
-                "opencode-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
-                    &certs_dir,
-                    &versioned_image_tag("inference", version),
-                    false,
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
+        if local_inference_disabled() {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 OpenCode lane launches without tillandsias-inference"
+            );
+        } else {
+            client
+                .run_container_observed(
+                    "opencode-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(
+                        &certs_dir,
+                        &versioned_image_tag("inference", version),
+                        false,
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
+        }
 
         // The OpenCode CLI lane serves the interactive agent ATTACHED to THIS
         // terminal (run_container_attached_observed below). Tailing the SUPPORT
@@ -10395,25 +10441,32 @@ pub(crate) fn run_opencode_web_mode(
             "started",
             Some(&versioned_image_tag("git", version)),
         )?;
-        client
-            .run_container_observed(
-                "opencode-web-inference",
-                "tillandsias-inference",
-                &build_inference_run_args(
-                    &certs_dir,
-                    &versioned_image_tag("inference", version),
-                    false,
-                ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
-        emit_opencode_web_event(
-            project_name,
-            "inference",
-            "started",
-            Some(&versioned_image_tag("inference", version)),
-        )?;
+        if local_inference_disabled() {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 OpenCode Web lane launches without tillandsias-inference"
+            );
+        } else {
+            client
+                .run_container_observed(
+                    "opencode-web-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(
+                        &certs_dir,
+                        &versioned_image_tag("inference", version),
+                        false,
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[OpenCode Web] failed to start inference: {e}"))?;
+            emit_opencode_web_event(
+                project_name,
+                "inference",
+                "started",
+                Some(&versioned_image_tag("inference", version)),
+            )?;
+        }
 
         // Use the canonical absolute path so the bind-mount source is
         // unambiguous even when the user passed "." or another relative
@@ -11034,7 +11087,14 @@ async fn ensure_shared_git_and_inference_for_launch(
     // Order 443: inference is nearly stateless but --replacing it on every
     // launch drops loaded models and interrupts a sibling's inference.
     // Recreate-if-not-running (ephemerality/idempotency), not always.
-    if crate::vault_bootstrap::container_running("tillandsias-inference") {
+    if local_inference_disabled() {
+        if debug {
+            eprintln!(
+                "[tillandsias] local inference disabled (TILLANDSIAS_NO_LOCAL_INFERENCE); \
+                 not starting tillandsias-inference"
+            );
+        }
+    } else if crate::vault_bootstrap::container_running("tillandsias-inference") {
         if debug {
             eprintln!("[tillandsias] inference already running; reusing (order 443)");
         }
@@ -13169,6 +13229,20 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
+
+    #[test]
+    fn inference_disable_flag_truth_table() {
+        // Unset / explicit zero / whitespace-only leave inference enabled.
+        assert!(!inference_disable_flag(None));
+        assert!(!inference_disable_flag(Some("0")));
+        assert!(!inference_disable_flag(Some(" 0 ")));
+        assert!(!inference_disable_flag(Some("")));
+        assert!(!inference_disable_flag(Some("   ")));
+        // Any other set value disables it.
+        assert!(inference_disable_flag(Some("1")));
+        assert!(inference_disable_flag(Some("true")));
+        assert!(inference_disable_flag(Some(" yes ")));
+    }
 
     fn fake_podman_output(status: i32, stdout: &str) -> CommandOutput {
         CommandOutput {
