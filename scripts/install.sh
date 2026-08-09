@@ -6,11 +6,51 @@ set -euo pipefail
 
 REPO="8007342/tillandsias"
 ASSET="tillandsias-linux-x86_64"
-# Default: the stable channel (/releases/latest resolves the newest promoted,
-# non-prerelease release — plan order 305). The curl-install SMOKE overrides
-# this via TILLANDSIAS_RELEASE_BASE to pin a specific release (e.g. the latest
-# daily prerelease) without changing what real users get.
-RELEASE_BASE="${TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download}"
+# Release channels (plan order 305 for stable, 621-* for unstable):
+#
+#   stable   (default) -> /releases/latest/download — GitHub resolves this to
+#                         the newest NON-prerelease, i.e. whatever
+#                         scripts/promote-stable.sh last promoted.
+#   unstable           -> /releases/download/unstable — a rolling prerelease
+#                         the release workflow re-points at EVERY daily build,
+#                         promoted or not. This is what Tillandsias operators
+#                         and opt-in testers run to exercise a build on real
+#                         hosts before it is promoted.
+#
+# Select with `--channel unstable` or TILLANDSIAS_CHANNEL=unstable. The
+# curl-install SMOKE still overrides everything via TILLANDSIAS_RELEASE_BASE to
+# pin one specific release without changing what real users get.
+CHANNEL="${TILLANDSIAS_CHANNEL:-stable}"
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --channel)
+            [ "$#" -ge 2 ] || { printf '  ERROR: --channel needs a value\n' >&2; exit 1; }
+            CHANNEL="$2"
+            shift 2
+            ;;
+        --channel=*)
+            CHANNEL="${1#--channel=}"
+            shift
+            ;;
+        *)
+            printf '  ERROR: unknown argument: %s\n' "$1" >&2
+            printf '  usage: install.sh [--channel stable|unstable]\n' >&2
+            exit 1
+            ;;
+    esac
+done
+
+case "$CHANNEL" in
+    stable)   CHANNEL_BASE="https://github.com/${REPO}/releases/latest/download" ;;
+    unstable) CHANNEL_BASE="https://github.com/${REPO}/releases/download/unstable" ;;
+    *)
+        printf '  ERROR: unknown channel: %s (want stable or unstable)\n' "$CHANNEL" >&2
+        exit 1
+        ;;
+esac
+
+RELEASE_BASE="${TILLANDSIAS_RELEASE_BASE:-$CHANNEL_BASE}"
 PATH_MARKER_BEGIN="# >>> tillandsias PATH >>>"
 PATH_MARKER_END="# <<< tillandsias PATH <<<"
 
@@ -163,6 +203,11 @@ say "Tillandsias Installer"
 say "====================="
 echo ""
 say "Target: Linux x86_64"
+say "Channel: $CHANNEL"
+if [ "$CHANNEL" = "unstable" ]; then
+    say "  !! UNSTABLE channel — newest daily build, NOT promoted to stable."
+    say "     Expect breakage. Re-run without --channel for the stable build."
+fi
 say "Install path: $INSTALL_PATH"
 echo ""
 

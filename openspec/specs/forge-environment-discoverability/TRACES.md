@@ -6,8 +6,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/tests/project_discovery.rs#L2](../../../crates/tillandsias-core/tests/project_discovery.rs#L2)
-- [crates/tillandsias-headless/src/main.rs#L12231](../../../crates/tillandsias-headless/src/main.rs#L12231)
-- [crates/tillandsias-headless/src/main.rs#L12724](../../../crates/tillandsias-headless/src/main.rs#L12724)
+- [crates/tillandsias-headless/src/main.rs#L12295](../../../crates/tillandsias-headless/src/main.rs#L12295)
+- [crates/tillandsias-headless/src/main.rs#L12788](../../../crates/tillandsias-headless/src/main.rs#L12788)
 - [flake.nix#L270](../../../flake.nix#L270)
 - [flake.nix#L281](../../../flake.nix#L281)
 - [images/default/config-overlay/codex/register-experts.sh#L2](../../../images/default/config-overlay/codex/register-experts.sh#L2)

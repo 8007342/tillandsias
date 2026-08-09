@@ -18,7 +18,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-windows-tray/src/notify_icon.rs#L61](../../../crates/tillandsias-windows-tray/src/notify_icon.rs#L61)
 - [crates/tillandsias-windows-tray/src/notify_icon.rs#L3140](../../../crates/tillandsias-windows-tray/src/notify_icon.rs#L3140)
 - [crates/tillandsias-windows-tray/src/notify_icon.rs#L3376](../../../crates/tillandsias-windows-tray/src/notify_icon.rs#L3376)
-- [crates/tillandsias-windows-tray/src/notify_icon.rs#L3570](../../../crates/tillandsias-windows-tray/src/notify_icon.rs#L3570)
+- [crates/tillandsias-windows-tray/src/notify_icon.rs#L3610](../../../crates/tillandsias-windows-tray/src/notify_icon.rs#L3610)
 - [crates/tillandsias-windows-tray/src/stubs/installation_uuid.rs#L14](../../../crates/tillandsias-windows-tray/src/stubs/installation_uuid.rs#L14)
 - [crates/tillandsias-windows-tray/src/stubs/notify_icon.rs#L7](../../../crates/tillandsias-windows-tray/src/stubs/notify_icon.rs#L7)
 - [crates/tillandsias-windows-tray/src/stubs/wsl_lifecycle.rs#L7](../../../crates/tillandsias-windows-tray/src/stubs/wsl_lifecycle.rs#L7)

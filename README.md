@@ -10,10 +10,69 @@ The Tlatoāni recommends Tillandsias as a safe runtime for your agents.
 Fedora Silverblue is our favorite OS but you can use whatever you want;
 we'll channel its inner Podman ;)
 
-The install commands below track the **stable channel**: they resolve the
-latest *promoted* release. Daily builds keep shipping as
-[pre-releases](https://github.com/8007342/tillandsias/releases) — grab one
-of those only if you want the bleeding edge.
+## Install
+
+Everything below tracks the **stable channel** — the latest *promoted*
+release. For the newest daily build, see
+[Unstable Releases](#unstable-releases).
+
+**Linux** — curl installer (we prefer Fedora Silverblue):
+
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
+```
+
+**Windows** — portable download: **[tillandsias-tray.exe](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-tray.exe)** (single file) or **[tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip)** (zip). Run it; the tray provisions a Fedora WSL2 distro automatically.
+
+**macOS** — portable download: **[Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg)** (Apple Silicon). Open it and drag Tillandsias into Applications; the tray provisions a Fedora VM automatically.
+
+Podman is the only host dependency on Linux (auto-detected). macOS and Windows
+provision a lightweight Fedora-based utility VM; no host Podman required.
+
+<a id="unstable-releases"></a>
+
+<details>
+<summary><b>Unstable Releases</b> — curl-install the newest daily build (Linux, Windows, macOS)</summary>
+
+The **unstable channel** is a rolling pointer at the newest daily build,
+whether or not it has been promoted to stable. It exists so we — and opt-in
+testers — can exercise a real build on real hosts *before* promotion. The URLs
+never change; the build behind them moves with every daily.
+
+**Expect breakage.** These builds have passed the local release gate but not
+the cross-platform smoke queue that gates promotion. Every installer prints an
+`UNSTABLE` banner before it touches your machine. If one breaks, that is the
+channel doing its job — file it in `plan/issues/`.
+
+Linux:
+
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/download/unstable/install.sh | bash -s -- --channel unstable
+```
+
+macOS:
+
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/download/unstable/install-macos.sh | bash -s -- --channel unstable
+```
+
+Windows (PowerShell):
+
+```powershell
+$env:TILLANDSIAS_CHANNEL='unstable'; irm https://github.com/8007342/tillandsias/releases/download/unstable/install-windows.ps1 | iex
+```
+
+Browse the artifacts directly at the
+[unstable release](https://github.com/8007342/tillandsias/releases/tag/unstable).
+
+**Promotion to stable.** A daily becomes the stable channel only when a release
+operator runs `scripts/promote-stable.sh vX.Y.YYMMDD.N`, which requires
+curl-install e2e PASS evidence in `plan/` naming that exact tag. Promotion flips
+the release off pre-release, which is what moves `/releases/latest` — and
+therefore every stable command above. Demote with
+`gh release edit <tag> --prerelease`.
+
+</details>
 
 ## RELEASE LEDGER
 
@@ -46,38 +105,6 @@ The release skill appends a row per release; STABLE marks channel promotions.
 *Older releases: distilled; see git tags and `plan/loop_status.md` history.*
 
 </details>
-
-## LINUX INSTRUCTIONS
-
-We prefer Fedora Silverblue.
-
-```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
-```
-
-## MACOS INSTRUCTIONS — MANUAL INSTALL
-
-Download **[Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg)**, open it, and drag Tillandsias into Applications.
-
-## MACOS INSTRUCTIONS — AUTO INSTALL
-
-```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
-```
-
-## WINDOWS INSTRUCTIONS
-
-```powershell
-irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
-```
-
-Each installer provisions the local runtime on first run:
-- **Linux**: runs `tillandsias --init` inline in your terminal.
-- **macOS**: launches the tray, which provisions a Fedora VM automatically.
-- **Windows**: launches the tray, which provisions a Fedora WSL2 distro automatically.
-
-Podman is the only host dependency on Linux (auto-detected). macOS and Windows
-provision a lightweight Fedora-based utility VM; no host Podman required.
 
 ## Run
 
@@ -123,8 +150,19 @@ Release operators should run the [local release gate](docs/RELEASING.md) before 
 
 | File | Description |
 |------|-------------|
+| [install.sh](https://github.com/8007342/tillandsias/releases/latest/download/install.sh) | Linux curl installer (`--channel stable\|unstable`) |
+| [install-macos.sh](https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh) | macOS curl installer (`--channel stable\|unstable`) |
+| [install-windows.ps1](https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1) | Windows curl installer (`$env:TILLANDSIAS_CHANNEL`) |
+| [Tillandsias.dmg](https://github.com/8007342/tillandsias/releases/latest/download/Tillandsias.dmg) | macOS portable disk image (Apple Silicon) |
+| [tillandsias-tray.exe](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-tray.exe) | Windows portable single-file tray |
+| [tillandsias-windows-x64.zip](https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-windows-x64.zip) | Windows portable zip (tray + installer script) |
 | [SHA256SUMS](https://github.com/8007342/tillandsias/releases/latest/download/SHA256SUMS) | Checksums for all artifacts |
 | [VERIFICATION.md](docs/VERIFICATION.md) | Signature verification instructions |
+
+The Windows portable downloads are unversioned aliases of the version-stamped
+zip in the same release (byte-identical); their checksums are in the signed
+`SHA256SUMS-windows`. Swap `latest/download` for `download/unstable` on any row
+above to pull the newest daily instead.
 
 ## Learn More
 

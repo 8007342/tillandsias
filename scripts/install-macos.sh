@@ -20,33 +20,50 @@ set -euo pipefail
 REPO="8007342/tillandsias"
 ASSET_PREFIX="tillandsias-tray-"
 ASSET_SUFFIX="-macos-arm64.tar.gz"
-# Default: stable channel (/releases/latest). Smoke overrides via
-# TILLANDSIAS_RELEASE_BASE to pin a specific daily prerelease (order 305).
-RELEASE_BASE_LATEST="${TILLANDSIAS_RELEASE_BASE:-https://github.com/${REPO}/releases/latest/download}"
-
 say() { printf '  %s\n' "$*"; }
 die() { printf '  ERROR: %s\n' "$*" >&2; exit 1; }
 
 # ── flags ─────────────────────────────────────────────────────────────────
+# Release channels (order 305 stable, 621-* unstable):
+#   stable   (default) -> /releases/latest/download (newest PROMOTED release)
+#   unstable           -> /releases/download/unstable (newest DAILY, rolling)
+# Smoke still overrides everything via TILLANDSIAS_RELEASE_BASE.
 LOGIN_ITEM=0
-for arg in "$@"; do
-    case "$arg" in
-        --login-item) LOGIN_ITEM=1 ;;
+CHANNEL="${TILLANDSIAS_CHANNEL:-stable}"
+while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+        --login-item) LOGIN_ITEM=1; shift ;;
+        --channel)
+            [[ "$#" -ge 2 ]] || die "--channel needs a value"
+            CHANNEL="$2"; shift 2
+            ;;
+        --channel=*) CHANNEL="${1#--channel=}"; shift ;;
         --help|-h)
             cat <<EOF
-Usage: install-macos.sh [--login-item]
+Usage: install-macos.sh [--login-item] [--channel stable|unstable]
 
-  --login-item   Register Tillandsias as a macOS Login Item so it auto-starts.
+  --login-item      Register Tillandsias as a macOS Login Item so it auto-starts.
+  --channel         stable (default) installs the newest promoted release;
+                    unstable installs the newest daily build, which is NOT
+                    promoted and is expected to break.
 
   Env:
+    TILLANDSIAS_CHANNEL    Same as --channel.
     TILLANDSIAS_VERSION    Pin an exact version (e.g. v0.2.260523.6) instead
                            of installing the latest GitHub release.
 EOF
             exit 0
             ;;
-        *) die "unknown flag: $arg (try --help)" ;;
+        *) die "unknown flag: $1 (try --help)" ;;
     esac
 done
+
+case "$CHANNEL" in
+    stable)   CHANNEL_BASE="https://github.com/${REPO}/releases/latest/download" ;;
+    unstable) CHANNEL_BASE="https://github.com/${REPO}/releases/download/unstable" ;;
+    *) die "unknown channel: $CHANNEL (want stable or unstable)" ;;
+esac
+RELEASE_BASE_LATEST="${TILLANDSIAS_RELEASE_BASE:-$CHANNEL_BASE}"
 
 # ── gates ─────────────────────────────────────────────────────────────────
 [[ "$(uname -s)" == "Darwin" ]] || die "install-macos.sh must run on macOS"
@@ -64,6 +81,11 @@ if [[ -n "${TILLANDSIAS_VERSION:-}" ]]; then
     say "pinned to v${VERSION}"
 else
     BASE="$RELEASE_BASE_LATEST"
+    say "channel: $CHANNEL"
+    if [[ "$CHANNEL" == "unstable" ]]; then
+        say "  !! UNSTABLE channel — newest daily build, NOT promoted to stable."
+        say "     Expect breakage. Re-run without --channel for the stable build."
+    fi
     say "resolving latest release"
 fi
 

@@ -315,12 +315,30 @@ Say "Install path: $InstalledExe"
 Write-Host ""
 
 # -- Resolve version and base URL ---------------------------------------------
+# Release channels (plan order 305 stable, 621-* unstable):
+#   stable   (default) -> /releases/latest/download - newest PROMOTED release.
+#   unstable           -> /releases/download/unstable - a rolling prerelease the
+#                         release workflow re-points at EVERY daily build.
+# `iex`-piped invocations cannot take parameters, so the channel is selected via
+# the environment: $env:TILLANDSIAS_CHANNEL='unstable' before the pipe.
+$Channel = if ($env:TILLANDSIAS_CHANNEL) { $env:TILLANDSIAS_CHANNEL } else { 'stable' }
+switch ($Channel) {
+    'stable'   { $ChannelBase = "https://github.com/$Repo/releases/latest/download" }
+    'unstable' { $ChannelBase = "https://github.com/$Repo/releases/download/unstable" }
+    default    { throw "Unknown TILLANDSIAS_CHANNEL '$Channel' (want stable or unstable)" }
+}
+
 if ($env:TILLANDSIAS_VERSION) {
     $Version = $env:TILLANDSIAS_VERSION.TrimStart('v')
     $Base = "https://github.com/$Repo/releases/download/v$Version"
     Say "Pinned to v$Version"
 } else {
-    $Base = "https://github.com/$Repo/releases/latest/download"
+    $Base = $ChannelBase
+    Say "Channel: $Channel"
+    if ($Channel -eq 'unstable') {
+        Say "  !! UNSTABLE channel - newest daily build, NOT promoted to stable."
+        Say "     Expect breakage. Clear TILLANDSIAS_CHANNEL for the stable build."
+    }
     Say "Resolving latest release..."
 }
 

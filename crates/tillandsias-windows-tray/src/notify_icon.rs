@@ -4555,7 +4555,10 @@ mod tests {
     #[test]
     fn wt_safe_title_never_needs_quoting() {
         for (raw, want) in [
-            ("Tillandsias \u{2014} GitHub Login", "Tillandsias-GitHub-Login"),
+            (
+                "Tillandsias \u{2014} GitHub Login",
+                "Tillandsias-GitHub-Login",
+            ),
             ("Tillandsias \u{2014} foo", "Tillandsias-foo"),
             ("Tillandsias shell", "Tillandsias-shell"),
             ("has \"quotes\" & specials;|", "has-quotes-specials"),

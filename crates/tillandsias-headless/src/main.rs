@@ -3083,7 +3083,11 @@ fn inference_disable_flag(value: Option<&str>) -> bool {
 /// howto, forge startup context, opencode entrypoints) already degrades
 /// cleanly when the endpoint is absent.
 fn local_inference_disabled() -> bool {
-    inference_disable_flag(std::env::var("TILLANDSIAS_NO_LOCAL_INFERENCE").ok().as_deref())
+    inference_disable_flag(
+        std::env::var("TILLANDSIAS_NO_LOCAL_INFERENCE")
+            .ok()
+            .as_deref(),
+    )
 }
 
 async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<(), String> {
