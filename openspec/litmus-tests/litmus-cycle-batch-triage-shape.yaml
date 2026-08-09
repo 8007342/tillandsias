@@ -83,6 +83,30 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: environment fault refused on its own token"
 
+  - step: "operator-gated packets are never offered to a host as claimable work"
+    # Order 641-*. A TLATOANI DECISION REQUEST (634-39ik) was filed
+    # `pickup_role: any` and the selector handed it to the macOS lane as that
+    # cycle's entire batch — a host asked to implement a packet whose exit
+    # criterion is "the Tlatoani decides". The convention already existed
+    # (`pickup_role: tlatoani`); the packet simply had not used it.
+    #
+    # Guards the MECHANISM rather than a tag: `--claimable-by <host>` matches a
+    # host's own role or a whole-field `any`, so `tlatoani` must never appear.
+    # Deliberately NOT a check on the `operator-decision` TAG — two ready packets
+    # carry that tag as implementation work informed by a ruling, which is
+    # legitimately claimable, and blocking them would be a false positive.
+    command: "for r in linux macos windows; do n=$(./target/release/tillandsias-plan query --status ready --claimable-by \"$r\" --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase==\"tlatoani\")]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n operator-gated packet(s) claimable by $r\"; exit 1; fi; done; echo 'ok: operator-gated work is not host-claimable'"
+    timeout_ms: 30000
+    expected_behavior: "ok: operator-gated work is not host-claimable"
+
+  - step: "NEGATIVE CONTROL: --claimable-by does not treat 'any' as a substring"
+    # `any` must match the WHOLE trimmed field. A pickup_role like "company-lane"
+    # contains "any" and is emphatically not claimable by everyone; a substring
+    # match would silently widen every host's queue.
+    command: "n=$(./target/release/tillandsias-plan query --status ready --claimable-by zzz-no-such-role --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase|test(\"^any$\")|not)]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n non-any packet(s) matched a nonexistent role\"; exit 1; fi; echo 'ok: any is a whole-field match'"
+    timeout_ms: 30000
+    expected_behavior: "ok: any is a whole-field match"
+
   - step: "selection writes nothing to the worktree"
     command: "before=\"$(git status --porcelain)\"; scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
     timeout_ms: 30000
