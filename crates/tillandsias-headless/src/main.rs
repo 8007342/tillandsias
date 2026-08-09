@@ -388,6 +388,14 @@ fn main() {
     // tray click tears down the whole VM stack (2026-07-12 attended-smoke
     // repro: --antigravity was missing from this list after order 296 wired
     // it into parsing + dispatch). Pinned by cli_mode_counts_every_lane_flag.
+    // PLEASE REVIEW: linux — one-line cross-scope fix from the macOS drain
+    // (2026-08-09): `capabilities` was missing here, so an in-guest
+    // `tillandsias-headless --capabilities` (with the server's
+    // XDG_RUNTIME_DIR) singleton-killed the running vsock service and
+    // severed the exec wire — the 2026-07-12 --antigravity repro, again.
+    // Only a macOS/Windows host can hit this (a CLI running beside the
+    // in-VM server); reproduced live on the VZ guest, journal: server
+    // 'Received shutdown signal' ~4s after --capabilities starts.
     let is_cli_mode = opencode
         || codex
         || claude
@@ -398,6 +406,7 @@ fn main() {
         || init
         || status_check
         || inference_tier
+        || capabilities
         || github_login
         || claude_login
         || codex_login
@@ -14223,6 +14232,9 @@ mod tests {
             "opencode_web",
             "observatorium",
             "inference_tier",
+            // 2026-08-09 macOS drain: --capabilities was missing and an
+            // in-guest run singleton-killed the live vsock server.
+            "capabilities",
             "github_login",
             "claude_login",
             "codex_login",
