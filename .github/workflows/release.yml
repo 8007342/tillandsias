@@ -554,7 +554,17 @@ jobs:
           # portable file with no unzip step.
           unzip -o -j "${ZIP}" 'tillandsias-tray.exe' -d .
           test -s tillandsias-tray.exe || { echo "zip carried no tillandsias-tray.exe"; exit 1; }
+          # The packaging script writes SHA256SUMS-windows WITHOUT a trailing
+          # newline. Appending straight onto that concatenates the first new
+          # entry onto the last existing one, which corrupts BOTH lines — the
+          # alias entry and a pre-existing versioned-artifact entry that used to
+          # verify fine. Caught by verifying the published v0.4.260809.1 file
+          # (`sha256sum -c` could not read the merged line). Normalize first.
+          [ -s SHA256SUMS-windows ] && [ "$(tail -c1 SHA256SUMS-windows | wc -l)" -eq 0 ] \
+            && printf '\n' >> SHA256SUMS-windows
           sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe >> SHA256SUMS-windows
+          # Fail the job rather than publish a checksum file that cannot verify.
+          sha256sum -c SHA256SUMS-windows
           echo "Staged version-stable aliases:"
           ls -la tillandsias-windows-x64.zip tillandsias-tray.exe
 
