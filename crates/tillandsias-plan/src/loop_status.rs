@@ -83,6 +83,22 @@ pub fn fragment_dir(base: &Path) -> PathBuf {
     crate::fragments::fragment_dir(base)
 }
 
+/// A file beside the base is a foldable fragment only when it is a `.md`
+/// cycle-status file — and not the store's own documentation (`README.md`).
+///
+/// The index overlay excludes its README by EXTENSION (fragments there are
+/// `.yaml`); the prose overlay reads `.md` fragments, so its README would
+/// otherwise be parsed as a malformed fragment with no `## Cycle` section on
+/// every fold and drift report. ORDER 626-bnn5: exclude it by NAME so the
+/// committed store documentation never masquerades as a fragment, while a
+/// genuinely malformed cycle-status file still surfaces via [`malformed`].
+fn is_fragment_file(p: &Path) -> bool {
+    p.extension().and_then(|x| x.to_str()) == Some("md")
+        && p.file_name()
+            .and_then(|n| n.to_str())
+            .is_none_or(|n| !n.eq_ignore_ascii_case("README.md"))
+}
+
 /// Parse a fragment's raw text into its cycle sections.
 ///
 /// STRICT by design, and fail-closed: a fragment may carry a leading
@@ -174,7 +190,7 @@ pub fn load_all(base: &Path) -> Vec<Fragment> {
     let mut out: Vec<Fragment> = entries
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("md"))
+        .filter(|p| is_fragment_file(p))
         .filter_map(|p| {
             let raw = std::fs::read_to_string(&p).ok()?;
             let sections = parse_fragment(&raw, &p).ok()?;
@@ -204,7 +220,7 @@ pub fn malformed(base: &Path) -> Vec<PathBuf> {
     let mut bad: Vec<PathBuf> = entries
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().and_then(|x| x.to_str()) == Some("md"))
+        .filter(|p| is_fragment_file(p))
         .filter(|p| {
             std::fs::read_to_string(p)
                 .ok()
@@ -754,5 +770,69 @@ mod tests {
         d.malformed_count = 0;
         assert!(!d.eligible());
         assert!(d.verdict().contains("eligible=false"));
+    }
+
+    #[test]
+    fn the_store_readme_is_never_a_fragment_but_real_malformed_files_still_are() {
+        // ORDER 626-bnn5: the committed plan/loop_status.d/README.md must not be
+        // parsed as a fragment or reported malformed, while a genuinely
+        // malformed cycle-status file still surfaces.
+        let dir = std::env::temp_dir().join(format!("tilland-ls-readme-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let base = dir.join("loop_status.md");
+        std::fs::create_dir_all(dir.join("loop_status.d")).unwrap();
+        std::fs::write(
+            &base,
+            "# Multi-Host Coordination Loop Status\n\n## ACTIVE RELEASE: v0.5\n\n> base\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("loop_status.d/README.md"),
+            "# Loop-status fragments (`plan/loop_status.d/`)\n\nDocumentation, not a fragment.\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("loop_status.d/20260809t010000z-bad-h.md"),
+            "## Direction — what are we all doing today\n\nclobber\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("loop_status.d/20260809t010000z-good-h.md"),
+            "## Cycle 2026-08-09T01:00:00Z (h — fine)\n\n- ok\n",
+        )
+        .unwrap();
+
+        let names = |v: &[Fragment]| -> Vec<String> { v.iter().map(|f| f.name.clone()).collect() };
+        let loaded = load_all(&base);
+        let loaded_names = names(&loaded);
+        assert!(
+            !loaded_names.iter().any(|n| n == "README.md"),
+            "README.md must not be folded as a fragment: {loaded_names:?}"
+        );
+        assert!(
+            loaded_names.iter().any(|n| n.ends_with("-good-h.md")),
+            "a real cycle fragment still loads"
+        );
+
+        let bad = malformed(&base);
+        let bad_names: Vec<String> = bad
+            .iter()
+            .map(|p| {
+                p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            })
+            .collect();
+        assert!(
+            !bad_names.iter().any(|n| n == "README.md"),
+            "README.md must not be reported malformed: {bad_names:?}"
+        );
+        assert!(
+            bad_names.iter().any(|n| n.ends_with("-bad-h.md")),
+            "a genuinely malformed fragment still surfaces as malformed: {bad_names:?}"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

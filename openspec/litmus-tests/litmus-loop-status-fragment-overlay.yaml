@@ -35,8 +35,11 @@ description: >
   separate files and both narratives fold in newest-first; compaction folds
   exactly its fragments and is a no-op on the second run; loop-status-append
   refuses an agent fragment naming the operator-owned Direction section and a
-  hand-written one is reported malformed and never folded; the CRDT unit tests
-  are green and the loop-status capability tokens are declared and dispatch.
+  hand-written one is reported malformed and never folded; the store's own
+  README.md is documentation, not a fragment (never folded, never reported
+  malformed, while a genuine malformed fragment still surfaces); the CRDT unit
+  tests are green and the loop-status capability tokens are declared and
+  dispatch.
 severity: high
 size: quick
 
@@ -84,6 +87,11 @@ critical_path:
     command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/loop_status.d\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Direction — what are we all doing today' '' '**base theme**' > \"$W/plan/loop_status.md\"; printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' > \"$W/plan/loop_status.d/20260803t020000z-zz99-bad.md\"; R=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-fragments 2>&1); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status 2>&1); printf '%s' \"$R\" | grep -q 'malformed'; printf '%s' \"$V\" | grep -q '**base theme**'; ! printf '%s' \"$V\" | grep -q 'clobber'; test -f \"$W/plan/loop_status.d/20260803t020000z-zz99-bad.md\"; cd /; rm -rf \"$W\"; echo 'ok: hand-written-direction-fragment-is-malformed-not-folded'"
     timeout_ms: 300000
     expected_behavior: "ok: hand-written-direction-fragment-is-malformed-not-folded"
+
+  - step: "PIN (ORDER 626-bnn5): the committed loop_status.d/README.md is documentation, not a fragment — never folded, never reported malformed, while a genuine malformed fragment still is"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/loop_status.d\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Cycle 2026-08-02T00:00Z (fixture — base entry)' '' '- base body' > \"$W/plan/loop_status.md\"; printf '%s\\n' '# Loop-status fragments (`plan/loop_status.d/`)' '' 'Documentation, not a fragment.' > \"$W/plan/loop_status.d/README.md\"; printf '%s\\n' '## Cycle 2026-08-03T01:00Z (h — fine)' '' '- ok' > \"$W/plan/loop_status.d/20260803t010000z-ok-h.md\"; printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' > \"$W/plan/loop_status.d/20260803t020000z-bad-h.md\"; R=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-fragments 2>&1); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status 2>&1); ! printf '%s' \"$R\" | grep -q 'README.md'; printf '%s' \"$R\" | grep -q -- '-bad-h.md'; printf '%s' \"$R\" | grep -q 'malformed=1'; printf '%s' \"$V\" | grep -q 'base body'; ! printf '%s' \"$V\" | grep -q 'clobber'; cd /; rm -rf \"$W\"; echo 'ok: store-readme-not-a-fragment-real-malformed-still-surfaces'"
+    timeout_ms: 300000
+    expected_behavior: "ok: store-readme-not-a-fragment-real-malformed-still-surfaces"
 
   # ── (e) the per-section CRDT choice is pinned behaviourally + by unit tests
   - step: "PIN: the loop_status CRDT unit tests (commutativity, idempotency, G-Set survival, gate refusals) are green"

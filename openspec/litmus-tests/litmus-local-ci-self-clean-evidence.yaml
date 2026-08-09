@@ -24,10 +24,19 @@ critical_path:
     command: "grep -F 'target/convergence/centicolon-dashboard.md' scripts/local-ci.sh && grep -F 'target/convergence/centicolon-dashboard.json' scripts/local-ci.sh && grep -F 'update-convergence-dashboard.sh' scripts/release-preflight-local.sh"
     timeout_ms: 3000
 
-  - step: "regenerate trace indexes from the current checkout (deterministic; no-op when committed indexes are current)"
-    command: "./scripts/generate-traces.sh >/dev/null && echo ok:traces-regenerated"
-    success_pattern: "^ok:traces-regenerated$"
+  # 2026-08-09: this used to regenerate 171 TRACES.md files, which is precisely
+  # the write this whole test exists to prevent — a gate step that dirtied the
+  # worktree it was about to declare clean. The rendering is gone; coverage is
+  # computed on demand and writes nothing.
+  - step: "compute trace coverage WITHOUT writing to the worktree"
+    command: "./scripts/trace-coverage.sh | grep -qE '^trace_coverage: specs=[0-9]+ traced=[0-9]+ ghost=[0-9]+ annotations=[0-9]+ files=[0-9]+$' && echo ok:trace-coverage-computed"
+    success_pattern: "^ok:trace-coverage-computed$"
     timeout_ms: 120000
+
+  - step: "NEGATIVE CONTROL: computing coverage leaves the worktree byte-identical"
+    command: "before=\"$(git status --porcelain)\"; ./scripts/trace-coverage.sh >/dev/null; ./scripts/trace-coverage.sh --json >/dev/null; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'fail: trace-coverage.sh mutated the worktree'; exit 1; fi; echo ok:trace-coverage-non-mutating"
+    success_pattern: "^ok:trace-coverage-non-mutating$"
+    timeout_ms: 60000
 
   - step: "render centicolon dashboards exactly as the CI gate does (target/-routed, gitignored)"
     command: "MD_OUT=target/convergence/centicolon-dashboard.md JSON_OUT=target/convergence/centicolon-dashboard.json SUMMARY_OUT=target/convergence/summary.md TERMINAL_PREVIEW=0 bash scripts/update-convergence-dashboard.sh >/dev/null && echo ok:dashboard-target-routed"
@@ -35,7 +44,7 @@ critical_path:
     timeout_ms: 30000
 
   - step: "assert porcelain names no generated-evidence path the forge dirty-start guard would refuse"
-    command: "dirt=\"$(git status --porcelain -- TRACES.md 'openspec/specs/*/TRACES.md' docs/convergence)\"; if [ -n \"$dirt\" ]; then echo \"$dirt\"; echo 'remedy: commit (or discard) the regenerated evidence BEFORE any post-build forge gate (order 495)'; echo fail:generated-evidence-dirt; exit 1; fi; echo ok:self-clean-evidence"
+    command: "dirt=\"$(git status --porcelain -- docs/convergence)\"; if [ -n \"$dirt\" ]; then echo \"$dirt\"; echo 'remedy: commit (or discard) the regenerated evidence BEFORE any post-build forge gate (order 495)'; echo fail:generated-evidence-dirt; exit 1; fi; echo ok:self-clean-evidence"
     success_pattern: "^ok:self-clean-evidence$"
     failure_pattern: "^fail:generated-evidence-dirt$"
     timeout_ms: 10000
@@ -53,5 +62,5 @@ observability:
     test: "local-ci-self-clean-evidence"
 
 rollback:
-  on_failure: "trace indexes or dashboards are stale relative to the checkout: run ./scripts/generate-traces.sh and commit the result (docs/RELEASING.md step 4) or discard local drift; never hand the dirt to the post-build forge gate"
-  command: "git status --porcelain -- TRACES.md 'openspec/specs/*/TRACES.md' docs/convergence"
+  on_failure: "the convergence dashboard is stale relative to the checkout: commit the regenerated evidence or discard local drift; never hand the dirt to the post-build forge gate. (Trace indexes left this check on 2026-08-09 — the rendering they guarded no longer exists; ghost traces are gated by scripts/trace-coverage.sh --gate instead.)"
+  command: "git status --porcelain -- docs/convergence"

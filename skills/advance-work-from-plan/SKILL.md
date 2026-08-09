@@ -54,6 +54,53 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 
 ## 2 — Discover Work & Select Shaped Packet
 
+### 2.0 — Run the batch selector FIRST (cycle triage)
+
+```bash
+scripts/select-work-batch.sh <linux|macos|windows|any> [--budget N] [--seed S]
+```
+
+This decides **what THIS cycle takes**, which flat ranking does not. It emits one
+cohesive, budgeted batch drawn from a single epic (`release_target`), the
+`triage:` coverage line, and the `frontier` it considered:
+
+```
+batch: epic=forge-local-experts-milestone role=linux release=v0.5 size=3 budget=3 score=19.728 seed=host-20260809 pick=1/3
+packet  394  plan-methodology-experts-rung1  p1
+...
+triage: eligible=140 grouped=60 ungrouped=80 epics=6
+frontier 19.728  forge-local-experts-milestone  packets=41 blocking=10 neglect=4.7
+```
+
+Work the batch **in the order printed**, then stop — do not top up from another
+epic. Record the printed `seed` in your loop-status entry so the selection can
+be replayed.
+
+Three things about it that are easy to get wrong:
+
+- **It is minimax, not priority-first.** Epics are scored by residual
+  (`2*urgency + 1.5*blocking + neglect`), because ranking by p0 alone is the
+  anti-pattern `convergence.yaml` names: *raising average convergence by
+  improving low-risk obligations while a high-risk maximum residual remains
+  unresolved.* The p0-first agent keeps finding p0s.
+- **The entropy is score-weighted, and that is deliberate.** Choice is spread
+  over the top-3 epics so nothing starves and two concurrent hosts do not
+  collide, but weighted so the largest residual still wins most of the time
+  (~9 in 12). Predictable drain is a property of batch SIZE — fixed absolutely
+  by the budget — never of always picking the same work.
+- **`ungrouped=N` on the triage line is a defect signal, not decoration.** It
+  counts eligible packets with no `release_target`. When it is large, the epic
+  tier is not doing its job; file/assign coverage rather than shrugging. It was
+  80 of 140 on 2026-08-09.
+
+Budgets: forge = 1 packet (order 264, unchanged), everything else = 3.
+
+If the selector refuses (`refused:no-eligible-work`, `refused:no-plan-binary`),
+fall back to the manual ranking below — which is also the rationale the selector
+automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triage`.
+
+### 2.1 — Manual ranking (fallback, and the rationale)
+
 1.  **Walk the Graph**: Read (via `project-plan` / `project-info` MCP tools or direct file inspection), in order:
     -   `plan/index.yaml` — packet index + selection policy (`plan_query` / `plan_ready`).
     -   `plan/issues/<host>-next-*work-queue*.md` — your host's queue (e.g. `linux-next-work-queue-*`, `osx-next-work-queue-*`, `windows-next-work-queue-*`).

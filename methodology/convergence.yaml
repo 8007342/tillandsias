@@ -149,6 +149,14 @@ evidence_bundle:
     - dependency_lock_hash
     - environment_profile
     - litmus_run_ids_and_results
+    # Produced by `scripts/trace-coverage.sh --json` since 2026-08-09.
+    # Grammar: {specs, traced, ghost, annotations, files, ghost_specs[]}.
+    #
+    # It was a declared-but-unproduced field for its whole life before that.
+    # The 171 committed TRACES.md files looked like they discharged it and did
+    # not: a spec -> file:line link index is not a coverage summary. Removing
+    # the rendering and computing the summary on demand closed the obligation
+    # and removed ~4000 lines of per-cycle churn in the same change.
     - trace_coverage_summary
     - ci_run_id
     - source_namespace

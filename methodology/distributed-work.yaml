@@ -996,6 +996,77 @@ distributed_work:
         role: "mutable-Linux coordinator host nickname"
     provenance: plan/issues/agent-fleet-and-zeroclaw-roadmap-2026-07-17.md
 
+  cycle_batch_triage:
+    purpose: >
+      Decide what ONE orchestration cycle takes, so that consecutive
+      `/meta-orchestration` calls on different agents and harnesses drain the
+      plan in predictable chunks instead of scattering.
+    authority: >
+      Operator directive 2026-08-09. Implemented by scripts/select-work-batch.sh
+      and consumed by skills/advance-work-from-plan and skills/meta-orchestration.
+    the_tier_already_exists: >
+      The layer between "release" and "packet" is `release_target:
+      <milestone-packet-id>` — milestones ARE the epics. Do NOT introduce a
+      third object (story/epic/task); the operator considered and rejected that
+      on 2026-08-09 in favour of making the existing tier load-bearing.
+
+      What made it not FEEL like a layer was coverage: on 2026-08-09 only 60 of
+      176 ready v0.5 packets carried a release_target. With two thirds of the
+      work ungrouped, selection degraded to flat priority order, which is what
+      produced the scatter. Coverage is the fix, not a new abstraction.
+    problem_being_solved:
+      - no_cohesion: >
+          `tillandsias-plan next linux` returns five correctly-ranked packets
+          that routinely span five unrelated subsystems. Draining them means
+          five context switches and five subsystem re-reads, so a cycle closing
+          one small packet can spend more tokens orienting than working.
+      - no_predictable_size: >
+          Without a declared budget, throughput cannot be reasoned about across
+          hosts or harnesses.
+      - no_anti_circling: >
+          A packet can accumulate progress events indefinitely without changing
+          status, and nothing notices it is being repeatedly re-explored.
+    selection_rule: >
+      Score each epic by MINIMAX residual, per convergence.yaml ->
+      minimax_convergence_strategy, never by priority alone:
+
+        urgency  = 3 - best_priority_rank_in_epic
+        blocking = downstream dependents of the epic's packets (capped 10)
+        neglect  = age of the epic's oldest ready packet, by order token
+        score    = 2*urgency + 1.5*blocking + neglect
+
+      Ranking by priority alone IS the anti-pattern that file names — "raising
+      average convergence by improving low-risk obligations while a high-risk
+      maximum residual remains unresolved". p0 asserts urgency, not residual.
+    entropy: >
+      The choice is score-WEIGHTED among the top-K epics (default K=3), from an
+      explicit printed seed (default: host kind + UTC date).
+
+      Uniform choice over the top-K would re-introduce the shiny-packet trap:
+      with scores 22.8 / 19.7 / 8.5 it takes the 8.5 a third of the time.
+      Weighting keeps the largest residual dominant — measured 9/12 runs — while
+      leaving smaller ones reachable so nothing starves. Entropy spreads
+      coverage over time and stops two concurrent hosts colliding on one epic;
+      it does not get a vote on what matters most.
+    reproducibility: >
+      Predictable drain is a property of batch SIZE, which the budget fixes
+      absolutely — NOT of always selecting the same work. Same seed + same
+      ledger yields the same batch, so any cycle can be replayed and audited;
+      the seed and the whole considered frontier are printed with every batch.
+      An unexplained selection is unauditable.
+    budgets:
+      forge: 1
+      default: 3
+      note: >
+        The forge budget of ONE packet per cycle predates this rule (order 264,
+        2026-07-10) and is not relaxed by it.
+    ungrouped_is_not_an_epic: >
+      UNGROUPED scores highest whenever coverage is poor, purely on size.
+      Letting it win would hand back the scattered batch this rule exists to
+      prevent, while hiding the coverage gap behind a plausible selection. It is
+      demoted whenever any real epic is eligible, and always reported on the
+      triage line so the gap is fixed rather than absorbed.
+
   worker_agent_protocol:
     purpose: >
       Detailed execution loop for worker agents to claim, execute, and complete shaped work
@@ -1009,6 +1080,21 @@ distributed_work:
           `plan_answer`, `methodology_ask`, `git_status`, `search_code`, `read_file`).
       - step: select_shaped_work
         description: >
+          FIRST run the batch selector — it applies [[cycle_batch_triage]] and
+          answers "what should THIS cycle take?", which flat ranking does not:
+
+            scripts/select-work-batch.sh <role> [--budget N] [--seed S]
+
+          It emits one cohesive, minimax-ranked, budgeted batch drawn from a
+          single epic (`release_target`), plus a `triage:` line reporting epic
+          coverage and the `frontier` it considered. Work the batch in order.
+          Record the printed seed in the cycle's loop-status entry so the
+          selection can be replayed.
+
+          The manual ranking below remains the fallback for when the selector
+          refuses (`refused:no-eligible-work`, `refused:no-plan-binary`) and the
+          rationale for the ranking the selector automates.
+
           Scan the plan ledger via `project-plan` / `forge-plan` MCP tools (`plan_ready` / `plan_query` / `plan_answer`)
           or direct file inspection. Filter for ready/pending/failed-retryable tasks where owner_host
           matches or is 'any', and matching capability tags exist. Rank the
