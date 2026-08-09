@@ -60,6 +60,46 @@ Hard rules:
    litmus greps for this marker; a smoke run that exits without it is a
    failure by definition.
 
+## Full-Mode Terminal Attestation (order 614-2gqx)
+
+Smoke mode has a machine-grepped verdict (`MO-SMOKE:`); full mode did not, so
+a normal provider exit between tool calls could discard local commits while
+every outer launcher returned zero (the `4a1410a2` breach; see
+`plan/issues/meta-orchestration-full-mode-exit-attestation-gap-2026-08-05.md`).
+
+Full mode therefore MUST emit a typed terminal marker as its FINAL output
+line, and MAY emit it ONLY after every finalization obligation below has
+passed (boundary verification, `./build.sh --check`, commit, push):
+
+```text
+MO-FULL: <DISPOSITION> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>
+```
+
+- `DISPOSITION` ∈ {`COMPLETE`, `BLOCKED`} — the cycle's terminal disposition.
+- `LOCAL_SHA` = final local HEAD (`git rev-parse HEAD`) at emission time.
+- `BRANCH` = the working branch the cycle committed to.
+- `REMOTE_SHA` = the remote branch head after the push.
+
+Invariants the outer gate (`scripts/mo-full-attest.sh`, wired into
+`scripts/litmus-opencode-e2e-launch.sh` for `litmus:opencode-prompt-e2e-shape`)
+enforces before it accepts exit zero:
+
+- `LOCAL_SHA == REMOTE_SHA` — a marker may never follow an unpushed local
+  commit. If the push failed after three rebase retries, do NOT emit the
+  marker; mark the packet `blocked`/`failed-retryable`, include the push
+  output, and stop — the missing marker is itself the loud failure.
+- `BRANCH` must match the host's current branch.
+- The claimed `REMOTE_SHA` must actually converge on
+  `git ls-remote origin refs/heads/<BRANCH>` within the bounded relay window.
+- `MO-SMOKE:` grammar and the shared full-cycle rate limit are unchanged; a
+  smoke run never emits `MO-FULL:`.
+
+Any full-mode run that exits without a valid, converging `MO-FULL:` marker
+has not completed its exit contract — regardless of the process exit code.
+`scripts/mo-full-attest.sh fixture` / `scripts/test-mo-full-attest.sh`
+reproduce the breach shapes hermetically (missing marker, malformed, unpushed
+local commit, branch mismatch, remote-head mismatch, clean pass).
+
 ## Non-Negotiable Exit Contract
 
 Local state is volatile. Before a successful exit, every meaningful result must
@@ -642,3 +682,11 @@ Before exit:
 8. Confirm there are no uncommitted changes created by this cycle and the
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.
+9. Emit the full-mode terminal marker (order 614-2gqx) as your FINAL output
+   line, computed from the post-push state:
+   ```text
+   MO-FULL: <COMPLETE|BLOCKED> <git rev-parse HEAD> <branch> <remote head>
+   ```
+   This line is the machine attestation that finalization steps 1-8 all
+   passed; the outer launcher rejects exit zero without it. See
+   "Full-Mode Terminal Attestation" above for the grammar and invariants.
