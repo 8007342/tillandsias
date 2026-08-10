@@ -45,7 +45,7 @@
 #   ^packet\t<order>\t<packet_id>\t<priority>$
 #   ^triage: eligible=<n> grouped=<n> ungrouped=<n> epics=<n>$
 # or exactly one refusal line:
-#   ^refused:(no-eligible-work|no-plan-binary|missing-tool|parse-failure|bad-role):.*$
+#   ^refused:(no-eligible-work|no-plan-binary|missing-tool|parse-failure|stale-plan-binary|query-failed|bad-role):.*$
 # Exit 0 on a batch, 1 on refusal.
 #
 # "NO WORK" MUST MEAN NO WORK (order 631-*, Windows host 2026-08-09)
@@ -135,10 +135,42 @@ esac
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 1
 
+# ARGUMENTS BEFORE ENVIRONMENT. A caller error must not be reported as an
+# environment fault: with the probes first, `--budget 0` on a host without jq
+# refused with `missing-tool`, so the same bad invocation produced different
+# diagnoses on different hosts and the litmus's bad-budget control passed only
+# where jq happened to be installed.
+#
+# DEFAULT BUDGET. Forge cycles take at most ONE packet — decided by The Tlatoani
+# 2026-07-10 (order 264) because a litmus-launched forge lives inside a 600s
+# step budget. That rule predates this script and is not relaxed by it.
+if [ -z "$BUDGET" ]; then
+    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+        BUDGET=1
+    else
+        BUDGET=3
+    fi
+fi
+case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac
+[ "$BUDGET" -ge 1 ] || { echo "refused:bad-role:budget must be >= 1"; exit 1; }
+
+# TILLANDSIAS_PLAN_BIN overrides the probe so the litmus can point this script at
+# a stub that fails the way a stale binary fails. Without it the stale-binary and
+# query-failed refusals are untestable on exactly the hosts CI runs on — the ones
+# whose binary is current — which is how the hole they close survived in the first
+# place.
 PLAN=""
-for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
-    [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
-done
+if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+    [ -x "${TILLANDSIAS_PLAN_BIN}" ] || {
+        echo "refused:no-plan-binary:TILLANDSIAS_PLAN_BIN=${TILLANDSIAS_PLAN_BIN} is not executable"
+        exit 1
+    }
+    PLAN="${TILLANDSIAS_PLAN_BIN}"
+else
+    for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
+        [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
+    done
+fi
 [ -n "$PLAN" ] || { echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"; exit 1; }
 
 # jq is load-bearing for every projection below. Absence is an environment
@@ -152,19 +184,6 @@ command -v "${TILLANDSIAS_JQ:-jq}" >/dev/null 2>&1 || {
     echo "refused:missing-tool:jq is not on PATH (required to project tillandsias-plan --json); this is NOT a drained ledger"
     exit 1
 }
-
-# DEFAULT BUDGET. Forge cycles take at most ONE packet — decided by The Tlatoani
-# 2026-07-10 (order 264) because a litmus-launched forge lives inside a 600s
-# step budget. That rule predates this script and is not relaxed by it.
-if [ -z "$BUDGET" ]; then
-    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
-        BUDGET=1
-    else
-        BUDGET=3
-    fi
-fi
-case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac
-[ "$BUDGET" -ge 1 ] || { echo "refused:bad-role:budget must be >= 1"; exit 1; }
 
 # ${arr[@]+"${arr[@]}"} guards the expansions below: under set -u, bash < 4.4
 # (stock macOS ships 3.2) treats "${arr[@]}" on an empty array as an unbound
@@ -211,7 +230,48 @@ fi
 # replaces a two-query jq union that lived here while the semantics were being
 # decided. `--role` remains a substring filter on the field, which is what the
 # MCP servers document and what plan_query's other consumers rely on.
-raw="$("$PLAN" query --status ready --claimable-by "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
+# CHECK THE EXIT CODE, NOT JUST THE OUTPUT (order 644-*, windows host 2026-08-10).
+#
+# `raw=$(... 2>/dev/null)` followed by `[ -n "$raw" ]` treats EVERY failure of
+# the query as an empty ledger. The binary is not at fault — it fails correctly:
+# an unknown constraint prints `error: unknown query constraint: --claimable-by`
+# and exits 2. This script threw both away, so the failure arrived as
+# `refused:no-eligible-work`, which is the greedy loop's terminal state.
+#
+# That is the SAME counterfeit-completion defect fixed here in order 632-retq,
+# walking back in through a different door. The jq preflight added then guards
+# one specific dependency; this guards the whole class, because it branches on
+# the tool's own verdict instead of inferring health from output volume.
+#
+# It is live right now, not hypothetical: `--claimable-by` landed with 632-39p3
+# a few hours ago, and any host whose tillandsias-plan predates it — including
+# this Windows checkout, whose binary is from an earlier build — gets an empty
+# `raw` and would have been told the plan was drained.
+#
+# stderr is captured rather than discarded so the refusal can quote the real
+# reason instead of guessing at it.
+query_err="$(mktemp)"
+raw="$("$PLAN" query --status ready --claimable-by "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>"$query_err")"
+query_rc=$?
+if [ "$query_rc" -ne 0 ]; then
+    reason="$(tr -d '\r' < "$query_err" | grep -m1 . || true)"
+    rm -f "$query_err"
+    # Match `unknown query` loosely: the wording is version-dependent — an older
+    # binary here says "unknown query flag: --claimable-by" while a newer one says
+    # "unknown query constraint: --claimable-by". Pinning either exact phrase
+    # would make the diagnosis silently degrade to the generic branch on half the
+    # binaries in the fleet, which is the failure this whole guard is about.
+    case "$reason" in
+        *"unknown query"*)
+            echo "refused:stale-plan-binary:${PLAN} does not support a constraint this script requires (${reason}); rebuild with cargo build --release -p tillandsias-plan"
+            ;;
+        *)
+            echo "refused:query-failed:${PLAN} query exited ${query_rc}: ${reason:-<no stderr>}"
+            ;;
+    esac
+    exit 1
+fi
+rm -f "$query_err"
 [ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
 
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
