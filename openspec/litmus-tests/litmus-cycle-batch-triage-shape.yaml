@@ -1,0 +1,151 @@
+# @trace spec:ci-release
+name: litmus:cycle-batch-triage-shape
+spec: ci-release
+phase: pre-build
+description: One orchestration cycle selects a cohesive, budgeted, minimax-ranked batch with reproducible entropy
+severity: high
+size: instant
+
+# Order 626-* (operator directive 2026-08-09). Every step here EXECUTES the
+# selector and asserts a property of its output. None of them grep the script's
+# source — that is the 622-rmit lesson applied at the point of writing rather
+# than retrofitted later.
+
+preconditions:
+  - workspace contains scripts/select-work-batch.sh
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "emits the batch grammar"
+    command: "scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+$' && echo 'ok: batch grammar'"
+    timeout_ms: 30000
+    expected_behavior: "ok: batch grammar"
+
+  - step: "the batch never exceeds its budget"
+    command: "for b in 1 2 5; do n=$(scripts/select-work-batch.sh linux --budget $b | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: budget $b returned $n packets\"; exit 1; fi; done; echo 'ok: budget respected'"
+    timeout_ms: 60000
+    expected_behavior: "ok: budget respected"
+
+  - step: "COHESION: every packet in a batch belongs to the announced epic"
+    # The whole point. A batch spanning epics is the scatter this replaces.
+    command: "out=$(scripts/select-work-batch.sh linux --budget 5); epic=$(printf '%s' \"$out\" | head -1 | sed 's/.*epic=\\([^ ]*\\).*/\\1/'); n=$(printf '%s' \"$out\" | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -lt 1 ]; then echo 'FAIL: empty batch'; exit 1; fi; echo \"ok: cohesive batch of $n from $epic\""
+    timeout_ms: 30000
+    expected_behavior: "ok: cohesive batch"
+
+  - step: "REPRODUCIBLE: the same seed yields the same batch"
+    # Without this, a cycle cannot be replayed or audited and the entropy is
+    # indistinguishable from nondeterminism.
+    command: "a=$(scripts/select-work-batch.sh linux --seed fixed-seed-1); b=$(scripts/select-work-batch.sh linux --seed fixed-seed-1); if [ \"$a\" != \"$b\" ]; then echo 'FAIL: same seed produced different batches'; exit 1; fi; echo 'ok: reproducible'"
+    timeout_ms: 60000
+    expected_behavior: "ok: reproducible"
+
+  # Both entropy properties are asserted from the PRINTED PROBABILITIES, not by
+  # sampling seeds. The sampling versions were inherently flaky: once
+  # release-scoping widened the score gap to ~6x, the top epic legitimately held
+  # ~95% and twelve consecutive seeds all chose it, so the test failed on correct
+  # behaviour. A test that fails 15% of the time for the right reason still
+  # trains people to re-run it. The properties that matter — a floor exists, and
+  # minimax still dominates — are exact, not statistical.
+  - step: "ENTROPY FLOOR: no frontier epic is starved"
+    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null); n=$(printf '%s\\n' \"$out\" | grep -c \"^frontier$(printf '\\t')\"); if [ \"$n\" -lt 2 ]; then echo \"ok: entropy floor n/a (single-epic frontier)\"; exit 0; fi; min=$(printf '%s\\n' \"$out\" | grep \"^frontier$(printf '\\t')\" | sed 's/.*p=//' | sort -g | head -1); awk -v m=\"$min\" 'BEGIN { if (m+0 < 0.02) { print \"FAIL: frontier epic starved at p=\" m; exit 1 } print \"ok: entropy floor min_p=\" m }'"
+    timeout_ms: 60000
+    expected_behavior: "ok: entropy floor"
+
+  - step: "MINIMAX DOMINATES: the top-residual epic holds the majority of probability"
+    # The opposite regression from the step above — the floor must not become the
+    # tail wagging the dog, which is what uniform-over-top-K did.
+    command: "top=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^frontier$(printf '\\t')\" | head -1 | sed 's/.*p=//'); awk -v t=\"$top\" 'BEGIN { if (t+0 <= 0.5) { print \"FAIL: top-residual epic holds only p=\" t \" — entropy is outvoting minimax\"; exit 1 } print \"ok: minimax dominant p=\" t }'"
+    timeout_ms: 60000
+    expected_behavior: "ok: minimax dominant"
+
+  - step: "reports epic coverage so the ungrouped gap cannot hide"
+    command: "scripts/select-work-batch.sh linux | grep -qE '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+$' && echo 'ok: triage line'"
+    timeout_ms: 30000
+    expected_behavior: "ok: triage line"
+
+  - step: "NEGATIVE CONTROL: an unknown role is refused, not silently defaulted"
+    command: "scripts/select-work-batch.sh nonsense >/dev/null 2>&1 && { echo 'FAIL: bad role accepted'; exit 1; }; scripts/select-work-batch.sh nonsense 2>&1 | grep -q '^refused:bad-role:' && echo 'ok: bad role refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: bad role refused"
+
+  - step: "NEGATIVE CONTROL: a zero/garbage budget is refused"
+    command: "scripts/select-work-batch.sh linux --budget 0 >/dev/null 2>&1 && { echo 'FAIL: budget 0 accepted'; exit 1; }; scripts/select-work-batch.sh linux --budget abc >/dev/null 2>&1 && { echo 'FAIL: garbage budget accepted'; exit 1; }; echo 'ok: bad budget refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: bad budget refused"
+
+  - step: "NEGATIVE CONTROL: a missing jq refuses as missing-tool, NOT as no-eligible-work"
+    # Order 631-* (Windows host 2026-08-09). jq is absent on Windows, so the
+    # selector reported an environment fault as a drained ledger and a greedy
+    # loop idled on a host with 7 claimable packets for its own role. The
+    # assertion is deliberately two-sided: the right token must appear AND the
+    # wrong one must not, because only the second half catches the regression.
+    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: missing jq reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -q '^refused:missing-tool:' && echo 'ok: environment fault refused on its own token'"
+    timeout_ms: 15000
+    expected_behavior: "ok: environment fault refused on its own token"
+
+  - step: "operator-gated packets are never offered to a host as claimable work"
+    # Order 641-*. A TLATOANI DECISION REQUEST (634-39ik) was filed
+    # `pickup_role: any` and the selector handed it to the macOS lane as that
+    # cycle's entire batch — a host asked to implement a packet whose exit
+    # criterion is "the Tlatoani decides". The convention already existed
+    # (`pickup_role: tlatoani`); the packet simply had not used it.
+    #
+    # Guards the MECHANISM rather than a tag: `--claimable-by <host>` matches a
+    # host's own role or a whole-field `any`, so `tlatoani` must never appear.
+    # Deliberately NOT a check on the `operator-decision` TAG — two ready packets
+    # carry that tag as implementation work informed by a ruling, which is
+    # legitimately claimable, and blocking them would be a false positive.
+    command: "for r in linux macos windows; do n=$(./target/release/tillandsias-plan query --status ready --claimable-by \"$r\" --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase==\"tlatoani\")]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n operator-gated packet(s) claimable by $r\"; exit 1; fi; done; echo 'ok: operator-gated work is not host-claimable'"
+    timeout_ms: 30000
+    expected_behavior: "ok: operator-gated work is not host-claimable"
+
+  - step: "NEGATIVE CONTROL: --claimable-by does not treat 'any' as a substring"
+    # `any` must match the WHOLE trimmed field. A pickup_role like "company-lane"
+    # contains "any" and is emphatically not claimable by everyone; a substring
+    # match would silently widen every host's queue.
+    command: "n=$(./target/release/tillandsias-plan query --status ready --claimable-by zzz-no-such-role --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase|test(\"^any$\")|not)]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n non-any packet(s) matched a nonexistent role\"; exit 1; fi; echo 'ok: any is a whole-field match'"
+    timeout_ms: 30000
+    expected_behavior: "ok: any is a whole-field match"
+
+  - step: "NEGATIVE CONTROL: a stale plan binary refuses as stale-plan-binary, NOT as no-eligible-work"
+    # Order 644-* (windows host 2026-08-10). The script captured the query's
+    # stdout with `2>/dev/null` and tested only `[ -n "$raw" ]`, so EVERY query
+    # failure arrived as an empty ledger. The binary is not at fault — it prints
+    # `unknown query constraint: --claimable-by` and exits 2. This was live, not
+    # hypothetical: `--claimable-by` landed hours earlier with 632-39p3, and any
+    # host whose binary predated it was told the plan was drained.
+    # TILLANDSIAS_PLAN_BIN exists so this is testable on a host whose binary is
+    # current — i.e. exactly the hosts CI runs on, where the hole was invisible.
+    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: unknown query constraint: --claimable-by\" >&2\\nexit 2\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: stale binary reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -q '^refused:stale-plan-binary:' && echo 'ok: stale binary refused on its own token'"
+    timeout_ms: 20000
+    expected_behavior: "ok: stale binary refused on its own token"
+
+  - step: "NEGATIVE CONTROL: any other query failure refuses as query-failed and quotes the reason"
+    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: ledger is unreadable\" >&2\\nexit 3\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: failed query reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -qE '^refused:query-failed:.*exited 3: error: ledger is unreadable' && echo 'ok: query failure refused with its reason'"
+    timeout_ms: 20000
+    expected_behavior: "ok: query failure refused with its reason"
+
+  - step: "ARGUMENTS BEFORE ENVIRONMENT: a bad budget is refused even when jq is absent"
+    # The probes used to run first, so `--budget 0` on a jq-less host refused with
+    # `missing-tool`. The same bad invocation then produced different diagnoses on
+    # different hosts, and the bad-budget control above only really tested hosts
+    # that happened to have jq.
+    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux --budget 0 2>&1); printf '%s' \"$out\" | grep -q '^refused:bad-role:budget' && echo 'ok: argument errors precede environment probes'"
+    timeout_ms: 15000
+    expected_behavior: "ok: argument errors precede environment probes"
+
+  - step: "selection writes nothing to the worktree"
+    command: "before=\"$(git status --porcelain)\"; scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
+    timeout_ms: 30000
+    expected_behavior: "ok: read-only"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Cycle batch triage: cohesive minimax batch, budgeted, reproducible under a printed seed"
+  log_fields:
+    spec: "ci-release"
+    test: "cycle-batch-triage-shape"
+
+rollback:
+  on_failure: "restore scripts/select-work-batch.sh and methodology/distributed-work.yaml -> cycle_batch_triage from git history"

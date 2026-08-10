@@ -60,6 +60,46 @@ Hard rules:
    litmus greps for this marker; a smoke run that exits without it is a
    failure by definition.
 
+## Full-Mode Terminal Attestation (order 614-2gqx)
+
+Smoke mode has a machine-grepped verdict (`MO-SMOKE:`); full mode did not, so
+a normal provider exit between tool calls could discard local commits while
+every outer launcher returned zero (the `4a1410a2` breach; see
+`plan/issues/meta-orchestration-full-mode-exit-attestation-gap-2026-08-05.md`).
+
+Full mode therefore MUST emit a typed terminal marker as its FINAL output
+line, and MAY emit it ONLY after every finalization obligation below has
+passed (boundary verification, `./build.sh --check`, commit, push):
+
+```text
+MO-FULL: <DISPOSITION> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>
+```
+
+- `DISPOSITION` ∈ {`COMPLETE`, `BLOCKED`} — the cycle's terminal disposition.
+- `LOCAL_SHA` = final local HEAD (`git rev-parse HEAD`) at emission time.
+- `BRANCH` = the working branch the cycle committed to.
+- `REMOTE_SHA` = the remote branch head after the push.
+
+Invariants the outer gate (`scripts/mo-full-attest.sh`, wired into
+`scripts/litmus-opencode-e2e-launch.sh` for `litmus:opencode-prompt-e2e-shape`)
+enforces before it accepts exit zero:
+
+- `LOCAL_SHA == REMOTE_SHA` — a marker may never follow an unpushed local
+  commit. If the push failed after three rebase retries, do NOT emit the
+  marker; mark the packet `blocked`/`failed-retryable`, include the push
+  output, and stop — the missing marker is itself the loud failure.
+- `BRANCH` must match the host's current branch.
+- The claimed `REMOTE_SHA` must actually converge on
+  `git ls-remote origin refs/heads/<BRANCH>` within the bounded relay window.
+- `MO-SMOKE:` grammar and the shared full-cycle rate limit are unchanged; a
+  smoke run never emits `MO-FULL:`.
+
+Any full-mode run that exits without a valid, converging `MO-FULL:` marker
+has not completed its exit contract — regardless of the process exit code.
+`scripts/mo-full-attest.sh fixture` / `scripts/test-mo-full-attest.sh`
+reproduce the breach shapes hermetically (missing marker, malformed, unpushed
+local commit, branch mismatch, remote-head mismatch, clean pass).
+
 ## Non-Negotiable Exit Contract
 
 Local state is volatile. Before a successful exit, every meaningful result must
@@ -413,7 +453,101 @@ successful cycle — not an excuse to escalate unprompted.
 See `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` for a worked
 example of capture → reduce → promote.
 
+## When the Gate Fails, Read check-logs.jsonl FIRST
+
+`target/convergence/check-logs.jsonl` holds a per-run verdict for every check,
+going back weeks. It is the authoritative record of what failed and when.
+
+Do NOT diagnose from terminal scrollback. The next run overwrites the per-check
+logs under `target/convergence/check-logs/`, and re-running to "get a better
+look" is what destroys the evidence — the re-run may pass, and then the failure
+is gone.
+
+```bash
+jq -r 'select(.status != "pass") | "\(.ci_run_id)\t\(.check_id)\t\(.status)"' \
+  target/convergence/check-logs.jsonl | tail -20
+```
+
+`scripts/local-ci.sh` also prints a `Failed checks:` block naming each failure.
+If you pipe the gate through `tail -N` or a grep filter, you will cut that block
+off and lose the names — this host did exactly that twice on 2026-08-09, spent
+two cycles calling an intermittent failure "unexplained", and filed a packet on
+the false premise that the names were unrecoverable (637-df4z, closed
+mis-diagnosed). The answer had been on disk the whole time: `rust-tests` and
+`tray-contract`, two parallel tests racing on `$HOME` and a shared fixture
+directory (638-ehzi).
+
+An intermittent failure is a defect with a schedule, not noise. Treating it as
+noise is how it survives.
+
+## Reads Go Through MCP First
+
+Before draining anything: **do not read whole ledgers.** `plan/index.yaml` is
+31,678 lines and `plan/loop_status.md` is 7,875; pulling either in full to learn
+one fact is the largest single consumer of orchestrator context in this loop, and
+it is paid again by every agent on every host every cycle.
+
+Ask `forge-plan` / `project-plan` (`plan_answer`, `plan_next`, `plan_query`,
+`plan_status`, `plan_blocked_by`, `methodology_ask`, `spec_answer`) and
+`project-info` (`search_code`, `grep_code`, `find_files`, `read_file`). Answers
+are cited — keep the citations.
+
+Drop to the filesystem for exactly three reasons, and name the one that applies:
+**unavailable** (MCP down or `confidence=unsupported` — fall back and keep going,
+then record it so a systematically-refusing expert stays visible);
+**verification** (before any irreversible act, read the CITED SPAN, not the
+file); **not exposed** (no tool covers it — and if the loop needs it repeatedly,
+that is a missing tool, so file a packet).
+
+Canonical: `methodology/distributed-work.yaml` → `mcp_first_read_path`.
+
 ## Worker Drain
+
+### Stranded-claim sweep (coordinator, every cycle)
+
+```bash
+scripts/check-stranded-in-progress.sh
+```
+
+A packet in `in_progress` is invisible in BOTH directions: `ready` queries skip
+it so nobody claims it, and burndown does not count it so nobody notices it is
+unfinished. 21 packets were in that state on 2026-08-09 — ~9% of the live
+ledger, oldest at order 153 — every one with no progress event ever recorded
+(641-e2qa).
+
+Report the `summary:` line in the handoff. If the count is rising cycle over
+cycle, claims are outliving their cycles and that is the thing to fix, not the
+individual packets.
+
+Advisory, never a gate: a packet legitimately in flight right now is
+indistinguishable from one abandoned an hour ago. **Do not bulk-close what it
+reports.** Closing a packet requires checking its exit criteria against the
+tree; guessing marks unfinished work done, which is strictly worse than leaving
+it stranded.
+
+### Cycle batch triage — decide the batch BEFORE draining
+
+```bash
+scripts/select-work-batch.sh <linux|macos|windows|any>
+```
+
+Run this once, at the top of the drain, and take the batch it prints. It selects
+ONE epic (`release_target`) and at most `budget` packets from it, so a cycle
+drains a coherent slice instead of five unrelated subsystems — the scatter that
+made small packets cost more in orientation than in work.
+
+It is minimax-ranked (largest residual first, per `convergence.yaml` →
+`minimax_convergence_strategy`), with score-weighted entropy over the top-3 so
+coverage spreads over time and two concurrent hosts do not collide on one epic.
+The seed is printed; record it in the loop-status entry so the cycle can be
+replayed. Budget is 1 on forge (order 264) and 3 elsewhere.
+
+The `triage:` line reports `ungrouped=N` — eligible packets with no
+`release_target`. That number is the health of the epic tier itself: when it is
+large, selection is degrading toward flat priority order regardless of what this
+script does. Surface it in the handoff.
+
+Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triage`.
 
 When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `./plan` friendly way in fresh cycles until one of these is true:
 
@@ -603,12 +737,26 @@ Before exit:
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
    Its presence on PATH is not permission. The forge startup context lists what
    is actually available.
-4. Commit targeted files only.
-5. Push the relevant branch.
-6. If a startup boundary was recorded, run the guard's `verify` mode. A guard
+4. Run the local pre-push gate: `./build.sh --check` and fix what it reports.
+   An unparseable or unformatted push poisons every downstream clone. Push CI
+   no longer exists on any working branch — only the manually-dispatched
+   release workflow remains (litmus:github-actions-budget) — so this gate is
+   the ONLY trunk protection. Do not push past a red gate (evidence case:
+   `plan/issues/local-gate-evidence-query-packets-clippy-2026-08-09.md`).
+5. Commit targeted files only.
+6. Push the relevant branch.
+7. If a startup boundary was recorded, run the guard's `verify` mode. A guard
    failure is a blocker: do not attempt destructive Git cleanup. After a
    successful verification, remove only the unique external `$boundary_dir`;
    finalization never deletes, restores, or resets a worktree path.
-7. Confirm there are no uncommitted changes created by this cycle and the
+8. Confirm there are no uncommitted changes created by this cycle and the
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.
+9. Emit the full-mode terminal marker (order 614-2gqx) as your FINAL output
+   line, computed from the post-push state:
+   ```text
+   MO-FULL: <COMPLETE|BLOCKED> <git rev-parse HEAD> <branch> <remote head>
+   ```
+   This line is the machine attestation that finalization steps 1-8 all
+   passed; the outer launcher rejects exit zero without it. See
+   "Full-Mode Terminal Attestation" above for the grammar and invariants.

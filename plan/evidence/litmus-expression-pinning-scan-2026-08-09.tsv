@@ -1,0 +1,644 @@
+candidate	5	litmus:accel-envelope-reaches-the-forge	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	The probe has a consumer: the forge launch exports the envelope
+candidate	5	litmus:accel-envelope-reaches-the-forge	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	The probe is observable from the host (--capabilities), so agents' claims are checkable
+candidate	5	litmus:accel-envelope-reaches-the-forge	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	The forge startup context renders the envelope for agents
+candidate	5	litmus:accel-envelope-reaches-the-forge	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Usability is decided by the CONTAINER lane, not the usable flag
+candidate	5	litmus:accel-envelope-reaches-the-forge	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	accel_class carries the full closed tier vocabulary
+candidate	5	litmus:accel-envelope-reaches-the-forge	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	The GPU hardware UUID does not travel into forge env or context files
+candidate	5	litmus:app-lifecycle-state-machine-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	state.rs carries the spec:app-lifecycle trace at file head
+candidate	5	litmus:app-lifecycle-state-machine-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	all 5 spec-mandated variants present
+candidate	5	litmus:app-lifecycle-state-machine-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	validate_transition method exists
+candidate	5	litmus:app-lifecycle-state-machine-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	canonical transition rule: Running → Stopping (graceful shutdown gate)
+candidate	5	litmus:app-lifecycle-state-machine-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	canonical transition rule: Initializing → Running (success path)
+candidate	5	litmus:app-lifecycle-state-machine-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	canonical transition rule: Initializing → Error (failure path)
+candidate	5	litmus:app-lifecycle-state-machine-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	canonical transition rule: Idle → Initializing (kickoff path)
+candidate	5	litmus:app-lifecycle-tray-state-api-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	TrayState stores the guarded lifecycle state
+candidate	5	litmus:app-lifecycle-tray-state-api-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	transition_lifecycle validates before mutating state
+candidate	5	litmus:app-lifecycle-tray-state-api-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	ready-for-action gate allows only Idle or Running
+candidate	5	litmus:app-lifecycle-tray-state-api-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	project-start gate is exposed and spec traced
+candidate	5	litmus:app-lifecycle-tray-state-api-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	shutdown gate treats Stopping and Error as terminal action blockers
+candidate	5	litmus:app-lifecycle-tray-state-api-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	unit tests cover all public lifecycle helpers
+candidate	5	litmus:app-lifecycle-tray-state-api-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	app-lifecycle trace breadth covers lifecycle helpers
+candidate	5	litmus:async-inference-launch-entrypoint-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	opencode entrypoint bounds the probe with curl -m 1 (non-blocking)
+candidate	5	litmus:async-inference-launch-entrypoint-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	opencode entrypoint emits trace_lifecycle for the ready path
+candidate	5	litmus:async-inference-launch-entrypoint-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	opencode entrypoint emits trace_lifecycle for the not-ready graceful path
+candidate	5	litmus:brew-attestation-egress	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	attestation is EXPLICITLY off (declared, not merely absent) with the replacement named
+candidate	5	litmus:brew-attestation-egress	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	NO GitHub credential is injected into a forge lane (the invariant that replaced it)
+candidate	5	litmus:brew-attestation-egress	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	the shim does not claim provenance it cannot deliver
+candidate	5	litmus:brew-ondemand-tools-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	runner and allowlist ship in the image
+candidate	5	litmus:brew-ondemand-tools-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	attestation state is explicitly declared and analytics disabled
+candidate	5	litmus:brew-ondemand-tools-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	brew bootstrap is a PINNED release tag, not floating install.sh
+candidate	5	litmus:brew-ondemand-tools-shape	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	lib-common generates shims for allowlisted missing commands and appends the dir LAST on PATH
+candidate	5	litmus:build-ci-dispatch-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	ci-full install cannot fall through to a debug build
+candidate	5	litmus:build-trace-index-dispatch-coverage	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	shared build helpers are defined above their first caller (bash resolves definitions at execution time)
+candidate	5	litmus:cheatsheet-host-image-sync	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	agents discover the synchronized runtime view
+candidate	5	litmus:cheatsheets-license-allowlist-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	allowlist header documents the three canonical tier strings
+candidate	5	litmus:cheatsheets-license-allowlist-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	allowlist documents the required per-domain schema fields
+candidate	5	litmus:cheatsheets-license-allowlist-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	allowlist contains at least one [domains.*] entry
+candidate	5	litmus:cheatsheet-source-layer-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	validator points at the canonical INDEX.json path
+candidate	5	litmus:cheatsheet-source-layer-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	validator handles fresh-state (missing INDEX.json) gracefully
+candidate	5	litmus:ci-release-musl-binary-policy	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify release workflow publishes Linux musl binary
+candidate	5	litmus:ci-release-toolchain-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	release workflow installs Nix via nix-installer-action and builds the musl target
+candidate	5	litmus:claude-launch-stability-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Claude launch reports its credential boundary (vault OAuth restore or API-key session, per orders 303/304)
+candidate	5	litmus:codex-api-key-env-var	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	the OpenAI provider maps to CODEX_API_KEY, not OPENAI_API_KEY
+candidate	5	litmus:codex-api-key-env-var	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	the Codex entrypoint gates its Vault OAuth restore on CODEX_API_KEY
+candidate	5	litmus:codex-api-key-env-var	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the empirical rationale is recorded next to the mapping so it is not reverted
+candidate	5	litmus:codex-device-auth-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	pin the Rust provider schema and prohibit the generic paste-token branch
+candidate	5	litmus:codex-forge-yolo-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	the bypass flag is gated on TILLANDSIAS_HOST_KIND=forge (not unconditional)
+candidate	5	litmus:codex-forge-yolo-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the gated args array is threaded into the codex exec line
+candidate	5	litmus:codex-forge-yolo-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	no ungated bare 'exec codex \"$@\"' whole line remains (drift back to prompting launch)
+candidate	5	litmus:codex-safe-state-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	ship and initialize the helper before any harness refresh
+candidate	5	litmus:codex-safe-state-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	host passes exact raw identity and provider login persists only the Codex tool cache
+candidate	5	litmus:control-dispatch-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	decide_route + TransportKind + DispatchOutcome are present in the canonical module (item 1)
+candidate	5	litmus:control-dispatch-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	all three TransportKind / DispatchOutcome variant arms exist
+candidate	5	litmus:control-dispatch-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	tray/mod.rs (unix dispatcher) consults decide_route (item 2)
+candidate	5	litmus:control-dispatch-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	vsock_server.rs (vsock dispatcher) consults decide_route (item 3)
+candidate	5	litmus:control-dispatch-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	matrix-Handle-but-no-handler-yet arm references the convergence packet
+candidate	5	litmus:control-dispatch-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	four routing-matrix unit tests still attached
+candidate	5	litmus:cross-platform-tray	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the native tray wrapper is present
+candidate	5	litmus:cross-target-cfg-gate-check	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	no un-gated top-level use std::os::unix imports in headless/main.rs
+candidate	5	litmus:cross-target-cfg-gate-check	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	no bare libc::getuid/geteuid/fork calls in headless/main.rs without nearby cfg(unix)
+candidate	5	litmus:cross-target-cfg-gate-check	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	no un-gated top-level use std::os::unix imports in core, control-wire, host-shell, podman crates
+candidate	5	litmus:cycle-metrics-answer-rate-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	the anti-gaming rule is stated in the methodology, not only in the script
+candidate	5	litmus:cycle-metrics-answer-rate-shape	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	telemetry at the MCP chokepoint is fail-soft (a metric may not break the surface it measures)
+candidate	5	litmus:default-image-containerfile-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Agents: opencode + openspec + claude + codex install at EVERY_LAUNCH via npm @latest
+candidate	5	litmus:default-vault-cli-security	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	default helper contains no insecure curl fallback
+candidate	5	litmus:default-vault-cli-security	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	live provider token writes use stdin rather than shell argv
+candidate	5	litmus:diagnostics-envelope-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	rust emitter: format string contains the four pinned fields
+candidate	5	litmus:diagnostics-envelope-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	bash distill consumer: extracts all four envelope fields
+candidate	5	litmus:diagnostics-envelope-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	summary template gains Host platform + Agent fields
+candidate	5	litmus:diagnostics-envelope-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	rust unit test pinning the emitter format still exists
+candidate	5	litmus:diagnostics-filter-env-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	verbose level keyword still gates internal events
+candidate	5	litmus:diagnostics-filter-env-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	eight unit tests pinning the spec scenarios still attached
+candidate	5	litmus:enclave-network-source-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	main.rs const ENCLAVE_NET = tillandsias-enclave (canonical launch constant)
+candidate	5	litmus:enclave-network-source-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	podman/src/lib.rs pub const ENCLAVE_NETWORK = tillandsias-enclave (shared constant)
+candidate	5	litmus:enclave-network-source-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	ensure_enclave_network() entry point with network_exists_sync (Req 1 create/reuse)
+candidate	5	litmus:enclave-network-source-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	proxy/git dual-homed onto enclave + managed egress network (Req 2)
+candidate	5	litmus:enclave-network-source-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	enclave_network_name unit test pinned (naming invariant)
+candidate	5	litmus:enclave-network-source-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	enclave lifecycle telemetry annotations (Req 3)
+candidate	5	litmus:exit-code-provisioned-zero-degraded-two-symmetric	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	windows-tray exit-code pin test exists
+candidate	5	litmus:exit-code-provisioned-zero-degraded-two-symmetric	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	macos-tray exit-code pin test exists
+candidate	5	litmus:external-logs-manifest-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	each file entry includes the required schema fields
+candidate	5	litmus:external-logs-manifest-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	tillandsias-core exposes the path-construction helpers
+candidate	5	litmus:external-logs-producer-manifests-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	service manifests declare canonical producer roles
+candidate	5	litmus:external-logs-producer-manifests-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	producer Containerfiles copy the manifest to /etc/tillandsias
+candidate	5	litmus:filesystem-scanner-event-driven-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	watcher uses the OS-native notify::RecommendedWatcher
+candidate	5	litmus:filesystem-scanner-event-driven-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	watcher exposes a configurable debounce override
+candidate	5	litmus:filesystem-scanner-event-driven-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	watcher docstring documents the OS-native backend choice
+candidate	5	litmus:filesystem-scanner-event-driven-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	watch() returns a notify::Result (no swallowed-error refactor)
+candidate	5	litmus:fix-windows-image-routing-helper-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	helper returns Result<(String, String), ImageBuilderError>
+candidate	5	litmus:fix-windows-image-routing-helper-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	prepare_build delegates to the helper (not inline routing)
+candidate	5	litmus:fix-windows-image-routing-helper-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	unit test pins the routing for all 5 known image types
+candidate	5	litmus:fix-windows-image-routing-helper-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	unit test pins the error mode for unknown types
+candidate	5	litmus:forge-cache-dual-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the shared cache helper uses the per-project cache root
+candidate	5	litmus:forge-cache-dual-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the runtime env routing exports still point into the per-project cache
+candidate	5	litmus:forge-e2e-rate-limit-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	methodology carries the e2e_token_budget canon
+candidate	5	litmus:forge-experts-discoverability-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	forge-plan MCP command resolves to forge-plan.sh
+candidate	5	litmus:forge-experts-discoverability-shape	11	literal-grep,no-exec,no-negative,src-pinned,long-literal	default image copies and installs the Codex registration helper
+candidate	5	litmus:forge-firstrun-prebuilt-tools-arch-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	lib-common defines the arch-aware prebuilt-tool helpers
+candidate	5	litmus:forge-firstrun-prebuilt-tools-arch-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	arch is resolved from uname -m (aarch64 + x86_64), not assumed
+candidate	5	litmus:forge-firstrun-prebuilt-tools-arch-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	forge entrypoints trigger the first-run tool install (backgrounded)
+candidate	5	litmus:forge-firstrun-prebuilt-tools-arch-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	slice 2: actionlint/vale/wasmtime also arch-aware first-run, and gone from creation
+candidate	5	litmus:forge-firstrun-prebuilt-tools-arch-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	dart sub-slice: Dart SDK installs arch-aware at FIRST_RUN (ensure_dart_sdk), gone from creation
+candidate	5	litmus:forge-gitdir-staging-chown	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	in-container index materialization guard is wired into configure_git_identity
+candidate	5	litmus:forge-gitdir-staging-chown	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	index materialization guard refuses silently proceeding when it cannot rebuild
+candidate	5	litmus:forge-git-index-materialization	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	the guard runs on every lane via configure_git_identity
+candidate	5	litmus:forge-git-index-materialization	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the guard refuses silently proceeding when it cannot rebuild
+candidate	5	litmus:forge-hot-cold-split-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the welcome banner surfaces the RAM-backed hot mounts
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 + 2: 4 forge profiles each declare /opt/cheatsheets:size=8m,mode=0755 tmpfs
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 + 2: 4 forge profiles each declare /tmp:size=256m,mode=1777 tmpfs
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 + 2: 4 forge profiles each declare /run/user/1000:size=64m,mode=0700 tmpfs
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 6 agent transparency: TILLANDSIAS_CHEATSHEETS = /opt/cheatsheets profile env var
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 5 default: hot_path_max_mb defaults to 4096 MB (spec § clamp ceiling)
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 5: compute_hot_budget pure helper present with canonical signature
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 5: parse_size_pack_kb pure parser present
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	10	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 5: HOT_PATH_BUDGET_FLOOR_MB constant pins the 256 MB floor
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	12	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 4 pre-flight RAM gate: check_host_ram + PreflightError surfaces
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	13	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 4: 1.25× headroom factor expressed as 125/100 integer constants
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	14	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 4: parse_mem_available_mb pure parser for Linux /proc/meminfo
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	16	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 3 --memory ceiling: compute_memory_ceiling_mb pure helper + 256 baseline
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	17	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 3 tmpfs size parser: parse_tmpfs_size_mb extracts size=Nm
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	19	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 7 tmpfs-overlay tier table: 3 cap constants (64/128/1024 MB) + 2 boundary constants (8/32 GiB)
+candidate	5	litmus:forge-hot-cold-split-tmpfs-shape	20	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 7 tmpfs-overlay resolver: resolve_pull_cache_ram_mb + parse_mem_total_mb helpers
+candidate	5	litmus:forge-offline-profile-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	all 3 forge_*_profile builders set secrets: vec![] (zero credentials, Req 1)
+candidate	5	litmus:forge-offline-profile-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	launch path attaches --network ENCLAVE_NET for forge containers (Req 3)
+candidate	5	litmus:forge-offline-profile-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	forge_profiles_have_eighteen_env_vars unit test attached (env-shape pin)
+candidate	5	litmus:forge-opencode-onboarding-bootstrap-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 3 web theme bootstrap: web launcher execs sse-keepalive-proxy.js
+candidate	5	litmus:forge-opencode-onboarding-bootstrap-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 3 web project materialization: clone + find + export project env
+candidate	5	litmus:forge-packed-refs-shared	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	the facade bind-mounts packed-refs rather than relying on the copy
+candidate	5	litmus:forge-packed-refs-shared	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the absent-packed-refs window is stated, not silently ignored
+candidate	5	litmus:forge-persistent-tool-cache-mount-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	a forge_tool_cache_volume helper names the per-project cache volume
+candidate	5	litmus:forge-persistent-tool-cache-mount-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	the cache is mounted at the lib-common CARGO_HOME/NPM_CONFIG_PREFIX root
+candidate	5	litmus:forge-persistent-tool-cache-mount-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the guard test still forbids a host .cache/.config mount SOURCE (no credential-leak bind)
+candidate	5	litmus:forge-persistent-tool-cache-mount-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	a unit test pins the persistent tool-cache named volume mount
+candidate	5	litmus:forge-secret-capability-contract	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	opencode forge builder mounts exactly one gated, scoped vault-token secret
+candidate	5	litmus:forge-secret-capability-contract	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	agent forge builder mounts exactly one gated, scoped vault-token secret
+candidate	5	litmus:forge-secret-capability-contract	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	raw provider-key env injection does not spread beyond the known deviation
+candidate	5	litmus:forge-secret-capability-contract	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	named behavioural checks for the forge argv shape still exist
+candidate	5	litmus:forge-shell-tools-implementation-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req trace: @trace spec:forge-shell-tools on both shell-helpers
+candidate	5	litmus:forge-shell-tools-implementation-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 3 Helper split: bashrc+zshrc source shell-helpers.sh (POSIX), config.fish sources shell-helpers.fish (native)
+candidate	5	litmus:forge-shell-tools-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the welcome banner advertises the shell tools
+candidate	5	litmus:forge-shell-tools-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the welcome banner advertises the shell tools
+candidate	5	litmus:forge-staleness-invariants-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	containerfile_is_stale entry point exists with the spec-pinned signature
+candidate	5	litmus:forge-staleness-invariants-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	absent cache version file means fresh start (non-negotiable invariant)
+candidate	5	litmus:forge-staleness-invariants-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	cache-version + staleness functions trace forge-staleness + forge-cache-dual
+candidate	5	litmus:forge-staleness-invariants-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	image_builder.rs documents Check staleness step + skip-if-exists pattern
+candidate	5	litmus:forge-staleness-invariants-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	image_builder.rs exposes a skipped-due-to-staleness signal
+candidate	5	litmus:forge-standalone-runtime-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 2: source mount targets /home/forge/src/<project> path
+candidate	5	litmus:forge-standalone-runtime-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 5: --src required + exits 2 on missing/invalid path
+candidate	5	litmus:forge-standalone-traceability	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	validate build-forge help path
+candidate	5	litmus:forge-standard-gitconfig-path	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	production forge sources contain no global-config environment mesh
+candidate	5	litmus:forge-tool-affordances	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	it states ruby is ABSENT, since our own skills historically assumed it
+candidate	5	litmus:forge-welcome-banner-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 project name in B_CYAN: printf line uses B_CYAN for project value
+candidate	5	litmus:forge-welcome-banner-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 2 fish default: entrypoint-terminal.sh runs `exec fish`
+candidate	5	litmus:forge-welcome-banner-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 banner discoverability: all 3 shells source /usr/local/share/tillandsias/forge-welcome.sh
+candidate	5	litmus:forge-welcome-banner-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 2 --bash flag: headless main.rs detects --bash + injects TILLANDSIAS_PROJECT_HOST_MOUNT=1
+candidate	5	litmus:forge-welcome-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the welcome banner still carries the project/OS/tip scaffolding
+candidate	5	litmus:forge-welcome-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the terminal launch path still triggers the banner once per session
+candidate	5	litmus:forge-welcome-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the shell startup files still call the banner script
+candidate	5	litmus:forge-welcome-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the shell startup files still call the banner script
+candidate	5	litmus:gh-auth-script-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	run_provider_login() shared entry point exists with the multi-spec trace
+candidate	5	litmus:gh-auth-script-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	run_github_login docblock traces all related specs
+candidate	5	litmus:gh-auth-script-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	--github-login CLI flag is parsed
+candidate	5	litmus:gh-auth-script-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	accountability log line is emitted on <provider>_auth_start (github_auth_start for GitHub)
+candidate	5	litmus:gh-auth-script-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	login verifies containerized provider authentication before Vault persistence
+candidate	5	litmus:github-credential-health-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	TrayState fields reference spec:github-credential-health (>=4 mentions, mixed standalone + comma-list)
+candidate	5	litmus:github-credential-health-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	is_github_key_present fast-poll helper uses vault volume check
+candidate	5	litmus:github-credential-health-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	is_github_key_present doc-comment trace references spec:tillandsias-vault + spec:tray-minimal-ux
+candidate	5	litmus:github-credential-health-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	the definitive is_github_logged_in check exists and documents the fast-poll alternative
+candidate	5	litmus:git-mirror-existing-volume-hardening	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	entrypoint reapplies all mandatory receive keys outside one-time initialization
+candidate	5	litmus:git-mirror-existing-volume-hardening	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	production paths derive zero object IDs instead of assuming SHA-1
+candidate	5	litmus:git-mirror-fetch-reconcile	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	relay helper hook unsets quarantine and fetches upstream on push failure
+candidate	5	litmus:git-mirror-no-anonymous-daemon-write	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	every accepted push reaches upstream through the pre-receive service relay
+candidate	5	litmus:git-mirror-no-anonymous-daemon-write	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	all deletion and non-fast-forward branch updates stop before relay
+candidate	5	litmus:git-mirror-no-anonymous-daemon-write	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	the anonymous HTTP write path stays disabled (http.receivepack unset, no http server spawned)
+candidate	5	litmus:git-mirror-ref-convergence	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	entrypoint fetches upstream into remote-tracking refs, not exported heads
+candidate	5	litmus:git-mirror-relay-verified-ack	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	failed relay reconciles exported heads via a non-forced fetch outside quarantine
+candidate	5	litmus:git-mirror-relay-verified-ack	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	must-succeed relay is pre-receive, atomic, and explicit-ref only
+candidate	5	litmus:git-mirror-relay-verified-ack	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	post-receive is bookkeeping and cannot claim acknowledgement
+candidate	5	litmus:git-mirror-safe-refspec-push	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	relay helper forbids mirror/all and uses atomic explicit refspecs
+candidate	5	litmus:git-mirror-safe-refspec-push	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	relay helper reads stdin and rejects every deletion
+candidate	5	litmus:git-mirror-safe-refspec-push	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	startup retry uses explicit refs and never mirror/all
+candidate	5	litmus:git-mirror-stale-reconcile	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	the reconcile fetch is NON-forced and never --mirror/--all (code lines only; comments may name the invariant)
+candidate	5	litmus:git-mirror-unborn-head-repair	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	both forge arg builders pin the launch-gated seed branch into the container env (order 501)
+candidate	5	litmus:git-mirror-unborn-head-repair	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	the common tail runs on BOTH clone transports (filesystem + network) so no transport keeps sticky-HEAD (repair B6)
+candidate	5	litmus:git-mirror-unborn-head-repair	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	forge gitconfig sets push.default=current so a bare push targets the seed (later lane) branch (order 501)
+candidate	5	litmus:git-mirror-yaml-gate-shape	12	literal-grep,no-exec,no-negative,src-pinned,long-literal	pre-receive hook exempts legacy archive from validation
+candidate	5	litmus:git-mirror-yaml-gate-shape	14	literal-grep,no-exec,no-negative,src-pinned,long-literal	hook code stays convention-neutral (order-462 leak class)
+candidate	5	litmus:git-mirror-yaml-gate-shape	15	literal-grep,no-exec,no-negative,src-pinned,long-literal	salvage YAML-gate exemption routes via a config-supplied exempt pattern
+candidate	5	litmus:git-mirror-yaml-gate-shape	16	literal-grep,no-exec,no-negative,src-pinned,long-literal	relay failure path prints protected-branch salvage advice (B3: never pre-reject main)
+candidate	5	litmus:guest-crashloop-detection	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	the cross-platform detector + pinned grammar live in control-wire (both trays consume them, so the two hosts cannot drift)
+candidate	5	litmus:guest-crashloop-detection	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the counter gates on REPEATED regression not slowness — is_phase_regression plus a bounded window/threshold, so a monotonic slow provision records no events
+candidate	5	litmus:guest-crashloop-detection	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	the Windows tray feeds the detector from its single VM-status funnel, persists state for --diagnose, and surfaces a trip as the single most-important Error balloon (order 250)
+candidate	5	litmus:guest-crashloop-detection	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	the macOS --diagnose reads the persisted verdict and prints the pinned-grammar guest-health line (static/filesystem-only per its platform limitation)
+candidate	5	litmus:harness-byte-cheap	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Claude probes use official update guards without exporting them globally
+candidate	5	litmus:harness-byte-cheap	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	official installer and ownership staleness have compatible hard bounds
+candidate	5	litmus:harness-contract-probe	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	harness_probe checks contracts, not only liveness
+candidate	5	litmus:harness-contract-probe	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the declared contracts cover the flags the entrypoints actually pass
+candidate	5	litmus:harness-curl-install-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Claude currentness is bounded and fixture-enforced
+candidate	5	litmus:harness-rollback-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	updater probes fresh installs and has a rollback branch
+candidate	5	litmus:harness-rollback-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	npm-update lock trap expands at set time and stale locks self-heal
+candidate	5	litmus:host-browser-mcp-frame-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	McpFrame variant declaration uses the spec-pinned shape
+candidate	5	litmus:host-browser-mcp-frame-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	MAX_MCP_FRAME_BYTES = 4 MiB per spec contract
+candidate	5	litmus:host-browser-mcp-frame-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	MCP frame cap traces the spec it serves
+candidate	5	litmus:host-browser-mcp-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the forge-side bridge and launcher wiring stay present
+candidate	5	litmus:host-browser-mcp-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	legacy browser MCP artifacts and dangling active-design references are absent
+candidate	5	litmus:host-chromium-on-demand-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	browser-mcp launcher: cache_root resolution chain (XDG_CACHE_HOME / ~/.cache / /tmp)
+candidate	5	litmus:host-chromium-on-demand-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	browser-mcp launcher: resolve_browser_binary entry point + override path
+candidate	5	litmus:host-guest-no-cfg-transport-selection	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	shared cross-platform host-shell code never branches on cfg(target_os) to select a host<->guest transport
+candidate	5	litmus:host-guest-no-cfg-transport-selection	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	shared cross-platform host-shell code never branches on cfg(target_os) to select a host<->guest transport
+candidate	5	litmus:inference-container-implementation-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 + Req 3 launch: build_inference_run_args sets canonical container identity
+candidate	5	litmus:inference-container-implementation-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req inference security: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id + --pids-limit=128
+candidate	5	litmus:inference-container-implementation-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 2 cache: model cache volume mount + CA cert bind-mount
+candidate	5	litmus:inference-container-implementation-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 4 pull-failure-non-fatal: entrypoint logs a non-fatal pull FAILED then continues (Squid EOF tolerance)
+candidate	5	litmus:inference-container-implementation-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 + Req 4 proxy: build_inference_run_args sets HTTP_PROXY/HTTPS_PROXY + NO_PROXY
+candidate	5	litmus:inference-container-implementation-shape	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req CA fedora-path pin (order 313 residual): update-ca-trust active, Debian update-ca-certificates path absent from active code
+candidate	5	litmus:inference-container-implementation-shape	10	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req OLLAMA_BINDIR nesting pin (order 313 residual): .tools nests inside the mounted OLLAMA_MODELS volume, not a sibling
+candidate	5	litmus:inference-firstrun-default-models-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	default model set is config-overridable via TILLANDSIAS_DEFAULT_MODELS
+candidate	5	litmus:inference-firstrun-default-models-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	first-run pull is idempotent (ollama list cached-guard before pull)
+candidate	5	litmus:inference-firstrun-default-models-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	the DEFAULT_MODELS default value is entirely 0.3-1.5B (no 3b/7b/14b/32b in the default set)
+candidate	5	litmus:inference-firstrun-default-models-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	the coder/diagnostics model qwen2.5-coder:1.5b remains available as an opt-in tier pull, not silently deleted
+candidate	5	litmus:inference-gpu-device-args	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	gpu-cuda injects the NVIDIA CDI device, and ONLY behind the deliverability gate
+candidate	5	litmus:inference-gpu-device-args	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	a GPU with no deliverable CDI spec degrades LOUDLY, never silently to CPU
+candidate	5	litmus:inference-gpu-device-args	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	gpu-rocm injects BOTH /dev/kfd and /dev/dri (either alone leaves ROCm non-functional)
+candidate	5	litmus:inference-gpu-device-args	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	the cpu tier injects NO device argument (the catch-all arm stays empty)
+candidate	5	litmus:inference-gpu-device-args	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	the EFFECTIVE tier is emitted after the hardware tier, so podman last-wins yields deliverability
+candidate	5	litmus:inference-model-preload-policy	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	policy helper exists and documents the pinned one-line grammar
+candidate	5	litmus:inference-model-preload-policy	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	TILLANDSIAS_DEFAULT_MODELS still drives the set, and entrypoint.sh keeps the canonical default assignment
+candidate	5	litmus:inference-model-preload-policy	10	literal-grep,no-exec,no-negative,src-pinned,long-literal	entrypoint sources the policy BEFORE `ollama serve` and emits the pinned preload-state line
+candidate	5	litmus:inference-model-preload-policy	11	literal-grep,no-exec,no-negative,src-pinned,long-literal	model inventory is checkpointed onto the MOUNTED volume (cold volume -> warm on later starts)
+candidate	5	litmus:inference-model-preload-policy	12	literal-grep,no-exec,no-negative,src-pinned,long-literal	warm inventory is derived from `ollama list`, never from preload intent
+candidate	5	litmus:inference-model-preload-policy	13	literal-grep,no-exec,no-negative,src-pinned,long-literal	multi-GB tier pulls are OPT-IN so they never consume the reserved expert slots
+candidate	5	litmus:inference-model-preload-policy	18	literal-grep,no-exec,no-negative,src-pinned,long-literal	the startup context wires the helper and emits the machine-readable branch key
+candidate	5	litmus:inference-model-preload-policy	19	literal-grep,no-exec,no-negative,src-pinned,long-literal	no indeterminate state survives: the context documents the closed vocabulary and disclaims a 'starting up' state
+candidate	5	litmus:inference-model-preload-policy	20	literal-grep,no-exec,no-negative,src-pinned,long-literal	preload never gates a launch: order 486's non-fatal contract and egress gate are intact
+candidate	5	litmus:inference-readiness-probe-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	assert tray launcher shares the same inference proxy bypass
+candidate	5	litmus:inference-tier-probe-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	runtime device gating: cuda tier requires a CDI spec and warns with the remedy when absent (source pin)
+candidate	5	litmus:ledger-fragment-convergence	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	compaction is TEXT-LEVEL and format-preserving (the base is never re-serialized)
+candidate	5	litmus:ledger-fragment-convergence	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	compaction deletes BY NAME, never by glob (the GC-versus-writer race)
+candidate	5	litmus:ledger-fragment-convergence	11	literal-grep,no-exec,no-negative,src-pinned,long-literal	the doctrine and its cheatsheet are recorded where the expert can answer them
+candidate	5	litmus:macos-tray-architectural-invariants	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	gui-items-deferred-to-v2: macos-tray pin tests disable observatorium + opencode_web for MacosTray
+candidate	5	litmus:macos-tray-architectural-invariants	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	terminal-uses-iterm2-when-default: pin test terminal_detection_returns_iterm2_preferred_when_present exists
+candidate	5	litmus:macos-tray-diagnose-cli-surface	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	both CLI modes wired in main.rs
+candidate	5	litmus:macos-tray-diagnose-cli-surface	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	DiagnoseFormat enum + Human/Json variants pinned
+candidate	5	litmus:macos-tray-diagnose-cli-surface	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	JSON schema-pin unit tests attached
+candidate	5	litmus:macos-tray-diagnose-cli-surface	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	exit-code contract test attached
+candidate	5	litmus:mcp-on-demand-bridge-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	host-browser MCP entry points at host-browser.sh in mcp config (Req 5)
+candidate	5	litmus:mcp-on-demand-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the TraySocket mount trace stays present
+candidate	5	litmus:methodology-accountability-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the unknown-event template carries the required fields
+candidate	5	litmus:native-secrets-store-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	KEYCHAIN_SERVICE 'tillandsias' constant on vault_bootstrap.rs (Req 1 platform-native keyring identity)
+candidate	5	litmus:native-secrets-store-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	KEYCHAIN_SERVICE constant on macos-tray installation_uuid.rs (cross-platform keyring identity)
+candidate	5	litmus:native-secrets-store-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	read_github_token() gh auth token path (Req 3 host-only keyring read)
+candidate	5	litmus:nix-cache-size-signal	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	assert purge-primary-key:never is configured in nix-cache-warm.yml
+candidate	5	litmus:nix-cache-size-signal	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	assert nix-cache-warm workflow fires on workflow_dispatch and schedule
+candidate	5	litmus:no-terminal-flicker-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 Windows: CREATE_NO_WINDOW = 0x0800_0000 constant pinned
+candidate	5	litmus:no-terminal-flicker-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1 Windows: no_window_async + no_window_sync helper signatures
+candidate	5	litmus:no-terminal-flicker-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 5: fn status_label(stage: &TrayStatusStage) -> String resolver
+candidate	5	litmus:no-terminal-flicker-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 4: enclave_status_to_stage() driver pinned
+candidate	5	litmus:observability-metrics-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	format_prometheus_metrics returns Result<String, String> (no fabricated values on failure)
+candidate	5	litmus:observability-metrics-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	500 Internal Server Error path exists on collection failure
+candidate	5	litmus:observability-metrics-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	MetricsServerState wraps a sampler + an exporter (stable surface for HTTP server)
+candidate	5	litmus:observability-metrics-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Prometheus TYPE+HELP headers are pinned by an existing unit test (stable names/units contract)
+candidate	5	litmus:observability-metrics-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	metrics HTTP endpoint is `200 OK` on success with the Prometheus text content type
+candidate	5	litmus:onboarding-cold-start-discovery	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify welcome banner includes project context detection
+candidate	5	litmus:onboarding-cold-start-discovery	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify welcome banner surfaces cheatsheet path
+candidate	5	litmus:onboarding-cold-start-discovery	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify discovery commands are advertised in welcome banner
+candidate	5	litmus:onboarding-cold-start-discovery	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify shell tools are mentioned in welcome banner
+candidate	5	litmus:onboarding-cold-start-discovery	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify welcome banner once-per-session gating is active
+candidate	5	litmus:onboarding-cold-start-discovery	10	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify shell startup files still call the banner script
+candidate	5	litmus:onboarding-cold-start-discovery	10	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify shell startup files still call the banner script
+candidate	5	litmus:opencode-web-session-otp-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	file-head trace declares spec:opencode-web-session-otp + secrets-management
+candidate	5	litmus:opencode-web-session-otp-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req: cookie shape constants — COOKIE_LEN=32, COOKIE_NAME=tillandsias_session, COOKIE_PATH=/
+candidate	5	litmus:opencode-web-session-otp-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req: format_set_cookie_header emits HttpOnly + SameSite=Lax literals
+candidate	5	litmus:opencode-web-session-otp-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req: generate_session_token CSPRNG + issue_session entry point
+candidate	5	litmus:opencode-web-session-otp-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req: build_login_data_url + build_login_form_html (data: URI embedding)
+candidate	5	litmus:opencode-web-session-otp-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req: PENDING_TTL = 60 seconds (single-use lifetime)
+candidate	5	litmus:opencode-web-session-otp-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req: control-socket routing — IssueWebSession matrix-Handle on UnixSocket, Unsupported on Vsock
+candidate	5	litmus:order-id-collision-free	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	the doctrine is recorded where the methodology expert can answer it
+candidate	5	litmus:podman-container-handle-source-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Identity: pub struct ContainerHandle with info + spec fields
+candidate	5	litmus:podman-container-handle-source-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Unit-testable: pub fn new(info, spec) -> Self constructor (pure data boundary)
+candidate	5	litmus:podman-container-handle-source-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Identity: 5 accessor methods (name / image / spec / info / into_spec)
+candidate	5	litmus:podman-container-handle-source-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Event correlation: PodmanEvent.container_name field exists (matches ContainerInfo.name)
+candidate	5	litmus:podman-container-spec-source-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Serialization: build_run_args returns Vec<String>
+candidate	5	litmus:podman-container-spec-source-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Serialization: build_run_argv prepends \"run\" subcommand
+candidate	5	litmus:podman-idiomatic-events-no-polling	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	assert podman events format json is used as event source
+candidate	5	litmus:podman-secrets-integration-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 2: >=4 `--secret` flag literal sites at launch (NEVER bind mounts for credentials)
+candidate	5	litmus:podman-secrets-integration-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 4: invocation-line redaction test pins log scrubbing (secrets not in logs)
+candidate	5	litmus:project-bootstrap-readme-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the cheatsheet documents the summarizer interface and validator exit codes
+candidate	5	litmus:provider-device-auth-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	pin the Rust provider schemas (claude + antigravity) and the --agy-login alias
+candidate	5	litmus:provider-device-auth-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	tray credentialed-agent clicks (codex/claude/opencode/antigravity) delegate to the TTY-capable CLI lane
+candidate	5	litmus:provider-device-auth-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	image bakes the generic helpers
+candidate	5	litmus:proxy-container-shape	11	literal-grep,no-exec,no-negative,src-pinned,long-literal	entrypoint.sh: cache/cert init + CA secret + runtime squid parser gate
+candidate	5	litmus:pty-attach-project-threading-symmetric	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	windows-tray imports intent_for_action + launch_spec from host-shell
+candidate	5	litmus:pty-attach-project-threading-symmetric	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	macos-tray imports intent_for_action + launch_spec from host-shell
+candidate	5	litmus:pty-attach-project-threading-symmetric	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	windows-tray calls launch_spec with project.as_deref()
+candidate	5	litmus:pty-attach-project-threading-symmetric	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	macos-tray calls launch_spec with project.as_deref()
+candidate	5	litmus:pty-open-argv-allowlisted	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	pty_handler.rs restricts project names to alphanumeric + hyphens
+candidate	5	litmus:pty-open-argv-allowlisted	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	child_env function in pty_handler.rs sets no_proxy
+candidate	5	litmus:pty-open-argv-allowlisted	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	child_env function in pty_handler.rs sets NO_PROXY
+candidate	5	litmus:release-artifact-integrity	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify release workflow signs artifacts with Cosign bundles
+candidate	5	litmus:release-artifact-integrity	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify release workflow release notes instruct bundle verification
+candidate	5	litmus:remote-projects-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	file-head trace declares spec:remote-projects + spec:gh-auth-script
+candidate	5	litmus:remote-projects-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Identity: GitHubProject struct + nwo() canonical owner/name accessor
+candidate	5	litmus:remote-projects-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Cache invalidation: pub fn invalidate_github_projects_cache()
+candidate	5	litmus:remote-projects-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Clone: pub fn clone_project_from_github + _with_debug variants
+candidate	5	litmus:remote-projects-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Fetch + token redaction: debug_log_helpers_redact_token_but_show_shape test pinned
+candidate	5	litmus:reverse-proxy-internal-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	all 4 router files carry a router-related @trace spec marker
+candidate	5	litmus:reverse-proxy-internal-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	entrypoint.sh: merges base.Caddyfile + dynamic /run/router/dynamic.Caddyfile
+candidate	5	litmus:reverse-proxy-internal-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	entrypoint.sh: supervises tillandsias-router-sidecar + waits for :9090 readiness
+candidate	5	litmus:reverse-proxy-internal-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	router-sidecar: DEFAULT_VALIDATE_PORT = 9090 + TILLANDSIAS_VALIDATE_PORT override
+candidate	5	litmus:reverse-proxy-internal-shape	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	router-sidecar: 204 (allow) vs 401 (deny) reply semantics documented + httpkit
+candidate	5	litmus:runtime-diagnostics-emitter-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	EmitterState carries the start-time map (phase-2e)
+candidate	5	litmus:runtime-diagnostics-emitter-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	signal_name_from_exit_code helper present (phase-2f)
+candidate	5	litmus:runtime-diagnostics-emitter-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	route_record dispatches all five routing arms (Died/Oom/Started/Removed/CleanedUp)
+candidate	5	litmus:runtime-diagnostics-emitter-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	DiagnosticsHandle::start_typed_event_stream surface present (phase-2g)
+candidate	5	litmus:runtime-diagnostics-emitter-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	run_opencode_mode wires both spawn helpers when --debug (phase-2c+2g)
+candidate	5	litmus:runtime-diagnostics-emitter-shape	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	emitter-layer unit tests are attached
+candidate	5	litmus:runtime-diagnostics-spec-mapping-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	format_resource_exhaustion_event invoked from the Oom arm
+candidate	5	litmus:runtime-diagnostics-spec-mapping-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Died arm pairs signal_name lookup with conditional emission
+candidate	5	litmus:runtime-diagnostics-spec-mapping-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	unit test pins the clean-exit-yields-no-signal branch (spec § Normal exit)
+candidate	5	litmus:runtime-diagnostics-stream-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify stream annotations and stderr capture hooks
+candidate	5	litmus:runtime-diagnostics-typed-events-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	container_exit formatter + wire-shape literal present
+candidate	5	litmus:runtime-diagnostics-typed-events-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	container_signal formatter + wire-shape literal present
+candidate	5	litmus:runtime-diagnostics-typed-events-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	resource_exhaustion formatter + wire-shape literal present
+candidate	5	litmus:runtime-diagnostics-typed-events-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	container_stderr formatter + wire-shape literal present
+candidate	5	litmus:runtime-diagnostics-typed-events-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	emit_diagnostic_event wrapper still gated on the global filter
+candidate	5	litmus:runtime-diagnostics-typed-events-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	unit tests pinning each shape are attached
+candidate	5	litmus:runtime-logging-env-filter	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the logging init code uses the TILLANDSIAS_LOG env filter
+candidate	5	litmus:secure-control-wire-guest-responder-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	the responder gates on the boot-time TILLANDSIAS_SECURE_CONTROL_WIRE flag
+candidate	5	litmus:secure-control-wire-guest-responder-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	when ON it runs the version-bound server handshake on the host<->guest hop
+candidate	5	litmus:secure-control-wire-guest-responder-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	the default-OFF + fail-closed flag parsing is unit-tested
+candidate	5	litmus:simplified-tray-ux-leaf-action-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Startup Menu: docblock pins 5-position startup menu layout (Status/Separator/Version/Quit + id=30/31)
+candidate	5	litmus:simplified-tray-ux-leaf-action-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Home Menu: docblock pins LeafAction offset layout (+0 Claude → +6 Maintenance, +7 submenu node)
+candidate	5	litmus:subdomain-naming-flip-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Subdomain ordering: pub fn extract_project_label(host: &str) -> Option<String>
+candidate	5	litmus:subdomain-naming-flip-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Subdomain ordering: parser strips port (`:8080` etc.) before extraction
+candidate	5	litmus:subdomain-naming-flip-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req new shape: browser-mcp test fixtures + allowlist description use new order
+candidate	5	litmus:tray-host-control-socket-unix-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	unix dispatcher delegates routing to the canonical control_dispatch matrix
+candidate	5	litmus:tray-host-control-socket-unix-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	ControlSubscribers fan-out keeps broadcast/Iceberg-OTP racing fixed
+candidate	5	litmus:tray-icon-initialization	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the renamed tray icon variants are present
+candidate	5	litmus:tray-minimal-ux-contract-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	confirm tray spec traces and menu contract names
+candidate	5	litmus:tray-minimal-ux-status-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 2: status text literals — 'Verifying environment' + 'Building enclave' + 'Building git mirror' + 'Environment OK' + 'Unhealthy environment'
+candidate	5	litmus:tray-minimal-ux-status-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 2: icon glyph progression (☐ → ☐🌐 → ☐🌐🪞 → ✓ / 🥀)
+candidate	5	litmus:tray-minimal-ux-status-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req 1: Quit Tillandsias menu literal present (4-element first-launch menu)
+candidate	5	litmus:tray-network-bootstrap	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Step 15 plan file references the @trace litmus binding
+candidate	5	litmus:tray-status-text-helpers-symmetric	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	windows-tray declares vm_phase_status_text + its pin test
+candidate	5	litmus:tray-status-text-helpers-symmetric	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	macos-tray declares vm_phase_status_text + its pin test
+candidate	5	litmus:tray-status-text-helpers-symmetric	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	windows-tray declares describe_wire_error + its pin test
+candidate	5	litmus:tray-status-text-helpers-symmetric	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	macos-tray declares describe_wire_error + its pin test
+candidate	5	litmus:tray-status-text-helpers-symmetric	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	windows-tray declares compose_chip_text + its pin test
+candidate	5	litmus:tray-status-text-helpers-symmetric	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	macos-tray declares compose_chip_text + its pin test
+candidate	5	litmus:vault-entrypoint-hardened-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Vault entrypoint does not read persistent root.token on boot
+candidate	5	litmus:vault-entrypoint-hardened-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Vault entrypoint writes handover artifacts to tmpfs
+candidate	5	litmus:vault-entrypoint-hardened-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Unseal HTTP 400 emits the wrong-key marker consumed by recovery
+candidate	5	litmus:vault-entrypoint-hardened-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Host bootstrap reads token and unseal key from tmpfs and shreds them before unlinking
+candidate	5	litmus:vault-github-token-capture-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	GitHub login writes the token from inside the container without host-side extraction
+candidate	5	litmus:vault-github-token-capture-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	Vault helper writes the canonical secret path
+candidate	5	litmus:vault-github-token-capture-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	Vault helper verifies the write by reading the token back
+candidate	5	litmus:vault-github-token-capture-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	integration test exercises the Vault KV v2 round trip
+candidate	5	litmus:vault-github-token-capture-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	login flow does not recreate the deprecated GitHub Podman secret
+candidate	5	litmus:vault-github-token-capture-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	remote-project commands use scoped Vault leases instead of the legacy GitHub secret
+candidate	5	litmus:vault-https-shape	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	In-VM headless selects enclave DNS without a host publish
+candidate	5	litmus:vault-https-shape	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	Vault leaf certificate covers network and loopback identities
+candidate	5	litmus:vault-https-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Launcher passes the leaf certificate key and CA as Podman secrets
+candidate	5	litmus:vault-https-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Rust clients add the enclave CA as a trusted root
+candidate	5	litmus:vault-https-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Container peers use HTTPS and the mounted CA bundle
+candidate	5	litmus:versioning-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req: pre-push-version-guard.sh hook present with @trace + branch guard
+candidate	5	litmus:vm-launch-graceful-failure-shape	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	classifier names the three confident signatures
+candidate	5	litmus:windows-tray-architectural-invariants	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	distro-name-pinned: DISTRO_NAME resolves to exactly 'tillandsias'
+candidate	5	litmus:windows-tray-architectural-invariants	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	terminal-uses-wt: launch_open_shell_terminal calls wt.exe (with bare-console fallback)
+candidate	5	litmus:windows-tray-diagnose-cli-surface	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	all seven CLI modes wired in main.rs (plus --bak for --logs rotation backup)
+candidate	5	litmus:windows-tray-diagnose-cli-surface	2	literal-grep,no-exec,no-negative,src-pinned,long-literal	DiagnoseFormat enum + Human/Json variants pinned
+candidate	5	litmus:windows-tray-diagnose-cli-surface	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	JSON schema-pin unit tests attached (superset + exact-count)
+candidate	5	litmus:windows-tray-diagnose-cli-surface	4	literal-grep,no-exec,no-negative,src-pinned,long-literal	exit-code contract tests attached (incl. summary_line classifiers for both --diagnose and --status-once)
+candidate	5	litmus:windows-tray-diagnose-cli-surface	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	--help / --version surface tests attached
+candidate	5	litmus:windows-tray-diagnose-cli-surface	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	tray tooltip composer test attached
+candidate	5	litmus:windows-tray-diagnose-cli-surface	8	literal-grep,no-exec,no-negative,src-pinned,long-literal	tray.log rotation boundary test attached
+candidate	5	litmus:windows-tray-diagnose-cli-surface	9	literal-grep,no-exec,no-negative,src-pinned,long-literal	wsl --version + cmd /c ver sniffers + first-line helper test attached
+candidate	5	litmus:windows-tray-diagnose-cli-surface	10	literal-grep,no-exec,no-negative,src-pinned,long-literal	end-to-end cli_integration tests attached (7 of 7 stateless CLI modes + cross-surface version consistency)
+candidate	5	litmus:windows-tray-diagnose-cli-surface	11	literal-grep,no-exec,no-negative,src-pinned,long-literal	install-windows.ps1 contains the post-install --version + --diagnose sanity checks AND surfaces OS + WSL versions
+candidate	5	litmus:wire-unreachable-chip-text-symmetric	3	literal-grep,no-exec,no-negative,src-pinned,long-literal	both trays attach the identically-named pin test
+candidate	5	litmus:wsl-daemon-orchestration-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify WSL daemon orchestration hooks
+candidate	5	litmus:wsl-runtime-shape	1	literal-grep,no-exec,no-negative,src-pinned,long-literal	verify the WSL runtime stub is still annotated
+candidate	5	litmus:zen-default-with-ollama-shape	5	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Tier-tagged pre-pull: inference entrypoint pulls T0 (qwen2.5:0.5b)
+candidate	5	litmus:zen-default-with-ollama-shape	6	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req Tier-tagged pre-pull: T1 auto-pull was intentionally dropped (order 168 OOM fix), T0-only is correct
+candidate	5	litmus:zen-default-with-ollama-shape	7	literal-grep,no-exec,no-negative,src-pinned,long-literal	Req inference container: ollama install via FIRST_RUN tarball extracting only bin/ (skip GPU lib/)
+candidate	4	litmus:accel-envelope-reaches-the-forge	5	literal-grep,no-exec,no-negative,src-pinned	An unexported envelope degrades to a NAMED unknown, never to cpu-only
+candidate	4	litmus:app-lifecycle-state-machine-shape	2	literal-grep,no-exec,no-negative,src-pinned	TrayAppLifecycleState enum is declared
+candidate	4	litmus:async-inference-launch-entrypoint-shape	1	literal-grep,no-exec,no-negative,src-pinned	opencode entrypoint carries the spec→trace mapping
+candidate	4	litmus:async-inference-launch-entrypoint-shape	2	literal-grep,no-exec,no-negative,src-pinned	opencode-web entrypoint carries the spec→trace mapping
+candidate	4	litmus:async-inference-launch-entrypoint-shape	4	literal-grep,no-exec,no-negative,src-pinned	opencode entrypoint documents the do-NOT-block contract
+candidate	4	litmus:async-inference-launch-entrypoint-shape	7	literal-grep,no-exec,no-negative,src-pinned	opencode-web entrypoint mirrors the same probe contract
+candidate	4	litmus:brew-ondemand-tools-shape	10	literal-grep,no-exec,no-negative,src-pinned	proxy allowlist covers the brew API domain
+candidate	4	litmus:browser-isolation-core-shape	1	literal-grep,no-negative,src-pinned,long-literal	launch-chromium.sh carries the 3-spec trace at file head
+candidate	4	litmus:browser-isolation-core-shape	2	literal-grep,no-negative,src-pinned,long-literal	run-safe-browser.sh carries the 3-spec trace at file head
+candidate	4	litmus:browser-isolation-core-shape	5	literal-grep,no-negative,src-pinned,long-literal	image identity uses the canonical tillandsias-chromium-framework:v<version> pattern
+candidate	4	litmus:browser-isolation-framework-shape	4	literal-grep,no-negative,src-pinned,long-literal	check-container-bases.sh asserts the framework extends chromium-core
+candidate	4	litmus:build-ci-dispatch-shape	2	literal-grep,no-negative,src-pinned,long-literal	ci-full pre-build gate has one local-ci invocation site
+candidate	4	litmus:build-ci-dispatch-shape	3	literal-grep,no-negative,src-pinned,long-literal	install block dispatches post-build and runtime without local-ci
+candidate	4	litmus:build-ci-dispatch-shape	5	literal-grep,no-negative,src-pinned,long-literal	install musl build targets only the Linux launcher
+candidate	4	litmus:build-ci-dispatch-shape	6	literal-grep,no-negative,src-pinned,long-literal	evidence bundle reuses completed CI results
+candidate	4	litmus:build-trace-index-dispatch-coverage	5	literal-grep,no-exec,no-negative,src-pinned	order 495: the post-build and runtime litmus phases run with regeneration suppressed
+candidate	4	litmus:cheatsheets-license-allowlist-shape	4	literal-grep,no-exec,no-negative,src-pinned	allowlist documents the default-tier inference rules
+candidate	4	litmus:cheatsheet-source-layer-shape	5	literal-grep,no-negative,src-pinned,long-literal	validator script documents all four spec-mandated checks
+candidate	4	litmus:cheatsheet-tooling-structure	3	literal-grep,no-negative,src-pinned,long-literal	verify index is auto-generated and not hand-edited
+candidate	4	litmus:chromium-variants-launch-shape	3	literal-grep,no-negative,src-pinned,long-literal	open_debug_window branch adds --remote-debugging-port + --remote-debugging-address
+candidate	4	litmus:chromium-variants-launch-shape	4	literal-grep,no-negative,src-pinned,long-literal	image tag is tillandsias-chromium-framework:v<VERSION>, no :latest fallback
+candidate	4	litmus:chromium-variants-launch-shape	6	literal-grep,no-negative,src-pinned,long-literal	incognito + user-data-dir + read-only root (ephemeral + isolation)
+candidate	4	litmus:chromium-variants-launch-shape	7	literal-grep,no-negative,src-pinned,long-literal	tmpfs mounts: /tmp + /tmp/chromium-config + /tmp/chromium-cache
+candidate	4	litmus:chromium-variants-launch-shape	8	literal-grep,no-negative,src-pinned,long-literal	security envelope: --cap-drop=ALL + --userns=keep-id + --security-opt=no-new-privileges
+candidate	4	litmus:ci-release-musl-binary-policy	2	literal-grep,no-negative,src-pinned,long-literal	verify litmus/runtime execution is local-only
+candidate	4	litmus:ci-release-toolchain-shape	2	literal-grep,no-exec,no-negative,src-pinned	release workflow is workflow_dispatch-only (manual trigger)
+candidate	4	litmus:ci-release-toolchain-shape	5	literal-grep,no-negative,src-pinned,long-literal	local release preflight script exists and is executable
+candidate	4	litmus:clickable-trace-index-generation	4	literal-grep,no-exec,no-negative,src-pinned	verify per-spec backlink file exists
+candidate	4	litmus:clickable-trace-index-generation	5	literal-grep,no-exec,no-negative,src-pinned	verify build integration still calls the generator
+candidate	4	litmus:codex-safe-state-shape	3	literal-grep,no-negative,src-pinned,long-literal	shared OAuth wrapper flushes only a successfully initialized Codex root
+candidate	4	litmus:control-dispatch-shape	7	literal-grep,no-exec,no-negative,src-pinned	control_dispatch module registered in main.rs
+candidate	4	litmus:cycle-metrics-answer-rate-shape	5	literal-grep,no-negative,src-pinned,long-literal	the order-531 signature (expert ran every time, answered nothing) is reported, not silently averaged away
+candidate	4	litmus:default-image-containerfile-shape	1	literal-grep,no-negative,src-pinned,long-literal	Containerfile + build-image.sh both carry @trace spec:default-image
+candidate	4	litmus:default-image-containerfile-shape	8	literal-grep,no-negative,src-pinned,long-literal	Req User-runtime assembly: cargo tools are prebuilt archives at FIRST_RUN (arch-aware), not compiled and not baked at creation
+candidate	4	litmus:default-image-containerfile-shape	10	literal-grep,no-exec,no-negative,src-pinned	Req Entrypoint: 4 forge entrypoint scripts COPY'd into /usr/local/bin
+candidate	4	litmus:default-image-containerfile-shape	11	literal-grep,no-negative,src-pinned,long-literal	Req Build pipeline: build-image.sh dispatches forge/web/proxy/git/inference/router/chromium/vault
+candidate	4	litmus:diagnostics-envelope-shape	2	literal-grep,no-exec,no-negative,src-pinned	rust emitter: select_diagnostics_agent_kind is the agent-token source
+candidate	4	litmus:diagnostics-envelope-shape	3	literal-grep,no-negative,src-pinned,long-literal	bash distill consumer: delegates to the Rust-backed diagnostics packager
+candidate	4	litmus:diagnostics-filter-env-shape	1	literal-grep,no-exec,no-negative,src-pinned	TILLANDSIAS_DEBUG_FILTER env-var literal present
+candidate	4	litmus:diagnostics-filter-env-shape	2	literal-grep,no-exec,no-negative,src-pinned	TILLANDSIAS_DEBUG_CONTAINER env-var literal present
+candidate	4	litmus:diagnostics-filter-env-shape	3	literal-grep,no-exec,no-negative,src-pinned	TILLANDSIAS_DEBUG_LEVEL env-var literal present
+candidate	4	litmus:diagnostics-filter-env-shape	7	literal-grep,no-exec,no-negative,src-pinned	DiagnosticsFilter::global() OnceLock cache still in place
+candidate	4	litmus:enclave-isolation	3	literal-grep,no-negative,src-pinned,long-literal	verify forge and terminal env vars point at the enclave proxy
+candidate	4	litmus:enclave-isolation	4	literal-grep,no-exec,no-negative,src-pinned	verify the tray launcher keeps the same proxy reference
+candidate	4	litmus:external-logs-producer-manifests-shape	3	literal-grep,no-exec,no-negative,src-pinned	service manifests expose required files schema fields
+candidate	4	litmus:filesystem-scanner-event-driven-shape	1	literal-grep,no-exec,no-negative,src-pinned	scanner library carries the spec→trace mapping at file head
+candidate	4	litmus:filesystem-scanner-event-driven-shape	3	literal-grep,no-exec,no-negative,src-pinned	default debounce constant is 2000 ms
+candidate	4	litmus:filesystem-scanner-event-driven-shape	6	literal-grep,no-exec,no-negative,src-pinned	watcher documents the Linux inotify per-user watch limit
+candidate	4	litmus:fix-windows-image-routing-helper-shape	1	literal-grep,no-exec,no-negative,src-pinned	image_builder.rs head trace includes spec:fix-windows-image-routing
+candidate	4	litmus:fix-windows-image-routing-helper-shape	2	literal-grep,no-exec,no-negative,src-pinned	spec-mandated helper function exists with the canonical signature
+candidate	4	litmus:forge-agent-result-format	2	literal-grep,no-exec,src-pinned,long-literal	the OpenCode lane passes the real --auto permission flag
+candidate	4	litmus:forge-agent-result-format	3	literal-grep,no-exec,src-pinned,long-literal	structured output is opt-in on both lanes, never unconditional
+candidate	4	litmus:forge-agent-result-format	4	literal-grep,no-exec,src-pinned,long-literal	the prompted Codex command consumes an appended --json result argument
+candidate	4	litmus:forge-cache-dual-tmpfs-caps	1	literal-grep,no-exec,src-pinned,long-literal	tmpfs cap on /tmp at 256 MB with mode 1777
+candidate	4	litmus:forge-cache-dual-tmpfs-caps	2	literal-grep,no-exec,src-pinned,long-literal	tmpfs cap on /run/user/1000 at 64 MB with mode 0700
+candidate	4	litmus:forge-cache-dual-tmpfs-caps	3	literal-grep,no-exec,src-pinned,long-literal	cache_semantics generator emits the size= format-string
+candidate	4	litmus:forge-cache-dual-tmpfs-caps	4	literal-grep,no-exec,src-pinned,long-literal	cache_version lifecycle functions present in main.rs
+candidate	4	litmus:forge-e2e-rate-limit-shape	5	literal-grep,no-negative,src-pinned,long-literal	opencode e2e litmus launches through the rate-limited wrapper
+candidate	4	litmus:forge-e2e-rate-limit-shape	6	literal-grep,no-negative,src-pinned,long-literal	smoke runs are marker-gated and delta-steps skip on mode=smoke
+candidate	4	litmus:forge-expert-base-guard-shape	2	literal-grep,no-negative,src-pinned,long-literal	the verdict grammar is documented in the guard itself
+candidate	4	litmus:forge-experts-discoverability-shape	7	literal-grep,no-exec,no-negative,src-pinned	forge-plan.sh exposes plan_answer tool
+candidate	4	litmus:forge-experts-discoverability-shape	8	literal-grep,no-exec,no-negative,src-pinned	forge-plan.sh exposes methodology_path tool
+candidate	4	litmus:forge-experts-discoverability-shape	9	literal-grep,no-exec,no-negative,src-pinned	forge-plan.sh exposes plan_blocked_by tool
+candidate	4	litmus:forge-firstrun-prebuilt-tools-arch-shape	4	literal-grep,no-exec,no-negative,src-pinned	install_prebuilt is timeout-guarded (a stalled fetch cannot hang launch)
+candidate	4	litmus:forge-harness-identity	4	literal-grep,no-negative,src-pinned,long-literal	agent profile consumes explicit Codex identity and shares the Claude compatibility default
+candidate	4	litmus:forge-hot-cold-split-tmpfs-shape	7	literal-grep,no-exec,no-negative,src-pinned	all 4 forge entrypoint scripts + terminal entrypoint carry @trace spec:forge-hot-cold-split
+candidate	4	litmus:forge-lsp-availability-shape	2	literal-grep,no-exec,no-negative,src-pinned	the startup context tells agents LSP is available (organic affordance, order 399)
+candidate	4	litmus:forge-offline-profile-shape	1	literal-grep,no-exec,no-negative,src-pinned	container_profile.rs file-head trace declares spec:forge-offline
+candidate	4	litmus:forge-opencode-onboarding-bootstrap-shape	5	literal-grep,no-exec,no-negative,src-pinned	Req 3 web launcher: entrypoint-forge-opencode-web.sh applies config overlay
+candidate	4	litmus:forge-staleness-shape	3	literal-grep,no-negative,src-pinned,long-literal	verify the live staleness trace surface remains attached
+candidate	4	litmus:forge-standalone-runtime-shape	1	literal-grep,no-exec,no-negative,src-pinned	Req 1: single-container `exec podman run` invocation (no orchestration)
+candidate	4	litmus:forge-standalone-runtime-shape	3	literal-grep,no-exec,no-negative,src-pinned	Req 3: --entrypoint /bin/bash + --interactive + --tty (operator shell)
+candidate	4	litmus:forge-standalone-runtime-shape	4	literal-grep,no-exec,no-negative,src-pinned	Req 4: --network=host (full network access, no enclave wiring)
+candidate	4	litmus:forge-standalone-runtime-shape	5	literal-grep,no-exec,no-negative,src-pinned	Req 1 + 5: image lookup is tillandsias-forge:v<VERSION>, no :latest fallback
+candidate	4	litmus:forge-standalone-runtime-shape	7	literal-grep,no-exec,no-negative,src-pinned	non-negotiable security flags: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id
+candidate	4	litmus:forge-standalone-traceability	3	literal-grep,no-exec,no-negative,src-pinned	validate canonical forge trace annotations
+candidate	4	litmus:forge-standalone-traceability	4	literal-grep,no-negative,src-pinned,long-literal	validate the standalone launcher fails fast on missing image
+candidate	4	litmus:forge-tool-affordances	1	literal-grep,no-exec,no-negative,src-pinned	the startup context names the tooling actually present
+candidate	4	litmus:forge-tool-affordances	3	literal-grep,no-exec,no-negative,src-pinned	it warns that python3's PRESENCE IS NOT PERMISSION
+candidate	4	litmus:forge-tool-affordances	4	literal-grep,no-exec,no-negative,src-pinned	it points at yq as the available YAML validator
+candidate	4	litmus:forge-welcome-banner-shape	1	literal-grep,no-exec,no-negative,src-pinned	Req 1 trace: @trace spec:forge-welcome on forge-welcome.sh
+candidate	4	litmus:freshness-inventory-shape	3	literal-grep,no-negative,src-pinned,long-literal	Req: local CI ranks stale audit candidates by numeric age
+candidate	4	litmus:github-actions-budget	4	literal-grep,no-exec,no-negative,src-pinned	the budget rule is recorded in the methodology, not only in this test
+candidate	4	litmus:github-actions-budget	5	literal-grep,no-exec,no-negative,src-pinned	the local-gate obligation that REPLACED push CI is stated
+candidate	4	litmus:git-mirror-ref-convergence	3	literal-grep,no-exec,no-negative,src-pinned	entrypoint seeds empty mirrors with an explicit heads/tags refspec
+candidate	4	litmus:git-mirror-relay-token-expiry	2	literal-grep,no-exec,no-negative,src-pinned	vault-cli exposes lookup and graceful current-token revocation
+candidate	4	litmus:git-mirror-relay-token-expiry	3	literal-grep,no-exec,no-negative,src-pinned	relay discriminates on lookup-self before blaming the GitHub credential
+candidate	4	litmus:git-mirror-relay-token-expiry	4	literal-grep,no-exec,no-negative,src-pinned	entrypoint starts Vault Agent and waits for its renewable sink
+candidate	4	litmus:git-mirror-vault-agent-auto-auth	2	literal-grep,no-exec,src-pinned,long-literal	Agent role crosses max_ttl but crash-orphans are finite; ordinary SecretIDs remain one-use/30s
+candidate	4	litmus:git-mirror-vault-agent-auto-auth	3	literal-grep,no-exec,src-pinned,long-literal	Vault Agent retains AppRole material for max_ttl re-auth and writes only a tmpfs sink
+candidate	4	litmus:git-mirror-vault-agent-auto-auth	4	literal-grep,no-exec,src-pinned,long-literal	shutdown closes current-token and reusable-SecretID lifecycle
+candidate	4	litmus:git-mirror-vault-agent-auto-auth	5	literal-grep,no-exec,src-pinned,long-literal	Vault client token is supplied to curl through a tmpfs header file, never argv
+candidate	4	litmus:host-browser-mcp-frame-shape	4	literal-grep,no-exec,no-negative,src-pinned	convergence-packet matrix: McpFrame is Handle on UnixSocket
+candidate	4	litmus:host-browser-mcp-frame-shape	5	literal-grep,no-exec,no-negative,src-pinned	convergence-packet matrix: McpFrame is Unsupported on Vsock
+candidate	4	litmus:host-browser-mcp-frame-shape	6	literal-grep,no-exec,no-negative,src-pinned	control-wire docstring acknowledges McpFrame's 4 MiB exception
+candidate	4	litmus:host-chromium-on-demand-shape	1	literal-grep,no-negative,src-pinned,long-literal	install-chromium.sh file-head trace declares spec:host-chromium-on-demand
+candidate	4	litmus:host-chromium-on-demand-shape	2	literal-grep,no-negative,src-pinned,long-literal	install_chromium() main entry point + chromium_platform() detector
+candidate	4	litmus:host-chromium-on-demand-shape	4	literal-grep,no-negative,src-pinned,long-literal	Req: atomic `ln -snf` symlink repoint of `current` (atomicity invariant)
+candidate	4	litmus:host-guest-no-cfg-transport-selection	2	literal-grep,no-exec,no-negative,src-pinned	GuestTransport trait is Send + Sync and stays object-safe (Box<dyn GuestTransport> resolved once at the boundary)
+candidate	4	litmus:inference-container-implementation-shape	1	literal-grep,no-exec,no-negative,src-pinned	Req trace: @trace spec:inference-container on entrypoint.sh
+candidate	4	litmus:inference-container-implementation-shape	5	literal-grep,no-exec,no-negative,src-pinned	Req 5 tier classification log: entrypoint emits single `tier=` line at boot
+candidate	4	litmus:inference-engine-payload-and-tuning	9	literal-grep,no-exec,src-pinned,long-literal	tuning helper exists and documents the pinned one-line grammar
+candidate	4	litmus:inference-readiness-probe-shape	6	literal-grep,no-negative,src-pinned,long-literal	assert inference cache mounts at the ollama home path
+candidate	4	litmus:knowledge-source-of-truth-shape	1	literal-grep,no-negative,src-pinned,long-literal	verify the debug-source fetch script is manifest-driven
+candidate	4	litmus:knowledge-source-of-truth-shape	3	literal-grep,no-negative,src-pinned,long-literal	verify the script advertises local source listing without fetching
+candidate	4	litmus:litmus-name-filter-fail-loud-shape	1	literal-grep,no-negative,src-pinned,long-literal	an explicit zero-match filter exits non-zero with the original argument in the diagnostic
+candidate	4	litmus:litmus-name-filter-fail-loud-shape	3	literal-grep,no-negative,src-pinned,long-literal	a filterless phase bucket with every bound test excluded still passes
+candidate	4	litmus:local-ci-self-clean-evidence	1	literal-grep,no-negative,src-pinned,long-literal	verify the CI gate routes dashboards under target/ and the preflight refreshes tracked evidence after the gate
+candidate	4	litmus:macos-tray-architectural-invariants	4	literal-grep,no-exec,no-negative,src-pinned	terminal-attach-no-ssh: pin test attach_client_never_invokes_ssh exists
+candidate	4	litmus:macos-tray-architectural-invariants	5	literal-grep,no-exec,no-negative,src-pinned	menu-from-host-shell-state: status_item builds via host_shell::menu_state::build
+candidate	4	litmus:macos-tray-architectural-invariants	8	literal-grep,no-exec,no-negative,src-pinned	vz-cid-allocated-at-config: VzRuntime::new takes guest_cid: u32 at construction
+candidate	4	litmus:mcp-on-demand-bridge-shape	4	literal-grep,no-exec,no-negative,src-pinned	host-browser.sh bridge script carries spec:host-browser-mcp trace
+candidate	4	litmus:mcp-on-demand-bridge-shape	5	literal-grep,no-exec,no-negative,src-pinned	host-browser.sh reads TILLANDSIAS_CONTROL_SOCKET env var (Req 6 — Unix socket channel)
+candidate	4	litmus:mcp-on-demand-bridge-shape	6	literal-grep,no-exec,no-negative,src-pinned	host-browser.sh bridges via socat UNIX-CONNECT (Req 6 contract pin)
+candidate	4	litmus:methodology-path-query-citability	5	literal-grep,no-negative,src-pinned,long-literal	EXIT (i)+(ii): ten canonical questions, exact YAML path, resolvable file:line, span holds the governing rule
+candidate	4	litmus:native-secrets-store-shape	3	literal-grep,no-exec,no-negative,src-pinned	keyring crate usage in vault_bootstrap.rs (actual keyring API access)
+candidate	4	litmus:native-secrets-store-shape	5	literal-grep,no-exec,no-negative,src-pinned	TokenRefreshError::KeyringReadError variant (Req 3 error surface)
+candidate	4	litmus:nix-builder-shape	2	literal-grep,no-negative,src-pinned,long-literal	assert build-image uses git ls-files for tracked source hashing
+candidate	4	litmus:no-raw-error-in-status-chip	2	literal-grep,no-exec,no-negative,src-pinned	windows-tray: update_status_text exists (guard against file rename hiding the check)
+candidate	4	litmus:no-raw-error-in-status-chip	3	literal-grep,no-exec,no-negative,src-pinned	windows-tray: sanitizer first-line guard present
+candidate	4	litmus:no-raw-error-in-status-chip	4	literal-grep,no-exec,no-negative,src-pinned	windows-tray: hard-cap at 45 chars present
+candidate	4	litmus:no-raw-error-in-status-chip	5	literal-grep,no-exec,no-negative,src-pinned	windows-tray: compose_chip_text budget guard present (evt_budget)
+candidate	4	litmus:no-terminal-flicker-shape	3	literal-grep,no-exec,no-negative,src-pinned	tray/mod.rs declares @trace spec:no-terminal-flicker
+candidate	4	litmus:no-terminal-flicker-shape	4	literal-grep,no-exec,no-negative,src-pinned	TrayStatusStage enum declared in tray/mod.rs (Req 4 + 5 keyed-by-stage)
+candidate	4	litmus:no-unprotected-plan-ledger-readers	3	literal-grep,no-exec,src-pinned,long-literal	PIN: project-info.sh no longer opens plan/index.yaml with yq, and its plan_query routes through the compiled CLI
+candidate	4	litmus:observability-convergence-script-shape	2	literal-grep,no-negative,src-pinned,long-literal	Req convergence velocity: shell wrapper records Python retirement
+candidate	4	litmus:observability-convergence-script-shape	3	literal-grep,no-negative,src-pinned,long-literal	Req evidence bundle: generate-evidence-bundle.sh declares 4 exit codes (0/1/2/3)
+candidate	4	litmus:observability-convergence-shape	1	literal-grep,no-negative,src-pinned,long-literal	verify convergence instrumentation remains annotated and the convergence score machinery is present in the spec
+candidate	4	litmus:observability-metrics-shape	1	literal-grep,no-exec,no-negative,src-pinned	metrics_server.rs carries the observability-metrics trace
+candidate	4	litmus:observability-metrics-shape	3	literal-grep,no-exec,no-negative,src-pinned	collection-failure spec contract is documented at the module head
+candidate	4	litmus:plan-compaction-format-preservation	6	literal-grep,no-exec,src-pinned,long-literal	the base is never re-serialized: the candidate must PARSE and pass integrity before the CLI writes it
+candidate	4	litmus:plan-engine-invariants-shape	4	literal-grep,no-exec,no-negative,src-pinned	schema is DATA loadable from the checkout (open-world evolution)
+candidate	4	litmus:podman-container-handle-source-shape	1	literal-grep,no-exec,no-negative,src-pinned	spec:podman-container-handle trace declared in container_spec.rs
+candidate	4	litmus:podman-container-handle-source-shape	5	literal-grep,no-exec,no-negative,src-pinned	Req Identity: handle_exposes_name_and_image unit test pinned
+candidate	4	litmus:podman-container-handle-source-shape	6	literal-grep,no-exec,no-negative,src-pinned	ContainerInfo struct in tillandsias-core/src/state.rs (linkage point)
+candidate	4	litmus:podman-container-spec-source-shape	1	literal-grep,no-exec,no-negative,src-pinned	file-head trace declares spec:podman-container-spec
+candidate	4	litmus:podman-container-spec-source-shape	3	literal-grep,no-exec,no-negative,src-pinned	Req Composition: 5 fluent-chain builder methods (detached / interactive / tty / name / hostname)
+candidate	4	litmus:podman-idiomatic-enclave-network	1	literal-grep,no-exec,no-negative,src-pinned	verify enclave_network_name() function exists with pub visibility
+candidate	4	litmus:podman-idiomatic-enclave-network	5	literal-grep,no-exec,no-negative,src-pinned	verify network_exists() function in client.rs
+candidate	4	litmus:podman-idiomatic-enclave-network	6	literal-grep,no-exec,no-negative,src-pinned	verify create_internal_network() function in client.rs
+candidate	4	litmus:podman-idiomatic-enclave-network	7	literal-grep,no-exec,no-negative,src-pinned	verify remove_network() function in client.rs
+candidate	4	litmus:podman-idiomatic-error-classification	1	literal-grep,no-exec,no-negative,src-pinned	verify is_transient() method exists on PodmanError
+candidate	4	litmus:podman-idiomatic-error-classification	2	literal-grep,no-exec,no-negative,src-pinned	verify PodmanError enum has StreamError variant
+candidate	4	litmus:podman-idiomatic-error-classification	3	literal-grep,no-exec,no-negative,src-pinned	verify PodmanError enum has CommandFailed variant
+candidate	4	litmus:podman-idiomatic-error-classification	4	literal-grep,no-exec,no-negative,src-pinned	verify PodmanError enum has NotFound variant
+candidate	4	litmus:podman-idiomatic-error-classification	5	literal-grep,no-exec,no-negative,src-pinned	verify PodmanError enum has ParseError variant
+candidate	4	litmus:podman-idiomatic-error-discrimination	1	literal-grep,no-exec,no-negative,src-pinned	assert PodmanError enum exists with CommandFailed variant
+candidate	4	litmus:podman-idiomatic-error-discrimination	2	literal-grep,no-exec,no-negative,src-pinned	assert PodmanError has NotFound variant for not-found discrimination
+candidate	4	litmus:podman-idiomatic-error-discrimination	3	literal-grep,no-exec,no-negative,src-pinned	assert PodmanError has ParseError variant
+candidate	4	litmus:podman-idiomatic-events-no-polling	1	literal-grep,no-exec,no-negative,src-pinned	assert events module exists with stream function
+candidate	4	litmus:podman-idiomatic-events-no-polling	3	literal-grep,no-exec,no-negative,src-pinned	assert exponential backoff is present in events fallback
+candidate	4	litmus:podman-idiomatic-events-no-polling	4	literal-grep,no-exec,no-negative,src-pinned	assert PodmanEventStream is exported from crate root
+candidate	4	litmus:podman-idiomatic-storage-isolation	3	literal-grep,no-exec,no-negative,src-pinned	assert TILLANDSIAS_PODMAN_GRAPHROOT is read in source
+candidate	4	litmus:podman-idiomatic-storage-isolation	4	literal-grep,no-exec,no-negative,src-pinned	assert TILLANDSIAS_PODMAN_RUNROOT is read in source
+candidate	4	litmus:podman-idiomatic-storage-isolation	5	literal-grep,no-exec,no-negative,src-pinned	assert TILLANDSIAS_PODMAN_RUNTIME_DIR is read in source
+candidate	4	litmus:podman-secrets-integration-shape	7	literal-grep,no-exec,no-negative,src-pinned	all 3 container entrypoints (proxy/git/inference) carry @trace spec:podman-secrets-integration
+candidate	4	litmus:proxy-container-shape	1	literal-grep,no-exec,no-negative,src-pinned	all 4 proxy files carry @trace spec:proxy-container
+candidate	4	litmus:psk-input-parity-shape	1	literal-grep,no-exec,src-pinned,long-literal	no channel_psk call site derives its version input from CARGO_PKG_VERSION
+candidate	4	litmus:psk-input-parity-shape	2	literal-grep,no-exec,src-pinned,long-literal	every known channel_psk call site uses the workspace VERSION source
+candidate	4	litmus:psk-input-parity-shape	3	literal-grep,no-exec,src-pinned,long-literal	host-shell's shared version() helper itself sources WORKSPACE_VERSION (not a crate literal)
+candidate	4	litmus:pty-open-argv-allowlisted	1	literal-grep,no-exec,no-negative,src-pinned	pty_handler.rs validates argv against an allowlist
+candidate	4	litmus:release-artifact-integrity	3	literal-grep,no-negative,src-pinned,long-literal	verify local verifier script enforces bundle mode
+candidate	4	litmus:release-gates-run-locally	13	literal-grep,no-exec,src-pinned,long-literal	the VERSION guard asks whether the PUSHED COMMITS touch VERSION, not whether it differs from main
+candidate	4	litmus:remote-projects-shape	2	literal-grep,no-exec,no-negative,src-pinned	Req Cache: CACHE_TTL_SECS = 300 (5-minute TTL per spec)
+candidate	4	litmus:reverse-proxy-internal-shape	8	literal-grep,no-exec,no-negative,src-pinned	router-sidecar: TILLANDSIAS_CONTROL_SOCKET env var for tray subscription
+candidate	4	litmus:runtime-diagnostics-emitter-shape	1	literal-grep,no-exec,no-negative,src-pinned	spawn_diagnostic_event_emitter public surface present (phase-2b)
+candidate	4	litmus:runtime-diagnostics-shape	1	literal-grep,no-exec,no-negative,src-pinned	verify the git entrypoint still exposes diagnostics wiring
+candidate	4	litmus:runtime-diagnostics-spec-mapping-shape	1	literal-grep,no-exec,no-negative,src-pinned	diagnostic_event_emitter.rs file-head trace declares spec:runtime-diagnostics
+candidate	4	litmus:runtime-diagnostics-spec-mapping-shape	2	literal-grep,no-exec,no-negative,src-pinned	memory_oom resource literal present in the Oom routing arm
+candidate	4	litmus:service-catalog-allowlist-shape	1	literal-grep,no-exec,no-negative,src-pinned	Catalog module defines the host-owned table
+candidate	4	litmus:simplified-tray-ux-leaf-action-shape	1	literal-grep,no-exec,no-negative,src-pinned	Req Home Menu: enum LeafAction declared in tray/mod.rs
+candidate	4	litmus:simplified-tray-ux-leaf-action-shape	3	literal-grep,no-exec,no-negative,src-pinned	Req Home Menu: LeafAction::ALL constant lists all 7 variants in canonical offset order
+candidate	4	litmus:simplified-tray-ux-leaf-action-shape	4	literal-grep,no-exec,no-negative,src-pinned	Req Startup Menu: 'By Tlatoāni' attribution literal in menu construction
+candidate	4	litmus:smoke-release-channel-shape	8	literal-grep,no-exec,src-pinned,long-literal	the Windows installer carries the same two channels and stays pure ASCII
+candidate	4	litmus:smoke-release-channel-shape	10	literal-grep,no-exec,src-pinned,long-literal	the release workflow republishes the rolling unstable channel every daily
+candidate	4	litmus:smoke-release-channel-shape	11	literal-grep,no-exec,src-pinned,long-literal	the landing page can link Windows portables (version-stable aliases exist and are checksummed)
+candidate	4	litmus:smoke-release-channel-shape	12	literal-grep,no-exec,src-pinned,long-literal	alias checksums are newline-normalized and the sums file is verified before publish
+candidate	4	litmus:subdomain-naming-flip-shape	1	literal-grep,no-exec,no-negative,src-pinned	router-sidecar http.rs file-head trace declares spec:subdomain-naming-flip
+candidate	4	litmus:subdomain-naming-flip-shape	5	literal-grep,no-exec,no-negative,src-pinned	Req Router config: headless dynamic-Caddyfile uses opencode.{project} (NOT {project}.opencode)
+candidate	4	litmus:subdomain-naming-flip-shape	6	literal-grep,no-exec,no-negative,src-pinned	Req cookie scoping: validate_subdomain_binding function present
+candidate	4	litmus:tray-host-control-socket-unix-shape	1	literal-grep,no-exec,no-negative,src-pinned	tray/mod.rs file-head trace declares spec:tray-host-control-socket
+candidate	4	litmus:tray-host-control-socket-unix-shape	2	literal-grep,no-exec,no-negative,src-pinned	control_socket_path resolves XDG_RUNTIME_DIR with /run/user/<uid> fallback
+candidate	4	litmus:tray-host-control-socket-unix-shape	3	literal-grep,no-exec,no-negative,src-pinned	control socket path is tillandsias/control.sock under the runtime dir
+candidate	4	litmus:tray-minimal-ux-status-shape	6	literal-grep,no-exec,no-negative,src-pinned	Req 3: Seedlings submenu order (OpenCode / OpenCodeWeb / Claude as SelectedAgent variants)
+candidate	4	litmus:vault-cli-verifies-tls	3	literal-grep,no-exec,no-negative,src-pinned	a missing CA bundle fails closed instead of degrading to unverified TLS
+candidate	4	litmus:vault-https-shape	2	literal-grep,no-exec,no-negative,src-pinned	Vault advertises HTTPS addresses
+candidate	4	litmus:versioning-shape	5	literal-grep,no-negative,src-pinned,long-literal	Req: bump-version.sh entry point + @trace spec:versioning
+candidate	4	litmus:versioning-shape	7	literal-grep,no-exec,no-negative,src-pinned	Req: Cargo workspace.package block present (semver derivation source)
+candidate	4	litmus:vm-launch-graceful-failure-shape	1	literal-grep,no-exec,no-negative,src-pinned	launch stderr classifier exists and is spec-traced
+candidate	4	litmus:vm-launch-graceful-failure-shape	3	literal-grep,no-exec,no-negative,src-pinned	host disk gate precedes wsl --import
+candidate	4	litmus:vm-launch-graceful-failure-shape	4	literal-grep,no-exec,no-negative,src-pinned	import failure carries stderr, never a bare status
+candidate	4	litmus:vm-launch-graceful-failure-shape	5	literal-grep,no-exec,no-negative,src-pinned	keepalive respawn loop is bounded (order 417)
+candidate	4	litmus:web-image-shape	1	literal-grep,no-exec,no-negative,src-pinned	Containerfile + entrypoint.sh both carry @trace spec:web-image
+candidate	4	litmus:web-image-shape	5	literal-grep,no-exec,no-negative,src-pinned	entrypoint.sh: POSIX sh shebang (Alpine busybox ash, no bash)
+candidate	4	litmus:web-image-shape	6	literal-grep,no-exec,no-negative,src-pinned	entrypoint.sh: exec httpd -f -p 8080 -h /var/www (busybox httpd launch)
+candidate	4	litmus:web-image-shape	7	literal-grep,no-exec,no-negative,src-pinned	entrypoint.sh: serving banner + URL printed before httpd exec (UX contract)
+candidate	4	litmus:windows-tray-architectural-invariants	3	literal-grep,no-exec,no-negative,src-pinned	notifyicon-reregisters: WM_TASKBARCREATED handler exists in notify_icon.rs
+candidate	4	litmus:windows-tray-architectural-invariants	4	literal-grep,no-exec,no-negative,src-pinned	menu-sourced-from-host-shell: notify_icon.rs invokes menu_state::build
+candidate	4	litmus:windows-tray-diagnose-cli-surface	6	literal-grep,no-exec,no-negative,src-pinned	--logs tail-selector test attached
+candidate	4	litmus:windows-tray-diagnose-cli-surface	12	literal-grep,no-exec,no-negative,src-pinned	tray-diagnose.ps1 consumer script surfaces the 16-key JSON + both binary + script verdicts
+candidate	4	litmus:wire-unreachable-chip-text-symmetric	1	literal-grep,no-exec,no-negative,src-pinned	windows-tray declares the named const
+candidate	4	litmus:wire-unreachable-chip-text-symmetric	2	literal-grep,no-exec,no-negative,src-pinned	macos-tray declares the named const
+candidate	3	litmus:browser-isolation-core-shape	3	literal-grep,no-negative,src-pinned	launch script enforces --cap-drop=ALL (reduced capabilities)
+candidate	3	litmus:browser-isolation-core-shape	4	literal-grep,no-negative,src-pinned	launch script uses --user-data-dir (ephemeral profile)
+candidate	3	litmus:cheatsheet-source-layer-shape	2	literal-grep,no-negative,src-pinned	validator script carries the spec trace
+candidate	3	litmus:chromium-variants-launch-shape	1	literal-grep,no-negative,src-pinned	launch-chromium.sh file-head trace declares BOTH variant specs
+candidate	3	litmus:chromium-variants-launch-shape	2	literal-grep,no-negative,src-pinned	default WINDOW_TYPE is open_safe_window (safe-by-default)
+candidate	3	litmus:chromium-variants-launch-shape	5	literal-grep,no-negative,src-pinned	ephemeral profile: PROFILE_DIR is per-launch mktemp -d + cleanup trap
+candidate	3	litmus:clickable-trace-index-generation	1	literal-grep,no-negative,src-pinned	verify generator script is present and executable
+candidate	3	litmus:default-image-containerfile-shape	13	literal-grep,no-negative,src-pinned	Req Content-hash identity: build-image.sh tags with content-hash + version alias
+candidate	3	litmus:enclave-isolation	1	literal-grep,no-negative,src-pinned	verify the enclave network is the internal runtime network
+candidate	3	litmus:enclave-isolation	2	literal-grep,no-negative,src-pinned	verify the proxy remains the enclave hostname exposed to forge containers
+candidate	3	litmus:forge-cache-dual-tmpfs-caps	5	literal-grep,no-exec,src-pinned	cache_version filename literal pinned in main.rs
+candidate	3	litmus:forge-cache-dual-tmpfs-caps	6	literal-grep,no-exec,src-pinned	spec→code trace on container_profile.rs
+candidate	3	litmus:forge-environment-discoverability-install-shape	7	literal-grep,no-negative,src-pinned	Req 4 welcome banner: advertises all 4 CLIs by name
+candidate	3	litmus:forge-staleness-shape	1	literal-grep,no-negative,src-pinned	verify the build script still keys freshness off the source hash file
+candidate	3	litmus:forge-staleness-shape	2	literal-grep,no-negative,src-pinned	verify the build script still prunes stale forge images after rebuild
+candidate	3	litmus:forge-staleness-shape	3	literal-grep,no-negative,src-pinned	verify the live staleness trace surface remains attached
+candidate	3	litmus:forge-standalone-traceability	5	literal-grep,no-negative,src-pinned	validate build-forge delegates directly to the image builder
+candidate	3	litmus:host-chromium-on-demand-shape	5	literal-grep,no-negative,src-pinned	SKIP_CHROMIUM_DOWNLOAD=1 escape hatch for air-gapped installs
+candidate	3	litmus:image-build-convergence-shape	3	literal-grep,no-negative,src-pinned	all-image wrapper contains full dependency-ordered matrix
+candidate	3	litmus:inference-readiness-probe-shape	1	literal-grep,no-negative,src-pinned	assert orchestrator waits for inference container health in status-check mode
+candidate	3	litmus:inference-readiness-probe-shape	2	literal-grep,no-negative,src-pinned	assert inference container has a friendly network alias
+candidate	3	litmus:inference-readiness-probe-shape	3	literal-grep,no-negative,src-pinned	assert forge-side status-check probes the inference API endpoint
+candidate	3	litmus:inference-readiness-probe-shape	4	literal-grep,no-negative,src-pinned	assert forge-side proxy exemptions include inference peers
+candidate	3	litmus:inference-readiness-probe-shape	7	literal-grep,no-negative,src-pinned	assert standalone inference diagnostic probes the local API
+candidate	3	litmus:inference-tier-probe-shape	1	literal-grep,no-negative,src-pinned	probe exists, is executable, and documents the grammar
+candidate	3	litmus:litmus-name-filter-fail-loud-shape	2	literal-grep,no-negative,src-pinned	a valid explicit spec with every bound test excluded by phase still passes
+candidate	3	litmus:litmus-stdlib-portability-shape	2	literal-grep,no-negative,src-pinned	LITMUS_STDLIB constant is set in the runner
+candidate	3	litmus:litmus-stdlib-portability-shape	3	literal-grep,no-negative,src-pinned	runner sources stdlib before executing step commands
+candidate	3	litmus:macos-tray-diagnose-cli-surface	5	literal-grep,no-negative,src-pinned	install-macos.sh contains the post-install --diagnose sanity check
+candidate	3	litmus:macos-tray-diagnose-cli-surface	6	literal-grep,no-negative,src-pinned	tray-diagnose.sh consumer script uses bash set +e around the tray invocation
+candidate	3	litmus:native-secrets-store-shape	7	literal-grep,no-negative,src-pinned	scripts/generate-repo-key.sh carries @trace spec:native-secrets-store (host-only script)
+candidate	3	litmus:nix-builder-shape	3	literal-grep,no-negative,src-pinned	assert the spec states the build-time-only boundary
+candidate	3	litmus:observability-convergence-script-shape	1	literal-grep,no-negative,src-pinned	Req trace: @trace spec:observability-convergence on all 5 scripts
+candidate	3	litmus:observability-convergence-script-shape	4	literal-grep,no-negative,src-pinned	Req test harness: test-convergence-dashboard.sh has >=6 test groups
+candidate	3	litmus:podman-build-command-shape	1	literal-grep,no-negative,src-pinned	assert build-image uses direct podman build with normal layer reuse
+candidate	3	litmus:podman-build-command-shape	2	literal-grep,no-negative,src-pinned	assert image builds serialize podman storage mutations
+candidate	3	litmus:podman-build-command-shape	3	literal-grep,no-negative,src-pinned	assert image existence probe happens before the build
+candidate	3	litmus:podman-build-command-shape	4	literal-grep,no-negative,src-pinned	assert human aliases are refreshed after build
+candidate	3	litmus:podman-secrets-integration-shape	2	literal-grep,no-negative,src-pinned	cleanup-secrets.sh walks direct-token and Agent-AppRole leftover patterns (Req 5 panic + idempotent)
+candidate	3	litmus:podman-secrets-integration-shape	3	literal-grep,no-negative,src-pinned	Vault TLS secrets are included in shutdown cleanup
+candidate	3	litmus:project-summarizers-shape	2	literal-grep,no-negative,src-pinned	all 6 summarizers carry @trace spec:project-summarizers
+candidate	3	litmus:project-summarizers-shape	3	literal-grep,no-negative,src-pinned	all 6 summarizers use set -euo pipefail (deterministic exit)
+candidate	3	litmus:project-summarizers-shape	4	literal-grep,no-negative,src-pinned	all 6 summarizers use exit 2 on missing manifest (skip semantics, not error)
+candidate	3	litmus:project-summarizers-shape	5	literal-grep,no-negative,src-pinned	all 6 summarizers emit >=3 H3 markdown headers (dispatcher contract)
+candidate	3	litmus:release-gates-run-locally	6	literal-grep,src-pinned,long-literal	and their new home is RECORDED in release.yml, so the removal is not mistaken for a drop
+candidate	3	litmus:release-gates-run-locally	9	literal-grep,no-exec,src-pinned	build.sh INSTALLS the hooks rather than merely shipping them
+candidate	3	litmus:release-gates-run-locally	15	literal-grep,src-pinned,long-literal	the stamp is git-dir local and never enters the worktree
+candidate	3	litmus:running-image-freshness	2	literal-grep,src-pinned,long-literal	the gate is content-hash based, not timestamp or heuristic based
+candidate	3	litmus:running-image-freshness	3	literal-grep,src-pinned,long-literal	drift fails loud with a non-zero exit and names the offending container
+candidate	3	litmus:running-image-freshness	4	literal-grep,src-pinned,long-literal	the gate reports three states and never claims STALE without positive evidence
+candidate	3	litmus:smoke-lock-fd-isolation-shape	4	literal-grep,no-negative,src-pinned	the fd-isolation redirection is present in the wrapper source
+candidate	3	litmus:smoke-release-channel-shape	1	literal-grep,src-pinned,long-literal	resolver exists, executable, defaults to the daily channel
+candidate	3	litmus:smoke-release-channel-shape	2	literal-grep,src-pinned,long-literal	daily filters to well-formed tags and picks the highest (robust to junk + API order)
+candidate	3	litmus:smoke-release-channel-shape	3	literal-grep,src-pinned,long-literal	stable resolves the non-prerelease /releases/latest
+candidate	2	litmus:release-gates-run-locally	2	literal-grep,src-pinned	the preflight PASSES on this tree (a gate that cannot pass is not adopted)
+candidate	2	litmus:release-gates-run-locally	8	literal-grep,src-pinned	the pre-push hook composes FAIL-FAST (a masked exit code is the bug this replaced)
+candidate	2	litmus:smoke-release-channel-shape	9	literal-grep,src-pinned	every installer warns before installing an unstable build
+candidate	2	litmus:smoke-release-channel-shape	13	literal-grep,src-pinned	promotion prompts the one-shot stable smoke
+summary	steps=1762	candidates=643	files=300

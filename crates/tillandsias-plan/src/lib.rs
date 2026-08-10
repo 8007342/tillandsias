@@ -141,6 +141,29 @@ pub fn str_list(packet: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// ORDER 626-zmhz — the folded counts for one release, exactly as the
+/// release-list prose renders them: `total` is every packet whose
+/// `desired_release` matches `release` exactly (the same filter
+/// `query --release` applies), and `open` is the nonterminal subset — anything
+/// that is not a terminal outcome (`completed`, `obsoleted`). Counting terminal
+/// statuses this way mirrors the v0.5 audit's definition (`64 completed, 2
+/// obsoleted, and 188 nonterminal`) and stays stable as new packets land.
+pub fn count_release(ledger: &Ledger, release: &str) -> (u64, u64) {
+    let mut total: u64 = 0;
+    let mut open: u64 = 0;
+    for packet in &ledger.packets {
+        if str_field(packet, "desired_release") != Some(release) {
+            continue;
+        }
+        total += 1;
+        let status = str_field(packet, "status").unwrap_or("");
+        if !matches!(status, "completed" | "obsoleted") {
+            open += 1;
+        }
+    }
+    (open, total)
+}
+
 impl Ledger {
     /// Load the ledger from a plan index file. Walks the whole YAML tree
     /// collecting every mapping that carries a `packet_id` — resilient to
@@ -1210,6 +1233,52 @@ plan_index:
             ledger.resolve("no-such-packet").is_none(),
             "unknown ids must not resolve"
         );
+    }
+
+    /// ORDER 626-zmhz exit criterion 3. A packet that lands as a FRAGMENT must
+    /// change the release counts the release-list prose is supposed to mirror,
+    /// and the renderer must produce a different canonical line — otherwise a
+    /// count gate that reads only the base would call stale prose current with
+    /// total confidence. Folds, not greps.
+    #[test]
+    fn a_packet_fragment_changes_the_rendered_release_count() {
+        let d = std::env::temp_dir().join(format!("tilland-count-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let index = d.join("plan/index.yaml");
+        std::fs::create_dir_all(d.join("plan/index.d")).expect("mkdir");
+        std::fs::write(
+            &index,
+            "plan_index:\n  steps:\n    - order: 900\n      packet_id: alpha\n      title: \"A\"\n      status: completed\n      desired_release: v0.5\n    - order: 901\n      packet_id: beta\n      title: \"B\"\n      status: ready\n      desired_release: v0.5\n    - order: 902\n      packet_id: gamma\n      title: \"C\"\n      status: ready\n      desired_release: v0.6\n",
+        )
+        .expect("write base");
+
+        let before = Ledger::load_with_fragments(&index).expect("base overlay loads");
+        let (open0, total0) = count_release(&before, "v0.5");
+        assert_eq!((open0, total0), (1, 2), "v0.5: one ready + one completed");
+
+        std::fs::write(
+            d.join("plan/index.d/20260809t0100z-new-v05.yaml"),
+            "packets:\n  - packet_id: delta\n    order: 903\n    title: \"D\"\n    status: pending\n    desired_release: v0.5\n",
+        )
+        .expect("write fragment");
+
+        let after = Ledger::load_with_fragments(&index).expect("folded overlay loads");
+        let (open1, total1) = count_release(&after, "v0.5");
+        assert_eq!(
+            (open1, total1),
+            (2, 3),
+            "the fragment packet must be counted"
+        );
+
+        let canonical_before = crate::loop_status::render_count_line(open0, total0);
+        let canonical_after = crate::loop_status::render_count_line(open1, total1);
+        assert_ne!(
+            canonical_before, canonical_after,
+            "a new packet fragment must change the rendered count line"
+        );
+        assert_eq!(canonical_after, "(2 open / 3 total tagged)");
+
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     /// ORDER 516 REGRESSION PIN. Before the fix `by_order` was keyed by

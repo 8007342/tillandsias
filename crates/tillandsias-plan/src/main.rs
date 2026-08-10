@@ -7,7 +7,8 @@
 
 use std::path::{Path, PathBuf};
 use tillandsias_plan::{
-    Ledger, Schema, answer, edit, groundtruth, loop_status, methodology, spec, str_field, str_list,
+    Ledger, Schema, answer, count_release, edit, fragments, groundtruth, loop_status, methodology,
+    spec, str_field, str_list,
 };
 
 /// ORDER 569. The capability manifest, embedded from the crate's own
@@ -57,6 +58,7 @@ fn capability_tokens() -> Vec<&'static str> {
 /// without naming it here (or in capabilities.txt) is exactly the omission this
 /// order exists to surface.
 const DISPATCH_ARMS: &[&str] = &[
+    "set-field",
     "append-event",
     "answer",
     "blocked-by",
@@ -72,6 +74,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "loop-status-append",
     "loop-status-compact",
     "loop-status-fragments",
+    "loop-status-verify",
     "methodology",
     "methodology-ask",
     "methodology-index",
@@ -192,6 +195,25 @@ const USAGE: &str = concat!(
     "                                     (base ⊕ loop_status.d/ fragments). The only correct way to\n",
     "                                     read loop_status — a reader that forgets fragments reports\n",
     "                                     a stale status with total confidence.\n",
+    "           loop-status-fragments      ORDER 582-nqw5. Report the loop_status.d/ overlay: live\n",
+    "                                     fragments, malformed ones, and whether compaction is eligible\n",
+    "           loop-status-verify [--ledger P] [--render]\n",
+    "                                     ORDER 626-zmhz. The deterministic ACTIVE-RELEASE + count gate:\n",
+    "                                     cross-checks the FOLDED loop_status prose (exactly one ACTIVE\n",
+    "                                     RELEASE heading, exactly one `— ACTIVE` bullet, and that bullet\n",
+    "                                     IS the active release) against the FOLDED ledger's release\n",
+    "                                     counts, and fails loud on stale prose. --ledger overrides\n",
+    "                                     plan/index.yaml; --render prints the canonical count line.\n",
+    "           set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT]\n",
+    "                                     ORDER 636-9m79. Correct a packet field by writing the LWW\n",
+    "                                     channel as a NEW fragment. USE THIS instead of hand-authoring:\n",
+    "                                     re-declaring a packet under `packets:` is a G-Set no-op that\n",
+    "                                     parses, validates and silently does nothing — three hosts hit\n",
+    "                                     that on 2026-08-09 and 11 of 21 completions were discarded.\n",
+    "                                     Field-generic despite the channel's `status:` name (642-fedr).\n",
+    "                                     Resolves against the FOLDED ledger, so unlike append-event it\n",
+    "                                     reaches fragment-only packets (600-c266). Refuses an unknown\n",
+    "                                     reference; reports a no-op instead of writing one.\n",
     "           loop-status-append [--ts ISO] [--host H] [--suffix S] [--file F]\n",
     "                                     ORDER 582-nqw5. Append ONE `## Cycle …` section (stdin or\n",
     "                                     --file) as a NEW fragment file — concurrent hosts each write\n",
@@ -378,6 +400,7 @@ fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
 struct QueryOptions {
     status: Option<String>,
     role: Option<String>,
+    claimable_by: Option<String>,
     release: Option<String>,
     tags: Vec<String>,
     limit: usize,
@@ -389,6 +412,7 @@ impl Default for QueryOptions {
         Self {
             status: None,
             role: None,
+            claimable_by: None,
             release: None,
             tags: Vec::new(),
             limit: 20,
@@ -431,6 +455,19 @@ fn parse_query_options(args: &[String]) -> Result<QueryOptions, String> {
                     return Err("--role may be specified only once".to_string());
                 }
                 options.role = Some(value_after(i)?);
+                i += 2;
+            }
+            "--claimable-by" => {
+                if options.claimable_by.is_some() {
+                    return Err("--claimable-by may be specified only once".to_string());
+                }
+                if options.role.is_some() {
+                    return Err(
+                        "--role and --claimable-by ask different questions; specify only one"
+                            .to_string(),
+                    );
+                }
+                options.claimable_by = Some(value_after(i)?);
                 i += 2;
             }
             "--release" => {
@@ -491,6 +528,19 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
         "pickup_role",
         "desired_release",
         "release_target",
+        // Order 627-cx24, found by the macOS lane. `priority` was absent from
+        // this projection, so scripts/select-work-batch.sh — whose minimax score
+        // is 2*urgency + 1.5*blocking + neglect — read `.priority // "p3"` and
+        // got "p3" for EVERY packet on EVERY platform. Urgency was a constant 0
+        // and the term contributed nothing to any selection ever made.
+        //
+        // The failure was silent by construction: the selector's `// "p3"`
+        // default is indistinguishable from a genuine p3, so the scoring looked
+        // like it worked and every batch was ranked on blocking+neglect alone.
+        // A projection that silently drops a field a consumer scores on is the
+        // same class of defect as an expression-pinned guard (622-rmit): it
+        // fails in a direction nothing observes.
+        "priority",
         "capability_tags",
         "deliverable",
         "depends_on",
@@ -502,10 +552,10 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
             );
         }
     }
-    // These two are the release-query contract, not opportunistic metadata.
+    // These are the release-query contract, not opportunistic metadata.
     // A missing field is explicit JSON null so consumers can distinguish
     // "projected but absent" from "this binary predates the projection".
-    for key in ["desired_release", "release_target"] {
+    for key in ["desired_release", "release_target", "priority"] {
         obj.entry(key.to_string())
             .or_insert(serde_json::Value::Null);
     }
@@ -522,6 +572,7 @@ fn query_packets<'a>(
     ledger: &'a Ledger,
     status: Option<&str>,
     role: Option<&str>,
+    claimable_by: Option<&str>,
     release: Option<&str>,
     tags: &[String],
     limit: usize,
@@ -533,14 +584,44 @@ fn query_packets<'a>(
             Some(s) => str_field(p, "status") == Some(s),
             None => true,
         })
-        .filter(|p| match role {
-            Some(r) => {
+        // ORDER 632-39p3. `--role` is a SUBSTRING FILTER ON THE FIELD, and both
+        // MCP servers document it that way. `next <role>` answers a different
+        // question — "what may a host of this role CLAIM" — which additionally
+        // includes `pickup_role: any`.
+        //
+        // Both were being used as if they answered the same question, and the
+        // gap was silent and expensive: `query --role macos` returned 13 packets
+        // while `next macos` saw 32, so scripts/select-work-batch.sh handed a
+        // Windows cycle ONE packet while 56 `any` packets sat unreachable by it.
+        // The Linux lane never noticed, because its own role tag covers 131.
+        //
+        // Resolved by ADDING the missing question rather than redefining the
+        // existing one: `--claimable-by` is claimability (role OR `any`),
+        // `--role` keeps the documented substring semantics its consumers rely
+        // on. Silently widening `--role` would have changed what plan_query
+        // reports to every other surface — the same class of unobserved change
+        // this packet exists to close.
+        .filter(|p| {
+            let matches_field = |r: &str| {
                 let want = r.to_ascii_lowercase();
                 str_field(p, "pickup_role")
                     .map(|pr| pr.to_ascii_lowercase().contains(&want))
                     .unwrap_or(false)
+            };
+            match (role, claimable_by) {
+                (Some(r), _) => matches_field(r),
+                (None, Some(c)) => {
+                    matches_field(c) || {
+                        // `any` must be the WHOLE field, not a substring: a
+                        // pickup_role of "company-lane" contains "any" and is
+                        // emphatically not claimable by everyone.
+                        str_field(p, "pickup_role")
+                            .map(|pr| pr.trim().eq_ignore_ascii_case("any"))
+                            .unwrap_or(false)
+                    }
+                }
+                (None, None) => true,
             }
-            None => true,
         })
         .filter(|p| match release {
             Some(r) => str_field(p, "desired_release") == Some(r),
@@ -847,6 +928,109 @@ fn run_loop_status(args: &[String], base: &Path) {
             }
             for bad in loop_status::malformed(base) {
                 emit(&format!("malformed: {}", bad.display()));
+            }
+        }
+        "loop-status-verify" => {
+            // ORDER 626-zmhz. The deterministic ACTIVE-RELEASE + count gate:
+            // READ-ONLY, so a coordinator runs it every cycle and it fails loud
+            // the moment the operator-owned release prose contradicts the FOLDED
+            // truth. Two truths are cross-checked:
+            //   - the FOLDED loop_status prose: exactly one `## ACTIVE RELEASE:`
+            //     heading, exactly one `— ACTIVE`-labeled release bullet, and
+            //     that bullet IS the active release;
+            //   - the FOLDED plan ledger: the active release's `(N open / M
+            //     total tagged)` counts must equal `count_release` over base
+            //     plus index.d fragments.
+            // `--ledger <path>` overrides the default plan/index.yaml so an
+            // isolated fixture can stage both corpora; `--render` prints the
+            // canonical count line (the splice a coordinator pastes into the
+            // release bullet) even when the check fails.
+            let mut ledger_path = PathBuf::from("plan/index.yaml");
+            if let Some(i) = args.iter().position(|a| a == "--ledger")
+                && let Some(p) = args.get(i + 1)
+            {
+                ledger_path = PathBuf::from(p);
+            }
+            let render_only = args.iter().any(|a| a == "--render");
+
+            let raw = match std::fs::read_to_string(base) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {}: {e}", base.display());
+                    std::process::exit(1);
+                }
+            };
+            let folded = match loop_status::fold_text(&raw, &loop_status::load_all(base)) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("error: fold {}: {e}", base.display());
+                    std::process::exit(1);
+                }
+            };
+            let active = loop_status::active_release(base).unwrap_or_default();
+            let mut problems = loop_status::verify_active_release(&folded, &active);
+
+            let (open, total) = match Ledger::load_with_fragments(&ledger_path) {
+                Ok(l) => count_release(&l, &active),
+                Err(e) => {
+                    eprintln!(
+                        "error: load ledger {} for the folded counts: {e}",
+                        ledger_path.display()
+                    );
+                    std::process::exit(1);
+                }
+            };
+            let canonical = loop_status::render_count_line(open, total);
+
+            let headings = loop_status::active_release_headings(&folded);
+            let actives = loop_status::release_bullets(&folded)
+                .iter()
+                .filter(|b| b.active)
+                .count();
+            let mut count_ok = true;
+            if render_only {
+                // `--render` is not a gate: emit the canonical line so a
+                // coordinator can splice it, and leave consistency checking to a
+                // bare run.
+                println!("{canonical}");
+                return;
+            }
+            if let Some(b) = loop_status::release_bullets(&folded)
+                .iter()
+                .find(|b| b.version == active)
+            {
+                match (b.open, b.total) {
+                    (Some(o), Some(t)) if o == open && t == total => {}
+                    (Some(o), Some(t)) => {
+                        count_ok = false;
+                        problems.push(format!(
+                            "active release {active} count is stale — committed ({o} open / {t} total tagged) should be {canonical}"
+                        ));
+                    }
+                    _ => {
+                        count_ok = false;
+                        problems.push(format!(
+                            "active release {active} bullet has no parseable count — should be {canonical}"
+                        ));
+                    }
+                }
+            }
+
+            let verdict = if problems.is_empty() { "ok" } else { "fail" };
+            println!(
+                "loop_status: verify active_release={} headings={} actives={} count_ok={} counts=\"{}\" verdict={}",
+                if active.is_empty() { "-" } else { &active },
+                headings,
+                actives,
+                if count_ok { "yes" } else { "no" },
+                canonical,
+                verdict
+            );
+            for p in &problems {
+                eprintln!("problem: {p}");
+            }
+            if !problems.is_empty() {
+                std::process::exit(1);
             }
         }
         "loop-status-compact" => {
@@ -1377,7 +1561,11 @@ fn main() {
     // named something else explicitly.
     if matches!(
         args[0].as_str(),
-        "loop-status" | "loop-status-append" | "loop-status-compact" | "loop-status-fragments"
+        "loop-status"
+            | "loop-status-append"
+            | "loop-status-compact"
+            | "loop-status-fragments"
+            | "loop-status-verify"
     ) {
         let base = if index_explicit {
             index.clone()
@@ -1698,6 +1886,7 @@ fn main() {
                 &ledger,
                 options.status.as_deref(),
                 options.role.as_deref(),
+                options.claimable_by.as_deref(),
                 options.release.as_deref(),
                 &options.tags,
                 options.limit,
@@ -1908,6 +2097,144 @@ fn main() {
         // Order 569. Was `usage()`, which conflated "this binary cannot do that"
         // with "you forgot an operand". The wrapper needs the two apart: the
         // first means RELAUNCH/REBUILD, the second means fix the call.
+        // ORDER 636-9m79. The write path for a field correction, so the LWW
+        // channel is never hand-authored.
+        //
+        // THREE HOSTS got this wrong on 2026-08-09, independently, within hours
+        // of each other and of it being documented:
+        //   linux    re-declared a packet under `packets:` to mark it done — a
+        //            G-Set no-op; 11 of 21 completions were discarded (635-i6vm)
+        //   macos    wrote `type: completed` EVENTS with no status block, so a
+        //            packet that passed 5/5 with evidence stayed claimable
+        //   windows  filed 642-fedr on the naming: the channel is called
+        //            `status:` but corrects ANY field, so nobody finds it
+        //
+        // Three independent hosts is a write-path defect, not three mistakes.
+        // 636-9m79's exit criteria call a helper "the strongest — it removes the
+        // choice". This also closes 600-c266: unlike `append-event`, which
+        // locates packets by their item prefix in the BASE ledger and so cannot
+        // see fragment-only packets, this resolves against the FOLDED ledger.
+        //
+        // Named `set-field`, not `set-status`: the channel is field-generic, and
+        // naming it for one field is exactly what hid it.
+        "set-field" => {
+            // args[0] is the subcommand itself (same convention as the `status`
+            // arm's args.get(1)); skip it or the subcommand name becomes the
+            // packet reference and every invocation refuses.
+            let positional: Vec<String> = {
+                let mut out = Vec::new();
+                let mut i = 1;
+                while i < args.len() {
+                    if args[i].starts_with("--") {
+                        i += 2;
+                    } else {
+                        out.push(args[i].clone());
+                        i += 1;
+                    }
+                }
+                out
+            };
+            let flagged = |name: &str| -> Option<String> {
+                args.iter()
+                    .position(|a| a == name)
+                    .and_then(|i| args.get(i + 1))
+                    .cloned()
+            };
+            if positional.len() < 3 {
+                eprintln!(
+                    "usage: tillandsias-plan set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT]"
+                );
+                std::process::exit(2);
+            }
+            let (target, field, value) = (
+                positional[0].clone(),
+                positional[1].clone(),
+                positional[2].clone(),
+            );
+
+            // Resolve against the FOLDED ledger so a fragment-only packet is
+            // reachable. A typo must refuse, never write a fragment that
+            // silently applies to nothing.
+            let Some(packet) = ledger.resolve(&target) else {
+                eprintln!(
+                    "error: no packet resolves '{target}' in the folded ledger (base + fragments)"
+                );
+                std::process::exit(1);
+            };
+            let Some(pid) = str_field(packet, "packet_id").map(|s| s.to_string()) else {
+                eprintln!("error: resolved packet has no packet_id");
+                std::process::exit(1);
+            };
+            let current = str_field(packet, &field).unwrap_or("<unset>").to_string();
+            if current == value {
+                println!("ok: no-op — {pid}.{field} is already '{value}'");
+                return;
+            }
+
+            let ts = flagged("--ts").unwrap_or_else(|| {
+                let secs = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                answer::epoch_to_iso8601(secs)
+            });
+            let host = flagged("--host").unwrap_or_else(|| {
+                std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
+            });
+            let reason = flagged("--reason").unwrap_or_default();
+
+            let compact = loop_status::iso_to_compact(&ts);
+            let suffix = format!(
+                "{:08x}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos())
+                    .unwrap_or(0)
+            );
+            let dir = fragments::fragment_dir(&index);
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                eprintln!("error: create {}: {e}", dir.display());
+                std::process::exit(1);
+            }
+            let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+
+            let mut body = String::new();
+            body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+            body.push_str("# Written by: tillandsias-plan set-field (order 636-9m79).\n");
+            body.push_str("#\n");
+            body.push_str(
+                "# The LWW channel below is named `status:` for historical reasons but\n",
+            );
+            body.push_str("# corrects ANY field (642-fedr). Re-declaring the packet under\n");
+            body.push_str("# `packets:` would be a G-Set no-op and would silently do nothing.\n");
+            body.push_str("status:\n");
+            body.push_str(&format!("  - packet_id: {pid}\n"));
+            body.push_str(&format!("    field: {field}\n"));
+            body.push_str(&format!("    value: {value}\n"));
+            body.push_str(&format!("    ts: \"{ts}\"\n"));
+            body.push_str(&format!("    host: {host}\n"));
+            if !reason.is_empty() {
+                body.push_str("\nevents:\n");
+                body.push_str(&format!("  - packet_id: {pid}\n"));
+                body.push_str("    event:\n");
+                body.push_str("      type: note\n");
+                body.push_str(&format!("      ts: \"{ts}\"\n"));
+                body.push_str(&format!("      host: {host}\n"));
+                body.push_str(&format!(
+                    "      summary: >\n        {}\n",
+                    reason.replace('\n', " ")
+                ));
+            }
+
+            if let Err(e) = std::fs::write(&path, body) {
+                eprintln!("error: write {}: {e}", path.display());
+                std::process::exit(1);
+            }
+            println!(
+                "ok: {pid}.{field} {current} -> {value} ({})",
+                path.display()
+            );
+        }
         other => unknown_subcommand(other),
     }
 }
@@ -2212,21 +2539,29 @@ mod tests {
         .expect("parse");
 
         // Exact status only.
-        let ready = query_packets(&led, Some("ready"), None, None, &[], 0);
+        let ready = query_packets(&led, Some("ready"), None, None, None, &[], 0);
         assert_eq!(ids(ready), vec!["p1", "p3", "p4"]);
 
         // pickup_role is a case-insensitive SUBSTRING.
-        let linux = query_packets(&led, None, Some("linux"), None, &[], 0);
+        let linux = query_packets(&led, None, Some("linux"), None, None, &[], 0);
         assert_eq!(ids(linux), vec!["p1", "p3"]);
 
         // desired_release is exact; packets without it never match an explicit
         // release constraint.
-        let v05 = query_packets(&led, None, None, Some("v0.5"), &[], 0);
+        let v05 = query_packets(&led, None, None, None, Some("v0.5"), &[], 0);
         assert_eq!(ids(v05), vec!["p1", "p3"]);
-        assert!(query_packets(&led, None, None, Some("V0.5"), &[], 0).is_empty());
+        assert!(query_packets(&led, None, None, None, Some("V0.5"), &[], 0).is_empty());
 
         // capability_tags all-must-match, independent of order in the list.
-        let crdt_plan = query_packets(&led, None, None, None, &["plan".into(), "crdt".into()], 0);
+        let crdt_plan = query_packets(
+            &led,
+            None,
+            None,
+            None,
+            None,
+            &["plan".into(), "crdt".into()],
+            0,
+        );
         assert_eq!(ids(crdt_plan), vec!["p1", "p3"]);
 
         // Combined filters narrow the set.
@@ -2234,6 +2569,7 @@ mod tests {
             &led,
             Some("ready"),
             Some("linux"),
+            None,
             Some("v0.5"),
             &["crdt".into()],
             0,
@@ -2241,12 +2577,12 @@ mod tests {
         assert_eq!(ids(combo), vec!["p1", "p3"]);
 
         // Limit caps the result.
-        let limited = query_packets(&led, Some("ready"), None, None, &[], 2);
+        let limited = query_packets(&led, Some("ready"), None, None, None, &[], 2);
         assert_eq!(ids(limited), vec!["p1", "p3"]);
 
         // A packet with no capability_tags matches a tag filter only if the
         // filter is empty.
-        let empty_tag = query_packets(&led, Some("ready"), None, None, &["plan".into()], 0);
+        let empty_tag = query_packets(&led, Some("ready"), None, None, None, &["plan".into()], 0);
         assert_eq!(ids(empty_tag), vec!["p1", "p3"]);
 
         let projected = query_json_projection(led.resolve("p1").expect("p1 resolves"));

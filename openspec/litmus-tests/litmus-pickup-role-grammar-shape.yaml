@@ -1,0 +1,105 @@
+# @trace spec:ci-release
+name: litmus:pickup-role-grammar-shape
+spec: ci-release
+phase: pre-build
+description: pickup_role prose drift is measured, and a lane named only as a follower is not counted as an owner
+severity: medium
+size: instant
+
+# Order 632-retq companion (Windows host 2026-08-09). Evidence feed for the p0
+# packet 632-39p3 (query-and-next-disagree-on-role-eligibility).
+#
+# Every assertion runs the checker against FIXTURES with known answers, via the
+# TILLANDSIAS_PICKUP_ROLE_INPUT seam. Asserting only against the live ledger
+# would make the test restate whatever the ledger happens to contain today: it
+# would pass on a ledger where every value had drifted to prose, so long as the
+# script agreed with itself. The live-ledger step below therefore checks the
+# GRAMMAR of the verdict, not its numbers.
+
+preconditions:
+  - workspace contains scripts/check-pickup-role-grammar.sh
+  - workspace contains plan/index.yaml
+
+critical_path:
+  - step: "checker is syntactically valid"
+    command: "bash -n scripts/check-pickup-role-grammar.sh && echo 'ok: checker parses'"
+    timeout_ms: 15000
+    expected_behavior: "ok: checker parses"
+
+  - step: "emits the verdict grammar against the live ledger"
+    command: "scripts/check-pickup-role-grammar.sh | grep -qE '^pickup-role: total=[0-9]+ canonical=[0-9]+ prose=[0-9]+ multi_host=[0-9]+ sequenced=[0-9]+ verdict=(ok:canonical-roles|attention:sequenced-prose)$' && echo 'ok: verdict grammar'"
+    timeout_ms: 60000
+    expected_behavior: "ok: verdict grammar"
+
+  - step: "an all-canonical ledger is clean and exits 0"
+    command: "f=$(mktemp); printf 'linux\\nmacos\\nwindows\\nany\\n' > \"$f\"; out=$(TILLANDSIAS_PICKUP_ROLE_INPUT=\"$f\" scripts/check-pickup-role-grammar.sh); rc=$?; rm -f \"$f\"; [ \"$rc\" -eq 0 ] || { echo \"FAIL: clean input exited $rc\"; exit 1; }; printf '%s' \"$out\" | grep -q 'sequenced=0 verdict=ok:canonical-roles' && echo 'ok: clean ledger passes'"
+    timeout_ms: 15000
+    expected_behavior: "ok: clean ledger passes"
+
+  - step: "NEGATIVE CONTROL: a follower lane is detected and fails the check"
+    # The defect this exists for. "linux (litmus harness); Windows/macOS
+    # replicate later" is owned by linux, and the substring matcher in
+    # `query --role` hands it to windows and macos anyway.
+    command: "f=$(mktemp); printf 'linux\\nlinux (litmus harness); Windows/macOS replicate later\\n' > \"$f\"; out=$(TILLANDSIAS_PICKUP_ROLE_INPUT=\"$f\" scripts/check-pickup-role-grammar.sh); rc=$?; rm -f \"$f\"; [ \"$rc\" -eq 1 ] || { echo \"FAIL: sequenced prose exited $rc, expected 1\"; exit 1; }; printf '%s' \"$out\" | grep -q 'sequenced=1 verdict=attention:sequenced-prose' && echo 'ok: follower lane detected'"
+    timeout_ms: 15000
+    expected_behavior: "ok: follower lane detected"
+
+  - step: "CO-OWNED IS NOT A DEFECT: two genuine owners do not fail the check"
+    # Guards the opposite over-correction. If this ever starts failing, the
+    # checker has become a style rule and its number stops meaning damage.
+    command: "f=$(mktemp); printf 'linux\\nlinux (XDNA2 lane) + macos (Metal lane)\\n' > \"$f\"; out=$(TILLANDSIAS_PICKUP_ROLE_INPUT=\"$f\" scripts/check-pickup-role-grammar.sh); rc=$?; rm -f \"$f\"; [ \"$rc\" -eq 0 ] || { echo \"FAIL: co-owned value exited $rc, expected 0\"; exit 1; }; printf '%s' \"$out\" | grep -q 'multi_host=1 sequenced=0' && echo 'ok: co-ownership allowed'"
+    timeout_ms: 15000
+    expected_behavior: "ok: co-ownership allowed"
+
+  - step: "--detail classifies each multi-lane value and names the owner"
+    command: "f=$(mktemp); printf 'windows/macos with linux control-wire support\\n' > \"$f\"; out=$(TILLANDSIAS_PICKUP_ROLE_INPUT=\"$f\" scripts/check-pickup-role-grammar.sh --detail); rm -f \"$f\"; printf '%s' \"$out\" | grep -qE '^sequenced.*owner=windows.*claimable-as=' && echo 'ok: detail names the owner'"
+    timeout_ms: 15000
+    expected_behavior: "ok: detail names the owner"
+
+  - step: "NEGATIVE CONTROL: a missing fixture is refused, not silently treated as empty"
+    # An unreadable input must never look like a clean ledger.
+    command: "out=$(TILLANDSIAS_PICKUP_ROLE_INPUT=/nonexistent/pickup-roles.txt scripts/check-pickup-role-grammar.sh 2>&1); rc=$?; [ \"$rc\" -eq 2 ] || { echo \"FAIL: missing input exited $rc, expected 2\"; exit 1; }; printf '%s' \"$out\" | grep -q '^pickup-role: refused:no-such-input:' && echo 'ok: missing input refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: missing input refused"
+
+  - step: "the checker needs no jq/yq/python/ruby"
+    # Deliberate: its sibling scripts/select-work-batch.sh cannot run on Windows
+    # at all for want of jq (packet 632-retq). A cross-host routing report that
+    # only runs on one host would be self-defeating.
+    command: "grep -nE '(^|[^a-z-])(jq|yq|python3?|ruby)([^a-z-]|$)' scripts/check-pickup-role-grammar.sh | grep -v '^[0-9]*:#' && { echo 'FAIL: checker acquired a non-portable dependency'; exit 1; }; echo 'ok: portable toolchain only'"
+    timeout_ms: 15000
+    expected_behavior: "ok: portable toolchain only"
+
+  - step: "READS THE FOLD: the live path never greps the raw ledger text"
+    # Order 635-qpx8 (2026-08-09). The first version of this checker grepped
+    # `pickup_role:` out of plan/index.yaml + plan/index.d/*.yaml. That is the
+    # PRE-FOLD text: a correction sent through the LWW channel (a `status:` entry
+    # with `field: pickup_role`) changes what every reader sees while leaving the
+    # overridden base line untouched on disk. The checker therefore kept
+    # reporting three offenders that had already been corrected — an instance of
+    # the very defect it exists to report. Structural assertion, because a
+    # behavioural one passes on any ledger with no pending LWW corrections.
+    command: "grep -nE \"grep .*plan/index(\\\\.yaml|\\\\.d)\" scripts/check-pickup-role-grammar.sh | grep -v '^[0-9]*:#' && { echo 'FAIL: checker reads the raw ledger text instead of the fold'; exit 1; }; grep -q 'query --limit 0 --json' scripts/check-pickup-role-grammar.sh && echo 'ok: reads the folded ledger'"
+    timeout_ms: 15000
+    expected_behavior: "ok: reads the folded ledger"
+
+  - step: "NEGATIVE CONTROL: an empty projection is refused, not read as a clean ledger"
+    command: "f=$(mktemp); : > \"$f\"; out=$(TILLANDSIAS_PICKUP_ROLE_INPUT=\"$f\" scripts/check-pickup-role-grammar.sh 2>&1); rc=$?; rm -f \"$f\"; printf '%s' \"$out\" | grep -q 'verdict=ok:canonical-roles' && { echo 'FAIL: empty input read as a clean ledger'; exit 1; }; echo \"ok: empty projection not mistaken for clean (rc=$rc)\""
+    timeout_ms: 15000
+    expected_behavior: "ok: empty projection not mistaken for clean"
+
+  - step: "the checker writes nothing to the worktree"
+    command: "before=\"$(git status --porcelain)\"; scripts/check-pickup-role-grammar.sh >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: checker mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
+    timeout_ms: 60000
+    expected_behavior: "ok: read-only"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "pickup_role drift is counted, and a follower lane is never mistaken for an owner"
+  log_fields:
+    spec: "ci-release"
+    test: "pickup-role-grammar-shape"
+
+rollback:
+  on_failure: "restore scripts/check-pickup-role-grammar.sh from git history"

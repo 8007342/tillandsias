@@ -1,3 +1,10 @@
+# @tombstone held:observatorium
+# HELD 2026-08-09 (operator directive). This test exists solely to enforce that
+# build.sh REGENERATES the clickable trace indexes from every build-producing
+# dispatch. That regeneration was removed the same day along with the 171
+# rendered TRACES.md files, so the requirement it guards no longer exists.
+# Held, not deleted, with the rest of the clickable-trace-index suite: if the
+# Observatorium resumes, this is the record of the dispatch contract.
 # @trace spec:clickable-trace-index
 # Order 490 (clickable-trace-index-build-dispatch-gap): build.sh regenerated the
 # clickable trace indexes only from the two install paths, so plain debug,
@@ -33,7 +40,8 @@
 # regeneration for the post-build/runtime litmus phases.
 name: litmus:build-trace-index-dispatch-coverage
 spec: clickable-trace-index
-phase: pre-build
+phase: retired
+status: retired
 description: Drive every build.sh dispatch in a stubbed sandbox and assert each build-producing mode regenerates the clickable trace indexes exactly once, test/check-only modes never do, and regeneration always precedes the CI gate
 severity: high
 size: quick

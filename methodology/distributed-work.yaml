@@ -996,6 +996,194 @@ distributed_work:
         role: "mutable-Linux coordinator host nickname"
     provenance: plan/issues/agent-fleet-and-zeroclaw-roadmap-2026-07-17.md
 
+  mcp_first_read_path:
+    purpose: >
+      Reads go through the local MCP servers FIRST. The filesystem is the
+      fallback — for MCP failure, for verification, and for content MCP does not
+      expose — not the default.
+    authority: >
+      Operator directive 2026-08-09. Identified as the cheapest available
+      velocity win by the 630-vpmq skill audit: it recovers most of the same
+      orchestrator context that agent delegation would, without spawning
+      anything.
+    the_problem: >
+      Skills name whole files to read. Those files are:
+
+        plan/index.yaml        31,678 lines
+        plan/loop_status.md     7,875 lines
+        plan/issues/              405 files
+        plan/index.d/              41 fragments
+
+      `advance-work-from-plan` step 1.6 instructs the orchestrator to read four
+      of those directly, to extract what amounts to a paragraph: the active
+      Direction, this host's branch, a handful of packet ids, and any blocker
+      naming this host. Tens of thousands of lines are imported to produce
+      twenty. That import is permanent for the rest of the session, and it is
+      paid again by every agent on every host on every cycle.
+
+      MCP already answers all of it in a bounded, cited envelope. The servers
+      exist, are wired, and are sub-100ms — they were simply offered as an
+      option rather than required, so the expensive path stayed the default.
+    rule: >
+      Prefer MCP for every read that has an MCP answer. Drop to the filesystem
+      only for one of the three reasons named in `filesystem_fallback` below,
+      and say which one.
+    tool_map:
+      plan_and_methodology: >
+        `forge-plan` / `project-plan`: plan_answer, plan_next, plan_query,
+        plan_ready, plan_status, plan_blocked_by, plan_blocked_on, plan_closure,
+        plan_burndown, plan_check, methodology_ask, methodology_path,
+        spec_answer, expert_capability.
+      repo_and_code: >
+        `project-info`: read_file, search_code, grep_code, find_files,
+        file_summary, project_answer, project_info, project_structure,
+        project_metadata, git_status.
+      note: >
+        `read_file` through MCP is still preferable to shelling `cat` — it is
+        bounded and the result is addressable. The rule is about not hauling
+        whole ledgers into context, not about avoiding file reads as such.
+    filesystem_fallback:
+      unavailable: >
+        MCP is absent, erroring, or the expert answers `confidence=unsupported`.
+        Fall back immediately and CONTINUE — an unavailable expert is a degraded
+        read path, never a blocked cycle. Record the fallback in the cycle's
+        loop-status entry so a systematically-refusing expert is visible rather
+        than quietly routed around (this is the order-531 failure mode: truthful
+        `experts: ready` while every answer was unsupported).
+      verification: >
+        Before an IRREVERSIBLE act that depends on an MCP answer — a commit, a
+        status flip, a deletion, a release — read the CITED SPAN to confirm it.
+        Expert answers carry citations precisely so this check is cheap: read the
+        span, not the file. Verification is the one case where the filesystem is
+        not a fallback but a requirement.
+      not_exposed: >
+        Content no MCP tool covers. Read it directly and, if it is content the
+        loop needs repeatedly, file a packet to expose it — a recurring direct
+        read is a missing tool, not a habit.
+    anti_patterns:
+      - >
+        Reading plan/index.yaml, plan/loop_status.md, or a directory of
+        plan/issues/ in full when a plan_query or plan_answer would answer the
+        question. This is the specific waste the rule exists to remove.
+      - >
+        Treating an MCP answer as verified evidence for a destructive step
+        without reading its citation. Cited is not the same as checked.
+      - >
+        Stalling a cycle because MCP is down. "'Tis broken? keep goin'" — fall
+        back, note it, continue.
+
+  ledger_write_path:
+    purpose: >
+      One command changes a packet field. Hand-authoring the LWW channel is the
+      single most reproducible way this project corrupts its own state.
+    rule: >
+      `tillandsias-plan set-field <id|order> <field> <value> --reason "why"`.
+      Never re-declare a packet under `packets:` to change it, and never rely on
+      an event alone to close one.
+    why: >
+      Three hosts got this wrong on 2026-08-09, independently, within hours of
+      each other AND of it being documented:
+
+        linux    re-declared under `packets:` — a G-Set no-op. 11 of 21
+                 completions silently discarded, some for two days (635-i6vm).
+        macos    wrote `type: completed` events with no status block. A packet
+                 that passed 5/5 with an evidence file stayed claimable.
+        windows  filed 642-fedr: the channel is NAMED `status:` but corrects any
+                 field, so nobody looks there when changing pickup_role.
+
+      Every one of those parses, validates, passes `tillandsias-plan check`, and
+      reads correctly in review. The fold discards the change and nothing
+      reports that it did.
+
+      The skills themselves taught the broken pattern: advance-work-from-plan
+      step 7 said to close a packet with `append-event` OR "a fragment file
+      setting status done", and BOTH branches are broken — append-event is blind
+      to fragment-only packets (600-c266), and the fragment form is the G-Set
+      no-op. Three hosts following the instructions correctly is not three
+      mistakes.
+    also: >
+      set-field resolves against the FOLDED ledger, so unlike append-event it
+      reaches fragment-only packets. It refuses an unknown reference rather than
+      writing a fragment that applies to nothing, and reports a no-op instead of
+      writing one.
+    detectors: >
+      scripts/check-fragment-status-loss.sh (gates: a declared terminal status the
+      fold discards, and a `completed` event with no transition);
+      scripts/check-stranded-in-progress.sh (advisory: claims that never produced
+      an event); scripts/reclaim-stranded-claims.sh (returns claims older than the
+      TTL to `ready`).
+
+  cycle_batch_triage:
+    purpose: >
+      Decide what ONE orchestration cycle takes, so that consecutive
+      `/meta-orchestration` calls on different agents and harnesses drain the
+      plan in predictable chunks instead of scattering.
+    authority: >
+      Operator directive 2026-08-09. Implemented by scripts/select-work-batch.sh
+      and consumed by skills/advance-work-from-plan and skills/meta-orchestration.
+    the_tier_already_exists: >
+      The layer between "release" and "packet" is `release_target:
+      <milestone-packet-id>` — milestones ARE the epics. Do NOT introduce a
+      third object (story/epic/task); the operator considered and rejected that
+      on 2026-08-09 in favour of making the existing tier load-bearing.
+
+      What made it not FEEL like a layer was coverage: on 2026-08-09 only 60 of
+      176 ready v0.5 packets carried a release_target. With two thirds of the
+      work ungrouped, selection degraded to flat priority order, which is what
+      produced the scatter. Coverage is the fix, not a new abstraction.
+    problem_being_solved:
+      - no_cohesion: >
+          `tillandsias-plan next linux` returns five correctly-ranked packets
+          that routinely span five unrelated subsystems. Draining them means
+          five context switches and five subsystem re-reads, so a cycle closing
+          one small packet can spend more tokens orienting than working.
+      - no_predictable_size: >
+          Without a declared budget, throughput cannot be reasoned about across
+          hosts or harnesses.
+      - no_anti_circling: >
+          A packet can accumulate progress events indefinitely without changing
+          status, and nothing notices it is being repeatedly re-explored.
+    selection_rule: >
+      Score each epic by MINIMAX residual, per convergence.yaml ->
+      minimax_convergence_strategy, never by priority alone:
+
+        urgency  = 3 - best_priority_rank_in_epic
+        blocking = downstream dependents of the epic's packets (capped 10)
+        neglect  = age of the epic's oldest ready packet, by order token
+        score    = 2*urgency + 1.5*blocking + neglect
+
+      Ranking by priority alone IS the anti-pattern that file names — "raising
+      average convergence by improving low-risk obligations while a high-risk
+      maximum residual remains unresolved". p0 asserts urgency, not residual.
+    entropy: >
+      The choice is score-WEIGHTED among the top-K epics (default K=3), from an
+      explicit printed seed (default: host kind + UTC date).
+
+      Uniform choice over the top-K would re-introduce the shiny-packet trap:
+      with scores 22.8 / 19.7 / 8.5 it takes the 8.5 a third of the time.
+      Weighting keeps the largest residual dominant — measured 9/12 runs — while
+      leaving smaller ones reachable so nothing starves. Entropy spreads
+      coverage over time and stops two concurrent hosts colliding on one epic;
+      it does not get a vote on what matters most.
+    reproducibility: >
+      Predictable drain is a property of batch SIZE, which the budget fixes
+      absolutely — NOT of always selecting the same work. Same seed + same
+      ledger yields the same batch, so any cycle can be replayed and audited;
+      the seed and the whole considered frontier are printed with every batch.
+      An unexplained selection is unauditable.
+    budgets:
+      forge: 1
+      default: 3
+      note: >
+        The forge budget of ONE packet per cycle predates this rule (order 264,
+        2026-07-10) and is not relaxed by it.
+    ungrouped_is_not_an_epic: >
+      UNGROUPED scores highest whenever coverage is poor, purely on size.
+      Letting it win would hand back the scattered batch this rule exists to
+      prevent, while hiding the coverage gap behind a plausible selection. It is
+      demoted whenever any real epic is eligible, and always reported on the
+      triage line so the gap is fixed rather than absorbed.
+
   worker_agent_protocol:
     purpose: >
       Detailed execution loop for worker agents to claim, execute, and complete shaped work
@@ -1009,6 +1197,21 @@ distributed_work:
           `plan_answer`, `methodology_ask`, `git_status`, `search_code`, `read_file`).
       - step: select_shaped_work
         description: >
+          FIRST run the batch selector — it applies [[cycle_batch_triage]] and
+          answers "what should THIS cycle take?", which flat ranking does not:
+
+            scripts/select-work-batch.sh <role> [--budget N] [--seed S]
+
+          It emits one cohesive, minimax-ranked, budgeted batch drawn from a
+          single epic (`release_target`), plus a `triage:` line reporting epic
+          coverage and the `frontier` it considered. Work the batch in order.
+          Record the printed seed in the cycle's loop-status entry so the
+          selection can be replayed.
+
+          The manual ranking below remains the fallback for when the selector
+          refuses (`refused:no-eligible-work`, `refused:no-plan-binary`) and the
+          rationale for the ranking the selector automates.
+
           Scan the plan ledger via `project-plan` / `forge-plan` MCP tools (`plan_ready` / `plan_query` / `plan_answer`)
           or direct file inspection. Filter for ready/pending/failed-retryable tasks where owner_host
           matches or is 'any', and matching capability tags exist. Rank the

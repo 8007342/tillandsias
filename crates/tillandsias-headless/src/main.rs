@@ -124,12 +124,72 @@ fn run_cli_with_vault_credential_cleanup<T>(
     result
 }
 
+/// Should this process claim its own process group?
+///
+/// `terminal_foreground_pgrp` is the foreground process group of our
+/// controlling terminal, or `None` when we hold no terminal at all (systemd
+/// service, `wsl.exe` non-tty exec, piped harness). Claiming our own group is
+/// safe unless we are *currently* the terminal's foreground group — moving out
+/// of it backgrounds us, and a background process group may not touch the
+/// terminal.
+///
+/// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+#[cfg(unix)]
+fn should_own_process_group(terminal_foreground_pgrp: Option<i32>, our_pgrp: i32) -> bool {
+    match terminal_foreground_pgrp {
+        Some(foreground) => foreground != our_pgrp,
+        None => true,
+    }
+}
+
+/// The foreground process group of our controlling terminal, or `None` when we
+/// have no controlling terminal at all.
+///
+/// This asks for the controlling terminal directly (`/dev/tty`) rather than
+/// inspecting fds 0/1/2: a lane can hold one while having all three redirected
+/// (`< /dev/tty > log 2>&1`, or a wrapper that pipes every stream), and reading
+/// only the standard descriptors would call that "no terminal" and put us back
+/// in a background group — the exact hang this guards against.
+#[cfg(unix)]
+fn terminal_foreground_pgrp() -> Option<i32> {
+    // SAFETY: open/tcgetpgrp/close on a path we own; the fd never escapes.
+    unsafe {
+        let fd = libc::open(c"/dev/tty".as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC);
+        if fd < 0 {
+            return None;
+        }
+        let pgrp = libc::tcgetpgrp(fd);
+        libc::close(fd);
+        if pgrp >= 0 { Some(pgrp) } else { None }
+    }
+}
+
 fn main() {
     #[cfg(unix)]
     {
-        // Set pgid so we can signal the whole group on exit.
-        // This ensures all children (even if they try to detach) can be tracked.
-        let _ = unsafe { libc::setpgid(0, 0) };
+        // Own our process group so graceful shutdown can sweep stray children
+        // with kill(-pgrp) — but NEVER at the cost of the terminal.
+        //
+        // When we inherit a controlling terminal AND are its foreground
+        // process group, setpgid(0, 0) moves us into a fresh BACKGROUND group.
+        // Every interactive lane then dies silently: `podman exec --interactive
+        // --tty` calls tcsetattr() to raw the terminal, the kernel answers a
+        // background-group terminal control call with SIGTTOU, and podman is
+        // STOPPED before it emits a single byte.
+        //
+        // That is the blank GitHub-Login terminal (v0.4.260809.2 field report):
+        // the tray's injected wrapper *forks* us instead of exec'ing us, so
+        // setpgid genuinely moved us and the window hung forever behind a
+        // 0-byte log. Directly exec'd lanes were spared only because the call
+        // is a no-op for a process that already leads its group — i.e. the
+        // call was inert everywhere it was wanted and fatal everywhere it was
+        // not.
+        //
+        // Keeping the launching shell's foreground group is safe because
+        // `graceful_shutdown` only signals the group when we actually lead it.
+        if should_own_process_group(terminal_foreground_pgrp(), unsafe { libc::getpgrp() }) {
+            let _ = unsafe { libc::setpgid(0, 0) };
+        }
     }
 
     let version = VERSION.trim();
@@ -388,6 +448,14 @@ fn main() {
     // tray click tears down the whole VM stack (2026-07-12 attended-smoke
     // repro: --antigravity was missing from this list after order 296 wired
     // it into parsing + dispatch). Pinned by cli_mode_counts_every_lane_flag.
+    // PLEASE REVIEW: linux — one-line cross-scope fix from the macOS drain
+    // (2026-08-09): `capabilities` was missing here, so an in-guest
+    // `tillandsias-headless --capabilities` (with the server's
+    // XDG_RUNTIME_DIR) singleton-killed the running vsock service and
+    // severed the exec wire — the 2026-07-12 --antigravity repro, again.
+    // Only a macOS/Windows host can hit this (a CLI running beside the
+    // in-VM server); reproduced live on the VZ guest, journal: server
+    // 'Received shutdown signal' ~4s after --capabilities starts.
     let is_cli_mode = opencode
         || codex
         || claude
@@ -398,6 +466,7 @@ fn main() {
         || init
         || status_check
         || inference_tier
+        || capabilities
         || github_login
         || claude_login
         || codex_login
@@ -7297,6 +7366,24 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     require_desktop_user_session(&format!("tillandsias {flag}"))?;
     report_runtime_lane(&flag, debug);
 
+    // Without `--debug` this whole preflight was SILENT, and on a cold guest it
+    // loads a ~580MB image and brings up Vault + the enclave proxy — minutes of
+    // a terminal that shows literally nothing, which reads to an operator as a
+    // hung window (v0.4.260809.2 field report). Progress is therefore
+    // unconditional; `--debug` still adds the full command-level trace.
+    // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    // Terminal mode only: `--with-token` is the automation lane, and scripted
+    // callers should not have to filter progress chatter out of stdout.
+    let interactive = matches!(config.input_mode, LoginInputMode::Terminal);
+    let step = |msg: &str| {
+        if interactive {
+            println!("[tillandsias] {msg}");
+        }
+    };
+    step(&format!(
+        "{provider_name} login — preparing; the first run can take a few minutes"
+    ));
+
     // @trace spec:secret-rotation
     info!(
         accountability = true,
@@ -7311,12 +7398,14 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     let root = resolve_runtime_asset_root(version, debug)?;
     let image = versioned_image_tag(config.image_name, version);
 
+    step("· checking the login container image");
     ensure_image_exists(&root, config.image_name, &image, debug)?;
 
     // Route infrastructure bring-up through the container dependency model
     // (order 227).  This replaces the ad-hoc ensure_enclave_network →
     // ensure_vault_running → ensure_proxy_running chain with a single
     // topological ensure that enforces the graph invariant at compile time.
+    step("· starting Vault and the enclave proxy");
     #[cfg(feature = "vault")]
     {
         use crate::container_deps::ensure_git_login;
@@ -7333,6 +7422,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         ensure_proxy_running(debug)?;
     }
 
+    step("· waiting for Vault and the proxy to report healthy");
     check_auth_required_services(&["tillandsias-vault", "tillandsias-proxy"], debug)?;
 
     let container = format!(
@@ -7340,6 +7430,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         config.provider.id_str(),
         std::process::id()
     );
+    step("· starting the login helper container");
     let cleanup = LoginContainerCleanup {
         name: container.clone(),
         debug,
@@ -7445,6 +7536,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
 
     let required = ["tillandsias-vault", container.as_str()];
     check_auth_required_services(&required, debug)?;
+    step("ready\n");
 
     // Order (operator directive 2026-07-29): CREDENTIAL FIRST, identity
     // second. Prompting for name/email before the token led operators to
@@ -13088,16 +13180,34 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
         }
     }
 
-    // 5. Force-terminate the process group to clean up any remaining stray children
-    // (like orphaned tillandsias-podman-cli instances).
+    // 5. Force-terminate the process group to clean up any remaining stray
+    // children (like orphaned tillandsias-podman-cli instances).
+    //
+    // KNOWN GAP: this only fires when we LEAD our group, which an interactive
+    // lane deliberately does not (see `should_own_process_group`). Those lanes
+    // therefore get no group sweep — accepted, because the alternative is
+    // SIGTERM'ing the operator's shell. The durable answer is to put spawned
+    // children in a group of their own (`CommandExt::process_group(0)`) and
+    // sweep that instead of ours; filed in the deliverable below.
     // @trace spec:graceful-shutdown
+    // @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
     #[cfg(unix)]
-    {
-        debug!("sending SIGTERM to process group");
-        unsafe {
-            // Signal our own process group. Use a negative PID to target the group.
-            // Ignore failure (ESRCH means group is already gone).
-            let _ = libc::kill(-libc::getpgrp(), libc::SIGTERM);
+    unsafe {
+        // Only sweep a group we LEAD. An interactive lane deliberately stays in
+        // the launching shell's foreground process group (see `main`), and
+        // signalling that group would SIGTERM the operator's shell — and, on
+        // the Windows tray path, the wrapper script and its terminal window.
+        let pgrp = libc::getpgrp();
+        if pgrp == libc::getpid() {
+            debug!("sending SIGTERM to process group");
+            // Negative PID targets the group. Ignore failure (ESRCH means the
+            // group is already gone).
+            let _ = libc::kill(-pgrp, libc::SIGTERM);
+        } else {
+            debug!(
+                pgrp,
+                "not the process-group leader; skipping group SIGTERM so the launching shell survives"
+            );
         }
     }
 
@@ -14223,6 +14333,9 @@ mod tests {
             "opencode_web",
             "observatorium",
             "inference_tier",
+            // 2026-08-09 macOS drain: --capabilities was missing and an
+            // in-guest run singleton-killed the live vsock server.
+            "capabilities",
             "github_login",
             "claude_login",
             "codex_login",
@@ -15451,6 +15564,57 @@ mod tests {
             .expect_err("non-TTY login without --with-token must fail before Podman startup");
         assert!(error.contains("--github-login requires a terminal"));
         assert!(error.contains("--with-token"));
+    }
+
+    /// The blank GitHub-Login terminal (v0.4.260809.2). Claiming our own
+    /// process group while we ARE the terminal's foreground group backgrounds
+    /// us, so `podman exec --tty`'s tcsetattr earns a SIGTTOU and the whole
+    /// login stops before printing anything.
+    ///
+    /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    #[cfg(unix)]
+    #[test]
+    fn interactive_lane_keeps_the_terminal_foreground_process_group() {
+        // Forked out of a shell that holds the terminal: we are the foreground
+        // group, so moving out of it would background us. Must NOT setpgid.
+        assert!(
+            !should_own_process_group(Some(4242), 4242),
+            "a process that leads the terminal's foreground group must stay in it"
+        );
+
+        // No controlling terminal (systemd service, piped harness): nothing to
+        // lose, so own the group and keep the kill(-pgrp) sweep working.
+        assert!(
+            should_own_process_group(None, 4242),
+            "a terminal-less lane must still claim its own process group"
+        );
+
+        // Already backgrounded by the launching shell (`... &`): we are not the
+        // foreground group, so claiming our own group costs nothing.
+        assert!(
+            should_own_process_group(Some(1), 4242),
+            "a lane already outside the foreground group may claim its own"
+        );
+    }
+
+    /// The other half of the same fix: a lane that deliberately stayed in the
+    /// launching shell's group must never SIGTERM that group on shutdown.
+    ///
+    /// @trace plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+    #[cfg(unix)]
+    #[test]
+    fn group_sigterm_is_gated_on_actually_leading_the_group() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let idx = source
+            .find("let _ = libc::kill(-pgrp, libc::SIGTERM);")
+            .expect("graceful shutdown must still sweep its own process group");
+        let guard = source[..idx]
+            .rfind("if pgrp == libc::getpid() {")
+            .expect("the group SIGTERM must be gated on leading the group");
+        assert!(
+            source[guard..idx].len() < 400,
+            "the leader check must guard the group SIGTERM directly, not from far away"
+        );
     }
 
     #[test]

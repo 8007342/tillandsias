@@ -36,23 +36,101 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
 4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
-5.  **Use Local MCP Servers for Instant Context**:
-    - **`project-plan` (`forge-plan`)**: Call `plan_query`, `plan_ready`, `plan_status`, `plan_answer`, `methodology_path`, `methodology_ask` for fast sub-60ms cited envelopes over `plan/` and `methodology/`.
-    - **`project-info`**: Call `read_file`, `search_code`, `git_status`, `project_structure` for fast sub-90ms repo navigation without heavy context load.
-6.  **Read Authoritative Ledgers**: Read:
-    -   `methodology.yaml`
-    -   `methodology/distributed-work.yaml`
-    -   `plan.yaml`
-    -   `plan/index.yaml` (or via `project-plan` / `forge-plan` MCP tools)
-    -   `plan/loop_status.md`
-    -   **Read the `## Direction` section of `plan/loop_status.md`** (operator-owned
-        thematic direction). Reduce your packet selection against that theme
-        rather than inventing new direction; cite the direction in your work-queue
-        ledger entry (order 381).
+5.  **Orient via MCP — do NOT read whole ledgers.** This is a rule, not a
+    suggestion. Canonical: `methodology/distributed-work.yaml` →
+    `mcp_first_read_path`.
+
+    The files this step used to tell you to read are `plan/index.yaml` (31,678
+    lines), `plan/loop_status.md` (7,875 lines), `plan.yaml`, and two methodology
+    files — imported in full to extract what amounts to a paragraph. That import
+    is permanent for the rest of your session, it is the single largest
+    consumer of orchestrator context in the loop, and every agent on every host
+    pays it again every cycle.
+
+    Ask instead, and stop when you have the answer:
+
+    | You need | Ask |
+    |---|---|
+    | the operator's active theme | `plan_answer "what is the current Direction?"` |
+    | what to work on | `plan_next <role>` / `plan_ready <role>` (then §2.0) |
+    | one packet's state | `plan_status <id\|order>` |
+    | why something is stuck | `plan_blocked_by` / `plan_blocked_on` / `plan_closure` |
+    | a methodology rule | `methodology_ask "<question>"` / `methodology_path` |
+    | a spec's content | `spec_answer` |
+    | repo/code navigation | `project-info`: `search_code`, `grep_code`, `find_files`, `file_summary`, `read_file` |
+
+    Every answer is CITED. Keep the citations — §5 and §7 need them.
+
+    **Fall back to the filesystem for exactly three reasons, and say which:**
+
+    - **Unavailable** — MCP absent, erroring, or answering
+      `confidence=unsupported`. Fall back and *keep going*; a degraded read path
+      is never a blocked cycle. Note it in your loop-status entry, so an expert
+      that systematically refuses becomes visible instead of being quietly
+      routed around (order 531: launch state truthfully reported `experts:
+      ready` while every answer was unsupported).
+    - **Verification** — before anything irreversible (commit, status flip,
+      delete, release) that rests on an MCP answer, read the **cited span** to
+      confirm it. The span, not the file. Cited is not the same as checked.
+    - **Not exposed** — no tool covers it. Read it directly, and if the loop
+      needs it repeatedly, file a packet: a recurring direct read is a missing
+      tool, not a habit.
+
+6.  **Direction still binds.** However you obtained it, reduce your packet
+    selection against the operator-owned `## Direction` theme rather than
+    inventing new direction, and cite it in your work-queue ledger entry
+    (order 381).
 
 ---
 
 ## 2 — Discover Work & Select Shaped Packet
+
+### 2.0 — Run the batch selector FIRST (cycle triage)
+
+```bash
+scripts/select-work-batch.sh <linux|macos|windows|any> [--budget N] [--seed S]
+```
+
+This decides **what THIS cycle takes**, which flat ranking does not. It emits one
+cohesive, budgeted batch drawn from a single epic (`release_target`), the
+`triage:` coverage line, and the `frontier` it considered:
+
+```
+batch: epic=forge-local-experts-milestone role=linux release=v0.5 size=3 budget=3 score=19.728 seed=host-20260809 pick=1/3
+packet  394  plan-methodology-experts-rung1  p1
+...
+triage: eligible=140 grouped=60 ungrouped=80 epics=6
+frontier 19.728  forge-local-experts-milestone  packets=41 blocking=10 neglect=4.7
+```
+
+Work the batch **in the order printed**, then stop — do not top up from another
+epic. Record the printed `seed` in your loop-status entry so the selection can
+be replayed.
+
+Three things about it that are easy to get wrong:
+
+- **It is minimax, not priority-first.** Epics are scored by residual
+  (`2*urgency + 1.5*blocking + neglect`), because ranking by p0 alone is the
+  anti-pattern `convergence.yaml` names: *raising average convergence by
+  improving low-risk obligations while a high-risk maximum residual remains
+  unresolved.* The p0-first agent keeps finding p0s.
+- **The entropy is score-weighted, and that is deliberate.** Choice is spread
+  over the top-3 epics so nothing starves and two concurrent hosts do not
+  collide, but weighted so the largest residual still wins most of the time
+  (~9 in 12). Predictable drain is a property of batch SIZE — fixed absolutely
+  by the budget — never of always picking the same work.
+- **`ungrouped=N` on the triage line is a defect signal, not decoration.** It
+  counts eligible packets with no `release_target`. When it is large, the epic
+  tier is not doing its job; file/assign coverage rather than shrugging. It was
+  80 of 140 on 2026-08-09.
+
+Budgets: forge = 1 packet (order 264, unchanged), everything else = 3.
+
+If the selector refuses (`refused:no-eligible-work`, `refused:no-plan-binary`),
+fall back to the manual ranking below — which is also the rationale the selector
+automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triage`.
+
+### 2.1 — Manual ranking (fallback, and the rationale)
 
 1.  **Walk the Graph**: Read (via `project-plan` / `project-info` MCP tools or direct file inspection), in order:
     -   `plan/index.yaml` — packet index + selection policy (`plan_query` / `plan_ready`).
@@ -88,6 +166,15 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
 
 1.  **Mint Lease ID**: Mint a content-stable lease ID.
 2.  **Emit Claim Event**: Append a `claim` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> claim "<summary>" --ts "<ISO-8601-UTC>" --agent "<your-agent-id>" --host "<host>"` or by creating an append-only fragment in `plan/index.d/<utc>-<suffix>-<host>.yaml`.
+
+    If `append-event` refuses with `packet_id not found`, the packet lives only
+    in a fragment and that command cannot see it (600-c266) — write the event
+    block by hand in your own fragment. **A `status` change is different: never
+    hand-author it, use `tillandsias-plan set-field`** (see §7.2).
+
+    A claim that produces no event by cycle end is reclaimed after 4h by
+    `scripts/reclaim-stranded-claims.sh` — 8 claims abandoned for 17–26 days
+    were found that way. Ending a cycle with an event is what keeps your claim.
 3.  **Commit & Push**: Commit ONLY the plan fragment edits, and push them to your active platform branch:
     ```bash
     git add plan/index.d/
@@ -238,7 +325,32 @@ status `ready`. The packet closes only when every agent named in
     Report `experts_substitution` as `unknown` — it is not derivable in-repo and
     must never be estimated.
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
-2.  **Emit Completed Event**: Append a `completed` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> completed "<summary>" ...` or by writing an append-only fragment file in `plan/index.d/` setting status `done` and listing commit SHAs and validation log paths.
+2.  **Close the packet — BOTH the event and the status transition.**
+
+    ```bash
+    tillandsias-plan set-field <packet-id> status completed \
+      --reason "<what shipped, commit SHAs, validation log paths>"
+    ```
+
+    An event alone does **not** close a packet. This step used to read *"append
+    a `completed` event … or by writing an append-only fragment file setting
+    status `done`"*, and **both of those branches are broken** — which is why
+    three hosts left finished work claimable on 2026-08-09:
+
+    - `append-event` locates packets by their item prefix in `plan/index.yaml`
+      and is blind to fragment-only packets (600-c266). It refuses them outright.
+    - Hand-writing a fragment that re-declares the packet under `packets:` with
+      a new status is a **G-Set no-op**. It parses, validates, passes
+      `tillandsias-plan check`, reads correctly in review — and the fold throws
+      it away. 11 of 21 completions were discarded that way (635-i6vm).
+    - Writing only a `type: completed` event leaves the status untouched. macOS
+      did this after a 5/5-PASS validation with an evidence file; the packet was
+      still being handed out as work hours later.
+
+    `set-field` resolves against the folded ledger, writes the LWW channel
+    correctly, refuses an unknown reference, and reports a no-op instead of
+    writing one. Add a narrative `progress`/`completed` event too if the detail
+    is worth keeping — but the status transition is what actually closes it.
 3.  **Commit & Push Ledger**: Commit and push the final plan fragment edits to `origin/<active-branch>`.
 
 ### Mandatory Exit Discipline

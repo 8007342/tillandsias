@@ -35,8 +35,11 @@ description: >
   separate files and both narratives fold in newest-first; compaction folds
   exactly its fragments and is a no-op on the second run; loop-status-append
   refuses an agent fragment naming the operator-owned Direction section and a
-  hand-written one is reported malformed and never folded; the CRDT unit tests
-  are green and the loop-status capability tokens are declared and dispatch.
+  hand-written one is reported malformed and never folded; the store's own
+  README.md is documentation, not a fragment (never folded, never reported
+  malformed, while a genuine malformed fragment still surfaces); the CRDT unit
+  tests are green and the loop-status capability tokens are declared and
+  dispatch.
 severity: high
 size: quick
 
@@ -85,6 +88,11 @@ critical_path:
     timeout_ms: 300000
     expected_behavior: "ok: hand-written-direction-fragment-is-malformed-not-folded"
 
+  - step: "PIN (ORDER 626-bnn5): the committed loop_status.d/README.md is documentation, not a fragment — never folded, never reported malformed, while a genuine malformed fragment still is"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/loop_status.d\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Cycle 2026-08-02T00:00Z (fixture — base entry)' '' '- base body' > \"$W/plan/loop_status.md\"; printf '%s\\n' '# Loop-status fragments (`plan/loop_status.d/`)' '' 'Documentation, not a fragment.' > \"$W/plan/loop_status.d/README.md\"; printf '%s\\n' '## Cycle 2026-08-03T01:00Z (h — fine)' '' '- ok' > \"$W/plan/loop_status.d/20260803t010000z-ok-h.md\"; printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' > \"$W/plan/loop_status.d/20260803t020000z-bad-h.md\"; R=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-fragments 2>&1); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status 2>&1); ! printf '%s' \"$R\" | grep -q 'README.md'; printf '%s' \"$R\" | grep -q -- '-bad-h.md'; printf '%s' \"$R\" | grep -q 'malformed=1'; printf '%s' \"$V\" | grep -q 'base body'; ! printf '%s' \"$V\" | grep -q 'clobber'; cd /; rm -rf \"$W\"; echo 'ok: store-readme-not-a-fragment-real-malformed-still-surfaces'"
+    timeout_ms: 300000
+    expected_behavior: "ok: store-readme-not-a-fragment-real-malformed-still-surfaces"
+
   # ── (e) the per-section CRDT choice is pinned behaviourally + by unit tests
   - step: "PIN: the loop_status CRDT unit tests (commutativity, idempotency, G-Set survival, gate refusals) are green"
     command: "cargo test --quiet --release -p tillandsias-plan --lib loop_status 2>&1 | grep -q 'test result: ok' && echo 'ok: loop-status-unit-tests-green'"
@@ -92,9 +100,25 @@ critical_path:
     expected_behavior: "ok: loop-status-unit-tests-green"
 
   - step: "PIN: the loop-status capability tokens are DECLARED and the manifest/binary readers agree"
-    command: "set -e; for t in loop-status loop-status-append loop-status-compact loop-status-fragments; do grep -qx $t crates/tillandsias-plan/capabilities.txt || { echo \"token $t missing from manifest\"; exit 1; }; done; cargo run --quiet --release -p tillandsias-plan -- capabilities | grep -qx loop-status && echo 'ok: loop-status-capabilities-declared'"
+    command: "set -e; for t in loop-status loop-status-append loop-status-compact loop-status-fragments loop-status-verify; do grep -qx $t crates/tillandsias-plan/capabilities.txt || { echo \"token $t missing from manifest\"; exit 1; }; done; cargo run --quiet --release -p tillandsias-plan -- capabilities | grep -qx loop-status && cargo run --quiet --release -p tillandsias-plan -- capabilities | grep -qx loop-status-verify && echo 'ok: loop-status-capabilities-declared'"
     timeout_ms: 300000
     expected_behavior: "ok: loop-status-capabilities-declared"
+
+  # ── (f) ORDER 626-zmhz: the ACTIVE-RELEASE + folded-count verify gate ─────
+  - step: "PIN (ORDER 626-zmhz): loop-status-verify agrees with the folded truth on a consistent fixture — verdict=ok"
+    command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## ACTIVE RELEASE: v0.5' '' '- **v0.5 — ACTIVE (1 open / 2 total tagged): \"fixture release\"** Fixture prose.' '- **v0.6 (0 open / 1 total tagged): \"next\"** Fixture prose.' > \"$W/plan/loop_status.md\"; printf '%s\\n' 'plan_index:' '  steps:' '    - order: 900' '      packet_id: alpha' '      title: \"A\"' '      status: completed' '      desired_release: v0.5' '    - order: 901' '      packet_id: beta' '      title: \"B\"' '      status: ready' '      desired_release: v0.5' '    - order: 902' '      packet_id: gamma' '      title: \"C\"' '      status: ready' '      desired_release: v0.6' > \"$W/plan/index.yaml\"; out=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-verify --ledger \"$W/plan/index.yaml\"); rc=$?; cd /; rm -rf \"$W\"; test $rc = 0 && printf '%s' \"$out\" | grep -q 'verdict=ok' && printf '%s' \"$out\" | grep -q 'count_ok=yes' && echo 'ok: verify-consistent-fixture-verdict-ok'"
+    timeout_ms: 300000
+    expected_behavior: "ok: verify-consistent-fixture-verdict-ok"
+
+  - step: "NEGATIVE CONTROL (ORDER 626-zmhz): a STALE count in the release bullet makes loop-status-verify fail loud (exit nonzero, count_ok=no)"
+    command: "W=$(mktemp -d); mkdir -p \"$W/plan\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## ACTIVE RELEASE: v0.5' '' '- **v0.5 — ACTIVE (9 open / 9 total tagged): \"fixture release\"** Fixture prose.' > \"$W/plan/loop_status.md\"; printf '%s\\n' 'plan_index:' '  steps:' '    - order: 900' '      packet_id: alpha' '      title: \"A\"' '      status: completed' '      desired_release: v0.5' '    - order: 901' '      packet_id: beta' '      title: \"B\"' '      status: ready' '      desired_release: v0.5' '    - order: 902' '      packet_id: gamma' '      title: \"C\"' '      status: ready' '      desired_release: v0.6' > \"$W/plan/index.yaml\"; out=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-verify --ledger \"$W/plan/index.yaml\" 2>&1); rc=$?; cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'count_ok=no' && printf '%s' \"$out\" | grep -q 'count is stale' && echo 'ok: verify-stale-count-fails-loud'"
+    timeout_ms: 300000
+    expected_behavior: "ok: verify-stale-count-fails-loud"
+
+  - step: "NEGATIVE CONTROL (ORDER 626-zmhz): a STALE `— ACTIVE` label on the wrong release bullet makes loop-status-verify fail loud"
+    command: "W=$(mktemp -d); mkdir -p \"$W/plan\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## ACTIVE RELEASE: v0.5' '' '- **v0.5 (1 open / 2 total tagged): \"fixture release\"** Fixture prose.' '- **v0.6 — ACTIVE (0 open / 1 total tagged): \"next\"** Fixture prose.' > \"$W/plan/loop_status.md\"; printf '%s\\n' 'plan_index:' '  steps:' '    - order: 900' '      packet_id: alpha' '      title: \"A\"' '      status: completed' '      desired_release: v0.5' '    - order: 901' '      packet_id: beta' '      title: \"B\"' '      status: ready' '      desired_release: v0.5' '    - order: 902' '      packet_id: gamma' '      title: \"C\"' '      status: ready' '      desired_release: v0.6' > \"$W/plan/index.yaml\"; out=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-verify --ledger \"$W/plan/index.yaml\" 2>&1); rc=$?; cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'are labeled ACTIVE' && echo 'ok: verify-stale-active-label-fails-loud'"
+    timeout_ms: 300000
+    expected_behavior: "ok: verify-stale-active-label-fails-loud"
 
 failure_modes:
   - "an agent rewrites plan/loop_status.md in place, so two hosts writing status conflict on every push"

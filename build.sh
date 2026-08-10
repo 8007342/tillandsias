@@ -473,24 +473,21 @@ _require_host_build_tools() {
     fi
 }
 
-# Clickable trace index regeneration. openspec/specs/clickable-trace-index/
-# spec.md ("Build integration") requires build.sh to invoke generate-traces.sh
-# on every build that is not a test-only or check-only invocation. Every
-# build-producing dispatch below calls this helper; the latch makes combined
-# flags (e.g. --clean --release --install) regenerate exactly once, and the
-# test/check dispatches never regenerate. A gate-bearing check may still run
-# `generate-traces.sh --check`, which writes only to a throwaway directory and
-# refuses to certify stale committed evidence.
+# Trace coverage. Until 2026-08-09 this was clickable-trace-index REGENERATION:
+# build.sh rewrote 171 tracked TRACES.md files on every build-producing dispatch,
+# and the ordering rule below existed entirely to stop that write from landing
+# between a gate that passed clean and the forge's dirty-start guard.
 #
-# Ordering rule (order 495, litmus:local-ci-self-clean-evidence): the tracked
-# trace indexes are deterministic, so regeneration is a no-op whenever the
-# committed indexes are current. It must therefore run BEFORE any CI gate or
-# post-build forge phase — never between a gate that passed clean and the
-# forge's dirty-start guard, which would refuse the cycle.
+# The write is gone, so the hazard is gone with it. scripts/trace-coverage.sh
+# only reads: it computes the trace_coverage_summary the evidence bundle has
+# always required and enforces the ghost-trace ratchet. Order 495's constraint is
+# satisfied vacuously now — a function that cannot dirty the worktree cannot hand
+# dirt to the forge gate — but the call site is kept in the same place so the
+# ordering property stays true by construction rather than by luck.
 #
-# TILLANDSIAS_SKIP_TRACE_INDEX=1 suppresses regeneration for callers that must
-# not mutate the tracked checkout; build.sh sets it for the post-build and
-# runtime litmus phases, which can launch a real forge.
+# TILLANDSIAS_SKIP_TRACE_INDEX=1 still suppresses it, kept under its old name so
+# existing callers (post-build and runtime litmus phases, which can launch a real
+# forge) keep working unchanged.
 # Local build counter. methodology/versioning.yaml declares this and has since
 # the scheme was designed:
 #
@@ -536,41 +533,51 @@ _bump_build_version() {
 }
 
 _TRACE_INDEXES_REGENERATED=false
-_regenerate_trace_indexes() {
+# Trace coverage + ghost-trace ratchet. Replaces the 171 committed TRACES.md
+# rendering files that scripts/generate-traces.sh used to emit and that this
+# function used to regenerate on every build (operator directive 2026-08-09).
+#
+# The rendering was pure cost. It was ~4000 lines of generated markdown, tracked
+# in git, rewritten on every build, and its only real consumers were a
+# dead-trace detector exercised solely by its own tests, a handful of litmus
+# greps, and the on-hold Observatorium. It dirtied worktrees, tripped
+# litmus:local-ci-self-clean-evidence, and forced agents into extra commits
+# whose whole content was regenerated evidence — the exact velocity tax the
+# comment this replaces spent 20 lines apologising for.
+#
+# Crucially it was NOT what carried the convergence guarantee. That is carried
+# by the @trace annotations themselves (still in source, untouched), by
+# validate_spec_existence, by litmus-to-spec binding, and by the CentiColon
+# signature. And `trace_coverage_summary` — a REQUIRED evidence-bundle field in
+# methodology/convergence.yaml and verification.yaml — was never produced by
+# anything at all. scripts/trace-coverage.sh now produces it, and enforces the
+# ghost ratchet, so this change closes an open obligation rather than dropping
+# one. Nothing writes to the worktree here: the summary is computed on demand.
+_check_trace_coverage() {
     [[ "$_TRACE_INDEXES_REGENERATED" == false ]] || return 0
     _TRACE_INDEXES_REGENERATED=true
     if [[ "${TILLANDSIAS_SKIP_TRACE_INDEX:-0}" == "1" ]]; then
-        _info "Skipping trace index regeneration (TILLANDSIAS_SKIP_TRACE_INDEX=1)"
+        _info "Skipping trace coverage check (TILLANDSIAS_SKIP_TRACE_INDEX=1)"
         return 0
     fi
-    _step "Regenerating clickable trace indexes..."
-    # Order 495 requires the regeneration to run here, BEFORE any gate. What it
-    # must NOT do is run silently: `2>/dev/null || true` swallowed every error
-    # AND every signal that the tracked indexes had just changed. The build
-    # dirtied TRACES.md and said nothing, so an agent shipped its @trace change
-    # without the index refresh and the NEXT agent's pre-build sweep failed
-    # litmus:local-ci-self-clean-evidence for dirt it did not create. That
-    # happened three times in one day before this was fixed.
-    #
-    # Ask first, so we can tell the agent whether ITS change is what moved them.
-    local _traces_were_stale=0
-    if ! "$SCRIPT_DIR/scripts/generate-traces.sh" --check >/dev/null 2>&1; then
-        _traces_were_stale=1
+    _step "Computing trace coverage + ghost-trace ratchet..."
+    local summary
+    summary="$("$SCRIPT_DIR/scripts/trace-coverage.sh" 2>/dev/null)"
+    if [[ -n "$summary" ]]; then
+        _info "$summary"
     fi
 
-    if ! "$SCRIPT_DIR/scripts/generate-traces.sh"; then
-        _warn "Trace index regeneration FAILED. The committed indexes are now of unknown currency; run ./scripts/generate-traces.sh by hand and read its errors."
-        return 0
+    # The ratchet fails in BOTH directions: a new ghost, or a baseline entry
+    # that is no longer a ghost and must be pruned. The baseline may only
+    # shrink, which is what makes this monotonic instead of a mute button.
+    local gate_out
+    if ! gate_out="$("$SCRIPT_DIR/scripts/trace-coverage.sh" --gate 2>&1)"; then
+        _error "Ghost-trace ratchet FAILED"
+        printf '%s\n' "$gate_out" >&2
+        return 1
     fi
-
-    if [[ "$_traces_were_stale" == "1" ]]; then
-        _warn "Trace indexes were STALE and have just been regenerated — your worktree is now dirty."
-        _warn "  This build changed tracked files. That is expected when you add, move, or remove an @trace annotation."
-        _warn "  YOU MUST commit them IN THE SAME COMMIT as the change that moved them:"
-        _warn "      git add TRACES.md openspec/specs/*/TRACES.md"
-        _warn "  Leaving them uncommitted fails litmus:local-ci-self-clean-evidence for the NEXT agent,"
-        _warn "  far from the cause. Verify before pushing:  ./scripts/generate-traces.sh --check"
-    fi
+    _info "${gate_out}"
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -583,7 +590,7 @@ if [[ "$FLAG_INIT" == true ]]; then
     # here rather than a possibly-confusing downstream Rust error.
     require_podman || exit 1
     _bump_build_version
-    _regenerate_trace_indexes
+    _check_trace_coverage
     _step "Running tillandsias --init (builds all images with versioned tags)..."
     # Runs on the host where podman works.
     "$SCRIPT_DIR/target/debug/tillandsias" --init 2>&1
@@ -595,7 +602,7 @@ fi
 
 if [[ "${FLAG_OBSERVATORIUM:-false}" == true ]]; then
     _bump_build_version
-    _regenerate_trace_indexes
+    _check_trace_coverage
     _step "Building workspace (debug)..."
     _require_host_build_tools
     (cd "$SCRIPT_DIR" && cargo build --workspace)
@@ -685,14 +692,20 @@ _write_gate_stamp() {
     [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]] || return 0
 
     # Order 584-2qq2: a stamp is authority for the pre-push hook, so it must
-    # cover generated trace evidence as well as Rust/ledger checks. Keep this
-    # validation non-mutating: check/test-only invocations still never rewrite
-    # TRACES.md, and TILLANDSIAS_SKIP_TRACE_INDEX continues to suppress every
-    # regeneration. It does not grant authority to stamp stale evidence.
-    local trace_status
-    if ! trace_status="$("$SCRIPT_DIR/scripts/generate-traces.sh" --check 2>&1)"; then
-        _error "Trace-index freshness check failed — gate stamp NOT recorded"
-        printf '%s\n' "$trace_status" >&2
+    # cover trace evidence as well as Rust/ledger checks. What it covered until
+    # 2026-08-09 was the FRESHNESS of 171 generated TRACES.md files — a property
+    # of a rendering, satisfiable only by committing regenerated markdown, and
+    # the reason a passing gate routinely demanded an extra commit before it
+    # would let you push.
+    #
+    # The stamp now covers the property that actually matters and that a
+    # rendering could never express: no annotation references a spec that does
+    # not exist. Non-mutating, as before — nothing is written to the worktree,
+    # so a stamp can no longer be blocked by evidence the build itself dirtied.
+    local ghost_status
+    if ! ghost_status="$("$SCRIPT_DIR/scripts/trace-coverage.sh" --gate 2>&1)"; then
+        _error "Ghost-trace ratchet failed — gate stamp NOT recorded"
+        printf '%s\n' "$ghost_status" >&2
         return 1
     fi
 
@@ -732,7 +745,7 @@ _prepare_ci_full_install_inputs() {
     # regenerated trace index does. Developer dispatches still bump — that is
     # methodology/versioning.yaml's increment_rule — but the cycle's internal
     # build must not.
-    _regenerate_trace_indexes
+    _check_trace_coverage
 
     if [[ ! -x "$SCRIPT_DIR/scripts/build-guest-binaries.sh" ]]; then
         _error "Missing executable guest binary builder: scripts/build-guest-binaries.sh"
@@ -751,7 +764,7 @@ _prepare_ci_full_install_inputs() {
 # gate and regenerates at the top of its own block.
 if [[ "$FLAG_INSTALL" == true ]]; then
     _bump_build_version
-    _regenerate_trace_indexes
+    _check_trace_coverage
 fi
 
 # CI validation
@@ -811,7 +824,7 @@ fi
 if [[ "$FLAG_INSTALL" == true ]]; then
     _step "Building portable launcher (musl-static) with tray support for install..."
     _bump_build_version
-    _regenerate_trace_indexes
+    _check_trace_coverage
 
     # Build only the Linux launcher here. macOS and Windows tray binaries share
     # the `tillandsias-tray` bin name and have platform-specific release paths.
@@ -953,6 +966,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan order uniqueness passed"
 
+    # Order 635-i6vm. `tillandsias-plan check` validates the ledger's SCHEMA and
+    # references; it cannot see a status transition the fold discarded, because
+    # the discarded result is itself perfectly valid. Re-declaring a packet under
+    # `packets:` with a new status parses, validates, reviews correctly — and is
+    # a no-op, because `packets:` is a G-Set. 11 of 21 fragment-recorded
+    # completions were being thrown away when this was found, and the batch
+    # selector was handing already-completed packets back out as next work.
+    _step "Checking for fragment status transitions the fold discards..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
+        _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
+        exit 1
+    fi
+    _info "Fragment status-loss check passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while
@@ -969,7 +996,7 @@ fi
 # Release build
 if [[ "$FLAG_RELEASE" == true ]]; then
     _bump_build_version
-    _regenerate_trace_indexes
+    _check_trace_coverage
     if ! _run_local_ci_gate --fast "${CI_ARG_LIST[@]}"; then
         _error "CI/CD validation failed — fix issues before releasing"
         exit 1
@@ -998,7 +1025,7 @@ if [[ "$FLAG_RELEASE" == true ]]; then
 # Default: debug build (only if no other build or CI action was requested)
 elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
     _bump_build_version
-    _regenerate_trace_indexes
+    _check_trace_coverage
     _step "Building workspace (debug)..."
     _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Debug build complete"

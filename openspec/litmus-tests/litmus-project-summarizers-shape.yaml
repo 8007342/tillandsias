@@ -94,12 +94,12 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "TRACES.md row for project-summarizers references all 6 summarizers"
-    # The spec-to-impl graph reference. A regression here would
-    # silently demote the openspec walker's coverage report.
-    command: "grep -F 'spec:project-summarizers' TRACES.md | grep -cE 'summarize-(cargo|package-json|go-mod|nix|pubspec|pyproject)' | awk '{ if ($1+0 >= 1) print \"ok: TRACES.md row references summarizers\"; else { print \"FAIL: TRACES.md row missing summarizer refs\"; exit 1 } }'"
-    timeout_ms: 3000
-    expected_behavior: "ok:"
+  # A step that greped the TRACES.md row for spec:project-summarizers lived here
+  # until 2026-08-09. It was removed with the rendering, and NOT replaced: STEP 2
+  # already asserts the same property against the ground truth (the annotations
+  # in the summarizer scripts themselves). The removed step was also weaker than
+  # its own title claimed — it accepted `>= 1` summarizer while announcing "all
+  # 6", so five could have lost their annotation without it going red.
 
 observability:
   traces:

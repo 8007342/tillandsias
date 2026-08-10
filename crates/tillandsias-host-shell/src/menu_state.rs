@@ -256,6 +256,27 @@ pub struct ProjectEntry {
 /// `LoginStatePush`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum GithubLoginState {
+    /// Order 626-r7kq: NOTHING has been observed yet — the tray has not had a
+    /// confirmed answer from the guest since it started. This is the INITIAL
+    /// state, and it is distinct from `LoggedOut`, which means "we asked and
+    /// the answer was no".
+    ///
+    /// Collapsing the two is the defect this variant exists to prevent. The
+    /// flag that makes the login row clickable (`login_runtime_ready`) resolves
+    /// after ONE wire round-trip — milliseconds — while the login answer costs
+    /// a container run in the guest (vault read + `gh auth login` + `gh api
+    /// user`), i.e. seconds to minutes. With `LoggedOut` as the initial state
+    /// the menu spent that entire window offering an actionable `GitHub Login`
+    /// to users who were already signed in, and they took it: the operator did
+    /// exactly that on v0.4.260809.2 (field log 2026-08-09T06:10:51Z, then a
+    /// project click at 06:12:26Z proving the stored credential had been valid
+    /// all along), and the same pattern recurs in every session in that log.
+    ///
+    /// The ratified Observable Streams Contract already specified this state as
+    /// `LoginState::Unknown` (plan/issues/observable-streams-contract-2026-06-30.md,
+    /// boundary B1); orders 154/230/231/260 landed the push streams but the
+    /// variant never reached `MenuState`.
+    Unknown,
     LoggedOut,
     /// The login flow has been started from this tray and the confirming
     /// probe has not yet reported. Renders as a disabled "Logging in…" row
@@ -329,7 +350,10 @@ impl MenuState {
             guest_version: None,
             status_text: BOOT_STATUS_TEXT.to_string(),
             version: crate::version().to_string(),
-            login: GithubLoginState::LoggedOut,
+            // Order 626-r7kq: NOT LoggedOut. Nothing has been observed at
+            // construction time, and claiming "signed out" before asking is
+            // what put an actionable login leaf in front of signed-in users.
+            login: GithubLoginState::Unknown,
             local_projects: Vec::new(),
             cloud_projects: Vec::new(),
             cloud_projects_loaded: false,
@@ -456,6 +480,33 @@ pub fn build(state: &MenuState) -> MenuStructure {
     // (2) Auth-gated body. Mirror the Linux golden `build_menu`: emit exactly
     //     one of {GitHub Login} OR {~/src + Cloud}, never both.
     match &state.login {
+        // Order 626-r7kq (operator-approved surface, 2026-08-09T08:33Z): the
+        // not-yet-known window gets its OWN disabled row, distinct from the
+        // "Setting up…" the runtime-not-ready case shows, so the two waits are
+        // tellable apart. Disabled is the load-bearing part — a sign-in the
+        // tray has not yet ruled out must never be offered as an action.
+        GithubLoginState::Unknown => {
+            // The approved sequence has TWO distinguishable waits, so this arm
+            // splits on the same runtime flag the LoggedOut arm uses:
+            //   runtime not ready -> the workspace itself is still coming up
+            //   runtime ready     -> workspace is up, the sign-in answer is
+            //                        outstanding (the container-run probe)
+            // Both disabled. Disabled is the load-bearing part: a sign-in the
+            // tray has not yet ruled out must never be offered as an action.
+            if state.login_runtime_ready {
+                items.push(MenuItem::disabled(
+                    ids::GITHUB_LOGIN,
+                    "\u{1F504} Checking your account\u{2026}",
+                    "sign-in state not yet known",
+                ));
+            } else {
+                items.push(MenuItem::disabled(
+                    ids::GITHUB_LOGIN,
+                    "\u{1F4CB} Setting up\u{2026}",
+                    "login runtime not ready",
+                ));
+            }
+        }
         GithubLoginState::LoggedOut => {
             if state.login_runtime_ready {
                 items.push(MenuItem::leaf(ids::GITHUB_LOGIN, "\u{1F511} GitHub Login"));
@@ -834,6 +885,110 @@ mod tests {
                 !ids_seen.contains(&gated),
                 "{gated} must be hidden while logged out",
             );
+        }
+    }
+
+    /// Order 626-r7kq, THE regression pin: an unobserved sign-in state must
+    /// never be offered as an actionable login. The shipped defect was that
+    /// `MenuState::initial()` claimed `LoggedOut`, so between "runtime ready"
+    /// (one wire round-trip) and the login answer (a container run in the
+    /// guest) the menu invited already-signed-in users to sign in again — and
+    /// they did (operator field log 2026-08-09T06:10:51Z).
+    ///
+    /// This test fails if anyone reverts the initial state to `LoggedOut` or
+    /// makes the Unknown row clickable.
+    ///
+    /// @trace spec:tray-ux, spec:host-shell-architecture
+    #[test]
+    fn unobserved_login_is_never_an_actionable_leaf() {
+        // The initial state IS the unobserved state — not "signed out".
+        assert_eq!(
+            MenuState::initial().login,
+            GithubLoginState::Unknown,
+            "a tray that has not asked yet must not claim the user is signed out",
+        );
+
+        // Runtime ready is the dangerous case: it is what enabled the leaf.
+        for runtime_ready in [false, true] {
+            let state = MenuState {
+                login: GithubLoginState::Unknown,
+                login_runtime_ready: runtime_ready,
+                ..MenuState::initial()
+            };
+            let items = match build(&state) {
+                MenuStructure::Ready { items } => items,
+                other => panic!("expected Ready, got {other:?}"),
+            };
+            let login = &items[1];
+            assert_eq!(login.id, ids::GITHUB_LOGIN);
+            assert!(
+                !login.enabled,
+                "unobserved sign-in must be DISABLED (runtime_ready={runtime_ready})",
+            );
+            // The auth-gated body must not leak either: unknown is not
+            // logged-in any more than it is logged-out.
+            let ids_seen: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+            for gated in [ids::LOCAL_PROJECTS, ids::CLOUD_PROJECTS] {
+                assert!(
+                    !ids_seen.contains(&gated),
+                    "{gated} must stay hidden while sign-in is unknown",
+                );
+            }
+        }
+    }
+
+    /// Order 626-r7kq: the operator approved TWO distinguishable waits
+    /// (2026-08-09T08:33Z) — "Setting up…" while the workspace is still coming
+    /// up, then "Checking your account…" once it is up but the sign-in answer
+    /// is still outstanding. Pins the copy so neither row silently becomes the
+    /// other.
+    ///
+    /// @trace spec:tray-ux
+    #[test]
+    fn unknown_login_distinguishes_the_two_waits() {
+        let row = |runtime_ready: bool| {
+            let state = MenuState {
+                login: GithubLoginState::Unknown,
+                login_runtime_ready: runtime_ready,
+                ..MenuState::initial()
+            };
+            match build(&state) {
+                MenuStructure::Ready { items } => items[1].label.clone(),
+                other => panic!("expected Ready, got {other:?}"),
+            }
+        };
+        assert!(
+            row(false).contains("Setting up"),
+            "workspace-still-starting wait must read 'Setting up…', got {:?}",
+            row(false),
+        );
+        assert!(
+            row(true).contains("Checking your account"),
+            "sign-in-outstanding wait must read 'Checking your account…', got {:?}",
+            row(true),
+        );
+        assert_ne!(
+            row(false),
+            row(true),
+            "the two waits must be distinguishable — that is the approved surface",
+        );
+        // Internals vocabulary is forbidden in end-user UX (spec:tray-ux).
+        for label in [row(false), row(true)] {
+            let lowered = label.to_lowercase();
+            for banned in [
+                "vm",
+                "wsl",
+                "enclave",
+                "container",
+                "vault",
+                "podman",
+                "provisioning",
+            ] {
+                assert!(
+                    !lowered.contains(banned),
+                    "end-user label {label:?} must not leak internals vocabulary {banned:?}",
+                );
+            }
         }
     }
 

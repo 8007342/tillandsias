@@ -9,6 +9,16 @@ features:
     macos: "done"
     windows: "done"
     parity: "required"
+  # Order 626-r7kq (Windows/macOS, host-shell GithubLoginState::Unknown) and
+  # 627-m3vp (Linux, TrayUiState::login_observed). Added 2026-08-09 because the
+  # matrix had NO row for the sign-in state machine, so landing this on two of
+  # three platforms broke parity with every gate still green — the exact hole
+  # 628-r2vk exists to close. Copy is operator-approved (2026-08-09T08:33Z).
+  - capability: "Sign-in row distinguishes unobserved from confirmed-signed-out (never offers an actionable sign-in before the first confirmed observation; renders a disabled 'Checking your account…')"
+    linux: "done"
+    macos: "done"
+    windows: "done"
+    parity: "required"
   - capability: "Cloud (☁️) project submenu + overflow"
     linux: "done"
     macos: "done"

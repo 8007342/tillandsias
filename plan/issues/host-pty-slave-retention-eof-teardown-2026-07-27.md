@@ -2,8 +2,48 @@
 
 - **Date:** 2026-07-27 (split out of `macos-terminal-management-audit-2026-07-27.md`, defect D5)
 - **Class:** bug (P2) — shared host-shell PTY layer (`#[cfg(unix)]`)
-- **Status:** ready (mitigated, not fixed — see mitigation note)
+- **Status:** FIXED 2026-08-09 (macOS drain cycle; probe verdict + fix record below)
 - **Pickup role:** macOS host (needs a live Darwin termios probe); code is shared `cfg(unix)`
+
+## Fix record 2026-08-09 (order 492, macOS drain cycle)
+
+**Probe verdict (step 1): Darwin RESETS pty termios to cooked when the last
+slave closes** — `after == cooked`, so the retention WAS load-bearing for
+raw-mode persistence, exactly as the adversarial verifier suspected. Branch 3
+was therefore required alongside branch 2. Bonus measurement: with zero
+slaves a nonblocking Darwin master read returns `n = 0` (EOF), **not EIO and
+not EAGAIN** — the clean-EOF break in `pump_io` is the live teardown path.
+The probe is now a permanent pin: `pty::unix::tests::
+raw_termios_survives_zero_slave_window` (asserts the reset, and that the
+zero-slave read never EAGAIN-pends).
+
+Shipped (all on `osx-next`, shared `cfg(unix)` — Linux retest owed at the
+next linux-next integration per the pre-push gate):
+
+- `split()` drops the bootstrap slave (`UnixPtyReader` lost its
+  `Option<OwnedFd>` field) — pre-8c6c8d05 semantics restored; module/struct
+  docs rewritten to match.
+- Input-task EOF/post-attach-error → bounded (5s)
+  `send_lossless(ControlMessage::PtyClose{code:0, signal:Some(1)})` through
+  the cloned transport Arc; the guest's confirming PtyClose flows back as
+  `SessionEvent::Closed` and ends the output task. Idempotent with the
+  2026-07-27 session-socket detach teardown (the two can race on window
+  close).
+- Attach client re-raws the slave it opens (`fd_set_raw` right after open,
+  before Hello/pumps) — required by the probe verdict; idempotent when the
+  pair is already raw.
+- Tests: `master_read_errors_once_sole_external_slave_closes` (liveness +
+  bounded termination, production fd ordering), `pump_input_eof_sends_pty_close`
+  (FakeTransport captures the reap), the probe pin, and
+  `pump_input_tolerates_pre_attach_eio` stays green. Full host-shell suite
+  71/71 on Darwin.
+- The blank-terminal guard doc moved to
+  `plan/archive/macos-tray-github-login-blank-terminal-2026-06-21.md`
+  (citation updated in `pty/mod.rs`).
+
+Live-path evidence: the 598-kibt M6 PTY-load e2e in the same cycle runs
+attach → high-volume writer → window-close teardown on a tray built from
+this tree.
 
 ## Defect (CONFIRMED by adversarial verifier, 2026-07-27)
 

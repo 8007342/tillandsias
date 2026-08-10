@@ -40,8 +40,10 @@ Canonical rule: `openspec/specs/tray-ux/spec.md` → "UX curation governance".
 
 **Before EVERY push**: run `./build.sh --check` and fix what it reports. An
 unparseable or unformatted push poisons every downstream clone (see
-`plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md`); the
-`CI` workflow will mark it red, but the gate belongs on your side of the push.
+`plan/issues/agent-pushed-unparseable-code-no-push-ci-2026-07-21.md`); push CI
+no longer exists on any working branch (only the manually-dispatched release
+workflow remains, litmus:github-actions-budget), so this local gate is the only
+trunk protection.
 
 ## Versioning & Releases
 

@@ -31,9 +31,8 @@ if [ -f /etc/tillandsias/ca.crt ]; then
     if [ "$_trust_rc" -ne 0 ]; then
         echo "[inference] WARN: system trust store not updated (rc=$_trust_rc, expected as uid $(id -u) on this image) — relying on SSL_CERT_FILE/CURL_CA_BUNDLE" >&2
     fi
-    # Order 486: point curl at the mounted enclave CA directly so downloads
-    # verify regardless of trust-store state (curl exit 60 otherwise).
-    export CURL_CA_BUNDLE=/etc/tillandsias/ca.crt
+    # Order 486: point curl at the mounted enclave CA so downloads verify
+    # regardless of trust-store state (curl exit 60 otherwise).
     # Order 525: CURL_CA_BUNDLE fixes CURL ONLY. ollama is a Go binary and Go's
     # crypto/x509 reads SSL_CERT_FILE — which appeared NOWHERE in this image — so
     # with the trust store unwritable every `ollama pull` through squid's TLS bump
@@ -41,12 +40,49 @@ if [ -f /etc/tillandsias/ca.crt ]; then
     # agent as `inference_reason=no-models`, making "the enclave CA is not
     # trusted" indistinguishable from "nothing is cached yet". Two very different
     # faults, one message. Export the variable Go actually honours.
-    export SSL_CERT_FILE=/etc/tillandsias/ca.crt
+    #
+    # Order 626 (this block): both variables REPLACE the default trust set —
+    # they do not augment it. Pointing them at the enclave-CA-only file left
+    # 146 public roots unloaded, so every SPLICED connection became
+    # unverifiable. squid SPLICES github (order 313 recorded the real Sectigo
+    # chain verifying against the system store), so the ollama self-install
+    # egress probe failed all five attempts with `curl (60) unable to get local
+    # issuer certificate` and the container exited 1 — on a completely healthy
+    # proxy, while reporting "proxy egress not ready". Controlled repro on the
+    # Windows field host 2026-08-09: same URL, same network, only this variable
+    # changed — system store verifies github, enclave-CA-only fails 60, byte
+    # identical to the container log.
+    #
+    # Concatenate instead: public roots THEN the enclave CA. That is exactly
+    # what the trust store would have produced had it been writable, and it
+    # verifies BOTH sides of squid's split behaviour — bumped endpoints (signed
+    # by the enclave CA) and spliced ones (real public chains).
+    _ca_bundle=/etc/tillandsias/ca.crt
+    _ca_note="enclave-only"
+    for _sys_bundle in /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem \
+        /etc/ssl/certs/ca-bundle.crt; do
+        [ -r "$_sys_bundle" ] || continue
+        # ${TMPDIR:-/tmp} is writable at uid 1000 on this image; $HOME is not
+        # guaranteed to be once the models volume is mounted beneath it.
+        _ca_candidate="${TMPDIR:-/tmp}/tillandsias-ca-bundle.crt"
+        if cat "$_sys_bundle" /etc/tillandsias/ca.crt >"$_ca_candidate" 2>/dev/null; then
+            _ca_bundle="$_ca_candidate"
+            _ca_note="system+enclave"
+        fi
+        break
+    done
+    if [ "$_ca_note" = "enclave-only" ]; then
+        # Bumped endpoints still verify; spliced ones cannot. Loud, because
+        # this is the exact silent state that exited the container above.
+        echo "[inference] WARN: no combined CA bundle available — spliced upstreams (e.g. github) will fail verification" >&2
+    fi
+    export CURL_CA_BUNDLE="$_ca_bundle"
+    export SSL_CERT_FILE="$_ca_bundle"
     # Some Go/OpenSSL paths consult a directory rather than a file; pointing it at
     # the anchors dir is harmless when the copy above failed and correct when it
     # succeeded.
     export SSL_CERT_DIR=/etc/pki/ca-trust/source/anchors
-    echo "[inference] ca-trust: store_rc=$_trust_rc ssl_cert_file=$SSL_CERT_FILE curl_ca_bundle=$CURL_CA_BUNDLE"
+    echo "[inference] ca-trust: store_rc=$_trust_rc mode=$_ca_note bundle=$_ca_bundle certs=$(grep -c 'BEGIN CERTIFICATE' "$_ca_bundle" 2>/dev/null || echo '?')"
 fi
 
 # Bind to all interfaces — reachable from other containers in the enclave.

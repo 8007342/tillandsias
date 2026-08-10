@@ -8,9 +8,11 @@
 //! pair, the master goes into a `tokio::io::unix::AsyncFd` for reactor
 //! readiness, and `split()` hands out two halves that share an
 //! `Arc<AsyncFd<…>>` for concurrent read+write on the same fd. The slave
-//! fd is kept alive on the master struct so the PTY pair doesn't EOF when
-//! the caller hands off the slave path to a child process (or the macOS
-//! tray's Terminal.app wrapper).
+//! fd is held only from `open()` to `split()` — long enough for the caller
+//! to hand the slave path to the attach client — and dropped at `split()`
+//! so the client's exit EOFs the master and the session can tear down
+//! (order 492; the old whole-session retention made master reads
+//! EAGAIN-pend forever after the terminal window closed).
 //!
 //! @trace openspec/changes/control-wire-pty-attach/proposal.md, spec:vsock-transport
 
@@ -47,15 +49,16 @@ impl std::fmt::Display for UnixPtyError {
 
 impl std::error::Error for UnixPtyError {}
 
-/// Host-side Unix PTY master + retained slave. The slave fd is held so the
-/// kernel keeps the PTY pair open even after the master is split — the
-/// caller (e.g. the macOS tray's `terminal_attach`) hands the slave's
-/// `/dev/ttys*` path to Terminal.app via a small wrapper that re-opens it.
+/// Host-side Unix PTY master + bootstrap slave. The slave fd is held from
+/// `open()` until `split()` so the pair survives while the caller (e.g. the
+/// macOS tray's `terminal_attach`) hands the slave's `/dev/ttys*` path to
+/// Terminal.app via a small wrapper that re-opens it; `split()` drops it so
+/// the wrapper's exit EOFs the master (order 492).
 pub struct UnixPtyMaster {
     /// Shared so `split()` can hand both halves concurrent access. AsyncFd
     /// itself only needs `&self` for poll_read_ready / poll_write_ready.
     master: Arc<AsyncFd<FdHolder>>,
-    /// Retained slave fd. Drop the master object to close BOTH ends.
+    /// Bootstrap slave fd — dropped at `split()`, see above.
     _slave: OwnedFd,
     /// `/dev/ttys*` path of the slave side. Set on construction so the
     /// caller can open it again to attach a terminal app or child process.
@@ -170,7 +173,7 @@ impl UnixPtyMaster {
 
 /// Read half handed out by `split()`. Wraps `Arc<AsyncFd>` so both halves
 /// share the same kqueue registration.
-pub struct UnixPtyReader(Arc<AsyncFd<FdHolder>>, Option<OwnedFd>);
+pub struct UnixPtyReader(Arc<AsyncFd<FdHolder>>);
 
 /// Write half handed out by `split()`.
 pub struct UnixPtyWriter(Arc<AsyncFd<FdHolder>>);
@@ -235,7 +238,15 @@ impl super::PtyMaster for UnixPtyMaster {
     type Writer = UnixPtyWriter;
 
     fn split(self) -> (UnixPtyReader, UnixPtyWriter) {
-        let r = UnixPtyReader(self.master.clone(), Some(self._slave));
+        // The retained slave CLOSES here (order 492, audit D5). From this
+        // point the attach client is the only slave holder, so its exit
+        // EOFs the master and pump_io's input task can tear the session
+        // down instead of EAGAIN-pending forever. Darwin resets the pair's
+        // termios to cooked if this drop ever creates a zero-slave window
+        // (measured — see raw_termios_survives_zero_slave_window), which is
+        // why the attach client re-raws the slave it opens.
+        drop(self._slave);
+        let r = UnixPtyReader(self.master.clone());
         let w = UnixPtyWriter(self.master);
         (r, w)
     }
@@ -459,5 +470,171 @@ mod tests {
         fn assert_w<T: tokio::io::AsyncWrite>() {}
         assert_r::<UnixPtyReader>();
         assert_w::<UnixPtyWriter>();
+    }
+
+    /// Order 492 (the packet's step-5 test): with `split()` no longer
+    /// retaining a slave, the master must EOF/error once the sole external
+    /// slave holder exits — NOT pend forever, which is exactly the wedge
+    /// the retention caused (window close left master reads EAGAIN-pending
+    /// and the guest harness leaked). Mirrors the production ordering: the
+    /// external slave (the attach client) opens BEFORE `split()` drops the
+    /// bootstrap fd, so the pair never sees a zero-slave window mid-test.
+    #[tokio::test]
+    async fn master_read_errors_once_sole_external_slave_closes() {
+        use std::io::Write as _;
+        use tokio::io::AsyncReadExt;
+
+        const O_NOCTTY_DARWIN: i32 = 0x2_0000;
+        #[cfg(not(target_os = "macos"))]
+        const O_NOCTTY_OTHER: i32 = 0o400;
+        #[cfg(target_os = "macos")]
+        let noctty = O_NOCTTY_DARWIN;
+        #[cfg(not(target_os = "macos"))]
+        let noctty = O_NOCTTY_OTHER;
+
+        let pty = UnixPtyMaster::open(24, 80).expect("openpty");
+        let path = pty.slave_path().to_string();
+
+        // External slave opens first (as the attach client does), THEN the
+        // bootstrap slave drops inside split().
+        let mut external = {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(noctty)
+                .open(&path)
+                .expect("open external slave")
+        };
+        let (mut reader, _writer) = super::super::PtyMaster::split(pty);
+
+        // Liveness: a byte written at the slave arrives at the master.
+        external.write_all(b"x").expect("slave write");
+        let mut buf = [0u8; 8];
+        let n = tokio::time::timeout(std::time::Duration::from_secs(2), reader.read(&mut buf))
+            .await
+            .expect("live read must not time out")
+            .expect("live read");
+        assert_eq!(&buf[..n], b"x", "byte must flow slave -> master");
+
+        // Sole slave holder exits: the master read must terminate.
+        drop(external);
+        let end = tokio::time::timeout(std::time::Duration::from_secs(2), reader.read(&mut buf))
+            .await
+            .expect("post-close master read must terminate, not pend forever (order 492)");
+        match end {
+            Ok(0) => {}  // Darwin: clean EOF (measured)
+            Err(_) => {} // EIO also acceptable — still terminates the pump
+            Ok(n) => panic!("unexpected extra bytes after slave close: {:?}", &buf[..n]),
+        }
+    }
+
+    /// Order 492 live Darwin probe (audit D5), now the permanent behavior
+    /// pin. Measured on this hardware 2026-08-09:
+    ///
+    ///   1. Darwin RESETS pty termios to cooked when the last slave closes
+    ///      (`after == cooked`). The 8c6c8d05 slave retention really was
+    ///      load-bearing for raw-mode persistence, exactly as the
+    ///      terminal-management audit's verifier suspected — which is why
+    ///      the attach client re-raws the slave it opens (branch 3 of the
+    ///      packet) now that `split()` drops the tray's retained fd.
+    ///
+    ///   2. With zero slaves a nonblocking Darwin master read returns
+    ///      `n == 0` (EOF), not EIO and crucially not EAGAIN — so
+    ///      `pump_io`'s clean-EOF break is the live teardown path once the
+    ///      terminal client exits.
+    ///
+    /// Shape: raw openpty FFI (no tokio reactor needed), three tcgetattr
+    /// snapshots through the crate's own helpers — cooked reference,
+    /// post-cfmakeraw raw, and post-zero-slave-window reopen (opened with the
+    /// exact attach-client flags, O_RDWR|O_NOCTTY). `SavedTermios` is a
+    /// zero-initialized [u8; 128], so whole-array equality is sound.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn raw_termios_survives_zero_slave_window() {
+        const O_NOCTTY_DARWIN: i32 = 0x2_0000;
+
+        let mut master_fd: c_int = -1;
+        let mut slave_fd: c_int = -1;
+        let mut winsize = WinSize {
+            ws_row: 24,
+            ws_col: 80,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        let rc = unsafe {
+            openpty(
+                &mut master_fd,
+                &mut slave_fd,
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                &mut winsize,
+            )
+        };
+        assert_eq!(rc, 0, "openpty failed: {}", io::Error::last_os_error());
+        let master = unsafe { OwnedFd::from_raw_fd(master_fd) };
+        let slave = unsafe { OwnedFd::from_raw_fd(slave_fd) };
+
+        let cooked = fd_save_termios(slave.as_raw_fd()).expect("tcgetattr cooked");
+        fd_set_raw(slave.as_raw_fd()).expect("cfmakeraw");
+        let raw = fd_save_termios(slave.as_raw_fd()).expect("tcgetattr raw");
+        assert_ne!(raw, cooked, "cfmakeraw must change the termios image");
+
+        let path = ptsname_of(master.as_raw_fd()).expect("ptsname");
+
+        // Zero-slave window opens here; master stays alive.
+        drop(slave);
+
+        // Document the zero-slave master read errno (EIO expected on Darwin;
+        // EAGAIN is the with-retained-slave symptom). Master must be
+        // nonblocking first or a blocking read could hang the test.
+        set_nonblocking(master.as_raw_fd()).expect("O_NONBLOCK");
+        let mut buf = [0u8; 8];
+        let n = unsafe {
+            read(
+                master.as_raw_fd(),
+                buf.as_mut_ptr() as *mut std::ffi::c_void,
+                buf.len(),
+            )
+        };
+        let zero_slave_errno = if n < 0 {
+            io::Error::last_os_error().raw_os_error()
+        } else {
+            None
+        };
+        eprintln!("[probe] zero-slave master read: n={n} errno={zero_slave_errno:?}");
+        // EAGAIN here would mean the kernel still counts an open slave —
+        // the with-retained-slave symptom this packet removed. EOF (0) is
+        // what this kernel does; EIO would also terminate the pump loop.
+        assert!(
+            !(n < 0 && zero_slave_errno == Some(35 /* EAGAIN */)),
+            "zero-slave master read must terminate (EOF/EIO), not EAGAIN-pend"
+        );
+
+        // Reopen exactly like the attach client (O_RDWR | O_NOCTTY).
+        let reopened = {
+            use std::os::unix::fs::OpenOptionsExt;
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .custom_flags(O_NOCTTY_DARWIN)
+                .open(&path)
+                .expect("reopen slave")
+        };
+        let after = fd_save_termios(reopened.as_raw_fd()).expect("tcgetattr reopened");
+
+        eprintln!(
+            "[probe] after==raw: {}  after==cooked: {}",
+            after == raw,
+            after == cooked
+        );
+        assert_eq!(
+            after, cooked,
+            "measured Darwin behavior: pty termios RESETS to cooked across a \
+             zero-slave window. If this pin ever flips, the attach client's \
+             re-raw becomes redundant (but harmless); if it flips the OTHER \
+             way while the client's re-raw is ever removed, the cooked-mode \
+             echo loop from 8c6c8d05 comes back"
+        );
     }
 }

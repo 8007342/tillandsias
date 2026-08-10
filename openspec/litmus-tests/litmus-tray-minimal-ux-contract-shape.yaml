@@ -11,7 +11,7 @@ preconditions:
 
 critical_path:
   - step: "confirm tray spec traces and menu contract names"
-    command: "grep -F '@trace spec:tray-minimal-ux' openspec/specs/tray-minimal-ux/spec.md openspec/specs/tray-minimal-ux/TRACES.md crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Seedlings' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Attach Here' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Maintenance' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Stop' crates/tillandsias-headless/src/tray/mod.rs"
+    command: "grep -F '@trace spec:tray-minimal-ux' openspec/specs/tray-minimal-ux/spec.md crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Seedlings' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Attach Here' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Maintenance' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'Stop' crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 5000
 
   - step: "confirm tray spec tombstones launch and cleanup ownership"
@@ -28,4 +28,4 @@ observability:
 
 rollback:
   on_failure: "inspect the tray spec, trace file, and tray module for stale Home/Cloud/login or launch/cleanup ownership"
-  command: "grep -n 'Seedlings\\|Attach Here\\|Maintenance\\|Stop\\|browser-isolation-tray-integration\\|tray/runtime lifecycle' openspec/specs/tray-minimal-ux/spec.md openspec/specs/tray-minimal-ux/TRACES.md crates/tillandsias-headless/src/tray/mod.rs"
+  command: "grep -n 'Seedlings\\|Attach Here\\|Maintenance\\|Stop\\|browser-isolation-tray-integration\\|tray/runtime lifecycle' openspec/specs/tray-minimal-ux/spec.md crates/tillandsias-headless/src/tray/mod.rs"

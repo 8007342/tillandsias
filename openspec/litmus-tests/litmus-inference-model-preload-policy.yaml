@@ -172,7 +172,16 @@ critical_path:
     # Order 486 (commit e6777c88) exported CURL_CA_BUNDLE and replaced a fixed
     # nap with a bounded, proxy-egress-gated backoff; the launcher's readiness
     # wait is warn-and-continue. 392a must not have turned any of that into a gate.
-    command: "grep -Fq 'export CURL_CA_BUNDLE=/etc/tillandsias/ca.crt' images/inference/entrypoint.sh && grep -Fq 'proxy egress not ready (attempt' images/inference/entrypoint.sh && grep -Fq 'continuing — local models are optional' crates/tillandsias-headless/src/main.rs && echo 'ok: non-fatal contract preserved'"
+    #
+    # 2026-08-09: the first clause used to pin the literal
+    # `export CURL_CA_BUNDLE=/etc/tillandsias/ca.crt`. Order 627-k4mz (Windows
+    # lane) correctly made the bundle AUGMENT the system roots instead of
+    # replacing them, so the value became a computed path — the property this
+    # step guards was strengthened, and the step went red anyway because it
+    # pinned an expression rather than the property. Third instance of the
+    # 622-rmit class in one week. Assert the property: CURL_CA_BUNDLE is
+    # exported to something, and SSL_CERT_FILE tracks it.
+    command: "grep -Eq '^[[:space:]]*export CURL_CA_BUNDLE=' images/inference/entrypoint.sh && grep -Eq '^[[:space:]]*export SSL_CERT_FILE=' images/inference/entrypoint.sh && grep -Fq 'proxy egress not ready (attempt' images/inference/entrypoint.sh && grep -Fq 'continuing — local models are optional' crates/tillandsias-headless/src/main.rs && echo 'ok: non-fatal contract preserved'"
     timeout_ms: 3000
     expected_behavior: "ok: non-fatal contract preserved"
 

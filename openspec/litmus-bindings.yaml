@@ -150,6 +150,7 @@ specs:
   - litmus:guest-binary-embed-integrity
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
+  - litmus:cycle-batch-triage-shape
   - litmus:local-ci-self-clean-evidence
   coverage_ratio: 75
   last_verified: '2026-07-15'
@@ -706,6 +707,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:project-bootstrap-readme-shape
+  - litmus:skills-canonical-and-mcp-first-shape
   - litmus:onboarding-cold-start-discovery
   coverage_ratio: 75
   last_verified: '2026-05-14'
@@ -713,6 +715,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:project-bootstrap-readme-shape
+  - litmus:skills-canonical-and-mcp-first-shape
   - litmus:project-summarizers-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'

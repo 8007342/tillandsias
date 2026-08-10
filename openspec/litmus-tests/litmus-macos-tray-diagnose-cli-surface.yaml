@@ -69,6 +69,11 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
+  - step: "Gatekeeper hint is quarantine-gated, not unconditional (order 421)"
+    command: "grep -Fq 'xattr -p com.apple.quarantine' scripts/install-macos.sh && echo 'ok: gatekeeper hint is quarantine-gated'"
+    success_pattern: "ok: gatekeeper hint is quarantine-gated"
+    timeout_ms: 3000
+
   - step: "tray-diagnose.sh consumer script uses bash set +e around the tray invocation"
     command: "grep -F 'set +e' scripts/tray-diagnose.sh && grep -Fe '--diagnose --json' scripts/tray-diagnose.sh"
     expected_behavior: "grep succeeds"

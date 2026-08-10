@@ -1,58 +1,60 @@
-# tillandsias-plan CAPABILITY MANIFEST — order 569
 #
-# ONE token per line: the subcommands this expert can answer. Sorted, unique,
-# `[a-z][a-z0-9-]*` only. Comments (`#`) and blank lines are ignored by every
-# reader.
 #
-# WHY THIS IS A DATA FILE AND NOT A RUST ARRAY
 #
-# Two DIFFERENT readers need the same list, and they cannot both run Rust:
+#
+#
 #
 #   1. the INSTALLED BINARY reports what IT can do — `tillandsias-plan
-#      capabilities` prints this file, embedded at compile time via
-#      include_str!, so the answer describes the sources that binary was
-#      actually built from and cannot be faked by a stale artifact;
 #   2. the MOUNTED CHECKOUT reports what a RELAUNCH would provide — the forge
-#      wrapper and lib-common.sh read THIS FILE from the checkout directly,
-#      with no build and no cargo.
-#
-# One filename, two readers, so the "available now" and "available after a
-# relaunch" sets can never drift apart the way a hardcoded list in the wrapper
+#      actually built from and cannot be faked by a stale artifact;
 # and a match arm in main.rs would. That drift is the defect order 569 exists to
-# close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
-# built a PRE-EXPERT binary from it, and stamped `experts: ready` — because
-# "ready" only ever meant "the build finished", never "the binary can answer".
-#
-# IF YOU ADD A SUBCOMMAND: add it here in the same commit. The dispatch and this
-# file are checked against each other BEHAVIOURALLY by
-# litmus:expert-capability-skew-honesty, which runs every token declared here
 # and fails if the binary answers "unknown subcommand". Removing a token here
-# does not remove the capability — it makes the expert UNDER-report itself, and
-# the litmus asserts the manifest covers the documented command surface too.
 answer
 append-event
+# `[a-z][a-z0-9-]*` only. Comments (`#`) and blank lines are ignored by every
 blocked-by
 blocked-closure
+# built a PRE-EXPERT binary from it, and stamped `experts: ready` — because
 burndown
 capabilities
+#      capabilities` prints this file, embedded at compile time via
 check
+# close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
 compact
 dependencies-of
+# does not remove the capability — it makes the expert UNDER-report itself, and
+# file are checked against each other BEHAVIOURALLY by
 fragments
 grade
+# IF YOU ADD A SUBCOMMAND: add it here in the same commit. The dispatch and this
+#      include_str!, so the answer describes the sources that binary was
+# litmus:expert-capability-skew-honesty, which runs every token declared here
 loop-status
 loop-status-append
 loop-status-compact
 loop-status-fragments
+loop-status-verify
 methodology
 methodology-ask
 methodology-index
 next
 next-order
+# One filename, two readers, so the "available now" and "available after a
+# ONE token per line: the subcommands this expert can answer. Sorted, unique,
 query
+# reader.
 ready
+# "ready" only ever meant "the build finished", never "the binary can answer".
+# relaunch" sets can never drift apart the way a hardcoded list in the wrapper
+set-field
 spec-envelope
 spec-index
 spec-retrieve
 status
+# the litmus asserts the manifest covers the documented command surface too.
+# tillandsias-plan CAPABILITY MANIFEST — order 569
+# Two DIFFERENT readers need the same list, and they cannot both run Rust:
 verify-answer
+# WHY THIS IS A DATA FILE AND NOT A RUST ARRAY
+#      with no build and no cargo.
+#      wrapper and lib-common.sh read THIS FILE from the checkout directly,
