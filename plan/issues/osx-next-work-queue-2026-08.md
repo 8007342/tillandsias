@@ -18,3 +18,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-10T05:06Z  (frag)    644-7w89 v0.4.260810.1 curl smoke 5/5 PASS — no regressions vs .2; 421 over-warn GONE in published installer; 635-kagg narrowed (tray lane works, exec-wire-context-specific)
 - 2026-08-10T06:12Z  cee23fb9  635-kagg ROOT CAUSE FIXED: podman exec -i + null stdin wedged conmon attach; six launcher execs de-i'd, pin added; bring-up now ~20s + fail-loud; remaining: foreground run -i attach over exec-wire PTY
 - 2026-08-10T07:08Z  (frag)    tri-slice: 598-kibt M3 CLOSED (envelope byte-identity PASS via Config.Env); 349 token ABSENT -> blocked-on-operator --github-login; 401 OLLAMA ALIVE (0.32.6 self-install succeeded with egress up)
+- 2026-08-10T08:15Z  (frag)    401 COMPLETED: cpu-ollama measured (52 tok/s warm; qwen2.5:0.5b), Modelfile expert built+answered via /api/create, tier:cpu verdict — lane decision cpu-ollama; llama.cpp gap pinned on 482b

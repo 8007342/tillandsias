@@ -55,3 +55,37 @@ schema rules, flush validated, format-preserving — serving both agents
 EXPERT (library backend for graph retrieval). Combined with hot-path
 RAMDISK placement (order 329) and forge LSP (order 399), local knowledge
 is queried locally, deterministically, from RAM.
+
+## macOS lane measurements (order 401, 2026-08-10, VZ guest — first live numbers)
+
+Measured on the aarch64 Fedora 44 VZ guest (4 vCPU clamp, 3.9 GB RAM), inside
+`tillandsias-inference` (ollama 0.32.6, self-installed at first successful
+egress; binary + models persist across container recreation via the models
+volume; preload policy had already fetched `qwen2.5:0.5b`):
+
+| Metric (qwen2.5:0.5b, cpu-ollama) | Value |
+|---|---|
+| ollama API ready after lane bring-up | 15 s |
+| model load (cold) | 2.47 s |
+| cold generation, 64 tok (incl. load + prompt) | 19.2 s wall |
+| warm generation throughput | ~52 tok/s (48 tok / 0.917 s; repeat 45 / 0.867 s) |
+| warm end-to-end wall (48-tok answer) | ~1.2 s |
+| guest RAM in use during serve | 1.4 / 3.9 GB |
+| Modelfile expert build (`/api/create`, FROM + SYSTEM) | < 1 s |
+| Modelfile expert first answer (cold load) | 19.5 s wall; coherent |
+
+**Lane decision (macOS): cpu-ollama.** It is the only backend present in the
+aarch64 inference image today — `llama-server`/`llama-cli` are absent
+(`NO-LLAMA-SERVER-IN-IMAGE`), so the llama.cpp comparison is blocked on the
+order-482b image variant; re-measure when that lands. cpu-ollama's warm
+~52 tok/s on a 0.5b model is comfortably interactive for expert answers, and
+cold-load (~2.5 s + first-eval warmup) argues for the eager preload policy
+already configured. Consistent with this doc's construction decision, the
+deterministic compiled engine remains the primary expert; the model lane is
+the fallback/generative tier.
+
+Operational caveats recorded on the 401/635 ledger entries: the enclave
+network only exists after a lane bring-up (a bare `podman start
+tillandsias-inference` on a fresh boot fails), and the ollama CLI is not on
+the exec PATH — use the HTTP API (`/api/create`, `/api/generate`) from inside
+the container.
