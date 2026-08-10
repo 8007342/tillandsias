@@ -314,11 +314,18 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
         "--secret",
         &vault_mount,
         "--network",
-        // Dual-homed: enclave leg (internal DNS) + managed egress leg for the
-        // direct GitHub push. `tillandsias-egress` is created at init alongside
-        // the enclave network; the old `bridge` name never resolved on a clean
-        // rootless runtime. See main.rs ENCLAVE_EGRESS_NETS / ensure_egress_network.
-        "tillandsias-enclave,tillandsias-egress",
+        // Order 606-9wqd: enclave-only. This was dual-homed for "the direct
+        // GitHub push", but the proxy env set below already routes that push,
+        // and the egress leg is plain NAT with no destination scoping — measured
+        // on two hosts, it reaches example.com and pypi.org just as readily as
+        // api.github.com.
+        //
+        // The historical note said a proxied attempt "never resolved on a clean
+        // rootless runtime". That was the old `bridge` name failing to RESOLVE,
+        // not proof that proxying git is impossible: verified at runtime that
+        // `git ls-remote` against GitHub succeeds from this exact posture while
+        // non-allowlisted destinations are refused.
+        "tillandsias-enclave",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--security-opt=label=disable",
@@ -646,9 +653,8 @@ exec gh repo clone "$1" "$2"
         "--secret",
         &vault_mount,
         "--network",
-        // Dual-homed egress leg — see run_git_image_shell above and
-        // main.rs ENCLAVE_EGRESS_NETS; `bridge` never resolved on clean rootless.
-        "tillandsias-enclave,tillandsias-egress",
+        // Order 606-9wqd: enclave-only, proxy-routed — see run_git_image_shell.
+        "tillandsias-enclave",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--env",

@@ -1112,9 +1112,35 @@ const ENCLAVE_RESOLVED_CONF: &str = "/etc/systemd/resolved.conf.d/tillandsias-en
 /// Tillandsias creates itself, or it cannot resolve on a clean runtime.
 /// @trace spec:enclave-network, spec:proxy-container
 const EGRESS_NET: &str = "tillandsias-egress";
-/// The dual-homed network spec attached to egress-capable enclave containers
-/// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
+/// The dual-homed network spec — enclave leg for in-enclave DNS + an egress leg
+/// for unrestricted NAT.
+///
+/// **This is the SPEC EXCEPTION, and only the proxy may take it.**
+/// `openspec/specs/enclave-network/spec.md:39` — "Only the proxy container MUST
+/// additionally be attached to the default bridge network for external access";
+/// `:46` — every other container "MUST NOT have access to the default bridge
+/// network". There is no second exception.
+///
+/// Order 606-9wqd: the git mirror and `run_provider_login` also used this
+/// constant, and because one name served both the sanctioned and the
+/// unsanctioned case, nothing in the code recorded the difference. Measured on
+/// two hosts independently: a container on this posture reaches api.github.com,
+/// example.com AND pypi.org — `tillandsias-egress` is plain NAT with no
+/// destination scoping, so the attachment does not grant "GitHub push", it
+/// grants the internet.
+///
+/// Before adding a caller: an enclave container that needs ONE external
+/// destination wants `ENCLAVE_ONLY_NET` plus `proxy_env_args()`. The proxy
+/// enforces an allowlist and denies everything else, which this does not.
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
+/// The compliant posture for every non-proxy enclave container: enclave leg
+/// only, with outbound traffic routed through the proxy via `proxy_env_args()`.
+///
+/// Order 606-9wqd, verified at runtime: from this posture `git ls-remote` against
+/// GitHub succeeds (exit 0) while example.com, wikipedia.org and bbc.co.uk are all
+/// refused — the proxy's allowlist plus `http_access deny all` turns "has the
+/// internet" into "has the allowlist".
+const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // `vault` + `tillandsias-vault` MUST be here: containers reach Vault by its
 // service DNS name (`https://vault:8200`) since the move off the locally-bound
 // `127.0.0.1` listener. Without these, vault-cli's curl routes the Vault request
@@ -2950,7 +2976,13 @@ fn build_git_run_args(
         "--network-alias".into(),
         "tillandsias-git".into(),
         "--network".into(),
-        ENCLAVE_EGRESS_NETS.into(),
+        // Order 606-9wqd: enclave-only. The post-receive hook's `git push`
+        // already goes through the proxy via proxy_env_args() below — that was
+        // always the intended mechanism, as the comment there says. The egress
+        // leg was a redundant second path that additionally granted unrestricted
+        // outbound access, so removing it leaves the intended route and closes
+        // the bypass.
+        ENCLAVE_ONLY_NET.into(),
         "--cap-drop=ALL".into(),
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
@@ -15519,11 +15551,33 @@ mod tests {
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
         let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
 
+        // The proxy dual-homes because the spec REQUIRES it (enclave-network
+        // spec.md:39) — it is the one sanctioned exception.
+        assert!(
+            has_arg(&proxy, "tillandsias-enclave,tillandsias-egress"),
+            "proxy must dual-home onto the managed egress network: {proxy:?}"
+        );
+
+        // Order 606-9wqd. The mirror must NOT. This is the bypass-negative
+        // assertion: `tillandsias-egress` is plain NAT with no destination
+        // scoping, so an egress leg grants the whole internet to a container
+        // whose stated need is one host. Reattaching it must fail here rather
+        // than in a security review.
+        assert!(
+            !has_arg(&git, "tillandsias-enclave,tillandsias-egress"),
+            "git mirror must not dual-home onto egress (606-9wqd): {git:?}"
+        );
+        assert!(
+            has_arg(&git, "tillandsias-enclave"),
+            "git mirror must still attach to the enclave network: {git:?}"
+        );
+        assert!(
+            git.iter().any(|a| a == "http_proxy=http://proxy:3128"),
+            "git mirror must route egress through the proxy once its direct leg \
+             is gone, or the push has no path at all: {git:?}"
+        );
+
         for (name, args) in [("proxy", &proxy), ("git", &git)] {
-            assert!(
-                has_arg(args, "tillandsias-enclave,tillandsias-egress"),
-                "{name} must dual-home onto the managed egress network: {args:?}"
-            );
             assert!(
                 !has_arg(args, "tillandsias-enclave,bridge"),
                 "{name} must not reference the nonexistent `bridge` network: {args:?}"
