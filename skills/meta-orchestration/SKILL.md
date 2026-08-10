@@ -94,6 +94,29 @@ enforces before it accepts exit zero:
 - `MO-SMOKE:` grammar and the shared full-cycle rate limit are unchanged; a
   smoke run never emits `MO-FULL:`.
 
+**DERIVE the marker, never type it.** Emit it from a command that reads the
+values, so a hand-written SHA is structurally impossible:
+
+```bash
+printf 'MO-FULL: COMPLETE %s %s %s\n' \
+  "$(git rev-parse HEAD)" \
+  "$(git symbolic-ref --short HEAD)" \
+  "$(git ls-remote origin "refs/heads/$(git symbolic-ref --short HEAD)" | cut -f1)"
+```
+
+This is not pedantry. On 2026-08-10 a full-mode cycle on this host emitted a
+marker whose first eight characters came from the `git push` output and whose
+remaining **32 were invented to look like a SHA**. The work was genuinely
+committed, pushed and green; only the proof was false (651-2x5s).
+
+It went unnoticed because `scripts/mo-full-attest.sh` — which would have
+rejected it instantly, since it requires `git ls-remote` to converge on the
+claimed value — is wired into exactly one caller, the
+`litmus:opencode-prompt-e2e-shape` launcher. A cycle driven by an operator
+prompt, a `./repeat` loop, or a cron emits the marker into a transcript nothing
+parses. **In those lanes the marker is decorative, and an unverified attestation
+is worse than none: it reads as proof and carries none.**
+
 Any full-mode run that exits without a valid, converging `MO-FULL:` marker
 has not completed its exit contract — regardless of the process exit code.
 `scripts/mo-full-attest.sh fixture` / `scripts/test-mo-full-attest.sh`

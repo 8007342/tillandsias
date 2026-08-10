@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t081500z
+packets:
+
+  - packet_id: flock-eintr-reported-a-released-lock-as-held
+    order: 652-zqix
+    status: completed
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    priority: p2
+    title: "try_lock treated EINTR as a lock verdict, so a signal could turn a released lock into a held one"
+    kind: bug
+    deliverable: crates/tillandsias-headless/src/resource_lock.rs
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [resource-lock, flock, flake, teardown]
+    context: >
+      `local-ci` failed the `tray-contract` check on two consecutive runs
+      (local-ci-20260810T054348Z, local-ci-20260810T074307Z), both on
+      `resource_lock::tests::is_held_reflects_lock_lifecycle` at the final
+      assertion — a guard that had just been dropped still probed as HELD.
+
+      `try_lock` classified every non-EWOULDBLOCK `flock(2)` return as `Err`,
+      and `is_held` maps `Err(_)` to `true` on purpose (a wrong "held" leaks a
+      container; a wrong "free" tears the stack out from under a live forge). But
+      flock(2) is interruptible: a signal delivered mid-call returns EINTR, which
+      is not a statement about the lock at all. Under a parallel test binary
+      spawning child processes, one stray SIGCHLD is enough — and the same path
+      runs in the order-443 launch-in-flight teardown probe, where the
+      consequence is a leaked container rather than a red test.
+
+      Same shape as the rest of this session's findings: wrong in a direction
+      nothing observes, until one assertion happened to look.
+    exit_criteria:
+      - "EINTR is retried rather than classified — it carries no verdict."
+      - "EWOULDBLOCK still means held; every other errno still fails loud."
+    verifiable_closure: >
+      10 consecutive runs of the exact gate command
+      (`cargo test -p tillandsias-headless --bin tillandsias --features tray`)
+      pass after the change, against 2 consecutive CI failures before it.
+    notes: >
+      HONEST LIMIT ON THE EVIDENCE. The fix is unconditionally correct — EINTR is
+      not a lock outcome under any reading of flock(2) — but 10 green runs do not
+      PROVE it was the cause, because the failure was intermittent to begin with
+      and was never reproduced locally on demand. If `tray-contract` reds again on
+      this assertion, the EINTR path is exonerated and the next suspect is the
+      probe fd lifetime. Recorded so a future host does not read the green as
+      settled.
+    events:
+      - ts: "2026-08-10T08:15:00Z"
+        event: completed
+        summary: >
+          Retry EINTR in try_lock instead of reporting it as a held lock.
