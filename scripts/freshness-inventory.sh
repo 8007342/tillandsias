@@ -97,13 +97,46 @@ declare -a UNSTAMPED_LINES
 
 today="$(date -u +%Y-%m-%d)"
 
+# ONE grep PASS, NOT ONE PER FILE (order 661-*, windows host 2026-08-10).
+#
+# This loop used to run `grep -m1` against every candidate — 1026 process
+# spawns. On Linux that is cheap enough to go unnoticed; on Windows, where
+# process creation is expensive, the full run took **126.8 seconds** and even
+# the two-line header took 23.2s, blowing litmus:freshness-inventory-shape's
+# 15s step timeout. The test failed on this host for a host-performance reason
+# with nothing wrong in its behaviour — and it had been failing invisibly,
+# because until this cycle nobody had run the suite here.
+#
+# Almost every candidate is UNSTAMPED (1018 of 1026), so almost every one of
+# those spawns was asking a question whose answer was "no". One `grep -l` pass
+# names the few files that carry a stamp; only those are then parsed
+# individually, exactly as before. 1026 spawns -> 1 + 8.
+#
+# Semantics are unchanged by construction: a file absent from the list has no
+# matching line, which is precisely the old `grep -m1` empty result, and a file
+# present is parsed with the same expression and the same first-match-wins rule.
+STAMPED_SET=""
+if [ "${#CANDIDATES[@]}" -gt 0 ]; then
+    STAMPED_SET="$(printf '%s\n' "${CANDIDATES[@]}" \
+        | tr '\n' '\0' \
+        | xargs -0 grep -lE "$STAMP_RE" 2>/dev/null || true)"
+fi
+
 for f in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
     # Only count files that exist and are regular files.
     [ -f "$f" ] || continue
     total=$((total + 1))
     rel="${f#./}"
-    # Find the first freshness record in the file.
-    rec="$(grep -m1 -E "$STAMP_RE" "$f" 2>/dev/null || true)"
+    # Find the first freshness record in the file — but only for files the
+    # single pass above already proved carry one.
+    rec=""
+    case "
+$STAMPED_SET
+" in
+        *"
+$f
+"*) rec="$(grep -m1 -E "$STAMP_RE" "$f" 2>/dev/null || true)" ;;
+    esac
     if [[ -n "$rec" ]]; then
         if [[ "$rec" =~ $STAMP_RE ]]; then
             auditor="${BASH_REMATCH[2]}"
