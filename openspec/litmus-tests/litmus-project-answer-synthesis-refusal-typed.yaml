@@ -1,6 +1,7 @@
 # @trace spec:forge-environment-discoverability
 # @trace order:619-pfsj (project-answer-uniform-surface, exit criteria C2/C5)
 # @trace order:669-qcsb (this refusal grammar shipped with NO litmus guard)
+# @trace order:669-h987 (project_answer lane routing keyed on the mounted project, not tool reachability)
 # @trace order:392 (inference readiness probe), order:531
 #
 # THE GAP THIS CLOSES
@@ -13,6 +14,15 @@
 # missing_capability=synthesis-tier means "the endpoint is fine, the tier is
 # unwired" — blaming the endpoint when the endpoint is fine sends an agent to
 # fix the wrong thing, so the two branches must stay distinct.
+#
+# ORDER 669-h987 owns a routing guarantee pinned here: the plan lane is
+# entered ONLY for a Tillandsias-shaped MOUNTED project (its own
+# plan/index.yaml at the project root), never because a tillandsias-plan
+# binary or ledger merely resolves somewhere. A non-Tillandsias project whose
+# dev host has a Tillandsias checkout in the fallback path answers from the
+# generic lane, never from the wrong ledger. The plan-lane steps therefore run
+# from a Tillandsias-shaped fixture, and a dedicated step proves the fallback
+# checkout cannot hijack a non-Tillandsias mount.
 #
 # PINNED GRAMMAR (the ratified envelope; answer prefix is the machine part):
 #   unsupported: synthesis question — missing_capability=<local-inference|synthesis-tier>
@@ -37,7 +47,10 @@ description: >
   fixtures (dead endpoint / stubbed-ready probe), envelope acceptance by
   verify-answer, the plan-lane routing through the same refusal constructor
   including the empty-output fallback, and negative controls proving the
-  deterministic lane still answers and deterministic-first still wins.
+  deterministic lane still answers and deterministic-first still wins. Pin
+  order 669-h987: plan-lane routing keyed on the MOUNTED project's own
+  plan/index.yaml, never on tool reachability — a non-Tillandsias mount with
+  a Tillandsias checkout in the fallback path answers from the generic lane.
 severity: high
 size: instant
 
@@ -48,7 +61,7 @@ preconditions:
   - target/release/tillandsias-plan built, or cargo available to build it
 
 critical_path:
-  - step: "FIXTURE: stage a non-Tillandsias project, inference stubs, plan-engine stubs, and the verifier"
+  - step: "FIXTURE: stage a non-Tillandsias project, a Tillandsias-shaped project, inference stubs, plan-engine stubs, the fallback-checkout trap, and the verifier"
     # rm -rf first is load-bearing (dead-check trap on fixture state). The
     # README is FIVE lines because the generic lane cites README.md:1-5
     # unconditionally and verify-answer refuses a range past EOF — the
@@ -57,7 +70,12 @@ critical_path:
     # the stub plan bins pin the plan lane without depending on what the real
     # ledger can answer. The verifier is the prebuilt release binary when
     # present (the instant path); cargo builds it only on a cold tree.
-    command: "rm -rf /tmp/.litmus-669r && mkdir -p /tmp/.litmus-669r/proj /tmp/.litmus-669r/home /tmp/.litmus-669r/bin && printf 'Fixture project for litmus 669-qcsb refusal grammar\\nline two\\nline three\\nline four\\nline five\\n' > /tmp/.litmus-669r/proj/README.md && printf '{\"name\":\"litmus-fixture\"}\\n' > /tmp/.litmus-669r/proj/package.json && printf 'tillandsias_inference_state() {\\n  TILLANDSIAS_INFERENCE_STATE=ready\\n  TILLANDSIAS_INFERENCE_REASON=-\\n  return 0\\n}\\n' > /tmp/.litmus-669r/stub-ready-lib.sh && jq -n '{answer:\"unsupported: no packet matches the question tokens\",citations:[],freshness:{source_commit:\"fixture\",indexed_at:\"2026-01-01T00:00:00Z\"},confidence:\"unsupported\",citation_root:\"/\"}' > /tmp/.litmus-669r/stub-unsupported.json && jq -n '{answer:\"deterministic fact from the ledger\",citations:[],freshness:{source_commit:\"fixture\",indexed_at:\"2026-01-01T00:00:00Z\"},confidence:\"exact\",citation_root:\"/\"}' > /tmp/.litmus-669r/stub-exact.json && printf '#!/bin/sh\\ncat /tmp/.litmus-669r/stub-unsupported.json\\n' > /tmp/.litmus-669r/bin/stub-unsupported && printf '#!/bin/sh\\ncat /tmp/.litmus-669r/stub-exact.json\\n' > /tmp/.litmus-669r/bin/stub-exact && printf '#!/bin/sh\\nexit 0\\n' > /tmp/.litmus-669r/bin/stub-empty && chmod +x /tmp/.litmus-669r/bin/stub-unsupported /tmp/.litmus-669r/bin/stub-exact /tmp/.litmus-669r/bin/stub-empty && printf 'k: v\\n' > /tmp/.litmus-669r/dummy-index.yaml && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan; { test -x \"$B\" || cargo build -q -p tillandsias-plan --release; } && cp \"$B\" /tmp/.litmus-669r/bin/verify && echo 'ok: fixture-ready'"
+    # ORDER 669-h987 shapes: ts-proj is a Tillandsias-shaped mount (own
+    # plan/index.yaml at the root) for the plan-lane steps; dev-proj is a
+    # plain non-Tillandsias mount whose HOME carries a fake Tillandsias
+    # checkout (src/tillandsias/plan/index.yaml + a stub tillandsias-plan
+    # emitting a DISTINCT plan answer) — the fallback-hijack trap.
+    command: "rm -rf /tmp/.litmus-669r && mkdir -p /tmp/.litmus-669r/proj /tmp/.litmus-669r/home /tmp/.litmus-669r/bin /tmp/.litmus-669r/ts-proj/plan /tmp/.litmus-669r/dev-proj /tmp/.litmus-669r/dev-home/src/tillandsias/plan /tmp/.litmus-669r/dev-home/.local/bin && printf 'Fixture project for litmus 669-qcsb refusal grammar\\nline two\\nline three\\nline four\\nline five\\n' > /tmp/.litmus-669r/proj/README.md && printf '{\"name\":\"litmus-fixture\"}\\n' > /tmp/.litmus-669r/proj/package.json && printf 'k: v\\n' > /tmp/.litmus-669r/ts-proj/plan/index.yaml && printf 'Dev project for litmus 669-h987 routing\\nline two\\nline three\\nline four\\nline five\\n' > /tmp/.litmus-669r/dev-proj/README.md && printf '{\"name\":\"dev-fixture\"}\\n' > /tmp/.litmus-669r/dev-proj/package.json && printf 'tillandsias_inference_state() {\\n  TILLANDSIAS_INFERENCE_STATE=ready\\n  TILLANDSIAS_INFERENCE_REASON=-\\n  return 0\\n}\\n' > /tmp/.litmus-669r/stub-ready-lib.sh && jq -n '{answer:\"unsupported: no packet matches the question tokens\",citations:[],freshness:{source_commit:\"fixture\",indexed_at:\"2026-01-01T00:00:00Z\"},confidence:\"unsupported\",citation_root:\"/\"}' > /tmp/.litmus-669r/stub-unsupported.json && jq -n '{answer:\"deterministic fact from the ledger\",citations:[],freshness:{source_commit:\"fixture\",indexed_at:\"2026-01-01T00:00:00Z\"},confidence:\"exact\",citation_root:\"/\"}' > /tmp/.litmus-669r/stub-exact.json && printf '#!/bin/sh\\ncat /tmp/.litmus-669r/stub-unsupported.json\\n' > /tmp/.litmus-669r/bin/stub-unsupported && printf '#!/bin/sh\\ncat /tmp/.litmus-669r/stub-exact.json\\n' > /tmp/.litmus-669r/bin/stub-exact && printf '#!/bin/sh\\nexit 0\\n' > /tmp/.litmus-669r/bin/stub-empty && chmod +x /tmp/.litmus-669r/bin/stub-unsupported /tmp/.litmus-669r/bin/stub-exact /tmp/.litmus-669r/bin/stub-empty && printf 'k: v\\n' > /tmp/.litmus-669r/dummy-index.yaml && printf 'k: v\\n' > /tmp/.litmus-669r/dev-home/src/tillandsias/plan/index.yaml && jq -n '{answer:\"plan lane answered from the fallback checkout\",citations:[],freshness:{source_commit:\"fallback\",indexed_at:\"2026-01-01T00:00:00Z\"},confidence:\"exact\",citation_root:\"/\"}' > /tmp/.litmus-669r/dev-fallback-answer.json && printf '#!/bin/sh\\ncat /tmp/.litmus-669r/dev-fallback-answer.json\\n' > /tmp/.litmus-669r/dev-home/.local/bin/tillandsias-plan && chmod +x /tmp/.litmus-669r/dev-home/.local/bin/tillandsias-plan && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan; { test -x \"$B\" || cargo build -q -p tillandsias-plan --release; } && cp \"$B\" /tmp/.litmus-669r/bin/verify && echo 'ok: fixture-ready'"
     timeout_ms: 300000
     expected_behavior: "ok: fixture-ready"
 
@@ -108,16 +126,20 @@ critical_path:
     # The plan engine (stubbed) refuses with ledger-flavoured prose; for a
     # synthesis question that was never about the ledger, forwarding that
     # refusal misdirects the reader. The typed refusal must replace it — and
-    # the stub's wording must NOT leak through.
-    command: "R=$PWD; cd /tmp/.litmus-669r/proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-unsupported TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 TILLANDSIAS_INFERENCE_STATE_LIB=$R/images/default/lib-inference-state.sh bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/plane.json && jq -r '.answer' /tmp/.litmus-669r/plane.json | grep -qE '^unsupported: synthesis question — missing_capability=local-inference ' && ! jq -r '.answer' /tmp/.litmus-669r/plane.json | grep -q 'no packet matches' && echo 'ok: plan-lane-refusal-typed'"
+    # the stub's wording must NOT leak through. ORDER 669-h987: the plan lane
+    # only EXISTS from a Tillandsias-shaped mount, so this step (like the two
+    # after it) runs from ts-proj, whose own plan/index.yaml is the gate.
+    command: "R=$PWD; cd /tmp/.litmus-669r/ts-proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-unsupported TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 TILLANDSIAS_INFERENCE_STATE_LIB=$R/images/default/lib-inference-state.sh bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/plane.json && jq -r '.answer' /tmp/.litmus-669r/plane.json | grep -qE '^unsupported: synthesis question — missing_capability=local-inference ' && ! jq -r '.answer' /tmp/.litmus-669r/plane.json | grep -q 'no packet matches' && echo 'ok: plan-lane-refusal-typed'"
     timeout_ms: 30000
     expected_behavior: "ok: plan-lane-refusal-typed"
 
   - step: "NEGATIVE CONTROL: DETERMINISTIC FIRST — a citable plan answer to a synthesis question is FORWARDED, never refused"
     # C5's ordering rule: inference adds recall, never authority. When the
     # deterministic layer CAN cite an answer, the synthesis classifier must
-    # not intercept it — even with a dead endpoint.
-    command: "R=$PWD; cd /tmp/.litmus-669r/proj && A=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-exact TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text') && test \"$(printf '%s' \"$A\" | jq -r '.answer')\" = 'deterministic fact from the ledger' && test \"$(printf '%s' \"$A\" | jq -r '.confidence')\" = 'exact' && echo 'ok: deterministic-first-wins'"
+    # not intercept it — even with a dead endpoint. Runs from the
+    # Tillandsias-shaped ts-proj mount (the only place the plan lane exists,
+    # order 669-h987).
+    command: "R=$PWD; cd /tmp/.litmus-669r/ts-proj && A=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-exact TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text') && test \"$(printf '%s' \"$A\" | jq -r '.answer')\" = 'deterministic fact from the ledger' && test \"$(printf '%s' \"$A\" | jq -r '.confidence')\" = 'exact' && echo 'ok: deterministic-first-wins'"
     timeout_ms: 30000
     expected_behavior: "ok: deterministic-first-wins"
 
@@ -125,17 +147,35 @@ critical_path:
     # The C1 regression this slice killed: the empty-output fallback used to
     # hand-roll an envelope (freshness \"now\", no unsupported: prefix) that
     # verify-answer REFUSED. It must route through the one pinned refusal
-    # constructor and name the engine that went silent.
-    command: "R=$PWD; cd /tmp/.litmus-669r/proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what is ready\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-empty TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/empty.json && jq -r '.answer' /tmp/.litmus-669r/empty.json | grep -q '^unsupported: the plan engine produced no answer envelope for this question (engine=' && /tmp/.litmus-669r/bin/verify verify-answer < /tmp/.litmus-669r/empty.json | grep -q '^ok: envelope verified' && echo 'ok: empty-envelope-refusal-pinned'"
+    # constructor and name the engine that went silent. Runs from the
+    # Tillandsias-shaped ts-proj mount (order 669-h987).
+    command: "R=$PWD; cd /tmp/.litmus-669r/ts-proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what is ready\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-empty TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/empty.json && jq -r '.answer' /tmp/.litmus-669r/empty.json | grep -q '^unsupported: the plan engine produced no answer envelope for this question (engine=' && /tmp/.litmus-669r/bin/verify verify-answer < /tmp/.litmus-669r/empty.json | grep -q '^ok: envelope verified' && echo 'ok: empty-envelope-refusal-pinned'"
     timeout_ms: 30000
     expected_behavior: "ok: empty-envelope-refusal-pinned"
+
+  - step: "BEHAVIOURAL (ORDER 669-h987): a non-Tillandsias mount with a Tillandsias checkout in the fallback path answers from the GENERIC lane, never the wrong ledger"
+    # The defect this closes, executed. Pre-669-h987 the gate was
+    # resolve_plan_bin && resolve_plan_index, which resolve the
+    # $HOME/src/tillandsias fallbacks — so a dev host with a Tillandsias
+    # checkout lying around routed a NON-Tillandsias project's question into
+    # that checkout's plan lane and answered from the wrong ledger. The
+    # fixture stages exactly that: dev-proj is a plain non-Tillandsias mount
+    # (no plan/index.yaml at its root) while HOME carries a fake Tillandsias
+    # checkout (src/tillandsias/plan/index.yaml + a stub tillandsias-plan
+    # emitting a DISTINCT plan answer). The generic lane must answer (anchored
+    # 'Project type: '), the fallback's plan answer must never leak, and the
+    # envelope must verify clean.
+    command: "R=$PWD; cd /tmp/.litmus-669r/dev-proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what type of project is this\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669r/dev-home bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/route.json && jq -r '.answer' /tmp/.litmus-669r/route.json | head -1 | grep -q '^Project type: ' && ! jq -r '.answer' /tmp/.litmus-669r/route.json | grep -q 'fallback checkout' && /tmp/.litmus-669r/bin/verify verify-answer < /tmp/.litmus-669r/route.json | grep -q '^ok: envelope verified' && echo 'ok: non-tillandsias-mount-answers-generic'"
+    timeout_ms: 30000
+    expected_behavior: "ok: non-tillandsias-mount-answers-generic"
 
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"
     - "@trace order:619-pfsj"
     - "@trace order:669-qcsb"
-  expected_log: "typed synthesis refusal grammar pinned: both missing_capability branches, verifier acceptance, plan-lane routing, deterministic-first negative controls"
+    - "@trace order:669-h987"
+  expected_log: "typed synthesis refusal grammar pinned: both missing_capability branches, verifier acceptance, plan-lane routing, deterministic-first negative controls; 669-h987 plan-lane routing keyed on the mounted project's own plan/index.yaml — a non-Tillandsias mount with a fallback checkout answers from the generic lane"
   log_fields:
     spec: "forge-environment-discoverability"
     test: "project-answer-synthesis-refusal-typed"
@@ -154,5 +194,9 @@ rollback:
     failed, the refusal gate is intercepting the deterministic lane: either
     deterministic questions refuse under a dead endpoint, or a citable
     deterministic answer to a synthesis question is being replaced by a
-    refusal — both kill the working lane to decorate the broken one.
-  command: "jq -r '.answer' /tmp/.litmus-669r/refusal.json 2>/dev/null; sed -n '/_pa_synthesis_refusal() {/,/^}/p' images/default/config-overlay/mcp/project-info.sh"
+    refusal — both kill the working lane to decorate the broken one. If the
+    669-h987 routing step failed, project_answer misrouted: a non-Tillandsias
+    mount answered from a fallback plan ledger (the pre-669-h987
+    resolve_plan_bin && resolve_plan_index gate), so the lane selection must
+    be re-keyed on the mounted project's own plan/index.yaml.
+  command: "jq -r '.answer' /tmp/.litmus-669r/refusal.json 2>/dev/null; jq -r '.answer' /tmp/.litmus-669r/route.json 2>/dev/null; sed -n '/_pa_synthesis_refusal() {/,/^}/p' images/default/config-overlay/mcp/project-info.sh; sed -n '/Two-lane routing (C4), ORDER 669-h987/,/^[[:space:]]*fi$/p' images/default/config-overlay/mcp/project-info.sh"
