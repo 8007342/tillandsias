@@ -62,6 +62,29 @@ $Channel = if ($env:TILLANDSIAS_CHANNEL) { $env:TILLANDSIAS_CHANNEL } else { 'st
 - The banner is emitted at lines 338–341; the first `Invoke-WebRequest` is at
   line 354. **Banner precedes download**, as required.
 
+## Step 5 — `install-windows.ps1` is pure ASCII: PASS
+
+The `v0.3.260723.1` regression class: a single non-ASCII byte makes the saved
+`.ps1` parse as a *different program*.
+
+```powershell
+$b=[IO.File]::ReadAllBytes("scripts\install-windows.ps1"); ($b | ? {$_ -gt 127}).Count
+```
+
+```
+repo copy              bytes=24426  non_ascii=0
+published (unstable)   bytes=24426  non_ascii=0
+```
+
+Zero on both, and both are 24426 bytes — consistent with the byte-identity check
+in step 1. The regression has not recurred.
+
+Deliberately **not** flagged: `install.sh` (12 non-ASCII bytes) and
+`install-macos.sh` (2028). The ASCII constraint exists because of PowerShell's
+encoding sensitivity when a `.ps1` is saved and re-parsed; POSIX shell scripts
+are UTF-8 and their non-ASCII bytes are ordinary output characters. Propagating
+the Windows rule to them would manufacture two false positives.
+
 ## What is NOT covered, and why
 
 **Steps 2 and 3 were not run.** They require downloading the portable
