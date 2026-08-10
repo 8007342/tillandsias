@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: stranded-in-progress-packets-are-invisible-both-ways
+    field: priority
+    value: p0
+    ts: "2026-08-10T00:25:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: stranded-in-progress-packets-are-invisible-both-ways
+    event:
+      type: note
+      ts: "2026-08-10T00:25:00Z"
+      host: linux-mutable
+      summary: >
+        Raised to p0: three hosts hit this write-path trap in one session, so the stranded audit now blocks coordination rather than merely being untidy.
