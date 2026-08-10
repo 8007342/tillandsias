@@ -162,3 +162,39 @@ busybox, so both initial "TCP-BLOCKED" readings were pure instrument error.
 Run the two postures plus BOTH controls (default network, and the host) on a
 machine with working rootless container egress. Only if the default-network
 control returns 200 does the enclave/egress comparison mean anything.
+
+---
+
+## Runtime reproduction (2026-08-10T08:45Z, macOS VZ guest) — CONCLUSIVE
+
+Run by the macOS host on the coordinator's 648-dvzd ask #3. This guest has
+PROVEN working container egress (the tillandsias-inference ollama
+self-install downloaded through it hours earlier), so the controls anchor.
+Probe container: the versioned inference image with `--entrypoint sh`;
+HTTPS = `curl -s -o /dev/null -w "%{http_code}"` against github.com,
+api.github.com, objects.githubusercontent.com (404 on a bare GET of the
+third is an HTTP ANSWER — connectivity proven; `000` is no-connection).
+
+| posture | DNS | HTTPS |
+|---|---|---|
+| `tillandsias-enclave` only | FAIL | `000 000 000` |
+| `tillandsias-enclave,tillandsias-egress` (mirror posture) | RESOLVED | **`200 200 404`** |
+| CONTROL: default podman network | RESOLVED | `200 200 404` |
+| CONTROL: the guest host itself | — | `200 200 404` |
+
+Network inspects: `tillandsias-egress internal=false driver=bridge`,
+`tillandsias-enclave internal=true driver=bridge` — same shapes as the
+Linux attempt.
+
+**Both controls return 200, so the comparison is valid — and the mirror's
+dual-homed posture has outbound reach byte-identical to the unrestricted
+default network.** The audit's central claim is now OBSERVED, not just read
+from source: the egress leg does not grant "GitHub push", it grants the
+internet. The enclave-only row simultaneously confirms the spec's isolation
+mechanism works as designed (`internal: true` really is airtight here).
+
+Criteria 2–4 are now unblocked for the decision owner: the reproduction
+shows scoping is absent at runtime, so criterion 2 (route mirror upstream
+through the proxy, drop the egress leg) or a genuinely destination-scoped
+criterion-3 exception must be implemented — closing as "theoretical" is no
+longer available.
