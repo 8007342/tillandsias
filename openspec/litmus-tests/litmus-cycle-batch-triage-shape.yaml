@@ -107,6 +107,33 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: any is a whole-field match"
 
+  - step: "NEGATIVE CONTROL: a stale plan binary refuses as stale-plan-binary, NOT as no-eligible-work"
+    # Order 644-* (windows host 2026-08-10). The script captured the query's
+    # stdout with `2>/dev/null` and tested only `[ -n "$raw" ]`, so EVERY query
+    # failure arrived as an empty ledger. The binary is not at fault — it prints
+    # `unknown query constraint: --claimable-by` and exits 2. This was live, not
+    # hypothetical: `--claimable-by` landed hours earlier with 632-39p3, and any
+    # host whose binary predated it was told the plan was drained.
+    # TILLANDSIAS_PLAN_BIN exists so this is testable on a host whose binary is
+    # current — i.e. exactly the hosts CI runs on, where the hole was invisible.
+    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: unknown query constraint: --claimable-by\" >&2\\nexit 2\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: stale binary reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -q '^refused:stale-plan-binary:' && echo 'ok: stale binary refused on its own token'"
+    timeout_ms: 20000
+    expected_behavior: "ok: stale binary refused on its own token"
+
+  - step: "NEGATIVE CONTROL: any other query failure refuses as query-failed and quotes the reason"
+    command: "s=$(mktemp); printf '#!/usr/bin/env bash\\necho \"error: ledger is unreadable\" >&2\\nexit 3\\n' > \"$s\"; chmod +x \"$s\"; out=$(TILLANDSIAS_PLAN_BIN=\"$s\" scripts/select-work-batch.sh linux 2>&1); rm -f \"$s\"; printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: failed query reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -qE '^refused:query-failed:.*exited 3: error: ledger is unreadable' && echo 'ok: query failure refused with its reason'"
+    timeout_ms: 20000
+    expected_behavior: "ok: query failure refused with its reason"
+
+  - step: "ARGUMENTS BEFORE ENVIRONMENT: a bad budget is refused even when jq is absent"
+    # The probes used to run first, so `--budget 0` on a jq-less host refused with
+    # `missing-tool`. The same bad invocation then produced different diagnoses on
+    # different hosts, and the bad-budget control above only really tested hosts
+    # that happened to have jq.
+    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux --budget 0 2>&1); printf '%s' \"$out\" | grep -q '^refused:bad-role:budget' && echo 'ok: argument errors precede environment probes'"
+    timeout_ms: 15000
+    expected_behavior: "ok: argument errors precede environment probes"
+
   - step: "selection writes nothing to the worktree"
     command: "before=\"$(git status --porcelain)\"; scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"
     timeout_ms: 30000
