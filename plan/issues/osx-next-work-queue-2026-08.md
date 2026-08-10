@@ -23,3 +23,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-10T19:20Z  (frag)    657-* filed: five Apple Silicon experts packets (Metal sidecar flagship 657-s6g8, i8mm guest unlock 657-3mq5, aarch64 llama-server variant, VZ resource policy, accel-probe truthfulness) — grounded in 3-scout research + 401 baseline
 - 2026-08-10T20:35Z  (frag)    663-acdw filed (github-login guest preflight wedge — blocks unattended re-seed + 349) + 663-69kp (unbounded one-shot boot hang after interrupted teardown); both hit repeatedly tonight
 - 2026-08-10T22:20Z  (frag)    657-3mq5 slice 1: guest has i8mm+SME2 (M4-class); native llama.cpp build (65s) benches 190 tok/s tg / 1194 t/s pp on qwen0.5b Q4_0 — ~3.65x the ollama baseline
+- 2026-08-10T23:50Z  (frag)    657-3mq5 slice 2: quant matrix — Q4_0 repack dominates (1220 pp / 187 tg vs Q4_K_M 355/151); lane guidance = Q4_0 for experts

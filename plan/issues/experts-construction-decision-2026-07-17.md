@@ -112,3 +112,21 @@ Fedora 44 guest, `dnf install cmake gcc-c++ git make`, llama.cpp shallow
 clone, `-DGGML_NATIVE=ON -DLLAMA_CURL=OFF`, plain Q4_0 GGUF, threads=4.
 Remaining: quant A/B (Q4_K_M / Q8_0), ollama version pin-bench, quality
 spot-check on the ground-truth set.
+
+### 657-3mq5 slice 2 (2026-08-10T23:45Z): the quant A/B matrix, 0.5B tier
+
+Same native build, same guest, t=4, llama-bench pp512/tg128:
+
+| quant | size | pp512 t/s | tg128 tok/s |
+|---|---|---|---|
+| **Q4_0** (online repack) | 403 MiB | **1219.7 ± 9.0** | **186.7 ± 8.5** |
+| Q4_K_M | 463 MiB | 355.2 ± 5.0 | 150.9 ± 3.3 |
+| Q8_0 | 639 MiB | 1053.8 ± 19.5 | 140.2 ± 1.9 |
+
+Q4_0's repack path dominates prompt processing 3.4x over Q4_K_M and wins
+decode outright — the i8mm/SME repack kernels apply to Q4_0/Q8_0 shapes,
+exactly as researched. **Lane guidance: Q4_0 GGUFs for macOS-guest experts**
+(Q8_0 where quality demands it, costing ~25% decode but keeping the repack
+pp advantage). Remaining 657-3mq5 criteria: ollama version pin-bench
+(apples-to-apples) and a ground-truth quality spot-check; 1.5–3B tier matrix
+optional follow-on.
