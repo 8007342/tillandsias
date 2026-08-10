@@ -166,6 +166,15 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
 
 1.  **Mint Lease ID**: Mint a content-stable lease ID.
 2.  **Emit Claim Event**: Append a `claim` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> claim "<summary>" --ts "<ISO-8601-UTC>" --agent "<your-agent-id>" --host "<host>"` or by creating an append-only fragment in `plan/index.d/<utc>-<suffix>-<host>.yaml`.
+
+    If `append-event` refuses with `packet_id not found`, the packet lives only
+    in a fragment and that command cannot see it (600-c266) — write the event
+    block by hand in your own fragment. **A `status` change is different: never
+    hand-author it, use `tillandsias-plan set-field`** (see §7.2).
+
+    A claim that produces no event by cycle end is reclaimed after 4h by
+    `scripts/reclaim-stranded-claims.sh` — 8 claims abandoned for 17–26 days
+    were found that way. Ending a cycle with an event is what keeps your claim.
 3.  **Commit & Push**: Commit ONLY the plan fragment edits, and push them to your active platform branch:
     ```bash
     git add plan/index.d/
@@ -316,7 +325,32 @@ status `ready`. The packet closes only when every agent named in
     Report `experts_substitution` as `unknown` — it is not derivable in-repo and
     must never be estimated.
 1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
-2.  **Emit Completed Event**: Append a `completed` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> completed "<summary>" ...` or by writing an append-only fragment file in `plan/index.d/` setting status `done` and listing commit SHAs and validation log paths.
+2.  **Close the packet — BOTH the event and the status transition.**
+
+    ```bash
+    tillandsias-plan set-field <packet-id> status completed \
+      --reason "<what shipped, commit SHAs, validation log paths>"
+    ```
+
+    An event alone does **not** close a packet. This step used to read *"append
+    a `completed` event … or by writing an append-only fragment file setting
+    status `done`"*, and **both of those branches are broken** — which is why
+    three hosts left finished work claimable on 2026-08-09:
+
+    - `append-event` locates packets by their item prefix in `plan/index.yaml`
+      and is blind to fragment-only packets (600-c266). It refuses them outright.
+    - Hand-writing a fragment that re-declares the packet under `packets:` with
+      a new status is a **G-Set no-op**. It parses, validates, passes
+      `tillandsias-plan check`, reads correctly in review — and the fold throws
+      it away. 11 of 21 completions were discarded that way (635-i6vm).
+    - Writing only a `type: completed` event leaves the status untouched. macOS
+      did this after a 5/5-PASS validation with an evidence file; the packet was
+      still being handed out as work hours later.
+
+    `set-field` resolves against the folded ledger, writes the LWW channel
+    correctly, refuses an unknown reference, and reports a no-op instead of
+    writing one. Add a narrative `progress`/`completed` event too if the detail
+    is worth keeping — but the status transition is what actually closes it.
 3.  **Commit & Push Ledger**: Commit and push the final plan fragment edits to `origin/<active-branch>`.
 
 ### Mandatory Exit Discipline

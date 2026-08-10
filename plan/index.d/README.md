@@ -40,11 +40,37 @@ events:                       # G-Set, keyed by (packet_id, event identity)
 
 status:                       # LWW-Register, resolved by (ts, host)
   - packet_id: some-existing-packet
-    field: status
+    field: status              # ANY field — the channel is misnamed, see below
     value: completed
     ts: "2026-08-01T05:00:00Z"
     host: linux-mutable
 ```
+
+## Changing a field: use the tool, do not hand-author
+
+```bash
+tillandsias-plan set-field <id|order> <field> <value> --reason "why"
+```
+
+Hand-authoring the `status:` channel is possible and it is how three hosts got
+it wrong on 2026-08-09, independently, within hours of each other:
+
+| host | what it wrote | what happened |
+|---|---|---|
+| linux | re-declared the packet under `packets:` with a new status | G-Set no-op. **11 of 21 completions silently discarded**, some for two days (635-i6vm) |
+| macOS | `type: completed` under `events:`, no `status:` block | packet passed 5/5 with an evidence file and stayed claimable |
+| windows | filed 642-fedr | the channel is *named* `status:` but corrects **any** field, so nobody looks here when changing `pickup_role` |
+
+Every one of those parses, validates, passes `tillandsias-plan check`, and reads
+correctly in review. The fold discards the change and nothing reports that it
+did. That is why the tool exists (636-9m79): it removes the choice rather than
+policing it.
+
+`set-field` also resolves against the **folded** ledger, so it reaches
+fragment-only packets. `append-event` cannot — it locates packets by their item
+prefix in `plan/index.yaml` and is blind to anything that lives only in a
+fragment (600-c266). That blindness is why agents started hand-authoring these
+fragments in the first place.
 
 Only you could have produced that filename, so git has nothing to merge. The
 packet is queryable immediately — reads fold fragments in automatically.
@@ -57,6 +83,12 @@ packet is queryable immediately — reads fold fragments in automatically.
   chronological because of that ordering.
 - **Events are a set, not a register.** Two hosts commenting on one packet keep
   both comments. Only `status` fields are last-writer-wins.
+- **Never hand-author the `status:` channel.** Use `tillandsias-plan set-field`.
+  Re-declaring a packet under `packets:` to change it is a G-Set no-op that looks
+  exactly like success — see the table above.
+- **The `status:` channel is field-generic despite its name.** It corrects
+  `pickup_role`, `priority`, `desired_release` — anything. Renaming it is tracked
+  by 642-fedr.
 
 ## Compaction
 

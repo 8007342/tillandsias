@@ -1072,6 +1072,47 @@ distributed_work:
         Stalling a cycle because MCP is down. "'Tis broken? keep goin'" — fall
         back, note it, continue.
 
+  ledger_write_path:
+    purpose: >
+      One command changes a packet field. Hand-authoring the LWW channel is the
+      single most reproducible way this project corrupts its own state.
+    rule: >
+      `tillandsias-plan set-field <id|order> <field> <value> --reason "why"`.
+      Never re-declare a packet under `packets:` to change it, and never rely on
+      an event alone to close one.
+    why: >
+      Three hosts got this wrong on 2026-08-09, independently, within hours of
+      each other AND of it being documented:
+
+        linux    re-declared under `packets:` — a G-Set no-op. 11 of 21
+                 completions silently discarded, some for two days (635-i6vm).
+        macos    wrote `type: completed` events with no status block. A packet
+                 that passed 5/5 with an evidence file stayed claimable.
+        windows  filed 642-fedr: the channel is NAMED `status:` but corrects any
+                 field, so nobody looks there when changing pickup_role.
+
+      Every one of those parses, validates, passes `tillandsias-plan check`, and
+      reads correctly in review. The fold discards the change and nothing
+      reports that it did.
+
+      The skills themselves taught the broken pattern: advance-work-from-plan
+      step 7 said to close a packet with `append-event` OR "a fragment file
+      setting status done", and BOTH branches are broken — append-event is blind
+      to fragment-only packets (600-c266), and the fragment form is the G-Set
+      no-op. Three hosts following the instructions correctly is not three
+      mistakes.
+    also: >
+      set-field resolves against the FOLDED ledger, so unlike append-event it
+      reaches fragment-only packets. It refuses an unknown reference rather than
+      writing a fragment that applies to nothing, and reports a no-op instead of
+      writing one.
+    detectors: >
+      scripts/check-fragment-status-loss.sh (gates: a declared terminal status the
+      fold discards, and a `completed` event with no transition);
+      scripts/check-stranded-in-progress.sh (advisory: claims that never produced
+      an event); scripts/reclaim-stranded-claims.sh (returns claims older than the
+      TTL to `ready`).
+
   cycle_batch_triage:
     purpose: >
       Decide what ONE orchestration cycle takes, so that consecutive
