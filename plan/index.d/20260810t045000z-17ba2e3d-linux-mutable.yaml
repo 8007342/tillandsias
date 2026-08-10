@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: credential-secrets-architecture-audit
+    field: release_target
+    value: architecture-audit-epic
+    ts: "2026-08-10T04:50:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: credential-secrets-architecture-audit
+    event:
+      type: note
+      ts: "2026-08-10T04:50:00Z"
+      host: linux-mutable
+      summary: >
+        Grouped under the new architecture-audit-epic (647-6c3g). Four all-platforms audits that were each competing alone against grouped epics and losing; they are the same kind of work over overlapping subject matter, so an agent holding one has most of the context for the next.

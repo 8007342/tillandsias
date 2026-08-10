@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t045000z
+packets:
+
+  - packet_id: architecture-audit-epic
+    order: 647-6c3g
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    title: "EPIC: the four cross-platform architecture audits (network, credentials, proxy/mirror, spec contradictions)"
+    kind: milestone
+    deliverable: plan/issues/ (one report per child audit)
+    depends_on: []
+    pickup_role: any
+    capability_tags: [audit, architecture, design, all-platforms, epic]
+    context: >
+      Operator directive 2026-08-10: group larger, greedier chunks so an orchestration
+      cycle takes a coherent block rather than one packet at a time.
+
+      Four audits sat ungrouped and reachable by every host — 245 network-architecture,
+      246 credential-secrets-architecture, 247 proxy-git-mirror-configuration, 248
+      spec-cheatsheet-contradiction. All four are `all-platforms`, all four are
+      `kind: audit+…`, and none had a head, so each was competing alone against
+      well-grouped epics and losing. They are the same KIND of work — read the system as
+      it actually is, find where design and implementation have drifted, write it down —
+      and they overlap heavily in subject: 247's proxy/mirror boundary IS 245's network
+      taxonomy seen from one side, and 606-9wqd's egress divergence is a worked example
+      of both.
+
+      They also compose. An agent holding the network taxonomy in context is the cheapest
+      possible reader of the proxy/mirror configuration; doing them in separate cycles
+      pays the orientation cost twice for the same subsystem. That is precisely the
+      cross-cycle cohesion the batch selector exists to buy.
+    exit_criteria:
+      - Each child audit produces a dated report in plan/issues/ with findings, not opinions.
+      - >
+        Cross-references are explicit: where two audits touch the same boundary, the later
+        one cites the earlier rather than re-deriving it. 606-9wqd is already a worked
+        example for 245/247 and should be cited, not repeated.
+      - >
+        Each finding is either filed as its own packet or explicitly dispositioned as
+        acceptable. An audit that ends in prose alone has not reduced anything.
+    verifiable_closure: >
+      All four children reach a terminal status, each with a dated report under plan/issues/,
+      and every finding is either a filed packet or a recorded disposition.
+    notes: >
+      kind: milestone — a criteria holder. Never claim this for implementation; claim the
+      children (245/246/247/248) and record burndown here.
+
+      Deliberately NOT scoped to one host: all four are `all-platforms`, so whichever host
+      draws this epic works its own slice, and the tag overlap means their contexts
+      reinforce rather than duplicate.

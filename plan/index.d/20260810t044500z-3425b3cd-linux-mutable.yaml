@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: event-push-architecture
+    field: release_target
+    value: socket-audit-master
+    ts: "2026-08-10T04:45:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: event-push-architecture
+    event:
+      type: note
+      ts: "2026-08-10T04:45:00Z"
+      host: linux-mutable
+      summary: >
+        Grouped under the socket-audit-master epic (151, 'MASTER AUDIT: Observable streams at all transport boundaries'). It was already the head of this family in name; nothing pointed at it. Operator directive 2026-08-10: group larger, greedier chunks so an orchestration cycle takes a coherent block instead of one packet. This family spans all three hosts by design — 154 windows, 155 macos, 156/157/158 linux, 147/249 any — so each host draws its own slice of ONE theme and the cross-host work converges instead of scattering.

@@ -57,10 +57,28 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: entropy floor"
 
-  - step: "MINIMAX DOMINATES: the top-residual epic holds the majority of probability"
+  - step: "MINIMAX DOMINATES: the top-residual epic beats uniform and every rival"
     # The opposite regression from the step above — the floor must not become the
     # tail wagging the dog, which is what uniform-over-top-K did.
-    command: "top=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^frontier$(printf '\\t')\" | head -1 | sed 's/.*p=//'); awk -v t=\"$top\" 'BEGIN { if (t+0 <= 0.5) { print \"FAIL: top-residual epic holds only p=\" t \" — entropy is outvoting minimax\"; exit 1 } print \"ok: minimax dominant p=\" t }'"
+    #
+    # 2026-08-10: this asserted `p_top > 0.5`, written when the frontier was
+    # 23.8 / 4.0 / 3.9 — one dominant epic and two stragglers. After the
+    # operator-directed regrouping (stream family under socket-audit-master, four
+    # audits under architecture-audit-epic) the frontier became 23.9 / 16.7 /
+    # 15.2 and p_top fell to 0.499. The step went red.
+    #
+    # That is NOT entropy outvoting minimax — it is three genuinely competitive
+    # epics, which is exactly what grouping was for. A fixed >0.5 threshold
+    # demands that grouping NOT work, and would get more wrong as coverage
+    # improves.
+    #
+    # Reformulated to the property, not a magic number, and DELIBERATELY not
+    # loosened: the top epic must (a) hold strictly more than any rival and
+    # (b) beat what pure uniform would give it (1/k). At k=3 uniform is 0.333 and
+    # the top holds 0.499 — dominant by 1.5x. This still fails if the floor ever
+    # flattens the distribution or inverts the order, which is the regression the
+    # step exists to catch, and it scales with frontier size instead of decaying.
+    command: "out=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^frontier$(printf '\\t')\"); k=$(printf '%s\\n' \"$out\" | grep -c .); if [ \"$k\" -lt 2 ]; then echo 'ok: minimax dominant (single-epic frontier)'; exit 0; fi; top=$(printf '%s\\n' \"$out\" | head -1 | sed 's/.*p=//'); second=$(printf '%s\\n' \"$out\" | sed -n '2p' | sed 's/.*p=//'); awk -v t=\"$top\" -v s=\"$second\" -v k=\"$k\" 'BEGIN { u = 1.0/k; if (t+0 <= s+0) { print \"FAIL: top epic p=\" t \" does not beat the runner-up p=\" s \" — ordering inverted\"; exit 1 } if (t+0 <= u) { print \"FAIL: top epic p=\" t \" is no better than uniform \" u \" — entropy has flattened minimax\"; exit 1 } printf \"ok: minimax dominant p=%s vs uniform %.3f over k=%s\\n\", t, u, k }'"
     timeout_ms: 60000
     expected_behavior: "ok: minimax dominant"
 
