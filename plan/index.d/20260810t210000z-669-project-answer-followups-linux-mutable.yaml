@@ -1,0 +1,91 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t210000z
+packets:
+
+  - packet_id: generic-index-deterministic-subset-is-thin
+    order: 669-egjn
+    status: ready
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    priority: p2
+    title: "index.json carries only path/types/meta — the spec's deterministic subset (commands, actions, layout) is not yet answerable"
+    kind: enhancement
+    deliverable: generic index enrichment so commands/actions/layout answer cited from the index
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [experts, generic-project, index]
+    estimated_hours: 3
+    context: >
+      Found finishing 619-pfsj: the C2 deterministic fallback advertises
+      "type, status, commands, layout, actions still answer from the index
+      alone", but the generic index.json only carries path/types/meta today,
+      so three of the five enumerated deterministic classes have nothing to
+      answer from off-Tillandsias. The refusal copy is honest about what IS
+      answerable; the index needs to grow the rest (build/run commands from
+      marker files, layout from the tree walk, actions from detected type)
+      with citable spans.
+    exit_criteria:
+      - commands, layout, and actions answer cited on the 619-3y75 generic fixtures, envelopes verify-answer clean
+    events:
+      - ts: "2026-08-10T21:00:00Z"
+        event: filed
+        summary: filed from the 619-pfsj completion report (finding 1).
+
+  - packet_id: plan-lane-routing-keys-on-binary-not-project
+    order: 669-h987
+    status: ready
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    priority: p2
+    title: "project_answer routes to the plan lane when tillandsias-plan resolves ANYWHERE — latent misroute for non-Tillandsias projects on dev hosts"
+    kind: bugfix
+    deliverable: lane routing keyed on the mounted project's identity, not on tool discoverability
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [experts, mcp, routing]
+    estimated_hours: 2
+    context: >
+      Found finishing 619-pfsj: plan-lane routing keys on the
+      tillandsias-plan binary + index resolving anywhere, including the
+      $HOME/src/tillandsias fallback. Correct inside a forge (one project
+      mounted); on a host with a Tillandsias checkout in the fallback path, a
+      NON-Tillandsias project's question can misroute into Tillandsias's
+      plan ledger and answer from the wrong project. The 619-pfsj fixture
+      verification already had to override HOME to dodge this. Route on
+      evidence about the mounted project (its own plan/index.yaml presence),
+      not on tool reachability.
+    exit_criteria:
+      - a non-Tillandsias fixture with a Tillandsias checkout present in the fallback path answers from the generic lane, proven by test
+    events:
+      - ts: "2026-08-10T21:00:00Z"
+        event: filed
+        summary: filed from the 619-pfsj completion report (finding 2).
+
+  - packet_id: project-engine-grammar-litmus-is-ownerless
+    order: 669-qcsb
+    status: ready
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    priority: p2
+    title: "No litmus pins the project_engine capability grammar or the typed synthesis refusal — the pinning was assigned to an already-completed packet"
+    kind: litmus
+    deliverable: litmus tests pinning the project_engine verdict line grammar (ready/skewed/stale-engine/absent) and the synthesis-refusal envelope
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [experts, litmus, capability-honesty]
+    estimated_hours: 2
+    context: >
+      Design constraint 9 of the generic-project-expert design assigned
+      grammar pinning to 619-3y75, which the ledger already marks completed —
+      so the brand-new 619-pfsj surfaces (the four project_engine verdicts
+      incl. the order-531-class skew detection, and the typed
+      missing_capability refusal) have no executable guard. Order-531's
+      lesson is precisely that capability honesty needs a litmus, not
+      goodwill: pin the verdict line grammar and a refusal envelope fixture
+      so a regression fails loud.
+    exit_criteria:
+      - litmus executes the four verdict states from fixtures and the no-inference refusal, bound under the owning spec, running in the instant pre-build tier
+    events:
+      - ts: "2026-08-10T21:00:00Z"
+        event: filed
+        summary: filed from the 619-pfsj completion report (finding 3).
