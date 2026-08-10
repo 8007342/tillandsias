@@ -86,7 +86,7 @@ critical_path:
     # git-service (git daemon), inference (ollama REST). Pin
     # canonical ports: proxy:3128 (Squid), git-service:9418 (git
     # protocol).
-    command: "grep -Fq 'proxy|proxy|3128|' images/default/cli/tillandsias-services && grep -Fq 'git-service|git-service|9418|' images/default/cli/tillandsias-services && grep -Fq 'inference' images/default/cli/tillandsias-services && echo \"ok: 3 services enumerated\""
+    command: "grep -Fq 'proxy|proxy|3128|' images/default/cli/tillandsias-services && grep -Fq 'git-mirror|${GIT_HOST}|9418|' images/default/cli/tillandsias-services && grep -Fq 'inference' images/default/cli/tillandsias-services && echo \"ok: 3 services enumerated\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 

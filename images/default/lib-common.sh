@@ -458,13 +458,13 @@ REFRESH
 # rule in `~/.gitconfig` (NOT the bind-mounted `.git/config`, which must stay
 # pristine so the host's normal workflow keeps working). The rule redirects
 # any push or fetch against the GitHub URL onto the enclave-local git mirror
-# reachable at `git://git-service/<project>`. The mirror owns the GitHub token
-# (fetched from Vault at push time by the post-receive hook via vault-cli) and
-# post-receive hook.
+# reachable at its per-project name `git://git-<project>/<project>`
+# (order 659-8faj). The mirror owns the GitHub token (fetched from Vault at
+# push time by the post-receive hook via vault-cli) and post-receive hook.
 #
 # Net effect inside the forge:
 #   - `git remote -v` still shows the GitHub URL (matches user expectation).
-#   - `git push origin <branch>` silently routes to `git://git-service/<project>`.
+#   - `git push origin <branch>` silently routes to `git://git-<project>/<project>`.
 #   - The host's `.git/config` is never modified.
 #
 # Diagnostic forensics: the original origin URL is preserved under
@@ -473,6 +473,19 @@ REFRESH
 #
 # Idempotent — re-running on each forge attach overwrites the same global
 # config keys.
+
+# @trace spec:git-mirror-service
+# Order 659-8faj: the mirror's DNS identity is PER-PROJECT — the shared
+# `tillandsias-git` / `git-service` aliases are retired and no longer resolve.
+# The launcher injects the authoritative name (git_mirror_service_identity in
+# tillandsias-headless, `git-{sanitized-project}`) as TILLANDSIAS_GIT_SERVICE.
+# The fallback mirrors that derivation for simple project names and exists
+# only for lanes where the launcher does not inject the variable (host-mount).
+# Every mirror URL in this file MUST derive its host here — never a constant.
+git_mirror_host() {
+    printf '%s' "${TILLANDSIAS_GIT_SERVICE:-git-${TILLANDSIAS_PROJECT}}"
+}
+
 rewrite_origin_for_enclave_push() {
     # Only act when host-mount mode is active. Other transports (filesystem
     # /Windows-WSL, git daemon /Linux-podman) handle their own remote setup
@@ -500,7 +513,7 @@ rewrite_origin_for_enclave_push() {
         return 0
     fi
 
-    local mirror_url="git://tillandsias-git/${TILLANDSIAS_PROJECT}"
+    local mirror_url="git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}"
 
     # Check whether the redirect is already installed (pre-injected by the
     # launcher's write_forge_gitconfig in order 224). If so, skip redundant
@@ -749,7 +762,7 @@ _clone_project_from_mirror_impl() {
 
     # Network transport (Linux/podman).
     if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
-        trace_lifecycle "git-mirror" "cloning from git://tillandsias-git/${TILLANDSIAS_PROJECT}"
+        trace_lifecycle "git-mirror" "cloning from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}"
         # Retry budget: the launcher-side wait_for_git_mirror_ready gate
         # (order 452 slice 2) blocks the launch until the mirror advertises a
         # resolvable HEAD, so this loop is the fail-loud BACKSTOP, not the
@@ -761,7 +774,7 @@ _clone_project_from_mirror_impl() {
         local backoff
         for i in $(seq 1 $max_retries); do
             if [[ $i -le 6 ]]; then backoff=2; else backoff=5; fi
-            if git clone "git://tillandsias-git/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
+            if git clone "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
                 # @trace spec:git-mirror-service
                 # A git daemon serving a mid-seed (still-empty) bare repo returns
                 # a SUCCESSFUL clone of an EMPTY repository — git only prints
@@ -780,7 +793,7 @@ _clone_project_from_mirror_impl() {
                         sleep "$backoff"
                         continue
                     fi
-                    echo "[forge] FATAL: git clone from git://tillandsias-git/${TILLANDSIAS_PROJECT} produced an EMPTY checkout (no HEAD) after $max_retries attempts." >&2
+                    echo "[forge] FATAL: git clone from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT} produced an EMPTY checkout (no HEAD) after $max_retries attempts." >&2
                     # Distinguish the two failure classes so the operator fixes
                     # the right thing (they previously shared one misleading
                     # message that blamed seeding for a mirror-side defect):
@@ -791,7 +804,7 @@ _clone_project_from_mirror_impl() {
                     #   - no refs at all -> the mirror has not finished seeding
                     #     from upstream, or upstream is genuinely empty.
                     local advertised
-                    advertised="$(git ls-remote "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
+                    advertised="$(git ls-remote "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
                     if [[ -n "$advertised" ]] && ! echo "$advertised" | grep -q $'\tHEAD$'; then
                         echo "[forge] The mirror ADVERTISES refs but its HEAD is unset (unborn-HEAD mirror defect)." >&2
                         echo "[forge] Restart/rebuild the tillandsias-git container so ensure-mirror-head repairs it (images/git/ensure-mirror-head.sh)." >&2
@@ -803,7 +816,7 @@ _clone_project_from_mirror_impl() {
                 fi
                 trace_lifecycle "git-mirror" "clone successful"
                 cd "$clone_dir" || return 1
-                git remote set-url --push origin "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
+                git remote set-url --push origin "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
                     echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
                 configure_git_identity
                 rewrite_origin_for_enclave_push
@@ -820,7 +833,7 @@ _clone_project_from_mirror_impl() {
                 trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
             fi
         done
-        echo "[forge] FATAL: git clone failed from git://tillandsias-git/${TILLANDSIAS_PROJECT}" >&2
+        echo "[forge] FATAL: git clone failed from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" >&2
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
     fi
