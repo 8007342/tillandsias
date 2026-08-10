@@ -1,5 +1,6 @@
 #!/bin/bash
 # @trace spec:spec-traceability
+# freshness: auditor=linux-macuahuitl-fable5-20260810t2240z date=2026-08-10 verdict=refreshed scope=spec-traceability suite (runner self-tests incl. name-filter fail-loud, backslash escaping, stdlib portability) 7/7 executed PASS; heavy incidental live exercise same day (5 host suites + a 195-test in-forge run via v0.4.260810.x); spec-name-only filter grammar confirmed fail-loud by design when handed a litmus: test name
 # freshness: auditor=linux-macuahuitl-opencode-20260801T0611Z date=2026-08-01 verdict=refreshed scope=live executor, filters, cleanup, and stdlib remain meaningful; focused self-tests 6/6 green
 #
 # Tillandsias Litmus Test Execution Runner

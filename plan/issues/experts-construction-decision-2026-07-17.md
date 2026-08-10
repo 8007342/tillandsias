@@ -89,3 +89,26 @@ network only exists after a lane bring-up (a bare `podman start
 tillandsias-inference` on a fresh boot fails), and the ollama CLI is not on
 the exec PATH — use the HTTP API (`/api/create`, `/api/generate`) from inside
 the container.
+
+### 657-3mq5 slice 1 (2026-08-10T22:15Z): the i8mm/SME native-build unlock, measured
+
+Guest `/proc/cpuinfo` exposes `asimddp`, `i8mm`, and the FULL SME/SME2 family
+(sme2p1, smef64f64, …) — an M4-class part; no SVE, exactly the combination
+llama.cpp's prebuilt linux-arm64 variants cannot use (their i8mm variants
+require SVE). A native in-guest build (`cmake -DGGML_NATIVE=ON`, detected
+flags `+dotprod+i8mm+sme-f64f64+sme-i16i64+sme2p1+…`) took **65 seconds** on
+the 4 vCPUs. llama-bench, qwen2.5-0.5b-instruct **Q4_0**, t=4:
+
+| test | native build |
+|---|---|
+| pp512 | **1194.5 ± 18.9 t/s** |
+| tg128 | **190.0 ± 7.2 tok/s** |
+
+vs the order-401 cpu-ollama baseline of 52 tok/s warm decode: **≈3.65x
+decode**, prompt processing in another league. (Caveat: llama-bench raw vs
+ollama's HTTP API path — some delta is API overhead; the apples-to-apples
+ollama pin-bench is the remaining 657-3mq5 criterion.) Recipe so far:
+Fedora 44 guest, `dnf install cmake gcc-c++ git make`, llama.cpp shallow
+clone, `-DGGML_NATIVE=ON -DLLAMA_CURL=OFF`, plain Q4_0 GGUF, threads=4.
+Remaining: quant A/B (Q4_K_M / Q8_0), ollama version pin-bench, quality
+spot-check on the ground-truth set.

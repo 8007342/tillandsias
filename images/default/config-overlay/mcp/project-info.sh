@@ -223,8 +223,11 @@ resolve_plan_bin() {
 # Tokens are `[a-z][a-z0-9-]*`, one per line, sorted; `engine-contract-vN` is
 # the contract version and MUST be bumped whenever the answer contract changes
 # behaviour. v2 = 619-pfsj: typed synthesis refusals + no-inference fallback.
+# v3 = 669-h987: project_answer lane routing keyed on the mounted project's
+# identity (own plan/index.yaml at the root), not on tool reachability — a
+# non-Tillandsias mount always answers from the generic lane.
 PROJECT_INFO_ENGINE_MANIFEST='
-engine-contract-v2
+engine-contract-v3
 file-summary
 find-files
 generic-lane
@@ -620,10 +623,33 @@ ${preview}"
                         error_code=-32602
                         error_msg="Invalid params for tool 'project_answer': missing required 'question'"
                     else
-                        # Two-lane routing (C4): specialized plan expert lane if available, else generic project index lane
-                        _pbin="$(resolve_plan_bin)"
-                        _pidx="$(resolve_plan_index)"
-                        if [ -n "$_pbin" ] && [ -n "$_pidx" ]; then
+                        # Two-lane routing (C4), ORDER 669-h987. The lane is
+                        # chosen on evidence about the MOUNTED project — its own
+                        # plan/index.yaml at the project root — never on tool
+                        # reachability. The pre-669-h987 gate
+                        # (resolve_plan_bin && resolve_plan_index) resolved the
+                        # $HOME/src/tillandsias fallbacks too, so on a dev host
+                        # with a Tillandsias checkout lying around a
+                        # NON-Tillandsias project's question misrouted into that
+                        # checkout's plan ledger and answered from the wrong
+                        # project. Only a Tillandsias-shaped mounted project
+                        # (own plan/index.yaml at the root) enters the plan
+                        # lane, and it answers from ITS OWN ledger
+                        # (TILLANDSIAS_PLAN_INDEX stays an explicit override for
+                        # operator pins and test stubs); everything else answers
+                        # from the generic lane, whatever the tooling resolves.
+                        _pa_plan_lane=0
+                        if [ -f "./plan/index.yaml" ]; then
+                            _pa_plan_lane=1
+                            _pbin="$(resolve_plan_bin)"
+                            if [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ] && [ -f "${TILLANDSIAS_PLAN_INDEX}" ]; then
+                                _pidx="${TILLANDSIAS_PLAN_INDEX}"
+                            else
+                                _pidx="${PWD}/plan/index.yaml"
+                            fi
+                            [ -n "$_pbin" ] || _pa_plan_lane=0
+                        fi
+                        if [ "$_pa_plan_lane" = "1" ]; then
                             # DETERMINISTIC FIRST (C5): the plan engine runs
                             # before any synthesis consideration, so a question
                             # it can cite an answer for is answered — with no

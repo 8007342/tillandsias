@@ -1,0 +1,23 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t225500z
+events:
+  - packet_id: forge-rustc-panics-during-build-check
+    event:
+      type: progress
+      ts: "2026-08-10T22:55:00Z"
+      agent_id: linux-mutable-20260810t225500z
+      host: linux_mutable
+      summary: >
+        Criterion 3 VERIFIED (BigPickle in-forge, 8374da13): ./build.sh
+        --check green under pids.max=4096, session exited clean, zero new
+        coredumps. HONEST NUANCE the verdict must carry: pids.peak read
+        199 — BELOW the old 512 ceiling — so tonight's green run does NOT
+        prove the exhaustion mechanism for the original crash (possible
+        confounds: warm forge-cache narrowing parallelism vs round 1's cold
+        first-ever build; or a different mechanism entirely, with the 4096
+        raise merely coincident). Practical outcome stands: in-forge builds
+        work and the policy is explicit. RESIDUAL to close this packet:
+        either read the 94.1M coredump (604-vmcg) to confirm/refute
+        thread-spawn failure in the SEGV, or repro a cold-cache in-forge
+        build with pids.peak sampled around the panic window. Packet stays
+        ready, scoped to that residual.
