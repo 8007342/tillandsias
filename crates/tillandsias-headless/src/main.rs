@@ -3175,12 +3175,18 @@ async fn wait_for_inference_ready(client: &PodmanClient, debug: bool) -> Result<
     for attempt in 1..=MAX_ATTEMPTS {
         // Probes from inside the container so we don't depend on the enclave
         // DNS alias resolving from the host launcher.
+        //
+        // NO `-i` on these execs (order 635-kagg): none of the bring-up
+        // execs feeds stdin, and `podman exec -i` with the launcher's
+        // null stdin hung the conmon attach protocol indefinitely on the
+        // macOS guest's podman — the first probe never returned and every
+        // one-shot lane launch wedged forever, absorbing SIGTERM. Pinned
+        // by bringup_execs_never_attach_stdin.
         match client
             .execute(
                 OperationKind::Container,
                 &[
                     "exec".into(),
-                    "-i".into(),
                     "tillandsias-inference".into(),
                     "curl".into(),
                     "-fsS".into(),
@@ -3235,7 +3241,6 @@ async fn probe_git_mirror_seeded(
             OperationKind::Container,
             &[
                 "exec".into(),
-                "-i".into(),
                 container_name.into(),
                 "git".into(),
                 "-C".into(),
@@ -3265,7 +3270,6 @@ async fn probe_git_mirror_seeded(
                 OperationKind::Container,
                 &[
                     "exec".into(),
-                    "-i".into(),
                     container_name.into(),
                     "git".into(),
                     "-C".into(),
@@ -3297,7 +3301,6 @@ async fn probe_git_mirror_seeded(
             OperationKind::Container,
             &[
                 "exec".into(),
-                "-i".into(),
                 container_name.into(),
                 "git".into(),
                 "-C".into(),
@@ -11094,7 +11097,6 @@ async fn ensure_shared_git_and_inference_for_launch(
                     OperationKind::Container,
                     &[
                         "exec".into(),
-                        "-i".into(),
                         git_container_name.clone(),
                         "git".into(),
                         "-C".into(),
@@ -11148,7 +11150,6 @@ async fn ensure_shared_git_and_inference_for_launch(
                 OperationKind::Container,
                 &[
                     "exec".into(),
-                    "-i".into(),
                     git_container_name.clone(),
                     "sh".into(),
                     "-c".into(),
@@ -14306,6 +14307,25 @@ mod tests {
         assert_eq!(
             serde_json::from_str::<RouterRoute>(&json).unwrap(),
             pubroute
+        );
+    }
+
+    /// Order 635-kagg pin: launcher-side podman execs must never attach
+    /// stdin. None of them feeds stdin, and `podman exec -i` with the
+    /// launcher's null stdin hung the conmon attach protocol on the macOS
+    /// guest's podman — the first inference readiness probe never
+    /// returned, so every one-shot forge-lane launch wedged forever
+    /// (SIGTERM-absorbed). Needle built by concatenation so this test
+    /// cannot match its own literal.
+    #[test]
+    fn bringup_execs_never_attach_stdin() {
+        let source = include_str!("main.rs");
+        let needle = format!("\"-{}\".into()", "i");
+        assert!(
+            !source.contains(&needle),
+            "podman exec in the launcher must not pass -i: no call site \
+             feeds stdin, and -i wedges conmon attach on a null stdin \
+             (order 635-kagg)"
         );
     }
 
