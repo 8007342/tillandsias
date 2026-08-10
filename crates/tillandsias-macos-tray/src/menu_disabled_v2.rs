@@ -102,6 +102,10 @@ mod tests {
             guest_version: None,
             login_runtime_ready: true,
             target: TargetSurface::MacosTray,
+            // Order 648-jv69: a READY menu by definition has no terminal
+            // provisioning failure. Setting this would flip `build` to the
+            // Failed structure and invalidate the parity snapshot below.
+            provisioning_failure: None,
         };
         build(&state)
     }
