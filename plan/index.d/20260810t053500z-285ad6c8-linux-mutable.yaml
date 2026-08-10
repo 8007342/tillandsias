@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: stable-promotion-candidate-v0-4-260810-1
+    field: status
+    value: completed
+    ts: "2026-08-10T05:35:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: stable-promotion-candidate-v0-4-260810-1
+    event:
+      type: note
+      ts: "2026-08-10T05:35:00Z"
+      host: linux-mutable
+      summary: >
+        PROMOTED v0.4.260810.1 to stable WITHOUT --force — the packet's central criterion. promote-stable.sh's evidence gate was SATISFIED, not bypassed: it found e2e PASS evidence naming this exact tag from both sibling platforms (macOS 644-7w89 5/5 with no regressions vs .2 and the 421 fix confirmed; Windows 644-a3wj 4/4 including the standalone portable exe and a fresh 623-iwq4 non-recurrence check). Contrast v0.4.260809.2, promoted by operator override with NO e2e evidence — this is the first promotion in a while that satisfied the gate rather than bypassing it, which was the whole point of filing this packet. Verified after: release isPrerelease=false, isLatest=true, stable git tag moved, and all six advertised landing-page links return 200. The only hiccup was the pre-push gate stamp going stale from the merge, re-gated rather than --no-verify'd.
