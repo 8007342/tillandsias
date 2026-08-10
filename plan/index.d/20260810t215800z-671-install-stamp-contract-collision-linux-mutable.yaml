@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t215800z
+packets:
+
+  - packet_id: branch-install-stamp-collides-with-exit-contract
+    order: 671-jvcg
+    status: ready
+    priority: p3
+    title: "./build.sh --install auto-bumps VERSION, but the push guard forbids committing it off-main — every branch install leaves mandatory-uncommittable dirt"
+    kind: enhancement
+    deliverable: install flow that stamps the binary without dirtying the tree on non-main branches (or an explicit stamp-revert step), plus a runbook line
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [build, release, install, discipline]
+    estimated_hours: 1
+    context: >
+      Hit live by the 2026-08-10 coordinator loop (cycle 3): installing the
+      667-se87 fix bumped VERSION 0.4.260810.1 -> .2 across six files; the
+      meta-orchestration exit contract demands cycle dirt be committed, the
+      pre-push guard then correctly refused the VERSION change on linux-next
+      (bumps belong to main), leaving commit-forbidden dirt. Resolved this
+      time by reverting the stamp (binary keeps its embedded .2 — standard
+      dev-install skew). The collision recurs for every on-branch install;
+      the flow should either stamp only the artifact (env/ldflags-style,
+      tree untouched) or print the exact revert step as part of --install
+      output so the loop's finalization is deterministic.
+    exit_criteria:
+      - an on-branch ./build.sh --install leaves a byte-clean tree (or prints a single documented command that does), while the installed binary still self-reports the bumped dev serial
+    events:
+      - ts: "2026-08-10T21:58:00Z"
+        event: filed
+        summary: filed live from the collision during loop cycle 3 finalization.
