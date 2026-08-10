@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t234224z
+events:
+  - packet_id: git-mirror-cross-project-service-identity
+    event:
+      type: progress
+      ts: "2026-08-10T23:42:24Z"
+      agent_id: linux-mutable-20260810t234224z
+      host: linux_mutable
+      summary: >
+        Vault-side substrate of the amended design LANDED (rungs T1/T2 + D13);
+        packet stays ready — the transport rungs are untouched.
+
+        T1 boot half: images/vault/entrypoint.sh now enables both SSH CA
+        engines (ssh-client-signer, ssh-host-signer) and generates both
+        in-vault ed25519 CAs via the same idempotent enable_endpoint 2xx|400
+        idiom as approle/kv2/audit; no roles at boot (amended T1 — roles are
+        provision-time). T1 migration half: because the entrypoint provisions
+        on FIRST boot only, provision_mirror_ssh_roles (vault_bootstrap.rs)
+        re-ensures mounts+CAs host-side, so vaults initialized before this
+        shipped gain the engines at first mirror provision.
+
+        D13: mint_mirror_id — 12 bytes host CSPRNG (getrandom 0.4, already in
+        the tree via uuid; no new lockfile entry), hand-rolled RFC 4648
+        base32hex lowercase no-pad (20 chars, hostname git-<id> a single
+        24-char DNS label). provision_mirror_identity mint-or-reads
+        secret/mirror-identity/<project>; the kv entry is the COMMIT MARKER
+        written LAST via a new kv-v2 cas=0 create-only client call
+        (write_secret_if_absent), so concurrent first-provisions converge on
+        one identity (loser re-reads and adopts the winner); a stored id
+        failing the grammar fails LOUD, never re-minted over.
+
+        T2/§2.3: provision_mirror_ssh_roles writes the exact per-project pair
+        — client role roles/<mirror-id> (allowed_users exactly
+        til:forge-push:<mirror-id>, allowed_extensions empty, force-command +
+        source-address=EFFECTIVE enclave subnet, 30m/1h) and host role
+        roles/host-<mirror-id> (allowed_domains exactly git-<mirror-id>,
+        24h/48h) — plus both policies MINTED via sys/policies/acl from Rust
+        templates next to provision_approle_roles (no static .hcl ships;
+        Containerfile-COPY/Policy::all() divergence trap not in play).
+        Runtime guard reject_sign_wildcard refuses any policy body containing
+        the withdrawn wildcard before it reaches the server; a source-window
+        test pins guard-before-write, and rendered-output tests grep both
+        policies for the exact sign paths and wildcard absence.
+
+        Wiring: ensure_shared_git_and_inference_for_launch (forge-launch
+        mirror CREATE branch only) calls ensure_mirror_identity_provisioned —
+        one kv read when already provisioned; the running-mirror reuse path
+        never touches Vault for this. Tests: RFC 4648 vectors, 20-char
+        grammar + uniqueness across 64 mints, stability across re-reads
+        (wiremock proves the read path performs zero writes), corrupt-id
+        refusal, first-provision full call matrix incl. cas=0 body match,
+        cas-race adoption, role-config exactness (incl. subnet override
+        flow-through and shared-alias exclusion), entrypoint pin. cargo test
+        -p tillandsias-headless 324 passed; ./build.sh --check green.
+
+        REMAINS (packet stays ready): T3-T13 — sshd in the git image, host
+        cert at mirror start, sshd_config/receive wrapper, repo hardening,
+        sidecar + AppRole ssh-lane-signer-<mirror-id> (D6, deliberately not
+        minted yet), forge wiring, negative matrix §4a M0-M7 (live-vault
+        litmus incl. the forge-cannot-read-mirror-identity pin), audit volume
+        T9, DNS swap of git_mirror_service_identity to the opaque hostname
+        (659-8faj's one swap point — deliberately NOT swapped in this slice),
+        and identity provisioning at the three non-forge-launch mirror-create
+        sites (status-check, opencode CLI, opencode web). Design still
+        UNSIGNED; Q1/Q2 operator-gated.

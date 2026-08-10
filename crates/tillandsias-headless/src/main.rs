@@ -11252,6 +11252,23 @@ async fn ensure_shared_git_and_inference_for_launch(
             );
         }
     } else {
+        // Order 606-bvnp (design D13 + §2.3, rungs T1/T2): a project's FIRST
+        // mirror provision mints its opaque mirror-id and the exact
+        // per-project SSH signer roles + policies; every later create is one
+        // kv read (the kv entry is the completed-provision commit marker).
+        // The running-mirror reuse path above never touches Vault for this.
+        // Nothing consumes the identity yet — sshd wiring is T4+ — but the
+        // substrate must exist before any of those rungs can land, and
+        // failure here is LOUD by the same windows-260716-2 rule as the
+        // credential mint below (Vault is already a hard dependency of this
+        // create path).
+        crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+            project_name,
+            &enclave_subnet(),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[forge-launch] mirror service-identity provisioning failed: {e}"))?;
         let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(

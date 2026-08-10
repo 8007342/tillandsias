@@ -3116,6 +3116,7 @@ dependencies = [
  "chrono",
  "dirs",
  "futures",
+ "getrandom 0.4.2",
  "hyper 1.9.0",
  "image",
  "keyring",

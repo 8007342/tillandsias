@@ -3340,6 +3340,396 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Per-project mirror service identity (order 606-bvnp)
+//
+// Design: plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md — D13
+// (opaque mirror-id), §2.3 (exact per-project SSH signer roles), D12/§4 T2
+// (policies MINTED at provision, never a static wildcard file). Every
+// per-project artifact — certificate principal, client/host signer role,
+// minted policy, opaque hostname — is keyed by one opaque token minted here.
+// ---------------------------------------------------------------------------
+
+/// Vault mount of the client (user-cert) SSH CA. Two mounts, not one with two
+/// roles: independent signing keys are independent blast radii (design D1).
+pub const SSH_CLIENT_SIGNER_MOUNT: &str = "ssh-client-signer";
+/// Vault mount of the host-cert SSH CA (design D1).
+pub const SSH_HOST_SIGNER_MOUNT: &str = "ssh-host-signer";
+/// KV-v2 prefix persisting each project's opaque mirror identity (D13).
+/// Written ONCE at first mirror provision, read on every later launch.
+/// No forge-reachable policy may read `secret/data/mirror-identity/*`.
+pub const MIRROR_IDENTITY_KV_PREFIX: &str = "secret/mirror-identity";
+/// Raw entropy of a mirror-id: 12 bytes from the host CSPRNG (D13).
+const MIRROR_ID_BYTES: usize = 12;
+/// Encoded length: 12 bytes → ceil(96/5) = 20 base32hex characters.
+pub const MIRROR_ID_LEN: usize = 20;
+
+/// RFC 4648 base32hex, lowercase, no padding.
+///
+/// Chosen over base32 because base32hex sorts like the bytes it encodes, and
+/// over base64/hex because the output must be a valid DNS label fragment
+/// (`git-<mirror-id>` is assigned as a podman `--network-alias`): lowercase
+/// alphanumeric only, no `+/=` and no case-sensitivity hazards. Hand-rolled
+/// (~15 lines) rather than a new crate dependency.
+fn base32hex_lowercase_nopad(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 32] = b"0123456789abcdefghijklmnopqrstuv";
+    let mut out = String::with_capacity(bytes.len().div_ceil(5) * 8);
+    let mut acc: u32 = 0;
+    let mut acc_bits: u32 = 0;
+    for &byte in bytes {
+        acc = (acc << 8) | u32::from(byte);
+        acc_bits += 8;
+        while acc_bits >= 5 {
+            acc_bits -= 5;
+            out.push(ALPHABET[((acc >> acc_bits) & 0x1f) as usize] as char);
+        }
+    }
+    if acc_bits > 0 {
+        out.push(ALPHABET[((acc << (5 - acc_bits)) & 0x1f) as usize] as char);
+    }
+    out
+}
+
+/// Mint a fresh opaque mirror-id: 12 CSPRNG bytes, base32hex lowercase, no
+/// padding — 20 chars (design D13).
+///
+/// Minted RANDOM, never derived: a hash of the project name (salted or not,
+/// if the salt is shared) is enumerable by any tenant that can guess project
+/// names, and project names are chosen by humans to be guessable. Randomness
+/// is the only derivation with nothing to guess from.
+pub fn mint_mirror_id() -> Result<String, String> {
+    let mut bytes = [0u8; MIRROR_ID_BYTES];
+    getrandom::fill(&mut bytes)
+        .map_err(|e| format!("host CSPRNG unavailable for mirror-id mint: {e}"))?;
+    Ok(base32hex_lowercase_nopad(&bytes))
+}
+
+/// Grammar check for a stored mirror-id: exactly 20 base32hex-lowercase
+/// chars. A stored identity that fails this was not written by the mint path
+/// and must be treated as corruption, never silently re-minted over —
+/// existing roles, policies, and certificates may reference it.
+pub fn mirror_id_is_valid(mirror_id: &str) -> bool {
+    mirror_id.len() == MIRROR_ID_LEN
+        && mirror_id
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'v'))
+}
+
+/// KV-v2 path persisting one project's mirror identity (D13).
+pub fn mirror_identity_kv_path(project: &str) -> String {
+    format!("{MIRROR_IDENTITY_KV_PREFIX}/{project}")
+}
+
+/// The one certificate principal a project's lane certs may carry (D3):
+/// authorization lives in the principal, identity lives in the key. Opaque —
+/// never the plaintext project name, which would leak cross-tenant into the
+/// other project's sshd log on a rejected cert.
+pub fn mirror_push_principal(mirror_id: &str) -> String {
+    format!("til:forge-push:{mirror_id}")
+}
+
+/// Opaque per-project mirror hostname `git-<mirror-id>` (24 chars, a single
+/// valid DNS label). The DNS swap point itself is
+/// `git_mirror_service_identity` (main.rs, order 659-8faj); this derivation
+/// exists so the Vault-side artifacts (host role `allowed_domains`, host-cert
+/// principal) name exactly the hostname that function will emit once the
+/// opaque identity is wired through it.
+pub fn mirror_service_hostname(mirror_id: &str) -> String {
+    format!("git-{mirror_id}")
+}
+
+/// Client-signer role name on [`SSH_CLIENT_SIGNER_MOUNT`]: the bare
+/// mirror-id (§2.3 — `roles/<mirror-id>`).
+pub fn mirror_client_signer_role(mirror_id: &str) -> String {
+    mirror_id.to_string()
+}
+
+/// Host-signer role name on [`SSH_HOST_SIGNER_MOUNT`]: `host-<mirror-id>`
+/// (§2.3 — the shared `roles/mirror-host` with alias domains is withdrawn).
+pub fn mirror_host_signer_role(mirror_id: &str) -> String {
+    format!("host-{mirror_id}")
+}
+
+/// Name of the minted per-project lane-signer policy (D12).
+pub fn mirror_lane_signer_policy_name(mirror_id: &str) -> String {
+    format!("ssh-lane-signer-{mirror_id}")
+}
+
+/// Name of the minted per-project host-signer policy (D12).
+pub fn mirror_host_signer_policy_name(mirror_id: &str) -> String {
+    format!("ssh-host-signer-{mirror_id}")
+}
+
+/// Render the lane-signer policy for ONE project: `update` on the exact
+/// `ssh-client-signer/sign/<mirror-id>` path and nothing else (D12).
+///
+/// This template lives HERE, in Rust next to `provision_approle_roles`, and
+/// not under `images/vault/policies/`, precisely so the static-file lanes
+/// (`Containerfile` COPY list, entrypoint `load_policy`, `Policy::all()`,
+/// the embedded-HCL parity test) are not in play — no wildcard policy file
+/// ever ships, so there is no wildcard to forget to remove (§4 T2).
+pub fn render_lane_signer_policy_hcl(mirror_id: &str) -> String {
+    format!(
+        "# Minted at mirror provision (order 606-bvnp). The per-lane ssh-agent\n\
+         # sidecar of ONE project: sign-only, exact path, wildcards refused.\n\
+         path \"{SSH_CLIENT_SIGNER_MOUNT}/sign/{mirror_id}\" {{\n  capabilities = [\"update\"]\n}}\n"
+    )
+}
+
+/// Render the host-signer policy for ONE project's mirror: `update` on the
+/// exact `ssh-host-signer/sign/host-<mirror-id>` path and nothing else (D12).
+pub fn render_host_signer_policy_hcl(mirror_id: &str) -> String {
+    format!(
+        "# Minted at mirror provision (order 606-bvnp). The mirror of ONE\n\
+         # project: sign-only, exact path, wildcards refused.\n\
+         path \"{SSH_HOST_SIGNER_MOUNT}/sign/host-{mirror_id}\" {{\n  capabilities = [\"update\"]\n}}\n"
+    )
+}
+
+/// Refuse to write any policy containing a `sign/*` wildcard to the server.
+///
+/// The earlier design draft shipped a static policy with
+/// `path "ssh-client-signer/sign/*"` — cross-project signing authority: a
+/// project-A sidecar could request a project-B certificate. That wildcard is
+/// withdrawn (amendment 2026-08-10, 606-bvnp), and this guard is the
+/// server-side enforcement: no policy body containing `sign/*` may ever
+/// reach `sys/policies/acl`, whatever future template produces it.
+fn reject_sign_wildcard(policy_name: &str, hcl: &str) -> Result<(), String> {
+    if hcl.contains("sign/*") {
+        return Err(format!(
+            "refusing to write policy {policy_name}: body contains a sign/* wildcard, \
+             which is cross-project signing authority (606-bvnp, design D12)"
+        ));
+    }
+    Ok(())
+}
+
+/// Client-signer role config (§2.3): exact principal, no extensions, two
+/// critical options, 30m/1h TTLs (D3/D4/D7).
+///
+/// `enclave_subnet` must be the EFFECTIVE enclave subnet
+/// (`TILLANDSIAS_ENCLAVE_SUBNET` override honored), or `source-address`
+/// locks every lane out. The subnet is enclave-WIDE: it contributes nothing
+/// to inter-project separation (both projects' forges sit inside it) and
+/// stays in the certificate purely as defense-in-depth against use from
+/// outside the enclave.
+pub fn build_client_signer_role_config(mirror_id: &str, enclave_subnet: &str) -> serde_json::Value {
+    serde_json::json!({
+        "key_type": "ca",
+        "allow_user_certificates": true,
+        // V3: allowed_users is an exact list with no globbing — one opaque
+        // principal, never the project name (D3).
+        "allowed_users": mirror_push_principal(mirror_id),
+        "default_user": "git",
+        // V4: an empty allowed_extensions makes Vault REFUSE a permit-pty
+        // request — a stolen key+cert cannot open a shell, forward a port,
+        // or forward an agent (D4).
+        "allowed_extensions": "",
+        "default_extensions": {},
+        "default_critical_options": {
+            "force-command": "/usr/local/bin/tillandsias-receive",
+            "source-address": enclave_subnet,
+        },
+        "ttl": "30m",
+        "max_ttl": "1h",
+        // V5: no per-request key_id; only {{role_name}} and
+        // {{token_display_name}} substitute.
+        "key_id_format": "{{role_name}}|{{token_display_name}}",
+    })
+}
+
+/// Host-signer role config (§2.3): exactly one allowed domain — the opaque
+/// per-project hostname. The legacy shared aliases are never certified (D9).
+pub fn build_host_signer_role_config(mirror_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "key_type": "ca",
+        "allow_host_certificates": true,
+        "allowed_domains": mirror_service_hostname(mirror_id),
+        "allow_bare_domains": true,
+        "allow_subdomains": false,
+        "ttl": "24h",
+        "max_ttl": "48h",
+    })
+}
+
+/// Ensure the two SSH CA mounts + both roles + both minted policies for one
+/// project's mirror-id. Idempotent throughout: mounts/CAs squash the
+/// already-exists 400, role and policy writes are overwrites.
+///
+/// Mount/CA ensure duplicates the vault image entrypoint's T1 boot-time work
+/// on purpose: the entrypoint provisions on FIRST boot only (subsequent
+/// boots exit before the token-authenticated section), so a vault volume
+/// initialized before these engines existed would never gain them —
+/// D13's migration story ("first launch after upgrade: kv path absent →
+/// mint, store, proceed") requires the host-side ensure.
+///
+/// Deliberately NOT provisioned here: the `ssh-lane-signer-<mirror-id>`
+/// AppRole (D6) — that is sidecar wiring (§4 T8), a later rung.
+pub async fn provision_mirror_ssh_roles(
+    client: &VaultClient,
+    mirror_id: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<(), String> {
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] ensuring SSH signer mounts + per-project roles for mirror-id {mirror_id}"
+        );
+    }
+    for mount in [SSH_CLIENT_SIGNER_MOUNT, SSH_HOST_SIGNER_MOUNT] {
+        client
+            .enable_secrets_engine(mount, "ssh")
+            .await
+            .map_err(|e| format!("enable ssh secrets engine {mount}: {e}"))?;
+        client
+            .configure_ssh_ca_generate(mount)
+            .await
+            .map_err(|e| format!("generate in-vault CA for {mount}: {e}"))?;
+    }
+    client
+        .write_ssh_role(
+            SSH_CLIENT_SIGNER_MOUNT,
+            &mirror_client_signer_role(mirror_id),
+            build_client_signer_role_config(mirror_id, enclave_subnet),
+        )
+        .await
+        .map_err(|e| format!("write client-signer role {mirror_id}: {e}"))?;
+    client
+        .write_ssh_role(
+            SSH_HOST_SIGNER_MOUNT,
+            &mirror_host_signer_role(mirror_id),
+            build_host_signer_role_config(mirror_id),
+        )
+        .await
+        .map_err(|e| format!("write host-signer role host-{mirror_id}: {e}"))?;
+    for (name, hcl) in [
+        (
+            mirror_lane_signer_policy_name(mirror_id),
+            render_lane_signer_policy_hcl(mirror_id),
+        ),
+        (
+            mirror_host_signer_policy_name(mirror_id),
+            render_host_signer_policy_hcl(mirror_id),
+        ),
+    ] {
+        reject_sign_wildcard(&name, &hcl)?;
+        client
+            .write_policy(&name, &hcl)
+            .await
+            .map_err(|e| format!("mint policy {name}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Mint-or-read a project's opaque mirror identity (D13) and ensure its
+/// Vault-side SSH substrate (roles + minted policies, §2.3/T2).
+///
+/// The kv entry at `secret/mirror-identity/<project>` is the COMMIT MARKER:
+/// it is written last, only after roles and policies landed, so its presence
+/// implies a completed provision and the read path can return without any
+/// further Vault writes. Two concurrent first-provisions are resolved by the
+/// kv-v2 `cas=0` create-only write: the loser re-reads and adopts the
+/// winner's identity (its own freshly written roles/policies are unreferenced
+/// orphans keyed by an id nothing will ever use — harmless, and cleaned up
+/// by the same `--reset-guest` that wipes Vault).
+pub async fn provision_mirror_identity(
+    client: &VaultClient,
+    project: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<String, String> {
+    let kv_path = mirror_identity_kv_path(project);
+    let read_stored_id = |data: serde_json::Value| -> Result<String, String> {
+        let id = data
+            .get("mirror_id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| {
+                format!("stored mirror identity at {kv_path} has no mirror_id field: corrupt entry")
+            })?
+            .to_string();
+        if !mirror_id_is_valid(&id) {
+            // Fail loud: certificates/roles may already reference this id;
+            // silently re-minting would orphan them (D13 — identity is
+            // written once and stable across mirror-volume recreation).
+            return Err(format!(
+                "stored mirror identity at {kv_path} fails the id grammar \
+                 (want {MIRROR_ID_LEN} base32hex chars): corrupt entry, refusing to re-mint over it"
+            ));
+        }
+        Ok(id)
+    };
+    match client.read_secret(&kv_path).await {
+        Ok(data) => {
+            let id = read_stored_id(data)?;
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] mirror identity for {project} already provisioned ({id})"
+                );
+            }
+            return Ok(id);
+        }
+        Err(VaultError::NotFound(_)) => {}
+        Err(e) => return Err(format!("read mirror identity {kv_path}: {e}")),
+    }
+
+    let minted = mint_mirror_id()?;
+    if debug {
+        eprintln!("[tillandsias-vault] minting mirror identity for {project}: {minted}");
+    }
+    provision_mirror_ssh_roles(client, &minted, enclave_subnet, debug).await?;
+    let created = client
+        .write_secret_if_absent(
+            &kv_path,
+            serde_json::json!({
+                "mirror_id": minted,
+                // The project ⇄ mirror-id join (D3/D13): the kv entry is keyed
+                // by project; recording it in the body too keeps the mapping
+                // self-describing when the entry is read by path listing.
+                "project": project,
+                "minted_at": chrono::Utc::now().to_rfc3339(),
+            }),
+        )
+        .await
+        .map_err(|e| format!("persist mirror identity {kv_path}: {e}"))?;
+    if created {
+        return Ok(minted);
+    }
+    // A concurrent first-provision won the cas=0 race. Adopt its identity —
+    // kv presence implies its roles/policies are already in place.
+    let winner = client
+        .read_secret(&kv_path)
+        .await
+        .map_err(|e| format!("re-read mirror identity {kv_path} after cas conflict: {e}"))?;
+    let id = read_stored_id(winner)?;
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] concurrent provision won the identity race for {project}; \
+             adopting {id} (locally minted {minted} is an unreferenced orphan)"
+        );
+    }
+    Ok(id)
+}
+
+/// Launcher entry point: resolve (mint-or-read) a project's mirror identity
+/// against the running Vault using the root bootstrap token.
+///
+/// Called from the mirror CREATE path only — the running-mirror reuse path
+/// never touches Vault for this, and when the kv entry exists this is a
+/// single kv read (cheap by construction, order 606-bvnp scope rule).
+pub async fn ensure_mirror_identity_provisioned(
+    project: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    provision_mirror_identity(&client, project, enclave_subnet, debug).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4118,5 +4508,441 @@ mod tests {
         );
         assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:latest").is_err());
         assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:sha256-short").is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // Order 606-bvnp — opaque mirror identity + exact SSH signer substrate
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn base32hex_encoder_matches_rfc4648_vectors() {
+        // RFC 4648 §10 base32hex vectors, lowercased and unpadded.
+        for (input, expected) in [
+            (&b""[..], ""),
+            (&b"f"[..], "co"),
+            (&b"fo"[..], "cpng"),
+            (&b"foo"[..], "cpnmu"),
+            (&b"foob"[..], "cpnmuog"),
+            (&b"fooba"[..], "cpnmuoj1"),
+            (&b"foobar"[..], "cpnmuoj1e8"),
+        ] {
+            assert_eq!(base32hex_lowercase_nopad(input), expected);
+        }
+    }
+
+    #[test]
+    fn minted_mirror_ids_are_20_char_base32hex_unique_and_dns_safe() {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..64 {
+            let id = mint_mirror_id().expect("host CSPRNG");
+            assert_eq!(id.len(), MIRROR_ID_LEN, "12 bytes must encode to 20 chars");
+            assert!(
+                mirror_id_is_valid(&id),
+                "grammar rejects its own mint: {id}"
+            );
+            assert!(
+                id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'v')),
+                "outside the base32hex lowercase alphabet: {id}"
+            );
+            assert!(seen.insert(id), "96 random bits collided within 64 mints");
+        }
+        // The derived hostname must be one valid DNS label (24 chars),
+        // assignable as a podman --network-alias (D13).
+        let hostname = mirror_service_hostname("0123456789abcdefghij");
+        assert_eq!(hostname, "git-0123456789abcdefghij");
+        assert_eq!(hostname.len(), 24);
+        assert!(hostname.len() <= 63, "must stay a single DNS label");
+        assert!(
+            hostname
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'),
+            "hostname must be lowercase alphanumeric/hyphen: {hostname}"
+        );
+
+        // Grammar rejects everything that is not the mint output.
+        assert!(!mirror_id_is_valid("0123456789abcdefghi")); // 19 chars
+        assert!(!mirror_id_is_valid("0123456789abcdefghijk")); // 21 chars
+        assert!(!mirror_id_is_valid("0123456789ABCDEFGHIJ")); // uppercase
+        assert!(!mirror_id_is_valid("0123456789abcdefghiw")); // 'w' > 'v'
+        assert!(!mirror_id_is_valid("myproject-mirror-idx")); // guessable name shape
+    }
+
+    #[test]
+    fn mirror_identity_derivations_are_exact() {
+        let id = "0123456789abcdefghij";
+        assert_eq!(
+            mirror_push_principal(id),
+            "til:forge-push:0123456789abcdefghij"
+        );
+        assert_eq!(mirror_client_signer_role(id), id);
+        assert_eq!(mirror_host_signer_role(id), "host-0123456789abcdefghij");
+        assert_eq!(
+            mirror_lane_signer_policy_name(id),
+            "ssh-lane-signer-0123456789abcdefghij"
+        );
+        assert_eq!(
+            mirror_host_signer_policy_name(id),
+            "ssh-host-signer-0123456789abcdefghij"
+        );
+        assert_eq!(
+            mirror_identity_kv_path("alpha"),
+            "secret/mirror-identity/alpha"
+        );
+        assert_eq!(SSH_CLIENT_SIGNER_MOUNT, "ssh-client-signer");
+        assert_eq!(SSH_HOST_SIGNER_MOUNT, "ssh-host-signer");
+    }
+
+    #[test]
+    fn minted_policies_grant_exact_sign_paths_and_never_a_wildcard() {
+        let id = "0123456789abcdefghij";
+        let lane = render_lane_signer_policy_hcl(id);
+        let host = render_host_signer_policy_hcl(id);
+        // The exact per-project paths, capabilities update-only (D12).
+        assert!(
+            lane.contains("path \"ssh-client-signer/sign/0123456789abcdefghij\""),
+            "lane policy must name the exact client sign path:\n{lane}"
+        );
+        assert!(
+            host.contains("path \"ssh-host-signer/sign/host-0123456789abcdefghij\""),
+            "host policy must name the exact host sign path:\n{host}"
+        );
+        for hcl in [&lane, &host] {
+            assert!(
+                hcl.contains("capabilities = [\"update\"]"),
+                "sign policies are update-only:\n{hcl}"
+            );
+            // THE guard of the 2026-08-10 amendment: no rendered policy may
+            // ever contain the withdrawn cross-project wildcard.
+            assert!(
+                !hcl.contains("sign/*"),
+                "sign/* wildcard is cross-project signing authority (D12):\n{hcl}"
+            );
+            // Neither policy may touch the CA config or role enumeration
+            // (verified enforced, V6 — but never granted in the first place).
+            assert!(!hcl.contains("config/ca"));
+            assert!(!hcl.contains("roles/"));
+        }
+        // The runtime write-guard refuses a wildcard body outright.
+        assert!(
+            reject_sign_wildcard("bad", "path \"ssh-client-signer/sign/*\" {}").is_err(),
+            "a sign/* body must be refused before it reaches sys/policies/acl"
+        );
+        assert!(reject_sign_wildcard("good", &lane).is_ok());
+    }
+
+    #[test]
+    fn every_minted_policy_write_passes_the_sign_wildcard_guard() {
+        // Source guard (§4 T2): the ONLY path that writes these minted
+        // policies must run every body through reject_sign_wildcard before
+        // write_policy. A future template edit cannot skip the guard without
+        // failing here.
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("pub async fn provision_mirror_ssh_roles(")
+            .nth(1)
+            .expect("provision_mirror_ssh_roles source")
+            .split("\npub async fn ")
+            .next()
+            .unwrap();
+        let guard_idx = window
+            .find("reject_sign_wildcard(&name, &hcl)?")
+            .expect("minted policy writes must call reject_sign_wildcard");
+        let write_idx = window
+            .find(".write_policy(&name, &hcl)")
+            .expect("provision_mirror_ssh_roles must write the minted policies");
+        assert!(
+            guard_idx < write_idx,
+            "the sign/* guard must run before the policy reaches the server"
+        );
+    }
+
+    #[test]
+    fn client_signer_role_config_matches_design() {
+        let cfg = build_client_signer_role_config("0123456789abcdefghij", "10.0.42.0/24");
+        assert_eq!(cfg["key_type"], "ca");
+        assert_eq!(cfg["allow_user_certificates"], true);
+        // V3: exact principal list, no glob, never the project name (D3).
+        assert_eq!(cfg["allowed_users"], "til:forge-push:0123456789abcdefghij");
+        assert_eq!(cfg["default_user"], "git");
+        // V4/D4: no extensions may be requested; two critical options ride
+        // in every issued certificate.
+        assert_eq!(cfg["allowed_extensions"], "");
+        assert_eq!(cfg["default_extensions"], serde_json::json!({}));
+        assert_eq!(
+            cfg["default_critical_options"]["force-command"],
+            "/usr/local/bin/tillandsias-receive"
+        );
+        assert_eq!(
+            cfg["default_critical_options"]["source-address"],
+            "10.0.42.0/24"
+        );
+        // D7 TTLs: 30-minute lane certs, 1h ceiling.
+        assert_eq!(cfg["ttl"], "30m");
+        assert_eq!(cfg["max_ttl"], "1h");
+        assert_eq!(cfg["key_id_format"], "{{role_name}}|{{token_display_name}}");
+        // The effective subnet flows through — an operator override must not
+        // be silently replaced by the default (§2.3 lockout hazard).
+        let overridden = build_client_signer_role_config("0123456789abcdefghij", "10.9.0.0/16");
+        assert_eq!(
+            overridden["default_critical_options"]["source-address"],
+            "10.9.0.0/16"
+        );
+    }
+
+    #[test]
+    fn host_signer_role_config_certifies_exactly_one_opaque_hostname() {
+        let cfg = build_host_signer_role_config("0123456789abcdefghij");
+        assert_eq!(cfg["key_type"], "ca");
+        assert_eq!(cfg["allow_host_certificates"], true);
+        // D9: exactly the opaque per-project hostname; the retired shared
+        // aliases are never certified.
+        assert_eq!(cfg["allowed_domains"], "git-0123456789abcdefghij");
+        assert_eq!(cfg["allow_bare_domains"], true);
+        assert_eq!(cfg["allow_subdomains"], false);
+        assert_eq!(cfg["ttl"], "24h");
+        assert_eq!(cfg["max_ttl"], "48h");
+        for retired in ["tillandsias-git", "git-service"] {
+            assert_ne!(
+                cfg["allowed_domains"], *retired,
+                "shared alias {retired} must never re-enter the host CA"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn provision_mirror_identity_reads_existing_id_without_any_write() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        // Only the kv read is mounted. Any write attempt hits wiremock's
+        // default 404 and would fail the call — the passing test IS the
+        // proof that the already-provisioned path performs exactly one read
+        // (the hot-path cheapness rule of the 606-bvnp scope).
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": {
+                    "data": { "mirror_id": "0123456789abcdefghij", "project": "alpha" },
+                    "metadata": { "version": 1 }
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = VaultClient::new(server.uri(), "root");
+        let id = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect("stored identity must be returned as-is");
+        assert_eq!(id, "0123456789abcdefghij", "re-reads must be stable");
+    }
+
+    #[tokio::test]
+    async fn provision_mirror_identity_refuses_a_corrupt_stored_id() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": {
+                    "data": { "mirror_id": "NOT-A-VALID-MIRROR-ID" },
+                    "metadata": { "version": 1 }
+                }
+            })))
+            .mount(&server)
+            .await;
+        let client = VaultClient::new(server.uri(), "root");
+        let err = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect_err("a corrupt stored identity must fail loud, never re-mint");
+        assert!(err.contains("refusing to re-mint"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn first_provision_mints_roles_policies_and_persists_with_cas() {
+        use wiremock::matchers::{body_partial_json, method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        // kv absent → the mint path runs.
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "errors": []
+            })))
+            .mount(&server)
+            .await;
+        // T1 migration ensure: both mounts; the 400 exercises the
+        // already-mounted squash.
+        for mount in ["ssh-client-signer", "ssh-host-signer"] {
+            Mock::given(method("POST"))
+                .and(path(format!("/v1/sys/mounts/{mount}")))
+                .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                    "errors": ["path is already in use at ssh-client-signer/"]
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+            Mock::given(method("POST"))
+                .and(path(format!("/v1/{mount}/config/ca")))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "data": { "public_key": "ssh-ed25519 AAAA..." }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+        }
+        // Exact per-project roles, named by the (random) minted id.
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/v1/ssh-client-signer/roles/[0-9a-v]{20}$"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/v1/ssh-host-signer/roles/host-[0-9a-v]{20}$"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // Both minted policies via sys/policies/acl (T2 — never a static file).
+        Mock::given(method("POST"))
+            .and(path_regex(
+                r"^/v1/sys/policies/acl/ssh-lane-signer-[0-9a-v]{20}$",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path_regex(
+                r"^/v1/sys/policies/acl/ssh-host-signer-[0-9a-v]{20}$",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // The commit marker is create-only: options.cas = 0 (D13 — written
+        // ONCE), and it must be the LAST write.
+        Mock::given(method("POST"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .and(body_partial_json(
+                serde_json::json!({ "options": { "cas": 0 } }),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "version": 1 }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = VaultClient::new(server.uri(), "root");
+        let id = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect("first provision must mint and persist");
+        assert!(
+            mirror_id_is_valid(&id),
+            "minted id fails its own grammar: {id}"
+        );
+        server.verify().await;
+    }
+
+    #[tokio::test]
+    async fn losing_the_cas_race_adopts_the_winning_identity() {
+        use wiremock::matchers::{method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        // First read: absent (this process starts a mint). Second read,
+        // after the cas conflict: the concurrent winner's identity.
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "errors": []
+            })))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": {
+                    "data": { "mirror_id": "vvvvvvvvvvvvvvvvvvvv", "project": "alpha" },
+                    "metadata": { "version": 1 }
+                }
+            })))
+            .mount(&server)
+            .await;
+        for pattern in [
+            r"^/v1/sys/mounts/ssh-(client|host)-signer$",
+            r"^/v1/ssh-(client|host)-signer/config/ca$",
+            r"^/v1/ssh-client-signer/roles/[0-9a-v]{20}$",
+            r"^/v1/ssh-host-signer/roles/host-[0-9a-v]{20}$",
+            r"^/v1/sys/policies/acl/ssh-(lane|host)-signer-[0-9a-v]{20}$",
+        ] {
+            Mock::given(method("POST"))
+                .and(path_regex(pattern))
+                .respond_with(ResponseTemplate::new(204))
+                .mount(&server)
+                .await;
+        }
+        // The create-only write loses: Vault rejects a cas=0 write over an
+        // existing version with 400 + a check-and-set error.
+        Mock::given(method("POST"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                "errors": ["check-and-set parameter did not match the current version"]
+            })))
+            .mount(&server)
+            .await;
+
+        let client = VaultClient::new(server.uri(), "root");
+        let id = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect("cas loser must adopt the winner, not error");
+        assert_eq!(
+            id, "vvvvvvvvvvvvvvvvvvvv",
+            "two concurrent first-provisions must converge on ONE identity"
+        );
+    }
+
+    #[test]
+    fn vault_entrypoint_mounts_both_ssh_signer_engines_and_generates_cas() {
+        // T1 boot half: the image entrypoint must ensure both SSH CA engines
+        // and generate both in-Vault CAs, in the same idempotent
+        // enable_endpoint style as approle/kv2/audit. (The host-side
+        // provision_mirror_ssh_roles covers vaults initialized before this
+        // shipped — the entrypoint only provisions on first boot.)
+        let entrypoint = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/vault/entrypoint.sh"
+        ));
+        for needle in [
+            "/v1/sys/mounts/ssh-client-signer",
+            "/v1/sys/mounts/ssh-host-signer",
+            "/v1/ssh-client-signer/config/ca",
+            "/v1/ssh-host-signer/config/ca",
+        ] {
+            assert!(
+                entrypoint.contains(needle),
+                "images/vault/entrypoint.sh must ensure {needle} (606-bvnp T1)"
+            );
+        }
+        assert!(
+            entrypoint.contains("\"generate_signing_key\":true"),
+            "the CA keypair must be generated INSIDE Vault (design D2)"
+        );
+        // The dynamic per-project artifacts must NOT be baked into the boot
+        // path — roles are provision-time (amended T1).
+        assert!(
+            !entrypoint.contains("ssh-client-signer/roles/")
+                && !entrypoint.contains("ssh-host-signer/roles/"),
+            "per-project roles are created at mirror provision, never at boot"
+        );
+        assert!(
+            !entrypoint.contains("sign/*"),
+            "no sign/* wildcard may appear anywhere in the vault entrypoint"
+        );
     }
 }

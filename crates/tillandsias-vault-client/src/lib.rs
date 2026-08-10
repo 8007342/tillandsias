@@ -244,6 +244,41 @@ impl VaultClient {
         }
     }
 
+    /// Create-only KV-v2 write: `options.cas = 0` makes Vault reject the
+    /// write when the path already holds any version.
+    ///
+    /// Returns `Ok(true)` when this call created the secret and `Ok(false)`
+    /// when a concurrent writer got there first (Vault answers 400 with a
+    /// check-and-set error). Used for the per-project mirror-identity mint
+    /// (order 606-bvnp, design D13): the identity must be written exactly
+    /// once, and two concurrent first-provisions must converge on one value
+    /// by re-reading rather than last-writer-wins clobbering.
+    pub async fn write_secret_if_absent(
+        &self,
+        path: &str,
+        data: Value,
+    ) -> Result<bool, VaultError> {
+        let kv_path = ensure_kv_data_prefix(path);
+        let envelope = serde_json::json!({ "data": data, "options": { "cas": 0 } });
+        debug!(target: "tillandsias_vault_client", path = %kv_path, "PUT secret (cas=0)");
+        let resp = self
+            .client
+            .post(self.url(&kv_path))
+            .header("X-Vault-Token", &self.token)
+            .json(&envelope)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(true);
+        }
+        let body = resp.text().await.unwrap_or_default();
+        if status == StatusCode::BAD_REQUEST && body.contains("check-and-set") {
+            return Ok(false);
+        }
+        Err(Self::map_status(status, body))
+    }
+
     /// Issue launch-scoped AppRole material without consuming it in a login.
     ///
     /// Long-running containers give this material to Vault Agent through a
@@ -432,6 +467,102 @@ impl VaultClient {
         }
         let body = resp.text().await.unwrap_or_default();
         Err(Self::map_status(status, body))
+    }
+
+    /// Enable a secrets engine of `engine_type` at `mount`
+    /// (`POST /v1/sys/mounts/<mount>`). Idempotent: Vault answers 400
+    /// "path is already in use" when the mount exists, and that is squashed
+    /// to `Ok(())` — the same contract as [`Self::enable_approle`] and the
+    /// vault image entrypoint's `enable_endpoint` helper.
+    ///
+    /// Used by the mirror-identity provisioning path (order 606-bvnp, design
+    /// §4 T1) to ensure the `ssh-client-signer` / `ssh-host-signer` mounts on
+    /// vaults initialized before those engines existed — the entrypoint only
+    /// provisions on FIRST boot, so upgraded installs need this host-side
+    /// ensure.
+    pub async fn enable_secrets_engine(
+        &self,
+        mount: &str,
+        engine_type: &str,
+    ) -> Result<(), VaultError> {
+        let url = self.url(&format!("sys/mounts/{mount}"));
+        let body = serde_json::json!({ "type": engine_type });
+        let resp = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &self.token)
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NO_CONTENT {
+            return Ok(());
+        }
+        if status == StatusCode::BAD_REQUEST {
+            // Vault returns 400 when the mount already exists. Treat as
+            // success (idempotent ensure).
+            return Ok(());
+        }
+        let body = resp.text().await.unwrap_or_default();
+        Err(Self::map_status(status, body))
+    }
+
+    /// Generate the in-Vault CA of an `ssh` secrets-engine mount
+    /// (`POST /v1/<mount>/config/ca`, `generate_signing_key=true`,
+    /// ed25519). The private half never leaves Vault — `GET config/ca`
+    /// returns only `public_key` (order 606-bvnp design D2, verified V2).
+    /// Idempotent: a mount whose CA is already configured answers 400
+    /// ("keys are already configured"), squashed to `Ok(())`.
+    pub async fn configure_ssh_ca_generate(&self, mount: &str) -> Result<(), VaultError> {
+        let url = self.url(&format!("{mount}/config/ca"));
+        let body = serde_json::json!({ "generate_signing_key": true, "key_type": "ed25519" });
+        let resp = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &self.token)
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NO_CONTENT {
+            return Ok(());
+        }
+        if status == StatusCode::BAD_REQUEST {
+            // "keys are already configured": the CA exists. Never overwrite
+            // an existing CA from this path — rotation is a deliberate,
+            // operator-gated act (design Q3), not an ensure side effect.
+            return Ok(());
+        }
+        let body = resp.text().await.unwrap_or_default();
+        Err(Self::map_status(status, body))
+    }
+
+    /// Create or overwrite a role on an `ssh` secrets-engine mount
+    /// (`POST /v1/<mount>/roles/<role>`). Vault overwrites role config on
+    /// repeated calls, so this is idempotent. The role JSON must be written
+    /// through the HTTP API — the `vault` CLI cannot express the map-typed
+    /// fields (`default_extensions`, `default_critical_options`).
+    pub async fn write_ssh_role(
+        &self,
+        mount: &str,
+        role: &str,
+        config: Value,
+    ) -> Result<(), VaultError> {
+        let url = self.url(&format!("{mount}/roles/{role}"));
+        let resp = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &self.token)
+            .json(&config)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NO_CONTENT {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
     }
 
     /// Create an AppRole role bound to the named policies with the supplied
