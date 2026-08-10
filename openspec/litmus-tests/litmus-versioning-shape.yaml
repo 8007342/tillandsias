@@ -90,6 +90,22 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "main"
 
+  - step: "Req: build.sh never unconditionally instructs committing VERSION"
+    # Order 643-64bx, partial reduction (windows host 2026-08-10). build.sh bumps
+    # VERSION on every build-producing dispatch and used to say, unconditionally,
+    # "Commit them with your change". On any branch except main the pre-push
+    # VERSION guard then refuses that push, so the advice led to `--no-verify` —
+    # disabling the only remaining gate in order to push the very file that gate
+    # protects — or to a local-only commit the exit contract forbids.
+    #
+    # Structural, and deliberately so: the harmful form is an instruction that is
+    # correct on one branch and wrong everywhere else, which no single-branch
+    # behavioural run would catch. The assertion is that the commit advice is
+    # reachable only under a branch test.
+    command: "awk '/_bump_build_version\\(\\)/,/^}/' build.sh > /tmp/bumpfn.txt; grep -q 'Commit them with your change' /tmp/bumpfn.txt || { echo 'FAIL: commit advice missing entirely — did the function move?'; exit 1; }; grep -qE 'symbolic-ref|\\$branch|\"main\"' /tmp/bumpfn.txt || { echo 'FAIL: commit advice is not branch-aware'; exit 1; }; grep -q 'no-verify' /tmp/bumpfn.txt || { echo 'FAIL: no warning against the --no-verify exit'; exit 1; }; echo 'ok: VERSION advice is branch-aware'"
+    timeout_ms: 15000
+    expected_behavior: "ok: VERSION advice is branch-aware"
+
   - step: "Req: Cargo workspace.package block present (semver derivation source)"
     # Spec § "Cargo/Tauri semver derivation" mandates the
     # workspace.package block (or equivalent) is where Cargo's
