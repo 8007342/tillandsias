@@ -526,9 +526,49 @@ _bump_build_version() {
     fi
     after="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION" 2>/dev/null || echo unknown)"
     if [[ "$before" != "$after" ]]; then
+        # NEVER INSTRUCT AN ACTION THE PRE-PUSH GUARD WILL REFUSE (order 643-64bx,
+        # partial reduction — windows host 2026-08-10).
+        #
+        # This used to say, unconditionally, "Commit them with your change".
+        # On any branch except main that is advice toward a wall: the pre-push
+        # VERSION guard refuses a push whose commits change VERSION unless the
+        # result equals main's (a sync-forward catch-up) or the branch is the
+        # release bump branch. Following the advice therefore ends at one of
+        #   * `git push --no-verify`, which disables the ONLY remaining gate
+        #     (push CI was removed, 599-w5jd) in order to push the very file that
+        #     gate protects — the worst available exit; or
+        #   * a local-only commit, which the meta-orchestration exit contract
+        #     forbids outright.
+        #
+        # The deadlock itself is NOT fixed here and 643-64bx stays open: a local
+        # build still writes to a tracked file, so `./build.sh --install` followed
+        # by a normal push still needs a manual revert. Fixing that means deciding
+        # whether the local build counter should touch tracked files at all, which
+        # has release-path consequences and is the packet's own first exit
+        # criterion. What is fixed is the packet's second criterion — the
+        # instruction that actively steers toward --no-verify.
+        local branch main_version
+        branch="$(git -C "$SCRIPT_DIR" symbolic-ref --short HEAD 2>/dev/null || echo "")"
+        main_version="$(git -C "$SCRIPT_DIR" show origin/main:VERSION 2>/dev/null \
+            || git -C "$SCRIPT_DIR" show main:VERSION 2>/dev/null || echo "")"
+        main_version="$(printf '%s' "$main_version" | tr -d '[:space:]')"
+
         _warn "VERSION bumped ${before} -> ${after} (local build counter). This dirties tracked files."
-        _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
-        _warn "  Verify monotonicity before pushing: scripts/verify-version-monotonic.sh"
+        if [[ -z "$branch" || "$branch" == "main" ]]; then
+            _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
+            _warn "  Verify monotonicity before pushing: scripts/verify-version-monotonic.sh"
+        elif [[ -n "$main_version" && "$after" == "$main_version" ]]; then
+            # Sync-forward: the bump landed exactly on main's VERSION, which the
+            # guard permits as a catch-up rather than a divergent bump.
+            _warn "  This matches origin/main (${main_version}) — a sync-forward, which the pre-push guard allows."
+            _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
+        else
+            _warn "  Do NOT commit VERSION on '${branch}': the pre-push guard refuses it (main's is ${main_version:-unknown})."
+            _warn "  Revert the bump to keep the tree clean:"
+            _warn "    git checkout -- VERSION Cargo.toml Cargo.lock crates/*/Cargo.toml"
+            _warn "  Or skip it next time: TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh …"
+            _warn "  Do NOT reach for 'git push --no-verify' — it disables the only remaining gate (643-64bx)."
+        fi
     fi
 }
 
