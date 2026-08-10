@@ -1,0 +1,158 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:619-pfsj (project-answer-uniform-surface, exit criteria C2/C5)
+# @trace order:669-qcsb (this refusal grammar shipped with NO litmus guard)
+# @trace order:392 (inference readiness probe), order:531
+#
+# THE GAP THIS CLOSES
+#
+# Order 619-pfsj taught project_answer to refuse synthesis questions TYPED —
+# a machine token naming the missing capability — instead of guessing or
+# dressing a deterministic fact as the asked-for explanation. That grammar
+# shipped ownerless (no litmus executed it), and it is a surface agents
+# BRANCH on: missing_capability=local-inference means "bring an endpoint",
+# missing_capability=synthesis-tier means "the endpoint is fine, the tier is
+# unwired" — blaming the endpoint when the endpoint is fine sends an agent to
+# fix the wrong thing, so the two branches must stay distinct.
+#
+# PINNED GRAMMAR (the ratified envelope; answer prefix is the machine part):
+#   unsupported: synthesis question — missing_capability=<local-inference|synthesis-tier>
+#                inference_state=<...> inference_reason=<...>; <prose>
+# with citations=[], confidence=unsupported, a REAL freshness struct — every
+# refusal passes `tillandsias-plan verify-answer`.
+#
+# Everything is EXECUTED: the real engine script over real JSON-RPC frames,
+# the real inference probe against a dead port, the real verifier. Both
+# lanes: the generic lane refuses directly; the plan lane routes an
+# unsupported deterministic verdict through the SAME pinned constructor. The
+# negative controls pin what must NOT refuse: a deterministic question under
+# the same no-inference fixture, and a citable deterministic answer to a
+# synthesis question (deterministic first — inference adds recall, never
+# authority).
+name: litmus:project-answer-synthesis-refusal-typed
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin order 619-pfsj C2/C5: project_answer's typed no-inference synthesis
+  refusal. The local-inference and synthesis-tier branches from no-inference
+  fixtures (dead endpoint / stubbed-ready probe), envelope acceptance by
+  verify-answer, the plan-lane routing through the same refusal constructor
+  including the empty-output fallback, and negative controls proving the
+  deterministic lane still answers and deterministic-first still wins.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/config-overlay/mcp/project-info.sh (the engine)
+  - workspace contains images/default/lib-inference-state.sh (the probe)
+  - jq is available in PATH
+  - target/release/tillandsias-plan built, or cargo available to build it
+
+critical_path:
+  - step: "FIXTURE: stage a non-Tillandsias project, inference stubs, plan-engine stubs, and the verifier"
+    # rm -rf first is load-bearing (dead-check trap on fixture state). The
+    # README is FIVE lines because the generic lane cites README.md:1-5
+    # unconditionally and verify-answer refuses a range past EOF — the
+    # negative control needs a verifiable deterministic envelope. The
+    # stub-ready probe lib pins the synthesis-tier branch without a network;
+    # the stub plan bins pin the plan lane without depending on what the real
+    # ledger can answer. The verifier is the prebuilt release binary when
+    # present (the instant path); cargo builds it only on a cold tree.
+    command: "rm -rf /tmp/.litmus-669r && mkdir -p /tmp/.litmus-669r/proj /tmp/.litmus-669r/home /tmp/.litmus-669r/bin && printf 'Fixture project for litmus 669-qcsb refusal grammar\\nline two\\nline three\\nline four\\nline five\\n' > /tmp/.litmus-669r/proj/README.md && printf '{\"name\":\"litmus-fixture\"}\\n' > /tmp/.litmus-669r/proj/package.json && printf 'tillandsias_inference_state() {\\n  TILLANDSIAS_INFERENCE_STATE=ready\\n  TILLANDSIAS_INFERENCE_REASON=-\\n  return 0\\n}\\n' > /tmp/.litmus-669r/stub-ready-lib.sh && jq -n '{answer:\"unsupported: no packet matches the question tokens\",citations:[],freshness:{source_commit:\"fixture\",indexed_at:\"2026-01-01T00:00:00Z\"},confidence:\"unsupported\",citation_root:\"/\"}' > /tmp/.litmus-669r/stub-unsupported.json && jq -n '{answer:\"deterministic fact from the ledger\",citations:[],freshness:{source_commit:\"fixture\",indexed_at:\"2026-01-01T00:00:00Z\"},confidence:\"exact\",citation_root:\"/\"}' > /tmp/.litmus-669r/stub-exact.json && printf '#!/bin/sh\\ncat /tmp/.litmus-669r/stub-unsupported.json\\n' > /tmp/.litmus-669r/bin/stub-unsupported && printf '#!/bin/sh\\ncat /tmp/.litmus-669r/stub-exact.json\\n' > /tmp/.litmus-669r/bin/stub-exact && printf '#!/bin/sh\\nexit 0\\n' > /tmp/.litmus-669r/bin/stub-empty && chmod +x /tmp/.litmus-669r/bin/stub-unsupported /tmp/.litmus-669r/bin/stub-exact /tmp/.litmus-669r/bin/stub-empty && printf 'k: v\\n' > /tmp/.litmus-669r/dummy-index.yaml && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan; { test -x \"$B\" || cargo build -q -p tillandsias-plan --release; } && cp \"$B\" /tmp/.litmus-669r/bin/verify && echo 'ok: fixture-ready'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fixture-ready"
+
+  - step: "the engine manifest DECLARES the behaviours this test proves"
+    # Bridge to the capability verdict surface: an engine claiming
+    # synthesis-refusal-typed / no-inference-fallback / typed-refusal while
+    # this file's behavioural steps fail would be a manifest lie; a behaviour
+    # without its token is invisible to the skew probe.
+    command: "M=$(bash images/default/config-overlay/mcp/project-info.sh capabilities </dev/null) && for t in synthesis-refusal-typed no-inference-fallback typed-refusal project-answer; do printf '%s\\n' \"$M\" | grep -qx \"$t\" || { echo \"missing manifest token: $t\"; exit 1; }; done; echo 'ok: manifest-declares-refusal-behaviours'"
+    timeout_ms: 15000
+    expected_behavior: "ok: manifest-declares-refusal-behaviours"
+
+  - step: "BEHAVIOURAL: generic lane, DEAD endpoint, synthesis question -> missing_capability=local-inference with the probe's closed reason"
+    # The real JSON-RPC loop, the real probe, a dead port (nothing listens on
+    # 127.0.0.1:9 — curl exit 7 -> endpoint-unreachable, the probe's closed
+    # vocabulary). HOME points into the fixture so no host tillandsias-plan
+    # or ledger can hijack the lane. The answer prefix is anchored: prose may
+    # grow, the machine tokens may not move.
+    command: "R=$PWD; cd /tmp/.litmus-669r/proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669r/home TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 TILLANDSIAS_INFERENCE_STATE_LIB=$R/images/default/lib-inference-state.sh bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/refusal.json && jq -r '.answer' /tmp/.litmus-669r/refusal.json | grep -qE '^unsupported: synthesis question — missing_capability=local-inference inference_state=not-ready inference_reason=endpoint-unreachable; ' && jq -e '.confidence == \"unsupported\" and (.citations | length == 0) and (.freshness | has(\"source_commit\") and has(\"indexed_at\"))' /tmp/.litmus-669r/refusal.json >/dev/null && echo 'ok: local-inference-refusal-typed'"
+    timeout_ms: 30000
+    expected_behavior: "ok: local-inference-refusal-typed"
+
+  - step: "BEHAVIOURAL: the refusal is the RATIFIED envelope — verify-answer accepts it"
+    # Exit criterion of the slice: every refusal passes the verifier. The
+    # pre-slice hand-rolled envelope (freshness \"now\", no unsupported:
+    # prefix) was REFUSED here — this step is what keeps that defect dead.
+    command: "/tmp/.litmus-669r/bin/verify verify-answer < /tmp/.litmus-669r/refusal.json | grep -q '^ok: envelope verified' && echo 'ok: verifier-accepts-refusal'"
+    timeout_ms: 30000
+    expected_behavior: "ok: verifier-accepts-refusal"
+
+  - step: "BEHAVIOURAL: endpoint READY but no tier wired -> missing_capability=synthesis-tier, NOT a lie about the endpoint"
+    # The load-bearing branch distinction. The stubbed probe reports ready;
+    # blaming local-inference here would send an agent to fix an endpoint
+    # that is fine. Same fixture, only the probe verdict differs.
+    command: "R=$PWD; cd /tmp/.litmus-669r/proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669r/home TILLANDSIAS_INFERENCE_STATE_LIB=/tmp/.litmus-669r/stub-ready-lib.sh bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/tier.json && jq -r '.answer' /tmp/.litmus-669r/tier.json | grep -qE '^unsupported: synthesis question — missing_capability=synthesis-tier inference_state=ready inference_reason=-;' && /tmp/.litmus-669r/bin/verify verify-answer < /tmp/.litmus-669r/tier.json | grep -q '^ok: envelope verified' && echo 'ok: synthesis-tier-refusal-distinct'"
+    timeout_ms: 30000
+    expected_behavior: "ok: synthesis-tier-refusal-distinct"
+
+  - step: "NEGATIVE CONTROL: a deterministic question under the SAME no-inference fixture still ANSWERS, and verifies"
+    # A refusal gate that refuses everything would pass every step above and
+    # kill the working lane. The deterministic subset must answer with a
+    # cited, verifier-clean envelope — with a dead endpoint, always.
+    command: "R=$PWD; cd /tmp/.litmus-669r/proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what type of project is this\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669r/home TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 TILLANDSIAS_INFERENCE_STATE_LIB=$R/images/default/lib-inference-state.sh bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/det.json && jq -e '.confidence != \"unsupported\"' /tmp/.litmus-669r/det.json >/dev/null && jq -r '.answer' /tmp/.litmus-669r/det.json | head -1 | grep -q '^Project type: ' && /tmp/.litmus-669r/bin/verify verify-answer < /tmp/.litmus-669r/det.json | grep -q '^ok: envelope verified' && echo 'ok: deterministic-still-answers'"
+    timeout_ms: 30000
+    expected_behavior: "ok: deterministic-still-answers"
+
+  - step: "BEHAVIOURAL: plan lane routes an unsupported deterministic verdict through the SAME typed constructor"
+    # The plan engine (stubbed) refuses with ledger-flavoured prose; for a
+    # synthesis question that was never about the ledger, forwarding that
+    # refusal misdirects the reader. The typed refusal must replace it — and
+    # the stub's wording must NOT leak through.
+    command: "R=$PWD; cd /tmp/.litmus-669r/proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-unsupported TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 TILLANDSIAS_INFERENCE_STATE_LIB=$R/images/default/lib-inference-state.sh bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/plane.json && jq -r '.answer' /tmp/.litmus-669r/plane.json | grep -qE '^unsupported: synthesis question — missing_capability=local-inference ' && ! jq -r '.answer' /tmp/.litmus-669r/plane.json | grep -q 'no packet matches' && echo 'ok: plan-lane-refusal-typed'"
+    timeout_ms: 30000
+    expected_behavior: "ok: plan-lane-refusal-typed"
+
+  - step: "NEGATIVE CONTROL: DETERMINISTIC FIRST — a citable plan answer to a synthesis question is FORWARDED, never refused"
+    # C5's ordering rule: inference adds recall, never authority. When the
+    # deterministic layer CAN cite an answer, the synthesis classifier must
+    # not intercept it — even with a dead endpoint.
+    command: "R=$PWD; cd /tmp/.litmus-669r/proj && A=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"why is the parser slow\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-exact TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml TILLANDSIAS_INFERENCE_ENDPOINT=http://127.0.0.1:9 bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text') && test \"$(printf '%s' \"$A\" | jq -r '.answer')\" = 'deterministic fact from the ledger' && test \"$(printf '%s' \"$A\" | jq -r '.confidence')\" = 'exact' && echo 'ok: deterministic-first-wins'"
+    timeout_ms: 30000
+    expected_behavior: "ok: deterministic-first-wins"
+
+  - step: "BEHAVIOURAL: a plan engine that produces NO envelope -> the pinned no-envelope refusal, verifier-clean"
+    # The C1 regression this slice killed: the empty-output fallback used to
+    # hand-roll an envelope (freshness \"now\", no unsupported: prefix) that
+    # verify-answer REFUSED. It must route through the one pinned refusal
+    # constructor and name the engine that went silent.
+    command: "R=$PWD; cd /tmp/.litmus-669r/proj && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what is ready\"}}}' | env HOME=/tmp/.litmus-669r/home TILLANDSIAS_PLAN_BIN=/tmp/.litmus-669r/bin/stub-empty TILLANDSIAS_PLAN_INDEX=/tmp/.litmus-669r/dummy-index.yaml bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669r/empty.json && jq -r '.answer' /tmp/.litmus-669r/empty.json | grep -q '^unsupported: the plan engine produced no answer envelope for this question (engine=' && /tmp/.litmus-669r/bin/verify verify-answer < /tmp/.litmus-669r/empty.json | grep -q '^ok: envelope verified' && echo 'ok: empty-envelope-refusal-pinned'"
+    timeout_ms: 30000
+    expected_behavior: "ok: empty-envelope-refusal-pinned"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:619-pfsj"
+    - "@trace order:669-qcsb"
+  expected_log: "typed synthesis refusal grammar pinned: both missing_capability branches, verifier acceptance, plan-lane routing, deterministic-first negative controls"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "project-answer-synthesis-refusal-typed"
+    engine: "images/default/config-overlay/mcp/project-info.sh"
+    probe: "images/default/lib-inference-state.sh"
+    verifier: "tillandsias-plan verify-answer"
+
+rollback:
+  on_failure: >
+    The typed synthesis refusal regressed. If a branch step failed, the two
+    missing_capability tokens have collapsed or drifted — agents are being
+    sent to fix an endpoint that is fine, or to wire a tier when the endpoint
+    is dead. If the verifier step failed, refusals are once again hand-rolled
+    envelopes verify-answer refuses, so every refusal reads as a verification
+    defect instead of a named missing capability. If a NEGATIVE CONTROL
+    failed, the refusal gate is intercepting the deterministic lane: either
+    deterministic questions refuse under a dead endpoint, or a citable
+    deterministic answer to a synthesis question is being replaced by a
+    refusal — both kill the working lane to decorate the broken one.
+  command: "jq -r '.answer' /tmp/.litmus-669r/refusal.json 2>/dev/null; sed -n '/_pa_synthesis_refusal() {/,/^}/p' images/default/config-overlay/mcp/project-info.sh"
