@@ -165,9 +165,95 @@ control returns 200 does the enclave/egress comparison mean anything.
 
 ---
 
-## Runtime reproduction (2026-08-10T08:45Z, macOS VZ guest) — CONCLUSIVE
+## Runtime reproduction, second attempt (same host, same day) — CONCLUSIVE
 
-Run by the macOS host on the coordinator's 648-dvzd ask #3. This guest has
+The section above is **wrong in its diagnosis**, and the correction is the
+finding. This host has working rootless container egress. What it did not have
+was a valid instrument.
+
+### Why the first attempt's control failed
+
+`~/.config/containers/containers.conf` sets, in a global `env` list:
+
+    http_proxy=http://proxy:3128   https_proxy=http://proxy:3128   (+ upper-case)
+
+Podman injects those into **every container it launches and every image pull**,
+on every network. The hostname `proxy` is an alias that exists only inside the
+enclave pod network, so anywhere else it does not resolve and all egress dies
+with `proxyconnect tcp: dial tcp: lookup proxy: no such host`.
+
+That poisoned the test arm and the control arm *identically*, which is precisely
+why the control looked like "this host has no container egress at all".
+
+This is a known class — `crates/tillandsias-podman/src/client.rs:709` calls it
+the "Proxy-exemption class (orders 116/118/119; 4th instance 2026-07-11)", and
+`scripts/with-tillandsias-builder.sh:78` carries the documented neutralization.
+The first reproduction attempt was the next instance, and it landed inside a p0
+security audit's control.
+
+### Measured, with the neutralization applied
+
+Neutralize first (empty value overrides `[engine] env`; an operator-set proxy is
+left untouched):
+
+    for v in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; do
+        [ -z "${!v+x}" ] && export "$v="
+    done
+
+| posture | api.github.com | example.com | pypi.org |
+|---|---|---|---|
+| **CONTROL: default podman network** | **REACHED** | — | — |
+| `tillandsias-enclave` only | blocked | blocked | blocked |
+| `tillandsias-enclave,tillandsias-egress` (the mirror's posture) | **REACHED** | **REACHED** | **REACHED** |
+
+The control now passes, so the comparison means something.
+
+### What it establishes
+
+1. **Enclave isolation genuinely works.** Enclave-only reaches nothing. The spec's
+   containment property holds where it is applied.
+2. **The egress leg grants arbitrary unscoped outbound access.** `example.com`
+   and `pypi.org` have nothing to do with a GitHub push. The audit's central
+   claim — the gap between *"needs api.github.com"* and *"has the internet"* —
+   is now observed, not inferred.
+
+Note the proxy env vars were neutralized for the measurement **deliberately**:
+env vars are not a security boundary. A compromised process in the mirror simply
+unsets `http_proxy`. The measurement is of the network path, which is what the
+spec constrains.
+
+So criterion 1 is closed by observation as well as by reading, and criteria 2–4
+are unblocked on this host.
+
+### Residual now resolved: every `ENCLAVE_EGRESS_NETS` use has a verdict
+
+| site | function | verdict |
+|---|---|---|
+| `main.rs:1117` | const definition | n/a |
+| `main.rs:2516` | `build_proxy_run_args` | **COMPLIANT** — spec mandates it |
+| `main.rs:2953` | `build_git_run_args` | violation |
+| `main.rs:7486`, `:7522` | `run_provider_login` | **violation** — verdict was open; same "needs one destination, has the internet" shape |
+| `remote_projects.rs:320` | `run_git_image_shell` | violation |
+| `remote_projects.rs:650` | `clone_project_from_github_with_debug` | violation |
+| `main.rs:15545-6` | test fixtures | n/a |
+
+**One sanctioned dual-homing, five unsanctioned runtime sites**, all sharing one
+constant that records no difference between them.
+
+### The lesson, restated because it recurred one level up
+
+The previous section warned *"verify the instrument, then the control, then
+believe the measurement"* — and then trusted a control that its own project
+config had poisoned. Verifying the instrument is not a step you complete once;
+the second attempt only worked because the failure changed shape (`lookup proxy:
+no such host` instead of a silent `000`) and named its own cause.
+
+---
+
+## Independent cross-host corroboration (2026-08-10T08:45Z, macOS VZ guest)
+
+Run CONCURRENTLY and blind to the section above (merge reconciled after the
+fact), by the macOS host on the coordinator's 648-dvzd ask #3. This guest has
 PROVEN working container egress (the tillandsias-inference ollama
 self-install downloaded through it hours earlier), so the controls anchor.
 Probe container: the versioned inference image with `--entrypoint sh`;
@@ -198,3 +284,10 @@ shows scoping is absent at runtime, so criterion 2 (route mirror upstream
 through the proxy, drop the egress leg) or a genuinely destination-scoped
 criterion-3 exception must be implemented — closing as "theoretical" is no
 longer available.
+
+**Cross-host agreement note (merge reconciliation):** this macOS run and the
+Linux second attempt above were executed concurrently, blind to each other,
+on different hosts with different probe images and different destination
+sets — and reached byte-equivalent verdicts on both properties (enclave
+isolation airtight; egress leg = unrestricted internet). Criterion 1 is
+closed by two independent observations.

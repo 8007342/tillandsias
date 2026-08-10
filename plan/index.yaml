@@ -31124,6 +31124,12 @@ plan_index:
         - clone/fetch/push parity and credential isolation remain green
 
       events:
+        - type: verified
+          ts: "2026-08-10T08:14:46Z"
+          agent_id: "unknown"
+          host: linux
+          summary: >
+            Runtime reproduction CONCLUSIVE with a valid control: enclave-only blocks all three destinations; enclave+egress reaches api.github.com, example.com and pypi.org. Criterion 1 closed by observation. The first attempt was inconclusive because our own containers.conf proxy poisoned both arms (653-zzkb). Fix half split to 654-7ur4.
         - type: progress
           ts: "2026-08-10T03:55:00Z"
           agent_id: "unknown"
