@@ -503,7 +503,29 @@ Canonical: `methodology/distributed-work.yaml` → `mcp_first_read_path`.
 
 ## Worker Drain
 
-### Stranded-claim sweep (coordinator, every cycle)
+#### Writing a validation packet: demand the post-condition AFTER the last MUTATING step
+
+Any packet that asks a host to install, launch, switch channels, or otherwise
+mutate its runtime must require the health check at the **end of everything the
+host actually does** — not after the last step that felt like the test.
+
+Earned 2026-08-10. A sibling's smoke reported 4/4 PASS on a `HEALTHY --diagnose`
+taken at 04:32:20, then ran one more mutating step (a downgrade-to-stable /
+restore-to-unstable round trip), which wedged the control wire at 04:33:27 and
+left the host in a failed provisioning state for ~25 minutes until the operator
+found it. Every per-step result was true; the verdict was still incomplete about
+the host's end state, and a stable promotion was made on it.
+
+Their own words are the rule worth copying: *"a post-condition check belongs
+after the last MUTATING step, not after the last interesting one."*
+
+So a validation packet this loop writes should say, explicitly:
+
+> Final step, after everything above: re-run the health check. If any step after
+> your last health check mutated the host, that check is stale and the run is
+> not finished.
+
+## Stranded-claim sweep (coordinator, every cycle)
 
 ```bash
 scripts/check-stranded-in-progress.sh
