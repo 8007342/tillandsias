@@ -2309,7 +2309,11 @@ fn main() {
             let cutoff = answer::epoch_to_iso8601(now - ttl_hours * 3600);
             let now_iso = answer::epoch_to_iso8601(now);
             let (expired, unknown) = expire_claim_candidates(&ledger, &cutoff);
-            let label = if dry_run { "expire-candidate" } else { "expired-claim" };
+            let label = if dry_run {
+                "expire-candidate"
+            } else {
+                "expired-claim"
+            };
             for (order, pid, last) in &expired {
                 emit(&format!("{label}\t{order}\t{pid}\t{last}"));
             }
@@ -2333,9 +2337,7 @@ fn main() {
                 let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
                 let mut body = String::new();
                 body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
-                body.push_str(
-                    "# Written by: tillandsias-plan expire-claims (order 672-bz7u).\n",
-                );
+                body.push_str("# Written by: tillandsias-plan expire-claims (order 672-bz7u).\n");
                 body.push_str("status:\n");
                 for (_, pid, _) in &expired {
                     body.push_str(&format!("  - packet_id: {pid}\n"));
@@ -2363,9 +2365,16 @@ fn main() {
                 }
                 emit(&format!("fragment: {}", path.display()));
             }
-            let total =
-                query_packets(&ledger, Some("in_progress"), None, None, None, &[], usize::MAX)
-                    .len();
+            let total = query_packets(
+                &ledger,
+                Some("in_progress"),
+                None,
+                None,
+                None,
+                &[],
+                usize::MAX,
+            )
+            .len();
             emit(&format!(
                 "summary: in_progress={total} expired={} unknown_age={} ttl_hours={ttl_hours} mode={}",
                 expired.len(),
@@ -2389,13 +2398,27 @@ fn main() {
 /// unparseable. A packet with NO parseable timestamp is never expired: age
 /// unknown is not age infinite, and guessing marks live work abandoned —
 /// the most expensive version of the 641-e2qa bug.
+///
+/// Expired rows are `(order, packet_id, last_activity_ts)`; unknown-age rows
+/// are `(order, packet_id)`.
+type ExpiredClaim<'a> = (String, &'a str, String);
+type UnknownAgeClaim<'a> = (String, &'a str);
+
 fn expire_claim_candidates<'a>(
     ledger: &'a Ledger,
     cutoff_iso: &str,
-) -> (Vec<(String, &'a str, String)>, Vec<(String, &'a str)>) {
+) -> (Vec<ExpiredClaim<'a>>, Vec<UnknownAgeClaim<'a>>) {
     let mut expired: Vec<(String, &str, String)> = Vec::new();
     let mut unknown: Vec<(String, &str)> = Vec::new();
-    for p in query_packets(ledger, Some("in_progress"), None, None, None, &[], usize::MAX) {
+    for p in query_packets(
+        ledger,
+        Some("in_progress"),
+        None,
+        None,
+        None,
+        &[],
+        usize::MAX,
+    ) {
         let Some(pid) = str_field(p, "packet_id") else {
             continue;
         };
