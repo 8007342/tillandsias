@@ -2435,7 +2435,14 @@ fn build_stack_common_args(
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
-        "--pids-limit=512".into(),
+        // 4096, not 512: the forge runs compilers. A workspace `cargo build`
+        // fans out to N rustc processes each spawning codegen threads, on top
+        // of the harness (opencode/node) — under 512 the clone() EAGAIN
+        // surfaces as rustc panics (jobserver.rs:124, back/write.rs:1871) and
+        // took a PID-1 harness SIGSEGV with it (667-se87, 604-vmcg third
+        // sighting, 2026-08-10). This is a fork-bomb ceiling, not a scheduler:
+        // size it above the workload's honest peak.
+        "--pids-limit=4096".into(),
     ];
     args.extend(proxy_env_args());
     args.extend([
@@ -5158,7 +5165,9 @@ fn build_opencode_forge_args(
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
-        "--pids-limit=512".into(),
+        // Same 4096 rationale as build_stack_common_args (667-se87): this
+        // lane hosts workspace builds too.
+        "--pids-limit=4096".into(),
     ];
     match mode {
         ForgeMode::Cli => {

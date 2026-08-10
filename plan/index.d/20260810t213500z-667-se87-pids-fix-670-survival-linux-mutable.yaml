@@ -1,0 +1,88 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t213500z
+packets:
+
+  - packet_id: forge-session-work-must-survive-container-death
+    order: 670-8f6z
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "Stage un-pushed in-forge commits/fragments on the persistent tool-cache volume so container death stops destroying work"
+    kind: enhancement
+    deliverable: entrypoint/teardown staging of un-pushed fragments + commits onto the per-project named volume, with host-side recovery surfacing
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [forge, durability, volumes, plan-tooling]
+    estimated_hours: 3
+    context: >
+      BigPickle's proposal P3 (diagnose-forge session 2026-08-10 20:40-20:47Z,
+      titled forge-session-fragment-survival), reconstructed by the coordinator
+      after the proposal FILES THEMSELVES died with the container — the third
+      loss of in-forge work tonight (round-2 validation fragments, then all
+      four diagnose proposals), each needing journald archaeology. The design:
+      the per-project named volume (tillandsias-forge-cache-<project>) already
+      survives container death; the forge entrypoint/exit path should stage
+      any un-pushed plan/index.d + plan/loop_status.d fragments (and, ideally,
+      `git bundle` of un-pushed commits) into a staging directory on that
+      volume, and the next launch (or the host coordinator) surfaces them
+      loudly for relay. Complements 668-2xeh (plan-only gate lane removes the
+      main REASON pushes fail); this packet removes the LOSS when a push
+      cannot happen at all (crash, timeout, gate refusal, network).
+    exit_criteria:
+      - a forge session that commits fragments and exits un-pushed leaves them recoverable on the named volume, and the next launch of that project surfaces the staged work in its first output
+      - a crashed (SIGKILLed) session's already-written fragment files are equally recoverable
+      - litmus pins the staging path shape with a fixture
+    events:
+      - ts: "2026-08-10T21:35:00Z"
+        event: filed
+        summary: >
+          Reconstructed from BigPickle's P3 proposal title + design sketch in
+          the journald transcript; proposal bodies were lost with the
+          container, which is this packet's own thesis.
+
+events:
+  - packet_id: forge-rustc-panics-during-build-check
+    event:
+      type: progress
+      ts: "2026-08-10T21:35:00Z"
+      agent_id: linux-mutable-20260810t213500z
+      host: linux_mutable
+      summary: >
+        ROOT-CAUSED AND FIXED, verification pending. BigPickle's in-forge
+        diagnosis was RIGHT: the forge runs under pids.max=512, set at
+        build_stack_common_args (main.rs, --pids-limit=512, sole caller
+        build_forge_common_args) and again in build_opencode_forge_args. A
+        workspace cargo build fans out past 512 tasks; clone() EAGAIN
+        presents exactly as the recorded panics (jobserver.rs:124 token
+        acquisition, back/write.rs:1871 lost codegen worker) and plausibly
+        the PID-1 harness SEGV. Coordinator's process note, owned for the
+        record: an initial host-side re-check nearly filed a FALSE correction
+        ("product never passes --pids-limit") because the confirming grep was
+        piped through head -8 and the main.rs hit ranked ninth — the same
+        instrument-truncation class as the 637-df4z tail-lesson in the
+        meta-orchestration runbook; caught before filing when the empirical
+        probe (podman default 2048) contradicted the 512 measurement and
+        forced a caller-by-caller re-read. FIX LANDED: both forge-class
+        sites raised to --pids-limit=4096 with the rationale comment citing
+        this packet (fork-bomb ceiling, not a scheduler); all other
+        containers keep their tight scoped limits (git 64, proxy 32,
+        inference 128, router 64). 312+ headless tests green. REMAINING for
+        exit: criterion 3 — an in-forge ./build.sh --check must complete
+        green under the new ceiling (schedule an in-forge build session once
+        this binary is installed; the currently-installed tray binary
+        predates the fix). BigPickle's P1/P2 proposals (concurrency cap,
+        resource watchdog) remain open ideas under this packet.
+  - packet_id: opencode-segfault-reproduced-with-a-host-side-coredump
+    event:
+      type: progress
+      ts: "2026-08-10T21:35:00Z"
+      agent_id: linux-mutable-20260810t213500z
+      host: linux_mutable
+      summary: >
+        Suspect mechanism strengthened: the PID-1 SEGV of the third sighting
+        co-occurred with pids.max=512 exhaustion (667-se87, now root-caused
+        to build_stack_common_args). A Bun runtime failing a thread spawn
+        mid-flight is a plausible SEGV path. Not yet proof — the 94.1M
+        coredump remains the evidence to read; if in-forge builds run clean
+        under 4096 across several sessions with no new cores, treat as
+        corroborated.
