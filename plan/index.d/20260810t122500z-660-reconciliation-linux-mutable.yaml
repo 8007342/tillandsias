@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t122500z
+events:
+  - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
+    event:
+      type: progress
+      ts: "2026-08-10T12:25:00Z"
+      agent_id: linux-mutable-20260810t122500z
+      host: linux
+      summary: >
+        EXIT CRITERION 1 ANSWERED — the reconciliation is done and the number is 26.
+
+          304  litmus files on disk carrying a `name:`
+          279  test names bound in openspec/litmus-bindings.yaml
+           26  UNBOUND — written, on disk, and NEVER EXECUTED by any suite
+            1  DANGLING — bound to a name with no file behind it
+              (litmus:recipe-release-tag-symmetric)
+
+        That is 8.5% of the suite. Each unbound file is a property someone wrote an
+        executable assertion for, and which nothing has ever checked; the author had
+        every reason to believe it was guarded, because the suite went green.
+
+        The list is not benign. Several are security- or cleanup-critical:
+
+          litmus:ca-ephemeral
+          litmus:git-mirror-relay-token-expiry
+          litmus:token-file-cleanup
+          litmus:pty-open-argv-allowlisted
+          litmus:mount-cleanup
+          litmus:teardown-liveness-shared-scope-agreement
+
+        Full list of 26: build-cache-transparent, build-clean-from-scratch-works,
+        ca-ephemeral, ci-unchanged-behavior, control-dispatch-shape,
+        cross-platform-terminal-attach, diagnostics-filter-env-shape,
+        forge-policy-binary-discoverability, git-mirror-relay-token-expiry,
+        hook-install-portability-shape, installer-ascii-expansion-safety,
+        launch-skips-prerequisite-fails, macos-tray-menu-renders, mount-cleanup,
+        no-raw-error-in-status-chip, pickup-role-grammar-shape,
+        pty-open-argv-allowlisted, publish-local-e2e, status-check-stack-verification,
+        teardown-liveness-shared-scope-agreement, token-file-cleanup, toolbox-isolation,
+        tray-host-control-socket-unix-shape, vm-provisioning-idempotent,
+        vm-shutdown-drains-forges, windows-tray-menu-renders.
+
+        Note macos-tray-menu-renders and windows-tray-menu-renders are BOTH unbound —
+        that is a sibling-relevant gap, not a linux one, and worth routing to those
+        hosts when this packet is worked.
+
+        Binding all 26 blind would be the wrong move: some may be unbound because they
+        do not pass, and turning 26 unknown tests on at once converts one silent
+        problem into an undiagnosed red suite. Bind them in small batches, and record
+        which ones fail — a failure found this way is the finding, not a setback.
+
+  - packet_id: mirror-dns-identity-is-shared-across-projects
+    event:
+      type: correction
+      ts: "2026-08-10T12:25:00Z"
+      agent_id: linux-mutable-20260810t122500z
+      host: linux
+      summary: >
+        CORRECTION to this host's own sequencing advice from the previous cycle. I wrote
+        "land NO_PROXY (surface item B) before the aliases (item A) or the failure
+        surfaces in the clone path". That is WRONG for the mirror's actual transport,
+        and a sibling acting on it would have done unnecessary work in a risky order.
+
+        Measured, with a valid control: a container whose http_proxy/https_proxy/
+        HTTP_PROXY all point at an unroutable black hole (192.0.2.1:9) still completes
+        `git ls-remote git://probe-git/demo` successfully. Control arm, same image and
+        network with no proxy env at all, also succeeds — so the daemon was genuinely
+        reachable and the result is about the proxy, not the setup.
+
+        git:// does not consult http_proxy at all (it is the git wire protocol; git uses
+        core.gitProxy for that scheme). Since `git://` is the ONLY transport used
+        against these names — grep finds no http(s):// client of git-service or
+        tillandsias-git anywhere in crates/, images/ or scripts/ — the NO_PROXY entries
+        naming them are not load-bearing for mirror traffic.
+
+        Revised guidance: surface item B is a tidiness follow-up, not a prerequisite.
+        The rename can proceed A -> C -> D/E/G without it. Item B should still be
+        updated eventually so the list stops naming hosts that no longer exist, but
+        nothing breaks if it lags.
+
+        Also worth knowing for whoever implements: enclave_no_proxy() already appends
+        the whole enclave SUBNET (10.0.42.0/24), so IP-addressed traffic inside the
+        enclave was never proxied regardless of the hostname list.
