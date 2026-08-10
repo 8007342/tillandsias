@@ -583,6 +583,7 @@ specs:
   - litmus:version-release-and-forge-selfservice-shape
   - litmus:ephemerality-invariant-shape
   - litmus:release-gates-run-locally
+  - litmus:plan-only-push-lane-shape
   coverage_ratio: 100
   last_verified: '2026-08-03'
 - spec_id: meta-orchestration
