@@ -17,7 +17,13 @@ preconditions:
 
 critical_path:
   - step: "emits the batch grammar"
-    command: "scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+$' && echo 'ok: batch grammar'"
+    # The trailing ` urgent=<packet_id>` is OPTIONAL — present only when the
+    # order-645 override displaced a slot with a higher-priority packet from
+    # outside the chosen epic. Adding that suffix without widening this pattern
+    # broke the step, CORRECTLY: unlike the expression-pinned guards repaired
+    # earlier this session, an output grammar is a genuine contract, so changing
+    # the output without changing the contract is the defect, not the test.
+    command: "scripts/select-work-batch.sh linux | head -1 | grep -qE '^batch: epic=[A-Za-z0-9._-]+ role=linux release=[^ ]+ size=[0-9]+ budget=[0-9]+ score=[0-9.]+ seed=[^ ]+ pick=[0-9]+/[0-9]+( urgent=[A-Za-z0-9._-]+)?$' && echo 'ok: batch grammar'"
     timeout_ms: 30000
     expected_behavior: "ok: batch grammar"
 
@@ -133,6 +139,29 @@ critical_path:
     command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux --budget 0 2>&1); printf '%s' \"$out\" | grep -q '^refused:bad-role:budget' && echo 'ok: argument errors precede environment probes'"
     timeout_ms: 15000
     expected_behavior: "ok: argument errors precede environment probes"
+
+  - step: "URGENCY OVERRIDE: the batch's best priority matches the ledger's best"
+    # Order 645-n3h6. Epic selection happens BEFORE priority and UNGROUPED is
+    # demoted whenever a real epic exists, so an ungrouped packet was unreachable
+    # at ANY priority — p0 and p3 were equally invisible without a
+    # release_target. Not theoretical: three p0 sibling smoke packets were filed
+    # and the batches offered p3 work until they were hand-grouped, on a ledger
+    # where 107 of 160 eligible linux packets are ungrouped.
+    #
+    # Asserts the OUTCOME, not the mechanism, so a different future fix satisfies
+    # it too: whatever the selector does, it must not offer p3 work while a p0 is
+    # claimable.
+    command: "best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); best_ledger=$(./target/release/tillandsias-plan query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '[.[]|(.priority//\"p3\")|sub(\"^p\";\"\")|tonumber]|min'); if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
+    timeout_ms: 60000
+    expected_behavior: "ok: urgency reachable"
+
+  - step: "the override costs at most ONE slot — the budget still holds"
+    # The override must not become a licence to scatter. One urgent outsider plus
+    # a cohesive remainder is workable; three unrelated p0s is the scatter this
+    # selector exists to end.
+    command: "for b in 1 2 3; do n=$(scripts/select-work-batch.sh linux --budget $b 2>/dev/null | grep -c \"^packet$(printf '\\t')\"); if [ \"$n\" -gt \"$b\" ]; then echo \"FAIL: override broke budget $b ($n)\"; exit 1; fi; done; echo 'ok: budget intact with override'"
+    timeout_ms: 60000
+    expected_behavior: "ok: budget intact with override"
 
   - step: "selection writes nothing to the worktree"
     command: "before=\"$(git status --porcelain)\"; scripts/select-work-batch.sh linux >/dev/null 2>&1; after=\"$(git status --porcelain)\"; if [ \"$before\" != \"$after\" ]; then echo 'FAIL: selector mutated the worktree'; exit 1; fi; echo 'ok: read-only'"

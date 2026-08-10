@@ -41,7 +41,10 @@
 #   scripts/select-work-batch.sh <role> [--budget N] [--release V]
 #
 # GRAMMAR — a batch header, then one line per packet, then a triage line:
-#   ^batch: epic=<id|UNGROUPED> role=<r> release=<v> size=<n> budget=<n>$
+#   ^batch: epic=<id|UNGROUPED> role=<r> release=<v> size=<n> budget=<n>
+#            score=<f> seed=<s> pick=<i>/<k>[ urgent=<packet_id>]$
+#          `urgent=` appears ONLY when the order-645 override displaced a slot
+#          with a strictly-higher-priority packet from outside the chosen epic.
 #   ^packet\t<order>\t<packet_id>\t<priority>$
 #   ^triage: eligible=<n> grouped=<n> ungrouped=<n> epics=<n>$
 # or exactly one refusal line:
@@ -426,10 +429,44 @@ batch="$(printf '%s\n' "$rows" \
     | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 \
     | head -n "$BUDGET")"
 
+# URGENCY OVERRIDE (order 645-n3h6). Reserve slot 1 for the globally
+# highest-priority eligible packet when it strictly beats everything the chosen
+# epic offers.
+#
+# Epic selection happens BEFORE priority, and UNGROUPED is demoted whenever any
+# real epic is eligible. Those two together made an ungrouped packet unreachable
+# at ANY priority: a p0 and a p3 were equally invisible without a
+# release_target. It was not theoretical — this host filed three p0 sibling
+# smoke packets, the batches offered p3 work instead, and the p0s only surfaced
+# after being hand-grouped. 107 of 160 eligible linux packets are ungrouped, so
+# the same hole is open under all of them.
+#
+# ONE slot, and only on a STRICT priority win. That keeps the rest of the batch
+# cohesive — one urgent outsider plus a cohesive remainder is still worth
+# working, whereas three unrelated p0s is the scatter this selector exists to
+# end. A tie does NOT displace: equal priority means the cohesive pick is
+# better, because it shares context with the rest of the batch.
+top_urgent="$(printf '%s\n' "$rows" \
+    | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 \
+    | head -1)"
+if [ -n "$top_urgent" ] && [ -n "$batch" ]; then
+    urgent_rank="$(printf '%s' "$top_urgent" | cut -f1)"
+    batch_rank="$(printf '%s\n' "$batch" | cut -f1 | sort -n | head -1)"
+    urgent_pid="$(printf '%s' "$top_urgent" | cut -f4)"
+    if [ "${urgent_rank:-9}" -lt "${batch_rank:-9}" ] \
+       && ! printf '%s\n' "$batch" | cut -f4 | grep -qxF "$urgent_pid"; then
+        # Prepend it and drop the batch's LAST entry, so the budget still holds.
+        batch="$({ printf '%s\n' "$top_urgent"
+                   printf '%s\n' "$batch" | head -n $((BUDGET - 1)); })"
+        URGENT_NOTE="$urgent_pid"
+    fi
+fi
+
 size="$(printf '%s\n' "$batch" | grep -c .)"
 
-printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s\n' \
-    "$chosen" "$ROLE" "$release" "$size" "$BUDGET" "$chosen_score" "$SEED" "$pick" "$k"
+printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s\n' \
+    "$chosen" "$ROLE" "$release" "$size" "$BUDGET" "$chosen_score" "$SEED" "$pick" "$k" \
+    "$( [ -n "${URGENT_NOTE:-}" ] && printf ' urgent=%s' "$URGENT_NOTE" )"
 printf '%s\n' "$batch" | while IFS=$'\t' read -r rank epic order pid prio rel; do
     [ -n "$pid" ] || continue
     printf 'packet\t%s\t%s\t%s\n' "$order" "$pid" "$prio"
