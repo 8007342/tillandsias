@@ -153,6 +153,8 @@ specs:
   - litmus:cycle-batch-triage-shape
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
+  - litmus:installer-ascii-expansion-safety
+  - litmus:pickup-role-grammar-shape
   coverage_ratio: 75
   last_verified: '2026-07-15'
 - spec_id: codex-tray-launcher
@@ -430,6 +432,7 @@ specs:
   - litmus:forge-standard-gitconfig-path
   - litmus:forge-config-trust-cross-platform-parity
   - litmus:forge-gitdir-staging-chown
+  - litmus:git-mirror-relay-token-expiry
   coverage_ratio: 83
   last_verified: '2026-07-23'
 - spec_id: github-credential-health
@@ -671,6 +674,7 @@ specs:
   - litmus:shared-containers-survive-per-project-cleanup
   - litmus:concurrent-forge-shared-stack-safety
   - litmus:drain-vs-self-heal
+  - litmus:teardown-liveness-shared-scope-agreement
   coverage_ratio: 100
   last_verified: '2026-07-09'
 - spec_id: podman-container-spec
@@ -702,6 +706,7 @@ specs:
   - litmus:headless-init-status-check-source-built
   - litmus:container-start-health
   - litmus:forge-secret-capability-contract
+  - litmus:launch-skips-prerequisite-fails
   coverage_ratio: 100
   last_verified: '2026-07-28'
 - spec_id: project-bootstrap-readme
@@ -760,6 +765,7 @@ specs:
   - litmus:runtime-diagnostics-typed-events-shape
   - litmus:container-start-health
   - litmus:diagnostics-envelope-shape
+  - litmus:diagnostics-filter-env-shape
   coverage_ratio: 100
   last_verified: '2026-05-31'
 - spec_id: runtime-logging
@@ -805,6 +811,7 @@ specs:
   - litmus:litmus-name-filter-fail-loud-shape
   - litmus:plan-engine-invariants-shape
   - litmus:freshness-inventory-shape
+  - litmus:hook-install-portability-shape
   coverage_ratio: 83
   last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip

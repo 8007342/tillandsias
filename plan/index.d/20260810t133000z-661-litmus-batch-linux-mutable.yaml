@@ -1,0 +1,136 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t133000z
+packets:
+
+  - packet_id: absence-assertions-are-structurally-unpassable-in-the-litmus-runner
+    order: 661-nm73
+    status: ready
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    priority: p2
+    title: "A litmus step that succeeds by producing NO output is judged FAILED"
+    kind: bug
+    deliverable: scripts/run-litmus-test.sh verdict evaluation
+    depends_on: []
+    pickup_role: any
+    capability_tags: [litmus, ci, harness, negative-assertion]
+    context: >
+      `run-litmus-test.sh:497` evaluates `expected_behavior: "succeeds"` as
+      `[[ -n "$output" ]]` — the step passes only if it printed something.
+
+      That makes ABSENCE assertions unpassable by construction. The canonical form of
+      such a step is a negated grep: `! grep -E '<forbidden pattern>' <file>`. When the
+      property HOLDS, grep matches nothing, prints nothing, and exits 1; `!` turns that
+      into exit 0. Correct behaviour, empty output — and the runner calls it FAIL.
+
+      Found concretely: litmus:no-raw-error-in-status-chip step 1 asserts the Windows
+      tray never passes a raw format-error into update_status_text. Running the grep by
+      hand against crates/tillandsias-windows-tray/src/notify_icon.rs returns NOTHING —
+      the property holds, the code is clean. The runner still reported FAIL with
+      `output=` empty.
+
+      This is a bad failure in a specific direction: it punishes exactly the tests that
+      check something is NOT there. Those are the negative controls this project keeps
+      insisting on, and the harness makes them impossible to satisfy — which is a strong
+      candidate explanation for why several such tests were never bound (660-ryhn).
+    exit_criteria:
+      - >
+        A step can declare success-by-silence. Either honour the command's EXIT CODE
+        when expected_behavior is `succeeds`, or add an explicit vocabulary
+        (`exits-zero`, `no-output`) for absence assertions.
+      - >
+        NEGATIVE CONTROL: a genuinely failing absence assertion (pattern present in the
+        file) must still FAIL after the change. Fixing this by always passing empty
+        output would be worse than the bug.
+      - "Rebind litmus:no-raw-error-in-status-chip once the harness can express it."
+    verifiable_closure: >
+      A negated-grep step passes when the pattern is absent and fails when it is
+      present, both demonstrated.
+    notes: >
+      Unbound again for now (it was bound during this cycle's batch), because leaving it
+      bound would redden the suite for a property that actually holds — the exact
+      inversion this packet is about.
+
+  - packet_id: forge-only-litmus-tests-need-a-host-kind-precondition
+    order: 661-emqi
+    status: ready
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    priority: p3
+    title: "A forge-only litmus test fails on the host instead of skipping"
+    kind: bug
+    deliverable: litmus preconditions / host-kind guard
+    depends_on: []
+    pickup_role: any
+    capability_tags: [litmus, forge, preconditions]
+    context: >
+      litmus:forge-policy-binary-discoverability hardcodes `/home/forge/.cache/...`,
+      which exists only inside the forge container. Bound and run on a Linux host it
+      fails with `mktemp: failed to create directory via template
+      '/home/forge/.cache/test-policy-target.XXXXXX': No such file or directory`.
+
+      The test is not wrong; it is simply forge-scoped, and the harness has no way for it
+      to say so. The runner already SKIPS tests (litmus:enclave-isolation skips today),
+      so the mechanism exists — this test just cannot declare the condition.
+
+      Left unbound rather than bound-and-red, but that is the same silence 660-ryhn is
+      about, which is why it gets a packet instead of a shrug.
+    exit_criteria:
+      - "A litmus test can declare a required host kind (forge/linux/macos/windows) and SKIP rather than fail elsewhere."
+      - "The test is then bound, and skips on a host while running inside a forge."
+    verifiable_closure: >
+      Running the suite on Linux reports it SKIPPED with the reason named, not FAILED.
+    events:
+      - ts: "2026-08-10T13:30:00Z"
+        event: filed
+        summary: "Surfaced by binding it during the 660-ryhn batch."
+
+events:
+  - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
+    event:
+      type: progress
+      ts: "2026-08-10T13:30:00Z"
+      agent_id: linux-mutable-20260810t133000z
+      host: linux
+      summary: >
+        FIRST BATCH BOUND, and the "26 unbound" headline from the previous cycle needs
+        correcting — I stated the number accurately but implied all 26 were oversights.
+        Classified, they are four different things:
+
+          6  phase: retired            — intentionally not run (token-file-cleanup,
+                                         status-check-stack-verification,
+                                         build-cache-transparent,
+                                         build-clean-from-scratch-works,
+                                         ci-unchanged-behavior, toolbox-isolation)
+          2  spec is OBSOLETE          — tray-host-control-socket is tombstoned
+                                         ("Superseded by orders 123-128"), so
+                                         control-dispatch-shape and
+                                         tray-host-control-socket-unix-shape have no
+                                         live spec to bind to
+          1  spec is DEPRECATED        — certificate-authority, hence ca-ephemeral
+          8  e2e / non-pre-build phase  — may be driven by an e2e harness; UNVERIFIED
+          9  genuine pre-build gaps     — bound this cycle
+
+        Plus one spec-level gap: vsock-exec-authz has NO bindings entry at all despite
+        openspec/specs/vsock-exec-authz existing on disk, so litmus:pty-open-argv-allowlisted
+        cannot be bound without adding the spec. That is a bigger hole than a missing
+        test line and deserves its own pass.
+
+        Of the 9 bound, 6 passed immediately and 3 failed — which is exactly why the
+        batch approach was right:
+
+          - litmus:pickup-role-grammar-shape        FIXED. Its "no jq/yq/python/ruby"
+            assertion excluded comments with `^[0-9]*:#`, matching only column-0
+            comments. It flagged check-pickup-role-grammar.sh:129 — an INDENTED comment
+            reading "No jq — see …", i.e. a comment asserting the very property under
+            test. The test failed on its own subject matter explaining that it complies.
+            Exclusion now allows leading whitespace; verified with a negative control
+            (an injected real `jq` call is still caught).
+          - litmus:no-raw-error-in-status-chip      HARNESS DEFECT, 661-nm73. Property
+            holds; the runner cannot express success-by-silence.
+          - litmus:forge-policy-binary-discoverability  FORGE-ONLY, 661-emqi.
+
+        Net: 7 tests that had never executed now run, all suites green (ci-release 11/11,
+        default-image 13/13, git-mirror-service 19/19, windows-native-tray 7/7,
+        podman-orchestration 9/9, podman-idiomatic-patterns 9/9,
+        runtime-diagnostics-stream 5/5, spec-traceability 8/8).
