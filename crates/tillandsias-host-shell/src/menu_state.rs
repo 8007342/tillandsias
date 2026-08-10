@@ -340,6 +340,27 @@ pub struct MenuState {
     pub login_runtime_ready: bool,
     /// Target UI backend. Drives macOS's "(v2)" defer markers.
     pub target: TargetSurface,
+    /// `Some(reason)` once provisioning has FAILED TERMINALLY — the retry
+    /// budget is exhausted and no attempt is in flight. Renders the Retry +
+    /// Open log affordances (order 648-jv69).
+    ///
+    /// This field exists because the affordances were unreachable. The tray's
+    /// status chip has always been able to say
+    /// `🔴 Provisioning failed — Retry`, and `MenuAction::Retry` is fully
+    /// implemented and correctly clears `PROVISIONING_ACTIVE` so a fresh
+    /// attempt can start. But the ONLY constructor of a `retry` leaf is
+    /// `MenuStructure::failed()`, and nothing on the Windows path — nor `build`
+    /// below — ever called it. The chip named an action that had no control
+    /// anywhere in the menu.
+    ///
+    /// Operator report, 2026-08-10: "it says 'provision failed - retry' but
+    /// 'retry' is not actionable, I don't know if it's retrying at all." Both
+    /// halves were true, and for different reasons: no Retry control existed,
+    /// and the chip does not distinguish "still trying" from "gave up".
+    ///
+    /// Additive by construction: `None` on every existing constructor, so the
+    /// Linux and macOS trays render exactly as before until they set it.
+    pub provisioning_failure: Option<String>,
 }
 
 impl MenuState {
@@ -362,6 +383,7 @@ impl MenuState {
             podman_ready: false,
             login_runtime_ready: false,
             target: TargetSurface::WindowsTray,
+            provisioning_failure: None,
         }
     }
 }
@@ -476,6 +498,24 @@ pub fn build(state: &MenuState) -> MenuStructure {
         clamp_tray_status_chip(&state.status_text),
         "current status",
     ));
+
+    // (1b) TERMINAL PROVISIONING FAILURE — Retry + Open log, immediately under
+    //      the status line (order 648-jv69).
+    //
+    //      This branch returns EARLY and deliberately. A failed provision means
+    //      there is no VM, so every item below — projects, cloud repos, sign-in,
+    //      per-project attach — is either inert or actively misleading. Offering
+    //      "Attach Here" against a VM that does not exist is the same class of
+    //      lie as the chip that named a Retry with no control behind it.
+    //
+    //      The status line above already carries the reason; these two leaves
+    //      are the only actions that can make progress from here.
+    if state.provisioning_failure.is_some() {
+        items.push(MenuItem::leaf("retry", "\u{1F504} Retry provisioning"));
+        items.push(MenuItem::leaf("open-log", "Open log"));
+        items.push(MenuItem::leaf(ids::QUIT, "\u{274C} Quit Tillandsias"));
+        return MenuStructure::Failed { items };
+    }
 
     // (2) Auth-gated body. Mirror the Linux golden `build_menu`: emit exactly
     //     one of {GitHub Login} OR {~/src + Cloud}, never both.
@@ -755,6 +795,7 @@ mod tests {
             guest_version: None,
             login_runtime_ready: true,
             target: TargetSurface::WindowsTray,
+            provisioning_failure: None,
         };
 
         let menu = build(&state);
@@ -1387,5 +1428,59 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Order 648-jv69. A terminal provisioning failure must put a REAL `retry`
+    /// control in the menu.
+    ///
+    /// The defect this pins: the status chip could say
+    /// "Provisioning failed — Retry" while the only constructor of a `retry`
+    /// leaf (`MenuStructure::failed`) was never called from `build` or from the
+    /// Windows tray. `MenuAction::Retry` was fully implemented and
+    /// `PROVISIONING_ACTIVE` was cleared correctly — the machinery worked, and
+    /// nothing rendered the control. Operator report 2026-08-10: "retry is not
+    /// actionable, I don't know if it's retrying at all."
+    ///
+    /// Asserting the leaf is PRESENT is the half that catches a regression;
+    /// asserting it is ABSENT when healthy is the half that stops the fix
+    /// becoming a permanent Retry item on a working tray.
+    #[test]
+    fn terminal_provisioning_failure_renders_a_real_retry_control() {
+        let failed = MenuState {
+            provisioning_failure: Some("control-wire handshake did not succeed".into()),
+            ..MenuState::initial()
+        };
+        let items = match build(&failed) {
+            MenuStructure::Failed { items } => items,
+            other => panic!("expected Failed, got {other:?}"),
+        };
+        let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert!(
+            ids.contains(&"retry"),
+            "a failed provision must offer a retry control; got {ids:?}"
+        );
+        assert!(
+            ids.contains(&"open-log"),
+            "a failed provision must offer the log; got {ids:?}"
+        );
+        // The retry leaf must be ENABLED — a disabled one reproduces the
+        // original complaint exactly.
+        let retry = items.iter().find(|i| i.id == "retry").expect("retry leaf");
+        assert!(
+            retry.enabled,
+            "the retry control must be clickable, not a disabled label"
+        );
+
+        // Negative half: a healthy tray must NOT carry a Retry item.
+        let healthy = MenuState::initial();
+        let healthy_ids: Vec<String> = build(&healthy)
+            .top_items()
+            .iter()
+            .map(|i| i.id.clone())
+            .collect();
+        assert!(
+            !healthy_ids.iter().any(|i| i == "retry"),
+            "a tray with no failure must not offer Retry; got {healthy_ids:?}"
+        );
     }
 }

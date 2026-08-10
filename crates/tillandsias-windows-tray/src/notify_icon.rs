@@ -2850,6 +2850,27 @@ static PROVISIONING_ACTIVE: std::sync::atomic::AtomicBool =
 /// (WSL2 idles the utility VM down otherwise, dropping the control wire). On
 /// failure it clears `PROVISIONING_ACTIVE` so `Retry` can try again.
 ///
+/// Record a TERMINAL provisioning failure on the shared `MenuState` so the
+/// menu renders Retry + Open log (order 648-jv69). Paired with
+/// `clear_provisioning_failure` on every path that starts a fresh attempt —
+/// a stale failure marker would leave the operator staring at a Retry menu
+/// while provisioning is actually running, which is the same
+/// state-vs-display lie in the opposite direction.
+fn mark_provisioning_failed(reason: &str) {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.provisioning_failure = Some(reason.to_string());
+    }
+}
+
+/// Clear the terminal-failure marker. Called when an attempt begins.
+fn clear_provisioning_failure() {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.provisioning_failure = None;
+    }
+}
+
 /// Idempotent: a (re)trigger while a task is already active/parked is ignored.
 fn spawn_provisioning(hwnd: HWND) {
     use std::sync::atomic::Ordering::SeqCst;
@@ -2857,6 +2878,9 @@ fn spawn_provisioning(hwnd: HWND) {
         tracing::info!("provisioning already active; ignoring (re)trigger");
         return;
     }
+    // An attempt is starting: the previous terminal failure is no longer the
+    // current state (order 648-jv69).
+    clear_provisioning_failure();
     // windows-260722 runtime split: the provisioning task tree runs on the
     // dedicated multi-thread runtime, NOT the 100ms-pumped LocalSet — bulk
     // download/import I/O must never be quantized by a GUI timer. HwndHandle
@@ -3092,8 +3116,19 @@ fn spawn_provisioning(hwnd: HWND) {
                         BalloonSeverity::Error,
                     );
                 } else {
-                    hwnd.status("\u{1F534} Provisioning failed — Retry");
+                    hwnd.status("\u{1F534} Provisioning failed — right-click \u{25B8} Retry");
                 }
+                // Order 648-jv69. Surface the Retry + Open log affordances the
+                // chip has always advertised. Until now the ONLY constructor of
+                // a `retry` leaf was `MenuStructure::failed()`, which nothing on
+                // this platform ever called — so the chip named an action with
+                // no control behind it anywhere in the menu.
+                //
+                // Set for BOTH the classified and unclassified branches: a
+                // classified failure (WSL absent, reboot pending) still leaves
+                // the operator with nothing to click, and `PROVISIONING_ACTIVE`
+                // is cleared below either way, so Retry is genuinely armed.
+                mark_provisioning_failed(&err_text);
                 // Order 420: terminal launch failure — auto-capture the
                 // shareable diagnostics bundle and tell the user where it
                 // is, so a remote crash is debuggable with zero live help.
