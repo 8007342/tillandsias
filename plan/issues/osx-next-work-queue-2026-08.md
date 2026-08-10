@@ -22,3 +22,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-10T08:55Z  (frag)    648-dvzd ask#3 ANSWERED: 606-9wqd runtime repro CONCLUSIVE on this guest (controls 200; mirror dual-home = unrestricted internet; enclave isolation airtight) — unblocks 451 release-blocker-v0.5
 - 2026-08-10T19:20Z  (frag)    657-* filed: five Apple Silicon experts packets (Metal sidecar flagship 657-s6g8, i8mm guest unlock 657-3mq5, aarch64 llama-server variant, VZ resource policy, accel-probe truthfulness) — grounded in 3-scout research + 401 baseline
 - 2026-08-10T20:35Z  (frag)    663-acdw filed (github-login guest preflight wedge — blocks unattended re-seed + 349) + 663-69kp (unbounded one-shot boot hang after interrupted teardown); both hit repeatedly tonight
+- 2026-08-10T22:20Z  (frag)    657-3mq5 slice 1: guest has i8mm+SME2 (M4-class); native llama.cpp build (65s) benches 190 tok/s tg / 1194 t/s pp on qwen0.5b Q4_0 — ~3.65x the ollama baseline
