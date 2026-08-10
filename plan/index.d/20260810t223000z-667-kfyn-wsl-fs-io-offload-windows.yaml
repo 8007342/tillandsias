@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: windows-20260810t223000z
+packets:
+  - packet_id: wsl2-builder-distro-native-source-mirror
+    order: 667-kfyn
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "with-wsl2-builder: mirror the checkout into the build distro's ext4 filesystem so cargo source I/O stops crossing 9p onto NTFS"
+    kind: optimization
+    deliverable: scripts/with-wsl2-builder.sh
+    depends_on: []
+    pickup_role: windows
+    capability_tags: [windows, wsl, build, performance, io]
+    context: >
+      Operator field report 2026-08-10: Windows itself pops advisories that
+      "heavy I/O applications like cargo build run better in WSL" — i.e. we
+      are thrashing NTFS. Half the offload already exists: every build
+      re-execs into the tillandsias-build distro and CARGO_TARGET_DIR is
+      distro-native (with-wsl2-builder.sh, default since inception). The
+      residual is the CHECKOUT: it stays at /mnt/c over 9p, so every crate
+      source read, git hook traversal, and build-script probe crosses the
+      slowest bridge onto the most scan-burdened filesystem. This session's
+      post-freeze git hooks hung for minutes on exactly that path. The
+      Windows-native tray (MSVC) build stays on the host by necessity and is
+      out of scope.
+
+      Full analysis and design sketch:
+      plan/issues/windows-build-io-offload-to-wsl-fs-2026-08-10.md
+    exit_criteria:
+      - >
+        with-wsl2-builder.sh maintains a distro-native git mirror of the
+        checkout (/root/.cache/tillandsias-wsl2-src/<repo>), synced per
+        invocation via git fetch from the /mnt/c tree plus dirty-diff and
+        untracked-file replay, and runs the re-exec'd command from the
+        mirror so no per-file build I/O crosses 9p.
+      - >
+        Sync fidelity is verified mechanically (mirror worktree state equals
+        source worktree state) before the build runs; a fidelity mismatch
+        fails loud rather than building a wrong tree.
+      - >
+        An escape hatch (TILLANDSIAS_WSL2_SRC_IN_TREE=1) restores the
+        current /mnt/c behavior, mirroring the existing
+        TILLANDSIAS_WSL2_TARGET_IN_TREE contract.
+      - >
+        Before/after wall time for ./build.sh --check on a Windows host is
+        measured and recorded in the closing event.
+    events:
+      - ts: "2026-08-10T22:30:00Z"
+        event: filed
+        summary: >
+          Filed from the operator's report of Microsoft's own heavy-I/O
+          advisory popups; research confirmed target/ and toolchain are
+          already distro-native, source tree is the remaining 9p/NTFS
+          residual.

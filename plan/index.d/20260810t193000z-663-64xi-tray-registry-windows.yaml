@@ -1,0 +1,107 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: windows-20260810t193000z
+packets:
+  - packet_id: tray-icon-registry-entries-accumulate-and-go-stale
+    order: 663-64xi
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "NotifyIconSettings entries accumulate per path with no cleanup in the portable flow, and the canonical entry's version tooltip is never refreshed"
+    kind: bug
+    deliverable: crates/tillandsias-windows-tray/src
+    depends_on: []
+    pickup_role: windows
+    capability_tags: [windows, tray, installer, registry, ux, portable]
+    context: >
+      OPERATOR FIELD REPORT during the 646-qde5 verification: "there's pollution
+      in Windows Registry, there are multiple tillandsias app (different
+      versions) in Windows Taskbar Settings > Other System Tray Icons, there's
+      two now".
+
+      Confirmed. Windows keys HKCU\Control Panel\NotifyIconSettings BY
+      EXECUTABLE PATH, so every distinct location the tray runs from earns a
+      permanent entry.
+
+      DEFECT 1 - the portable flow has no cleanup path. install-windows.ps1:457
+      already prunes correctly (it removed Desktop and target/release entries
+      during last night's smoke), but that prune runs ONLY inside the installer.
+      621-2re2 made tillandsias-tray.exe a PRIMARY landing-page download meant to
+      be run directly with no installer - so the advertised flow is exactly the
+      one that never prunes. Download to Downloads/, run, move to Tools/, run
+      again: two permanent entries, one pointing at a file that no longer exists,
+      and nothing in the product will ever remove either.
+
+      DEFECT 2 - the canonical entry's tooltip is never refreshed. Measured on
+      this host: registry tooltip says "Tillandsias 0.4.260728.1" (28 July) while
+      the binary at that exact path is 0.4.260810.1 (10 August). Written once at
+      first registration and never updated across every upgrade since. This is
+      what made the list read as "different versions".
+
+      The interaction is the sharp part: prune-on-install plus never-refresh
+      means the ONE entry guaranteed to survive is also the one guaranteed to go
+      stale.
+
+      Full write-up:
+      plan/issues/tray-icon-registry-entries-accumulate-2026-08-10.md
+    exit_criteria:
+      - >
+        The tray prunes at STARTUP, not only at install: on start it drops any
+        other tillandsias-tray.exe NotifyIconSettings entry whose target no
+        longer exists. This covers the portable flow, which the installer cannot.
+      - >
+        The tray writes its InitialTooltip on every start, so the entry tracks
+        the running build rather than the first one ever registered.
+      - >
+        Entries whose target still EXISTS at a different path are left alone - a
+        user may legitimately run a portable build and an installed build, and
+        deleting the other one's entry would be the product removing state it
+        does not own.
+    verifiable_closure: >
+      After running the tray from a temp path and deleting that binary, a
+      subsequent tray start leaves no NotifyIconSettings entry pointing at the
+      deleted path; and the surviving entry's tooltip matches the running
+      version.
+    notes: >
+      Found only because the operator was asked to look at the notification area
+      for 646-qde5 and looked at the Settings list too. No automated check would
+      have surfaced it: the tray works, the icon appears, nothing errors. It is
+      visible only as clutter in a Windows settings page - the kind of thing a
+      headless loop cannot see.
+    events:
+      - ts: "2026-08-10T19:30:00Z"
+        event: filed
+        summary: Operator field report during the 646-qde5 GUI verification.
+
+status:
+  - packet_id: windows-portable-exe-gui-execution-check
+    field: status
+    value: completed
+    ts: "2026-08-10T19:30:00Z"
+    host: windows
+
+events:
+  - packet_id: windows-portable-exe-gui-execution-check
+    event:
+      type: completed
+      ts: "2026-08-10T19:30:00Z"
+      agent_id: windows-20260810t193000z
+      summary: >
+        CLOSED - PASS, on direct operator observation. The question open since
+        621-2re2 is answered: the bare tillandsias-tray.exe alias, run from a
+        directory containing nothing but itself, SHOWS ITS TRAY ICON and flashes
+        no console. It is usable standalone; this is NOT the defect 624-su5r
+        feared.
+
+        Method: the published alias was downloaded to an isolated temp directory,
+        launched, and the operator confirmed the notification-area icon appeared
+        with no console flash. That completes the pair - the CLI surface and
+        self-containment were established headlessly by 644-a3wj, the
+        no-console-flash half had structural evidence (PE subsystem=2 GUI,
+        CREATE_NO_WINDOW on background children), and the icon itself needed a
+        human and now has one.
+
+        The verification also surfaced a defect nothing automated would have
+        found: NotifyIconSettings entries accumulate per path with no cleanup in
+        the portable flow, and the canonical entry's version tooltip is stale by
+        two weeks. Filed as 663-64xi. The test binary's entry was removed after
+        the check rather than left behind.

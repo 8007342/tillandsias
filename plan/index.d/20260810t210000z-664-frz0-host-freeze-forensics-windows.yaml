@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: windows-20260810t210000z
+packets:
+  - packet_id: wedged-vm-start-should-trigger-bounded-shutdown-recovery
+    order: 664-frz0
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    title: "After handshake-budget exhaustion on a FRESH VM start, run the existing bounded wsl --shutdown recovery instead of leaving the wedged utility VM running"
+    kind: enhancement
+    deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+    depends_on: []
+    pickup_role: windows
+    capability_tags: [windows, wsl, resilience, provisioning]
+    context: >
+      Host hard-freeze 2026-08-10 19:28-19:30Z forensics (operator asked
+      "make sure it wasn't us" - it wasn't, see the issue doc): the WSL VM
+      started at 19:13Z, the control wire never connected (hvsocket
+      timeouts through the full bounded backoff), the tray errored cleanly
+      at 19:29:26Z, and the HOST progressively froze around the same
+      window. No memory exhaustion, disk, WHEA, or GPU events - a
+      Hyper-V/WSL2 platform-layer hang with our VM start as context. The
+      wedged VM sat unreachable ~15 min while the host sickened. The tray
+      already owns perform_wsl_shutdown_recovery (148a9076, bounded 60s,
+      kill_on_drop); invoking it once on the fresh-start
+      handshake-exhaustion path costs little and removes a
+      wedged-from-boot VM that has no value alive.
+
+      Full forensics:
+      plan/issues/host-freeze-during-vm-start-forensics-2026-08-10.md
+    exit_criteria:
+      - >
+        The provisioning failure path that today ends at "control-wire
+        handshake did not succeed within budget" on a FRESH VM start
+        additionally invokes the existing bounded shutdown recovery
+        exactly once, with the outcome logged.
+      - >
+        The recovery is NOT invoked when the handshake failure follows a
+        previously-healthy wire (that is the keepalive supervisor's
+        domain, already bounded).
+    events:
+      - ts: "2026-08-10T21:00:00Z"
+        event: filed
+        summary: >
+          Filed from the host-freeze forensics; operator-requested
+          investigation concluded platform-layer hang, tray exonerated,
+          this is the one cheap hardening the evidence supports.
