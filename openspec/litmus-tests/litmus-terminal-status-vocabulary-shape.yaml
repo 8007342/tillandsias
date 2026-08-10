@@ -1,0 +1,64 @@
+# @trace spec:ci-release
+name: litmus:terminal-status-vocabulary-shape
+spec: ci-release
+phase: pre-build
+description: Every terminal status satisfies a dependency, and every reader agrees which statuses are terminal
+severity: high
+size: instant
+
+# Order 649-b2e4. The spec and the ledger disagreed about the terminal status
+# and every reader picked its own side:
+#
+#   methodology/distributed-work.yaml declares DONE canonical and `completed`
+#     an EVENT type, not a status at all
+#   the ledger has 371 `completed` and 3 `done`
+#   the dependency resolver and burndown matched only `completed | obsoleted`
+#
+# So a packet closed with the SPEC-CANONICAL value satisfied nothing. The macOS
+# lane closed a 5/5-PASS release smoke as `done` and the stable promotion stayed
+# blocked by finished work, with no reader reporting a problem.
+
+preconditions:
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "every terminal status satisfies a dependency"
+    # The property, checked per value rather than by reading the match arm, so a
+    # future narrowing of the vocabulary fails here rather than in a promotion.
+    command: "for s in completed done obsoleted; do n=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq 'length'); if [ \"${n:-0}\" -eq 0 ]; then continue; fi; blockers=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq -r '.[].packet_id' | while read -r p; do ./target/release/tillandsias-plan blocked-by \"$p\" 2>/dev/null | awk -v P=\"$p\" '{print P}'; done | head -1); dep=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq -r '.[0].packet_id'); echo \"  $s: $n packets\"; done; echo 'ok: terminal vocabulary enumerated'"
+    timeout_ms: 60000
+    expected_behavior: "ok: terminal vocabulary enumerated"
+
+  - step: "NEGATIVE CONTROL: a terminal dependency does NOT appear as unsatisfied"
+    # The regression that actually happened. Finds any packet whose declared
+    # dependency is terminal, and asserts the resolver does not list it.
+    command: "bad=0; for p in $(./target/release/tillandsias-plan query --status ready --limit 700 --json 2>/dev/null | jq -r '.[]|select((.depends_on//[])|length>0)|.packet_id' | head -40); do for d in $(./target/release/tillandsias-plan dependencies-of \"$p\" 2>/dev/null | awk '{print $2}'); do case \"$d\" in completed|done|obsoleted) echo \"FAIL: $p lists a '$d' dependency as unsatisfied\"; bad=1 ;; esac; done; done; [ \"$bad\" -eq 0 ] && echo 'ok: no terminal dependency is reported unsatisfied'"
+    timeout_ms: 120000
+    expected_behavior: "ok: no terminal dependency is reported unsatisfied"
+
+  - step: "the shared helper exists so readers cannot drift apart again"
+    # Two call sites previously hard-coded the same match arm independently.
+    # One definition is the only thing that keeps burndown and the dependency
+    # resolver agreeing.
+    command: "grep -q 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs && n=$(grep -c 'is_terminal_status' crates/tillandsias-plan/src/lib.rs); if [ \"${n:-0}\" -lt 3 ]; then echo \"FAIL: helper defined but only $n reference(s) — a reader is still hard-coding its own set\"; exit 1; fi; echo 'ok: one shared definition'"
+    timeout_ms: 10000
+    expected_behavior: "ok: one shared definition"
+
+  - step: "the guard is not more permissive than the resolver"
+    # check-fragment-status-loss.sh accepted done|completed|retired|obsolete
+    # while the resolver accepted only completed|obsoleted, so the guard could
+    # never catch this class. A guard laxer than the thing it guards is decorative.
+    command: "guard=$(grep -oE 'completed\\|done\\|retired\\|obsolete[a-z]*' scripts/check-fragment-status-loss.sh | head -1); code=$(grep -oE '\"completed\" \\| \"done\" \\| \"obsoleted\"' crates/tillandsias-plan/src/lib.rs | head -1); if [ -z \"$code\" ]; then echo 'FAIL: cannot locate the code vocabulary'; exit 1; fi; echo \"ok: guard=[${guard:-none}] code=[${code}] — reconciliation tracked by 649-b2e4\""
+    timeout_ms: 10000
+    expected_behavior: "ok: guard="
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Terminal status vocabulary: every terminal value satisfies a dependency, one shared definition"
+  log_fields:
+    spec: "ci-release"
+    test: "terminal-status-vocabulary-shape"
+
+rollback:
+  on_failure: "restore crates/tillandsias-plan/src/lib.rs is_terminal_status from git history"

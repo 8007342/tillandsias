@@ -157,11 +157,38 @@ pub fn count_release(ledger: &Ledger, release: &str) -> (u64, u64) {
         }
         total += 1;
         let status = str_field(packet, "status").unwrap_or("");
-        if !matches!(status, "completed" | "obsoleted") {
+        if !is_terminal_status(status) {
             open += 1;
         }
     }
     (open, total)
+}
+
+/// Is this status terminal — i.e. does it satisfy a dependency and count as
+/// closed for burndown?
+///
+/// ORDER 649-b2e4. THE SPEC AND THE LEDGER DISAGREE, and this function is
+/// deliberately the UNION of both rather than a ruling for either.
+///
+/// methodology/distributed-work.yaml -> status_transition_protocol declares the
+/// canonical statuses as pending/ready/claimed/in_progress/blocked/stalled/
+/// DONE/failed. `completed` is documented there as an EVENT TYPE whose effect is
+/// "changes status to done" — it is not a declared status at all. The ledger does
+/// the opposite: 371 packets are `completed` and 3 are `done`.
+///
+/// Both readers previously matched only `completed | obsoleted`, so a packet
+/// recorded with the SPEC-CANONICAL value silently failed to satisfy anything. It
+/// was not hypothetical: the macOS lane closed a 5/5-PASS release smoke as `done`
+/// and the stable promotion stayed blocked by finished work.
+///
+/// Accepting the union is the safe direction. Every value here is documented or
+/// overwhelmingly practised as terminal, so widening can only stop CORRECTLY
+/// finished work from blocking; it cannot unblock anything that is genuinely
+/// open. Narrowing to one value would invalidate either 371 packets or the
+/// methodology, and that is an operator decision, not a refactor — tracked by
+/// 649-b2e4.
+pub fn is_terminal_status(status: &str) -> bool {
+    matches!(status, "completed" | "done" | "obsoleted")
 }
 
 impl Ledger {
@@ -493,7 +520,7 @@ impl Ledger {
                 // fabricate a row when a malformed live ledger slips through.
                 continue;
             };
-            if matches!(str_field(packet, "status"), Some("completed" | "obsoleted")) {
+            if str_field(packet, "status").is_some_and(is_terminal_status) {
                 continue;
             }
             result.push(packet);

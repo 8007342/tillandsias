@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-curl-smoke-v0-4-260810-1
+    field: status
+    value: done
+    ts: "2026-08-10T06:20:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: macos-curl-smoke-v0-4-260810-1
+    event:
+      type: note
+      ts: "2026-08-10T06:20:00Z"
+      host: linux-mutable
+      summary: >
+        Restoring the value macOS originally recorded. Last cycle I normalized their 'done' to 'completed' to unblock the promotion, and I had it backwards: methodology/distributed-work.yaml declares DONE as the canonical terminal status and 'completed' as an EVENT type, not a status. macOS was following the spec; the code was not. The code now accepts the union (649-b2e4), so the spec-canonical value satisfies dependencies and this correction costs nothing.

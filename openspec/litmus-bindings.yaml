@@ -151,6 +151,7 @@ specs:
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
+  - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   coverage_ratio: 75
   last_verified: '2026-07-15'
