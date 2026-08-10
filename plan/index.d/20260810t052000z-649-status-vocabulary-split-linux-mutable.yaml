@@ -1,0 +1,79 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t052000z
+packets:
+
+  - packet_id: terminal-status-vocabulary-is-split
+    order: 649-b2e4
+    status: ready
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    priority: p1
+    title: "Only `completed` satisfies a dependency; `done`, `implemented` and `obsoleted` silently do not"
+    kind: bug
+    deliverable: crates/tillandsias-plan/src/
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [plan, ledger, dependencies, data-integrity]
+    context: >
+      Found live, blocking a release promotion.
+
+      macOS completed 644-7w89 (the v0.4.260810.1 curl smoke, 5/5 PASS with an evidence
+      file) and recorded it as `status: done`. Reasonable word, correctly written through
+      the LWW channel, and accepted as terminal by
+      scripts/check-fragment-status-loss.sh. The dependency resolver does not accept it:
+      `dependencies-of 644-pnsp` continued to list 644-7w89 as an UNSATISFIED
+      prerequisite, so the stable promotion stayed blocked by work that was finished.
+
+      Measured vocabulary across 645 packets:
+
+        completed  368     satisfies dependencies
+        ready      229
+        pending     27
+        in_progress 12
+        done         3     does NOT satisfy
+        obsoleted    2     does NOT satisfy
+        implemented  2     does NOT satisfy
+        needs_clarification 2
+        blocked      2
+
+      Confirmed by contrast: `dependencies-of 619-pfsj` is EMPTY (its prerequisites are
+      `completed`), while 644-pnsp's `done` prerequisite was listed. Same shape, different
+      word, opposite outcome.
+
+      This is the same family as 632-39p3 (`query --role` and `next` disagreeing about
+      eligibility) and 635-i6vm (a status write the fold discarded): two readers of one
+      ledger disagreeing, with the disagreement invisible from either side. Here it is
+      worse in one respect — check-fragment-status-loss.sh accepts `done|completed|
+      retired|obsolete` as terminal, so the GUARD is MORE permissive than the resolver and
+      can never flag this.
+    exit_criteria:
+      - >
+        Decide the terminal vocabulary: one canonical value with the others rejected at
+        write time, or a recognised set that EVERY reader shares. Either is defensible;
+        having each reader use its own set is not.
+      - >
+        Whatever is chosen, `set-field` refuses a status outside the vocabulary rather than
+        writing it. A word that parses but means nothing to the resolver is the defect.
+      - >
+        check-fragment-status-loss.sh and the dependency resolver are aligned in the same
+        pass. A guard more permissive than the thing it guards cannot catch this class.
+      - A litmus with a negative control: a dependency in each terminal status unblocks its dependant.
+    verifiable_closure: >
+      For every terminal status in the vocabulary, a packet in that status is absent from
+      `dependencies-of` for anything depending on it; and a status outside the vocabulary
+      is refused at write time.
+    notes: >
+      IMMEDIATE DAMAGE WAS ONE PACKET, already repaired: 644-7w89 normalized `done` ->
+      `completed`, which unblocked 644-pnsp. That was a WORD change, not a re-verdict —
+      macOS's 5/5 PASS stands exactly as recorded.
+
+      The other five are latent: 627-sgtt (`implemented`) blocks only 627-wtrp, itself
+      `implemented`, so those chains are self-consistent and nothing live is waiting on
+      them. Latent, not harmless — the next packet to depend on one of them inherits an
+      invisible block.
+    events:
+      - ts: "2026-08-10T05:20:00Z"
+        event: filed
+        summary: >
+          Found while checking why the stable promotion was still gated after macOS
+          returned 5/5 PASS. The work was done; the word was wrong; nothing said so.
