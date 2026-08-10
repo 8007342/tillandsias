@@ -1,0 +1,56 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t102000z
+events:
+  - packet_id: authenticated-forge-write-transport-impl
+    event:
+      type: progress
+      ts: "2026-08-10T10:20:00Z"
+      agent_id: linux-mutable-20260810t102000z
+      host: linux
+      summary: >
+        The v0.5 release blocker went from FIVE unsatisfied dependencies to FOUR:
+        git-mirror-egress-network-spec-drift (606-9wqd) closed on all four criteria
+        this morning. Remaining:
+
+          322      ready    mirror-authenticated-push-transport
+          579      ready    mirror-repo-config-hardening-never-reaches-existing-volumes
+          606-bvnp ready    git-mirror-cross-project-service-identity            p0
+          610-txvr pending  git-mirror-pre-receive-native-validation-relay-gap   p0
+
+        COORDINATION FACT worth stating plainly: all four are pickup_role=linux. The
+        v0.5 release blocker's entire critical path sits on this host. macOS and
+        Windows cannot shorten it no matter how many cycles they run, so their queues
+        should stay pointed at the rest of v0.5 rather than at 451 — which is what the
+        selector is already doing (56 and 61 eligible respectively, 5 epics each).
+
+        Three of the four are ready and unblocked; only 610-txvr is pending. This host
+        should drain 606-bvnp and 610-txvr next, as the two p0s on the path.
+
+  - packet_id: route-mirror-and-login-egress-through-the-proxy-chokepoint
+    event:
+      type: progress
+      ts: "2026-08-10T10:20:00Z"
+      agent_id: linux-mutable-20260810t102000z
+      host: linux
+      summary: >
+        CRITERION 4 (parity + credential isolation) verified, so 606-9wqd could close
+        and this packet now carries only the run_provider_login site.
+
+        From a container on tillandsias-enclave ONLY, through the proxy:
+          - authenticated `git ls-remote` returned the real linux-next SHA
+          - `git fetch --depth=1` succeeded
+          - `git push --dry-run` completed a full auth + ref negotiation:
+            "* [new branch]  HEAD -> probe-never-created", exit 0
+
+        NO MUTATION, verified rather than asserted: `git ls-remote origin
+        refs/heads/probe-never-created` returns 0 refs. --dry-run was chosen precisely
+        so the credentialed path could be exercised without touching the remote.
+
+        Credential isolation holds BY CONSTRUCTION, which is the part worth recording:
+        squid's ssl_bump peeks at step 1, bumps ONLY release-assets.githubusercontent.com,
+        and splices everything else. github.com is therefore tunneled end-to-end and the
+        proxy never sees the token. Routing the mirror through the chokepoint does not
+        expose credentials to it.
+
+        Remaining here: run_provider_login (main.rs:7518, :7554), deferred one more
+        cycle while macOS 349 still needs its one interactive login.

@@ -31125,6 +31125,12 @@ plan_index:
 
       events:
         - type: verified
+          ts: "2026-08-10T10:12:42Z"
+          agent_id: "unknown"
+          host: linux
+          summary: >
+            CRITERION 4 VERIFIED — credential parity through the proxy from an enclave-only container. Authenticated ls-remote returned the real linux-next SHA; a depth-1 fetch succeeded; and git push --dry-run completed a full auth + ref negotiation ('* [new branch]', exit 0). Confirmed no mutation: the remote has 0 refs matching the probe name. Credential isolation holds by construction — squid's ssl_bump splices everything except release-assets.githubusercontent.com, so github.com traffic is tunneled and the proxy never sees the token. All four criteria are now closed: spec/impl divergence established (two hosts), criterion 2 chosen and implemented, criterion 3 explicitly unnecessary, parity proven. run_provider_login remains dual-homed and is tracked in 654-7ur4 per this audit's own residual note.
+        - type: verified
           ts: "2026-08-10T08:14:46Z"
           agent_id: "unknown"
           host: linux
