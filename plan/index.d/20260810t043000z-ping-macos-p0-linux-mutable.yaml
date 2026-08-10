@@ -1,0 +1,41 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t043000z
+#
+# A PING under methodology/distributed-work.yaml -> ping_and_triage_protocol
+# ("if a ready item has not been claimed for one integration cycle, append a
+# ping note to its Events section with why it matters and what it unlocks").
+#
+# Hand-authored because `tillandsias-plan append-event` refuses this packet:
+# it locates packets by their item prefix in plan/index.yaml and 644-7w89 lives
+# only in a fragment (600-c266). Hand-authoring an EVENT is safe — events are a
+# G-Set, so this merges. A STATUS change would not be, and must still go through
+# `set-field` (636-9m79). This is 600-c266 biting in exactly the documented way.
+events:
+  - packet_id: macos-curl-smoke-v0-4-260810-1
+    event:
+      type: note
+      ts: "2026-08-10T04:30:00Z"
+      agent_id: linux-mutable-20260810t043000z
+      host: linux_mutable
+      summary: >
+        PING — ready and unclaimed for several integration cycles.
+
+        WHY IT MATTERS: this is the p0 the operator cut v0.4.260810.1 for —
+        "then the other hosts will be able to do a curl e2e smoke test".
+
+        WHAT IT UNLOCKS: 644-pnsp, the stable promotion. That packet depends on
+        BOTH sibling smokes and requires `promote-stable.sh` to run WITHOUT
+        --force. The stable channel currently serves v0.4.260809.2, promoted by
+        operator override with no e2e evidence; this is the chance to SATISFY
+        that gate instead of bypassing it a second time.
+
+        STATE OF THE OTHER LANE: Windows delivered its headless half (624-su5r —
+        623-iwq4 confirmed fixed in the field, byte-level framing green across
+        latest / v0.4.260810.1 / unstable) and split the GUI half to 646-qde5.
+        macOS is therefore the remaining blocker on the promotion.
+
+        NOT a reclaim and NOT a reassignment — the packet stays macos-owned and
+        its lease is untouched. This host has no way to trigger a sibling; the
+        ledger is the only channel between us. The previous macOS silence of
+        this length turned out to be a deep drain that returned 624-q4jj at 5/5
+        PASS, so silence here is not evidence of a stall.
