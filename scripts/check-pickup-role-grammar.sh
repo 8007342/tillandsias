@@ -165,14 +165,33 @@ SEQ_WORDS='later|verif|replicate|support|afterward|follow|then'
 # will hand this packet to. Single-host prose ("macOS host (needs a live Darwin
 # probe)") is untidy but routes correctly, so it is not counted here — this
 # number is damage, not style.
+# BUILTINS, NOT SPAWNS (order 661-2wsz sibling, windows host 2026-08-10).
+#
+# This loop originally ran `printf | grep` several times per value: a canonical
+# check, one presence test per host, then position and claim passes. Across 626
+# values that is well over a thousand processes, and on Windows the checker took
+# **100,128 ms** — blowing this litmus's own 60s step timeout the moment the test
+# was bound and actually executed.
+#
+# The irony is worth recording: this is the same one-spawn-per-item pattern I had
+# just fixed in scripts/freshness-inventory.sh an hour earlier (126.8s -> 4.7s).
+# I fixed it in someone else's script and shipped it in my own, because until
+# this test was bound nothing ever ran it and the cost was invisible.
+#
+# `shopt -s nocasematch` makes `[[ ]]` case-insensitive, so every one of those
+# tests becomes a shell builtin with no process at all. The only remaining spawn
+# is one `tr` per MULTI-LANE value — 4 of 626 — where a byte position is needed.
+# Available on bash 3.2 (macOS), which this script must run on.
+shopt -s nocasematch
+
 while IFS= read -r v; do
     [ -n "$v" ] || continue
-    printf '%s' "$v" | grep -qEi "^($CANON)$" && continue
+    [[ "$v" =~ ^($CANON)$ ]] && continue
 
     owner=""
     extra=""
     for h in $HOSTS; do
-        if printf '%s' "$v" | grep -qi "$h"; then
+        if [[ "$v" == *"$h"* ]]; then
             if [ -z "$owner" ]; then
                 # Earliest-appearing host token is the declared owner.
                 owner="$h"
@@ -184,19 +203,26 @@ while IFS= read -r v; do
 
     # Re-derive the owner by position, not by $HOSTS iteration order.
     if [ -n "$extra" ]; then
+        # One lowercase copy so prefix-stripping can find the byte offset
+        # case-insensitively; ${v,,} is bash 4+ and macOS ships 3.2.
+        lower="$(printf '%s' "$v" | tr '[:upper:]' '[:lower:]')"
         first_pos=999999
         for h in $HOSTS; do
-            p="$(printf '%s' "$v" | grep -oib "$h" 2>/dev/null | head -1 | cut -d: -f1)"
-            [ -n "$p" ] || continue
-            if [ "$p" -lt "$first_pos" ]; then first_pos="$p"; owner="$h"; fi
+            case "$lower" in
+                *"$h"*)
+                    prefix="${lower%%"$h"*}"
+                    p="${#prefix}"
+                    if [ "$p" -lt "$first_pos" ]; then first_pos="$p"; owner="$h"; fi
+                    ;;
+            esac
         done
         claim=""
         for h in $HOSTS; do
             [ "$h" = "$owner" ] && continue
-            printf '%s' "$v" | grep -qi "$h" && claim="${claim:+$claim,}$h"
+            [[ "$v" == *"$h"* ]] && claim="${claim:+$claim,}$h"
         done
         multi_host=$((multi_host + 1))
-        if printf '%s' "$v" | grep -qEi "$SEQ_WORDS"; then
+        if [[ "$v" =~ ($SEQ_WORDS) ]]; then
             sequenced=$((sequenced + 1))
             kind="sequenced"
         else
