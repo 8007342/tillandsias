@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t092000z
+packets:
+
+  - packet_id: proxy-ca-key-bind-mount-fallback-does-not-chown
+    order: 657-vqxz
+    status: ready
+    desired_release: v0.5
+    release_target: socket-audit-master
+    priority: p3
+    title: "QUESTION: the proxy image's bind-mount CA fallback never chowns the key, unlike the secret path"
+    kind: question
+    deliverable: images/proxy/entrypoint.sh
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [proxy, squid, tls, permissions]
+    context: >
+      Observed while standing up a probe proxy for the 606-9wqd criterion-2 test:
+      squid refused to start with `FATAL: No valid signing certificate configured
+      for HTTP_port [::]:3128` while the CA key was mode 0600, and started healthy
+      at 0644 with nothing else changed.
+
+      `images/proxy/entrypoint.sh:41-45` chowns the key to `proxy:proxy` on the
+      podman-SECRET path. The bind-mount fallback at `:46-47` only prints "CA key
+      already present" and does not chown or chmod. `build_proxy_run_args`
+      (main.rs:2516) uses bind mounts, not secrets.
+
+      NOT VERIFIED, and this is why it is filed as a question rather than a bug:
+      whether the product path actually hits this depends on the mode
+      `ensure_ca_bundle`'s openssl invocation leaves on the key and on how
+      `--userns=keep-id` maps the owner. This host checked neither. The live stack
+      demonstrably works for the operator, so either the mode is already permissive
+      or the mapping makes it moot.
+    exit_criteria:
+      - >
+        Determine the actual mode `ensure_ca_bundle` leaves on intermediate.key and
+        whether squid can read it under --userns=keep-id.
+      - >
+        If it works only because the CA PRIVATE KEY is world-readable on the host,
+        that is the real finding and outranks the startup failure.
+      - "If the fallback is genuinely unreachable in production, delete it — a fallback nobody takes is untested code that lies about being supported."
+    verifiable_closure: >
+      Either the fallback branch handles ownership like the secret branch, or it is
+      removed, or a comment records why it cannot be reached.
+    notes: >
+      Filed by a host that hit it in a probe, not in the product. Do not treat the
+      startup failure as a confirmed production defect without checking the mode.
+    events:
+      - ts: "2026-08-10T09:20:00Z"
+        event: filed
+        summary: "Side-observation from the criterion-2 runtime test; deliberately scoped as a question."

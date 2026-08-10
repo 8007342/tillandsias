@@ -240,6 +240,69 @@ are unblocked on this host.
 **One sanctioned dual-homing, five unsanctioned runtime sites**, all sharing one
 constant that records no difference between them.
 
+## Criterion 2 tested at runtime — VIABLE. The fallback is not needed.
+
+The remaining open question was whether the proxy chain preserves push semantics,
+or whether an unscoped exception (criterion 3) had to be ratified instead.
+Measured on this host with a probe squid (the real `tillandsias-proxy` image, on
+the spec-sanctioned dual-homed posture) and a client container on
+**`tillandsias-enclave` only — no egress leg** — with `http_proxy=http://proxy:3128`:
+
+| operation from enclave-only, through the proxy | result |
+|---|---|
+| `git ls-remote https://github.com/8007342/tillandsias.git HEAD` | **succeeds, exit 0**, real SHA returned |
+| `https://github.com/` (allowlisted) | **200** |
+| `https://example.com/` (not allowlisted) | **000 — denied** |
+| `https://wikipedia.org/` (not allowlisted) | **000 — denied** |
+| `https://bbc.co.uk/` (not allowlisted) | **000 — denied** |
+
+Two things follow, and together they decide the packet.
+
+**1. The mirror does not need its egress leg.** Its actual operation works through
+the proxy from an enclave-only container. The old note that a proxied attempt
+"failed on clean rootless" described a DNS *resolution* failure, exactly as the
+static audit suspected — not a limitation of proxying git.
+
+**2. Routing through the proxy is not merely spec-compliance.** The proxy's squid
+config carries `acl allowlist dstdomain "/etc/squid/allowlist.txt"` followed by
+`http_access deny all`, and `.github.com` is already on that list (line 108). So
+the chokepoint genuinely enforces destination scoping — the exact property
+`tillandsias-egress` lacks. Moving the mirror behind it converts *"has the
+internet"* into *"has the allowlist"*, which is the scoping criterion 3 would
+otherwise have to build from scratch.
+
+`ssl_bump splice all` (squid.conf:79) means non-release-asset traffic is tunneled
+rather than decrypted, so TLS stays end-to-end and git's credential handling is
+untouched — relevant to criterion 4.
+
+**Recommendation is now a finding: take criterion 2. Criterion 3 is unnecessary.**
+
+### A third invalid control, caught before it became a claim
+
+The first negative control used `gitlab.com` — which is **allowlisted** (line 111).
+It returned a real SHA, which read as *"the proxy does not enforce its allowlist"*,
+a dramatic and completely wrong second finding. It was caught by checking the
+allowlist before writing the claim down, and the controls above were then chosen
+by first verifying their absence from the list.
+
+That is three invalid instruments in three cycles on this one packet (`/dev/tcp`
+against busybox; the proxy-poisoned control; now an allowlisted "control"). The
+pattern is not carelessness about the *result* — it is that a control is only a
+control if you verify the thing it assumes.
+
+### Unverified side-observation: the bind-mount CA fallback needs a readable key
+
+The probe proxy refused to start with `FATAL: No valid signing certificate
+configured` while the CA key was `0600`; the same run succeeded at `0644`. The
+image's entrypoint chowns the key to `proxy:proxy` on the **podman-secret** path
+(`images/proxy/entrypoint.sh:41-45`) but the **bind-mount fallback** branch
+(`:46-47`) only reports "already present" and does not.
+
+`build_proxy_run_args` uses bind mounts, not secrets. Whether the product path is
+actually affected depends on the mode `ensure_ca_bundle`'s openssl invocation
+leaves behind and on `--userns=keep-id` semantics — **neither of which this host
+verified**. Recorded as a question, not a defect: 657-vqxz.
+
 ### The lesson, restated because it recurred one level up
 
 The previous section warned *"verify the instrument, then the control, then
