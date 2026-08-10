@@ -1147,7 +1147,14 @@ const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // through the enclave proxy and fails with "Could not resolve proxy: proxy",
 // breaking GitHub-login token storage and remote-project listing.
 // @trace spec:proxy-container, plan/issues/vault-service-dns-no-proxy-2026-06-27.md
-const ENCLAVE_NO_PROXY_BASE: &str = "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,git-service,tillandsias-git";
+// Order 659-8faj: the retired shared mirror aliases (`git-service`,
+// `tillandsias-git`) are gone, and the per-project mirror name
+// (`git-{project}`) is DELIBERATELY absent: the mirror's only transport is
+// git:// (the git wire protocol), which never consults http_proxy — measured
+// with a black-hole proxy control on 2026-08-10 — and enclave_no_proxy()
+// already appends the whole enclave subnet for IP-addressed traffic.
+const ENCLAVE_NO_PROXY_BASE: &str =
+    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
 
 fn enclave_subnet() -> String {
@@ -2940,6 +2947,26 @@ pub(crate) const GIT_VAULT_TOKEN_SECRET_OPTS: &str =
 /// environment.
 const GIT_VAULT_APPROLE_SECRET_OPTS: &str = "target=vault-approle,uid=1000,gid=1000,mode=0400";
 
+/// Project-unique DNS identity of the per-project git-mirror service.
+///
+/// Returns the sanitized per-project hostname (`git-{project}`) — the same
+/// string `build_git_run_args` sets as the container `--hostname` and
+/// `--network-alias`. Every consumer of the mirror's name (alias assignment,
+/// the `TILLANDSIAS_GIT_SERVICE` injection into forges, the readiness probe,
+/// the generated gitconfig `insteadOf` redirect) derives it HERE, never from
+/// a constant (order 659-8faj: the old constant aliases `git-service` /
+/// `tillandsias-git` gave every project's mirror the same DNS name, so two
+/// simultaneous projects produced two A records for one name and routing
+/// between projects was non-deterministic and cross-project).
+///
+/// The opaque/salted identity upgrade is decided by the SSH-CA design under
+/// 606-bvnp; this function is the single swap point for it.
+///
+/// @trace spec:git-mirror-service
+pub(crate) fn git_mirror_service_identity(project_name: &str) -> String {
+    sanitize_hostname(&format!("git-{project_name}"))
+}
+
 /// Build the podman launch args for the per-project git-mirror container.
 ///
 /// `vault_approle_secret` is the Podman secret holding launch-scoped AppRole
@@ -2970,11 +2997,16 @@ fn build_git_run_args(
         "--name".into(),
         format!("tillandsias-git-{project_name}"),
         "--hostname".into(),
-        sanitize_hostname(&format!("git-{project_name}")),
+        git_mirror_service_identity(project_name),
+        // Order 659-8faj: the DNS identity is PER-PROJECT. The old constant
+        // aliases (`git-service`, `tillandsias-git`) were assigned to EVERY
+        // project's mirror, so with two projects up one name had two A records
+        // and podman's resolver handed out either — cross-project,
+        // non-deterministic routing to a daemon that serves --export-all with
+        // an anonymous write path. Clients receive this exact name via
+        // TILLANDSIAS_GIT_SERVICE; do not reintroduce a shared alias.
         "--network-alias".into(),
-        "git-service".into(),
-        "--network-alias".into(),
-        "tillandsias-git".into(),
+        git_mirror_service_identity(project_name),
         "--network".into(),
         // Order 606-9wqd: enclave-only. The post-receive hook's `git push`
         // already goes through the proxy via proxy_env_args() below — that was
@@ -3369,7 +3401,7 @@ const GIT_MIRROR_SEED_POLL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// Order 452 slice 2: launcher-side git-mirror readiness gate.
 ///
-/// A clone-only forge (order 437) clones `git://tillandsias-git/<project>` the
+/// A clone-only forge (order 437) clones `git://git-<project>/<project>` the
 /// moment its entrypoint runs, but a FRESH mirror volume seeds in a background
 /// sweep — a full-repo fetch from upstream through the proxy that can take
 /// minutes — while the guest's clone backstop only waits ~60s. Block the
@@ -5035,11 +5067,14 @@ fn build_status_check_forge_args(
             "}",
             "echo \"[status-check] running inside forge container\"",
             "check_port proxy 3128 proxy",
-            "check_port git-service 9418 git",
-            "check_inference",
-            "echo \"[status-check] forge online\"",
         ]
-        .join("\n"),
+        .join("\n")
+            // Order 659-8faj: probe the PER-PROJECT mirror identity — the
+            // shared `git-service` alias is no longer assigned to any mirror.
+            + &format!(
+                "\ncheck_port {} 9418 git\ncheck_inference\necho \"[status-check] forge online\"",
+                git_mirror_service_identity(project_name)
+            ),
     ]);
 
     args
@@ -5244,7 +5279,10 @@ fn build_opencode_forge_args(
             // the network-clone branch, so this env only feeds the push-URL
             // redirect, never a re-clone.
             "--env".into(),
-            "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
+            format!(
+                "TILLANDSIAS_GIT_SERVICE={}",
+                git_mirror_service_identity(project_name)
+            ),
         ]);
     } else if forge_uses_host_mount() {
         // Opt-in legacy shared host-mount (TILLANDSIAS_FORGE_HOST_MOUNT=1):
@@ -5272,10 +5310,14 @@ fn build_opencode_forge_args(
         // facade data-loss surface (notmpcopyup mask, index materialisation
         // [425], packed-refs live-mount [432]) is simply not in play. Set the
         // presence flag that selects the network-clone transport in
-        // clone_project_from_mirror.
+        // clone_project_from_mirror. Order 659-8faj: the VALUE is the
+        // per-project mirror identity the guest addresses over git://.
         args.extend([
             "--env".into(),
-            "TILLANDSIAS_GIT_SERVICE=tillandsias-git".into(),
+            format!(
+                "TILLANDSIAS_GIT_SERVICE={}",
+                git_mirror_service_identity(project_name)
+            ),
         ]);
     }
     // Seed-branch pin (order 501, git-branching decision record §5.2, repair
@@ -8022,7 +8064,13 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
 
     if let Some(ref origin) = origin_url {
         config.push('\n');
-        let mirror_url = format!("git://tillandsias-git/{}", project_name);
+        // Order 659-8faj: redirect to the PER-PROJECT mirror identity — the
+        // shared `tillandsias-git` alias is no longer assigned to any mirror.
+        let mirror_url = format!(
+            "git://{}/{}",
+            git_mirror_service_identity(project_name),
+            project_name
+        );
         config.push_str(&format!("[url \"{}\"]\n", mirror_url));
         config.push_str(&format!("\tinsteadOf = {}\n", origin));
         // If origin is an SSH-style URL, also redirect its HTTPS equivalent
@@ -11394,7 +11442,11 @@ fn build_forge_agent_run_args_with_vault(
     spec = if host_mount {
         spec.env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
     } else {
-        spec.env("TILLANDSIAS_GIT_SERVICE", "tillandsias-git")
+        // Order 659-8faj: per-project mirror identity, not a shared constant.
+        spec.env(
+            "TILLANDSIAS_GIT_SERVICE",
+            git_mirror_service_identity(project_name),
+        )
     };
     // Seed-branch pin (order 501, repair B6): same sticky-HEAD repair as
     // build_opencode_forge_args — see the full rationale there. Injected on
@@ -14723,7 +14775,11 @@ mod tests {
         }
         assert_eq!(enclave_subnet(), "10.77.0.0/24");
         let no_proxy = enclave_no_proxy();
-        assert!(no_proxy.contains("tillandsias-git"));
+        // Order 659-8faj: the retired shared mirror aliases must NOT come
+        // back — the mirror has per-project DNS identity and its git://
+        // transport never consults the proxy env anyway.
+        assert!(!no_proxy.contains("tillandsias-git"));
+        assert!(!no_proxy.contains("git-service"));
         assert!(no_proxy.ends_with("10.77.0.0/24"));
         unsafe {
             std::env::remove_var(ENCLAVE_SUBNET_ENV);
@@ -16583,6 +16639,46 @@ mod tests {
         assert!(has_arg(&args, "PROJECT=alpha"));
     }
 
+    /// Order 659-8faj: each mirror's DNS identity is project-unique. The old
+    /// constant aliases gave EVERY project's mirror the same name, so two
+    /// simultaneous projects produced two A records for one name and clients
+    /// routed cross-project non-deterministically.
+    #[test]
+    fn git_run_args_assign_per_project_dns_identity_never_shared_aliases() {
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+
+        // Hostname and network alias are the SAME per-project identity.
+        assert!(
+            has_arg(&args, "git-alpha"),
+            "expected per-project identity git-alpha in args: {args:?}"
+        );
+        let alias_values: Vec<&String> = args
+            .iter()
+            .zip(args.iter().skip(1))
+            .filter(|(flag, _)| flag.as_str() == "--network-alias")
+            .map(|(_, value)| value)
+            .collect();
+        assert_eq!(
+            alias_values,
+            vec!["git-alpha"],
+            "exactly one per-project network alias: {args:?}"
+        );
+
+        // The retired shared aliases must never be assigned again.
+        assert!(
+            !has_arg(&args, "git-service") && !has_arg(&args, "tillandsias-git"),
+            "shared aliases git-service/tillandsias-git are retired (659-8faj): {args:?}"
+        );
+
+        // Sanitization flows through the single derivation point.
+        assert_eq!(git_mirror_service_identity("alpha"), "git-alpha");
+        assert_eq!(
+            git_mirror_service_identity("has_underscore"),
+            "git-has-underscore"
+        );
+    }
+
     #[test]
     fn git_run_args_forward_project_remote_url_when_present() {
         let certs = PathBuf::from("/tmp/ca");
@@ -16742,8 +16838,15 @@ mod tests {
             args.iter()
                 .any(|arg| arg.contains("check_port proxy 3128 proxy"))
         );
+        // Order 659-8faj: the probe must target the per-project mirror
+        // identity — the shared `git-service` alias no longer resolves.
         assert!(
             args.iter()
+                .any(|arg| arg.contains("check_port git-alpha 9418 git"))
+        );
+        assert!(
+            !args
+                .iter()
                 .any(|arg| arg.contains("check_port git-service 9418 git"))
         );
         assert!(args.iter().any(|arg| arg.contains("check_inference")));
@@ -17774,7 +17877,7 @@ esac
         // Order 437: clone-only by default — no host-checkout mount; the mirror
         // presence flag selects the network clone.
         assert!(!has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
-        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
+        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=git-alpha"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
@@ -17808,7 +17911,7 @@ esac
         assert!(has_arg(&argv, "TILLANDSIAS_PROJECT=alpha"));
         // Order 437: clone-only by default.
         assert!(!has_arg(&argv, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
-        assert!(has_arg(&argv, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
+        assert!(has_arg(&argv, "TILLANDSIAS_GIT_SERVICE=git-alpha"));
     }
 
     #[test]
@@ -18023,7 +18126,7 @@ esac
         // Order 437: clone-only by default — no host-checkout mount; the mirror
         // presence flag selects the network clone.
         assert!(!has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
-        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=tillandsias-git"));
+        assert!(has_arg(&args, "TILLANDSIAS_GIT_SERVICE=git-alpha"));
         assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
@@ -18219,8 +18322,9 @@ esac
             "config must contain mirror redirect for origin URL"
         );
         assert!(
-            contents.contains("[url \"git://tillandsias-git/test-project\"]"),
-            "config must contain project-specific url.insteadOf section for mirror"
+            contents.contains("[url \"git://git-test-project/test-project\"]"),
+            "config must contain project-specific url.insteadOf section for mirror \
+             (order 659-8faj: per-project identity, not the retired shared alias)"
         );
         assert!(
             contents.contains("helper ="),
@@ -18895,8 +18999,10 @@ esac
              forge_uses_host_mount() branch"
         );
         assert!(
-            window.contains("TILLANDSIAS_GIT_SERVICE=tillandsias-git"),
-            "clone-only default must set the mirror network-clone presence flag"
+            window.contains("TILLANDSIAS_GIT_SERVICE={}")
+                && window.contains("git_mirror_service_identity(project_name)"),
+            "clone-only default must set the mirror network-clone presence flag \
+             to the per-project identity (order 659-8faj)"
         );
     }
 
