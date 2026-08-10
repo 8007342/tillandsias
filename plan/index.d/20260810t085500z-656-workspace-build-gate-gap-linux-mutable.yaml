@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t085500z
+packets:
+
+  - packet_id: no-lane-gate-builds-the-workspace-for-other-targets
+    order: 656-spux
+    status: ready
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    priority: p2
+    title: "A cross-platform build break passes every host's gate, because no gate builds the workspace for another target"
+    kind: bug
+    deliverable: build.sh / scripts/local-ci.sh cross-target check
+    depends_on: []
+    pickup_role: any
+    capability_tags: [ci, cross-platform, build-gate, cfg]
+    context: >
+      The Windows host found (653-7rag) that `tillandsias-headless` did not COMPILE on
+      Windows: `enumerate_cpu` declared two bindings and assigned them only under
+      `cfg(target_os = "linux")` and a macOS arm, with no arm for anything else.
+      `cargo build --workspace` — the most ordinary command in a Rust repo — hard-errored
+      in a crate the contributor never touched.
+
+      The code defect is fixed. The gate gap is not, and it is the durable half:
+
+      1. `./build.sh --check` PASSES on the broken tree. It validates the plan ledger,
+         traces and YAML; it does not build the workspace. So nothing in the normal
+         push path on any host reports a cross-platform break.
+      2. Each host only ever compiles for ITSELF, so platform-gated code is verified by
+         exactly the platform that cannot exercise the other arms.
+
+      Together those mean a cfg-gated defect is invisible from the host most likely to
+      introduce it. The originating commit (bd8a47d1) says so in its own message: a
+      Linux host repairing macOS-only lints. Fixing one arm and leaving no fallback is
+      unobservable from both Linux and macOS, and it reached Windows.
+
+      This host verified the FIX against the real x86_64-pc-windows-gnu target with a
+      negative control, which proves the check is cheap and available — the target was
+      already installed. Nothing was stopping the gate from doing it except that nobody
+      had asked it to.
+    exit_criteria:
+      - >
+        At least a `cargo check --workspace --target <one non-host target>` in the local
+        gate. `x86_64-pc-windows-gnu` was already installed on this Linux host, so the
+        marginal cost is compile time, not toolchain setup.
+      - >
+        If full-crate cross-check is blocked by native deps (it is: `ring`'s build script
+        needs a Windows C toolchain), gate the property that is checkable — cfg-arm
+        exhaustiveness — rather than skipping the check entirely and calling it green.
+      - >
+        A negative control: a deliberately removed cfg arm must fail the new gate.
+    verifiable_closure: >
+      Reintroducing 653-7rag's exact defect fails a gate on a Linux host, without a
+      Windows machine in the loop.
+    notes: >
+      Scope question the Windows report raised honestly and did not presume the answer
+      to: `tillandsias-headless` runs in the WSL guest and is injected as a prebuilt
+      binary, so it is fair to ask whether Windows must build it at all. Either answer
+      closes this packet — make it build everywhere, or exclude it from the Windows
+      workspace build deliberately and say so. What is not acceptable is the current
+      state, where the boundary exists but is undocumented and discovered by hitting it.
+    events:
+      - ts: "2026-08-10T08:55:00Z"
+        event: filed
+        summary: >
+          Split from the Windows host's 653-7rag report. They fixed the finding; this is
+          the reason it was findable only by a human running the wrong command.

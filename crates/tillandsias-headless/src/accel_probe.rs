@@ -222,6 +222,23 @@ fn enumerate_cpu() -> DeviceRecord {
         flags.push("neon".to_string());
     }
 
+    // Every other target (653-7rag). Without this arm both bindings are read
+    // uninitialized and the crate fails to COMPILE on Windows — a hard error in
+    // `cargo build --workspace` for a contributor who touched nothing here.
+    //
+    // It survived because the commit that introduced it (bd8a47d1) was a Linux
+    // host repairing platform-gated code that Linux cannot compile, and
+    // `./build.sh --check` does not build the workspace. Both blind spots are
+    // real; this arm removes the failure mode rather than relying on either
+    // being fixed. Reporting fewer facts is correct here — the probe's contract
+    // is "what this host can tell you", and an unknown physical count is a
+    // legitimate answer where no enumeration path exists.
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        logical_cores = num_cpus();
+        physical_cores = logical_cores;
+    }
+
     DeviceRecord {
         device_class: "cpu".to_string(),
         vendor,

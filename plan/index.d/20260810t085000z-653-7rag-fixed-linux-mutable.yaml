@@ -1,0 +1,33 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t085000z
+events:
+  - packet_id: headless-accel-probe-no-fallback-target-arm
+    event:
+      type: completed
+      ts: "2026-08-10T08:50:00Z"
+      agent_id: linux-mutable-20260810t085000z
+      host: linux
+      summary: >
+        Fixed by resolution 1 — the fallback arm the Windows report recommended.
+        `enumerate_cpu` now has a `#[cfg(not(any(target_os = "linux", target_os =
+        "macos")))]` arm assigning both bindings, so the workspace builds on every
+        target.
+
+        VERIFIED on the real x86_64-pc-windows-gnu target rather than reasoned
+        about, because reasoning about platform-gated code from the wrong platform
+        is what caused the defect. A dependency-free reduction of the exact cfg
+        skeleton compiles on x86_64-unknown-linux-gnu, x86_64-pc-windows-gnu and
+        aarch64-apple-darwin; the NEGATIVE CONTROL — the same skeleton with the new
+        arm removed — fails to compile on windows-gnu, so the check is falsifiable.
+
+        STATED LIMIT: the full crate could NOT be cross-checked here. `cargo check
+        -p tillandsias-headless --target x86_64-pc-windows-gnu` dies earlier in
+        `ring`'s build script, which needs a Windows C toolchain this host lacks.
+        So the binding fix is verified and the rest of the crate's Windows
+        compilability is not. Windows host: please confirm `cargo build --workspace`
+        on a real checkout and close the loop.
+
+        The report's second observation stands unaddressed and is the more valuable
+        half — `./build.sh --check` does not build the workspace, so no lane's gate
+        catches a cross-platform build break. That is a gate gap, not a code bug;
+        filed separately as 656-spux.
