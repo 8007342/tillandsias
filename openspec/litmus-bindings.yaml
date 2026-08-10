@@ -932,6 +932,7 @@ specs:
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:windows-tray-architectural-invariants
+  - litmus:no-raw-error-in-status-chip
   - litmus:pty-attach-project-threading-symmetric
   - litmus:installer-wsl-preflight-shape
   coverage_ratio: 100

@@ -437,6 +437,10 @@ check_signal() {
 behavior_matches_output() {
     local output="$1"
     local expected="$2"
+    # Order 661-nm73. The step's EXIT CODE, so a step can succeed by producing
+    # nothing. Optional and defaulting to 0: callers that do not pass it keep the
+    # previous output-only semantics rather than silently changing verdict.
+    local exit_code="${3:-0}"
     # tr, not bash-4+ ${var,,}, so this runs on stock macOS bash 3.2 too.
     local expected_lc
     expected_lc="$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')"
@@ -494,8 +498,40 @@ behavior_matches_output() {
             grep -Eqi 'failed to connect|connection refused|network unreachable|timeout|could not resolve|curl_exit=[1-9]' <<<"$output"
             return $?
             ;;
-        *"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*|*"succeeds"*)
+        # These name a SPECIFIC artefact the step must print, so silence really is
+        # a failure for them. Listed first: `case` takes the first match, and
+        # "shutdown command succeeds" would otherwise fall into the generic
+        # exit-code branch below and stop requiring its output.
+        # "grep succeeds" is a claim about a MATCH, so it means output, not exit
+        # status — a step may chain several greps and end on a non-zero one while
+        # the match it cares about was printed. Listed before the generic
+        # "succeeds" branch, which honours the exit code instead.
+        *"grep succeeds"*|*"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*)
             [[ -n "$output" ]]
+            return $?
+            ;;
+        # Order 661-nm73. A bare "succeeds" is a claim about the step's OUTCOME,
+        # not about it printing something. Requiring non-empty output made ABSENCE
+        # assertions unpassable by construction: the canonical form is a negated
+        # grep (`! grep -E '<forbidden>' file`), which — when the property HOLDS —
+        # matches nothing, prints nothing, and exits 0. Correct behaviour, empty
+        # output, and the runner called it FAIL.
+        #
+        # That punished exactly the tests that check something is NOT there, which
+        # are the negative controls this project relies on. litmus:no-raw-error-in-
+        # status-chip failed this way while the property it asserts was true.
+        #
+        # It honours the EXIT CODE ONLY — deliberately, and `output || exit_code`
+        # was tried first and is wrong. With `! grep`, a VIOLATION prints the
+        # offending lines and exits 1, so any condition that accepts non-empty
+        # output passes the very case the step exists to catch. That is how
+        # litmus:no-raw-error-in-status-chip came to be inverted in BOTH
+        # directions: silent-and-correct read as FAIL, loud-and-violating read as
+        # PASS. Caught by injecting a violation and watching the step stay green.
+        #
+        # "succeeds" is a claim about the outcome. The exit code IS the outcome.
+        *"succeeds"*)
+            [[ "$exit_code" -eq 0 ]]
             return $?
             ;;
         *"path is correctly set"*|*"cargo"*)
@@ -864,7 +900,7 @@ run_litmus_test_file() {
                 printf '%s\n' "         output=${step_output}" >&2
                 return 1
             fi
-        elif ! behavior_matches_output "$step_output" "$step_expected"; then
+        elif ! behavior_matches_output "$step_output" "$step_expected" "$exit_code"; then
             printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
             printf '%s\n' "         expected=${step_expected}" >&2
             printf '%s\n' "         output=${step_output}" >&2
