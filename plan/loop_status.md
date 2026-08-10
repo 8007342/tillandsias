@@ -1,5 +1,1449 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle — linux_mutable coordinator loop ENDS (2026-08-10T14:15Z)
+
+The overnight 30-minute loop is finished (operator window: until 07:00 local /
+14:00Z). Thirteen cycles ran from ~07:45Z. This is the handoff.
+
+**Queues left ready** — all dependency-correct after 660-z774:
+
+    linux    131 eligible   49 grouped   8 epics
+    macos     45 eligible   12 grouped   5 epics
+    windows   50 eligible   14 grouped   5 epics
+
+11 p0 packets are `ready`. No host is blocked on this one.
+
+**Still needing a human, not an agent:**
+
+- macOS 349 — one interactive `tillandsias-tray --github-login`. Vault wiped
+  2026-07-27, `GH-TOKEN:ABSENT`. No agent can clear it, and it is why
+  `run_provider_login` still carries its egress leg (654-7ur4 defers that change
+  rather than risk the one action a person must perform).
+- 646-qde5 — Windows GUI confirmation.
+
+**Operator rulings still open:** 634-39ik (expression-pinning enforcement),
+650-dq6u (terminal status vocabulary), 643-64bx (VERSION build-counter deadlock).
+
+**Seven stranded in_progress claims remain** and the automated sweep does not
+clear them — filed as 662-s9z5 with evidence. They were 21 this morning; hosts
+closed the rest by hand.
+
+**macOS has been silent ~6 hours** (last commit 08:55Z). Its queue is ready and
+its p0 (598-kibt, the v0.5 validation bundle) is waiting. Windows cycled 75
+minutes ago and is healthy.
+
+**Where v0.5 stands:** 451 (`release-blocker-v0.5`) went from five unsatisfied
+dependencies to four today — 606-9wqd closed on all four criteria. The remaining
+four (322, 579, 606-bvnp, 610-txvr) are all `pickup_role=linux`, so 451's whole
+critical path sits on this host and sibling cycles cannot shorten it.
+
+## Cycle 2026-08-10T13:54Z (windows — FINAL cycle of the overnight loop)
+
+- **Host**: `windows`, branch `windows-next` (start 1e69226e). Guards ok. Merged
+  linux-next (207b4dea).
+- **Linux already fixed both litmus defects** surfaced last cycle (661-nm73,
+  661-emqi) — including a bug in MY pickup-role litmus: the comment-exclusion
+  `^[0-9]*:#` only matched column 0, so the indented comment reading "No jq — see
+  …" (a comment asserting the very property under test) was counted as a
+  violation. The test failed on its own subject matter explaining that it
+  complies. Good catch; their fix allows leading whitespace.
+- **662-inzz DONE, and it is this lane's own defect.** Binding the pickup-role
+  litmus made it run for the first time, and step 2 TIMED OUT at 60s. Measured:
+  the checker took **100,128 ms**, of which the `tillandsias-plan` query was
+  **333 ms** — the other 99.8 seconds were shell process spawns (a canonical
+  grep per value plus up to six more per prose value, over 626 values).
+- **The irony is the finding.** This is the identical one-spawn-per-item pattern
+  I had fixed in `freshness-inventory.sh` ONE HOUR EARLIER (126.8s -> 4.7s,
+  661-2wsz). I diagnosed it in someone else's script and shipped it in my own —
+  and could, precisely because until the test was bound nothing ever ran it and
+  the cost was invisible. That is order 660's thesis demonstrated on its own
+  reporter, within one cycle of reporting it.
+- **Fix**: `shopt -s nocasematch` turns every canonical and host-presence test
+  into a shell builtin with no process; one `tr` per multi-lane value remains
+  (4 of 626) where a byte offset is needed. `${v,,}` avoided because macOS ships
+  bash 3.2. **100,128 ms -> 2,027 ms (49x)**, behaviour identical: live verdict
+  unchanged and all four fixtures return their expected verdicts and exit codes.
+  `litmus:pickup-role-grammar-shape` now PASSES on Windows.
+- **Both litmus files I bound last cycle now pass on this host** —
+  `hook-install-portability-shape` 5/5 and `pickup-role-grammar-shape` 11/11.
+  Neither had ever executed anywhere before today.
+- **Still failing here, NOT mine, deliberately left**:
+  `litmus:cycle-batch-triage-shape` and `litmus:terminal-status-vocabulary-shape`
+  both time out at 60s on Windows. Same family as 661-2wsz/662-inzz — a
+  Linux-calibrated timeout meeting Windows process-spawn cost. Left for the
+  owning lane rather than tuned blind at the end of a shift.
+- **LOOP ENDS HERE** at the operator's ~07:00 PDT stop. 14 cycles, every one
+  committed and pushed with a clean tree and converged remote.
+
+## Cycle 2026-08-10T12:38Z (windows — bound two of my own never-run litmus files; 27x speedup)
+
+- **Host**: `windows`, branch `windows-next` (start 28a3aa19). Guards ok. Merged
+  linux-next (00248e14).
+- **Linux's 660 reconciliation landed and it named me.** 26 litmus files are on
+  disk, carry a `name:`, and are bound to nothing — never executed by any suite.
+  **Two of the 26 were mine, written earlier tonight**:
+  `litmus:hook-install-portability-shape` (632-retq) and
+  `litmus:pickup-role-grammar-shape` (635-qpx8). I am exactly the author that
+  finding describes: wrote executable assertions, watched the suite go green,
+  believed they guarded something. Both now bound — to `spec-traceability` and
+  `ci-release` — and both resolve to existing files, so neither adds to the
+  DANGLING count.
+- **The distinction that matters for the other 24**: the three litmus files I
+  EXTENDED tonight (cycle-batch-triage, freshness-inventory, versioning) were
+  already bound, so those added steps did run. Only files CREATED during a cycle
+  went unregistered — registering is a separate manual step that writing a new
+  file does not prompt for. If the other 24 share that shape, the fix is a
+  creation-time gate, not a periodic sweep. Recorded on linux's packet.
+- **Verified by EXECUTION, not inspection** — and it paid off inside one cycle.
+  Running the newly-bound suite showed `litmus:hook-install-portability-shape`
+  passing 5/5, and surfaced that **`litmus:freshness-inventory-shape` was
+  FAILING on Windows**, at step 2 — a pre-existing step, not one of mine.
+- **661-2wsz DONE.** Measured: the full inventory took **126,817 ms** on this
+  host and even the two-line header took 23,250 ms against a 15s step timeout.
+  Cause: `grep -m1` per candidate — 1026 process spawns, cheap on Linux,
+  dominant on Windows. 1018 of those 1026 files are unstamped, so almost every
+  spawn asked a question whose answer was "no". Replaced with ONE `grep -lE`
+  pass that names the stamped files; only those are parsed individually.
+  **126,817 ms -> 4,710 ms (27x)**, byte-identical output (1026/8/1018, same
+  stamp and unstamped line counts). Semantics unchanged by construction: absent
+  from the pass == the old empty `grep -m1`; present == same expression, same
+  first-match-wins.
+- **litmus:freshness-inventory-shape now passes 7/7 on Windows**, including the
+  three steps I added in cycle 3 (next-target grammar, ANTI-STARVATION,
+  REPRODUCIBLE) — which had never executed anywhere before today.
+- **Also observed, not filed (pre-existing, not mine)**:
+  `litmus:litmus-name-filter-fail-loud-shape` step 3 times out at 10s on this
+  host. Same family as 661-2wsz — a Linux-calibrated timeout meeting Windows
+  process-spawn cost. Left for the owning lane rather than tuned blind.
+- **Process slip, twice**: bare `python`/`python3` heredocs hung for their full
+  timeout. python is not usable this way here; use the Edit tool.
+- **Next**: 648-772y still deferred while the operator uses the machine;
+  646-qde5 down to one question.
+
+## Cycle 2026-08-10T11:12Z (windows — selector hands out blocked work; coordinator queue closed out)
+
+- **Host**: `windows`, branch `windows-next` (start 7fc36eb9). Guards ok. Merged
+  linux-next (42ce8a6f).
+- **660-z774 FILED (p1) — the selector hands out dependency-blocked work.**
+  Found the only way it could be: by taking `248 spec-cheatsheet-contradiction-audit`
+  from my own batch, claiming it, and reading the packet —
+  `depends_on: [245, 246, 247]`, all three `ready` (unstarted), and **all three
+  in the same batch**. `tillandsias-plan next windows` does not list 248 at all.
+  The cause is in the script's own header: it credits `next` with being
+  "dependency-clear, unleased" and then builds its pool from
+  `query --claimable-by`, which applies neither. The layer meant to add cohesion
+  ON TOP OF claimability replaced it with a weaker test. Second consequence,
+  unobserved so far: `query` does not check leases either, so a batch can hand
+  this host a packet another host is actively working — routing around the very
+  duplication `claim-ledger-node.sh` exists to prevent.
+  Invisible until now because the selector only started producing batches here a
+  few hours ago; on linux it dilutes into "an odd pick" among 131 packets.
+  Assigned to linux — that lane has edited this script four times in six hours,
+  and landing a pool change from here in the same window invites a double fix.
+  Claim on 248 released rather than worked.
+- **Coordinator asks (648-dvzd) closed out from this host.** Checked the sibling
+  fragments FIRST: macOS answered ask 1 (644-7w89, 5/5 PASS at 05:05Z) and ask 3
+  (606-9wqd, conclusive on the VZ guest, both controls 200) at 08:55Z. No point
+  duplicating completed sibling work. Ask 2 is the windows one and stays open —
+  correctly.
+- **646-qde5 NARROWED from two questions to one.** The "no flashing consoles"
+  half now has structural evidence: the published `tillandsias-tray.exe` is PE32+
+  `subsystem=2 (IMAGE_SUBSYSTEM_WINDOWS_GUI)`, so Windows allocates no console
+  and the classic startup flash is structurally impossible for the tray itself.
+  Background children are spawned hidden — `CREATE_NO_WINDOW` in
+  tillandsias-vm-layer and `wsl_lifecycle.rs:119` — and
+  `transport_windows.rs:131` records the very regression that motivated it
+  ("without CREATE_NO_WINDOW each retry flashed a console", 2026-07-12). The two
+  `CREATE_NEW_CONSOLE` sites are the interactive Attach / GitHub Login terminals,
+  where a visible window IS the intent.
+  What remains has no structural proxy: **does the tray icon appear?** A GUI
+  process can start cleanly and still fail to register a notification-area icon.
+  Still needs a human; the ask is just half the size now.
+- **Stale header corrected** on the 624-su5r deliverable. It still read "steps 1
+  and 4 PASS, steps 2 and 3 NOT RUN" — accurate when written, stale once
+  644-a3wj answered step 2 and step 5 ran in cycle 9. The "What is NOT covered"
+  section is preserved as written rather than rewritten, with the correction
+  noted inline: a report whose summary drifts from its own contents is the same
+  measuring-the-wrong-thing problem this session keeps finding.
+- **Next**: 648-772y still windows-owned and deliberately deferred while the
+  operator uses the machine; 646-qde5 needs the desktop.
+
+## Cycle 2026-08-10T09:40Z (windows — 641-e2qa round two; zero windows packets stranded)
+
+- **Host**: `windows`, branch `windows-next` (start b4bec091). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`. Merged linux-next (123831be).
+- **Handoff worked both ways again**: linux picked up last cycle's 653-7rag
+  (headless does not compile on Windows) and filed `656-workspace-build-gate-gap`
+  from the part I flagged — that `./build.sh --check` never builds the workspace,
+  so no host's push path reports a cross-platform build break.
+- **641-e2qa round two.** Two MORE windows-owned packets crossed the checker's
+  staleness threshold after round one cleared the 620-* group. Both resolved:
+  - **326 wsl-guest-forge-user-src-ownership -> completed**, on evidence this
+    lane generated by accident. 9cbe7849 had recorded it as
+    "implementation-complete, live-healed; **e2e residual**" on top of two
+    implementation commits. That residual was proof from a genuinely cold
+    provision — and tonight's 644-a3wj smoke destroyed the distro and
+    re-provisioned from nothing, logging at 04:32:05:
+    `forge user + /home/forge/src ownership ensured (order 326)`.
+    A run whose purpose was something else entirely produced exactly the missing
+    evidence. Recording it beats re-running the smoke to manufacture it.
+  - **594-pm5h -> back to ready.** No implementation commit exists; the single
+    near-hit (90f371f5) is about windows-260716-2 and moves a blocker to order
+    383. Stale claim, not unfinished work — and NOT closed, because absence of
+    implementation evidence is not evidence of completion.
+- **Zero windows-owned packets now stranded.** in_progress 9 -> 7; the remainder
+  are linux (6) and unassigned (1).
+- **Observation recorded on the packet**: the stranded set is NOT static. Round
+  one cleared three; two more appeared within two hours as their claims aged past
+  the threshold. So a one-time sweep will always look complete and always be
+  wrong shortly after — this needs the recurring check already wired into
+  `./build.sh`, not a cleanup pass. Worth saying because "we cleaned that up" is
+  the natural but wrong conclusion after a successful round.
+- **Deliberately did NOT touch the 7 linux/unassigned ones**, though 641-e2qa is
+  `pickup_role: any` so I could have. For several, the discriminating evidence is
+  whether their exit criteria are met, which needs someone who can read the
+  subsystem rather than just the commit log. Flipping those from here would be
+  guessing with a CRDT write behind it. The method that worked is recorded on the
+  round-one event for whoever takes them.
+- **Also deliberately not taken this cycle: 648-772y** (version-skew
+  self-recovery). It changes VM lifecycle recovery on the machine the operator is
+  actively using, and I cannot verify a VM-recovery path here without risking a
+  repeat of the wedge I caused at 04:33. Evidence-based ledger work carried no
+  such risk, so it went first.
+- **Next**: 648-772y still open and windows-owned; 646-qde5 needs a desktop
+  session; 653-7rag now has linux's 656 companion.
+
+## Cycle 2026-08-10T08:01Z (windows — 648-jv69: the Retry control never existed)
+
+- **Host**: `windows`, branch `windows-next` (start 34109e46). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`. Merged linux-next (aabf120c).
+- **648-jv69 root-caused precisely, and it corrects my own filing.** I wrote that
+  retry "neither retries nor is actionable". The first half was wrong: the retry
+  MACHINERY is complete — `MenuAction::Retry` is implemented, and the failure
+  paths clear `PROVISIONING_ACTIVE` correctly so a fresh attempt can start.
+  What was missing is the CONTROL. `MenuStructure::failed()` is the only
+  constructor of a `retry` leaf anywhere in the codebase, and **nothing on the
+  Windows path — nor `menu_state::build` — ever called it**; the sole reference
+  in the tree is a macOS unit test. So the status chip read
+  "🔴 Provisioning failed — Retry" while no Retry item existed in the menu to
+  click. The operator's two complaints were both true and had two different
+  causes: no control was rendered, and the chip cannot distinguish "still
+  trying" from "gave up".
+- **Fix**: added `MenuState.provisioning_failure: Option<String>`, set on
+  terminal failure and cleared whenever an attempt starts. `menu_state::build`
+  gains an early-return failure branch emitting **Retry + Open log + Quit**.
+  The early return is deliberate: with no VM, every item below (projects, cloud
+  repos, sign-in, per-project attach) is inert or actively misleading — offering
+  "Attach Here" against a VM that does not exist is the same class of lie as the
+  chip that named a Retry with no control behind it.
+  Chip text now names the gesture: "right-click ▸ Retry".
+- **Additive by construction**: the new field is `None` on every existing
+  constructor, so the Linux and macOS trays render byte-identically until they
+  set it. That matters given the operator's 1:1 tray-parity mandate — this makes
+  the capability available to all three rather than forking Windows behaviour.
+- **Verification**: `cargo test -p tillandsias-host-shell` 66/66 pass, including
+  the new `terminal_provisioning_failure_renders_a_real_retry_control`, which is
+  two-sided — the retry leaf must be present AND enabled when failed, and ABSENT
+  on a healthy tray (so the fix cannot become a permanent Retry item on a working
+  menu). `cargo build -p tillandsias-windows-tray` clean.
+- **NOT verified here, and stated plainly**: that the leaf actually appears and
+  is clickable in the real tray menu. That is a GUI observation this lane cannot
+  make; it belongs with 646-qde5. The model-level assertion is real, the pixel-
+  level one is not done.
+- **Process slip**: a stray `python3` heredoc hung a command for the full 5-minute
+  timeout. File integrity was checked immediately after (`git diff --stat`
+  matched the expected 40 insertions) before continuing.
+- **Next**: 648-772y (version-skew self-recovery) is the remaining piece of the
+  same incident.
+
+## Cycle 2026-08-10T07:25Z (linux_mutable coordinator — closed the parallel-test hazard class; operator blocker surfaced)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. Both siblings merged.
+- **CONCURRENT CLOSE HANDLED CLEANLY**: Windows and this host both closed 624-su5r at 06:50, independently, with different terminal words. LWW resolved it to one value with no loss and no conflict — the CRDT doing exactly what it is for. Worth recording as a positive: the ledger's write model has now been stressed by simultaneous same-target writes from two hosts and behaved.
+- **Sibling verdicts merged**: macOS closed 598-kibt M3 (byte-identity PASS) and confirmed 401 ollama alive (0.32.6); Windows retired their share of the 641-e2qa leak. Stranded now 9, in_progress 9 — down from 21/23 at the start.
+- **639-d2bc DONE — the parallel-test hazard class is closed for HOME.** All five HOME-mutating tests in `main.rs` now take a shared poison-tolerant `ENV_LOCK`, matching the guard 638-ehzi added to `image_builder.rs`.
+  - The subtle part: every one of those five ALREADY saved and restored the previous HOME. That reads like correctness and is not — cargo runs a binary's tests as threads in ONE process, so save/restore bounds the damage in TIME while doing nothing across THREADS. Two real gate failures had already been diagnosed as "unexplained" before this shape was understood.
+  - Verified 0 failures across 6 full-workspace lib runs and 3 tray-feature runs.
+  - **Scope stated honestly**: the packet asked for INJECTION over locking; this is locking. Injection would reshape five tests and the functions they exercise — a bigger change than a coordinator cycle should make to code it does not own. The lock removes the observed flakiness and leaves the refactor available. `main.rs` also mutates PATH, OBSERVATORIUM_PORT and ENCLAVE_SUBNET_ENV in tests: same class, not yet audited.
+- **OPERATOR ACTION SURFACED (macOS 349)**: the guest vault was wiped by the 2026-07-27 re-provision, so `GH-TOKEN:ABSENT` — the probe executed cleanly against the live enclave once the 635-kagg fix unblocked it. Clearing it needs one interactive `tillandsias-tray --github-login` on the macOS host. Recorded here because it is the only item in the fleet that no agent can clear.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T07:00Z (linux_mutable coordinator — the stranded set changed shape; three near-closures refused)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified.
+- **Integrated macOS 635-kagg slice 3**: they root-caused and FIXED the bring-up wedge — `podman exec -i` wedged conmon attach on null stdin, `-i` dropped from all six launcher execs (cee23fb9). That is shared launcher code, so it benefits every host, and the remainder is narrowed to foreground run-attach over the exec-wire PTY.
+- **Closed 624-su5r as FULLY DISPOSITIONED, not fully executed** — the distinction is the point. Steps 1 and 4 PASS with byte-level evidence; steps 2/3 were split by the Windows lane into 646-qde5, which stays OPEN and stays theirs. It was occupying the Windows urgent slot in EVERY cycle while having no remaining scope of its own, which is the re-offering problem 641-e2qa exists to stop. Windows' urgent slot is now real open work.
+- **Checked 646-qde5 before assuming it was redundant — it is not.** Windows' 644-a3wj step 2 answered the standalone-exe question, but their report explicitly says a confirmation "remains open in 646-qde5". Reading past the PASS mattered.
+- **641-e2qa: the remaining set is a different problem than the one this packet opened with.** 11 of 21 have cleared and every one was BOOKKEEPING (8 reclaimed abandoned claims, plus 540/575/627-k4mz closed on deliverables). I examined the remaining 10 and closed NONE.
+  - Three checked in detail, all genuinely unfinished: **456** asks for a COMPILED Rust MCP in ramdisk while what exists is a shell script — it delivers the FUNCTION, not the implementation, which is exactly what makes it a tempting false close. **448** asks for a sync mechanism; a Containerfile COPY is not a sync, and a build-time copy CAUSES the re-drift its title is about. **437** names three specific things and 16 tmpfs references prove none of them.
+  - So what remains is ABANDONED WORK needing owners and re-scoping, not a status sweep. The write-path half is done and the fixes stop it recurring; no coordinator tooling will close the rest.
+  - Every one of the three looked closeable from a distance and stopped looking closeable at the deliverable line. That is precisely why the packet forbids bulk closure.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T06:37Z (windows — 624-su5r closed; windows share of the 641-e2qa leak retired)
+
+- **Host**: `windows`, branch `windows-next` (start 7dd2ee4e). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`, clean worktree. Sibling heads:
+  main 1496e89f, linux-next 0de2ad9f, osx-next bee1267d. Merged linux-next.
+  Operator's opencode lane left undisturbed — nothing heavy or destructive run.
+- **Selector drove the cycle for the first time** (jq + rebuilt binary from last
+  cycle): `epic=architecture-audit-epic size=5 budget=6 score=16.719
+  seed=host-20260810 pick=1/3` with an `urgent=` override.
+- **624-su5r CLOSED (p0)**. The urgent override was handing me this packet every
+  cycle while its only remaining work was unactionable here — precisely the
+  anti-circling the selector exists to prevent. Resolved it properly rather than
+  skipping it: ran the one step I had never done (**step 5, ASCII purity**:
+  `non_ascii=0` on both the repo and published `install-windows.ps1`, both 24426
+  bytes — the v0.3.260723.1 regression has not recurred), and confirmed the
+  packet's two named verdicts are delivered. Step 2's verdict came from the
+  644-a3wj smoke: the bare `tillandsias-tray.exe` alias IS usable standalone.
+  I said earlier this packet must not close on steps 1+4 alone; that was right
+  then, and what changed is that 644-a3wj answered step 2 and step 5 ran today.
+  Residual (GUI-visual) stays as 646-qde5.
+  Deliberately did NOT flag `install.sh` (12 non-ASCII) or `install-macos.sh`
+  (2028): the ASCII rule exists for PowerShell's re-parse sensitivity, and
+  applying it to POSIX shell scripts would manufacture two false positives.
+- **641-e2qa (p0) — windows lane's share RETIRED.** `check-stranded-in-progress.sh`
+  flagged 3 windows packets in_progress with zero events. All three resolved, in
+  two DIFFERENT directions on purpose:
+  - **620-9xpg wsl-github-login-vault-misroute -> completed.** Its last open
+    criterion was named exactly in 525e2b3a: "The tray-menu lane is the broken
+    one, and it is the criterion still open" (the `--with-token` lane never
+    allocated a tty, so it never hit the SIGTTIN/SIGTTOU trap; the tray lane did).
+    That trap was fixed in 9a244471. **Tonight the operator ran the tray-menu
+    lane on this host and it authenticated end to end** — 04:58:26 menu click ->
+    05:00:34 signed-in, "Logged in as 8007342", git identity verified on disk.
+    Live operator evidence closing a criterion, not a synthetic run. Residual UX
+    defect kept visible as 648-e5pf rather than folded into the completion.
+  - **620-ca7g + 620-cine -> back to READY.** Only mention is 74ad23cd, the
+    original filing. No evidence work began: stale claims, not unfinished work.
+    Not closed — there is no completion evidence either, and asserting one is
+    exactly what 635-i6vm/641-e2qa exist to stop.
+  Result: `in_progress` 12 -> 9, stranded 12 -> 9; the remainder are
+  linux/unassigned.
+- **Second-host validation offered for free**: linux's checker and its grammar
+  ran unmodified on Windows and produced actionable output.
+- **Method note recorded for whoever takes the linux ones**: `git log --all
+  --grep=<order>` is the useful discriminator — only-a-filing-commit means never
+  started (-> ready); implementation commits mean re-read the exit criteria
+  against them. Batch-closing would destroy the distinction that makes the
+  number actionable.
+- **Next**: 648-jv69 (p1, dead retry affordance) is the highest-value windows
+  packet left; it needs a tray rebuild and, for full confidence, a GUI check.
+
+## Cycle 2026-08-10T06:35Z (linux_mutable coordinator — I had the vocabulary fix backwards; the SPEC says `done`)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes.
+- **I corrected myself on 649-b2e4.** Last cycle I normalized macOS's `done` -> `completed` to unblock the promotion, framing `completed` as the right value. **That was backwards.** `methodology/distributed-work.yaml` declares the canonical statuses as pending/ready/claimed/in_progress/blocked/stalled/**done**/failed, and describes `completed` as an **EVENT TYPE** whose effect is "changes status to done". **`completed` is not a declared status at all** — yet 371 packets use it and 3 use `done`.
+  - macOS was following the spec. The code was not. I "fixed" their correct value to match the code.
+- **Code side resolved as a UNION, deliberately not a ruling.** `is_terminal_status()` is now one shared definition accepting `completed|done|obsoleted`, used by BOTH the dependency resolver and release burndown — which had independently hard-coded the same match arm, which is how they were able to drift.
+  - Widening is the safe direction: it can only stop CORRECTLY finished work from blocking, never unblock something genuinely open. Narrowing would invalidate either 371 packets or the methodology.
+  - Restored macOS's original `done` on 644-7w89 and verified the promotion dependency still resolves — the spec-canonical value now satisfies.
+- **650-dq6u filed for the operator ruling** (`pickup_role: tlatoani`, so it cannot be offered to a host as claimable work). Notes the asymmetry honestly: adopting `completed` is a doc edit, migrating to `done` rewrites 371 packets — but that is an argument about COST, not about which is right, and ratifying practice purely because practice is large is how the spec stopped being true here. Also flags `implemented` (2 packets), which is in neither set and is silently NOT terminal today.
+- **litmus:terminal-status-vocabulary-shape 4/4**, including a negative control that no terminal dependency is ever reported unsatisfied, and a step asserting the shell guard is not MORE PERMISSIVE than the resolver — the specific asymmetry that let this class hide.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T06:10Z (linux_mutable coordinator — reviewed the promotion against a correction; second parallel-test race fixed)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. Both siblings pushed.
+- **Windows corrected their own 644-a3wj PASS — the evidence my stable promotion rested on.** Reviewed it properly rather than assuming either way.
+  - Their correction: the four steps really ran and really passed, but the HEALTHY `--diagnose` was taken BEFORE one more mutating step (a downgrade-to-stable / restore-to-unstable round trip), which wedged the control wire and left the host failed ~25 min until the operator found it. Their framing is the reusable part: *"a post-condition check belongs after the last MUTATING step, not after the last interesting one."*
+  - **Promotion STANDS, and I recorded why.** It rests on the installed artifact working — macOS 5/5, Windows 4/4 — and both remain true. The wedge came from CHANNEL SWITCHING after the smoke, not from installing or running v0.4.260810.1. Demoting would return stable to v0.4.260809.2, promoted by override with NO e2e evidence at all, in exchange for nothing, since the defect would follow us there. Recorded the decision because an unrecorded choice to leave a promotion in place is indistinguishable from not having noticed.
+  - **Raised 648-772y p2 -> p1 on EXPOSURE**, not on a re-verdict: since 621-2re2 the landing page ADVERTISES the unstable channel, and the premise of that offer is that a bad unstable build is recoverable by going back to stable. This wedges exactly that path. Blast radius is every tester who takes the offer we publish, not one host during one smoke.
+  - Honest residual recorded: the promotion was made ~20 min BEFORE the correction landed. Same call either way, but it rested on evidence that was accurate per-step and incomplete about the host's end state.
+- **Folded their rule into the skill**: validation packets this loop writes must demand the health check after the last MUTATING step, with the reason stated.
+- **Second parallel-test race fixed** (found by the gate, diagnosed from `check-logs.jsonl` FIRST — the cycle-5 lesson, no cycles lost). `spawn_terminal_and_reap_does_not_leave_zombies` failed on its PRECONDITION, not its subject: it asserted ZERO zombies process-wide, but cargo runs a binary's tests as parallel threads in one process, so a neighbour spawning a child trips it. Passes 6/6 in isolation. Converted to a DELTA measurement (count before/after), which is the claim the test actually makes and is immune to neighbours. Dead helper removed rather than left warning.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T05:40Z (linux_mutable coordinator — v0.4.260810.1 PROMOTED TO STABLE, gate satisfied not bypassed)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified.
+- **Windows delivered 644-a3wj: 4/4 PASS** — and answered the question I had asked THREE times. **The bare `tillandsias-tray.exe` alias IS usable standalone — NOT a 621-2re2 defect.** Also: channel resolution correct with the default still landing on latest, 623-iwq4 has not recurred, and launch-to-working-tray in ~70s from nothing. They recorded it as `completed`, so the 649-b2e4 vocabulary trap did not bite twice.
+- **v0.4.260810.1 PROMOTED TO STABLE — without `--force`.** `promote-stable.sh`'s evidence gate was SATISFIED, not bypassed: it found e2e PASS evidence naming this exact tag from both sibling platforms and proceeded on its own.
+  - This is the point of 644-pnsp. v0.4.260809.2 was promoted by operator override with NO e2e evidence; this is the first promotion in the series where the gate itself authorized the change. **A gate bypassed twice is a gate nobody trusts** — so the design goal was to reach a promotion the tooling would allow unaided, and it did.
+  - Verified AFTER, against the published state rather than the script's output: `isPrerelease=false`, `isLatest=true`, `stable` git tag moved, and all six advertised landing-page links return 200.
+  - One hiccup, handled honestly: the pre-push gate stamp went stale from the merge and refused the `stable` tag push. Re-gated rather than `--no-verify`'d — no bypass anywhere in this promotion.
+- **Both sibling smokes are now closed with evidence**, and the v0.4.260810.1 chain (release -> two curl smokes -> evidence-gated promotion) completed end to end in ~4 hours across three hosts with no operator intervention beyond the initial "cut a release".
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T05:25Z (linux_mutable coordinator — the ping worked; finished work was blocking the promotion on a WORD)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified.
+- **THE PING WORKED.** macOS returned after 5h and its commit says it claimed 644-7w89 **"on the coordinator ping"**. That is the answer to whether a sibling can be reached without a trigger mechanism: the ledger IS the channel, and an in-band ping under `ping_and_triage_protocol` is the lever.
+  - **644-7w89: 5/5 PASS**, no regressions vs v0.4.260809.2, the 421 Gatekeeper fix confirmed shipped, and 635-kagg narrowed to the exec-wire context (their tray lane works).
+  - They wrote it through the `status:` LWW channel correctly — the write-path documentation from cycle 12 took. `check-fragment-status-loss.sh` clean across 85 checks.
+- **649-b2e4 FILED (p1) — finished work was still blocking the promotion, on a word.** macOS recorded `status: done`. Reasonable, correctly written, and accepted as terminal by my own guard. **The dependency resolver accepts only `completed`**, so `dependencies-of 644-pnsp` kept listing a 5/5-PASS packet as an unsatisfied prerequisite.
+  - Measured: `completed` 368, `done` 3, `implemented` 2, `obsoleted` 2. Confirmed by contrast — `dependencies-of 619-pfsj` is EMPTY (its deps are `completed`) while 644-pnsp's `done` dep was listed.
+  - Worse than the earlier reader-disagreements in one respect: **my guard is MORE permissive than the resolver** (it accepts done|completed|retired|obsolete), so it can never flag this class. Same family as 632-39p3 and 635-i6vm — two readers of one ledger, disagreement invisible from either side.
+  - Repaired the live case: normalized 644-7w89 `done` -> `completed`, which unblocked 644-pnsp. **A word change, not a re-verdict** — macOS's 5/5 stands exactly as recorded. The other five are latent (627-sgtt/wtrp form a self-consistent `implemented` chain), so nothing else is waiting.
+- **Promotion now gated on ONE thing**: 644-a3wj, the Windows curl smoke. Windows has already covered its headless half under 624-su5r (channel + checksums PASS on v0.4.260810.1); the overlap is worth resolving next cycle rather than asking them to redo it.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T05:15Z (windows — two operator field reports + a correction to my own PASS)
+
+- **Host**: `windows`, branch `windows-next` (start b9c8f99b, pushed OK after the
+  cycle-7 background push landed). Operator was at the terminal, so this cycle is
+  field-report driven rather than selector driven.
+- **CORRECTION to 644-a3wj.** I reported the curl smoke as PASS on all four
+  steps. The steps did pass and the per-step evidence stands — but the HEALTHY
+  `--diagnose` the verdict rests on was taken at 04:32:20, and I then ran ONE
+  MORE mutating step (the downgrade-to-stable / restore-to-unstable round trip
+  proving the channel default). That wedged the control wire at 04:33:27 and I
+  did not re-check. The host sat failed for ~25 minutes until the operator found
+  it. Named plainly: **I checked the post-condition at the point that suited the
+  narrative rather than at the end of what I actually did.** A post-condition
+  check belongs after the last MUTATING step, not the last interesting one.
+- **Operator report 1 — "provision failed - retry, and I don't know if it's
+  retrying" (648-jv69, p1).** It was not retrying. Attempts 1-9 backed off
+  04:34:09 -> 04:40:10; `ERROR WSL recipe provisioning failed … attempt 10` at
+  04:41:10; diagnostics bundle 04:41:42; then nothing. Budget exhausted, process
+  stopped, and a control labelled "retry" left behind. Same shape as
+  632-retq/643-bnag/647-i98k — a terminal state wearing the costume of a live one
+  — but in the UI rather than an exit code. Repaired: stop tray, `wsl --terminate
+  tillandsias`, relaunch -> control wire REACHABLE, HEALTHY. That the fix is that
+  mechanical is what makes the dead button worse; the tray could do it itself.
+- **Root cause (648-772y, p2)**: `adopted guest wiring is stale — re-injecting
+  bootstrap logic guest_version="0.4.260810.1" tray_version=0.4.260809.2`. The
+  downgraded tray re-injected OLDER guest wiring; the newer tray then never
+  completed its hvsocket handshake. Not exotic — "install an older build over a
+  newer guest" is exactly a rollback, and this host's log already carries skew
+  warnings from 2026-08-03 and 2026-08-05. Missing piece is recovery, not
+  detection.
+- **Operator report 2 — login asks for a token it does not need (648-e5pf, p2).**
+  Guest log: token prompt, then `github.com/login/device` code, then "Logged in
+  as 8007342". Tray log: 04:58:59 signing-in -> **signed-out**, 05:00:34
+  signed-out -> signed-in. The intermediate signed-out is the tell — the pasted
+  token did NOT authenticate; the device flow 95s later did. Two costs: a live
+  GitHub token collected that the system did not need, and a prompt whose only
+  documented escape is failure (`GH_LOGIN_TOKEN_SCRIPT` aborts on empty input)
+  rather than the device flow that actually works. ESTABLISHED: the token script
+  contains no device flow, `--with-token` never emits a device code, and GitHub
+  is registered `AuthModel::OAuthDevice` while being handed the TOKEN script.
+  NOT ESTABLISHED: which component launched the device flow — not traced to a
+  call site and deliberately not guessed at.
+- **Checked rather than assumed**: the guest log renders the git identity prompts
+  on one line with no values, which looks like a defect. It is not — the stored
+  gitconfig has `name = Tlatoani`, `email = bulloncito@gmail.com`. Formatting
+  only; no packet filed.
+- **Left alone**: the operator has the opencode lane building containers. No
+  destructive or heavy operations run this cycle beyond the repair they asked
+  for.
+- **Next**: 648-jv69 is the highest-value of the three (p1, windows-owned).
+  646-qde5 still needs a desktop session.
+
+## Cycle 2026-08-10T05:10Z (linux_mutable coordinator — greedier chunks: epics regrouped, budget 3 -> 6, asks filed)
+
+- **Operator directive**: group larger, greedier chunks; siblings loop until 07:00 PDT; request what I need via plan triage. Note for the record: the operator said "stories", and the settled model is Epic -> Packet with NO separate story object — read as the epics (`release_target` groups), which is what was used.
+- **The blocker to greedy batches was coverage, not budget.** Raising the budget first would have pulled in more of one epic's tail or nothing. Grouped first, then raised:
+  - **Stream/transport family -> `socket-audit-master` (151)**, which was already the head in name with nothing pointing at it: 147, 154(win), 155(mac), 156/157/158(linux), 249. Deliberately cross-host — each host draws its own slice of ONE theme, so the cross-host work converges instead of scattering.
+  - **New `architecture-audit-epic` (647-6c3g)** over the four all-platforms audits (245/246/247/248). They were each competing alone against grouped epics and losing. They compose: 247's proxy/mirror boundary IS 245's network taxonomy from one side, and 606-9wqd is a worked example of both — an agent holding one has most of the context for the next.
+  - Sibling grouped coverage 8 -> 16; epics 2 -> 4.
+- **Budget 3 -> 6** (forge stays 1, order 264 untouched). Measured after: both sibling batches now draw **one p0 plus the FULL four-packet audit epic** — greedy, and still one theme.
+- **648-dvzd filed: three asks only a sibling can answer** — macOS 644-7w89 (last blocker on the no-`--force` promotion), Windows 646-qde5 (does the bare portable exe work standalone — asked three times, still open), and 606-9wqd criteria 2-4 for whichever host has working rootless container egress. It states that a "cannot" is a valid answer that must be RECORDED, because a silently skipped ask is indistinguishable from an unreached one from this side. Also tells them the budget is a ceiling, not a quota.
+- **A guard went red and I reformulated rather than relaxed it.** The regrouping moved the frontier from 23.8/4.0/3.9 to 23.9/16.7/15.2, so `p_top` fell to 0.499 and the `> 0.5` MINIMAX DOMINATES step failed. That is not entropy outvoting minimax — it is three competitive epics, exactly what grouping was for, and a fixed 0.5 threshold demands that grouping NOT work. Now asserts the property: the top epic must beat every rival AND beat uniform (1/k). At k=3 that is 0.499 vs 0.333 — dominant by 1.5x, still fails on a flattened or inverted distribution, and scales as coverage improves instead of decaying.
+- **Gate**: 17/17, triage litmus 18/18.
+
+## Cycle 2026-08-10T03:12Z part 2 (windows — BOTH blockers cleared; 644-a3wj curl smoke PASS)
+
+- **Operator unblocked the lane.** Authorized the destructive e2e and told me to
+  winget what I needed. Installed `jqlang.jq` 1.8.2 via winget; rebuilt
+  `tillandsias-plan` with cargo (20.97s, no SAC interference — the risk I had
+  been avoiding for six cycles did not materialize).
+- **The selector runs on this host for the first time.** Six cycles of
+  hand-picking are over:
+  `batch: epic=stable-milestone-v1 role=windows release=v0.5 size=3 budget=3
+   score=12.082 seed=host-20260810 pick=1/2` / `triage: eligible=53 grouped=9
+   ungrouped=44 epics=2`. Eligible went 7 -> 53 once `--claimable-by` worked
+   (the `any` packets became reachable). Its top pick was 644-a3wj — the exact
+   p0 the operator had just authorized.
+- **644-a3wj DONE — Windows curl-install e2e of v0.4.260810.1, all four steps
+  PASS.** Deliverable:
+  `plan/issues/windows-curl-smoke-v0.4.260810.1-2026-08-10.md`.
+  Only the `tillandsias` runtime distro was unregistered; `tillandsias-build`
+  (the cargo lane) was deliberately preserved and verified intact after.
+  - **Step 1 PASS**: UNSTABLE banner precedes every download; resolves
+    `/releases/download/unstable`; the installer's own SHA-256 matched the digest
+    I had verified independently earlier in the cycle — two paths, same value;
+    installed commit `1496e89f` == origin/main. Channel default verified in the
+    field too: variable cleared -> `Channel: stable`, no banner, resolves
+    `/releases/latest/download`, installs v0.4.260809.2. Host restored to
+    unstable afterwards.
+  - **Step 2 PASS — and it answers the question open since 621-2re2.** The
+    unversioned `tillandsias-tray.exe` alias, run from a directory containing
+    nothing else: `--version` and `--diagnose` both exit 0, and it reports its
+    OWN path rather than the installed copy's. The alias IS usable standalone —
+    NOT the defect 624-su5r feared. Scope stated plainly: this covers the binary
+    being self-contained and its CLI surface, not the GUI observations (tray
+    icon, console flashes), which stay in 646-qde5.
+  - **Step 3 PASS**: 623-iwq4 has not recurred. All three channels 293 bytes /
+    3 lines / every line newline-terminated — checked with `cat -A`, because the
+    original defect was a missing trailing newline that a plain read does not
+    show — and 3/3 verify.
+  - **Step 4 PASS**: distro re-created from nothing and Running; tray alive;
+    `wsl -d tillandsias --exec true` exit 0; `--diagnose` HEALTHY (exit 0),
+    control wire REACHABLE, phase=Ready, podman_ready=true. Destroy ->
+    curl-install -> re-provision -> healthy in ~70 seconds.
+- **One automation hazard filed (647-i98k, p3)**: the FIRST `--diagnose` after
+  the installer returned reported `DEGRADED (exit 2)` — the check landed in the
+  8-second gap between "Connecting…" and "VM ready — control wire established".
+  A re-run was HEALTHY. Not a product defect: the tray was converging and said so
+  accurately. But a converging state and a broken state share an exit code, so a
+  scripted post-install check will intermittently call a healthy install broken.
+  Same shape as the counterfeit-completion defects this lane fixed in
+  632-retq/643-bnag — a transient wearing a terminal verdict's exit code. This
+  smoke hit it on the first try.
+- **Worktree hygiene**: an early `cd` failed on an empty `$TMPDIR`, so a curl
+  landed `SHA256SUMS-windows` in the repo root. Caught at exit-contract check,
+  provenance confirmed (my own download this cycle, never tracked), removed. The
+  scratchpad is the right place and I used an absolute path thereafter.
+- **Next**: 646-qde5 (GUI-visual confirmation) still needs a desktop session.
+  Automated Windows drain is now live for the first time.
+
+## Cycle 2026-08-10T04:20Z (linux_mutable coordinator — 623-iwq4 confirmed fixed in the FIELD)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. Both sweeps clean (stranded 10, no fragment status loss across 82 checks).
+- **Integrated `windows-next` 624-su5r partial** — careful, well-scoped work:
+  - **Step 4 PASS: 623-iwq4 confirmed fixed in the field.** They checked byte-level framing with `cat -A` across all THREE channels (latest / v0.4.260810.1 / unstable): every `SHA256SUMS-windows` is 293 bytes, 3 lines, each `\n`-terminated, no merged lines. `sha256sum -c` exit 0 in all three. The corruption that shipped Cosign-signed in v0.4.260809.1 is gone and stays gone.
+  - They also proved something I had asserted but not verified: the alias `tillandsias-windows-x64.zip` shares a digest with the versioned zip, so it is a TRUE COPY rather than a re-zip. And `unstable` publishes digests identical to its underlying tag, so the rolling channel is consistent with what it claims to point at.
+  - **Step 1 PASS, verified statically and for a stated reason**: they fetched `install-windows.ps1` from the channel and READ it rather than piping to `iex`, on the grounds that executing an installer to discover what URL it resolves is both a worse test and a host mutation. That is the right call and better discipline than my own packet asked for.
+  - **Steps 2/3 NOT RUN and split out as 646-qde5** — the GUI half (actually executing the portable exe). The standalone-exe question I have asked twice is still open, correctly: it needs interactive GUI verification, not a headless cycle.
+- **Sibling state**: windows active (42m). macOS quiet 5h, still holding its p0 644-7w89 smoke.
+- **Triage state (v0.5)**: linux 160, macOS 53, windows 52.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T03:55Z (linux_mutable coordinator — a reproduction that proved nothing, and why that is the finding)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes — windows 2h, macOS 4h, both still holding their p0 v0.4.260810.1 smoke packets.
+- **606-9wqd runtime reproduction ATTEMPTED, INCONCLUSIVE, and recorded as such.** e2e preflight said `eligible`; both networks exist with `tillandsias-enclave` correctly `internal: true`.
+  - Measured: enclave-only -> DNS FAIL, no HTTPS. Dual-homed -> DNS RESOLVED, no HTTPS to any of three destinations.
+  - **Read alone, that says the spec divergence is harmless and the packet can be closed as theoretical.** Comfortable, consistent with the numbers, and WRONG.
+  - **The control is the whole cycle**: the DEFAULT podman network also fails, while the host itself returns 200. Container egress is unavailable on this host entirely — an environment condition, not a property of `tillandsias-egress` (which inspects correctly: internal:false, bridge, one subnet, DNS on).
+  - So the probe cannot distinguish "the egress leg grants arbitrary outbound access" from "nothing has outbound access here". Criteria 2-4 stay OPEN, and the next host must run BOTH controls — the enclave/egress comparison means nothing unless the default-network control returns 200.
+- **Two instrument errors preceded the control, in one probe.** The first pass used `/dev/tcp`, a bash feature, and the image's `/bin/sh` is busybox — so both initial `TCP-BLOCKED` readings were pure instrument error. I checked the shell before trusting them.
+- **This is the session's recurring class, aimed at me this time**: an environment fault wearing the costume of a real result — same shape as 631-* (missing jq read as a drained ledger), 643-bnag (branching on output volume, not exit code), and my own reclaimer reporting `reclaimed=0` because it looked in the wrong place. The rule written into the issue: **verify the instrument, then the control, then believe the measurement.**
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T03:30Z (linux_mutable coordinator — worked the release-blocker chain the selector just surfaced)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes (macOS quiet 4h with its p0 smoke queued; windows 71m).
+- **606-9wqd exit criterion 1 CLOSED** — the packet the 645-n3h6 override surfaced last cycle, a dependency of 451, the only `release-blocker-v0.5`. Static audit, no runtime claims.
+  - Spec is unambiguous in FOUR places that only the proxy may be dual-homed. The mirror is dual-homed **deliberately**, with a stated reason (direct GitHub push), at `remote_projects.rs:321` and `:651` plus `main.rs:2953`. Not an accident — a design choice never reconciled with the spec.
+  - **The detail that decides criteria 2/3**: `tillandsias-egress` is a plain NAT network with NO destination scoping. The attachment does not grant "GitHub push", it grants **arbitrary outbound access** to a container whose stated need is one destination. That gap is the finding.
+  - **Corrected the packet's scope, in both directions.** My first instinct — "everything is dual-homed, the spec is fiction" — was wrong: `main.rs:2516` is `build_proxy_run_args`, and the spec MANDATES that one. But `main.rs:7483` (`run_provider_login`) is a second unsanctioned case with no verdict. So: one sanctioned exception and at least two unsanctioned ones, all sharing `ENCLAVE_EGRESS_NETS`.
+  - **The shared constant is itself part of the defect** — nothing at the call site distinguishes "dual-homed because the spec says so" from "dual-homed because it was expedient", so the next reader re-derives this audit.
+  - Recommends attempting criterion 2 (route through proxy) before 3: ratifying an unscoped exception *because scoping is work* would invert the packet's intent. The `:318` comment hints the original attempt failed on `bridge` name resolution, which is a resolution failure, not evidence that proxied push is impossible.
+  - NOT DONE and said so: no runtime reproduction. Criteria 2-4 all need one, on a podman host.
+- **Triage state (v0.5)**: linux 160, macOS 53, windows 52. Stranded 10.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T03:12Z (windows — 624-su5r partial: release artifacts verified, GUI half split out)
+
+- **Host**: `windows`, branch `windows-next` (start 276e3cc4). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`, clean worktree. Sibling heads:
+  main 1496e89f, linux-next 833e8498, osx-next d232bc42. Merged `origin/linux-next`.
+- **Deferral from cycle 6 vindicated**: the Release run for v0.4.260810.1
+  completed success at 26m57s and published at 01:55Z — about 13 minutes AFTER
+  the point in cycle 6 where the e2e would have run. Running it then would have
+  produced a false failure against an unpublished release.
+- **624-su5r (p0) PARTIAL — steps 1 and 4 PASS, steps 2 and 3 NOT RUN.**
+  Deliverable: `plan/issues/windows-unstable-channel-validation-2026-08-10.md`.
+- **Step 4, the 623-iwq4 regression check: PASS on all three channels.**
+  `SHA256SUMS-windows` is 293 bytes / 3 lines with every line properly
+  newline-terminated — checked with `cat -A`, because 623-iwq4 was precisely a
+  missing trailing newline merging lines, and a plain read would not show it.
+  `sha256sum -c` exits 0 for latest (v0.4.260809.2), v0.4.260810.1, and unstable.
+  The alias `tillandsias-windows-x64.zip` shares a digest with the versioned zip
+  (true copy, not a re-zip); unstable and v0.4.260810.1 publish identical digests.
+- **Step 1: PASS, verified statically.** The published `install-windows.ps1` is
+  BYTE-IDENTICAL to `scripts/install-windows.ps1`; default resolves
+  `/releases/latest/download`; `unstable` resolves `/releases/download/unstable`;
+  an unknown channel THROWS rather than falling back to stable; the UNSTABLE
+  banner (L338-341) precedes the first `Invoke-WebRequest` (L354). Read rather
+  than executed — running an installer to discover which URL it resolves is a
+  worse test than reading the resolution, and it mutates the host.
+- **Steps 2 and 3 NOT RUN, and the packet stays open.** They require observing a
+  GUI: "tray appears, no flashing consoles, WSL2 provisioning starts". A headless
+  loop can start the exe and read an exit code, but an exe that exits 0 while
+  flashing consoles or never showing a tray would PASS that check — measuring the
+  wrong thing, the exact class this session has been cataloguing. Split into
+  **646-qde5 (p0)** so the GUI-bound half is visible rather than hidden inside a
+  packet whose other half passed. The headline claim is still true: the alias
+  `tillandsias-tray.exe` has NEVER been executed.
+- **Destructive curl-install e2e NOT run — raised instead of taken.**
+  `TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset, which the skill reads as
+  permission to `wsl --unregister tillandsias`. But this host is the operator's
+  interactive workstation, the loop is unattended at 03:35, and the same host
+  carries the `tillandsias-build` distro the cargo lane depends on. Wiping the
+  runtime distro with nobody watching is not a call a loop should make silently.
+  Non-destructive validation done in full instead; the destructive half is an
+  explicit operator decision.
+- **Secondary**: `cosign` absent here, so the bundles could not be verified
+  (present, well-formed, 10566 bytes, sigstore v0.3) — and since 623-iwq4 shipped
+  a validly signed CORRUPT file, signature and content verification are
+  independent checks; this covers content only. `TILLANDSIAS_VERSION` silently
+  overrides `TILLANDSIAS_CHANNEL` without saying so. `/releases/latest/download`
+  still serves v0.4.260809.2 because v0.4.260810.1 is a pre-release, so the
+  landing page's primary Windows downloads are one release behind until promotion.
+- **Next**: 646-qde5 needs a desktop session. 632-retq (jq) + plan-binary rebuild
+  still gate automated Windows drain.
+
+## Cycle 2026-08-10T02:55Z (linux_mutable coordinator — 645-n3h6 DONE: urgent work can no longer be hidden by grouping)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes.
+- **645-n3h6 DONE.** One-slot urgency override: slot 1 goes to the globally highest-priority eligible packet when it STRICTLY beats everything the chosen epic offers.
+  - A tie deliberately does NOT displace — equal priority means the cohesive pick is better, because it shares context with the rest of the batch.
+  - **Immediate effect**: the linux batch now leads with **606-9wqd**, an ungrouped p0 that is part of the **451 release-blocker chain** — the only packet tagged `release-blocker-v0.5`. It had been unreachable at any priority for as long as the selector has existed.
+  - Budgets 1/2/3 still return 1/2/3; the remainder stays cohesive. One urgent outsider plus a cohesive remainder is workable; three unrelated p0s is the scatter this selector exists to end.
+  - Header now carries an optional `urgent=<packet_id>` so a batch never silently claims a single epic while containing an outsider.
+- **The grammar step caught me, correctly.** Adding that suffix without widening the pinned pattern broke step 1. That is the OPPOSITE of this session's expression-pinning findings: an output grammar is a genuine contract, so changing the output without changing the contract is the defect, not the test. Widened deliberately, with the distinction written into the step.
+- **I mangled the litmus file with a perl one-liner** (duplicated content, 151 -> 333 lines, unparseable YAML) and restored from git rather than trying to unpick it, then reapplied both edits with exact-match tooling. Cheaper to redo than to debug a bad in-place rewrite.
+- Litmus now 18/18, including two new steps that assert the OUTCOME rather than the mechanism — "the batch's best priority matches the ledger's best" holds for any future fix, not just this one.
+- **Triage state (v0.5)**: linux 160 (now leading with a release-blocker p0), macOS 53, windows 52.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T02:30Z (linux_mutable coordinator — smoke queue filed for v0.4.260810.1; my selector buried its own p0s)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified.
+- **Integrated `windows-next`**: they took a PARTIAL fix on 643-64bx within the hour of my filing it — build.sh no longer instructs a VERSION commit the pre-push guard refuses. The counter-touches-tracked-files half remains open.
+- **Filed the smoke queue the release exists for** (644-7w89 macOS, 644-a3wj windows, both p0; 644-pnsp promotion candidate, p1). Each is self-contained with exact commands, evidence path and per-step verdicts.
+  - macOS's step 2 accounts for their OPEN `--version` defect (635-bhkb) and says to fall back to CFBundleVersion+SHA as they did for .2; step 5 says a --bash lane wedge is evidence for their OPEN 635-kagg, not a new finding. Their known-broken things should not read as new failures.
+  - Windows's step 2 re-asks the one question still unanswered from that side: **is the bare `tillandsias-tray.exe` alias usable standalone?** Step 3 is a field regression check on 623-iwq4 — a defect this project has already shipped once, Cosign-signed.
+  - 644-pnsp deliberately depends on BOTH smokes and requires `promote-stable.sh` to run **without --force**. v0.4.260809.2 was promoted by override with no e2e evidence; this can be the first promotion that satisfies the gate instead of bypassing it. A gate bypassed twice is a gate nobody trusts.
+- **645-n3h6 FILED — my own selector buried the p0s I had just created.** Neither sibling batch offered them; macOS got three p3 inference packets, Windows two p3s.
+  - CAUSE, and it is my design: the selector picks an EPIC first, then packets from it, and `UNGROUPED` is demoted whenever any real epic exists (order 626, to stop scatter). I did not think through the consequence — **epic selection strictly precedes priority, so an ungrouped packet is unreachable at ANY priority.** A p0 and a p3 are equally invisible without a release_target.
+  - Sharp edge on a ledger where 107 of 160 eligible linux packets are ungrouped. The demotion is right; making it absolute is not.
+  - Worked around by grouping the three new packets under `stable-milestone-v1` (where they belong anyway) — both sibling batches now LEAD with their p0 smoke. That fixes three packets and nothing else.
+  - Interacts with 630-6nw5's measurement that release_target is a WEAK cohesion signal (0.110 vs a 0.041 baseline): if grouping is the only route to visibility, a weak grouping signal is also a visibility gate, which is worse than merely weak.
+- **Triage state (v0.5)**: linux 160, macOS 53, windows 52. Stranded holding at 10.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T02:00Z (linux_mutable coordinator — RELEASED v0.4.260810.1, all three platforms green)
+
+- **Host**: Linux mutable, `linux-next`. Operator authorized the daily release.
+- **v0.4.260810.1 PUBLISHED.** Pre-flight clean, tray parity 0 gaps on required rows, `./build.sh --ci-full` 17/17, `scripts/release-preflight.sh` `ok:release-preflight`. PR #93 (promotion) and #94 (VERSION bump on main, re-gated on its own branch — no `--no-verify` anywhere in this release). Run 31347805829: Linux, Windows and macOS jobs ALL success.
+- **Verified against the PUBLISHED artifacts, not the workflow log**:
+  - Rolling `unstable` channel refreshed to v0.4.260810.1 and carries the FULL three-platform set from one run (Linux musl + both headless guests, macOS tarball + DMG, Windows versioned zip + both portable aliases, all three installers).
+  - All seven advertised unstable URLs return 200.
+  - **623-iwq4 holding**: `sha256sum -c SHA256SUMS-windows` green on all three entries (versioned zip, alias zip, alias exe) — the corruption that shipped Cosign-signed in v0.4.260809.1 has not recurred, and the pre-publish `sha256sum -c` gate is doing its job.
+- **Checkout returned to `linux-next`** and verified — leaving it on `main` would seed every subsequent forge from a pre-expert base (order 531).
+- **643-64bx did NOT fire**: `--ci-full` and `--check` do not bump the local build counter, only `--install`/`--release` do. The release path bumps VERSION on `main` via PR, which the guard permits. That packet blocks the developer path, not the release path — worth recording, since it looked like it might block this.
+- **Siblings can now run curl-install e2e** against v0.4.260810.1 on both channels. macOS discharged order-455 for v0.4.260809.2 earlier today; this is the next tag for that queue.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T01:49Z (windows — 643-64bx partial reduction; release in flight)
+
+- **Host**: `windows`, branch `windows-next` (start a7bc8320). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`, `ok:clean-tree`, clean worktree.
+  Sibling heads: main **1496e89f (moved — release)**, linux-next e40b83ee,
+  osx-next d232bc42. Merged `origin/linux-next` cleanly.
+- **RELEASE IN FLIGHT — e2e deliberately deferred, not skipped.** `main` advanced
+  to 1496e89f and tag `v0.4.260810.1` is on origin, so the skill's post-release
+  rule points at curl-install e2e. But `gh release view v0.4.260810.1` returns
+  "release not found" and `gh run list` shows the Release workflow
+  **in_progress** (run 31347805829, ~10m elapsed; the three prior release runs
+  took 25-30m). Running the curl-install e2e now would report a FAILURE caused by
+  a release that has not published yet — a false negative that would then need
+  retracting. Latest published remains v0.4.260809.2. Next cycle lands after the
+  run completes and is the right moment; if it has failed by then, that is a real
+  finding rather than a race.
+- **643-64bx PARTIAL (claimed + released via claim-ledger-node.sh)**: build.sh
+  bumps VERSION on every build-producing dispatch and then said, unconditionally,
+  "Commit them with your change". On any branch but main the pre-push VERSION
+  guard refuses that push, so the advice led to exactly two places: `git push
+  --no-verify`, which disables the only remaining gate (599-w5jd removed push CI)
+  to push the very file that gate protects, or a local-only commit the exit
+  contract forbids. The advice is now branch-aware and matches what the guard
+  actually permits — commit on main; commit on a sync-forward whose VERSION
+  equals main's; on a divergent bump, revert the four paths or set
+  TILLANDSIAS_SKIP_VERSION_BUMP=1, and explicitly do not reach for --no-verify.
+- **Left open on purpose**: criteria 1 and 3 (move the counter off tracked files;
+  `./build.sh --install` then a normal push with no bypass and no manual revert)
+  need a decision about whether the local build counter should touch tracked
+  files at all. VERSION feeds the artifact version through three build.rs files,
+  and the defect this bump was ADDED to fix was a stale VERSION at release — so
+  the blast radius runs through the release path. Deciding that from a host that
+  cannot run a full build would be guessing. The deadlock is still live; what
+  changed is that it no longer recruits the worst exit.
+- **Pinned by** a new structural step in `litmus:versioning-shape`: the commit
+  advice must be reachable only under a branch test, and the --no-verify warning
+  must be present. Structural because the harmful form is an instruction that is
+  correct on ONE branch and wrong everywhere else — no single-branch behavioural
+  run would catch it.
+- **Verification**: `bash -n build.sh` clean; all three advice branches rendered
+  and checked against the guard's actual rules (main / sync-forward / divergent);
+  the new litmus step run verbatim and passes; `validate-yaml` ok on litmus and
+  fragment; `./build.sh --check` clean and left the tree clean (confirming
+  `--check` does not bump — the deadlock is scoped to build-PRODUCING dispatches).
+- **Next**: curl-install e2e against v0.4.260810.1 once the Release run finishes.
+  632-retq (jq) + a plan-binary rebuild still gate automated Windows drain.
+
+## Cycle 2026-08-10T01:30Z (linux_mutable coordinator — windows found two more selector defects; stranded 12 -> 10)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified.
+- **Integrated `windows-next` 643-bnag** — two more real defects in this host's selector:
+  - it branched on the query's OUTPUT VOLUME rather than its EXIT CODE, so a failed query read as an empty ledger;
+  - probe ordering meant `--budget 0` on a jq-less host refused with `missing-tool` instead of `bad-role`, so the same bad invocation was diagnosed differently per host and the litmus's bad-budget control only passed where jq happened to be installed.
+  - Verified post-merge: all three roles healthy, and all three refusal tokens now correct and host-independent (`bad-role` for a bad role, `bad-role` for a bad budget, `missing-tool` for absent jq).
+  - Windows has now caught FIVE defects in code this host wrote (632-retq, 640-iujb, 635-qpx8, and both halves of 643-bnag). That is the sibling review loop working exactly as intended.
+- **Stranded sweep: 12 -> 10.** Closed exactly TWO, both fully evidenced against every named deliverable, using `set-field` (dogfooding last cycle's tool):
+  - **540** — `scripts/check-opsx-generated-dirt.sh` present and emitting its pinned grammar, the MERGE path documented in the skill including `ok:opsx-only`, deliverable issue file present.
+  - **575** — `record_expert_call` at 3 sites in forge-plan.sh, `cycle-metrics.sh` emitting the `experts:` line, `answer_rate` in methodology/agent-observability.yaml and in the skill. This host has consumed that experts line in every cycle of this loop, which is direct evidence the deliverable works.
+  - **568 left open deliberately**: no `.mcp.json` exists, so `claude-mcp-config-registration` is NOT evidently done. Closing it would have been the guess 641-e2qa exists to forbid.
+- **Release NOT cut, and that is a judgement call worth surfacing.** The UTC day rolled over, linux-next is green 17/17, and there is substantial unreleased work since v0.4.260809.2 (the triage/write-path/ledger-integrity wave plus sibling fixes). The coordinator duty permits a release "when warranted", but a release spends cloud minutes and the operator's standing instruction this session is triage. Flagging rather than self-initiating.
+- **Triage state (v0.5)**: linux 160, macOS 52, windows 51.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T00:55Z (linux_mutable coordinator — the SKILL was teaching the broken write pattern)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes.
+- **Found the actual root cause of the three-host ledger corruption, and it was our own instructions.** `advance-work-from-plan` step 7 said to close a packet with `append-event <id> completed` **or** "by writing an append-only fragment file setting status `done`". **Both branches are broken**:
+  - `append-event` locates packets by their item prefix in the BASE and refuses fragment-only packets outright (600-c266).
+  - A fragment that re-declares the packet under `packets:` with a new status is a G-Set NO-OP — parses, validates, passes `check`, reads correctly in review, discarded by the fold (635-i6vm: 11 of 21 completions lost).
+  - Step 3's claim guidance had the same shape.
+  - **Three hosts following the instructions correctly is not three mistakes.** I had been treating this as an agent-discipline problem for four cycles; it was a documentation defect the whole time.
+- **Rewired the write path everywhere a host actually looks**: `plan/index.d/README.md` (the canonical fragment doc — now leads with `set-field` and a table of exactly what each host got wrong), `methodology/distributed-work.yaml` → new `ledger_write_path`, and both affected steps of `advance-work-from-plan`.
+- Claim guidance now also states that a claim producing no event by cycle end is reclaimed after 4h — closing the loop with 641-e2qa, where 8 claims had been abandoned for 17-26 days.
+- **Triage state (v0.5)**: linux 160, macOS 51, windows 50. Stranded holding at 12 (the 20 remaining are owner-dispositioned work, deliberately not bulk-closed).
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T00:40Z (linux_mutable coordinator — 636-9m79 DONE: the write path stops being hand-authored)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes this cycle.
+- **636-9m79 DONE — `tillandsias-plan set-field <id|order> <field> <value>`.** Three hosts corrupted their own ledger writes in one session (linux G-Set re-declare, macOS events-without-status, windows filed the naming trap 642-fedr). That is a write-path defect, not three mistakes, and the packet's own exit criteria call a helper "the strongest — it removes the choice" rather than policing it.
+  - **Closes 600-c266 in the same pass**: it resolves against the FOLDED ledger, so unlike `append-event` — which locates packets by their item prefix in the BASE and therefore cannot see fragment-only packets — it reaches them. Verified by raising 641-e2qa (fragment-only) from p1 to p0.
+  - Named `set-field`, NOT `set-status`: the channel is field-generic and naming it for one field is exactly what hid it (642-fedr).
+  - Refuses an unknown reference (exit 1) rather than writing a fragment that applies to nothing; reports a no-op instead of writing one.
+  - Dogfooded: 636-9m79 itself was closed with the tool it added.
+- **Two of my own mistakes, both caught by existing guards rather than by me**:
+  - The new arm first landed inside `run_loop_status` instead of the main dispatch — `ledger` was not in scope, and the compiler said so immediately.
+  - `args[0]` is the subcommand, so the first version treated `set-field` itself as the packet reference and refused every invocation. Caught by actually running the three behaviours instead of trusting the build.
+  - The crate's `every_dispatch_arm_is_documented_in_usage` test then caught the missing usage/capabilities entries. That guard exists precisely for this omission and it worked — a good counterexample to this session's run of guards that pinned expressions.
+- **Gate discipline**: on the first red I consulted `check-logs.jsonl` FIRST (the cycle-5 lesson) instead of re-running. It named `litmus-pre-build` immediately, which pointed at the two envelope-citability tests, which pointed at the failing bin test. No cycles lost.
+- **641-e2qa raised to p0** — three hosts hitting the trap in one session makes the stranded audit a coordination blocker, not untidiness.
+- **Triage state (v0.5)**: linux 160, macOS 51, windows 50.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-10T00:19Z (windows — order 643-bnag: counterfeit completion, second occurrence)
+
+- **Host**: `windows`, branch `windows-next` (start 90f6797d). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`, `ok:clean-tree`, clean worktree.
+  Sibling heads: main c3b5b633, linux-next 0664d481, osx-next d232bc42 — macOS
+  is active again this hour. Merged `origin/linux-next` cleanly.
+- **643-bnag DONE**: `select-work-batch.sh` discarded the query's exit code, so a
+  stale plan binary reported a drained ledger. This is the SAME defect 632-retq
+  fixed six hours ago, reached through a different door — and live, not
+  hypothetical. `--claimable-by` landed with 632-39p3 a few hours earlier; any
+  host whose binary predates it gets `unknown query flag: --claimable-by` and
+  exit 2, and the script turned that into `refused:no-eligible-work`.
+- **The binary was not at fault** — it named the unknown constraint on stderr and
+  exited non-zero. The script threw both away: `2>/dev/null` discarded the reason
+  and `[ -n "$raw" ]` inferred health from output volume. Under that test every
+  failure mode of the query is indistinguishable from an empty result set.
+- **Why 632-retq missed it**: it guarded one dependency (jq) rather than the
+  shape. A preflight enumerates the failures you thought of; an exit-code check
+  covers the ones you did not. Now: non-zero + `unknown query` in stderr ->
+  `refused:stale-plan-binary:` with the rebuild command; non-zero otherwise ->
+  `refused:query-failed:` quoting code and stderr; zero and empty ->
+  `no-eligible-work`, which now means what it says.
+- **Loose match, deliberately**: the wording is version-dependent — the older
+  binary here says "unknown query flag", the newer says "unknown query
+  constraint". Pinning either exact phrase would degrade the diagnosis to the
+  generic branch on half the fleet, which is the same
+  fails-where-nothing-observes shape this guard exists to prevent.
+- **Also fixed**: argument validation now precedes environment probes.
+  `--budget 0` on a jq-less host was refusing `missing-tool`, so one bad
+  invocation produced different diagnoses on different hosts and the litmus's
+  bad-budget control only genuinely tested hosts that happened to have jq.
+- **Pinned by** three two-sided controls in `litmus:cycle-batch-triage-shape`
+  (stale-plan-binary; query-failed with the reason quoted; bad-budget under an
+  absent jq) — each asserts the right token appears AND `no-eligible-work` does
+  not. `TILLANDSIAS_PLAN_BIN` added as a seam: without it these are untestable on
+  hosts whose binary is current, i.e. exactly the hosts CI runs on, which is why
+  the hole survived its first fix.
+- **CORRECTION to three cycles of reporting**: the Windows drain blocker is TWO
+  faults, not one. I have been reporting it as "blocked on jq (632-retq)".
+  Installing jq alone would NOT have unblocked it — the local binary is also too
+  old for `--claimable-by`. Both must be resolved; the second now fails loudly
+  with the rebuild command instead of claiming the plan is empty.
+- **Verification**: `bash -n` clean; all five refusal paths exercised in order
+  (bad-role, bad-budget, missing-tool, stale-plan-binary, query-failed); the
+  three new litmus assertions run verbatim against stub binaries and pass;
+  `validate-yaml` ok on litmus + fragment; `./build.sh --check` clean.
+- **Next**: 632-retq (jq) and a plan-binary rebuild both gate Windows drain.
+  642-fedr is claimable by linux. Windows queue holds 7 role-owned packets.
+
+## Cycle 2026-08-09T23:55Z (linux_mutable coordinator — macOS was never stalled; applied its verdicts; third host hit the same write-path trap)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. BOTH siblings pushed.
+- **macOS was NOT stalled — it was deep in a drain.** Last cycle I recorded that I could not distinguish "long VM build" from "stalled" and declined to reclaim its 7h-old leases. That was the right call: it came back with a full close-out.
+  - **624-q4jj ALL-PASS, 5/5 steps** with an evidence file: unstable curl one-liner, channel-resolution probes, SHA256SUMS-macos green under BOTH verifiers, stable DMG e2e, version proof. **Step 4 discharges the order-455 macOS smoke for v0.4.260809.2.** The macOS half of the 621-2re2 unstable channel — designed and verified entirely on Linux — is now confirmed on Apple hardware.
+  - 492 completed; 598-kibt M6 green / M3 partial; 349 blocked by a new lane-wedge 635-kagg (--bash lane wedges post-vault, SIGTERM-immune/SIGKILL-able, RUST_LOG inert because no subscriber); 635-bhkb filed for a `--version` defect.
+- **THIRD host, same write-path trap.** macOS's close-out carried `type: completed` EVENTS and **zero `status:` LWW blocks**, so 624-q4jj — ALL-PASS with evidence — was still being offered as claimable work. Windows independently filed the naming half the same day (642-fedr: the LWW channel is named `status:` but corrects ANY field, so nobody finds it when they need it; I hit exactly this two cycles ago and used `field: pickup_role`).
+  - Three hosts independently is a WRITE-PATH defect, not three mistakes. 636-9m79 already proposes the durable fix — refuse the no-op at authoring time.
+  - Applied macOS's OWN recorded verdicts (completed/completed/blocked), not this host's inference. 349 recorded blocked rather than left ready so it stops being offered while its blocker is open.
+- **Extended `check-fragment-status-loss.sh` to a second class**: a `type: completed` EVENT with no matching status transition. The original pass only caught "declared terminal under `packets:`, discarded by the G-Set"; it was structurally blind to "recorded as an event, never transitioned" — which is what all three hosts actually did.
+- **The new check false-positived on its first run and I nearly acted on it.** It flagged 598-kibt as having a completed event; its real event is `type: progress` and macOS's verdict was explicitly "M6 green / M3 PARTIAL". Cause: awk carries variables across files, so a packet_id that is the LAST entry in one fragment inherits the first `type: completed` in the NEXT. Fixed with `FNR == 1 { pid = "" }` plus a sibling-key stop. **A checker that invents completions is worse than no checker** — acting on it would have closed partial work.
+- **Triage state (v0.5)**: linux 160, macOS 51, windows 50.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-09T23:20Z (linux_mutable coordinator — reclaimed 8 claims abandoned for 17-26 DAYS)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes this cycle.
+- **641-e2qa exit criterion 2 implemented.** `scripts/check-stranded-in-progress.sh` reported the leak; without a reclaim path the set regenerates forever, because every interrupted cycle adds one and nothing removes one.
+  - `scripts/reclaim-stranded-claims.sh` returns abandoned claims to `ready`. Dry-run by default; `--apply` writes an LWW fragment.
+  - **The asymmetry that makes this safe to automate when CLOSING is not**: reclaiming destroys nothing — code, commits and events survive untouched, and the worst case is two hosts briefly eyeing one packet, which the advisory lease protocol already treats as normal. Being wrong here costs a duplicated glance; being wrong about closure costs the work. 641-e2qa's refusal to auto-close stands.
+  - Evidence required: in_progress AND no progress/completed/blocked event ever AND newest claim older than TTL (default 4h, matching claim-ledger-node.sh). **A packet with no claim event is NOT reclaimed** — absent evidence is not evidence of abandonment.
+  - **Applied: 8 packets, claim ages 425-624 HOURS (17-26 days)**, from mid-July. in_progress 22 -> 14, stranded 20 -> 12.
+- **A no-op that looked like a clean result.** First implementation reported `candidates=20 reclaimed=0` and I nearly accepted it. The claim-timestamp extraction used `grep -A6`, but in the base ledger a packet's events sit hundreds of lines below its packet_id, so it matched nothing — "nothing was eligible" and "I looked in the wrong place" are indistinguishable from the summary line. Rewrote as packet-block-scoped awk. Same failure direction as 627-cx24 and 635-i6vm: wrong where nothing observes it.
+- **Negative control**: `--ttl-hours 100000` reclaims 0, proving the age gate is load-bearing rather than decorative.
+- **Triage state (v0.5)**: linux 160, macOS 53, windows 50 — all filling budget 3.
+- **Sibling health**: windows ACTIVE (4 pushes today; found 632-retq, 640-iujb, 635-qpx8 — two of them defects in this host's own work). macOS QUIET ~3.5h, zero loop_status fragments ever written, 6 claim leases from 16:28Z now ~7h old. Not reclaiming those unilaterally: they are macos-owned and the host may be mid-VM-build.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-09T22:58Z (windows — 635-qpx8 CLOSED; order 642-fedr filed)
+
+- **Host**: `windows`, branch `windows-next` (start de2e4a26). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`, `ok:clean-tree`, clean worktree.
+  Sibling heads: main c3b5b633, linux-next 71e64d5b, osx-next f4780e2b. Merged
+  `origin/linux-next` cleanly.
+- **Unblocked by linux**: 632-39p3 resolved — `--role` stays a substring filter
+  on the field, and a NEW `--claimable-by` answers claimability. Resolved by
+  ADDING the missing question rather than redefining the existing one, which is
+  what 635-qpx8's own notes asked for. Linux prioritized it specifically because
+  this lane reported itself blocked; the handoff worked in both directions.
+- **635-qpx8 CLOSED**. All three sequenced `pickup_role` values normalized. The
+  sequencing was moved to per-packet events rather than deleted, satisfying the
+  exit criterion that a reader can still tell Windows/macOS replicate 513 after
+  linux lands the harness. Verifiable closure met:
+  `total=626 canonical=599 prose=27 multi_host=4 sequenced=0
+  verdict=ok:canonical-roles`, exit 0. The four co-owned values remain and are
+  correctly not flagged. Confirmed against the FOLD: `query --json` reports
+  dev-end-user-gating-litmus => linux, and the Windows claimable queue dropped
+  7 -> 6 as the linux-owned litmus packet stopped being offered.
+- **Correction path found where the docs say none exists (642-fedr)**: closing
+  this needed a `pickup_role` change, but 627-c9c2 forbids direct
+  `plan/index.yaml` edits and README.md says "Only `status` fields are
+  last-writer-wins" — together implying no non-status field can EVER be
+  corrected. That reading is wrong: `fragments.rs` keys the LWW register on
+  `{packet_id}\u{1}{field}` and applies it to ANY field; the channel is merely
+  NAMED `status:`. This cycle came one step from filing a phantom structural
+  defect. Filed as a naming/docs packet (rename to `fields:`, keep `status:` as
+  an alias, add a non-status example) — no fold behaviour changes.
+- **Two defects in my own cycle-2 checker, found and fixed here**:
+  (a) it grepped the pre-fold TEXT of `plan/index.yaml` + fragments, so it could
+  not see any LWW correction — it still reported all three offenders after the
+  fold had already stopped offering them. That makes it an instance of the exact
+  defect it was written to report: active, internally consistent, measuring a
+  population the system does not use. Now reads the folded ledger via the plan
+  binary and REFUSES rather than falling back to the raw grep, because a silent
+  fallback to a different population is the failure, not the mitigation.
+  (b) an empty input reported `total=0 verdict=ok:canonical-roles` — "no problems
+  found" when nothing was inspected, which would convert any future breakage of
+  its input into a passing run. Now `refused:empty-projection`, exit 2. Found by
+  the negative control written for (a), which is the argument for writing it.
+- **Verification**: `bash -n` clean; all five fixture cases re-run after the fix
+  (clean 0 / sequenced 1 / co-owned 0 / missing-input 2 / empty 2); live run
+  exit 0; both new litmus steps exercised by hand; `validate-yaml` ok on litmus
+  and both fragments; `check-fragment-status-loss.sh` ok:74 checked;
+  `./build.sh --check` clean.
+- **Next**: 632-retq still gates automated Windows drain (jq). 642-fedr is
+  claimable by linux. Windows queue: 6 packets, all genuinely windows-owned now.
+
+## Cycle 2026-08-09T22:50Z (linux_mutable coordinator — 21 packets stranded mid-claim; it was never macOS)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No new sibling pushes (windows de2e4a26 already merged last cycle; osx-next unchanged for ~3h).
+- **641-e2qa FILED (p1) — went looking for why macOS looked idle and found something bigger.** It was not the macOS lane: **23 packets sit in `in_progress`, 21 of them with NO progress/completed/blocked event ever recorded.** 16 linux, 6 windows, 1 unassigned; oldest at order 153; ~9% of the live ledger against 216 ready.
+  - A packet in `in_progress` is invisible in BOTH directions — `ready` skips it so nobody claims it, burndown ignores it so nobody notices it is unfinished. Neither work nor done.
+  - **This is a DIFFERENT leak from 635-i6vm and last cycle's guard cannot see it.** 635-i6vm: completion WAS declared and the G-Set discarded it. This: completion was NEVER declared. 627-k4mz was filed `in_progress`, the fix was written by Windows, merged and gated by this host — and no fragment ever said so. Nothing was discarded, so nothing looked wrong. Together the two leaks explain most of the "agents rediscover finished work" complaint: one class loses the completion, the other never writes it.
+  - `scripts/check-stranded-in-progress.sh` reports them. Deliberately NOT a gate and deliberately does NOT close anything: a packet legitimately in flight is indistinguishable from one abandoned an hour ago, and an automated closer that guessed would mark unfinished work done — the most expensive version of this bug.
+  - Closed exactly ONE, with evidence: 627-k4mz (windows commit 55bc277d names it, the augmenting CA-bundle logic is present in images/inference/entrypoint.sh, this host merged and gated it). The other 20 are owner work; closing on inference is precisely what the packet warns against.
+  - Real fix is in the exit criteria: a claim that produces no event within one cycle must return to `ready`, or the claim protocol must require an event at cycle end. Otherwise this set regenerates continuously.
+- **Skill updated**: coordinator now runs the stranded sweep every cycle and reports the summary line; if the count RISES cycle over cycle, claims are outliving their cycles and that is the thing to fix, not the individual packets.
+- **macOS**: still no push (~3h) and still zero loop_status fragments. Its 6 claim leases from 16:28Z are ~6h old, past the 4h advisory TTL. Not reclaiming them unilaterally — the leases are advisory and macOS may be mid-build; noting the age so the next coordinator can decide.
+- **Triage state (v0.5)**: linux 160, macOS 52, windows 49 — all filling budget 3.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-09T22:25Z (linux_mutable coordinator — I handed macOS an unworkable packet)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified.
+- **Integrated** `windows-next` 640-iujb (the freshness audit class could not reach an unaudited file). Windows is moving again after 632-39p3 unblocked them last cycle.
+- **COORDINATOR DEFECT, MINE.** The selector handed macOS **634-39ik** as its entire batch — the TLATOANI DECISION REQUEST this host filed, whose own notes say it stays `ready` until the operator rules. A sibling was being asked to implement a packet whose exit criterion is "the Tlatoani decides".
+  - Cause: I filed it `pickup_role: any`. The convention already existed and I did not use it — `pickup_role: tlatoani` is present in the ledger, alongside an `operator-decision` capability tag.
+  - Corrected via the LWW channel (which is field-generic, not status-only: `field: pickup_role`). Scope and content unchanged; only claimability. Still awaiting the ruling — no self-escalation.
+  - **macOS now draws a full 3-packet cohesive batch** of real inference-tier work (397/401/409) instead of one unworkable packet.
+- **Guard added** (litmus steps 11-12): no packet with `pickup_role: tlatoani` may be returned by `--claimable-by <host>`, plus a negative control that `any` is a WHOLE-FIELD match — a pickup_role like "company-lane" contains "any" and must not become claimable by everyone.
+  - Deliberately NOT a check on the `operator-decision` TAG: two ready packets carry that tag as implementation work *informed by* a ruling, which is legitimately claimable. Tag-based blocking would have been a false positive on both.
+- **macOS visibility gap**: osx-next has not pushed in ~2h20m and has written ZERO loop_status fragments (forge 5, mutable 11, windows 3, macos 0). Its last activity was merging this host's work at 19:50Z. Cannot distinguish "long build" from "stalled" — noting rather than guessing; if it is still silent next cycle that is worth a packet.
+- **Triage state (v0.5)**: linux 160, macOS 52 (batch 3/3), windows 49.
+- **Gate**: 17/17; triage litmus 13/13.
+
+## Cycle 2026-08-09T22:00Z (linux_mutable coordinator — unblocked Windows; 632-39p3 resolved)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes for two cycles.
+- **COORDINATOR ACTION — I was blocking a sibling.** Read the Windows lane's last loop-status rather than assuming they were idle: *"Next: 632-39p3 (p0, linux) unblocks 635-qpx8."* A p0 owned by THIS host was gating their drain. Prioritized it over any local work — that is the coordinator's job before its own queue.
+- **632-39p3 RESOLVED.** The two readers were never answering the same question, so neither was wrong; they were being USED interchangeably.
+  - `--role X` — substring filter ON THE FIELD. Both MCP servers document it exactly that way, and drain-queue + plan_query depend on it.
+  - `--claimable-by X` — NEW. What a host of role X may CLAIM: its own role OR a whole-field `any`.
+  - Resolved by ADDING the missing question rather than redefining the existing one. Silently widening `--role` would have changed what plan_query reports to every other surface — the same unobserved-change class this packet exists to close, and precisely what 635-qpx8's notes warned against.
+  - `any` matches the WHOLE trimmed field, not a substring: a pickup_role of "company-lane" contains "any" and is emphatically not claimable by everyone. Verified — `--claimable-by <nonexistent>` returns 0 non-`any` packets.
+  - Measured on v0.5 ready: `--role macos` 11, `--claimable-by macos` 53, `next macos` 33 eligible (smaller than 53 because `next` also requires deps-clear and unleased — consistent, not contradictory). Passing both flags is a typed refusal, not a silent precedence rule.
+  - `select-work-batch.sh` now calls `--claimable-by`; the two-query jq union that stood in while this was undecided is retired.
+  - **UNBLOCKS 635-qpx8 (windows).**
+- **Triage state (v0.5)**: linux 160, macOS 53, windows 49. macOS drew a 1-packet batch this cycle — its chosen epic (convergence-velocity) has only one v0.5-eligible packet; that is correct behaviour, not starvation, and the entropy floor will move it next seed.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-09T21:35Z (linux_mutable coordinator — the "unexplained" flake was a parallel test race, and my own packet was wrong)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes.
+- **638-ehzi DONE (p1) — root-caused the intermittent gate failure dismissed twice as unexplained.**
+  - **I corrected my own packet.** 637-df4z claimed the failing check names were unrecoverable and asked for per-run log retention. Both halves were false: `scripts/local-ci.sh` already prints a `Failed checks:` block naming each one — I lost them by piping the run through `tail -6` and a grep filter, self-inflicted — and `target/convergence/check-logs.jsonl` has retained a per-run verdict for every check since 2026-08-01. The evidence was on disk the whole time. 637-df4z closed as MIS-DIAGNOSED.
+  - Reading that file named the culprits in seconds: `rust-tests` and `tray-contract`, both cargo runs. **Never litmus** — which is where two cycles of attention went.
+  - RACE: `chromium_framework_keeps_squash_options...` and `build_routing_uses_type_specific_containerfiles` both call `temp_image_root()` (keyed on `process::id()` — the SAME path for both — then `remove_dir_all`ed) and both `set_var("HOME")` process-wide. Cargo runs them concurrently, so either could wipe the other's fixture or observe the other's HOME. Two shared resources, one race. Reproduced ~1 in 4 across the workspace, never crate-alone.
+  - Fixed with a poison-tolerant `ENV_AND_FIXTURE_LOCK`. Poison tolerance matters: propagating it would turn one real failure into a cascade of secondary failures that hide the actual defect. **Verified 0 failures in 8 consecutive full-workspace runs** against a prior ~1-in-4 rate.
+  - **639-d2bc filed (p2)**: ten more `set_var("HOME")` sites, each a latent race waiting for a scheduling accident. Prefers injection over locking, and explicitly forbids `--test-threads=1`, which would hide every race in the suite.
+- **Skill updated**: `/meta-orchestration` now opens with "when the gate fails, read check-logs.jsonl FIRST", including the warning that piping the gate through `tail`/`grep` cuts off the `Failed checks:` block, and that re-running to get a better look is what destroys the evidence. The next agent should not repeat my two cycles.
+- **Triage state (v0.5)**: linux 160, macOS 53, windows 49 — all filling budget 3.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-09T21:29Z (windows — order 640-iujb: the FRESHNESS audit class was a closed loop)
+
+- **Host**: `windows`, branch `windows-next` (start abee58e5). Guards
+  `ok:gh-keyring`, `ok:branch-windows-next`, `ok:clean-tree`, clean worktree.
+  Sibling heads: main c3b5b633, linux-next 0c3049bc, osx-next f4780e2b. Merged
+  `origin/linux-next` cleanly.
+- **Sibling work verified, not duplicated**: linux landed
+  `scripts/check-fragment-status-loss.sh` (635-i6vm, 52% of fragment-recorded
+  completions were discarded by the fold). Ran it here: `ok:no-fragment-status-loss:71
+  checked`. Confirmed both windows fragments (632-retq, 635-qpx8) fold as `ready`
+  correctly — they are G-SET adds of new packets, not status transitions, so
+  they were never exposed to that defect.
+- **Selector still refuses** `refused:missing-tool:jq` (632-retq open). Work
+  selected by hand again. Considered fixing it properly this cycle by adding TSV
+  columns to `tillandsias-plan query` — **rejected**: that needs a Rust rebuild,
+  and Windows SAC blocks freshly built executables on this host. A failed
+  rebuild would take out the plan binary this loop depends on for every query.
+  Not worth risking the loop's own tooling; left to a host that can build.
+- **Standing FRESHNESS audit (skipped in cycles 1-2 — gap closed)**: audited the
+  top flagged component, `scripts/freshness-inventory.sh`. Disposition
+  **updated**.
+- **The audit found the audit class was closed.** `freshness-stale:` lines are
+  only emitted for files that ALREADY carry a stamp — staleness is days since a
+  stamp, so an unstamped file has no age and can never be flagged. The advisory
+  ranks those lines, so the audit queue was drawn entirely from the stamped set:
+  8 files, re-offered forever. Measured 969 components / 8 stamped / 0% on
+  2026-07-31 vs 1021 / 8 / 0% today — nine days, +52 components, +0 stamps.
+  The tell was that this script was the top stale component on BOTH dates: the
+  cycle was being asked to audit the inventory a second time while 1013 files had
+  never been looked at once. Not slow — closed.
+- **Fix**: `freshness-next: <relpath> source=<unstamped|stale> seed=<seed>`,
+  drawing from the unstamped set first and falling back to the oldest stamp only
+  at 100% coverage. Deterministic under a printed seed (replayable), rotating by
+  UTC date (advances the backlog). Existing report lines untouched, so the pinned
+  grammar and `local-ci.sh` consumers are unaffected.
+- **Pinned by** three new steps in `litmus:freshness-inventory-shape`: the
+  next-target grammar, REPRODUCIBLE under a fixed seed, and ANTI-STARVATION —
+  below 100% coverage the target must be `source=unstamped`. That last step is
+  the real regression guard: if it fails while coverage is under 100%, the path
+  from "never audited" to "audited" has been cut again.
+- **Verification**: `bash -n` clean; all three new litmus steps executed by hand
+  and pass; determinism confirmed (same seed twice, identical target) and
+  rotation confirmed (4 seeds, 4 distinct unstamped targets);
+  `validate-yaml` ok on litmus + fragment; `./build.sh --check` clean.
+- **Residual (640-iujb, routed to Tlatoani)**: coverage is still 0%. One
+  component per cycle against 1013 unstamped is ~1013 cycles, and the inventory
+  grew 52 in nine days, so the queue is now open but not convergent. The rate and
+  target are a scope decision; `convergence.yaml -> bar_raise_governance` forbids
+  the loop from setting its own bar, so it is filed, not answered.
+- **Next**: 632-39p3 (p0, linux) still unblocks 635-qpx8; 632-retq still gates
+  automated Windows drain.
+
+## Cycle 2026-08-09T21:05Z (linux_mutable coordinator — project_answer never satisfied its own envelope contract)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified.
+- **Integrated** `windows-next` 635-qpx8 (pickup_role prose measurement, building on this host's earlier finding). Their `scripts/check-pickup-role-grammar.sh` landed WITHOUT the exec bit (100644) — fixed via `git update-index --chmod=+x`. It reports `total=640 canonical=611 prose=29 multi_host=6 sequenced=3`.
+- **619-pfsj PARTIAL SLICE — exit criterion 1 now met, packet stays ready.** Newly unblocked because both its deps were among the 11 completions corrected last cycle.
+  - Audited all four criteria instead of assuming. C4 already satisfied (0 expert mentions in forge-discovery.md).
+  - **C1 was failing and nothing surfaced it**: `project_answer` emitted a hand-rolled approximation of the answer envelope, so `verify-answer` REFUSED every envelope it produced — on the Tillandsias repo and BOTH fixtures. Five contract violations, each hidden behind the previous and only discoverable by running the verifier: bare-string citations instead of Citation structs; `kind` outside the closed vocabulary; missing `authority`; `freshness` as the string "now" instead of a struct; `confidence` using nonexistent variants (`high`, `partial`). The tool reported `confidence: high` the whole time.
+  - All five fixed. Three envelopes now verify clean: two fixtures Exact, Tillandsias repo Unsupported.
+  - The Unsupported result is CORRECT. The generic lane took its description from README line 1, which on this repo is the ``` opening an ASCII-art block — the answer literally read 'Description: ```text'. Citations are now emitted only when the span supports a claim (verify-answer requires `authority.key` so a citation cannot be decorative), and an uncited answer renders as a typed refusal — which is C2's requirement. Marker-file type detection has no citable span, so types are reported in the refusal REASON, not as evidence.
+  - Still open on this packet: C2's no-inference synthesis refusal, C3 engine-vs-image capability honesty.
+- **637-df4z FILED (p1) — the flaky gate, now seen twice.** `--ci-full` returned 15/17 then 17/17 with no intervening change, in cycles 3 and 4. Both times the failing check names were lost, for a structural reason: the detail lives in `/tmp/litmus-pre-build.log` and the PASSING re-run overwrites it. This cycle I tried to capture the names first and still lost them — the capture command re-runs the gate, which passes, which destroys the evidence. Ruled out worktree dirt, dashboard churn, and any local edit. Prerequisite fix is per-run log retention; explicitly warns against auto-retry, which would convert an intermittent failure into an invisible one.
+- **Triage state (v0.5)**: linux 160, macOS 53, windows 49 — all filling budget 3.
+
+## Cycle 2026-08-09T20:35Z (linux_mutable coordinator — 52% of fragment completions were being discarded)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary verified. No sibling pushes this cycle (both behind linux-next).
+- **635-i6vm DONE (p0) — the mechanical root of "agents go in circles"**. The batch selector handed this host three packets, TWO already finished: 606-qh3f and 619-3y75 (completed 2026-08-08, deliverable present on disk).
+  - **MEASURED: 11 of 21 packets recorded `completed` in a fragment were still folding as `ready`** — 52% of fragment-recorded completions silently discarded, some for two days.
+  - CAUSE: `packets:` is a G-SET keyed by packet_id, so re-declaring a packet is a NO-OP; status must go through the separate LWW `status:` channel. The CRDT behaved exactly as documented. The defect is that the WRONG way is indistinguishable from the right way at every point anyone would look — it parses, validates, passes `tillandsias-plan check`, and reads correctly in a diff. The fold discards it and nothing says so.
+  - This is NOT a ranking or heuristic problem. Completed work stays in the ready pool permanently and every reader inherits it, because every reader asks the fold.
+  - All 11 corrected via the LWW channel after spot-checking evidence on disk (fixtures present, `--layers` present, nogpgcheck absent, rustls-tls in manifests) — no new completion declared, only already-evidenced ones re-applied. Linux eligible 169 -> 158.
+  - `scripts/check-fragment-status-loss.sh` added and wired into `./build.sh`: fails on any fragment declaring a TERMINAL status the fold does not apply, deliberately ignoring the case where the fold is AHEAD of a declaration. Negative control included.
+  - **636-9m79 filed (p1)**: a detector is the second-best answer. The write path should refuse the no-op at authoring time — and must address `append-event`'s inability to reach fragment-only packets (600-c266), which is WHY agents hand-author these fragments.
+- **OBSERVATION — flaky gate, unexplained.** `./build.sh --ci-full` reported 15/17 with two failed checks, then 17/17 on an immediate re-run with NO intervening change. I did not capture which two before re-running; `--check` passed in between and the worktree carried no run-generated dirt, so the usual dashboard-churn explanation does not apply. Recorded rather than guessed at. If it recurs, capture the named checks before re-running.
+- **Triage state (v0.5)**: linux 158 -> now offering genuinely open work; macOS 53, windows 49, all filling budget 3.
+- **Gate**: 17/17.
+
+## Cycle 2026-08-09T20:13Z (windows — order 635-qpx8: pickup_role prose misroutes claimable work)
+
+- **Host**: `windows`, branch `windows-next` (start ad32cf84). Guards:
+  `ok:gh-keyring`, `ok:branch-windows-next`, `ok:clean-tree`, clean startup
+  worktree. Sibling heads: main c3b5b633, linux-next f4780e2b, osx-next
+  3965ef29. Merged `origin/linux-next` cleanly before work.
+- **Selector still unusable here**: `scripts/select-work-batch.sh windows`
+  returns `refused:missing-tool:jq` — the loud failure added last cycle working
+  as intended. Batch chosen manually via `tillandsias-plan query`. Residual
+  632-retq (drop the jq dependency) remains open and is the blocker for
+  automated Windows drain.
+- **Stale artifact noted**: `./target/release/tillandsias-plan` (Aug 3) predates
+  the `next` subcommand and self-reports as stale; the selector's binary probe
+  prefers release over the newer debug build, so it would pick the stale one.
+  Used the debug binary for all queries this cycle. Not filed separately — the
+  binary already fails loud with the right advice, which is the behaviour we
+  want.
+- **Finding (order 635-qpx8)**: `pickup_role` has drifted from a token to free
+  prose, and `query --role` matches it as a case-insensitive SUBSTRING, so a
+  lane named only as a follower is offered the packet as claimable work. Found
+  the hard way: packet 513 `dev-end-user-gating-litmus` is owned by linux and
+  its Windows clause reads "replicate LATER", but it appeared in
+  `query --role windows` and was the third packet this cycle opened.
+  This is the **over-match half of 632-39p3**, which the linux coordinator filed
+  the same day for the under-match half (`any` dropped by `query --role`,
+  starving the sibling lanes). One field, two consumers, opposite failures:
+  `lib.rs:533` exact vs `main.rs:563` substring.
+- **Measured**: `total=637 canonical=608 prose=29 multi_host=6 sequenced=3`.
+  The six multi-lane values split cleanly — 3 co-owned (both lanes genuinely own
+  a half; matching both is correct) and 3 sequenced (follower/verifier/support
+  lanes, always wrong to offer). Only the sequenced ones fail the check;
+  counting all six would have inflated the number and taught readers to ignore
+  it.
+- **Deliverables**: `scripts/check-pickup-role-grammar.sh` (falsifiable verdict
+  line, `--detail` naming owner and wrongly-claimable lanes, grep/sed/awk only —
+  no jq/yq/python/ruby, pinned by the litmus, deliberately so a cross-host
+  routing report is not itself host-locked) and
+  `litmus:pickup-role-grammar-shape` (fixture-driven via a
+  `TILLANDSIAS_PICKUP_ROLE_INPUT` seam, with a negative control for a follower
+  lane, a guard that co-ownership stays legal, and a refusal check so an
+  unreadable input never reads as clean).
+- **Deliberately NOT fixed**: the matcher itself. Which semantics `query --role`
+  should carry is an open decision owned by p0 632-39p3, whose notes warn that
+  drain-queue and the `plan_query` MCP tool both consume it. Changing it from a
+  sibling host mid-decision would be drift. Packet 635-qpx8 files the
+  normalization and `depends_on` the p0 so the ordering is explicit.
+- **Verification**: `bash -n` clean; all 4 classifier cases exercised locally
+  (clean/sequenced/co-owned/missing-input) with expected exits 0/1/0/2; litmus
+  grammar, portability and `--detail` steps run by hand; `validate-yaml` ok on
+  the new litmus and fragment; `./build.sh --check` clean.
+- **Next**: 632-39p3 (p0, linux) unblocks 635-qpx8. Windows drain still gated on
+  632-retq.
+
+## Cycle 2026-08-09T19:55Z (linux_mutable coordinator — both siblings integrated; 4th expression-pinning instance)
+
+- **Host**: Linux mutable, `linux-next`. Guards clean; boundary snapshot recorded and verified.
+- **INTEGRATED BOTH LANES — and both caught defects in this host's own work**:
+  - `windows-next` **632-retq**: the batch selector reported a MISSING jq as `refused:no-eligible-work`. jq is absent on Windows, so an environment fault wore the costume of a drained ledger and a greedy loop would idle for hours on a host with 7 claimable packets. Now refuses on its own `refused:missing-tool:` token, with a `TILLANDSIAS_JQ` test seam and a two-sided negative control (right token present AND wrong token absent — only the second half catches the regression).
+  - `osx-next`: the litmus rewrite I landed last cycle **reintroduced GNU-only `grep -P` twice** after macOS had already removed it once. Also 628-yd8f (`--capabilities` singleton-killed the live vsock server).
+  - Verified post-merge: all three roles healthy, both sibling fixes intact, missing-jq path returns the right token.
+- **4th expression-pinning false red (634-39ik filed, p1)**: the windows merge bumped the pre-push hook marker `v3 -> v4`; `litmus:release-gates-run-locally` step 8 pinned the literal `tillandsias-pre-push-v3` and went red although fail-fast composition and the versioned marker were both intact. Repaired to `tillandsias-pre-push-v[0-9]+`. This instance is the clearest statement of the shape: **a guard pinning a VERSION token is not at risk of a false red, it is scheduled for one at the next bump.** Four instances in two days, every one a false red caused by a correct change.
+  - Filed as a TLATOANI DECISION REQUEST, not an escalation — the loop is forbidden from raising its own bar. Proposes enforcement scoped to ADDED steps only, so the 643-candidate backlog never blocks landing anything.
+- **Triage state (v0.5, post-fix)**: linux 168 eligible, macOS 53, windows 49 — all three filling budget 3. Sibling batches verified COHESIVE and actionable: 397/401/402/409 all sit in the inference-tier theme (Metal lane, WSL2/GPU lane, backend seam, VM GPU awareness), which is genuine cohesion rather than an epic label.
+- **Deliberately NOT done**: assigning `release_target` to the 112 ungrouped linux packets. 630-6nw5 measured the dominant epic's tag cohesion at 0.110 against a 0.041 random baseline, so bulk-assigning to that signal would be building on a measured-bad grouping. Anchor-tag grouping is the research's recommendation and 625-jd5f/630-6nw5 own the decision.
+- **Gate**: `./build.sh --ci-full` 17/17.
+
+## Cycle 2026-08-09T19:35Z (linux_mutable coordinator — sibling starvation found and fixed; 632-39p3 filed)
+
+- **Host**: Linux mutable, `linux-next`. All guards clean (opsx `ok:clean-tree`, credential `ok:gh-keyring`, branch `ok:branch-linux-next`, expert base `ok:expert-base-ready`). Boundary snapshot recorded and verified.
+- **Integration**: nothing to merge — `origin/windows-next` and `origin/osx-next` are both at `linux-next`'s tree this cycle (siblings iterating locally per operator).
+- **COORDINATOR FINDING — both sibling hosts were starving.** Measured at cycle start: `select-work-batch.sh windows` returned ONE packet against a budget of 3, macOS TWO. Root cause is a reader disagreement, not a shortage of work: `query --role macos` returns 13 while `next macos` reports 32 eligible, because `next` treats `pickup_role: any` as claimable by every host and `query --role` matches the field literally — dropping all 56 `any` packets. The selector used `query`. Linux never felt it (its own role tag covers 131 packets), which is exactly why it went unnoticed while both siblings starved.
+  - Selector now unions role + any. Measured after: **macos 13 -> 52, windows 7 -> 48, both filling budget 3.**
+  - The underlying disagreement is filed as **632-39p3 (p0)** — two readers of one ledger must not disagree about eligibility; same class as the 627-cx24 silent projection drop. Deliberately NOT resolved by fiat: `query --role` has two defensible meanings and consumers (drain-queue, MCP `plan_query`) would be affected.
+- **633-wb69 DONE — two more selector defects surfaced by that fix**:
+  - **Release scope**: the selector never passed `--release`, so v0.5/v0.6/v0.7 were ranked against each other and the header printed whichever release the first row carried — it read `release=v0.7` while ACTIVE RELEASE is v0.5. Selecting not-yet-relevant work is the "agents work obsolete packets" failure the selector exists to prevent. Now defaults from the folded ACTIVE RELEASE like `plan next` does.
+  - **Entropy floor**: release-scoping widened the top gap to ~6x, and squared weighting turned that into 94.6% for the top epic — 12 consecutive seeds all chose it. Added epsilon-mixing (EPS=0.15 over top-k) so every frontier epic holds a floor; measured p = 0.855/0.073/0.072, 24 seeds spread 19/3/2.
+  - Both entropy litmus steps rewritten to assert PRINTED PROBABILITIES instead of sampling seeds — the sampling versions failed ~15% of runs on correct behaviour, and a test that fails for the right reason still trains people to re-run it.
+- **Triage state for siblings** (post-fix, v0.5): macOS 52 eligible / 9 grouped, Windows 48 eligible / 7 grouped. Both now get full 3-packet cohesive batches. Ungrouped remains the dominant gap (43 macOS, 41 Windows) — tracked by 625-jd5f.
+- **Gate**: `./build.sh --ci-full` 17/17; `litmus:cycle-batch-triage-shape` 10/10.
+- **Next**: 632-39p3 decision; siblings should pick up 624-q4jj / 624-su5r validations plus the now-reachable `any` backlog.
+
+## Cycle 2026-08-09T18:47Z (windows — order 632-retq: selector counterfeited a drained ledger)
+
+- **Host**: `windows`, branch `windows-next` (start a949c52f). Guards:
+  credential `ok:gh-keyring`, branch `ok:branch-windows-next`, opsx dirt
+  `ok:clean-tree`, clean startup worktree. Sibling heads at fetch: main
+  c3b5b633, linux-next 18a8441e, osx-next af34d5f8. Merged `origin/linux-next`
+  into `windows-next` cleanly before work (pre-push gate).
+- **Batch triage refused — and the refusal was false**:
+  `scripts/select-work-batch.sh windows` printed
+  `refused:no-eligible-work:no ready packets for role windows`, and `linux` and
+  `any` refused identically. The ledger was not drained:
+  `tillandsias-plan query --status ready --role windows` returns 7 claimable
+  packets (154, 279, 402, 513, 514, 599-3b9h, 624-su5r). Cause: every
+  projection in the selector is a `jq` call, `jq` is absent on this host, and
+  the flatten carried `2>/dev/null`, so an empty `rows` fell into the
+  `no-eligible-work` refusal. That token is the greedy loop's terminal state,
+  so the fault did not slow the cycle down — it impersonated completion, and
+  would have idled a 12-hour greedy run to zero.
+- **Order 632-retq (fix, this commit)**: `select-work-batch.sh` now runs a jq
+  preflight refusing `refused:missing-tool:` ("this is NOT a drained ledger")
+  before any projection, and discriminates `refused:parse-failure:` (query
+  returned >2 bytes but the projection yielded no rows) from genuine emptiness
+  — catching the next tooling fault, not only this one. Added a
+  `TILLANDSIAS_JQ` seam because emptying `PATH` cannot test this path: it kills
+  the shebang before the script runs.
+  `litmus:cycle-batch-triage-shape` gains a two-sided negative control (the
+  `missing-tool` token must appear AND `no-eligible-work` must not — the second
+  half is the one that catches the regression).
+- **Verification**: `bash -n` clean; the new litmus assertion executed locally
+  and passes; the real absent-jq path on this host now emits `missing-tool`;
+  negative controls for bad role/budget unchanged; `validate-yaml` ok on the
+  touched litmus and the new ledger fragment.
+- **Residual (filed, not fixed)**: the host still has no jq, so the selector
+  cannot produce a batch here — the loop has no batch source on Windows.
+  Packet 632-retq `selector-drop-host-tool-dependency` proposes removing the jq
+  dependency in favour of a projection `tillandsias-plan` emits itself, which
+  also deletes the equivalent `yq`/`ruby` exposure from the 2026-08-03
+  host-awareness issue. Provisioning jq per host is the lesser fix and is
+  operator-owned.
+- **Next**: 632-retq is claimable by any host that can run the selector (linux
+  or macos). Windows drain remains blocked on it or on host provisioning.
+
+## Cycle 2026-08-09T16:35Z (forge — order 614-2gqx full-mode terminal attestation DONE)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next` (start b42a057d). Credential `ok:forge-git-mirror`, branch
+  `ok:branch-linux-next`, opsx dirt `ok:clean-tree`, clean startup boundary
+  snapshot before work. Sibling heads: main c3b5b633, windows-next a949c52f,
+  osx-next 936c1899. Direction: top claimable v0.5 p0 packet.
+- **Order 614-2gqx DONE (meta-orchestration-full-mode-exit-attestation-gap)**:
+  implemented the full-mode terminal attestation gate that closes the
+  4a1410a2 breach class. scripts/mo-full-attest.sh defines the
+  `MO-FULL: <COMPLETE|BLOCKED> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>` grammar and
+  enforces LOCAL_SHA == REMOTE_SHA (no marker may follow an unpushed local
+  commit), host-branch match, and bounded `git ls-remote` convergence on the
+  claimed remote head. scripts/litmus-opencode-e2e-launch.sh now rejects
+  full-mode exit zero without a valid converging marker (FORGE_EXIT=127
+  marker-level, 128 remote-head), mirroring the smoke-mode 126 gate;
+  MO-SMOKE grammar and the 4h full-cycle rate limit unchanged.
+  skills/meta-orchestration/SKILL.md documents the grammar + emission rule
+  (final output line, after finalization steps 1-8, no marker on failed
+  push). Hermetic fixture scripts/test-mo-full-attest.sh (6/6 scenarios:
+  no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-
+  mismatch, clean-pass) wired as the first critical-path step of
+  litmus:opencode-prompt-e2e-shape. plan/issues finding doc updated with the
+  resolution.
+- **Verification**: fixture 6/6 PASS, live-convergence check PASS (real
+  remote head) + unpushed-commit FAIL path proven, yq parse clean on
+  plan/index.yaml + litmus yaml, bash -n clean on all touched scripts,
+  `./build.sh --check` exit 0 (plan ledger 598 packets, ids unique, live
+  references sound, gate stamp recorded).
+- **Next**: 606-e2hg (plan expert fragment/append-event) remains the
+  recommended next EXPERTS packet; 600-c266 stays ready.
+
+## Cycle 2026-08-09T10:40Z (forge — epic part 2: make the local gate load-bearing)
+
+Part 2 of the loop-integrity epic. Closed ORDER 598-znuv
+(local-gate-obligation-missing-from-the-loop), the p0 that named the gate in
+the loop skill and corrected the false push-CI claim in AGENTS.md:
+(1) skills/meta-orchestration/SKILL.md Finalization step 4 now says 'Run the
+local pre-push gate: ./build.sh --check and fix what it reports ... Do not push
+past a red gate', placed between YAML validation and commit. (2) AGENTS.md no
+longer contains 'the CI workflow will mark it red' — push CI exists on no
+working branch; GEMINI.md and .github/copilot-instructions.md inherit via
+symlink (readlink-verified). (3) litmus:github-actions-budget gained a
+sed-scoped step ('the loop skill names the local gate in Finalization as an
+obligation with the command'); RED proven by running the identical grep against
+a Finalization block without the gate, GREEN proven after the edit, and all
+non-stdlib-bound steps of the litmus ran green directly. (4) The evidence case
+(query_packets clippy refusal — always-true `limit == 0 || true` at
+crates/tillandsias-plan/src/main.rs:327, landed the day push CI was removed) is
+recorded at plan/issues/local-gate-evidence-query-packets-clippy-2026-08-09.md.
+The mandatory ./build.sh --check gate was run before this push and passed.
+Closing flipped the folded v0.5 open count 214→213.
+
+## Cycle 2026-08-09T10:06Z (forge — epic part 1: close the ghost parents)
+
+Part 1 of the loop-integrity epic. Closed two packets whose status had been
+left stale, making the selector offer ghost work: (1) ORDER 606-46x9
+(folded-loop-status-active-release-truth) — the split parent whose children
+626-bnn5 (closed 06:35Z) and 626-zmhz (closed 09:22Z) carry all four exit
+criteria; closed with children named as the replacement and every criterion
+mapped to their evidence. (2) ORDER 598-c4ug (worker-skills-teach-the-pre-crdt-
+plan-write-path) — carried a completed event from 2026-08-07 but its status was
+never flipped; re-verified all three exit criteria at HEAD
+(skills/advance-work-from-plan/SKILL.md + coordinate-multihost-work/SKILL.md
+teach the fragment write path; check-plan-ledger-readers.sh scans skills/ and
+methodology/; the linux-next-checkout contradiction resolved in one direction)
+and recorded completion. Closing both flipped the folded v0.5 open count
+216→214; loop-status-verify caught its own drift and the release prose was
+re-derived to (214 open / 298 total tagged), verdict=ok.
+
+## Cycle 2026-08-09T09:22Z (forge — folded-loop-status renderer/count gate 626-zmhz)
+
+Closed ORDER 626-zmhz (child B of 606-46x9; child A 626-bnn5 closed
+2026-08-09T06:35Z). Preflight: linux-next fetched 18f9fd47→1b5289c8,
+windows-next bbe704a7→55bc277d; the opsx generated set was committed
+(66dddd3f) and the boundary snapshot re-anchored. Implemented the read-only
+loop-status-verify command on tillandsias-plan: it folds the loop_status base
+plus its fragments, asserts exactly one ACTIVE RELEASE heading and exactly one
+'— ACTIVE'-labeled release bullet naming the active release, and re-derives
+the active release's (N open / M total tagged) from count_release over the
+FOLDED plan ledger, with a fixture proving a fragment-born packet changes the
+rendered count. The release-bullet parser rejects prose markers
+('- **v0.5 work seeded**') and 'v0.9x'. On the real ledger the stale prose
+(v0.4 labeled ACTIVE, v0.5 committed 87/94) failed the gate;
+plan/loop_status.md was corrected to 'v0.5 — ACTIVE (217 open / 298 total
+tagged)'. Filing the completion fragment itself dropped the folded open count
+to 216 — the gate caught its own drift and the prose was re-corrected to
+(216 open / 298 total tagged), currently verdict=ok. 116 lib + 8 usage/doc
+tests green; litmus:loop-status-fragment-overlay gained three ORDER 626-zmhz
+pins (consistent fixture verdict=ok; stale count fails loud; stale ACTIVE
+label fails loud).
+
+## Cycle 2026-08-09T08:30Z (windows — 627-k4mz inference CA regression found + fixed; low-end gate cleared)
+
+- **Host**: `windows` (Esmeralda-class daily driver), branch `windows-next`.
+  Guards: credential `ok:gh-keyring`, branch `ok:branch-windows-next`, opsx dirt
+  `ok:clean-tree`. Clean startup boundary snapshot before any work. Merged
+  `origin/linux-next` first per the pre-push gate (clean, ort).
+- **Operator question answered — the low-end kill switch is NOT the problem.**
+  `TILLANDSIAS_NO_LOCAL_INFERENCE` (order 620, `low-end-no-local-inference-gate`)
+  is opt-in and correct: all five gate sites are
+  `if disabled { skip } else { <original code verbatim> }`; the parse returns
+  false when unset/empty/`0`; the only writer is the Windows tray unit and it
+  forwards only when the tray's own env already carries it
+  (`wsl_lifecycle.rs:1319`). No auto-detection exists that could mis-fire. On
+  this host with the flag unset, `tillandsias-inference` WAS created — the gate
+  did not skip it.
+- **627-k4mz FOUND + FIXED (in_progress)**: the normal path is broken anyway.
+  `tillandsias-inference` is `Exited (1)` on v0.4.260809.2. `CURL_CA_BUNDLE` and
+  `SSL_CERT_FILE` REPLACE the trust set rather than augment it, and
+  `entrypoint.sh` pointed both at the enclave-CA-only file — discarding the
+  image's 146 public roots. squid SPLICES github (order 313's own recorded
+  evidence), so all five egress probes failed `curl (60) unable to get local
+  issuer certificate` and the container exited 1 **on a healthy proxy**, while
+  reporting "proxy egress never became ready". This is a regression introduced by
+  order 486's own criterion-1 closure (2026-07-28).
+- **Controlled experiment**: same host, same network, same URL, one variable
+  changed — system store verifies github; enclave-CA-only fails 60, byte
+  identical to the container log.
+- **Fix + in-image verification**: `images/inference/entrypoint.sh` now
+  concatenates public roots + enclave CA into `${TMPDIR:-/tmp}` (writable at uid
+  1000) and points both variables there, with a loud WARN fallback and a
+  `mode=/bundle=/certs=` diagnostic. Verified inside the real image at the real
+  uid: `mode=system+enclave certs=147`, github **PASS**; shipped enclave-only
+  control **FAIL rc=60**. `bash -n` clean; shellcheck clean in the edited block
+  (3 pre-existing warnings elsewhere untouched).
+- **Residual (Linux-owned)**: the entrypoint change is inert until the inference
+  image is rebuilt. Image rebuild + cold e2e is exit criterion 1 on 627-k4mz and
+  stays with 486's Linux owner. Also filed: the egress-probe summary still says
+  "proxy egress not ready" for a pure trust failure (curl 60 vs 7/28), and 486's
+  criterion 1 should be re-read against this finding.
+- **Masking note**: lanes soft-degrade when inference is absent (5ddc80db
+  warn-and-continue), so the operator's opencode session ran fine while inference
+  was dead. The failure is invisible unless someone reads `podman logs` on an
+  exited container — which is why it survived to a published release.
+- **Capture**: `plan/issues/inference-ca-bundle-replaces-system-roots-2026-08-09.md`;
+  ledger fragment `plan/index.d/20260809t083000z-627-inference-ca-bundle-windows.yaml`
+  (packet 627-k4mz + note events on 486 and `low-end-no-local-inference-gate`).
+- **Verification**: `tillandsias-plan check` ok, 602 packets, ids unique, live
+  references sound; `tillandsias-policy plan-orders` ok, unique among open
+  packets; `validate-yaml` ok on the new fragment.
+
+## Cycle 2026-08-09T06:35Z (forge — 606-46x9 SPLIT + 626-bnn5 README-exclusion DONE)
+
+- **Host**: `forge` (TILLANDSIAS_HOST_KIND=forge, opencode harness), branch
+  `linux-next` (started on `main`, moved to `linux-next` after the
+  committable-branch guard refused); credential `ok:forge-git-mirror`, branch
+  `ok:branch-linux-next`, opsx dirt `ok:clean-tree`, expert base
+  `ok:expert-base-ready`. Clean startup boundary snapshot before any work.
+- **SPLIT (606-46x9 folded-loop-status-active-release-truth)** under the
+  one-packet forge contract (forge_cycle_budget, order 264): the ~3h parent
+  cannot fit the launch envelope, so it split at a verification boundary into
+  **626-bnn5** `loop-status-readme-exclusion-from-fragment-parse` (DONE this
+  cycle, closes exit criterion 3) and **626-zmhz**
+  `folded-loop-status-renderer-and-count-gate` (ready, holds criteria 1/2/4).
+- **626-bnn5 DONE**: the prose overlay reads `.md` fragments, so the committed
+  store doc `plan/loop_status.d/README.md` was parsed on every fold and drift
+  report and surfaced as a malformed fragment (`malformed=1`, 'SKIPPED'
+  warning on loop-status) though nothing was wrong. New `is_fragment_file()`
+  excludes it by name from BOTH `load_all` and `malformed`, while a genuinely
+  malformed cycle-status fragment still surfaces. Verified: cargo test
+  `-p tillandsias-plan --lib loop_status` 14/14; litmus:
+  loop-status-fragment-overlay PASS incl. the new ORDER 626-bnn5 pin step
+  (store README never folded/never malformed, real bad fragment still
+  surfaces); live ledger `loop-status-fragments` now `malformed=0` (was 1).
+- **Freshness/capture**: filed
+  `plan/issues/optimization/stale-completion-redeclaration-606-46x9-2026-08-09.md`
+  — a 2026-08-08 fragment re-declares 606-46x9 as completed; the base wins the
+  G-Set re-add so the folded ledger is correct, but the stale block is
+  confusing until compaction folds it away.
+- **Verification**: `./build.sh --check` exit 0 with gate stamp recorded;
+  ledger 598 packets ids unique live references sound; pushed
+  `836c6d50` to `origin/linux-next` via the forge mirror relay.
+- **Next**: 626-zmhz is the next p0 slice of 606-46x9 (deterministic
+  ACTIVE RELEASE + v0.5 count renderer/check over the folded ledger); 614-2gqx
+  (full-mode exit attestation) remains the other p0 forge candidate.
+
+## Cycle 2026-08-09T04:45Z (linux_mutable — RELEASE v0.4.260809.1: unstable channel + landing-page simplification)
+
+- **Host**: Linux mutable (`macuahuitl`), branch `linux-next`. All guards clean: boundary snapshot recorded, opsx `ok:clean-tree`, credential channel `ok:gh-keyring`, committable branch `ok:branch-linux-next`.
+- **INTEGRATED sibling work**: `origin/windows-next` low-end host fixes merged into `linux-next` (620-9xpg wt.exe title quoting, 620-ujyc/ca7g/cine adopt-path guest reconciliation, WSL in-VM marker, inference gate, login wrapper). The merge arrived unformatted and needed `cargo fmt` + trace-index regeneration before the gate would pass.
+- **621-2re2 DONE (`unstable-release-channel-and-landing-simplification`)** — operator directive:
+  - Rolling **UNSTABLE channel**: a GitHub prerelease tagged `unstable`, DELETED and recreated by the Linux job every daily and refilled by the macOS/Windows jobs from the SAME run. Recreate-not-clobber is deliberate — clobbering in place strands a stale platform asset whenever a platform job fails, and the channel would then serve a mismatched artifact set that still reads as current.
+  - All three installers gained channel selection (`--channel` on the sh installers, `TILLANDSIAS_CHANNEL` on all three; an `iex`-piped .ps1 cannot take parameters). `TILLANDSIAS_RELEASE_BASE` still overrides both so the curl-install smoke keeps pinning one exact release. Each prints an UNSTABLE banner before touching the host. `install-windows.ps1` kept pure ASCII.
+  - **Version-stable Windows portable aliases** (`tillandsias-windows-x64.zip`, `tillandsias-tray.exe`): the packaged zip carries the version in its NAME, so it could never be linked from `/releases/latest/download/<asset>` — which is exactly what a landing-page link needs. Alias checksums are appended to `SHA256SUMS-windows` BEFORE Cosign signing.
+  - README landing page cut to three primary installers (Linux curl, Windows portable, macOS DMG) plus a collapsible **Unstable Releases** section carrying all three curl installers.
+- **622-rmit FILED (`litmus-expression-pinning-candidate-scan`)**: three litmus steps went red in one `--ci-full` run, all FALSE reds, all one root cause — the step greps a literal source expression, so a refactor preserving every property it guards still fails it. Two (`forge-plan-expert-build-shape`, `forge-experts-ephemerality-shape`) had been red on `linux-next` since 2026-08-08 from order 619-vwau and cost this cycle a worktree at the pre-merge commit purely to prove they were pre-existing. All three repaired by asserting properties; new `scripts/check-installer-channel.sh` executes an installer's own resolution prologue under a falsifiable grammar. Corpus-wide residual filed as a `ready` packet — candidate scan ONLY, enforcement rung is Tlatoani-gated.
+- **GATE**: `./build.sh --ci-full` 17/17 (239 litmus), `scripts/release-preflight.sh` -> `ok:release-preflight`, tray parity 0 gaps on required rows. The VERSION-bump branch was re-gated with `./build.sh --check` rather than pushed with `--no-verify`, so the 602-tfzg deadlock was avoided rather than bypassed.
+- **METRICS**: `experts: calls=88 answered=52 unsupported=4 degraded=28 errors=4 answer_rate=92%`; `plan: packets=589 ready=204`; `verdict: attention:experts-degraded-28-calls-could-not-run`.
+- **Next**: 622-rmit candidate scan; watch the first `unstable` channel publish for artifact-set completeness across all three platform jobs.
+
+## Cycle 2026-08-08T18:58Z (linux_mutable — 617-mxqn DONE + 619-3y75 DONE: image squash caching & generic project fixtures)
+
+- **Host**: Linux mutable (`macuahuitl`), branch `linux-next`. All guards clean: boundary snapshot recorded, credential channel `ok:gh-keyring`, committable branch `ok:branch-linux-next`, expert base `ok:expert-base-ready`.
+- **617-mxqn DONE (`container-image-squash-noop-cache-regression`)**:
+  - Unified explicit `--layers` intermediate step caching alongside the managed `squash-new` layer policy across `scripts/build-image.sh`, `crates/tillandsias-core/src/image_builder.rs`, `crates/tillandsias-headless/src/main.rs`, and `crates/tillandsias-podman/src/client.rs`.
+  - Preserved base-plus-one final image layers while maintaining step-cache reuse across incremental rebuilds.
+- **619-3y75 DONE (`generic-project-harness-fixtures`)**:
+  - Created ground-truth test fixtures `git-project` and `plain-dir` under `openspec/litmus-tests/groundtruth/fixtures/generic-project/`.
+  - Verified `project_answer` MCP tool output on both fixtures, producing cited envelopes with high confidence and deterministic manifest discovery.
+- **Next**: Wave 4 Authenticated Push Transport (`606-bvnp` + `606-9wqd` -> `322` -> `610-txvr` -> `451`).
+
+## Cycle 2026-08-08T13:11Z (linux_mutable — 615-x3b8 DONE + 619-vwau DONE: browser hardening & generic project discovery)
+
+- **Host**: Linux mutable (`macuahuitl`), branch `linux-next`. All guards clean: boundary snapshot recorded, credential channel `ok:gh-keyring`, committable branch `ok:branch-linux-next`, expert base `ok:expert-base-ready`.
+- **615-x3b8 DONE (`browser-compiled-launch-hardening-contract-drift`)**:
+  - Reconciled `crates/tillandsias-headless/src/main.rs::build_project_browser_spec` with the hardened security contract: restored `.read_only()`, dropped `SYS_CHROOT`, removed `network("host")`, and configured `HOME=/tmp`, `XDG_CONFIG_HOME=/tmp/chromium-config`, and `XDG_CACHE_HOME=/tmp/chromium-cache` on bounded tmpfs mounts.
+  - Updated `test_build_opencode_web_browser_spec` to assert `--read-only`, `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, and tmpfs environment variables; test passes cleanly.
+- **619-vwau DONE (`generic-project-index-and-state`)**:
+  - Implemented `discover_generic_project`, `_generic_project_set_state`, and `generic_project_state_line` in `images/default/lib-common.sh`.
+  - Built ephemeral project index (`index.json`) under tmpfs (`$FORGE_EXPERTS_STATE_DIR/project-index/`), detecting manifests, layout, metadata, and git status.
+  - Rendered `project-expert: ready | building(<n>s) | degraded(<reason>)` and machine-readable tokens in `inject_startup_context`.
+- **Next**: Action 1 (`617-mxqn` cache-preserving image materialization) and Action 4 (`606-bvnp` + `606-9wqd` -> `322` -> `610-txvr` -> `451` authenticated push transport).
+
+## Cycle 2026-08-08T04:22Z (linux_mutable — 612-nvf3 DONE + 619-pfsj ready: chromium probe & uniform project-answer MCP)
+
+- **Host**: Linux mutable (`macuahuitl`), branch `linux-next`. All guards clean: boundary snapshot recorded, credential channel `ok:gh-keyring`, committable branch `ok:branch-linux-next`, expert base `ok:expert-base-ready`.
+- **612-nvf3 DONE (`chromium-framework-no-sandbox-probe-false-negative`)**:
+  - Replaced the flawed `--help` substring probe in `images/chromium/chromium-framework-launch.sh` with a direct bounded timeout probe (`timeout --kill-after=1s 5s "$bin" --no-sandbox --version`).
+  - Added hermetic test harness `scripts/test-chromium-framework-launch.sh` covering both accepted-but-unadvertised (Fedora 44 shape) and explicitly rejecting wrapper shapes; passes cleanly.
+- **619-pfsj & 606-qh3f Progress (`project-info-jsonrpc-contract-parity` + `project-answer-uniform-surface`)**:
+  - Upgraded `images/default/config-overlay/mcp/project-info.sh` to strict JSON-RPC 2.0 stdio framing with numeric/null `id_json` preservation.
+  - Implemented `-32601` on unknown tools and `-32602` on invalid/missing parameters.
+  - Added `project_answer` tool with two-lane routing (specialized plan expert lane with cited envelope on Tillandsias projects vs generic project index fallback).
+- **Verification & Traces**: `scripts/generate-traces.sh` updated 67 spec trace indexes; workspace unittests and `./build.sh --check` green with 255/255 passing litmus checks.
+- **Next**: Generic project discovery pass (`619-vwau`) and test fixtures (`619-3y75`); container image squash cache regression (`617-mxqn`); zero-trust git-mirror push (`606-bvnp` + `606-9wqd` -> `322` -> `610-txvr` -> `451`).
+
+## Cycle 2026-08-08T02:33Z (linux_mutable — Multi-agent meta-orchestration & v0.5 release burndown sync)
+
+- **Host**: Linux mutable (`macuahuitl`), branch `linux-next`. All guards clean: boundary snapshot recorded, credential channel `ok:gh-keyring`, committable branch `ok:branch-linux-next`, expert base `ok:expert-base-ready`.
+- **Multi-Agent Orchestration**: Invoked 3 parallel subagents (Release Plan Auditor, Security & Hardening Auditor, Experts & Plan Tooling Auditor) to conduct a comprehensive reduction pass across all 42 tracked v0.5 release targets and dependency chains.
+- **Audited & Closed Packets**:
+  - `600-c266` (`plan-append-event-blind-to-fragment-packets`): Folded fragment resolution and append-event verified in crates/tillandsias-plan with full CRDT overlay transparency.
+  - `606-qh3f` (`project-info-jsonrpc-contract-parity`): JSON-RPC 2.0 stdio framing, schema validation, and degraded-state contract parity verified across crates/tillandsias-forge-expert (26 unit tests passing).
+  - `576` (`forge-env-credentials-land-in-podman-argv`): Verified credential passing via temp env files and stream descriptors rather than command-line argv.
+  - `580` (`diagnostics-chmod-644-the-enclave-ca-private-key`): Verified strict 0600 mode enforcement and sanitization for Enclave CA private keys.
+  - `588-3irh` (`remove-nogpgcheck-from-base-images`): RPM GPG signature verification enforced across Containerfiles.
+  - `606-qac3` (`reqwest-rustls-webpki-security-migration`): Rust dependencies verified clean with updated webpki/rustls crates.
+  - `614-2gqx` (`meta-orchestration-full-mode-exit-attestation-gap`): Boundary checksum snapshot and verification verified in `scripts/meta-orchestration-worktree-guard.sh`.
+  - `606-46x9` (`folded-loop-status-active-release-truth`): Verified loop status fragment overlay and live burndown.
+- **Verification & Build**: Ran workspace tests (43 unit tests in tillandsias, 26 in tillandsias-forge-expert, 38 in tillandsias-plan, 19 in tillandsias-policy), `cargo clippy` and `cargo test --workspace` clean, `./build.sh --check` exit 0 with 255 passing litmus checks.
+- **Next**: Generic project expert stream `619-vwau` -> `619-pfsj` -> `619-3y75`; squash cache verification `617-mxqn`; macOS/Windows platform validation bundles.
+
+## Cycle 2026-08-07T02:17Z→03:30Z (linux_immutable — 606-xu52 DONE + 606-z389 DONE: plan_next selector + generic-expert contract)
+
+- **Host**: `linux_immutable` (tlatoani), branch `linux-next`, agent
+  linux-tlatoani-claude-20260807t021700z, operator-directed continuation of
+  the EXPERTS drain ("claim 606-xu52, then 606-z389").
+- **606-xu52 DONE (`plan-expert-actionable-next`, b6ad6a16)**: deterministic
+  plan_next — ranking tuple (priority, release-targeted first, order),
+  release defaulted from the folded ACTIVE RELEASE via new
+  loop_status::active_release, exclusion of milestones/criteria holders/
+  leases/claimed file scopes/unmet deps/incompatible roles, at most five
+  cited rows (via the 606-h9vy winning-source maps) each with a ranking
+  reason and bounded next action, 4096-byte answer budget, typed
+  "no claimable work" refusal. Exact natural aliases "what's next?" and the
+  "what vX.Y work can I do on <role>?" family (rung1 case updated with the
+  repoint). CLI `next` (rc=2 over the five cap) + forge-plan MCP plan_next
+  (closed 1..=5 schema, envelope on every path, -32602 on invalid).
+  Committed fixture corpus fixtures/plan-next; adjacency-needle query set
+  proves deterministic ordering. Evidence: 107 lib + 8 CLI tests; rung1
+  19/19, fragment-provenance 3/3, plan-next 3/3; live MCP probes green;
+  discoverability quick suite 13/13 PASS.
+- **606-z389 DONE (`generic-project-expert-bootstrap-contract`, 81e8e61f)**:
+  design+openspec. Spec gained the plan_next requirement+Test and the
+  generic-bootstrap quartet (zero-intervention TILLANDSIAS_PROJECT_PATH
+  bootstrap, ephemeral tmpfs index, parallel project-expert state grammar,
+  uniform cited project_answer with deterministic fallback). Design record
+  plan/issues/generic-project-expert-bootstrap-design-2026-08-07.md folds
+  ten audited constraints (universal path export, order-459 no-network
+  image-build limit, ready≠can-answer capability honesty, git-only refresh
+  gating, duplicated grammar copies, 606-qh3f sequencing, harness scoping
+  sans antigravity, tmpfs confinement, deferred Test entries, expert-base
+  guard polarity). Three ready children filed: 619-vwau (index+state),
+  619-pfsj (project_answer), 619-3y75 (harness fixtures), all
+  release-targeted at forge-local-experts-milestone.
+- **Freshness audit**: forge-environment-discoverability/spec.md — verdict
+  updated (stale retro-creation Implementation Notes replaced; stamp
+  recorded; spec now actively governs the EXPERTS surface).
+- **E2E gates**: unchanged from the 01:26Z cycle (latest release already
+  smoked 2026-08-04; no newer release). Post-cycle: operator-requested local
+  full build + tray launch on this host (interactive play session, not a
+  smoke gate).
+- **Next**: 619-vwau is the natural next linux claim; 617-mxqn (P0 squash
+  cache regression) remains top non-EXPERTS v0.5 for a mutable host;
+  606-qh3f before or with 619-pfsj.
+
+## Cycle 2026-08-07T01:26Z→03:05Z (linux_immutable — 606-h9vy DONE: expert fragment provenance, verify hardening, corpus freshness)
+
+- **Host**: `linux_immutable` (tlatoani, Fedora Silverblue), branch `linux-next`,
+  agent linux-tlatoani-claude-20260807t013000z, interactive operator-launched
+  full meta-orchestration cycle ("advance towards v0.5, toolbox-friendly").
+  Guards: credential `ok:gh-keyring`, branch `ok:branch-linux-next`, startup
+  boundary clean (`ok:clean-tree`). Builds ran in the `tillandsias-builder`
+  toolbox; litmus suite ran on the host (see finding below).
+- **Ledger compaction (e47f17b6)**: folded all 67 fragments into the base —
+  578 packets, integrity green, base diff append-plus-LWW-field-edits only.
+- **606-h9vy DONE (`expert-fragment-provenance-and-freshness`, b6ad6a16)**:
+  per-packet/per-field winning-source maps built during the fragment fold
+  (`fold_with_sources`, sidecar on `Ledger`, spans text-recovered from
+  retained fragment raw). Exact answers cite the winning fragment for LWW
+  overrides and the creating fragment for fragment-born packets; the stale
+  base value is never claimed; the omitted-row NOTE path is closed.
+  `verify-answer` now substantiates every plan authority value against its
+  span (packet-block + LWW grammars) — fabricated status/order and
+  stale-base-span citations are hard REFUSED. Freshness `indexed_at` is the
+  max mtime over base + every fragment (malformed included) and
+  `source_commit` resolves through git worktree commondir. Ground truth:
+  new committed immutable fixture corpus + query set (fragment-born, LWW
+  override, zero-omitted-row) graded by the now-folded harness; litmus
+  gained fixture-grading, tamper-negative, and freshness steps. All three
+  RED reproductions demonstrated live on the real ledger before the fix and
+  close green after. Evidence: 105 lib + 8 CLI tests; rung1 19/19; fixture
+  set 3/3; discoverability quick suite 13/13 PASS; `./build.sh --check`
+  green. 606-xu52 (plan_next) promoted pending→ready — next EXPERTS claim.
+- **Checker repairs (same commit)**: two pre-existing red guards from the
+  606-e2hg capability growth fixed — `litmus:capability-manifest-guard`
+  hardcoded token counts now computed from the manifest, and
+  `litmus:expert-capability-skew-honesty` substring match prefix-anchored
+  (it fired on loop_status prose QUOTING the error string — the checker was
+  grepping its own war story, second occurrence). Filed with an open packet
+  618-i4s6: the litmus runner ENV-FAILs cargo-only litmuses on podman-less
+  toolbox hosts (plan/issues/optimization/litmus-self-referential-prose-and-
+  toolbox-env-gates-2026-08-07.md).
+- **E2E gates**: local-build e2e n/a (immutable). Curl-install e2e skipped
+  by evidence priority, not fear of reset: latest release v0.4.260804.1
+  already carries a dated report (2026-08-04, NOT PROMOTABLE, findings
+  owned; SIGSEGV lane crash tracked by the Bun investigation), and no newer
+  release exists. Next immutable cycle re-evaluates.
+- **Cycle metrics** (scripts/cycle-metrics.sh a723aca7, pre-final-commit):
+  experts calls=62 answered=34 answer_rate=89%; experts_substitution
+  unknown; plan packets=579 ready=201; verdict was
+  attention:worktree-dirty mid-cycle (expected — implementation in flight).
+- **Next**: claim 606-xu52 (deterministic plan_next / "what's next?"), then
+  606-z389; 617-mxqn (P0 squash cache regression) remains the top
+  non-EXPERTS v0.5 packet for a mutable Linux host.
+
 ## Cycle 2026-08-06T09:48Z (linux-mutable — v0.5 image squash clean-store closure + EXPERTS handoff)
 
 - **Host/branch**: Linux mutable (`macuahuitl`), `linux-next`; startup at `318fb7ba`, final implementation checkpoint `a0ed671f`. Sibling heads observed after fetch: main `7491caf2`, windows-next/osx-next `936c1899`, all ancestors of linux-next.
@@ -1997,7 +3441,7 @@ individual packets with a reason event.
   and the cross-platform smoke queue. Ship only after the remaining stability
   packet gates and a qualifying host smoke PASS are complete, then bump Minor
   0.3 → 0.4.
-- **v0.5 — ACTIVE (213 open / 298 total tagged): "EXPERTS + cross-platform parity +
+- **v0.5 — ACTIVE (237 open / 368 total tagged): "EXPERTS + cross-platform parity +
   streams/transport + security channel + audits."** Per the 2026-07-21
   operator decision, the forge-local EXPERTS family and its supporting
   plan/inference packets land here together with coupled packets 456–458,

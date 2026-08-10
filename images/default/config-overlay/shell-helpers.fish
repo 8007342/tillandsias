@@ -39,8 +39,10 @@ function clone-fresh --description "Clone a project from the enclave git mirror"
         return 1
     end
 
+    # Order 659-8faj: each project's mirror answers only at its per-project
+    # DNS name `git-<project>`; the shared aliases are retired.
     set git_service "$GIT_SERVICE_HOST"
-    test -n "$git_service"; or set git_service git-service
+    test -n "$git_service"; or set git_service "git-$project"
     set git_port "$GIT_SERVICE_PORT"
     test -n "$git_port"; or set git_port 9418
 

@@ -143,6 +143,13 @@ pub enum ContextKey {
     GitAuthorName,
     /// Git author email, read from the cached gitconfig.
     GitAuthorEmail,
+    /// The project-unique DNS name of this project's git mirror
+    /// (`git-{sanitized-project}`). Order 659-8faj: mirrors no longer share a
+    /// constant alias, so any profile naming the mirror must resolve the
+    /// per-project identity at launch time (canonical derivation:
+    /// `git_mirror_service_identity` in tillandsias-headless).
+    /// @trace spec:git-mirror-service
+    GitServiceHost,
 }
 
 /// A secret that may be mounted as a volume or injected as an env var.
@@ -369,15 +376,15 @@ pub fn terminal_profile() -> ContainerProfile {
                 value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
             },
             // @trace spec:git-mirror-service
-            // Order 436: PRESENCE FLAG, not a hostname. lib-common.sh only
-            // tests `-n "${TILLANDSIAS_GIT_SERVICE:-}"` to decide that network
-            // transport is available; the clone URL is hardcoded to
-            // git://tillandsias-git/. The old value "git-service" read as a
-            // host and was never resolved as one. Set to the canonical name so
-            // it cannot mislead a reader into thinking it selects a host.
+            // Order 436 made this a presence flag; order 659-8faj made the
+            // VALUE load-bearing again: lib-common.sh now addresses the mirror
+            // as git://${TILLANDSIAS_GIT_SERVICE}/<project>, and the name is
+            // PER-PROJECT (`git-{project}`, derived by
+            // git_mirror_service_identity in tillandsias-headless). A constant
+            // literal cannot express that, so resolve from launch context.
             ProfileEnvVar {
                 name: "TILLANDSIAS_GIT_SERVICE",
-                value: EnvValue::Literal("tillandsias-git"),
+                value: EnvValue::FromContext(ContextKey::GitServiceHost),
             },
             // @trace spec:inference-container
             ProfileEnvVar {
@@ -395,7 +402,12 @@ pub fn terminal_profile() -> ContainerProfile {
             },
             ProfileEnvVar {
                 name: "NO_PROXY",
-                value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
+                // Order 659-8faj: the retired shared mirror aliases
+                // (`git-service`, `tillandsias-git`) are removed and the
+                // per-project mirror name is deliberately absent — the mirror
+                // is only addressed over git://, which never consults the
+                // http proxy env.
+                value: EnvValue::Literal("localhost,127.0.0.1"),
             },
             ProfileEnvVar {
                 name: "http_proxy",
@@ -407,7 +419,12 @@ pub fn terminal_profile() -> ContainerProfile {
             },
             ProfileEnvVar {
                 name: "no_proxy",
-                value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
+                // Order 659-8faj: the retired shared mirror aliases
+                // (`git-service`, `tillandsias-git`) are removed and the
+                // per-project mirror name is deliberately absent — the mirror
+                // is only addressed over git://, which never consults the
+                // http proxy env.
+                value: EnvValue::Literal("localhost,127.0.0.1"),
             },
             ProfileEnvVar {
                 name: "TILLANDSIAS_CHEATSHEETS",
@@ -657,10 +674,11 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             value: EnvValue::FromContext(ContextKey::GitAuthorEmail),
         },
         // @trace spec:git-mirror-service
-        // Order 436: presence flag, not a hostname — see the note above.
+        // Order 436 made this a presence flag; order 659-8faj made the value
+        // the per-project mirror identity — see the note in terminal_profile.
         ProfileEnvVar {
             name: "TILLANDSIAS_GIT_SERVICE",
-            value: EnvValue::Literal("tillandsias-git"),
+            value: EnvValue::FromContext(ContextKey::GitServiceHost),
         },
         // @trace spec:inference-container
         // Point forge containers to the inference service for local LLM access.
@@ -680,7 +698,12 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         },
         ProfileEnvVar {
             name: "NO_PROXY",
-            value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
+            // Order 659-8faj: the retired shared mirror aliases
+            // (`git-service`, `tillandsias-git`) are removed and the
+            // per-project mirror name is deliberately absent — the mirror is
+            // only addressed over git://, which never consults the http proxy
+            // env.
+            value: EnvValue::Literal("localhost,127.0.0.1"),
         },
         // Lowercase — required by libcurl, Go net/http, some Python libs.
         ProfileEnvVar {
@@ -693,7 +716,12 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         },
         ProfileEnvVar {
             name: "no_proxy",
-            value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
+            // Order 659-8faj: the retired shared mirror aliases
+            // (`git-service`, `tillandsias-git`) are removed and the
+            // per-project mirror name is deliberately absent — the mirror is
+            // only addressed over git://, which never consults the http proxy
+            // env.
+            value: EnvValue::Literal("localhost,127.0.0.1"),
         },
         ProfileEnvVar {
             name: "TILLANDSIAS_CHEATSHEETS",

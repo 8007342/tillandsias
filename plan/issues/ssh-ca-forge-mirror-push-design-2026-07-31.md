@@ -4,6 +4,12 @@
 - Class: research/decision — the deliverable of order 322 `mirror-authenticated-push-transport`
 - Owner host: linux (`linux-next`)
 - Status: **UNSIGNED.** Order 451 stays `blocked` until The Tlatoāni signs §1.
+- Amended 2026-08-10 (packet 606-bvnp `git-mirror-cross-project-service-identity`):
+  shared aliases and the `sign/*` wildcard replaced with an opaque per-project
+  mirror identity (D13), exact per-project client AND host roles/policies, exact
+  certificate principals, and the negative two-project matrix (§4a) that must be
+  green before 451 wires production sshd. Still UNSIGNED; the amendment changes
+  no prior operator decision, it narrows authority.
 - Transport already decided by the operator (plan/index.yaml order 322, event
   `2026-07-31T18:30:00Z`): **SSH, as a certificate authority with short-lived
   certs and rotation**, not `authorized_keys`. The `git://` accept-the-risk
@@ -83,7 +89,13 @@ generated key.
 
 ### D3 — Authorization lives in the **principal**; identity lives in the **key**
 
-- Principal (one per project): `til:forge-push:<project>`.
+- Principal (one per project): `til:forge-push:<mirror-id>`, where `<mirror-id>`
+  is the opaque per-project identity of D13 — never the plaintext project name.
+  A rejected cert prints its principal into the *other* project's `sshd` log;
+  with plaintext names that is a cross-tenant information leak, with opaque IDs
+  it is noise. Readability cost: logs need one join against the attribution
+  ledger's `project ⇄ mirror-id` mapping (recorded at mint time, D13), which is
+  the same join the fingerprint already requires.
 - Attribution: the lane's **certificate public-key fingerprint**
   (`SHA256:…`), recorded by the launcher at lane creation and logged by `sshd`.
 - **Why**: verified (V3) that Vault's `allowed_users` is an exact list with no
@@ -111,7 +123,11 @@ Role: `allowed_extensions=""`, `default_extensions={}`,
   that both critical options land in the issued certificate. A stolen key+cert
   pair cannot open a shell, forward a port, or forward an agent; it can only run
   the receive wrapper, and only from the enclave subnet. This is the single
-  cheapest containment control in the whole design.
+  cheapest containment control in the whole design. `source-address` is
+  enclave-wide, so it does NOT separate project A from project B — per-project
+  separation is carried by the exact principal (D3) and exact roles/policies
+  (D12/D13); the subnet restriction is defense-in-depth against off-enclave use
+  only (see the §2.3 note).
 - **Rejected**: relying on `sshd`'s `ForceCommand` alone. Equivalent on a
   correctly configured server, but it is not carried *by the credential*, so it
   does not travel to the mesh's future servers.
@@ -147,10 +163,12 @@ publishes only the public key, holds the certificate, and exposes an
 
 ### D6 — The sidecar self-renews via Vault Agent AppRole; the launcher never handles the key
 
-The sidecar gets an AppRole (`ssh-lane-signer`) delivered exactly like
-`git-mirror-agent` is today — one podman secret, `uid=1000,gid=1000,mode=0400`,
+The sidecar gets an AppRole (`ssh-lane-signer-<mirror-id>`, per project — D12)
+delivered exactly like `git-mirror-agent` is today — one podman secret, `uid=1000,gid=1000,mode=0400`,
 split onto tmpfs by a bootstrap script, Vault Agent auto-auth, token in a tmpfs
-sink. Its policy grants **only** `update` on `ssh-client-signer/sign/<project>`.
+sink. Its minted policy grants **only** `update` on
+`ssh-client-signer/sign/<mirror-id>` (D12/D13 — the exact path, never a
+wildcard).
 
 - **Why**: verified (V6) that such a token can sign but is denied `read` on
   `config/ca`. The marginal blast radius of a compromised sidecar is nil: it can
@@ -197,9 +215,11 @@ can revoke a whole CA generation.
 
 ### D9 — Host certificates, and TOFU treated as a defect
 
-The mirror presents a host certificate for `tillandsias-git` and `git-service`;
-every client's `known_hosts` carries one `@cert-authority` line for the host CA
-and nothing else.
+The mirror for project P presents a host certificate whose principal list is
+exactly one name — its opaque per-project hostname `git-<mirror-id>` (D13).
+The legacy shared aliases `tillandsias-git` / `git-service` are never certified
+(they stop existing entirely under 659-8faj). Every client's `known_hosts`
+carries one `@cert-authority` line for the host CA and nothing else.
 
 - **Why**: verified (V7 case D) that without the `@cert-authority` line the
   connection fails with *"No ED25519 host key is known … Host key verification
@@ -217,7 +237,8 @@ and nothing else.
 ### D10 — Two OpenSSH controls carry the transport-level gate
 
 `sshd_config`: `AuthorizedKeysFile none`, `TrustedUserCAKeys <client-CA.pub>`,
-`AuthorizedPrincipalsFile` containing exactly `til:forge-push:<project>`,
+`AuthorizedPrincipalsFile` containing exactly `til:forge-push:<mirror-id>`
+(this project's opaque principal, one line, D3/D13),
 plus `ForceCommand` to a receive wrapper.
 Mirror repo config: `receive.denyNonFastForwards=true`,
 `receive.denyDeletes=true`, `receive.fsckObjects=true`, applied on **every**
@@ -256,12 +277,19 @@ container start.
   with the container — under a destroy-and-recreate discipline, permanently.
   Fixing that is in scope for 451 (§4 T9).
 
-### D12 — Only two identities may ever ask the CA to sign
+### D12 — Only two identities per project may ever ask the CA to sign
 
-`ssh-lane-signer` (the sidecar, `update` on `ssh-client-signer/sign/<project>`
-only) and `ssh-host-signer-agent` (the mirror, `update` on
-`ssh-host-signer/sign/mirror-host` only). Nothing else — not `tray-policy`,
-not `forge-policy`, not the root token path.
+Per project P with opaque identity `<mirror-id>`: `ssh-lane-signer-<mirror-id>`
+(the sidecar, `update` on `ssh-client-signer/sign/<mirror-id>` only — the exact
+path, never `sign/*`) and `ssh-host-signer-<mirror-id>` (the mirror, `update` on
+`ssh-host-signer/sign/host-<mirror-id>` only). Nothing else — not `tray-policy`,
+not `forge-policy`, not the root token path. Because the project set is dynamic,
+these exact policies are MINTED by the launcher at mirror provision (the same
+code path that creates the per-project roles, §2.3) from a template with the
+`<mirror-id>` substituted — no wildcard policy file ever ships, so there is no
+wildcard to forget to remove. A project-A sidecar asking `sign/<mirror-id-B>`
+receives 403 (§4a M2), which is the property the zero-trust audit's correction
+1 demands.
 
 - **Why**: verified (V6) that a sign-only token cannot read `config/ca`. Note
   that `tray.hcl` today is `path "secret/*" { … }` — it grants everything under
@@ -271,6 +299,52 @@ not `forge-policy`, not the root token path.
   `vault_kv_get_via_exec` root-token path (`vault_bootstrap.rs:844`). It works
   today and needs no new AppRole, but it puts a root-capable path across the
   highest-value mount in the system.
+
+### D13 — Opaque per-project mirror identity (`mirror-id`): minted random, persisted in Vault, distributed by the launcher
+
+Added 2026-08-10 by 606-bvnp. Every per-project artifact above — DNS hostname,
+role names, policy paths, certificate principals — is keyed by one opaque token:
+
+- **Form**: `mirror-id` = 12 bytes from the host CSPRNG, lowercase base32hex
+  without padding (20 chars). Hostname = `git-<mirror-id>` (24 chars, a single
+  valid DNS label, assignable as a podman `--network-alias`).
+- **Minted RANDOM, never derived.** A hash of the project name (salted or not,
+  if the salt is shared) is enumerable by any tenant that can guess project
+  names — and project names are chosen by humans to be guessable. Randomness is
+  the only derivation with nothing to guess from.
+- **Persisted in Vault kv**: `secret/mirror-identity/<project>` (kv-v2), written
+  ONCE by the launcher at first mirror provision for that project, read on every
+  later launch. Why Vault and not a podman volume label: (a) the launcher must
+  have the value server-side anyway, at the moment it writes the per-project
+  host role's `allowed_domains` and mints the per-project policies (D12) — Vault
+  is already in that transaction; (b) a volume label is casually enumerable by
+  anything that can reach the podman socket and is dumped wholesale by
+  diagnostics tooling, while the kv path is policy-gated and audited; (c) labels
+  die with `podman volume rm` while the kv entry survives mirror-volume
+  recreation, so identity is stable across the destroy-and-recreate discipline.
+  Under a full `--reset-guest` both Vault and volumes are wiped together: a NEW
+  mirror-id is minted on next launch, which is correct — identity restarts with
+  the trust root. No forge-reachable policy may read
+  `secret/data/mirror-identity/*`; extend the
+  `litmus-vault-policy-forge-cannot-read-github-token.yaml` shape to pin that.
+- **Distribution**: the launcher resolves (mint-or-read) the mirror-id inside
+  `ensure_shared_git_and_inference_for_launch`, and it flows exclusively through
+  the single derivation function that slice 659-8faj introduces for the DNS
+  identity — that function is the one swap point; `build_git_run_args` (alias +
+  hostname), the forge env (`TILLANDSIAS_GIT_SERVICE`, already-existing plumbing
+  honoured by `shell-helpers.sh`), and `write_forge_gitconfig`'s `insteadOf`
+  targets all consume its output and never re-derive it. The attribution ledger
+  records `project ⇄ mirror-id` at mint time (D3's join).
+- **Migration**: existing installs have no stored identity. First launch after
+  upgrade: kv path absent → mint, store, proceed; repo volume data is untouched
+  because the identity appears nowhere inside the repository. The shared aliases
+  are simply no longer assigned (659-8faj) and the negative fixture (§4a M1)
+  proves they no longer resolve.
+- **Stated plainly**: knowing another project's hostname must NEVER be
+  sufficient to reach or authenticate to its mirror. The enforced controls are
+  the certificates and exact roles/policies (D10, D12); DNS opacity is
+  defense-in-depth against enumeration and accidental cross-routing, not a
+  security boundary.
 
 ### Open questions that genuinely need The Tlatoāni
 
@@ -289,10 +363,17 @@ running the probes in §0. These four are not.
   or a separate packet? *(Recommendation: separate packet — it is a brew
   convenience token with one consumer, and bundling it doubles 451's blast
   radius.)*
+  *2026-08-10 (606-bvnp): remains OPEN and operator-gated; deliberately not
+  resolved by this amendment.*
 - **Q2 — Sidecar per lane, or a single per-project sidecar running one agent
   per lane?** Per-lane is cleaner and is what D5 specifies; per-project is one
   container instead of N and reuses one AppRole. Attribution works either way.
   This is a resource-vs-isolation call, and forges are already heavy.
+  *2026-08-10 (606-bvnp): remains OPEN and operator-gated. The operator
+  re-raised exactly this question on 2026-08-10 while asking about multi-agent
+  enclave topology ("each their own git-mirror, or share one") — the mirror
+  itself is settled (one per project, order 443); the signing-sidecar layer is
+  this Q2 and still needs The Tlatoāni's call.*
 - **Q3 — CA rotation cadence, and who is allowed to trigger it.** `sshd` can
   trust several CAs at once, so overlap rotation is mechanically easy. But
   rotating the client CA invalidates every outstanding lane cert within one TTL,
@@ -327,9 +408,11 @@ Order 451 remains `blocked` until this block is filled in.
 
 - The forge pushes over **`git://tillandsias-git/<project>`** to an anonymous
   `git daemon --export-all --enable=receive-pack` on 9418
-  (`images/git/entrypoint.sh:345-352`). No authentication of any kind. The
-  mirror is enclave-internal and dual-homed onto the egress net so the relay can
-  reach GitHub (`crates/tillandsias-headless/src/main.rs:2841-2849`).
+  (`images/git/entrypoint.sh:345-352`). No authentication of any kind.
+  *(Corrected 2026-08-10: the mirror's direct egress attachment was removed by
+  the 606-9wqd work — it now sits on the enclave network only; upstream relay
+  traffic goes through the proxy. The dual-homing this paragraph originally
+  described no longer exists.)*
 - The URL rewrite reaches the forge through a host-generated, read-only-mounted
   `/home/forge/.gitconfig` (`main.rs:7739-7862`, mounted at `:5116-5124` and
   `:11241-11247`), with guest-side fallbacks in
@@ -388,12 +471,13 @@ POST /v1/sys/mounts/ssh-host-signer     {"type":"ssh"}
 POST /v1/ssh-client-signer/config/ca    {"generate_signing_key":true,"key_type":"ed25519"}
 POST /v1/ssh-host-signer/config/ca      {"generate_signing_key":true,"key_type":"ed25519"}
 
-# one client role PER PROJECT (V3: allowed_users does not glob)
-POST /v1/ssh-client-signer/roles/<project>
+# one client role PER PROJECT, named by the opaque mirror-id (D13)
+# (V3: allowed_users does not glob — exact principal, never the project name)
+POST /v1/ssh-client-signer/roles/<mirror-id>
 {
   "key_type": "ca",
   "allow_user_certificates": true,
-  "allowed_users": "til:forge-push:<project>",
+  "allowed_users": "til:forge-push:<mirror-id>",
   "default_user": "git",
   "allowed_extensions": "",
   "default_extensions": {},
@@ -405,43 +489,71 @@ POST /v1/ssh-client-signer/roles/<project>
   "key_id_format": "{{role_name}}|{{token_display_name}}"
 }
 
-# one host role, shared
-POST /v1/ssh-host-signer/roles/mirror-host
+# one host role PER PROJECT — exact identity, no shared aliases
+# (amended 2026-08-10 by 606-bvnp; the previous shared roles/mirror-host with
+#  allowed_domains "tillandsias-git,git-service" encoded the shared-alias
+#  defect into the host CA and is withdrawn)
+POST /v1/ssh-host-signer/roles/host-<mirror-id>
 {
   "key_type": "ca", "allow_host_certificates": true,
-  "allowed_domains": "tillandsias-git,git-service",
+  "allowed_domains": "git-<mirror-id>",
   "allow_bare_domains": true, "allow_subdomains": false,
   "ttl": "24h", "max_ttl": "48h"
 }
 ```
 
+Both roles are created at mirror provision time by the launcher (the project
+set is dynamic, so they cannot be baked into the image), keyed by the mirror-id
+that slice 659-8faj's derivation function supplies — that function is the single
+swap point for the DNS identity and these roles alike.
+
 `10.0.42.0/24` is `DEFAULT_ENCLAVE_SUBNET` (`main.rs:1034`); when
 `TILLANDSIAS_ENCLAVE_SUBNET` overrides it the role must be written with the
-effective value, or `source-address` will lock every lane out.
+effective value, or `source-address` will lock every lane out. Note that the
+subnet is ENCLAVE-WIDE: project A's forge and project B's forge both sit inside
+`10.0.42.0/24`, so `source-address` contributes NOTHING to inter-project
+separation. What separates projects is the exact principal (D3), the exact
+per-project roles above, and the exact policies below; `source-address` stays
+in the certificate purely as defense-in-depth against use from outside the
+enclave.
 
-Policies (new files under `images/vault/policies/`, embedded by
-`crates/tillandsias-vault-client/src/policy.rs` via `include_str!` — the
-`embedded_hcl_matches_image_files_on_disk` test enforces the pairing):
+Policies are PER PROJECT and therefore MINTED at provision time, not shipped as
+static files (amended 2026-08-10 by 606-bvnp — the earlier draft shipped a
+static `ssh-lane-signer.hcl` containing `path "ssh-client-signer/sign/*"`,
+which is cross-project signing authority: a project-A sidecar could request a
+project-B certificate. That wildcard is withdrawn; no policy containing
+`sign/*` may ever be written to the server):
 
 ```hcl
-# ssh-lane-signer.hcl  — the per-lane ssh-agent sidecar
-path "ssh-client-signer/sign/*" { capabilities = ["update"] }
+# ssh-lane-signer-<mirror-id> — the per-lane ssh-agent sidecar of ONE project
+path "ssh-client-signer/sign/<mirror-id>" { capabilities = ["update"] }
 
-# ssh-host-signer-agent.hcl — the mirror
-path "ssh-host-signer/sign/mirror-host" { capabilities = ["update"] }
+# ssh-host-signer-<mirror-id> — the mirror of ONE project
+path "ssh-host-signer/sign/host-<mirror-id>" { capabilities = ["update"] }
 ```
 
-Neither may read `config/ca`, `config/*`, or `roles/*` — verified (V6) that
-this is enforced, not merely conventional. **These policies must be added to the
-image's `COPY` list and to the entrypoint's `load_policy` calls, not only to the
-Rust-side `Policy::all()`** — otherwise an image-only boot provisions 4 policies
-and the SSH path silently does not exist.
+The launcher writes both through `sys/policies/acl/<name>` in the same
+transaction that creates the roles (§2.3 above) and mints the AppRoles (D6),
+substituting the literal `<mirror-id>` — the template lives in Rust next to
+`provision_approle_roles` (`vault_bootstrap.rs`), not under
+`images/vault/policies/`, precisely so the static-file lanes
+(`Containerfile` COPY list, `entrypoint.sh` `load_policy`, `Policy::all()`,
+`embedded_hcl_matches_image_files_on_disk`) are not in play. IF any future rung
+does add a static ssh policy file, it must be added to ALL of: the
+`images/vault/Containerfile` COPY list (which today copies only 4 of 12
+policies — the known silent-divergence trap), the entrypoint's `load_policy`
+calls, and `Policy::all()`.
+
+Neither minted policy may read `config/ca`, `config/*`, or `roles/*` — verified
+(V6) that this is enforced, not merely conventional.
 
 ### 2.4 Credential flow, end to end
 
 ```
 tillandsias-headless (launcher, in-guest on every platform)
-  │  1. ensures the per-project Vault client role exists
+  │  0. resolves mirror-id: mint-or-read secret/mirror-identity/<project> (D13)
+  │  1. ensures BOTH per-project Vault roles exist (client <mirror-id>,
+  │     host host-<mirror-id>) and mints both exact policies (D12)
   │  2. mints ssh-lane-signer AppRole material  ── podman secret, uid=1000 mode=0400
   │     (identical to mint_git_mirror_vault_auto_auth, main.rs:2760-2787)
   ▼
@@ -449,21 +561,22 @@ tillandsias-sshagent-<project>-<lane>        [image: tillandsias-git, alt entryp
   │  3. Vault Agent auto-auth → tmpfs token sink
   │  4. ssh-keygen -t ed25519 on tmpfs        ← private key is born here and dies here
   │  5. publishes lane.pub to the shared volume
-  │  6. POST ssh-client-signer/sign/<project>, valid_principals=til:forge-push:<project>
+  │  6. POST ssh-client-signer/sign/<mirror-id>, valid_principals=til:forge-push:<mirror-id>
   │  7. ssh-add key+cert into ssh-agent; socket on the shared named volume
   │  8. re-signs at T−10m, ssh-add again
   ▼  (named volume: /run/tillandsias-ssh/agent.sock)
 tillandsias-<project>-forge-<lane>           SSH_AUTH_SOCK=/run/tillandsias-ssh/agent.sock
-  │  git push  → ssh git@tillandsias-git → cert auth, no key material present
+  │  git push  → ssh git@git-<mirror-id> → cert auth, no key material present
   ▼
 tillandsias-git-<project>                    sshd (non-root, uid 1000 git, port 2222)
      TrustedUserCAKeys / AuthorizedPrincipalsFile / ForceCommand
      → tillandsias-receive → git-receive-pack → pre-receive → relay → GitHub
 ```
 
-The launcher records `{lane, project, mode, container, key_fingerprint,
-created_at}` in the accountability log at step 5; that is the attribution
-ledger the mirror's logs join against.
+The launcher records `{lane, project, mirror_id, mode, container,
+key_fingerprint, created_at}` in the accountability log at step 5; that is the
+attribution ledger the mirror's logs join against (and the `project ⇄ mirror-id`
+mapping that keeps opaque principals readable, D3/D13).
 
 ### 2.5 TTL, rotation, and what happens to in-flight work
 
@@ -535,10 +648,13 @@ that it contains the full certificate. The wrapper parses it with
 
 ```
 TILLANDSIAS_PUSH_KEY_FP=SHA256:…       # stable per lane      → joins the ledger
-TILLANDSIAS_PUSH_PRINCIPAL=til:forge-push:<project>
+TILLANDSIAS_PUSH_PRINCIPAL=til:forge-push:<mirror-id>
 TILLANDSIAS_PUSH_SERIAL=<n>            # changes per renewal  → joins the KRL
-TILLANDSIAS_PUSH_KEY_ID=<project>|token-…
+TILLANDSIAS_PUSH_KEY_ID=<mirror-id>|token-…
 ```
+
+(The opaque principal and key ID resolve to a project through the launcher's
+`project ⇄ mirror-id` mapping, D13 — one join, same as the fingerprint.)
 
 `pre-receive` inherits them and emits them on the existing `--log-git`
 accountability records next to the ref transaction, so "which lane pushed which
@@ -627,17 +743,23 @@ the Cloudflare production posture — is designed here.
 
 In dependency order. Each rung has a named closure.
 
-- **T1 — Vault engines.** Mount `ssh-client-signer` and `ssh-host-signer`,
-  generate both CAs, create the per-project client role and the host role, in
-  the same idempotent style as `images/vault/entrypoint.sh:220-224`. Closure:
-  a litmus asserting both mounts exist and that `config/ca` returns a public key
-  and no private key.
-- **T2 — Policies.** Add `ssh-lane-signer.hcl` and `ssh-host-signer-agent.hcl`
-  to `images/vault/policies/`, to the Containerfile `COPY` list, to the
-  entrypoint's `load_policy` calls, **and** to `Policy::all()`. Closure: extend
-  the existing `embedded_hcl_matches_image_files_on_disk` test; add a litmus in
-  the shape of `litmus-vault-policy-forge-cannot-read-github-token.yaml` proving
-  a lane-signer token can sign and cannot read `config/ca`.
+- **T1 — Vault engines.** Mount `ssh-client-signer` and `ssh-host-signer` and
+  generate both CAs at boot, in the same idempotent style as
+  `images/vault/entrypoint.sh:220-224`. The per-project roles (client
+  `<mirror-id>`, host `host-<mirror-id>`) are NOT boot-time work: the launcher
+  creates them at mirror provision, keyed by D13's mint-or-read mirror-id.
+  Closure: a litmus asserting both mounts exist and that `config/ca` returns a
+  public key and no private key.
+- **T2 — Policies.** Mint `ssh-lane-signer-<mirror-id>` and
+  `ssh-host-signer-<mirror-id>` per project at provision time via
+  `sys/policies/acl/` (template in Rust next to `provision_approle_roles` —
+  no new static `.hcl` files, so the Containerfile-COPY/`Policy::all()`
+  divergence trap is not in play; if a static file IS ever added it must go to
+  the `COPY` list, `load_policy`, and `Policy::all()` together). Closure: a
+  litmus in the shape of `litmus-vault-policy-forge-cannot-read-github-token.yaml`
+  proving a lane-signer token can sign via its own exact path, receives 403 on
+  the sibling's path (§4a M2), and cannot read `config/ca`; plus a source-level
+  guard that no server-side policy ever contains `sign/*`.
 - **T3 — `openssh-server` in the mirror image.** `images/git/Containerfile`
   currently has `openssh-client` only (V11). Add `openssh-server`; keep
   `--read-only` rootfs and `--cap-drop=ALL`, so `sshd` must run as uid 1000
@@ -645,12 +767,15 @@ In dependency order. Each rung has a named closure.
   `/tmp` tmpfs or the `/srv/git` volume. **This is the highest-risk step —
   see R1 in §5. Verify it inside the container before building anything on it.**
 - **T4 — Host certificate at mirror start.** The mirror requests a host cert
-  from `ssh-host-signer` using its existing Vault Agent token, writes it beside
+  from `ssh-host-signer/sign/host-<mirror-id>` using its existing Vault Agent
+  token, for exactly the principal `git-<mirror-id>` (D9), writes it beside
   the host key, and re-requests every 8 h. Closure: a fixture asserting the
-  presented host key is a certificate and that a client with only the
-  `@cert-authority` line connects with `StrictHostKeyChecking=yes`.
+  presented host key is a certificate for exactly that one principal and that a
+  client with only the `@cert-authority` line connects with
+  `StrictHostKeyChecking=yes`.
 - **T5 — `sshd_config`.** `AuthorizedKeysFile none`, `TrustedUserCAKeys`,
-  `AuthorizedPrincipalsFile` written per project at start,
+  `AuthorizedPrincipalsFile` written per project at start containing exactly
+  `til:forge-push:<mirror-id>` (one line, opaque, D3),
   `ForceCommand /usr/local/bin/tillandsias-receive`, `ExposeAuthInfo yes`,
   `AllowTcpForwarding no`, `AllowAgentForwarding no`, `PermitTTY no`,
   `RevokedKeys`, `LogLevel VERBOSE`.
@@ -666,25 +791,32 @@ In dependency order. Each rung has a named closure.
 - **T8 — ssh-agent sidecar.** New entrypoint script in the existing
   `images/git` image (V11: `ssh-agent`, `ssh-keygen`, `vault` already present —
   no new image). Vault Agent auto-auth reusing `vault-agent.hcl` /
-  `vault-agent-bootstrap.sh`; keygen on tmpfs; sign; `ssh-add`; renewal loop;
-  socket on a named volume. Launcher wiring in `tillandsias-headless`: create
-  the volume, mint the AppRole, start the sidecar before the forge, record the
-  key fingerprint, tear both down together.
+  `vault-agent-bootstrap.sh`; keygen on tmpfs; sign via the exact
+  `ssh-client-signer/sign/<mirror-id>` path its minted policy names (D12 — a
+  403 from any other path is correct behavior, §4a M2); `ssh-add`; renewal
+  loop; socket on a named volume. Launcher wiring in `tillandsias-headless`:
+  create the volume, mint the AppRole, start the sidecar before the forge,
+  record the key fingerprint and mirror-id in the attribution ledger, tear both
+  down together.
 - **T9 — Persist the Vault audit device.** Mount a volume at `/vault/audit`
   (or repoint the device at the already-mounted `/vault/logs`). Without this,
   D11's third attribution channel does not exist (V12).
 - **T10 — Forge wiring.** Mount the socket volume, set `SSH_AUTH_SOCK`, and
   change the `insteadOf` target in `write_forge_gitconfig`
-  (`main.rs:7802-7804`) from `git://tillandsias-git/<project>` to
-  `ssh://git@tillandsias-git:2222/srv/git/<project>` **for push only** —
-  `git://` stays the fetch path (Q4). `known_hosts` with the `@cert-authority`
+  (`main.rs:7802-7804`) from the per-project mirror URL to
+  `ssh://git@git-<mirror-id>:2222/srv/git/<project>` **for push only** —
+  the anonymous protocol stays the fetch path (Q4), itself addressed at the
+  per-project hostname once 659-8faj lands (the shared-alias `git://` URL form
+  is retired with the aliases). `known_hosts` with the `@cert-authority`
   line must be delivered through the read-only global config, because
   `~/.ssh` is an empty tmpfs (D9). Also reckon with `export_ssh_env()` in
   `images/default/lib-common.sh:3098-3153`, which every forge entrypoint calls
   and which probes `~/.ssh` for identity files — dead today against the tmpfs,
   and a live hazard once ssh is in the push path.
 - **T11 — Staged migration.** One lane behind a flag with a fetch/push parity
-  fixture; soak; flip the default; then remove `--enable=receive-pack` from
+  fixture; soak; **the full §4a negative two-project matrix green is the gate
+  for flipping the default** — no lane flips while any row of it is red or
+  unbuilt; then remove `--enable=receive-pack` from
   `images/git/entrypoint.sh:345-352` and rewrite
   `openspec/litmus-tests/litmus-git-mirror-no-anonymous-daemon-write.yaml` to
   assert the write path is authenticated (its current text explicitly defends
@@ -694,6 +826,30 @@ In dependency order. Each rung has a named closure.
   material is not* (§2.2), or the new socket reads as a violation.
 - **T13 — Fail loud.** A litmus that removes the agent socket and asserts the
   push fails with a named cause and does **not** fall back to `git://`.
+
+### §4a — The negative two-project matrix (added 2026-08-10, 606-bvnp)
+
+Two REAL simultaneous projects, A and B (product-shaped containers, not
+hand-built stand-ins — the 659-8faj audit showed a probe image's `nslookup`
+inverting a finding; use `getent ahostsv4` for every DNS row). Every row must
+be an executable fixture with a pass/fail exit code, and ALL rows must be green
+before T11 flips any lane to production sshd. This is the packet's exit
+criterion 1–4 made enumerable:
+
+| # | Fixture | Must hold |
+|---|---|---|
+| M0 | Positive control | A's and B's lanes each clone/fetch/push their own mirror successfully, concurrently. |
+| M1 | DNS identity (delivered by 659-8faj's fixture) | `getent ahostsv4 git-<id-A>` returns exactly ONE A record; same for B; `tillandsias-git` and `git-service` resolve to NOTHING. |
+| M2 | Vault signing 403 | A's lane-signer token: `sign/<id-A>` → 200; `sign/<id-B>` → 403 permission denied (clone the `litmus-vault-policy-forge-cannot-read-github-token.yaml` shape). Symmetric for B. |
+| M3 | Client cert cross-rejection | A's valid cert (principal `til:forge-push:<id-A>`) presented to B's sshd → denied (principal not in B's `AuthorizedPrincipalsFile`), and `sshd` logs the refusal. |
+| M4 | Host cert exactness | The host cert B's mirror presents carries exactly one principal, `git-<id-B>` (`ssh-keygen -L`); a client connecting to `git-<id-A>` that is answered with B's cert MUST fail host verification. |
+| M5 | Fixed repository path | A's cert with `SSH_ORIGINAL_COMMAND` naming B's repo path still lands in A's fixed repository — the wrapper ignores the requested target (T6). |
+| M6 | Audit completeness | After M0/M2/M3/M5, the audit records carry project, lane, principal, fingerprint, serial, and refs — and SURVIVE a mirror/Vault container recreation. Blocked on T9: `/vault/audit` is a container-layer directory today (V12) and dies on recreate; M6 cannot pass until T9 lands. |
+| M7 | Identity confidentiality | From inside A's forge, B's mirror-id is not discoverable: not in A's env, not in A's gitconfig, and `secret/data/mirror-identity/*` unreadable through every forge-reachable policy (D13). |
+
+Rows M2/M3/M5/M7 are the "project A must never mint or reach project B" claim;
+M1/M4 are the identity-exactness claim; M6 is the attribution claim. M0 keeps
+the matrix honest — a broken stack passes every negative test.
 
 Not in scope for 451: the mesh (563/564/565), the `HOMEBREW_GITHUB_API_TOKEN`
 env injection (Q1), and the pre-receive relay's upstream auth, which is correct
