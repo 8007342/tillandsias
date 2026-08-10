@@ -1,0 +1,57 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t233618z
+status:
+  - packet_id: plan-lane-routing-keys-on-binary-not-project
+    field: status
+    value: done
+    ts: "2026-08-10T23:36:18Z"
+    host: linux
+
+events:
+  - packet_id: plan-lane-routing-keys-on-binary-not-project
+    event:
+      type: completed
+      ts: "2026-08-10T23:36:18Z"
+      agent_id: linux-mutable-20260810t233618z
+      host: linux
+      summary: >
+        Exit criterion met in full: a non-Tillandsias fixture with a Tillandsias
+        checkout present in the fallback path answers from the generic lane,
+        PROVEN BY TEST (executed via scripts/run-litmus-test.sh, not merely
+        bound).
+
+        THE DEFECT. project_answer in images/default/config-overlay/mcp/project-info.sh
+        gated the plan lane on resolve_plan_bin && resolve_plan_index, and
+        resolve_plan_index resolves $HOME/src/tillandsias/plan/index.yaml as a
+        fallback. Inside a forge that is correct (one project mounted); on a dev
+        host with a Tillandsias checkout lying around, a NON-Tillandsias project's
+        question misrouted into that checkout's plan ledger and answered from the
+        wrong project — the 619-pfsj fixture verification had already had to
+        override HOME to dodge this.
+
+        THE FIX. Lane selection now keys on evidence about the MOUNTED project —
+        its own plan/index.yaml at the project root (./plan/index.yaml) — never
+        on tool reachability. Only a Tillandsias-shaped mounted project enters
+        the plan lane, and it answers from ITS OWN ledger (TILLANDSIAS_PLAN_INDEX
+        stays an explicit override for operator pins and test stubs); everything
+        else answers from the generic lane, whatever the tooling resolves. A
+        Tillandsias-shaped mount with no plan binary falls through to the generic
+        lane (absence never degrades the generic contract). Engine contract
+        bumped v2 -> v3 (669-h987) per the manifest rule that the contract
+        version MUST move whenever the answer contract changes behaviour.
+
+        VERIFICATION. Extended litmus:project-answer-synthesis-refusal-typed
+        (bound under forge-environment-discoverability, the spec that owns this
+        surface) with a new EXECUTED step staging the exact regression: a plain
+        non-Tillandsias mount (no plan/index.yaml at root) whose HOME carries a
+        fake Tillandsias checkout (src/tillandsias/plan/index.yaml + a stub
+        tillandsias-plan emitting a distinct plan answer) — the generic lane
+        answers with an anchored 'Project type: ' envelope, the fallback's plan
+        answer never leaks, and the envelope passes `tillandsias-plan
+        verify-answer`. The existing plan-lane steps were re-keyed onto a
+        Tillandsias-shaped fixture (own plan/index.yaml) because post-fix the
+        plan lane only exists there. Full run:
+        ./scripts/run-litmus-test.sh forge-environment-discoverability --size
+        instant --phase pre-build -> 10/10 PASS incl. the new 669-h987 step;
+        ./build.sh --check green (fmt, check, strict clippy, ledger check,
+        plan-orders, fragment status-loss, gate stamp).
