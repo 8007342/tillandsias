@@ -31123,6 +31123,13 @@ plan_index:
         - if an exception is ratified, it is destination-scoped and a negative test proves arbitrary direct egress is refused
         - clone/fetch/push parity and credential isolation remain green
 
+      events:
+        - type: progress
+          ts: "2026-08-10T03:25:00Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: >
+            Exit criterion 1 CLOSED by static audit (plan/issues/git-mirror-egress-spec-divergence-audit-2026-08-10.md): implementation and spec DO NOT agree, and the divergence is now located exactly. Spec is unambiguous in four places that only the proxy may be dual-homed; the mirror is dual-homed deliberately at remote_projects.rs:321 and :651 plus main.rs:2953, with a stated reason (direct GitHub push). The decisive detail for criteria 2/3: tillandsias-egress is a plain NAT network with NO destination scoping, so the attachment grants arbitrary outbound access to a container whose stated need is one destination. Also corrected the packet's scope: of the sites sharing ENCLAVE_EGRESS_NETS, main.rs:2516 is build_proxy_run_args and is COMPLIANT (the spec mandates it), while main.rs:7483 run_provider_login is a second unsanctioned case needing its own verdict. The shared constant is part of the defect — nothing distinguishes sanctioned from expedient dual-homing at the call site. Recommends attempting criterion 2 (route through proxy) before 3, since ratifying an unscoped exception because scoping is work would invert the packet's intent. NOT DONE: no runtime reproduction; criteria 2-4 all need one.
     - packet_id: container-image-final-layer-squashing
       order: 607-vbbt
       status: completed
