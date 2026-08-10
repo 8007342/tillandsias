@@ -5,8 +5,18 @@
 - Packet: `624-su5r` p0 `windows-unstable-channel-validation`
 - Releases under test: `v0.4.260810.1` (published 01:55Z as **pre-release**),
   `unstable` (rolling), and `latest` (still `v0.4.260809.2`)
-- Verdict: **steps 1 and 4 PASS. Steps 2 and 3 NOT RUN** — see "What is not
-  covered", which is the important half of this report.
+- Verdict: **steps 1, 3, 4, 5 PASS; step 2's substantive question answered.**
+  Only the GUI-visual observation remains, tracked as `646-qde5`.
+
+> **Header corrected 2026-08-10.** This originally read "steps 1 and 4 PASS,
+> steps 2 and 3 NOT RUN", which was accurate when written and went stale as the
+> work landed: `644-a3wj` answered step 2 (the bare alias IS usable standalone)
+> and step 3 (alias/versioned zips share a digest), and step 5 ran in cycle 9.
+> The "What is NOT covered" section below is preserved as written rather than
+> rewritten — it records what was true at the time, and the addendum at the end
+> narrows the remaining ask. A report whose summary drifts from its own contents
+> is the same measuring-the-wrong-thing problem this session has been chasing,
+> so it is fixed rather than left.
 
 ## Step 4 — checksum integrity (the 623-iwq4 regression check): PASS
 
@@ -123,3 +133,46 @@ automation channel. It is a few minutes of clicking, not a large task.
   `v0.4.260809.2`. That appears intended (the unstable channel is how the new
   build is reachable), but it means the landing page's primary Windows downloads
   are one release behind until promotion.
+
+---
+
+## Addendum 2026-08-10 — structural evidence for the "no flashing consoles" half (646-qde5)
+
+The GUI half of this validation still needs a human, but one of its two questions
+has a checkable structural answer, and narrowing the ask is worth more than
+restating that it is open.
+
+**The tray process cannot flash a console at startup.** Reading the PE header of
+the published `tillandsias-tray.exe` (the unversioned alias, from the `unstable`
+channel):
+
+```
+pe_sig=PE  optional_magic=0x20B (PE32+)
+subsystem=2  ->  IMAGE_SUBSYSTEM_WINDOWS_GUI
+```
+
+Subsystem 2 means Windows does not allocate a console for the process. A
+console-subsystem binary (3, `WINDOWS_CUI`) is what produces the classic flash;
+this is not one.
+
+**Child processes are spawned hidden, except where a terminal is the point.**
+
+- `crates/tillandsias-vm-layer/src/lib.rs` applies `CREATE_NO_WINDOW`
+  (`0x0800_0000`) to background commands on Windows.
+- `wsl_lifecycle.rs:119` builds background `wsl.exe` commands with it applied.
+- `transport_windows.rs:131` records the regression that motivated it: *"without
+  CREATE_NO_WINDOW each retry flashed a console (2026-07-12)"* — so this exact
+  failure mode was already found and fixed once.
+- The two `CREATE_NEW_CONSOLE` sites (`notify_icon.rs:3644`, `:3729`) are the
+  interactive PTY launches — Attach and GitHub Login — where a visible terminal
+  is the intended behaviour, not a flash.
+
+**What this does and does not settle.** It settles that no *incidental* console
+window is expected from the tray or its background children, and it is evidence
+a reader can re-derive rather than a claim to trust. It does not settle that the
+tray **icon appears**, which has no structural proxy — a GUI process can start
+cleanly and still fail to register a notification-area icon.
+
+So the remaining human check is now one question, not two: **does the tray icon
+appear in the notification area when the bare exe is run?** If it does, and no
+console flashes, `646-qde5` closes.
