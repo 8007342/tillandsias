@@ -414,6 +414,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:git-mirror-fetch-reconcile
+  - litmus:git-mirror-dns-identity
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write

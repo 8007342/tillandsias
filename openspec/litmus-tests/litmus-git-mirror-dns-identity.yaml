@@ -1,0 +1,65 @@
+# @trace spec:git-mirror-service
+name: litmus:git-mirror-dns-identity
+spec: git-mirror-service
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  Order 659-8faj: every project's mirror must carry a PROJECT-UNIQUE DNS
+  identity (git-<project>, derived in one place by git_mirror_service_identity)
+  and the retired shared aliases (git-service, tillandsias-git) must never be
+  assigned again. Before the fix, build_git_run_args gave every mirror the same
+  two constant aliases, so two simultaneous projects produced two A records for
+  one name and podman's resolver routed clients cross-project,
+  non-deterministically — against a daemon serving --export-all with an
+  anonymous write path (audit:
+  plan/issues/mirror-identity-is-a-shared-dns-alias-audit-2026-08-10.md).
+
+  These steps pin the code shape. The LIVE negative fixture — two containers
+  carrying the product's exact alias/hostname args, one A record per
+  project-unique name, NXDOMAIN for the shared aliases — is
+  scripts/test-git-mirror-dns-identity.sh (podman required, so it is not an
+  instant pre-build step; run it on runtime-capable hosts).
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains images/default/lib-common.sh
+  - workspace contains scripts/test-git-mirror-dns-identity.sh
+
+critical_path:
+  - step: "the launcher never assigns the retired shared aliases to a mirror"
+    command: "! grep -Fq '\"git-service\".into()' crates/tillandsias-headless/src/main.rs && ! grep -Fq '\"tillandsias-git\".into()' crates/tillandsias-headless/src/main.rs && echo 'ok: no shared alias constants assigned'"
+    timeout_ms: 5000
+    expected_behavior: "ok: no shared alias constants assigned"
+
+  - step: "the mirror identity has exactly one derivation point (the 606-bvnp swap point)"
+    command: "grep -Fq 'fn git_mirror_service_identity' crates/tillandsias-headless/src/main.rs && echo 'ok: single identity derivation'"
+    timeout_ms: 5000
+    expected_behavior: "ok: single identity derivation"
+
+  - step: "guest clients derive the mirror host, never a hardcoded shared name"
+    command: "grep -Fq 'git_mirror_host()' images/default/lib-common.sh && ! grep -Fq 'git://tillandsias-git/' images/default/lib-common.sh && ! grep -Fq 'git://git-service/' images/default/lib-common.sh && echo 'ok: clients address the per-project name'"
+    timeout_ms: 5000
+    expected_behavior: "ok: clients address the per-project name"
+
+  - step: "the live two-mirror fixture exists, probes with getent (never nslookup), and asserts the shared aliases are NXDOMAIN"
+    command: "test -x scripts/test-git-mirror-dns-identity.sh && grep -Fq 'getent ahostsv4' scripts/test-git-mirror-dns-identity.sh && ! grep -Eq '^[^#]*nslookup' scripts/test-git-mirror-dns-identity.sh && grep -Fq 'tillandsias-git git-service' scripts/test-git-mirror-dns-identity.sh && echo 'ok: live negative fixture encoded'"
+    timeout_ms: 5000
+    expected_behavior: "ok: live negative fixture encoded"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "per-project mirror DNS identity; shared aliases retired (659-8faj)"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "git-mirror-dns-identity"
+
+rollback:
+  on_failure: >
+    Do NOT reintroduce a shared alias to make routing "work" — one name over N
+    mirrors is the cross-project misrouting this test exists to prevent. If a
+    client cannot reach its mirror, fix the TILLANDSIAS_GIT_SERVICE injection
+    or the git_mirror_host() fallback so the client addresses git-<project>,
+    and keep git_mirror_service_identity the only derivation point.
+  command: "grep -n 'network-alias\\|git_mirror_service_identity' crates/tillandsias-headless/src/main.rs | head -20; grep -n 'git_mirror_host' images/default/lib-common.sh"
