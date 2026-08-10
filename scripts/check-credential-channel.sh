@@ -79,7 +79,11 @@ credential_channel_verdict() {
     local effective_origin
     effective_origin="$(git ls-remote --get-url origin 2>/dev/null || true)"
     case "$effective_origin" in
-      git://tillandsias-git/*|git://git-service/*) ;;
+      # Order 659-8faj: mirrors answer at per-project names (git-<project>),
+      # which git://git-*/* covers (it also matches the retired git-service).
+      # git://tillandsias-git/* stays accepted for configs written before the
+      # rename.
+      git://git-*/*|git://tillandsias-git/*) ;;
       *)
         echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but origin does not resolve to the enclave git mirror (effective origin: ${effective_origin:-<missing>}): no usable push channel. Fix the forge gitconfig injection or provide a forge credential channel; do NOT import host credentials." >&2
         echo "missing:no-credential-channel"
