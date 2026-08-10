@@ -24,3 +24,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-10T20:35Z  (frag)    663-acdw filed (github-login guest preflight wedge — blocks unattended re-seed + 349) + 663-69kp (unbounded one-shot boot hang after interrupted teardown); both hit repeatedly tonight
 - 2026-08-10T22:20Z  (frag)    657-3mq5 slice 1: guest has i8mm+SME2 (M4-class); native llama.cpp build (65s) benches 190 tok/s tg / 1194 t/s pp on qwen0.5b Q4_0 — ~3.65x the ollama baseline
 - 2026-08-10T23:50Z  (frag)    657-3mq5 slice 2: quant matrix — Q4_0 repack dominates (1220 pp / 187 tg vs Q4_K_M 355/151); lane guidance = Q4_0 for experts
+- 2026-08-11T01:00Z  (frag)    657-3mq5 COMPLETED: recipe = native GGML_NATIVE build + Q4_0 repack -> 2.6x ollama decode (187 vs 71 tok/s), engine gap 2.1x isolated; ollama pinned 0.32.6

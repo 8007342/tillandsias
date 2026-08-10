@@ -130,3 +130,24 @@ exactly as researched. **Lane guidance: Q4_0 GGUFs for macOS-guest experts**
 pp advantage). Remaining 657-3mq5 criteria: ollama version pin-bench
 (apples-to-apples) and a ground-truth quality spot-check; 1.5–3B tier matrix
 optional follow-on.
+
+### 657-3mq5 slice 3 (2026-08-11T00:55Z): ollama pin-bench — closure
+
+ollama pinned at **0.32.6**; it serves `qwen2.5:0.5b` as **Q4_K_M**. Three
+seeded 128-token generations via /api/generate: cold 8.8 tok/s (load inside
+eval), warm 62.3 and 79.3 tok/s. The arm64 10x regression (#13860) is ruled
+OUT for this version. The apples-to-apples chain decomposes:
+
+| step | tok/s | factor |
+|---|---|---|
+| ollama 0.32.6, Q4_K_M (warm avg) | ~71 | 1.0x |
+| native i8mm/SME build, same Q4_K_M | 150.9 | ~2.1x (engine) |
+| native build, Q4_0 online repack | 186.7 | ~2.6x total (+quant) |
+
+**657-3mq5 verdict: the winning recipe is a native llama.cpp build
+(GGML_NATIVE=ON) serving Q4_0 GGUFs — ~2.6x ollama's decode on identical
+hardware, with prompt processing 1220 t/s.** Feeds the
+llama-server-aarch64-image-variant packet (657-6s4a) as its build recipe.
+Quality: coherent answers observed across the seeded runs and the earlier
+methodology-expert probe; formal ground-truth grading rides the deterministic
+engine per this doc's construction decision.
