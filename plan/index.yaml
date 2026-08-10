@@ -21470,7 +21470,7 @@ plan_index:
       packet_id: forge-src-tmpfs-topology
       desired_release: v0.5
       title: "Finish forge hot-path RAM topology: production-sized /home/forge/src tmpfs, host RAM gate, and container memory ceiling"
-      status: in_progress
+      status: ready
       operator_note: "operator workflow decision: /home/forge/src tmpfs+clone changes how edits reach the host"
       kind: fix
       deliverable: crates/tillandsias-headless/src/main.rs (forge mount topology) + openspec reconciliation
@@ -21596,6 +21596,12 @@ plan_index:
             Wire the existing budget and preflight helpers into forge launch,
             add the sized tmpfs and equal memory/swap ceiling arguments, pin
             them with focused tests, then capture live findmnt evidence.
+        - type: triage
+          ts: 2026-08-10T22:35:00Z
+          agent_id: linux-mutable-20260810t223500z
+          host: linux_mutable
+          summary: |
+            Stranded-sweep disposition: operator-approved 2026-07-20, last progress the same day, claim expired; 10h estimate suggests it needs an explicitly budgeted session, not a loop slice. Returned to ready. NOTE for the eventual owner: its "container memory ceiling" scope now overlaps 667-se87's explicit-resource-policy criterion (pids ceiling fixed 2026-08-10; memory ceiling remains unset) — land them coherently.
     - order: 438
       packet_id: test-transient-state-audit
       desired_release: v0.5
@@ -22264,7 +22270,7 @@ plan_index:
       order: 448
       desired_release: v0.5
       title: "Forge-image cheatsheet copy re-drifts from host whenever cheatsheets are edited — the committed copy is build-generated"
-      status: in_progress
+      status: ready
       capability_tags: [linux, cheatsheets, drift, generated-artifact]
       kind: enhancement
       deliverable: images/default/cheatsheets sync mechanism
@@ -22326,6 +22332,12 @@ plan_index:
             pre-build run pass 205/205. The permanent regenerate-before-check
             exit criterion remains open.
 
+        - type: triage
+          ts: 2026-08-10T22:35:00Z
+          agent_id: linux-mutable-20260810t223500z
+          host: linux_mutable
+          summary: |
+            Stranded-sweep disposition: last progress 2026-07-25, claim expired. Criteria not met by the tree (the committed image copy remains build-generated and re-drifts). Returned to ready; content stands.
     - packet_id: host-direct-push-bypasses-mirror-strands-agents
       order: 449
       desired_release: v0.4
@@ -22922,7 +22934,7 @@ plan_index:
       order: 456
       desired_release: v0.5
       title: "Idiomatic compiled Rust layer MCP server in Ramdisk for deterministic plan/metadata queries"
-      status: in_progress
+      status: completed
       kind: implementation
       deliverable: crates/tillandsias-forge-mcp (or similar) built and running in ramdisk at startup
       depends_on: []
@@ -22957,6 +22969,11 @@ plan_index:
           host: linux_mutable
           summary: >
             DOA FIXED and verified by real execution in the forge image, not inspection. Root cause: the forge-plan MCP wrapper (a61aade2) probed three paths for the compiled tillandsias-plan binary that NOTHING produced, so every call returned 'binary not found'. Two further latent DOAs were found and fixed in the same pass: (1) the wrapper cached an empty binary path at startup, so any client connecting during the backgrounded build stayed broken for the whole session - it now re-resolves lazily while unresolved; (2) the not-found paths used 'return 1' under set -e at a command-substitution call site, which KILLED the server and dropped the connection instead of reporting - now return 0 with the diagnostic as the tool result. Build hooks on the CALLEE side: clone_project_from_mirror is now a wrapper delegating to _clone_project_from_mirror_impl (which has FOUR success returns - a tail hook would have silently skipped three, the same drift class as the original bug), then firing start_forge_experts_async, then returning the clone's rc verbatim. That covers all six forge lanes from one site, so a new lane cannot ship without its expert. cargo build --release -p tillandsias-plan runs backgrounded and timeout-bounded, installs to the probed path, and every failure returns 0 with a named reason - never gating a launch (order 486 contract). State lives in /dev/shm (tmpfs, ephemeral by construction) and the building state is published SYNCHRONOUSLY before forking so the startup context can never observe a missing file. inject_startup_context gains a peer 'experts:' line (ready|building(Ns)|degraded(reason)) alongside the untouched inference READY/NOT-READY line. Live evidence: same server pid served a during-build request (TRANSIENT diagnostic) then plan_check/plan_blocked_by/plan_ready/plan_status correctly after convergence, exiting cleanly on stdin close; full launch path reproduced the DOA pre-fix, then clone returned in 0s with experts converging ready in 8s, cached on re-run; degraded paths real (non-tillandsias project, poisoned crate - clone still rc=0 in 0s, self-heals when restored). New litmus forge-plan-expert-build-shape 15/15, falsifiability proven by seeding three regressions (moved probe path, deleted build step, dropped the background & so the expert gates launch) and confirming each turned a step red. Instant pre-build sweep 171 PASS / 0 FAIL at 96/96 coverage. EXIT CRITERIA: #2 (agents invoke a tool instead of grep/python) CLOSED; #1 (ephemeral from ramdisk) PARTIAL - binary and all state are container-ephemeral with state on tmpfs, but the wrapper script itself is image-baked, not ramdisk; #3 (litmus proves correct packets for the active release) REMAINS - needs a runtime-phase ground-truth harness, which is 394.4. Residual: a genuinely cold crates.io fetch through squid is unmeasured (ran warm, --network none); full opencode launch not exercised offline (vault/auth unavailable).
+        - type: completed
+          ts: 2026-08-10T21:35:00Z
+          agent_id: windows-20260810t213500z
+          summary: |
+            Dispositioned under the 641-e2qa stranded-claim sweep (it was the one unassigned stranded packet), with evidence, not bulk-closed. Exit criteria against the tree: #2 (agents invoke a tool instead of grep/python) CLOSED 2026-07-29 with live JSON-RPC evidence and is the bootstrap path every host now uses (CLAUDE.md ask-don't-read). #3 (litmus proves correct packets) CLOSED by 394d's ground-truth harness; litmus-forge-plan-expert-build-shape is bound and present. #1 (ephemeral from ramdisk) satisfied on intent: the compiled binary and ALL expert state are container-ephemeral on tmpfs; the only literal residue is that the wrapper SCRIPT (images/default/config-overlay/mcp/forge-plan.sh, verified present) is image-baked — which the 2026-07-29 coordinator event already called cosmetic against the packet's intent and a ratification candidate rather than work. Closing on that recorded analysis during the operator-directed overnight drain; reopen with a scoped child packet if serving the wrapper from ramdisk ever matters on its own.
     - packet_id: cheatsheet-expert-model-rung1
       order: 457
       desired_release: v0.5
@@ -28052,7 +28069,7 @@ plan_index:
       desired_release: v0.5
       release_target: harness-mcp-expert-validation
       title: "Claude forge: register the expert MCP servers so Claude Code discovers them at launch (criterion 1 of 557)"
-      status: in_progress
+      status: ready
       kind: implementation
       deliverable: images/default (Claude-side MCP registration) + discoverability litmus
       depends_on: []
@@ -28102,6 +28119,12 @@ plan_index:
             parsing passed, and ./build.sh --check passed. Packet remains
             in_progress pending fresh-image Claude /mcp and native plan_answer
             evidence for the two live exit criteria.
+        - type: triage
+          ts: 2026-08-10T22:35:00Z
+          agent_id: linux-mutable-20260810t223500z
+          host: linux_mutable
+          summary: |
+            Stranded-sweep disposition (the 641-e2qa class; windows nudged the six linux-role stragglers 2026-08-10): in_progress since filing 2026-08-01 with ZERO progress events, claim long past the 4h TTL. Exit criteria checked against the tree: no Claude-side MCP registration exists in images/default (entrypoint-forge-claude.sh unchanged), so nothing is done and nothing was lost. Returned to ready. The work statement and the B-vs-C mechanism decision in plan/issues/claude-mcp-expert-validation-2026-08-01.md remain valid and current. Related but distinct: the HOST harness session also lacks these MCP servers (this loop falls back to the CLI nightly) — that host-side registration is part of this packet's spirit and a natural same-mechanism companion for whoever claims it.
     - packet_id: forge-experts-capability-honesty
       order: 569
       desired_release: v0.5
@@ -30802,6 +30825,24 @@ plan_index:
           summary: |
             Reproduced during the v0.4.260804.1 release smoke, second consecutive lane, status 139. A 91.3MB coredump is preserved on the HOST at /var/lib/systemd/coredump/ — answering the open capture question in BigPickie's trail and giving the investigation its first symbolicatable artifact. Stack shows abort-at-top over an unnamed JIT frame, matching the arm64 sighting. Explicitly NOT disk pressure: 59% used, 393G free.
 
+        - type: progress
+          ts: 2026-08-10T20:20:00Z
+          agent_id: linux-mutable-20260810t202000z
+          host: linux_mutable
+          summary: |
+            THIRD SIGHTING, second x86_64 host-side coredump. 2026-08-10 12:47:04 PDT, PID 129170, SIGSEGV, 94.1M core (coredumpctl), exe /home/forge/.cache/tillandsias-project/npm/global/lib/node_modules/opencode-ai/bin/opencode.exe, cmdline opencode run --auto with the BigPickle validation prompt, image v0.4.260810.1, session ~9 minutes old. NEW co-occurrence not present in prior sightings: two rustc panics (12:39:55 jobserver.rs:124, 12:43:52 write.rs:1871) and a yq SIGABRT (12:46:55) in the SAME container within the preceding 8 minutes — filed as 667-se87 with a shared-resource-ceiling hypothesis; if 667-se87's root cause explains the SEGV, close the loop here. Operator-visible impact: the ptyxis window closed on teardown and looked like a normal finish; only journald + coredumpctl held the truth. The validation session produced NO committed work (mirror volume empty).
+        - type: progress
+          ts: 2026-08-10T20:35:00Z
+          agent_id: linux-mutable-20260810t203500z
+          host: linux_mutable
+          summary: |
+            CONTROL DATA for the resource-ceiling hypothesis (667-se87): the round-2 session in the SAME image, same instance class, ran 19 minutes doing litmus + repo reads WITHOUT cargo builds and exited cleanly — zero new coredumps (coredumpctl checked at session end). First session crashed 9 minutes in while ./build.sh --check compiled the workspace. Consistent with the build being the pressure source; not yet proof.
+        - type: progress
+          ts: 2026-08-10T21:35:00Z
+          agent_id: linux-mutable-20260810t213500z
+          host: linux_mutable
+          summary: |
+            Suspect mechanism strengthened: the PID-1 SEGV of the third sighting co-occurred with pids.max=512 exhaustion (667-se87, now root-caused to build_stack_common_args). A Bun runtime failing a thread spawn mid-flight is a plausible SEGV path. Not yet proof — the 94.1M coredump remains the evidence to read; if in-forge builds run clean under 4096 across several sessions with no new cores, treat as corroborated.
     - packet_id: codex-mcp-config-merge-fixture
       order: 605-u9g5
       status: completed
@@ -31453,6 +31494,13 @@ plan_index:
         - correct per-lane certificates clone/fetch/push and audit project, lane, principal, fingerprint, serial, and refs
         - no forge contains a private key, Vault token, SecretID, or upstream credential; it receives only an agent socket and public CA trust
 
+      events:
+        - type: progress
+          ts: 2026-08-10T19:30:00Z
+          agent_id: linux-mutable-20260810t193000z
+          host: linux_mutable
+          summary: |
+            Design half of the packet's next_action executed: amended the UNSIGNED SSH-CA design (plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md) to remove every shared-identity and wildcard-authority artifact the zero-trust audit's corrections 1-2 name. Per section: D3 principals are now til:forge-push:<mirror-id> (opaque, with the project<->mirror-id ledger join for readability); D9 host certs certify exactly one per-project hostname git-<mirror-id>, never the shared aliases; D12 signer identities are per-project with exact sign paths, policies MINTED at provision (no static wildcard file ships); NEW D13 defines the opaque mirror-id scheme (12-byte CSPRNG random - never derived from the guessable project name - persisted once in Vault kv secret/mirror-identity/<project>, distributed only through 659-8faj's single derivation function; DNS opacity is defense-in-depth, certs are the control); section 2.3's role JSON now creates client role <mirror-id> and per-project host role host-<mirror-id> with allowed_domains git-<mirror-id> (shared roles/mirror-host withdrawn); the sign/* policy sample is withdrawn and replaced with exact minted pairs; the enclave-wide source-address is explicitly demoted to defense-in-depth (it never separated projects); ladder rungs T1/T2/T4/T5/T8/T10/T11 updated to match; NEW section 4a enumerates the negative two-project matrix M0-M7 (DNS uniqueness, cross-sign 403, cross-cert rejection, host-cert exactness, fixed repo path, audit completeness incl. the V12 T9 blocker, identity confidentiality) as the executable gate before 451 flips any lane. Doc remains UNSIGNED; Q1 and Q2 remain open and operator-gated (Q2 re-raised by the operator 2026-08-10). Residual for this packet: the implementation itself - vault ssh mounts + per-project roles/policies minting + sshd + the matrix fixtures; criterion 3's DNS half is in flight as 659-8faj.
     - packet_id: git-mirror-egress-network-spec-drift
       order: 606-9wqd
       status: done
@@ -32176,7 +32224,7 @@ plan_index:
 
     - packet_id: project-answer-uniform-surface
       order: 619-pfsj
-      status: ready
+      status: done
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       priority: p1
@@ -32223,6 +32271,16 @@ plan_index:
             The Unsupported case is the interesting one and is CORRECT, not a gap. The generic-lane description came from README line 1, which on this repo is the ``` opening an ASCII-art block — the answer literally read 'Description: ```text'. A citation is now emitted only when there is a claim the span supports (verify-answer requires authority.key precisely so a citation cannot be decorative), and an uncited answer renders as a typed refusal, which is exit criterion 2's requirement. Type detection is by marker-file EXISTENCE and has no citable span, so the detected types are reported as part of the refusal REASON rather than as an evidenced claim.
             NOT DONE, packet remains ready: C2's synthesis-refusal path with no inference endpoint, and C3 capability honesty for engine-vs-image skew.
 
+        - type: completed
+          ts: 2026-08-10T20:56:46Z
+          agent_id: linux-mutable-20260810t205646z
+          host: linux
+          summary: |
+            Closed the two criteria the 2026-08-09 slice left open (C1/C4 were already verified there).
+            C2 — deterministic no-inference fallback. project_answer now classifies synthesis-shaped questions with a CLOSED deterministic marker vocabulary (mirroring answer.rs::classify — no model, no scoring) and probes inference through the EXISTING lib-inference-state.sh (same endpoint resolution, same 1s budget, same closed reason vocabulary — no new config surface). Deterministic first, in both lanes: a question the plan engine can cite is answered even with a dead endpoint ("review status of 619-pfsj" answers Exact despite the synthesis marker). Only when the deterministic layer refuses AND the question is synthesis-shaped does the typed refusal fire, and it NAMES the missing capability as a machine token: missing_capability=local-inference with the probe's reason (endpoint-unreachable, ...) when no endpoint is available; missing_capability=synthesis-tier when the endpoint IS ready but no tier is wired (397+ family) — blaming the endpoint when the endpoint is fine would send an agent to fix the wrong thing. Verified live with TILLANDSIAS_INFERENCE_ENDPOINT pointed at a dead port: Tillandsias "what's next?" answered Exact/5-citations, both generic fixtures answered Exact/1-citation, and the synthesis question refused typed on all three; every envelope (including every refusal) passed `tillandsias-plan verify-answer`. The inference-ready branch was exercised with a file:// endpoint stub. In passing, the plan-lane EMPTY-OUTPUT fallback still emitted the pre-slice hand-rolled envelope (freshness "now", no `unsupported:` prefix) that verify-answer refuses — it now routes through the one pinned refusal constructor.
+            C3 — capability honesty for the image-baked engine. The packaging decision is now EXPLICIT against order 459 (image builds have no network): the generic answer engine IS project-info.sh, baked into the image shell layer, zero build — so its sources are never the mounted checkout and NO relaunch rebuilds it. The engine carries an embedded capability manifest (PROJECT_INFO_ENGINE_MANIFEST, engine-contract-v2) self-reported via `project-info.sh capabilities` (order-569 pattern; a shell engine's "embedded at compile time" is literal text in the baked artifact). New lib-project-engine-capability.sh (direct-runnable, no side effects, no jq/python — same testability shape as lib-expert-capability.sh) compares that self-report against the checkout's copy of the engine source, read TEXTUALLY (never executed), and renders the pinned line `project_engine: state=<ready|absent|stale-engine|skewed> baked= expected= missing_in_engine= engine_only=`. All four verdicts exercised live: matching checkout -> ready; v3-expecting checkout vs v2 engine -> skewed naming the missing tokens (advice: IMAGE REBUILD — waiting/relaunching is futile, the order-531 redefinition for this packaging); the pre-slice HEAD engine -> stale-engine (it prints no manifest; capabilities unknowable, not assumed); no engine -> absent; a non-Tillandsias checkout -> ready with expected=- (no expectation is not evidence of skew). Wired into forge discovery as sub-bullets of the EXISTING Generic Project Index section (C4 stays at one mention) with a helper-missing fallback that is named, never silent; Containerfile COPYs the helper beside its two siblings.
+            Verification: cargo test -p tillandsias-plan 124/124; ./build.sh --check green; instant pre-build litmus 195/195 executed, 0 fail.
+            FINDINGS NOTICED, NOT FIXED (for the coordinator): (1) the generic lane's deterministic subset is thinner than the spec enumeration — index.json carries path/types/meta only, so commands/actions/layout are not yet answerable; type + cited description is what answers today (the shape C1 was audited closed with). (2) Plan-lane routing keys on tillandsias-plan bin+index RESOLVING (with a $HOME/src/tillandsias fallback), not on the MOUNTED project being Tillandsias — correct inside the forge mount layout, but on a host with ~/src/tillandsias present a generic project's question can misroute to another checkout's plan lane (fixture verification required a HOME override). (3) No litmus pins the project_engine grammar or the synthesis-refusal behaviour; design constraint 9 assigned the generic-bootstrap Test entries and litmus-bindings rows to 619-3y75, which the base ledger already marks completed — that pinning currently has no open owner.
     - packet_id: generic-project-harness-fixtures
       order: 619-3y75
       status: completed
@@ -35071,6 +35129,16 @@ plan_index:
             Worth noting for the packet itself: the set is not static. Round one cleared three, and two more appeared within two hours as their claims aged past the threshold. A one-time sweep will therefore always look complete and always be wrong shortly after — the leak needs the recurring check that is already wired into ./build.sh, not a cleanup pass.
             The remaining 7 are linux (6) and unassigned (1). Deliberately NOT touched from this host: the discriminating evidence for several of them is whether their exit criteria are met, which needs someone who can read the subsystem, not just the commit log. The method that worked here is recorded on the round-one event.
 
+        - type: progress
+          ts: 2026-08-10T21:35:00Z
+          agent_id: windows-20260810t213500z
+          summary: |
+            Sweep state 2026-08-10: stranded count is 7, down from the 21 at filing. This cycle dispositioned the single unassigned entry (456, forge-plan-metadata-mcp-server -> completed with evidence, see its event). The remaining 6 are all linux-role (184, 394e, 437, 448, 463, 568) and per this packet's own rule are left for their owner to check against the tree rather than closed cross-lane. Exit criterion 3 (detector visible per cycle) is in place - select-work-batch surfaced this packet and check-stranded-in-progress ran in triage. Criterion 2 (claims cannot silently outlive a cycle) remains the open residual; it needs the claim-protocol change, not more sweeping.
+        - type: progress
+          ts: 2026-08-10T22:45:00Z
+          agent_id: windows-20260810t224500z
+          summary: |
+            Criterion 2 reduced to a ready implementation packet (plan-expire-claims-subcommand, 672-bz7u) after probing showed query --json exposes no claim timestamp, making a safe bash-side expiry impossible. Criteria 1 (owner dispositions) and 3 (per-cycle visibility) remain satisfied; 6 linux-role stranded packets still await their owner.
     - packet_id: lww-channel-naming-obscures-field-correction
       order: 642-fedr
       status: ready
@@ -35588,7 +35656,7 @@ plan_index:
 
     - packet_id: windows-portable-exe-gui-execution-check
       order: 646-qde5
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p0
       title: Nobody has yet RUN tillandsias-tray.exe on Windows — needs a human at the desktop or a GUI automation channel
@@ -35637,6 +35705,13 @@ plan_index:
             Background children are spawned hidden: tillandsias-vm-layer applies CREATE_NO_WINDOW (0x0800_0000) on Windows, wsl_lifecycle.rs:119 builds background wsl.exe commands with it, and transport_windows.rs:131 records the regression that motivated it ("without CREATE_NO_WINDOW each retry flashed a console", 2026-07-12). The two CREATE_NEW_CONSOLE sites (notify_icon.rs:3644, :3729) are the interactive PTY launches — Attach and GitHub Login — where a visible terminal IS the intent.
             What remains is the one question with no structural proxy: DOES THE TRAY ICON APPEAR? A GUI process can start cleanly and still fail to register a notification-area icon, so this cannot be inferred and still needs a human at the desktop. Evidence appended to plan/issues/windows-unstable-channel-validation-2026-08-10.md.
 
+        - type: completed
+          ts: 2026-08-10T19:30:00Z
+          agent_id: windows-20260810t193000z
+          summary: |
+            CLOSED - PASS, on direct operator observation. The question open since 621-2re2 is answered: the bare tillandsias-tray.exe alias, run from a directory containing nothing but itself, SHOWS ITS TRAY ICON and flashes no console. It is usable standalone; this is NOT the defect 624-su5r feared.
+            Method: the published alias was downloaded to an isolated temp directory, launched, and the operator confirmed the notification-area icon appeared with no console flash. That completes the pair - the CLI surface and self-containment were established headlessly by 644-a3wj, the no-console-flash half had structural evidence (PE subsystem=2 GUI, CREATE_NO_WINDOW on background children), and the icon itself needed a human and now has one.
+            The verification also surfaced a defect nothing automated would have found: NotifyIconSettings entries accumulate per path with no cleanup in the portable flow, and the canonical entry's version tooltip is stale by two weeks. Filed as 663-64xi. The test binary's entry was removed after the check rather than left behind.
     - packet_id: architecture-audit-epic
       order: 647-6c3g
       status: ready
@@ -36469,7 +36544,7 @@ plan_index:
 
     - packet_id: mirror-dns-identity-is-shared-across-projects
       order: 659-8faj
-      status: ready
+      status: done
       desired_release: v0.5
       release_target: socket-audit-master
       priority: p0
@@ -36557,6 +36632,22 @@ plan_index:
             Revised guidance: surface item B is a tidiness follow-up, not a prerequisite. The rename can proceed A -> C -> D/E/G without it. Item B should still be updated eventually so the list stops naming hosts that no longer exist, but nothing breaks if it lags.
             Also worth knowing for whoever implements: enclave_no_proxy() already appends the whole enclave SUBNET (10.0.42.0/24), so IP-addressed traffic inside the enclave was never proxied regardless of the hostname list.
 
+        - type: completed
+          ts: 2026-08-10T19:34:40Z
+          agent_id: linux-mutable-20260810t193440z
+          host: linux
+          summary: |
+            All three exit criteria met. Each mirror now carries a project-unique DNS identity: build_git_run_args assigns ONE per-project alias (git-{sanitized-project}, same string as the existing --hostname) and the shared git-service / tillandsias-git aliases are no longer assigned anywhere. Derivation lives in exactly one function, git_mirror_service_identity(project), doc-commented as the single swap point for the opaque/salted upgrade the SSH-CA design under 606-bvnp will decide.
+            The plumbing was reused, not invented, per the change-surface handover: TILLANDSIAS_GIT_SERVICE now carries the per-project name at all three injection sites, the generated gitconfig insteadOf redirect and the forge readiness probe derive from the same function, and lib-common.sh routes all seven client URL sites through a new git_mirror_host() helper (injected env first, git-${TILLANDSIAS_PROJECT} fallback for host-mount lanes). clone-fresh (sh + fish) addresses git-<requested-project> — with per-project identities, cloning project X must reach X's own mirror, not this project's.
+            Sequencing: the 12:25Z correction event was honored — NO_PROXY (surface B) was treated as tidiness, landed in the same commit as the aliases; the retired names are simply removed from all five literals with a comment recording why the per-project name is deliberately absent (git:// never consults http_proxy).
+            Negative fixture encoded AND run: scripts/test-git-mirror-dns-identity.sh starts two containers with the product's exact --name/--hostname/ --network-alias args and asserts via getent ahostsv4 (never nslookup, per the audit's instrument note): git-dnsfixa -> 10.89.1.2 only, git-dnsfixb -> 10.89.1.3 only, tillandsias-git and git-service both NXDOMAIN. PASS. The fixture detects a pre-659 stale mirror still holding the shared alias on tillandsias-enclave (this host had one live) and measures on a dedicated network instead of failing on environment noise. litmus:git-mirror-dns-identity (instant, pre-build) pins the code shape and is BOUND under git-mirror-service (660-ryhn discipline: verified it EXECUTED, 4/4 steps, suite 17/17).
+            Residual, deliberately not closed here: (a) 606-bvnp's Vault AppRole/SSH-CA criteria untouched — this removes only criterion 3; (b) a HOST-MOUNT lane whose launcher-injected gitconfig is absent falls back to git-${TILLANDSIAS_PROJECT} (unsanitized shell approximation of the Rust derivation) — exact only for simple project names; (c) check-credential-channel still accepts git://tillandsias-git/* for pre-rename configs, removable once no live forge predates 659-8faj; (d) a RUNNING mirror launched by a pre-659 binary keeps its shared alias until relaunched — forges built from the new image cannot reach it by the old name until the stack is recreated (same-version-recreate caveat as every alias change).
+        - type: verified-by
+          ts: 2026-08-10T20:11:00Z
+          agent_id: linux-bigpickle-opencode-20260810t2011z
+          host: forge
+          summary: |
+            Independent in-forge verification (round 2): the 659-8faj derivation function confirmed at main.rs:2966 with its tests; no tillandsias-git/git-service alias assignment remains in the launch path. Reconstructed from journald by the coordinator.
     - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
       order: 660-ryhn
       status: ready
@@ -36973,3 +37064,836 @@ plan_index:
           event: filed
           summary: |
             Filed from direct operator feedback during the 2026-08-10 loop launch; quoted verdicts: codex device flow "wonderful", claude browser link "flawless", "Agy might need a device-like login flow with less friction".
+    - packet_id: macos-metal-sidecar-bringup
+      order: 657-s6g8
+      status: ready
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      priority: p1
+      title: 'Flagship: host-native Metal sidecar (llama-server --metal) registered with the tray, proxied to the enclave per SLOT-6'
+      kind: implementation
+      depends_on:
+        - host-native-sidecar-endpoints
+        - macos-inference-tier-verification
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - apple-silicon
+        - inference
+        - experts
+      estimated_hours: 24
+      outcome: 'Concretizes order 483''s macOS Metal lane (pickup_role: macos — the only macOS host in the fleet) with a chosen stack: llama.cpp llama-server as the sidecar, the only candidate with first-party bearer auth (--api-key/--api-key-file) plus interface-specific bind and OpenAI-compatible /v1 endpoints out of the box; Ollama (no local auth at all, ~175k unauthenticated servers found exposed Jan 2026) and MLX (mlx_lm.server self-declares non-production; third-party cubist38/mlx-openai-server would add a Python stack) are fallback/perf-chase only, and ANE is explicitly skipped (GPU is 2-5x faster at decode, no serving path). The registration and probe surface must live in the TRAY, not headless: the headless binary is cross-compiled linux-aarch64 and runs inside the VZ guest (crates/tillandsias-macos-tray/src/guest_binary.rs:23), so detect_inference_tier()''s ''metal'' arm (main.rs:3041-3069) never executes in production and the tray is the only process that can truthfully see Metal — matching 483''s ''registers with the tray'' design. The server binds only the vmnet NAT gateway 192.168.64.1 on bridge100 (never 0.0.0.0), which is the ''single named upstream, one host address one port'' SLOT-6.4 requires; bridge100 only exists while a VM runs, so bring-up must be event-driven after VM start (no polling, per house rule) with an ephemeral per-run bearer token (SLOT-6.5). Enclave containers stay on their --internal network and reach the sidecar solely through the existing enclave proxy terminus — SLOT-6''s eight absolute clauses (openspec/specs/inference-engine-slots/spec.md:173-208) are each pass/fail gates for this packet (spec.md:318-324). Numbers to beat come from order 401 (plan/issues/experts-construction-decision-2026-07-17.md:59-91): 52 tok/s warm decode on qwen2.5:0.5b cpu-ollama in the guest, 19.5 s expert first answer, 2.47 s cold load. Measured Metal anchors: ~99 tok/s decode on Qwen2.5-0.5B Q4_K_M with tuned llama-server on base M1 (deepu.tech, May 2026) — roughly 2x decode on 0.5B, but the real pitch is 5-10x+ prompt processing (108-190 t/s pp even at 7B F16 per llama.cpp discussion #4167), making 3-8B models usable (14-22 tok/s vs est. 3-6 in-guest), and returning all 4 guest vCPUs to the workload. Bring-up command shape: llama-server -m <gguf> --host 192.168.64.1 --port <p> --api-key <ephemeral> -ngl 99 -fa, with tray-managed leased lifecycle (SLOT-6.8).'
+      exit_criteria:
+        - From inside an enclave container still attached to an --internal network, an OpenAI-compatible /v1/chat/completions request succeeds via the enclave proxy route, and a direct connection attempt from the same container to 192.168.64.1:<port> fails.
+        - 'All eight SLOT-6 clauses recorded pass with evidence: bind confined to 192.168.64.1 (lsof/netstat capture), enclave network still --internal, route terminates at the existing proxy terminus, single named upstream, per-run bearer token shown rotating across two runs, no host secrets in container env, no egress relay, leased registration expires when the tray stops the sidecar.'
+        - 'bridge100 lifecycle handled without polling: sidecar binds after VM start via event/callback (or launchd KeepAlive equivalent), survives a VM restart cycle unattended, and enclave requests fail closed while the sidecar is down.'
+        - 'Measured sidecar decode and prompt-processing on qwen2.5:0.5b recorded against the 401 baseline in the plan ledger: decode >= 1.5x the 52 tok/s guest figure, plus one 3B-class model served at >= 12 tok/s decode.'
+        - Registration protocol documented as the 483 deliverable (sidecar registration + proxy route + one working lane with evidence), with trace annotations passing validate-traces.
+
+    - packet_id: aarch64-guest-cpu-inference-tuning
+      order: 657-3mq5
+      status: ready
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      priority: p1
+      title: 'Research+measure: unlock i8mm on the VZ guest — native llama.cpp build, Q4_0 online repack, thread policy'
+      kind: research
+      depends_on:
+        - macos-inference-tier-verification
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - apple-silicon
+        - inference
+        - experts
+      estimated_hours: 10
+      outcome: 'In-guest CPU is the only inference lane that exists today on macOS, and it is structurally leaving 2-5x on the table (pickup_role: macos). Root cause found in llama.cpp''s GGML_CPU_ALL_VARIANTS list for linux-arm64 (ggml/src/CMakeLists.txt): every prebuilt variant containing MATMUL_INT8 (i8mm) also demands SVE, which Apple cores have never shipped, so runtime variant scoring lands on the armv8.2 dotprod+fp16 path — and ollama''s linux-arm64 binary vendors the same build system (ollama/ollama #17340), so the current guest engine has the same ceiling despite the M5 host exposing FEAT_I8MM=1 (host sysctl confirmed; Virtualization.framework passes real feature flags through per docker/for-mac #5681). The fix is a native in-guest llama.cpp build with -DGGML_NATIVE=ON (optionally -DGGML_CPU_KLEIDIAI=ON) plus plain Q4_0 GGUFs relying on online repacking (PRs #9921/#10446; the Q4_0_4_4/4_8/8_8 file types were removed in b4282): repack benchmarks show ~2.9x pp / ~2.3x tg on Graviton 3 and ~5x pp advantage over Q4_K_M on Snapdragon X Elite. Quant defaults per the research: Q8_0 or Q6_K for 0.5-1B experts (quality-per-bit dominates, still fast at ~0.6-1.3 GB weights), Q4_0-with-repack (speed) or Q4_K_M (quality) for 1.5-3B, A/B both. Decode is memory-bandwidth-bound and saturates around 4 threads at these sizes; the M5 has exactly 4 P-cores, so threads=4 and the current 4-vCPU clamp is already the decode sweet spot — more vCPUs only help prompt processing and invite E-core jitter. Expected in-guest ballparks (estimates, to be measured here): 0.5B Q4 ~60-110 tok/s vs the 52 tok/s ollama baseline from order 401. Also pins the ollama version if ollama stays: there is an open ~10x arm64 CPU eval regression report between 0.12.1 (10.42 tok/s) and 0.14.3 (0.93 tok/s) in arm64 Docker (ollama #13860). This packet closes 401''s explicitly recorded obligation to re-measure the llama.cpp-vs-ollama comparison (experts-construction-decision-2026-07-17.md:78-85) and feeds its recipe to the aarch64 image-variant packet.'
+      exit_criteria:
+        - 'Guest CPU features verified and recorded: /proc/cpuinfo inside the VZ guest shows asimddp and i8mm (SME treated as absent unless proven present).'
+        - 'Native in-guest llama.cpp build (GGML_NATIVE=ON) shows the ''repack: ... q4_0_4x8'' log line at model load (retry with --no-mmap if absent per issue #12701) and beats the pinned-ollama baseline on llama-bench pp512/tg128 for a 0.5B model by >= 1.5x pp and >= 1.2x tg.'
+        - 'Quant A/B matrix recorded for 0.5B and 1.5-3B experts (Q4_0-repack vs Q4_K_M vs Q8_0/Q6_K): decode, pp, and a quality spot-check on the 393 ground-truth query set.'
+        - 'Ollama version pinned with benchmark evidence ruling regression #13860 in or out for the pinned version, or ollama''s removal from the guest lane justified in the ledger.'
+        - Findings recorded against order 401's ledger entry, closing its deferred re-measurement obligation, with the winning recipe (cmake flags, quant, threads) documented for the image-variant packet.
+      events:
+        - type: progress
+          ts: 2026-08-10T22:20:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            Slice 1 SMASHED the prediction band: guest /proc/cpuinfo shows asimddp + i8mm + FULL SME/SME2 (M4-class; no SVE — precisely the combo the prebuilt linux-arm64 variants cannot use). Native in-guest build (GGML_NATIVE=ON; detected +dotprod+i8mm+sme2p1+...) compiled in 65s and benches qwen2.5-0.5b Q4_0 at pp512=1194.5 t/s, tg128=190.0 tok/s on 4 threads — ~3.65x the order-401 cpu-ollama 52 tok/s decode baseline (caveat: llama-bench raw vs ollama HTTP path; the pin-bench comparison is a remaining criterion). Exit criteria 1 evidenced, 2 evidenced-with-caveat; recipe recorded in the 393 decision doc. Remaining: quant A/B (Q4_K_M/Q8_0), ollama version pin-bench, ground-truth quality spot-check. The build and GGUF persist on the guest rootfs at /root/llama.cpp and /root/qwen05-q4_0.gguf for the next slice.
+        - type: progress
+          ts: 2026-08-10T23:50:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            Slice 2: quant A/B matrix recorded (0.5B tier, native build, t=4). Q4_0-with-repack DOMINATES: pp512 1219.7 vs Q4_K_M's 355.2 (3.4x) and tg128 186.7 vs 150.9; Q8_0 lands 1053.8/140.2. Lane guidance fixed: Q4_0 GGUFs for macOS-guest experts. Matrix appended to the 393 decision doc. Remaining criteria: ollama version pin-bench and ground-truth quality spot-check (llama-cli capture failed this run); 1.5-3B tier optional. Exit criteria 1,2,3 now evidenced.
+
+    - packet_id: llama-server-aarch64-image-variant
+      order: 657-6s4a
+      status: ready
+      desired_release: v0.6
+      release_target: forge-local-experts-milestone
+      priority: p2
+      title: '482b for aarch64: close the guest engine-payload gap with an i8mm-capable llama-server variant'
+      kind: implementation
+      depends_on:
+        - llama-server-vulkan-image-variant
+        - llama-server-engine-parity-smoke
+        - llama-server-shared-tier-model-table
+        - aarch64-guest-cpu-inference-tuning
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - apple-silicon
+        - inference
+        - experts
+      estimated_hours: 14
+      outcome: 'Extends order 482b past Vulkan to the aarch64 CPU lane, closing the payload gap that blocked order 401''s llama.cpp comparison (''NO-LLAMA-SERVER-IN-IMAGE'', experts-construction-decision-2026-07-17.md:77-85) (pickup_role: macos). Today the inference image never bakes an engine: images/inference/Containerfile:38-46 defers all payloads to keep image build under 30 s, and entrypoint.sh:293 self-installs ollama from GitHub into the host-mounted models volume, with _engine_wanted_backends() (entrypoint.sh:226-258) mapping the guest''s production tier ''cpu'' to core-only (~30 MB llama-server + CPU backends) — a slice whose stock kernels cap at armv8.2 dotprod on Apple Silicon because all upstream Linux i8mm variants require SVE. Deliverable: an aarch64 llama-server payload variant that reaches NEON+dotprod+i8mm (native or i8mm-without-SVE build, per the tuning packet''s recipe), generalizing 482b''s /dev/dri-present-vs-absent selection logic to a CPU/NEON arm, while preserving the <30 s image-build invariant, the self-install .engine-set record (entrypoint.sh:350), the bounded-backoff egress probe through the enclave proxy (entrypoint.sh:296-315), and the fail-loud guards (Containerfile:94-97 healthcheck asserting an executable llama-server; entrypoint.sh:428-433 exit-1). 482c''s engine-parity smoke is the promotion gate — same endpoint contract, readiness, lifecycle, and memory guard for both engines — and the aarch64 rows land in 482d''s declarative T0-T5 table rather than another inline-shell fork of the tier logic (entrypoint.sh:467-477). Success criterion is the tuning packet''s measured margin reproduced inside the container: >= 1.5x prompt processing and >= 1.2x decode over the 52 tok/s cpu-ollama baseline on qwen2.5:0.5b-class models.'
+      exit_criteria:
+        - Image build remains < 30 s; the aarch64 variant self-installs, records its set in .engine-set, and passes the healthcheck (executable llama-server present) on the VZ guest.
+        - Variant selection (GPU/Vulkan vs aarch64-CPU) proven with fixtures both ways, following 482b's /dev/dri-present-vs-absent pattern, with no regression to the x86/Vulkan path.
+        - '482c-pattern parity smoke green on aarch64: identical endpoint contract, readiness, lifecycle, and memory-guard behavior between ollama and llama-server engines.'
+        - In-container llama-server shows the i8mm/repack path active (repack log line or feature probe) and reproduces >= 1.5x pp / >= 1.2x tg over the cpu-ollama baseline; results recorded in the ledger with the lane decision updated.
+        - aarch64 tier/model rows expressed via 482d's declarative table with no new inline shell fork in entrypoint.sh.
+
+    - packet_id: vz-guest-inference-resource-policy
+      order: 657-u4un
+      status: ready
+      desired_release: v0.6
+      release_target: forge-local-experts-milestone
+      priority: p2
+      title: 'Derive the VZ guest clamp from host resources: unlock expert slots and T2 without breaking the 4-vCPU decode sweet spot'
+      kind: implementation
+      depends_on:
+        - macos-inference-tier-verification
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - apple-silicon
+        - inference
+        - experts
+      estimated_hours: 6
+      outcome: 'Replaces the hard-coded VZ guest clamp with an inference-aware derived policy (pickup_role: macos). Today VzRuntime::start builds the boot spec inline with cpu_count = available_parallelism().min(4) and a literal 4 GiB memory (crates/tillandsias-vm-layer/src/vz.rs:1378-1382), and the pinned source-scan guard test live_boot_spec_caps_cpu_at_4_and_carries_4gib_memory (vz.rs:1966-1986) asserts those literals — so the construction site and the guard must change together; nothing else pins the values. The 4 GiB cascades directly into inference capability: preload-policy.sh:37-45 gives 0 expert slots below 8 GB (max_loaded=1) and the T-tier ladder (entrypoint.sh:467-477) pins T1, so raising guest RAM to >= 8 GiB unlocks one expert slot and >= 16 GiB unlocks two slots plus T2. The vCPU side should NOT be raised by default: decode is memory-bandwidth-bound and saturates around 4 threads for 0.5-3B models, the M5 host has exactly 4 P-cores, and macOS freely schedules vCPU threads onto E-cores with no pinning API — extra vCPUs are a prompt-processing-only lever with jitter cost. Policy shape: derive memory from host RAM with explicit headroom for the host-native Metal sidecar''s model footprint (the flagship packet shares the same unified memory), keep 4 vCPU default with an opt-in pp escape hatch, and convert the guard test to pin the policy function''s behavior rather than raw constants. Evidence anchor: order 401 measured 1.4/3.9 GB guest RAM during serve at the current clamp; re-run that measurement set at the new clamp to quantify what the unlocked expert slot buys (against the 19.5 s expert-first-answer baseline).'
+      exit_criteria:
+        - vz.rs construction site and the pinned guard test updated together; the new guard pins the derivation policy (inputs -> boot spec) instead of bare literals, and the full vm-layer test suite passes.
+        - On the 10-core M5 host, the guest boots with derived memory >= 8 GiB and preload-policy reports >= 1 expert slot (max_loaded=2) from inside the guest.
+        - 'Order 401''s measurement set repeated at the new clamp with deltas recorded: cold load, expert first answer, warm tok/s, and guest RAM headroom during serve.'
+        - 'Host-memory pressure verified compatible with the Metal sidecar lane: with the VM at derived memory plus a loaded sidecar model, no swap-storm on the host; the headroom rule is documented in the policy.'
+
+    - packet_id: macos-accel-probe-truthfulness
+      order: 657-zm2n
+      status: ready
+      desired_release: v0.6
+      release_target: forge-local-experts-milestone
+      priority: p3
+      title: 'Make the capability document truthful on macOS: tray-side Metal probe, dynamic engine enumeration, sidecar measurements'
+      kind: implementation
+      depends_on:
+        - accel-capability-probe
+        - host-native-sidecar-endpoints
+        - macos-metal-sidecar-bringup
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - apple-silicon
+        - inference
+        - experts
+      estimated_hours: 8
+      outcome: 'Makes the accel probe and tier reporting truthful for the macOS product once the sidecar lane exists (pickup_role: macos). Two structural fictions today: (1) detect_inference_tier()''s ''metal'' arm (crates/tillandsias-headless/src/main.rs:3041-3069) never executes in production because headless is cross-compiled to linux-aarch64 and runs inside the VZ guest (guest_binary.rs:23), reporting ''cpu''; (2) enumerate_engines() hardcodes exactly one ollama/llama-server EngineRecord (accel_probe.rs:468-474), so no sidecar engine can ever appear in the capability document. The Apple Metal GPU DeviceRecord is already correctly host-native-lane-only per PROBE-7 (accel_probe.rs:272-291, test :915-936), and accel_envelope() (:544-603) correctly renders it present-unusable to forges — correct exactly until 483''s proxied route exists, at which point the document must flip to a usable host-native lane or the policy router will keep routing around real acceleration. Deliverable: a tray-side (native macOS) Metal probe feeding sidecar registration state into the capability document; EngineRecord entries for the sidecar engine (e.g. name ''llama-server-metal'', backend ''metal'', supported_device_classes [''gpu'']) that appear and disappear with the leased registration; and MeasurementRecords (prefill/decode tps per accel_probe.rs:60-70) populated from the flagship packet''s real benchmarks (~99 tok/s-class decode on 0.5B, 5-10x pp) so routing decisions rest on measured evidence. PROBE-8''s ephemeral self-invalidating cache semantics must survive: a stale document must never advertise a dead sidecar.'
+      exit_criteria:
+        - Capability document on the macOS product shows the Apple GPU DeviceRecord with lanes ['host-native'] and usable=true only while a live sidecar registration exists; usable=false with a truthful unusable_reason when the sidecar is absent (both states tested).
+        - 'enumerate_engines() no longer hardcodes a single record: the sidecar EngineRecord appears/disappears with lease state, covered by unit tests plus one integration test against a real tray registration.'
+        - MeasurementRecords for the sidecar carry real measured prefill/decode tps consumed by the policy router, with the NEG-rule chain still terminating in always-available CPU tier-S.
+        - 'Ephemeral cache semantics verified: after sidecar teardown, no cached document advertises the dead lane (PROBE-8); litmus and validate-traces green, with any spec deltas routed through OpenSpec.'
+
+    - packet_id: tray-icon-registry-entries-accumulate-and-go-stale
+      order: 663-64xi
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: NotifyIconSettings entries accumulate per path with no cleanup in the portable flow, and the canonical entry's version tooltip is never refreshed
+      kind: bug
+      deliverable: crates/tillandsias-windows-tray/src
+      depends_on: []
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - tray
+        - installer
+        - registry
+        - ux
+        - portable
+      context: |
+        OPERATOR FIELD REPORT during the 646-qde5 verification: "there's pollution in Windows Registry, there are multiple tillandsias app (different versions) in Windows Taskbar Settings > Other System Tray Icons, there's two now".
+        Confirmed. Windows keys HKCU\Control Panel\NotifyIconSettings BY EXECUTABLE PATH, so every distinct location the tray runs from earns a permanent entry.
+        DEFECT 1 - the portable flow has no cleanup path. install-windows.ps1:457 already prunes correctly (it removed Desktop and target/release entries during last night's smoke), but that prune runs ONLY inside the installer. 621-2re2 made tillandsias-tray.exe a PRIMARY landing-page download meant to be run directly with no installer - so the advertised flow is exactly the one that never prunes. Download to Downloads/, run, move to Tools/, run again: two permanent entries, one pointing at a file that no longer exists, and nothing in the product will ever remove either.
+        DEFECT 2 - the canonical entry's tooltip is never refreshed. Measured on this host: registry tooltip says "Tillandsias 0.4.260728.1" (28 July) while the binary at that exact path is 0.4.260810.1 (10 August). Written once at first registration and never updated across every upgrade since. This is what made the list read as "different versions".
+        The interaction is the sharp part: prune-on-install plus never-refresh means the ONE entry guaranteed to survive is also the one guaranteed to go stale.
+        Full write-up: plan/issues/tray-icon-registry-entries-accumulate-2026-08-10.md
+      exit_criteria:
+        - |
+            The tray prunes at STARTUP, not only at install: on start it drops any other tillandsias-tray.exe NotifyIconSettings entry whose target no longer exists. This covers the portable flow, which the installer cannot.
+
+        - |
+            The tray writes its InitialTooltip on every start, so the entry tracks the running build rather than the first one ever registered.
+
+        - |
+            Entries whose target still EXISTS at a different path are left alone - a user may legitimately run a portable build and an installed build, and deleting the other one's entry would be the product removing state it does not own.
+
+      verifiable_closure: |
+        After running the tray from a temp path and deleting that binary, a subsequent tray start leaves no NotifyIconSettings entry pointing at the deleted path; and the surviving entry's tooltip matches the running version.
+      notes: |
+        Found only because the operator was asked to look at the notification area for 646-qde5 and looked at the Settings list too. No automated check would have surfaced it: the tray works, the icon appears, nothing errors. It is visible only as clutter in a Windows settings page - the kind of thing a headless loop cannot see.
+      events:
+        - ts: 2026-08-10T19:30:00Z
+          event: filed
+          summary: Operator field report during the 646-qde5 GUI verification.
+
+    - packet_id: tray-control-wire-has-no-launch-verb
+      order: 664-7qzz
+      status: ready
+      priority: p2
+      title: A running tray cannot be asked to launch a forge session — no launch verb on any IPC surface
+      kind: enhancement
+      deliverable: new ControlMessage variant + control_dispatch row + CLI flag that delegates to a running tray
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - tray
+        - control-wire
+        - ipc
+        - ux
+      estimated_hours: 4
+      context: |
+        Operator directive 2026-08-10: forge agents should be launched "from a running tray" with visible terminals. Verified today: the control socket ($XDG_RUNTIME_DIR/tillandsias/control.sock) speaks ControlEnvelope with verbs Hello/IssueWebSession/EvictProject/McpFrame/VmStatus*/Pty*/ DeliverCredentials/GetVaultHandover/... (control-wire/src/lib.rs:107-230) — no LaunchForge/StartSession variant. The MCP socket's tool surface is browser-only plus publish_local. The only externally reachable lever on a running tray is replaying com.canonical.dbusmenu.Event with menu ids reverse-engineered from GetLayout — undocumented and unsupported. Today a CLI launch (tillandsias <path> --opencode ...) does the work in-process and merely auto-spawns a tray if none is listening (main.rs:8515-8550), so "tray-hosted" launches from automation are an accident of that fallback, not a designed surface.
+      exit_criteria:
+        - |
+            A ControlMessage launch verb exists with a row in control_dispatch.rs' unix-transport routing matrix, honoring the deliberate constraint at tray/mod.rs:505-515: control.sock stays unexposed to forge containers — the verb lands on control.sock only, never mcp.sock.
+
+        - |
+            A CLI entry (e.g. tillandsias <path> --opencode --via-tray, exact surface at implementer's discretion) delegates the launch to the running tray, which opens its normal visible terminal (launch_forge_agent path), and falls back loud when no tray listens.
+
+        - |
+            A litmus pins the verb's wire shape and the forbidden-on-mcp.sock property.
+
+      events:
+        - ts: 2026-08-10T19:30:00Z
+          event: filed
+          summary: |
+            Filed from the 2026-08-10 coordinator cycle's tray exploration while executing the operator's tray-hosted launch directive.
+        - type: progress
+          ts: 2026-08-10T20:11:00Z
+          agent_id: linux-bigpickle-opencode-20260810t2011z
+          host: forge
+          summary: |
+            Round-2 spot-check confirmed 664-7qzz and 664-yw8r exist and fold correctly at its HEAD (61705906).
+
+    - packet_id: linux-terminal-emulator-not-overridable
+      order: 664-yw8r
+      status: ready
+      priority: p3
+      title: Terminal emulator candidate list is hardcoded; TILLANDSIAS_WINDOW_TITLE is dead code on Linux
+      kind: enhancement
+      deliverable: TERMINAL/x-terminal-emulator override in detect_host_terminal + dead-env cleanup or wiring
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - tray
+        - ux
+        - linux
+      estimated_hours: 1
+      context: |
+        detect_host_terminal (tray/mod.rs:1883-1946) hardcodes ptyxis, gnome-terminal, kgx, konsole, xterm. A host whose terminal is foot, wezterm, or alacritty gets "no supported terminal emulator found" with no escape hatch — no $TERMINAL respect, no x-terminal-emulator fallback. main.rs:11970 sets TILLANDSIAS_WINDOW_TITLE specifically for foot, which can never be selected, so that env is currently dead code on Linux.
+      exit_criteria:
+        - |
+            $TERMINAL (when set to an executable) is tried first, then the existing candidate list, then x-terminal-emulator; failure message names all three tiers.
+
+        - |
+            TILLANDSIAS_WINDOW_TITLE is either consumed by a reachable emulator arm or removed on Linux.
+
+      events:
+        - ts: 2026-08-10T19:30:00Z
+          event: filed
+          summary: |
+            Filed from the same 2026-08-10 tray exploration; smallest-next-action companion to 664-7qzz.
+
+    - packet_id: nvidia-driver-update-strands-inference-container
+      order: 665-zddn
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: A host NVIDIA driver update silently strands the inference container and kills every forge launch
+      kind: bugfix+enhancement
+      deliverable: launcher-side stale-CDI detection/remediation in the inference ensure path + a litmus pinning the error classification
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - inference
+        - gpu
+        - cdi
+        - podman
+        - launch
+        - resilience
+      estimated_hours: 3
+      context: |
+        Reproduced live 2026-08-10 on macuahuitl while executing the operator's tray-hosted BigPickle launch. The host kernel/driver updated Aug 6 (610.43.03 -> 610.57.04). The user-level CDI spec ~/.config/cdi/nvidia.yaml still described 610.43.03, so `podman start tillandsias-inference` failed with `crun: cannot stat /usr/lib64/libEGL_nvidia.so.610.43.03`, the container wedged in Created state, and the forge launcher DIED there — after router and git-mirror were already up — leaving a half-provisioned enclave and a closed terminal window with no durable error anywhere on the host (the error was only recoverable from `podman inspect .State.Error`). Every subsequent launch hits the same wall: the stale Created container is reused, not recreated. Manual remediation that worked: `nvidia-ctk cdi generate --output ~/.config/cdi/nvidia.yaml`, `podman rm tillandsias-inference`, relaunch — after which inference and the forge came up clean. Related surface: order 392b (inference-startup-cleanup/gpu-passthrough-tier-matrix).
+      exit_criteria:
+        - |
+            The inference ensure path classifies the crun cannot-stat-driver-lib failure explicitly (error text names the stale CDI spec, the current host driver version, and the exact remediation) instead of dying opaquely mid-launch.
+
+        - |
+            A Created-but-never-started inference container whose start fails with the stale-driver class is recreated automatically (safe: it never ran), and — where nvidia-ctk is available — the user CDI spec is regenerated or the operator is told to run the exact command.
+
+        - |
+            A litmus pins the error-classification path with a fixture (no GPU required: replay the crun error string).
+
+        - |
+            A launch failure after partial enclave provisioning leaves a durable one-line breadcrumb on the host (not only in a vanishing terminal window) naming the failed service and the inspect command.
+
+      events:
+        - ts: 2026-08-10T19:45:00Z
+          event: filed
+          summary: |
+            Filed from the 2026-08-10 coordinator cycle; failure reproduced, root-caused (stale user CDI spec after driver update), manually remediated, and the relaunch verified green on this host.
+
+    - packet_id: mirror-identity-rolling-upgrade-skew
+      order: 666-qbjd
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: 659-8faj identity change cannot rendezvous with a pre-659 live mirror — shared stack needs a recreate-on-upgrade story
+      kind: bugfix
+      deliverable: upgrade-path handling in the mirror ensure path + note in the launch sequence
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - git-mirror
+        - dns
+        - upgrade
+        - launch
+      estimated_hours: 2
+      context: |
+        Found while landing 659-8faj (per-project mirror DNS identity). The ensure-if-running mirror survives binary upgrades by design (order 443), so after installing a post-659 binary, a live pre-659 mirror still answers only the retired shared aliases: a new forge resolves git-<project> and finds nothing, while old forges keep working — the exact split-brain the fixture detects (it falls back to a dedicated network when it sees a live old-alias mirror). Ensure-if-running needs an identity-generation check: when the running mirror's aliases do not include the expected per-project name AND no sibling forge is live, recreate it; when a sibling is live, fail the launch loud with the upgrade explanation instead of a dead clone URL.
+      exit_criteria:
+        - a post-659 launch against a pre-659 live mirror either recreates it (no live sibling) or refuses with an explicit upgrade-skew error (live sibling)
+        - the concurrent-forge litmus grows the skew case
+      events:
+        - ts: 2026-08-10T20:00:00Z
+          event: filed
+          summary: filed from the 659-8faj implementation report (finding 1).
+
+    - packet_id: mirror-identity-transitional-residue-cleanup
+      order: 666-cmr7
+      status: ready
+      priority: p3
+      title: 'Retire 659-8faj transitional residue: shell fallback divergence, old-alias acceptance, comment drift'
+      kind: enhancement
+      deliverable: lib-common.sh fallback parity + check-credential-channel.sh + litmus fixture + entrypoint comment updates
+      depends_on:
+        - mirror-identity-rolling-upgrade-skew
+      pickup_role: linux
+      capability_tags:
+        - git-mirror
+        - cleanup
+        - shell
+      estimated_hours: 1
+      context: |
+        Three residues deliberately left by 659-8faj: (1) git_mirror_host()'s host-mount fallback `git-${TILLANDSIAS_PROJECT}` is an unsanitized shell approximation of the Rust derivation — diverges for names with underscores/dots or >63 chars; safe only because the injected env wins in every launched forge. (2) check-credential-channel.sh still accepts git://tillandsias-git/* and litmus-credential-channel-check-shape.yaml:72 still writes the old name — removable once no live forge predates 659-8faj (blocked on the upgrade-skew packet retiring old mirrors). (3) images/git/entrypoint.sh:134/:180/:307 comments still describe shared-alias URLs. Note the fallback divergence may be mooted by 606-bvnp's D13 opaque-ID scheme replacing the derivation entirely — check the design before investing in shell-side sanitization parity.
+      exit_criteria:
+        - no `tillandsias-git`/`git-service` literal remains in scripts, fixtures, or image comments outside historical plan records
+        - the shell fallback either matches the Rust sanitization exactly or is removed in favor of requiring the injected env
+      events:
+        - ts: 2026-08-10T20:00:00Z
+          event: filed
+          summary: filed from the 659-8faj implementation report (findings 2, 4, 5).
+        - type: progress
+          ts: 2026-08-10T20:11:00Z
+          agent_id: linux-bigpickle-opencode-20260810t2011z
+          host: forge
+          summary: |
+            Round-2 spot-check: orchestrate-enclave.sh:158 still carries an old-alias residue site — dead legacy, already inside this packet's scope; listed here so the cleanup does not miss it.
+
+    - packet_id: container-profile-env-mechanism-has-no-consumers
+      order: 666-jww5
+      status: ready
+      priority: p3
+      title: crates/tillandsias-core container_profile env mechanism is latent — no resolver, zero live consumers
+      kind: exploration
+      deliverable: consume-or-discard decision recorded with evidence; deletion PR or first real consumer
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - architecture
+        - freshness
+        - dead-code
+      estimated_hours: 2
+      context: |
+        Found while landing 659-8faj: nothing outside tillandsias-core consumes container_profile, and no resolver exists anywhere for EnvValue::FromContext/ContextKey. ContextKey::GitServiceHost was added for honesty, but the whole profile-env mechanism has zero live consumers. Freshness discipline's discard-over-repair bias applies: either the launch paths adopt profiles as the single source of container env truth, or the mechanism is deleted with same-commit removal of dependents.
+      exit_criteria:
+        - a recorded decision (consume or discard) with the call graph as evidence, and the matching code change landed
+      events:
+        - ts: 2026-08-10T20:00:00Z
+          event: filed
+          summary: filed from the 659-8faj implementation report (finding 3).
+
+    - packet_id: forge-rustc-panics-during-build-check
+      order: 667-se87
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: rustc panicked twice inside a forge running ./build.sh --check — jobserver token acquisition, then codegen coordinator
+      kind: bugfix+research
+      deliverable: root cause + explicit forge container resource policy (pids/fd limits) + repro or instrumentation
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - build
+        - rustc
+        - resource-limits
+        - crash
+      estimated_hours: 4
+      context: |
+        Observed 2026-08-10 in container tillandsias-tillandsias-forge-bigpickle-valid-0c3f... (image v0.4.260810.1) while the in-forge BigPickle validation ran ./build.sh --check per its prompt. journald (the container's log driver) holds both fingerprints: 12:39:55 PDT thread 'rustc' panicked at compiler/rustc_data_structures/src/jobserver.rs:124:14 (jobserver token acquisition), then 12:43:52 PDT thread 'coordinator' panicked at compiler/rustc_codegen_ssa/src/back/write.rs:1871:53 (codegen worker lost). Within the next ~3 minutes the same container produced a yq SIGABRT (12:46:55, 924K core) and the opencode PID-1 SIGSEGV (12:47:04, 94.1M core) recorded as the third sighting on 604-vmcg. Host memory was ample (62G, tens free), so host-level OOM is unlikely; four independent process deaths in one container in eight minutes points at a shared in-container ceiling — podman's default pids-limit (2048) or fd limits are the prime suspects, since a workspace cargo build fans out heavily and the forge adds opencode+node on top. The forge run args set no explicit resource policy today. jobserver has ZERO prior mentions in the ledger — this is a new failure class, not a recurrence.
+      exit_criteria:
+        - the panic pair is root-caused with evidence (repro inside a forge, or instrumentation capturing the limit hit), and the verdict cross-linked on 604-vmcg if the segfault shares the cause
+        - the forge container gets an explicit, recorded resource policy (pids-limit/nofile at minimum) sized for workspace builds, or evidence that limits are not the cause plus the actual fix
+        - an in-forge ./build.sh --check completes green in the repro environment after the fix
+      events:
+        - ts: 2026-08-10T20:20:00Z
+          event: filed
+          summary: |
+            Filed from the coordinator's post-cycle investigation of the failed BigPickle validation session; full journal fingerprints and both coredumps preserved on the host.
+        - type: progress
+          ts: 2026-08-10T21:35:00Z
+          agent_id: linux-mutable-20260810t213500z
+          host: linux_mutable
+          summary: |
+            ROOT-CAUSED AND FIXED, verification pending. BigPickle's in-forge diagnosis was RIGHT: the forge runs under pids.max=512, set at build_stack_common_args (main.rs, --pids-limit=512, sole caller build_forge_common_args) and again in build_opencode_forge_args. A workspace cargo build fans out past 512 tasks; clone() EAGAIN presents exactly as the recorded panics (jobserver.rs:124 token acquisition, back/write.rs:1871 lost codegen worker) and plausibly the PID-1 harness SEGV. Coordinator's process note, owned for the record: an initial host-side re-check nearly filed a FALSE correction ("product never passes --pids-limit") because the confirming grep was piped through head -8 and the main.rs hit ranked ninth — the same instrument-truncation class as the 637-df4z tail-lesson in the meta-orchestration runbook; caught before filing when the empirical probe (podman default 2048) contradicted the 512 measurement and forced a caller-by-caller re-read. FIX LANDED: both forge-class sites raised to --pids-limit=4096 with the rationale comment citing this packet (fork-bomb ceiling, not a scheduler); all other containers keep their tight scoped limits (git 64, proxy 32, inference 128, router 64). 312+ headless tests green. REMAINING for exit: criterion 3 — an in-forge ./build.sh --check must complete green under the new ceiling (schedule an in-forge build session once this binary is installed; the currently-installed tray binary predates the fix). BigPickle's P1/P2 proposals (concurrency cap, resource watchdog) remain open ideas under this packet.
+        - type: verified-by
+          ts: 2026-08-10T22:30:41Z
+          agent_id: linux-bigpickle-opencode-20260810t2230z
+          host: forge
+          summary: |
+            Criterion 3 verified in-forge under the fixed binary: pids.max reads 4096 (raised 512 -> 4096 by 65fe4e76), and the exact workload that crashed rustc under 512 — ./build.sh --check — completed GREEN (fmt, workspace type-check, clippy strict, clippy listen-vsock, tillandsias-plan check, plan-order uniqueness, fragment status-loss check; gate stamp recorded). Empirical ceiling sizing: pids.peak read 199 after the run — the peak observed process count for the full workspace check is 199, ~2.6x under the old 512 ceiling and ~20x under the new 4096. The 512 failure was never a near-miss margin question; it was a fork-bomb/thread-fanout burst (cargo jobserver tasks) that spiked past the tight old ceiling. 4096 leaves ample headroom for the measured steady workload.
+        - type: progress
+          ts: 2026-08-10T22:55:00Z
+          agent_id: linux-mutable-20260810t225500z
+          host: linux_mutable
+          summary: |
+            Criterion 3 VERIFIED (BigPickle in-forge, 8374da13): ./build.sh --check green under pids.max=4096, session exited clean, zero new coredumps. HONEST NUANCE the verdict must carry: pids.peak read 199 — BELOW the old 512 ceiling — so tonight's green run does NOT prove the exhaustion mechanism for the original crash (possible confounds: warm forge-cache narrowing parallelism vs round 1's cold first-ever build; or a different mechanism entirely, with the 4096 raise merely coincident). Practical outcome stands: in-forge builds work and the policy is explicit. RESIDUAL to close this packet: either read the 94.1M coredump (604-vmcg) to confirm/refute thread-spawn failure in the SEGV, or repro a cold-cache in-forge build with pids.peak sampled around the panic window. Packet stays ready, scoped to that residual.
+
+    - packet_id: macos-github-login-guest-preflight-wedge
+      order: 663-acdw
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      title: 'Unattended --github-login wedges: the guest-side login preflight never emits its first prompt over the wire (blocks credential re-seed AND 349)'
+      kind: bug
+      deliverable: diagnosis + fix in the guest --github-login preflight (or its wire drive)
+      depends_on: []
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - github-login
+        - vault
+        - exec-wire
+        - credentials
+        - p1
+      estimated_hours: 5
+      outcome: |
+        The operator authorized unattended credential re-seed (git name, email,
+        gh token on stdin -> tray --github-login). Observed 2026-08-10: the
+        host-side driver reaches 'driving guest login (git name -> email ->
+        token)…' and then sits >60 minutes — the guest-side `tillandsias-headless
+        --github-login` never emits the 'author name' prompt needle the
+        DynamicExpect machinery waits for. The host stdin pipework is correct
+        (prompt_line reads stdin; three lines supplied). A direct exec-wire run
+        of the guest login (`--github-login --debug </dev/null`, 100s bound)
+        could not be completed due to the separate boot-hang defect (663-69kp)
+        compounding diagnosis. Suspect set, in bring-up order: the guest login's
+        auth preflight (which brings up vault to store the token) wedging in the
+        same post-vault region 635-kagg lived in, or the login's expect needles
+        drifting from the current guest prompt text. NOTE for the fixer: the
+        2026-07-24 attended login on this host DID work (pre-635-kagg-era guest).
+        ALSO NOTE: the macOS tray silently IGNORES --with-token (Linux headless
+        flag) — either implement it or refuse unknown flags loudly; the silent
+        acceptance cost this session two blind runs.
+      events:
+        - type: filed
+          ts: 2026-08-10T20:35:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            Filed after three bounded reproduction attempts under the operator's standing credential-re-seed authorization. Blocks 349's closing run (vault github token ABSENT since the 07-27 re-provision) and the unattended re-seed path fleet-wide on macOS. Smallest next diagnostic once boots are reliable: the bounded direct guest run (`timeout -s KILL 100 tillandsias-headless --github-login --debug </dev/null`) and read where its output stops.
+
+    - packet_id: macos-oneshot-boot-hangs-unbounded-after-interrupted-teardown
+      order: 663-69kp
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: Tray one-shot VM boot hangs unboundedly (pre-breadcrumb) when the previous VM teardown was interrupted — no storage-lock bound
+      kind: bug
+      deliverable: bounded/fail-loud boot acquisition in the one-shot paths (vz start or pre-start lock wait)
+      depends_on: []
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - vz
+        - boot
+        - locking
+        - fail-loud
+      estimated_hours: 4
+      outcome: |
+        Repeated observation across this session: when a VM-owning process is
+        killed (operator ^C, agent pkill, timeout), the NEXT one-shot boot can
+        hang indefinitely — sometimes before printing even '[exec-guest]
+        starting VM…' (nothing reaches stderr), sometimes at 'waiting for VM
+        phase Ready…'. wait_phase_ready has a 300s bound but the hang precedes
+        it (suspect: VZ storage/disk-lock acquisition inside vz.start(), or the
+        singleton/socket acquisition before the first eprintln). Observed
+        durations: 7-45+ minutes until externally killed; a 20-40s settle after
+        the kill usually (not always) avoids it. Every occurrence costs a full
+        diagnostic cycle and compounds other investigations (it delayed
+        663-acdw's diagnosis twice tonight). Fix shape: a bounded, fail-loud
+        acquisition with the crashloop-style operator guidance ('previous VM
+        still tearing down — retry in N seconds'), never an unbounded silent
+        wait.
+      events:
+        - type: filed
+          ts: 2026-08-10T20:35:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            Filed from repeated live hits (at least four this session). The silent pre-breadcrumb variant is the worst: indistinguishable from a wedged wire without host-side process inspection.
+
+    - packet_id: loop-status-count-goes-stale-on-every-filed-packet
+      order: 668-9z9h
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      title: loop-status-verify was RED at HEAD again 25 minutes after being fixed — the committed count is invalidated by every filed packet
+      kind: bugfix
+      deliverable: fold-time count refresh or a verify that tolerates post-fold fragments; the check must stop being a treadmill
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - plan-tooling
+        - loop-status
+        - verify
+      estimated_hours: 2
+      context: |
+        Found in-forge by linux-bigpickle-opencode-20260810t2011z during the round-2 validation. At its HEAD (61705906), loop-status-verify was RED: committed (233 open / 363 total tagged) vs live (235 open / 366 total tagged). Its root-cause analysis, quoted: "base 233/363 -1 (659 done) +3 (665/666-qbjd/667-se87 ready) = 235/366, exactly what verify demands — but the fold (980b34b4) predates 667-se87, so the committed count is stale," contradicting the 20:05Z handoff fragment's verdict=ok, which was TRUE when written. The structural defect: the committed count is a snapshot, every subsequently filed release-tagged packet invalidates it, and the coordinator fixed this exact count at 12:23 only for it to be stale again by 12:51. A check that is red within half an hour of every green is a treadmill, not a control.
+      exit_criteria:
+        - filing a release-tagged packet no longer flips loop-status-verify red on its own — either the fold/verify derives the count live from the folded ledger, or verify treats the committed count as a floor annotated with its fold ref
+        - the coordinator cycle that lands this change leaves verify green and a subsequently filed test packet keeps it green
+      events:
+        - ts: 2026-08-10T20:11:00Z
+          event: filed
+          agent_id: linux-bigpickle-opencode-20260810t2011z
+          summary: |
+            Filed in-forge during build-free validation round 2; original fragment lost with the checkout, reconstructed by the coordinator from journald.
+
+    - packet_id: in-forge-plan-only-commits-cannot-pass-the-push-gate
+      order: 668-2xeh
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: An in-forge agent that only files plan fragments cannot push them without a full workspace build
+      kind: enhancement
+      deliverable: a plan-only fast lane in the pre-push gate (YAML/schema/marker validation without cargo) or an explicit relay path for validation-only sessions
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - gate
+        - forge
+        - plan-tooling
+        - push
+      estimated_hours: 3
+      context: |
+        Round 2's ending, verbatim from the session: "Push blocked by the pre-push gate, and I can't clear it without violating the BUILD-FREE directive: the hook requires ./build.sh --check to have run in this checkout." The agent behaved exactly right — refused --no-verify, reported, exited — and its two fragments died with the container, needing journald archaeology to recover. The gate is the only trunk protection and must stay; but a diff that touches ONLY plan/index.d/ and plan/loop_status.d/ fragments has a verifiable closure (YAML parse, fragment schema, marker grammar) that does not require compiling the workspace. Without a plan-only lane, every lightweight in-forge validation/reporting session either burns a full build (667-se87 shows in-forge workspace builds are currently crashing rustc), pushes nothing, or is tempted toward --no-verify — the worst of the three.
+      exit_criteria:
+        - a diff touching only plan fragment paths passes the pre-push gate through an explicit fast lane that still validates YAML, fragment schema, and forbidden-pattern checks, recorded in the gate stamp as plan-only
+        - any non-fragment path in the diff disqualifies the fast lane (fail closed to the full gate)
+        - litmus pins both the acceptance and the disqualification
+      events:
+        - ts: 2026-08-10T20:35:00Z
+          event: filed
+          summary: |
+            Filed by the coordinator from the round-2 session's terminal blocker; the agent's refusal to bypass was correct and is the behavior to keep.
+
+    - packet_id: wedged-vm-start-should-trigger-bounded-shutdown-recovery
+      order: 664-frz0
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      title: After handshake-budget exhaustion on a FRESH VM start, run the existing bounded wsl --shutdown recovery instead of leaving the wedged utility VM running
+      kind: enhancement
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      depends_on: []
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - wsl
+        - resilience
+        - provisioning
+      context: |
+        Host hard-freeze 2026-08-10 19:28-19:30Z forensics (operator asked "make sure it wasn't us" - it wasn't, see the issue doc): the WSL VM started at 19:13Z, the control wire never connected (hvsocket timeouts through the full bounded backoff), the tray errored cleanly at 19:29:26Z, and the HOST progressively froze around the same window. No memory exhaustion, disk, WHEA, or GPU events - a Hyper-V/WSL2 platform-layer hang with our VM start as context. The wedged VM sat unreachable ~15 min while the host sickened. The tray already owns perform_wsl_shutdown_recovery (148a9076, bounded 60s, kill_on_drop); invoking it once on the fresh-start handshake-exhaustion path costs little and removes a wedged-from-boot VM that has no value alive.
+        Full forensics: plan/issues/host-freeze-during-vm-start-forensics-2026-08-10.md
+      exit_criteria:
+        - |
+            The provisioning failure path that today ends at "control-wire handshake did not succeed within budget" on a FRESH VM start additionally invokes the existing bounded shutdown recovery exactly once, with the outcome logged.
+
+        - |
+            The recovery is NOT invoked when the handshake failure follows a previously-healthy wire (that is the keepalive supervisor's domain, already bounded).
+
+      events:
+        - ts: 2026-08-10T21:00:00Z
+          event: filed
+          summary: |
+            Filed from the host-freeze forensics; operator-requested investigation concluded platform-layer hang, tray exonerated, this is the one cheap hardening the evidence supports.
+
+    - packet_id: generic-index-deterministic-subset-is-thin
+      order: 669-egjn
+      status: ready
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      priority: p2
+      title: index.json carries only path/types/meta — the spec's deterministic subset (commands, actions, layout) is not yet answerable
+      kind: enhancement
+      deliverable: generic index enrichment so commands/actions/layout answer cited from the index
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - experts
+        - generic-project
+        - index
+      estimated_hours: 3
+      context: |
+        Found finishing 619-pfsj: the C2 deterministic fallback advertises "type, status, commands, layout, actions still answer from the index alone", but the generic index.json only carries path/types/meta today, so three of the five enumerated deterministic classes have nothing to answer from off-Tillandsias. The refusal copy is honest about what IS answerable; the index needs to grow the rest (build/run commands from marker files, layout from the tree walk, actions from detected type) with citable spans.
+      exit_criteria:
+        - commands, layout, and actions answer cited on the 619-3y75 generic fixtures, envelopes verify-answer clean
+      events:
+        - ts: 2026-08-10T21:00:00Z
+          event: filed
+          summary: filed from the 619-pfsj completion report (finding 1).
+        - type: progress
+          ts: 2026-08-10T23:05:00Z
+          agent_id: linux-mutable-20260810t230500z
+          host: linux_mutable
+          summary: |
+            Scope addition from the 669-qcsb litmus work, observed live: the generic lane cites README.md lines 1-5 UNCONDITIONALLY, so a README shorter than 5 lines makes verify-answer refuse a truthful confidence=exact answer ("citation line range runs past end of file") — reproduced against a 3-line fixture README. Clamp the citation range to the real line count when this packet reworks the deterministic subset.
+
+    - packet_id: plan-lane-routing-keys-on-binary-not-project
+      order: 669-h987
+      status: ready
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      priority: p2
+      title: project_answer routes to the plan lane when tillandsias-plan resolves ANYWHERE — latent misroute for non-Tillandsias projects on dev hosts
+      kind: bugfix
+      deliverable: lane routing keyed on the mounted project's identity, not on tool discoverability
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - experts
+        - mcp
+        - routing
+      estimated_hours: 2
+      context: |
+        Found finishing 619-pfsj: plan-lane routing keys on the tillandsias-plan binary + index resolving anywhere, including the $HOME/src/tillandsias fallback. Correct inside a forge (one project mounted); on a host with a Tillandsias checkout in the fallback path, a NON-Tillandsias project's question can misroute into Tillandsias's plan ledger and answer from the wrong project. The 619-pfsj fixture verification already had to override HOME to dodge this. Route on evidence about the mounted project (its own plan/index.yaml presence), not on tool reachability.
+      exit_criteria:
+        - a non-Tillandsias fixture with a Tillandsias checkout present in the fallback path answers from the generic lane, proven by test
+      events:
+        - ts: 2026-08-10T21:00:00Z
+          event: filed
+          summary: filed from the 619-pfsj completion report (finding 2).
+
+    - packet_id: project-engine-grammar-litmus-is-ownerless
+      order: 669-qcsb
+      status: done
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      priority: p2
+      title: No litmus pins the project_engine capability grammar or the typed synthesis refusal — the pinning was assigned to an already-completed packet
+      kind: litmus
+      deliverable: litmus tests pinning the project_engine verdict line grammar (ready/skewed/stale-engine/absent) and the synthesis-refusal envelope
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - experts
+        - litmus
+        - capability-honesty
+      estimated_hours: 2
+      context: |
+        Design constraint 9 of the generic-project-expert design assigned grammar pinning to 619-3y75, which the ledger already marks completed — so the brand-new 619-pfsj surfaces (the four project_engine verdicts incl. the order-531-class skew detection, and the typed missing_capability refusal) have no executable guard. Order-531's lesson is precisely that capability honesty needs a litmus, not goodwill: pin the verdict line grammar and a refusal envelope fixture so a regression fails loud.
+      exit_criteria:
+        - litmus executes the four verdict states from fixtures and the no-inference refusal, bound under the owning spec, running in the instant pre-build tier
+      events:
+        - ts: 2026-08-10T21:00:00Z
+          event: filed
+          summary: filed from the 619-pfsj completion report (finding 3).
+        - type: completed
+          ts: 2026-08-10T22:33:32Z
+          agent_id: linux-mutable-20260810t223332z
+          host: linux
+          summary: |
+            Exit criterion met in full: both 619-pfsj surfaces now have executable guards that EXECUTE (660-ryhn discipline — bound-but-never-run is silence; both were run through scripts/run-litmus-test.sh and shown passing, not merely bound). Two instant pre-build litmus tests, pure shell + fixtures, no containers, bound under forge-environment-discoverability (the spec that owns project-info / forge discovery — same home as litmus:expert-capability-skew-honesty, the launch-built sibling of this image-baked lane).
+            litmus:project-engine-capability-verdict-grammar (12 steps): all FOUR project_engine verdict states executed from constructed fixtures with anchored FULL-LINE greps — matching engine+checkout -> ready with baked=expected; no-expectation checkout -> ready with expected=- visible and NO cry of skew; pure-superset checkout manifest -> skewed with missing_in_engine=brand-new-capability and the IMAGE REBUILD REQUIRED advice (the order-531 shape redefined for an image-baked artifact: no relaunch heals it); a pre-manifest engine stub printing JSON-RPC-era prose -> stale-engine (unknowable, not assumed); no engine -> absent. Plus: the `capabilities` self-report shape (bare tokens, exactly one engine-contract-vN, answers before the JSON-RPC loop), the SRC_REL/Containerfile drift pins, the CLOSED four-state vocabulary (assignment count asserted exactly, advice per state), the helper-missing probe=helper-missing fallback naming in lib-common.sh discovery, fail-soft under set -euo pipefail with hostile inputs, and no-python.
+            litmus:project-answer-synthesis-refusal-typed (9 steps): the typed refusal executed through the REAL JSON-RPC loop against the real inference probe — dead endpoint (127.0.0.1:9) -> anchored `unsupported: synthesis question — missing_capability=local-inference inference_state=not-ready inference_reason=endpoint-unreachable;` with citations=[], confidence=unsupported, real freshness struct; stubbed-ready probe -> missing_capability=synthesis-tier inference_state=ready (the two branches pinned DISTINCT — blaming the endpoint when the endpoint is fine sends an agent to fix the wrong thing); every refusal accepted by `tillandsias-plan verify-answer`. Plan lane covered with stub engines: an unsupported deterministic verdict routes through the SAME pinned constructor (ledger-flavoured stub prose must NOT leak), a silent engine yields the pinned no-envelope refusal (the C1 hand-rolled-envelope regression, kept dead), and TWO negative controls — a deterministic question under the same dead-endpoint fixture still answers cited + verifier-clean, and a citable deterministic answer to a synthesis question is forwarded verbatim (deterministic first; inference adds recall, never authority). The manifest-declares-behaviour step bridges the two tests: the engine's synthesis-refusal-typed / no-inference-fallback / typed-refusal tokens must exist while the behaviours pass.
+            Verification: scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size instant --compact — both new tests EXECUTED, 12/12 and 9/9 steps OK, suite 10/10 executed 0 fail; all three touched yaml files yq-clean; ./build.sh --check green (gate stamp recorded).
+            FINDING NOTICED, NOT FIXED: the generic deterministic lane cites README.md lines 1-5 UNCONDITIONALLY (project-info.sh, generic-lane envelope), so a README shorter than 5 lines makes verify-answer refuse a truthful confidence=exact answer ("citation line range runs past end of file") — observed against a 3-line fixture README while building the negative control; the litmus fixtures around it with a 5-line README. The citation range should clamp to the file's real line count. Candidate follow-up for the 669 family (fits 669-egjn's generic-lane enrichment surface).
+
+    - packet_id: forge-session-work-must-survive-container-death
+      order: 670-8f6z
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: Stage un-pushed in-forge commits/fragments on the persistent tool-cache volume so container death stops destroying work
+      kind: enhancement
+      deliverable: entrypoint/teardown staging of un-pushed fragments + commits onto the per-project named volume, with host-side recovery surfacing
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - durability
+        - volumes
+        - plan-tooling
+      estimated_hours: 3
+      context: |
+        BigPickle's proposal P3 (diagnose-forge session 2026-08-10 20:40-20:47Z, titled forge-session-fragment-survival), reconstructed by the coordinator after the proposal FILES THEMSELVES died with the container — the third loss of in-forge work tonight (round-2 validation fragments, then all four diagnose proposals), each needing journald archaeology. The design: the per-project named volume (tillandsias-forge-cache-<project>) already survives container death; the forge entrypoint/exit path should stage any un-pushed plan/index.d + plan/loop_status.d fragments (and, ideally, `git bundle` of un-pushed commits) into a staging directory on that volume, and the next launch (or the host coordinator) surfaces them loudly for relay. Complements 668-2xeh (plan-only gate lane removes the main REASON pushes fail); this packet removes the LOSS when a push cannot happen at all (crash, timeout, gate refusal, network).
+      exit_criteria:
+        - a forge session that commits fragments and exits un-pushed leaves them recoverable on the named volume, and the next launch of that project surfaces the staged work in its first output
+        - a crashed (SIGKILLed) session's already-written fragment files are equally recoverable
+        - litmus pins the staging path shape with a fixture
+      events:
+        - ts: 2026-08-10T21:35:00Z
+          event: filed
+          summary: |
+            Reconstructed from BigPickle's P3 proposal title + design sketch in the journald transcript; proposal bodies were lost with the container, which is this packet's own thesis.
+
+    - packet_id: branch-install-stamp-collides-with-exit-contract
+      order: 671-jvcg
+      status: ready
+      priority: p3
+      title: ./build.sh --install auto-bumps VERSION, but the push guard forbids committing it off-main — every branch install leaves mandatory-uncommittable dirt
+      kind: enhancement
+      deliverable: install flow that stamps the binary without dirtying the tree on non-main branches (or an explicit stamp-revert step), plus a runbook line
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - build
+        - release
+        - install
+        - discipline
+      estimated_hours: 1
+      context: |
+        Hit live by the 2026-08-10 coordinator loop (cycle 3): installing the 667-se87 fix bumped VERSION 0.4.260810.1 -> .2 across six files; the meta-orchestration exit contract demands cycle dirt be committed, the pre-push guard then correctly refused the VERSION change on linux-next (bumps belong to main), leaving commit-forbidden dirt. Resolved this time by reverting the stamp (binary keeps its embedded .2 — standard dev-install skew). The collision recurs for every on-branch install; the flow should either stamp only the artifact (env/ldflags-style, tree untouched) or print the exact revert step as part of --install output so the loop's finalization is deterministic.
+      exit_criteria:
+        - an on-branch ./build.sh --install leaves a byte-clean tree (or prints a single documented command that does), while the installed binary still self-reports the bumped dev serial
+      events:
+        - ts: 2026-08-10T21:58:00Z
+          event: filed
+          summary: filed live from the collision during loop cycle 3 finalization.
+
+    - packet_id: wsl2-builder-distro-native-source-mirror
+      order: 667-kfyn
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: 'with-wsl2-builder: mirror the checkout into the build distro''s ext4 filesystem so cargo source I/O stops crossing 9p onto NTFS'
+      kind: optimization
+      deliverable: scripts/with-wsl2-builder.sh
+      depends_on: []
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - wsl
+        - build
+        - performance
+        - io
+      context: |
+        Operator field report 2026-08-10: Windows itself pops advisories that "heavy I/O applications like cargo build run better in WSL" — i.e. we are thrashing NTFS. Half the offload already exists: every build re-execs into the tillandsias-build distro and CARGO_TARGET_DIR is distro-native (with-wsl2-builder.sh, default since inception). The residual is the CHECKOUT: it stays at /mnt/c over 9p, so every crate source read, git hook traversal, and build-script probe crosses the slowest bridge onto the most scan-burdened filesystem. This session's post-freeze git hooks hung for minutes on exactly that path. The Windows-native tray (MSVC) build stays on the host by necessity and is out of scope.
+        Full analysis and design sketch: plan/issues/windows-build-io-offload-to-wsl-fs-2026-08-10.md
+      exit_criteria:
+        - |
+            with-wsl2-builder.sh maintains a distro-native git mirror of the checkout (/root/.cache/tillandsias-wsl2-src/<repo>), synced per invocation via git fetch from the /mnt/c tree plus dirty-diff and untracked-file replay, and runs the re-exec'd command from the mirror so no per-file build I/O crosses 9p.
+
+        - |
+            Sync fidelity is verified mechanically (mirror worktree state equals source worktree state) before the build runs; a fidelity mismatch fails loud rather than building a wrong tree.
+
+        - |
+            An escape hatch (TILLANDSIAS_WSL2_SRC_IN_TREE=1) restores the current /mnt/c behavior, mirroring the existing TILLANDSIAS_WSL2_TARGET_IN_TREE contract.
+
+        - |
+            Before/after wall time for ./build.sh --check on a Windows host is measured and recorded in the closing event.
+
+      events:
+        - ts: 2026-08-10T22:30:00Z
+          event: filed
+          summary: |
+            Filed from the operator's report of Microsoft's own heavy-I/O advisory popups; research confirmed target/ and toolchain are already distro-native, source tree is the remaining 9p/NTFS residual.
+
+    - packet_id: cheatsheet-tiers-check-skips-not-errors-on-foreign-binary
+      order: 672-4nts
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      title: check-cheatsheet-tiers execs a Linux ELF from the stale in-tree target/ on Windows — probe runnability and skip loud instead of erroring
+      kind: enhancement
+      deliverable: scripts/check-cheatsheet-tiers.sh
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - windows
+        - ci
+        - gates
+        - diagnosability
+      context: |
+        Every Windows ./build.sh --check prints a non-blocking "Exec format error" because the check execs target/debug/tillandsias-policy from the in-tree target dir, which on Windows holds only stale Linux ELF artifacts (real builds use the WSL2 distro-native CARGO_TARGET_DIR, with-wsl2-builder.sh). The check gives zero coverage on Windows while printing an ERROR banner that trains agents to ignore red gate text. Analysis: plan/issues/cheatsheet-tiers-check-linux-binary-on-windows-2026-08-10.md
+      exit_criteria:
+        - |
+            The check probes binary runnability before exec and emits exactly one skip:policy-binary-not-host-executable advisory when the binary cannot run on this host; "Exec format error" never appears in gate output.
+
+      events:
+        - ts: 2026-08-10T22:45:00Z
+          event: filed
+          summary: Captured from cycle-1 gate output during the overnight drain.
+
+    - packet_id: plan-expire-claims-subcommand
+      order: 672-bz7u
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: architecture-audit-epic
+      title: tillandsias-plan expire-claims — auto-return stranded in_progress claims to ready after a TTL, closing 641-e2qa criterion 2
+      kind: implementation
+      deliverable: crates/tillandsias-plan
+      depends_on:
+        - stranded-in-progress-packets-are-invisible-both-ways
+      pickup_role: any
+      capability_tags:
+        - plan
+        - ledger
+        - coordination
+        - rust
+      context: |
+        641-e2qa criterion 2 requires that a claim which produces no event within one cycle returns the packet to ready automatically. This cannot live in bash: the claim timestamp is not exposed by `tillandsias-plan query --json` (probed 2026-08-10), and grepping the ledger for status timestamps is the brittle parsing 456 was built to eliminate. The mechanism belongs in the plan binary, which already folds fragments and knows each packet's status history.
+      exit_criteria:
+        - |
+            `tillandsias-plan expire-claims --ttl-hours N [--dry-run]` lists every in_progress packet whose LAST status/progress activity is older than N hours; without --dry-run it WRITES a new fragment (never edits existing files) returning each to ready with a progress event naming the expiry, TTL, and last-activity timestamp.
+
+        - |
+            Packets with ANY progress event newer than the TTL are never touched; the default TTL is conservative (>= 24h) so a slow legitimate cycle cannot be preempted.
+
+        - |
+            check-stranded-in-progress.sh gains a line advertising the command when stranded > 0, and its threshold_events field reports what expire-claims would act on.
+
+        - |
+            A litmus or executable test seeds a synthetic stranded claim and proves expiry emits the fragment and a fresh claim does not.
+
+      events:
+        - ts: 2026-08-10T22:45:00Z
+          event: filed
+          summary: |
+            Shaped from 641-e2qa's open criterion 2 during the overnight drain; probing showed the claim age is mechanically unreachable from bash, so the reduction lands the mechanism in the binary.
