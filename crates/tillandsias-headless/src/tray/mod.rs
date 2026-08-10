@@ -4165,11 +4165,15 @@ mod tests {
         use std::process::Command;
 
         // Find any Z-state (zombie) children currently parented to us.
-        fn has_zombie_children() -> bool {
+        /// Count zombie children of THIS process. The delta between two calls is
+        /// attributable to what happened in between; the absolute value is not,
+        /// because sibling tests in the same process spawn children too.
+        fn count_zombie_children() -> usize {
             let me = std::process::id();
             let Ok(entries) = std::fs::read_dir("/proc") else {
-                return false;
+                return 0;
             };
+            let mut n = 0;
             for entry in entries.flatten() {
                 let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
                     continue;
@@ -4178,30 +4182,42 @@ mod tests {
                     continue;
                 }
                 let stat = std::fs::read_to_string(entry.path().join("stat")).unwrap_or_default();
-                // /proc/<pid>/stat: "pid (comm) state ..." — state is char 3.
                 if let Some(state) = stat.split_whitespace().nth(2)
                     && state.starts_with('Z')
                 {
-                    // Confirm it is actually our child via /proc/<pid>/status PPid.
                     let status =
                         std::fs::read_to_string(entry.path().join("status")).unwrap_or_default();
                     for line in status.lines() {
                         if line.starts_with("PPid:")
                             && line.split_whitespace().nth(1) == Some(&me.to_string())
                         {
-                            return true;
+                            n += 1;
                         }
                     }
                 }
             }
-            false
+            n
         }
 
-        // Precondition: a clean slate.
-        assert!(
-            !has_zombie_children(),
-            "test harness started with stray zombies"
-        );
+        // MEASURE A DELTA, NOT AN ABSOLUTE.
+        //
+        // `has_zombie_children()` scans /proc for zombies of the whole PROCESS,
+        // and cargo runs a binary's tests as parallel threads inside one
+        // process. So any sibling test that spawns a child creates a transient
+        // zombie this test can see, and an absolute precondition
+        // (`assert!(!has_zombie_children(), "started with stray zombies")`)
+        // fails on a neighbour's activity rather than on anything this test did.
+        //
+        // That is exactly what happened: `tray-contract` went red on the
+        // PRECONDITION at mod.rs:4201 during a full parallel run, while the test
+        // passes 6/6 in isolation. Same class as 638-ehzi — a process-global
+        // assertion under a parallel harness — and the second instance found in
+        // this crate.
+        //
+        // The claim this test actually makes is a delta one: "spawn_terminal_and_reap
+        // does not leave zombies". Measuring before and after tests precisely
+        // that, and is immune to whatever the neighbours are doing.
+        let zombies_before = count_zombie_children();
 
         for _ in 0..8 {
             let cmd = Command::new("/bin/true");
@@ -4210,9 +4226,12 @@ mod tests {
 
         // Give the reaping threads time to wait() the exited children.
         std::thread::sleep(std::time::Duration::from_millis(500));
+        let zombies_after = count_zombie_children();
         assert!(
-            !has_zombie_children(),
-            "fast-exiting children must be reaped, not left as zombies"
+            zombies_after <= zombies_before,
+            "fast-exiting children must be reaped, not left as zombies \
+             (zombies before={zombies_before}, after={zombies_after}; \
+             a rise is attributable to this test, a steady count is a neighbour's)"
         );
     }
 

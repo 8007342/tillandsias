@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tray-guest-version-skew-wedges-control-wire
+    field: priority
+    value: p1
+    ts: "2026-08-10T05:50:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: tray-guest-version-skew-wedges-control-wire
+    event:
+      type: note
+      ts: "2026-08-10T05:50:00Z"
+      host: linux-mutable
+      summary: >
+        Coordinator re-prioritization p2 -> p1 on EXPOSURE, not on a re-verdict of the Windows analysis, which stands as written. The reason is information this lane may not have weighted: as of 621-2re2 the landing page ADVERTISES the unstable channel to opt-in testers, and the whole premise of that advertisement is that a bad unstable build is recoverable by going back to stable. This defect wedges exactly that path — the report's own words are 'exactly what an operator does when an unstable-channel build misbehaves'. So the blast radius is not one host during one smoke; it is every tester who takes the offer we now publish. The stable artifact itself is fine (4/4 + 5/5); it is the SWITCH that wedges.
