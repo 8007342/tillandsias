@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t105500z
+packets:
+
+  - packet_id: mirror-dns-identity-is-shared-across-projects
+    order: 659-8faj
+    status: ready
+    desired_release: v0.5
+    release_target: socket-audit-master
+    priority: p0
+    title: "Give each project's mirror a unique DNS identity — today all mirrors answer to one shared alias"
+    kind: security+implementation
+    deliverable: crates/tillandsias-headless/src/main.rs aliases + images/default/lib-common.sh URL + negative DNS fixture
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [security, git-mirror, dns, identity, multi-project]
+    context: >
+      Slice of 606-bvnp (p0, one of the four remaining dependencies of 451). Closes its
+      exit criterion 3 — "two simultaneous projects resolve only their opaque unique
+      mirror hostnames" — by MEASURING that it is violated today.
+
+      `build_git_run_args` (main.rs:2974-2977) assigns two CONSTANT aliases,
+      `git-service` and `tillandsias-git`, to every project's mirror. Container name and
+      volume are per-project; the DNS identity is not. Clients then address projects as
+      a path on the shared name — `git://tillandsias-git/${TILLANDSIAS_PROJECT}`
+      (lib-common.sh:503 and five other sites).
+
+      Measured with two containers carrying the product's exact aliases on
+      tillandsias-enclave:
+
+        $ getent ahostsv4 tillandsias-git
+        10.0.42.17   STREAM tillandsias-git.dns.podman
+        10.0.42.18   STREAM tillandsias-git.dns.podman
+
+      Two A records for one name. Routing between projects is not just non-unique, it is
+      non-deterministic.
+
+      This is a security finding rather than a flaky-DNS nuisance because of what it
+      composes with: the daemon runs --export-all --base-path=/srv/git
+      (images/git/entrypoint.sh:370) and still carries --enable=receive-pack per the
+      order-450/423 interim. One shared name resolving to N mirrors + a daemon that
+      exports everything under its base path + an anonymous write path. What contains it
+      today is that each volume happens to hold only its own project — containment by
+      accident of volume layout, not by identity, which is the exact distinction
+      606-bvnp exists to remove.
+    exit_criteria:
+      - >
+        Each mirror gets a project-unique DNS identity; the shared `tillandsias-git` /
+        `git-service` aliases stop being assigned to per-project mirrors.
+      - >
+        Client URLs in images/default/lib-common.sh address that per-project name (6
+        sites), so project separation stops resting on a path component.
+      - >
+        NEGATIVE FIXTURE, already reproduced and ready to encode: with two mirrors up,
+        each project-unique name must return exactly ONE A record, and the old shared
+        name must not resolve at all. The measurement above is the before-picture.
+    verifiable_closure: >
+      `getent ahostsv4 <project-name>` returns one address per project with two mirrors
+      running, and the shared alias returns none.
+    notes: >
+      Deliberately scoped to DNS identity. 606-bvnp's Vault AppRole / SSH-CA criteria
+      (exact signer roles, certificate principals, the A-signs-for-B 403 matrix) are
+      untouched and still need the design pass — this slice does not close that packet,
+      it removes one criterion from it and makes the routing question answered.
+
+      Instrument note: `nslookup` inside the probe image fails against the podman
+      resolver with "Message too large" and returns nothing, which reads as "the name
+      does not resolve" — the opposite of the finding. Use `getent ahostsv4`.
+    events:
+      - ts: "2026-08-10T10:55:00Z"
+        event: filed
+        summary: >
+          Split from 606-bvnp after measuring the shared-alias collision. Full audit in
+          plan/issues/mirror-identity-is-a-shared-dns-alias-audit-2026-08-10.md.
