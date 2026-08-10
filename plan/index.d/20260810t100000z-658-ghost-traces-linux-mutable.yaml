@@ -1,0 +1,77 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t100000z
+packets:
+
+  - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
+    order: 658-kcd5
+    status: ready
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    priority: p2
+    title: "14 spec traces point at specs that do not exist, and the check only sees the ones in a commit's changed files"
+    kind: bug
+    deliverable: openspec trace checker + trace cleanup
+    depends_on: []
+    pickup_role: any
+    capability_tags: [openspec, traces, ghost-trace-ratchet, ci]
+    context: >
+      Committing an unrelated change to `main.rs` printed six
+      `✗ OpenSpec: ghost trace 'spec:enclave-service-catalog' … no spec exists`
+      lines. They are NOT new — `git log -S` puts them in orders 357 and 364. They
+      surfaced only because the hook scans the files a commit touches, and nothing had
+      touched those lines since.
+
+      Repo-wide count: **179 distinct spec traces, 170 specs on disk, 14 ghosts.**
+
+        enclave-service-catalog        error-message-localization
+        fat-spec-corpus-index          forge-git-ergonomics
+        forge-git-identity-anonymization  forge-push-credential-channel
+        guest-crashloop-detection      help-system-localization
+        litmus-runner                  macos-tray-build-and-release
+        meta-orchestration             shell-prompt-localization-fr
+        shell-prompt-localization-ja   windows-wsl-runtime
+
+      Two classes, and they deserve opposite treatment:
+
+      - **2 have a pending `openspec/changes/` directory** (macos-tray-build-and-release,
+        windows-wsl-runtime). The trace points at work in flight; the spec is simply not
+        promoted yet. Both are ALSO in the "78 days old — consider archiving" warning
+        list, so the pending change has been pending for two and a half months.
+      - **12 have neither a spec nor a change directory.** The trace points at nothing at
+        all — `spec:meta-orchestration` and `spec:litmus-runner` are traces to concepts
+        that were never specified, or were renamed with the trace left behind.
+
+      Why this matters beyond tidiness: a `@trace` is the link that makes coverage
+      claims checkable. A trace to a nonexistent spec inflates the appearance of
+      coverage while contributing nothing to it — the annotation looks like evidence and
+      is not. Traces are also what the convergence metrics count.
+    exit_criteria:
+      - >
+        The ghost check runs REPO-WIDE, not only over a commit's changed files. Six of
+        these sat unreported for months purely because nobody edited those lines.
+      - >
+        The two pending-change ghosts get a decision: promote the change, or drop the
+        trace. Two and a half months pending is itself the answer to whether it is
+        active.
+      - >
+        The twelve true ghosts are removed or given specs. Prefer removal — per the
+        project's discard-over-repair bias, a trace nobody wrote a spec for in months is
+        evidence the spec was not needed.
+      - >
+        A negative control: adding a `@trace spec:does-not-exist` anywhere must fail the
+        repo-wide check.
+    verifiable_closure: >
+      `distinct spec traces` minus `specs on disk` reconciles to zero (or to an
+      explicitly listed set of in-flight changes), and a fabricated trace fails CI.
+    notes: >
+      Connects to the standing ask about harvesting unused traces and metrics without
+      losing the monotonic-convergence guarantee. This is the safe end of that work: a
+      trace pointing at a spec that does not exist cannot be carrying a guarantee, so
+      removing it cannot lose one. Establish this reconciliation BEFORE touching traces
+      that do resolve.
+    events:
+      - ts: "2026-08-10T10:00:00Z"
+        event: filed
+        summary: >
+          Found because an unrelated edit to main.rs made the hook scan lines untouched
+          since order 357.
