@@ -727,6 +727,7 @@ specs:
   - litmus:brew-attestation-egress
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
+  - litmus:podman-egress-control-shape
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching

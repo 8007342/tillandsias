@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t113500z
+packets:
+
+  - packet_id: an-unregistered-litmus-file-never-runs-and-nothing-says-so
+    order: 660-ryhn
+    status: ready
+    desired_release: v0.5
+    release_target: convergence-velocity-milestone
+    priority: p2
+    title: "A litmus YAML that is not listed in litmus-bindings.yaml is silently never executed"
+    kind: bug
+    deliverable: scripts/run-litmus-test.sh + a bindings reconciliation check
+    depends_on: []
+    pickup_role: any
+    capability_tags: [litmus, ci, coverage, silent-failure]
+    context: >
+      Writing `openspec/litmus-tests/litmus-<name>.yaml` does NOT make it run. The
+      runner resolves tests through `get_litmus_tests_for_spec`, which reads
+      `openspec/litmus-bindings.yaml`; a file absent from that list is invisible.
+
+      Nothing reports the gap. Adding a new test for spec `proxy-container` and running
+      the suite printed `PASS: 3, FAIL: 0, Status: PASS` — the suite was green and the
+      new test had not executed. The only reason this was caught is that the step
+      names in the output did not match the ones just written.
+
+      This is the highest-leverage version of the failure this session keeps hitting: a
+      test author gets a green suite and reasonable confidence that a property is now
+      guarded, when nothing is guarding it. Every subsequent reader inherits that
+      belief. The project's whole verification story rests on litmus tests being
+      executable assertions rather than documents, and this quietly converts one into
+      the other.
+
+      There are 306 files in openspec/litmus-tests/. How many are bound is unknown —
+      that reconciliation is exit criterion 1.
+    exit_criteria:
+      - >
+        Reconcile: every `litmus-*.yaml` on disk is either bound to a spec in
+        litmus-bindings.yaml or explicitly listed as intentionally unbound. Report the
+        count — if it is nonzero, each unbound file is a property someone believed was
+        guarded.
+      - >
+        The runner FAILS (or at minimum warns loudly) when a litmus file exists with no
+        binding, instead of silently skipping it.
+      - >
+        NEGATIVE CONTROL: adding a well-formed litmus file with no binding must make the
+        check fail. That is exactly the state this packet was filed from.
+    verifiable_closure: >
+      An unbound litmus file is reported by name; a bound one runs. Both directions
+      verified, since the failure mode is silence rather than error.
+    notes: >
+      Found while adding litmus:podman-egress-control-shape for 653-zzkb. That test is
+      now bound and passing (4/4 for spec proxy-container), so this packet is about the
+      general gap, not that specific test.
+
+      Second-order note worth keeping: the new test's OWN first assertion was wrong — it
+      used `${http_proxy:-unset}` to check neutralization, and `:-` treats an empty
+      value as unset, so it reported a correctly-neutralized variable as a failure. Use
+      `${x+declared}` to test declaredness. The bug was in the ruler again, and this
+      time the ruler caught itself only because it had finally been wired up to run.
+    events:
+      - ts: "2026-08-10T11:35:00Z"
+        event: filed
+        summary: >
+          Filed on discovering a newly added litmus never executed while the suite
+          reported PASS.

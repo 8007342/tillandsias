@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t112000z
+events:
+  - packet_id: mirror-dns-identity-is-shared-across-projects
+    event:
+      type: progress
+      ts: "2026-08-10T11:20:00Z"
+      agent_id: linux-mutable-20260810t112000z
+      host: linux
+      summary: >
+        CHANGE SURFACE ENUMERATED. Not implemented this cycle, deliberately: the alias
+        is load-bearing for every forge's clone path, the surface spans three crates
+        plus the guest scripts, and a half-landed rename breaks cloning for all
+        projects. Handing over a complete list instead of a partial edit.
+
+        The good news found while enumerating: THE PLUMBING ALREADY EXISTS. There is a
+        third naming channel, `TILLANDSIAS_GIT_SERVICE`, injected into forges at
+        main.rs:11397, :5247, :5278 — currently hardcoded to the constant
+        "tillandsias-git". shell-helpers.sh:58 already prefers an override
+        (`${GIT_SERVICE_HOST:-tillandsias-git}`). So the fix is to set an existing
+        variable per-project, NOT to invent a naming scheme or add plumbing.
+
+        Full surface:
+
+          A. ALIAS ASSIGNMENT — main.rs:2975 ("git-service"), :2977 ("tillandsias-git").
+             The two constants to make per-project.
+          B. NO_PROXY — 5 literals containing "git-service,tillandsias-git":
+             container_profile.rs:398, :410, :683, :696 and the
+             ENCLAVE_NO_PROXY_BASE const at main.rs:1150. If these miss the new name,
+             mirror traffic is no longer excluded from the proxy.
+          C. FORGE CLIENT URLS — 7 occurrences of `git://tillandsias-git/${...}` in
+             images/default/lib-common.sh (:503, :752, :764, :783, :794, :806 + one).
+             These should consume the injected name rather than hardcoding it.
+          D. GUEST DEFAULT — shell-helpers.sh:58 `${GIT_SERVICE_HOST:-tillandsias-git}`.
+             Note :55-56 says the `git-service` alias is kept "for one release" and is
+             SCHEDULED for removal — there is already a deprecation in flight and the
+             implementer must reconcile with it rather than re-entrench the name.
+          E. READINESS PROBE — main.rs:5038 `check_port git-service 9418 git`, pinned by
+             a test at :16747.
+          F. INJECTION SITES — main.rs:11397, :5247, :5278 set TILLANDSIAS_GIT_SERVICE.
+             container_profile.rs:373 only tests it for PRESENCE to select the transport,
+             so changing its VALUE is safe there; :235 documents a `-> localhost` rewrite
+             for non-enclave profiles which must keep working.
+          G. TESTS pinning the constant: main.rs:14726, :16747, :17777, :17811, :18026.
+
+        Sequencing note for whoever takes it: land B before A. If the aliases become
+        per-project while NO_PROXY still names only the old constants, mirror traffic
+        starts matching the proxy env and the failure appears in the clone path, far
+        from the change.
