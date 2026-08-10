@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t070000z
+events:
+  - packet_id: stranded-in-progress-packets-are-invisible-both-ways
+    event:
+      type: progress
+      ts: "2026-08-10T07:00:00Z"
+      agent_id: linux-mutable-20260810t070000z
+      host: linux_mutable
+      summary: >
+        TRIAGE PASS — and the remaining set is a DIFFERENT KIND of problem than the one
+        this packet opened with.
+
+        Of the 21 originally stranded, 11 have now cleared and every one of them was
+        BOOKKEEPING: 8 claims abandoned 17-26 days, reclaimed to `ready` because reclaiming
+        destroys nothing; plus 540, 575 and 627-k4mz closed against every named deliverable.
+
+        The remaining 10 were examined this cycle and NOT closed, deliberately. Three were
+        checked against their declared deliverables in detail and all three are genuinely
+        unfinished:
+
+          456  wants "crates/tillandsias-forge-mcp built and running in ramdisk at
+               startup" — a COMPILED RUST layer. What exists is
+               images/default/config-overlay/mcp/forge-plan.sh, a shell script with 44
+               plan-tool references. The shell MCP works and this host has used it all
+               session, which is exactly why it is a tempting false close: it delivers the
+               FUNCTION while the packet asks for a specific IMPLEMENTATION in ramdisk.
+          448  wants a cheatsheet sync mechanism. The Containerfile COPYs cheatsheets to
+               /opt/cheatsheets-image; a COPY is not a sync, and the packet's title is
+               about re-drift, which a build-time copy causes rather than cures.
+          437  wants three specific things — production-sized /home/forge/src tmpfs, a host
+               RAM gate, a container memory ceiling. 16 tmpfs references in lib-common.sh
+               prove none of the three.
+
+        SO THE PACKET'S REMAINING SCOPE HAS CHANGED SHAPE. It opened as "finished work is
+        invisible because nobody recorded it" — that half is done, and the write-path fixes
+        (635-i6vm, 636-9m79, the skill correction) stop it recurring. What is left is
+        ABANDONED WORK: real, unfinished packets someone claimed and walked away from. That
+        needs owners and re-scoping, not a status sweep, and no amount of coordinator
+        tooling will close them.
+
+        Explicitly NOT closing any of the ten on inference. Each looked closeable from a
+        distance and stopped looking closeable at the deliverable line — which is the whole
+        reason this packet forbids bulk closure.
