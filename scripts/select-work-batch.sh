@@ -291,6 +291,52 @@ fi
 rm -f "$query_err"
 [ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
 
+# ── Intersect with `next <role>`'s eligible set (660-z774) ──────────────────
+# The header of this script credits `tillandsias-plan next <role>` with being
+# "release-aware, role-compatible, dependency-clear, unleased, priority-ranked"
+# and says this script only adds "what should ONE cycle take?" on top. That was
+# the design. It was not the implementation: the pool above comes from `query`,
+# which filters status, role and release and applies NEITHER dependency-clearing
+# NOR lease-checking. The layer meant to add cohesion ON TOP of claimability had
+# quietly REPLACED claimability with a weaker test.
+#
+# The Windows host found it by trying to do the work (660-z774): its batch
+# offered packet 248 together with 245, 246 and 247 — the three unstarted
+# packets 248 depends on. `next windows` never listed 248 at all. The lease half
+# is worse and quieter: `query` cannot see leases, so a batch could hand this
+# host a packet another host is actively working, routing around the very
+# mechanism (claim-ledger-node.sh) that exists to prevent duplicated effort.
+#
+# On Linux the effect was diluted — with 100+ role-matching packets a blocked
+# pick reads as an odd choice, not a defect — which is why it survived here.
+# Intersecting with `next <role>` directly is not available: it is capped at five
+# results ON PURPOSE ("plan_next is capped at five on purpose"), so it answers
+# "what should I start now", not "what is the eligible set". The dependency test
+# is therefore recomputed here from the folded ledger, using the same rule the
+# resolver uses — a dependency is satisfied only when its packet is terminal.
+#
+# Unknown/unresolvable dependency ids count as BLOCKING, matching the resolver's
+# conservatism: an id that resolves to nothing is an unanswered question, not an
+# absent constraint.
+terminal_ids="$("$PLAN" query --limit 900 --json 2>/dev/null \
+    | jq -r '[.[] | select(.status=="done" or .status=="completed" or .status=="obsoleted") | .packet_id]' 2>/dev/null)"
+if [ -z "$terminal_ids" ] || [ "$terminal_ids" = "null" ]; then
+    # Fail loud. Silently keeping the unfiltered pool would restore exactly the
+    # defect this block exists to fix, and would do it invisibly.
+    echo "refused:eligibility-unavailable:cannot read terminal-status set from ${PLAN}; refusing to score a pool whose dependency state is unknown"
+    exit 1
+fi
+raw="$(printf '%s' "$raw" | jq -c --argjson done "$terminal_ids" \
+    '[.[] | select([(.depends_on // [])[] | select((. as $d | $done | index($d)) | not)] | length == 0)]' 2>/dev/null)"
+[ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:no ready packet for role ${ROLE} is both claimable and dependency-clear"; exit 1; }
+
+# LEASES REMAIN UNCHECKED, and that is stated rather than hidden. `query`'s
+# projection carries no lease field, so this script cannot tell whether another
+# host is already working a packet; the duplication half of 660-z774 needs the
+# constraint pushed into the plan binary. Until then a batch may still overlap a
+# sibling's active claim — which is a wasted cycle, not a corrupted ledger,
+# since claim-ledger-node.sh still refuses the second claimant at claim time.
+
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
 # packet can be the thing a macos packet is waiting on, and that downstream
 # weight is exactly the "residual it is holding up" minimax asks us to maximise.

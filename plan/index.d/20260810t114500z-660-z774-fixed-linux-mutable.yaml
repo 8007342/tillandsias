@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t114500z
+events:
+  - packet_id: selector-hands-out-dependency-blocked-work
+    event:
+      type: progress
+      ts: "2026-08-10T11:45:00Z"
+      agent_id: linux-mutable-20260810t114500z
+      host: linux
+      summary: >
+        DEPENDENCY HALF FIXED; lease half explicitly still open. Confirmed the Windows
+        diagnosis exactly: select-work-batch.sh built its pool from `query --status
+        ready --claimable-by`, which filters status, role and release and applies
+        NEITHER dependency-clearing NOR lease-checking — while the script's own header
+        credited `next <role>` with both and claimed only to add cohesion on top. The
+        layer meant to sit ON TOP of claimability had replaced it with a weaker test.
+        This host wrote that script, and the defect survived here because with 100+
+        role-matching packets a blocked pick reads as an odd choice rather than a bug.
+
+        The suggested fix — intersect with `next <role>` — turns out NOT to be
+        available: `next` is capped at five results on purpose ("plan_next is capped at
+        five on purpose"), so it answers "what should I start now", not "what is the
+        eligible set". My first attempt did exactly that and refused for all three
+        roles, which is how the cap was discovered.
+
+        Implemented instead: recompute the dependency test from the folded ledger with
+        the resolver's own rule — a dependency is satisfied only when its packet is
+        terminal (done/completed/obsoleted), and an unresolvable id counts as BLOCKING
+        rather than as an absent constraint.
+
+        VERIFIED IN BOTH DIRECTIONS against `dependencies-of`, because a filter can fail
+        by over-excluding just as easily as by under-excluding, and over-exclusion would
+        starve the siblings:
+          - packets now EXCLUDED: 246 and 247 both depend on 245, which is `ready`;
+            248 depends on all three. The resolver agrees they are blocked.
+          - packets now KEPT: all six in the linux batch report unsatisfied=0.
+
+        Visible effect: the architecture-audit-epic drops from four packets to one.
+        That is the honest number — it was never four parallel packets, it is a serial
+        chain (245 -> 246,247 -> 248) that the selector had been offering as if it could
+        be worked at once, which is also why that epic scored as unusually "greedy".
+        Sibling pools: macOS 57->45 eligible, Windows 62->50. Lower and true.
+
+        STILL OPEN — the lease half, and it needs a code change, not a script change.
+        `query`'s projection carries no lease field, so this script cannot see whether a
+        sibling is already working a packet. Consequence is a wasted cycle rather than a
+        corrupted ledger: claim-ledger-node.sh still refuses the second claimant at
+        claim time. The constraint belongs in the plan binary
+        (`--deps-clear` / `--unleased` on query, as the Windows report suggested);
+        filed there rather than papered over here.
