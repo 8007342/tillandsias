@@ -13345,6 +13345,33 @@ mod tests {
     use std::path::PathBuf;
     use tillandsias_podman::{CommandFailure, CommandOutput, FakeBackend, RetryClass};
 
+    /// Serializes every test in this module that mutates a process-global
+    /// environment variable.
+    ///
+    /// ORDER 639-d2bc. Five tests here `set_var("HOME", …)`. Each already saves
+    /// and restores the previous value, which is good hygiene and does NOT make
+    /// them parallel-safe: cargo runs a binary's tests as threads in ONE
+    /// process, so while any of them holds the temp HOME, every other test in
+    /// the binary sees it. Save/restore bounds the damage in TIME; it does not
+    /// bound it across THREADS.
+    ///
+    /// This is not theoretical — the same shape has already cost two real gate
+    /// failures diagnosed as "unexplained": 638-ehzi (two tests racing on HOME
+    /// and a shared `process::id()` fixture dir, ~1 run in 4) and the
+    /// `spawn_terminal_and_reap` precondition, which asserted a process-global
+    /// zombie count that a neighbour could trip.
+    ///
+    /// Poison-tolerant on purpose: a panicking test poisons the mutex, and
+    /// propagating that turns ONE real failure into a cascade of misleading
+    /// secondary failures that bury the defect which caused them.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn env_guard() -> std::sync::MutexGuard<'static, ()> {
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
     #[test]
     fn inference_disable_flag_truth_table() {
         // Unset / explicit zero / whitespace-only leave inference enabled.
@@ -13380,6 +13407,7 @@ mod tests {
 
     #[test]
     fn nvidia_cdi_available_honors_user_config_dir() {
+        let _env = env_guard();
         // Order 408: a user-level ~/.config/cdi/nvidia.yaml (generatable with
         // NO sudo once the toolkit is installed) must count as "CDI available",
         // so GPU passthrough can be auto-enabled without a second root step.
@@ -18017,6 +18045,7 @@ esac
     /// genuinely misread the former as the latter.
     #[test]
     fn write_forge_gitconfig_states_why_no_redirect_was_written() {
+        let _env = env_guard();
         let _guard = crate::runtime_assets::env_lock();
         let temp = tempfile::tempdir().expect("tempdir");
         let old_home = std::env::var_os("HOME");
@@ -18073,6 +18102,7 @@ esac
 
     #[test]
     fn write_forge_gitconfig_produces_valid_config_with_origin_redirect() {
+        let _env = env_guard();
         // This test mutates HOME: serialize with every other env-mutating
         // test or a parallel thread's set_var races the read inside
         // write_forge_gitconfig (first fired in gate run 20260710T062345Z).
@@ -18171,6 +18201,7 @@ esac
 
     #[test]
     fn write_forge_gitconfig_handles_ssh_origin_with_https_redirect() {
+        let _env = env_guard();
         // HOME-mutating: same serialization requirement as the sibling test.
         let _guard = env_lock();
         let tmp = tempfile::tempdir().expect("temp dir");
@@ -18293,6 +18324,7 @@ esac
 
     #[test]
     fn forge_repo_gitdir_quarantines_local_config_and_preserves_shared_state_mounts() {
+        let _env = env_guard();
         let _guard = env_lock();
         // Order 437: the gitdir facade/quarantine is the OPT-IN host-mount
         // feature; exercise it in host-mount mode.

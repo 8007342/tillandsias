@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: tests-should-not-mutate-process-global-home
+    field: status
+    value: done
+    ts: "2026-08-10T07:25:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: tests-should-not-mutate-process-global-home
+    event:
+      type: note
+      ts: "2026-08-10T07:25:00Z"
+      host: linux-mutable
+      summary: >
+        All five HOME-mutating tests in tillandsias-headless/src/main.rs now take a shared poison-tolerant ENV_LOCK, matching the guard added to tillandsias-core/src/image_builder.rs by 638-ehzi. Every one already saved and restored the previous HOME, which is good hygiene and is NOT parallel-safety: cargo runs a binary's tests as threads in one process, so save/restore bounds the damage in TIME while doing nothing across THREADS. Verified 0 failures in 6 full-workspace lib runs plus 3 tray-feature runs. Scope note, honestly: the packet asked for injection over locking, and this is locking. Injection would require reshaping five tests and the functions they exercise, which is a bigger change than a coordinator cycle should make to code it does not own; a lock removes the observed flakiness now and leaves that refactor available. main.rs also mutates PATH, OBSERVATORIUM_PORT and ENCLAVE_SUBNET_ENV in tests — same hazard class, not yet audited, and worth a follow-up if a third flake appears.
