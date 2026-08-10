@@ -3451,6 +3451,33 @@ inject_startup_context() {
         _cap_advice="The capability probe (${_cap_lib}) is not present in this image, so the fields above are placeholders — treat expert capability as UNVERIFIED and check \`tillandsias-plan capabilities\` by hand."
     fi
 
+    # Order 619-pfsj (C3): the same honesty for the GENERIC ANSWER ENGINE,
+    # REDEFINED for its packaging. project-info.sh is image-baked (order 459 —
+    # no network at image build, so the engine ships in the baked shell layer),
+    # which means its sources are never the mounted checkout and NO relaunch
+    # rebuilds it. `project-expert: ready` above describes the tmpfs INDEX;
+    # this line describes the ENGINE — whether the baked artifact carries the
+    # answer contract this checkout expects (order 531: an artifact can report
+    # ready truthfully while every answer refuses). The probe compares the
+    # engine's embedded manifest (`project-info.sh capabilities`, order 569
+    # pattern) against the checkout's copy of the engine source — versions and
+    # capabilities embedded in the artifacts, never a network probe.
+    local _pe_line _pe_advice
+    local _pe_lib="${BASH_SOURCE[0]%/*}/lib-project-engine-capability.sh"
+    if [[ -r "$_pe_lib" ]]; then
+        # shellcheck source=lib-project-engine-capability.sh
+        source "$_pe_lib"
+        tillandsias_project_engine_capability \
+            "${TILLANDSIAS_PROJECT_ENGINE:-/home/forge/.config-overlay/mcp/project-info.sh}" \
+            "$project_dir"
+        _pe_line="$TILLANDSIAS_PROJECT_ENGINE_LINE"
+        _pe_advice="$(tillandsias_project_engine_advice "$TILLANDSIAS_PROJECT_ENGINE_STATE")"
+    else
+        # A missing probe is its own named fact, not a silent "no skew".
+        _pe_line="project_engine: state=unknown baked=- expected=- missing_in_engine=- engine_only=- probe=helper-missing"
+        _pe_advice="The engine capability probe (${_pe_lib}) is not present in this image, so the fields above are placeholders — treat the answer engine's capability as UNVERIFIED and run \`project-info.sh capabilities\` by hand."
+    fi
+
     # Order 480 follow-up (accelerator envelope): the host probes its own
     # hardware and passes the verdict in; the forge cannot see PCI devices, an
     # NVIDIA driver, or /dev/accel, so it may never attempt this itself.
@@ -3570,6 +3597,10 @@ inject_startup_context() {
 - **Generic Project Index** — \`project-expert: ${_project_experts_status}\`. Query via the \`project-info\` MCP server (\`project_answer\`, \`project_metadata\`, \`project_structure\`).
   - Machine-readable (branch on this, do not parse the prose): \`project_expert_state=${_project_experts_state} project_expert_reason=${_project_experts_reason} project_expert_elapsed=${_project_experts_elapsed}\`
   - \`project-expert\` is \`ready\` when the generic project index is built into tmpfs (\`$FORGE_EXPERTS_STATE_DIR/project-index/index.json\`).
+  - Machine-readable ENGINE-vs-CHECKOUT skew (order 619-pfsj — branch on this, do not parse the prose): \`${_pe_line}\`
+  - \`project-expert: ready\` above describes the tmpfs INDEX, not the engine. The answer engine (\`project-info.sh\`) is IMAGE-BAKED, so unlike the launch-built plan engine no relaunch rebuilds it: \`state=ready\` means the baked engine matches the mounted checkout's answer contract (or the checkout carries none — \`expected=-\`); \`state=skewed\` means this image's engine and the checkout disagree (\`missing_in_engine=\`/\`engine_only=\` name the difference) and only an image rebuild heals it; \`state=stale-engine\` means the engine predates the capability manifest and its abilities are unknowable; \`state=absent\` means no engine is installed.
+  - ${_pe_advice}
+  - With no local inference endpoint, \`project_answer\` still answers the deterministic subset (type, status, commands, layout, actions; plan-backed answers on Tillandsias) and refuses synthesis questions TYPED: \`unsupported: synthesis question — missing_capability=local-inference inference_state=... inference_reason=...\` — branch on \`missing_capability=\`, never parse the prose.
 - **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.
 
 You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA certs.

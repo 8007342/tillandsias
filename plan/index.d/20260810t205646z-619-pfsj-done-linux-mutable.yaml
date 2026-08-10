@@ -1,0 +1,84 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t205646z
+status:
+  - packet_id: project-answer-uniform-surface
+    field: status
+    value: done
+    ts: "2026-08-10T20:56:46Z"
+    host: linux
+
+events:
+  - packet_id: project-answer-uniform-surface
+    event:
+      type: completed
+      ts: "2026-08-10T20:56:46Z"
+      agent_id: linux-mutable-20260810t205646z
+      host: linux
+      summary: >
+        Closed the two criteria the 2026-08-09 slice left open (C1/C4 were already
+        verified there).
+
+        C2 — deterministic no-inference fallback. project_answer now classifies
+        synthesis-shaped questions with a CLOSED deterministic marker vocabulary
+        (mirroring answer.rs::classify — no model, no scoring) and probes inference
+        through the EXISTING lib-inference-state.sh (same endpoint resolution, same 1s
+        budget, same closed reason vocabulary — no new config surface). Deterministic
+        first, in both lanes: a question the plan engine can cite is answered even with
+        a dead endpoint ("review status of 619-pfsj" answers Exact despite the
+        synthesis marker). Only when the deterministic layer refuses AND the question
+        is synthesis-shaped does the typed refusal fire, and it NAMES the missing
+        capability as a machine token: missing_capability=local-inference with the
+        probe's reason (endpoint-unreachable, ...) when no endpoint is available;
+        missing_capability=synthesis-tier when the endpoint IS ready but no tier is
+        wired (397+ family) — blaming the endpoint when the endpoint is fine would
+        send an agent to fix the wrong thing. Verified live with
+        TILLANDSIAS_INFERENCE_ENDPOINT pointed at a dead port: Tillandsias "what's
+        next?" answered Exact/5-citations, both generic fixtures answered
+        Exact/1-citation, and the synthesis question refused typed on all three; every
+        envelope (including every refusal) passed `tillandsias-plan verify-answer`.
+        The inference-ready branch was exercised with a file:// endpoint stub. In
+        passing, the plan-lane EMPTY-OUTPUT fallback still emitted the pre-slice
+        hand-rolled envelope (freshness "now", no `unsupported:` prefix) that
+        verify-answer refuses — it now routes through the one pinned refusal
+        constructor.
+
+        C3 — capability honesty for the image-baked engine. The packaging decision is
+        now EXPLICIT against order 459 (image builds have no network): the generic
+        answer engine IS project-info.sh, baked into the image shell layer, zero
+        build — so its sources are never the mounted checkout and NO relaunch rebuilds
+        it. The engine carries an embedded capability manifest
+        (PROJECT_INFO_ENGINE_MANIFEST, engine-contract-v2) self-reported via
+        `project-info.sh capabilities` (order-569 pattern; a shell engine's "embedded
+        at compile time" is literal text in the baked artifact). New
+        lib-project-engine-capability.sh (direct-runnable, no side effects, no
+        jq/python — same testability shape as lib-expert-capability.sh) compares that
+        self-report against the checkout's copy of the engine source, read TEXTUALLY
+        (never executed), and renders the pinned line `project_engine:
+        state=<ready|absent|stale-engine|skewed> baked= expected= missing_in_engine=
+        engine_only=`. All four verdicts exercised live: matching checkout -> ready;
+        v3-expecting checkout vs v2 engine -> skewed naming the missing tokens
+        (advice: IMAGE REBUILD — waiting/relaunching is futile, the order-531
+        redefinition for this packaging); the pre-slice HEAD engine ->
+        stale-engine (it prints no manifest; capabilities unknowable, not assumed);
+        no engine -> absent; a non-Tillandsias checkout -> ready with expected=-
+        (no expectation is not evidence of skew). Wired into forge discovery as
+        sub-bullets of the EXISTING Generic Project Index section (C4 stays at one
+        mention) with a helper-missing fallback that is named, never silent;
+        Containerfile COPYs the helper beside its two siblings.
+
+        Verification: cargo test -p tillandsias-plan 124/124; ./build.sh --check
+        green; instant pre-build litmus 195/195 executed, 0 fail.
+
+        FINDINGS NOTICED, NOT FIXED (for the coordinator): (1) the generic lane's
+        deterministic subset is thinner than the spec enumeration — index.json carries
+        path/types/meta only, so commands/actions/layout are not yet answerable; type
+        + cited description is what answers today (the shape C1 was audited closed
+        with). (2) Plan-lane routing keys on tillandsias-plan bin+index RESOLVING
+        (with a $HOME/src/tillandsias fallback), not on the MOUNTED project being
+        Tillandsias — correct inside the forge mount layout, but on a host with
+        ~/src/tillandsias present a generic project's question can misroute to
+        another checkout's plan lane (fixture verification required a HOME override).
+        (3) No litmus pins the project_engine grammar or the synthesis-refusal
+        behaviour; design constraint 9 assigned the generic-bootstrap Test entries and
+        litmus-bindings rows to 619-3y75, which the base ledger already marks
+        completed — that pinning currently has no open owner.

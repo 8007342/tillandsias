@@ -5,7 +5,11 @@
 #
 # Tools: project_structure, file_summary, search_code, project_list, project_info,
 #        project_type, project_metadata, find_files, grep_code, git_status,
-#        read_file, plan_query
+#        read_file, plan_query, project_answer
+#
+# Run with the single argument `capabilities` to print this engine's embedded
+# capability manifest and exit (order 569 pattern; see the manifest block below
+# and images/default/lib-project-engine-capability.sh for the skew probe).
 
 set -euo pipefail
 
@@ -189,6 +193,160 @@ resolve_plan_bin() {
         fi
     fi
     printf '\n'
+}
+
+# ── Engine identity + capability manifest (orders 569, 619-pfsj C3) ─────────
+# @trace spec:forge-environment-discoverability, order:619-pfsj
+#
+# THE PACKAGING DECISION, made explicitly against the order-459 constraint
+# (image builds have no network): this generic answer engine is THIS SCRIPT,
+# baked into the forge image at /home/forge/.config-overlay/mcp/project-info.sh.
+# Zero build, zero vendoring, zero launch-time compilation. That choice has a
+# consequence order 531 already taught us to name: the running engine's sources
+# are NOT the mounted checkout, so "the launch finished" can never mean "the
+# engine behaves as this checkout's contract promises". A forge whose image was
+# baked from an older tree runs an older engine while every health signal reads
+# green.
+#
+# So the engine carries its own capability manifest, embedded in the artifact
+# itself — the `capabilities` subcommand pattern of order 569, adapted for a
+# shell engine where "embedded at compile time" means "literal text in the
+# baked script". Two readers, one manifest:
+#
+#   1. the RUNNING ARTIFACT self-reports: `project-info.sh capabilities`
+#      prints this block and exits before the JSON-RPC loop — asked of the
+#      artifact, never inferred from the checkout;
+#   2. the MOUNTED CHECKOUT's expectation is read TEXTUALLY out of its copy of
+#      this file by lib-project-engine-capability.sh (no execution of checkout
+#      code, the same discipline as reading capabilities.txt).
+#
+# Tokens are `[a-z][a-z0-9-]*`, one per line, sorted; `engine-contract-vN` is
+# the contract version and MUST be bumped whenever the answer contract changes
+# behaviour. v2 = 619-pfsj: typed synthesis refusals + no-inference fallback.
+PROJECT_INFO_ENGINE_MANIFEST='
+engine-contract-v2
+file-summary
+find-files
+generic-lane
+git-status
+grep-code
+no-inference-fallback
+plan-lane
+plan-query
+project-answer
+project-info
+project-list
+project-metadata
+project-structure
+project-type
+read-file
+search-code
+sibling-projects
+synthesis-refusal-typed
+typed-refusal
+'
+
+if [ "${1:-}" = "capabilities" ]; then
+    printf '%s\n' "$PROJECT_INFO_ENGINE_MANIFEST"
+    exit 0
+fi
+
+# ── project_answer C2/C5 helpers (order 619-pfsj) ───────────────────────────
+# @trace spec:forge-environment-discoverability, order:619-pfsj
+#
+# _pa_is_synthesis — deterministic question classification, mirroring the
+# no-fuzzy discipline of answer.rs::classify: a CLOSED marker vocabulary, no
+# model, no scoring. A question is SYNTHESIS-shaped when answering it requires
+# composing an explanation rather than looking a fact up — the class C5 says
+# must refuse typed when it cannot be served, never be answered with a guess
+# or with a deterministic fact dressed up as the asked-for explanation.
+#
+# Deliberately NOT synthesis: "how do I ..." (a commands question — the
+# deterministic subset), "describe ..." (the cited README description IS the
+# deterministic answer), and any question the deterministic layer can cite an
+# answer for — the plan lane runs FIRST and a cited deterministic answer always
+# wins (inference adds recall, never authority).
+_pa_is_synthesis() {
+    _pas_q=" $(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '?!.,;:()' ' ') "
+    case "$_pas_q" in
+        *" why "* | *" explain "* | *" summarize "* | *" summarise "* | \
+            *" architecture "* | *" compare "* | *" review "* | \
+            *" analyze "* | *" analyse "* | *" recommend "* | \
+            *" rationale "* | *" refactor "* | *" redesign "* | \
+            *" tradeoff "* | *" tradeoffs "* | *" trade-off "* | *" trade-offs "* | \
+            *" how does "* | *" how it works "* | *" should i "* | *" should we "*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# _pa_refusal <reason> — the typed refusal in the ratified envelope. The
+# rendering is pinned by answer.rs (`unsupported: <reason>`, zero citations,
+# confidence=unsupported, a real freshness struct) so verify-answer accepts it
+# and an agent can branch on it without parsing prose. Never an error string,
+# never a silent degrade.
+_pa_refusal() {
+    _par_commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    _par_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    _par_root=$(pwd -P)
+    jq -n \
+        --arg reason "$1" \
+        --arg commit "$_par_commit" \
+        --arg now "$_par_now" \
+        --arg root "$_par_root" \
+        '{
+            answer: ("unsupported: " + $reason),
+            citations: [],
+            freshness: {source_commit: $commit, indexed_at: $now},
+            confidence: "unsupported",
+            citation_root: $root
+        }'
+}
+
+# _pa_probe_inference — is a local inference endpoint available? Asked through
+# the EXISTING probe (lib-inference-state.sh, orders 392/392a): same endpoint
+# resolution (TILLANDSIAS_INFERENCE_ENDPOINT, default http://inference:11434),
+# same 1s budget, same closed reason vocabulary. No new config surface. A
+# missing helper is its own named fact (probe-helper-missing), never a silent
+# "unavailable" — an absent probe reporting a verdict would be the same lie
+# `experts: ready` told in order 531.
+_pa_probe_inference() {
+    TILLANDSIAS_INFERENCE_STATE="unknown"
+    TILLANDSIAS_INFERENCE_REASON="probe-helper-missing"
+    for _pai_lib in \
+        "${TILLANDSIAS_INFERENCE_STATE_LIB:-}" \
+        "${BASH_SOURCE[0]%/*}/../../lib-inference-state.sh" \
+        "/usr/local/lib/tillandsias/lib-inference-state.sh"; do
+        if [ -n "$_pai_lib" ] && [ -r "$_pai_lib" ]; then
+            # shellcheck source=/dev/null
+            . "$_pai_lib"
+            tillandsias_inference_state || true
+            return 0
+        fi
+    done
+    return 0
+}
+
+# _pa_synthesis_refusal — C2/C5: the typed refusal for a synthesis question the
+# deterministic layer could not cite an answer for. It NAMES the missing
+# capability as a machine token, and the two branches are deliberately
+# distinct: blaming the endpoint when the endpoint is fine (or vice versa)
+# would send an agent to fix the wrong thing.
+#
+#   missing_capability=local-inference  no endpoint is available; the reason is
+#                                       the probe's closed vocabulary
+#                                       (endpoint-unreachable, no-models, ...)
+#   missing_capability=synthesis-tier   the endpoint IS ready but no synthesis
+#                                       tier is wired into this surface yet
+#                                       (the 397+ family owns the tiers)
+_pa_synthesis_refusal() {
+    _pa_probe_inference
+    if [ "${TILLANDSIAS_INFERENCE_STATE:-unknown}" = "ready" ]; then
+        _pa_refusal "synthesis question — missing_capability=synthesis-tier inference_state=ready inference_reason=-; the deterministic layer holds no citable answer for it, and no synthesis tier is wired into project_answer yet (inference adds recall, never authority — citations stay deterministic-layer products). Deterministic questions (type, status, commands, layout, actions) still answer."
+    else
+        _pa_refusal "synthesis question — missing_capability=local-inference inference_state=${TILLANDSIAS_INFERENCE_STATE:-unknown} inference_reason=${TILLANDSIAS_INFERENCE_REASON:--}; the deterministic layer holds no citable answer for it and no local inference endpoint is available to add recall. Deterministic questions (type, status, commands, layout, actions) still answer from the index alone."
+    fi
 }
 
 # Read JSON-RPC requests from stdin, respond on stdout
@@ -466,12 +624,43 @@ ${preview}"
                         _pbin="$(resolve_plan_bin)"
                         _pidx="$(resolve_plan_index)"
                         if [ -n "$_pbin" ] && [ -n "$_pidx" ]; then
+                            # DETERMINISTIC FIRST (C5): the plan engine runs
+                            # before any synthesis consideration, so a question
+                            # it can cite an answer for is answered — with no
+                            # inference endpoint, with a dead one, always.
+                            # Inference adds recall, never authority.
                             _ans=$("$_pbin" --index "$_pidx" answer "$_q" 2>/dev/null || true)
-                            if [ -n "$_ans" ]; then
-                                result="$_ans"
+                            _conf=$(printf '%s' "$_ans" | jq -r '.confidence // empty' 2>/dev/null || true)
+                            if [ -z "$_ans" ] || [ -z "$_conf" ]; then
+                                # The engine produced no envelope at all. This
+                                # used to emit a hand-rolled approximation
+                                # (freshness: "now", no `unsupported:` prefix)
+                                # that verify-answer REFUSED — the exact class
+                                # of defect the C1 slice removed from the
+                                # generic lane. Route through the one pinned
+                                # refusal constructor instead.
+                                result=$(_pa_refusal "the plan engine produced no answer envelope for this question (engine=${_pbin})")
+                            elif [ "$_conf" = "unsupported" ] && _pa_is_synthesis "$_q"; then
+                                # C2: the deterministic layer refused AND the
+                                # question needs synthesis — refuse TYPED,
+                                # naming the missing capability, instead of
+                                # forwarding a refusal that talks about ledger
+                                # tokens for a question that was never about
+                                # the ledger.
+                                result=$(_pa_synthesis_refusal)
                             else
-                                result='{"answer":"the project expert cannot answer this question","citations":[],"freshness":"now","confidence":"unsupported"}'
+                                result="$_ans"
                             fi
+                        elif _pa_is_synthesis "$_q"; then
+                            # Generic lane, synthesis question (C2/C5). The
+                            # generic deterministic answer below is
+                            # question-blind (it reports type/name/description
+                            # whatever was asked), so classification must gate
+                            # it: answering "why is the parser slow?" with
+                            # "Project type: node" would be a wrong answer
+                            # dressed as confidence=exact. Refuse typed,
+                            # naming what is actually missing.
+                            result=$(_pa_synthesis_refusal)
                         else
                             # Generic project index lane.
                             #
