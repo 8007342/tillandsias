@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: forge-opsx-skill-sync-dirties-checkout
+    field: status
+    value: completed
+    ts: "2026-08-10T01:25:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: forge-opsx-skill-sync-dirties-checkout
+    event:
+      type: note
+      ts: "2026-08-10T01:25:00Z"
+      host: linux-mutable
+      summary: >
+        Closed on evidence during a coordinator stranded-claim sweep. Every named deliverable is present: scripts/check-opsx-generated-dirt.sh exists and returns its pinned grammar (ok:clean-tree here), skills/meta-orchestration documents the MERGE path including the ok:opsx-only verdict twice, and plan/issues/forge-opsx-skill-sync-dirties-checkout-2026-07-31.md exists. The packet had sat in_progress with no event ever recorded.
