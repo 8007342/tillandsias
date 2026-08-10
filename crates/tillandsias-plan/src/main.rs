@@ -7,8 +7,8 @@
 
 use std::path::{Path, PathBuf};
 use tillandsias_plan::{
-    Ledger, Schema, answer, count_release, edit, groundtruth, loop_status, methodology, spec,
-    str_field, str_list,
+    Ledger, Schema, answer, count_release, edit, fragments, groundtruth, loop_status, methodology,
+    spec, str_field, str_list,
 };
 
 /// ORDER 569. The capability manifest, embedded from the crate's own
@@ -58,6 +58,7 @@ fn capability_tokens() -> Vec<&'static str> {
 /// without naming it here (or in capabilities.txt) is exactly the omission this
 /// order exists to surface.
 const DISPATCH_ARMS: &[&str] = &[
+    "set-field",
     "append-event",
     "answer",
     "blocked-by",
@@ -203,6 +204,16 @@ const USAGE: &str = concat!(
     "                                     IS the active release) against the FOLDED ledger's release\n",
     "                                     counts, and fails loud on stale prose. --ledger overrides\n",
     "                                     plan/index.yaml; --render prints the canonical count line.\n",
+    "           set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT]\n",
+    "                                     ORDER 636-9m79. Correct a packet field by writing the LWW\n",
+    "                                     channel as a NEW fragment. USE THIS instead of hand-authoring:\n",
+    "                                     re-declaring a packet under `packets:` is a G-Set no-op that\n",
+    "                                     parses, validates and silently does nothing — three hosts hit\n",
+    "                                     that on 2026-08-09 and 11 of 21 completions were discarded.\n",
+    "                                     Field-generic despite the channel's `status:` name (642-fedr).\n",
+    "                                     Resolves against the FOLDED ledger, so unlike append-event it\n",
+    "                                     reaches fragment-only packets (600-c266). Refuses an unknown\n",
+    "                                     reference; reports a no-op instead of writing one.\n",
     "           loop-status-append [--ts ISO] [--host H] [--suffix S] [--file F]\n",
     "                                     ORDER 582-nqw5. Append ONE `## Cycle …` section (stdin or\n",
     "                                     --file) as a NEW fragment file — concurrent hosts each write\n",
@@ -2086,6 +2097,144 @@ fn main() {
         // Order 569. Was `usage()`, which conflated "this binary cannot do that"
         // with "you forgot an operand". The wrapper needs the two apart: the
         // first means RELAUNCH/REBUILD, the second means fix the call.
+        // ORDER 636-9m79. The write path for a field correction, so the LWW
+        // channel is never hand-authored.
+        //
+        // THREE HOSTS got this wrong on 2026-08-09, independently, within hours
+        // of each other and of it being documented:
+        //   linux    re-declared a packet under `packets:` to mark it done — a
+        //            G-Set no-op; 11 of 21 completions were discarded (635-i6vm)
+        //   macos    wrote `type: completed` EVENTS with no status block, so a
+        //            packet that passed 5/5 with evidence stayed claimable
+        //   windows  filed 642-fedr on the naming: the channel is called
+        //            `status:` but corrects ANY field, so nobody finds it
+        //
+        // Three independent hosts is a write-path defect, not three mistakes.
+        // 636-9m79's exit criteria call a helper "the strongest — it removes the
+        // choice". This also closes 600-c266: unlike `append-event`, which
+        // locates packets by their item prefix in the BASE ledger and so cannot
+        // see fragment-only packets, this resolves against the FOLDED ledger.
+        //
+        // Named `set-field`, not `set-status`: the channel is field-generic, and
+        // naming it for one field is exactly what hid it.
+        "set-field" => {
+            // args[0] is the subcommand itself (same convention as the `status`
+            // arm's args.get(1)); skip it or the subcommand name becomes the
+            // packet reference and every invocation refuses.
+            let positional: Vec<String> = {
+                let mut out = Vec::new();
+                let mut i = 1;
+                while i < args.len() {
+                    if args[i].starts_with("--") {
+                        i += 2;
+                    } else {
+                        out.push(args[i].clone());
+                        i += 1;
+                    }
+                }
+                out
+            };
+            let flagged = |name: &str| -> Option<String> {
+                args.iter()
+                    .position(|a| a == name)
+                    .and_then(|i| args.get(i + 1))
+                    .cloned()
+            };
+            if positional.len() < 3 {
+                eprintln!(
+                    "usage: tillandsias-plan set-field <id|order> <field> <value> [--ts ISO] [--host H] [--reason TEXT]"
+                );
+                std::process::exit(2);
+            }
+            let (target, field, value) = (
+                positional[0].clone(),
+                positional[1].clone(),
+                positional[2].clone(),
+            );
+
+            // Resolve against the FOLDED ledger so a fragment-only packet is
+            // reachable. A typo must refuse, never write a fragment that
+            // silently applies to nothing.
+            let Some(packet) = ledger.resolve(&target) else {
+                eprintln!(
+                    "error: no packet resolves '{target}' in the folded ledger (base + fragments)"
+                );
+                std::process::exit(1);
+            };
+            let Some(pid) = str_field(packet, "packet_id").map(|s| s.to_string()) else {
+                eprintln!("error: resolved packet has no packet_id");
+                std::process::exit(1);
+            };
+            let current = str_field(packet, &field).unwrap_or("<unset>").to_string();
+            if current == value {
+                println!("ok: no-op — {pid}.{field} is already '{value}'");
+                return;
+            }
+
+            let ts = flagged("--ts").unwrap_or_else(|| {
+                let secs = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                answer::epoch_to_iso8601(secs)
+            });
+            let host = flagged("--host").unwrap_or_else(|| {
+                std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
+            });
+            let reason = flagged("--reason").unwrap_or_default();
+
+            let compact = loop_status::iso_to_compact(&ts);
+            let suffix = format!(
+                "{:08x}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.subsec_nanos())
+                    .unwrap_or(0)
+            );
+            let dir = fragments::fragment_dir(&index);
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                eprintln!("error: create {}: {e}", dir.display());
+                std::process::exit(1);
+            }
+            let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+
+            let mut body = String::new();
+            body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+            body.push_str("# Written by: tillandsias-plan set-field (order 636-9m79).\n");
+            body.push_str("#\n");
+            body.push_str(
+                "# The LWW channel below is named `status:` for historical reasons but\n",
+            );
+            body.push_str("# corrects ANY field (642-fedr). Re-declaring the packet under\n");
+            body.push_str("# `packets:` would be a G-Set no-op and would silently do nothing.\n");
+            body.push_str("status:\n");
+            body.push_str(&format!("  - packet_id: {pid}\n"));
+            body.push_str(&format!("    field: {field}\n"));
+            body.push_str(&format!("    value: {value}\n"));
+            body.push_str(&format!("    ts: \"{ts}\"\n"));
+            body.push_str(&format!("    host: {host}\n"));
+            if !reason.is_empty() {
+                body.push_str("\nevents:\n");
+                body.push_str(&format!("  - packet_id: {pid}\n"));
+                body.push_str("    event:\n");
+                body.push_str("      type: note\n");
+                body.push_str(&format!("      ts: \"{ts}\"\n"));
+                body.push_str(&format!("      host: {host}\n"));
+                body.push_str(&format!(
+                    "      summary: >\n        {}\n",
+                    reason.replace('\n', " ")
+                ));
+            }
+
+            if let Err(e) = std::fs::write(&path, body) {
+                eprintln!("error: write {}: {e}", path.display());
+                std::process::exit(1);
+            }
+            println!(
+                "ok: {pid}.{field} {current} -> {value} ({})",
+                path.display()
+            );
+        }
         other => unknown_subcommand(other),
     }
 }

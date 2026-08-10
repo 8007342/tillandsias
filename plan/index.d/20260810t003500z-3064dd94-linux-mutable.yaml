@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fragment-status-write-path-should-refuse-not-noop
+    field: status
+    value: completed
+    ts: "2026-08-10T00:35:00Z"
+    host: linux-mutable
+
+events:
+  - packet_id: fragment-status-write-path-should-refuse-not-noop
+    event:
+      type: note
+      ts: "2026-08-10T00:35:00Z"
+      host: linux-mutable
+      summary: >
+        Implemented as tillandsias-plan set-field. A helper rather than a refusal, per this packet's own exit criteria: it removes the choice instead of policing it. Resolves against the FOLDED ledger so it reaches fragment-only packets, which also closes 600-c266 (append-event locates packets by their item prefix in the base and cannot see them). Named set-field, not set-status: the channel is field-generic and naming it for one field is exactly what hid it (642-fedr). Refuses an unknown reference and reports a no-op instead of writing one. Registered in DISPATCH_ARMS, usage and capabilities.txt — the crate's own every_dispatch_arm_is_documented_in_usage test caught the omission, which is that guard working as designed.
