@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260810t235900z
+packets:
+
+  - packet_id: three-litmus-tests-depend-on-a-vm-exec-example-that-never-existed
+    order: 673-y7gy
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "litmus vault-policy-403 / vault-auto-unseal / terminal-attach all invoke `cargo run --example vm-exec` — an instrument with no trace in tree or history"
+    kind: bugfix+litmus
+    deliverable: build the vm-exec (and replay-audit-log) host-shell examples OR re-instrument the three tests on what exists; host_kind/precondition gates where a live substrate is required
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [litmus, host-shell, vault, instruments]
+    estimated_hours: 4
+    context: >
+      Found during the 2026-08-10 freshness audit of
+      litmus-vault-recreate-mutex.yaml (which PASSED twice — the audit
+      target is healthy). The tillandsias-vault quick tier fails 12/13 via
+      litmus:vault-policy-forge-cannot-read-github-token step 1: "error: no
+      example target named `vm-exec` in `tillandsias-host-shell` package".
+      grep shows THREE bound tests invoking it
+      (litmus-vault-policy-forge-cannot-read-github-token.yaml,
+      litmus-vault-auto-unseal-no-prompt.yaml — which also wants a
+      `replay-audit-log` example, equally absent —
+      litmus-cross-platform-terminal-attach.yaml), and `git log -S vm-exec`
+      finds no commit that ever added it: the tests were authored against a
+      planned instrument that was never built. They are silent in the
+      instant tier and fail loud only when a quick-tier run executes them —
+      phantom coverage in exactly the 660-ryhn sense. CROSS-LINK for
+      606-bvnp: the amended SSH-CA design's §4a cites the vault-policy-403
+      test as the M2 cross-sign template; whoever builds M2 must know the
+      template's step-1 instrument is currently broken and should model the
+      ASSERTION shape (403 on cross-policy read), not the vm-exec plumbing.
+    exit_criteria:
+      - the three tests either execute green with a real in-tree instrument or are re-instrumented/gated so the quick tier is honest on every host kind
+      - no bound litmus invokes a cargo example target that does not exist (executable check over bindings)
+    events:
+      - ts: "2026-08-10T23:59:00Z"
+        event: filed
+        summary: >
+          Filed from the cycle-5 freshness audit; failure reproduced twice
+          with full capture; instrument absence verified in tree and history.

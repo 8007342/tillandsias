@@ -1,5 +1,6 @@
 # @trace spec:tillandsias-vault
 # freshness: auditor=linux-opencode-metaorch-20260725 date=2026-07-25 verdict=updated scope=order-463-bounded-vault-lock
+# freshness: auditor=linux-macuahuitl-fable5-20260810t2359z date=2026-08-10 verdict=refreshed scope=executed PASS twice in the tillandsias-vault quick tier on live substrate same day; the tier's one FAIL is a different test's phantom vm-exec instrument (filed 673-y7gy), not this mutex
 name: litmus:vault-recreate-mutex
 spec: tillandsias-vault
 phase: pre-build
