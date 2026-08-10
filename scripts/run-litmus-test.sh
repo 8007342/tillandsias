@@ -353,6 +353,53 @@ get_test_phase() {
     fi
 }
 
+# Order 661-emqi. A test may declare the host kind it requires; anywhere else it
+# SKIPS instead of failing. Defaults to `any`, so every existing test is
+# unaffected — an absent field must never start gating anything.
+#
+# The motivating case: litmus:forge-policy-binary-discoverability hardcodes
+# /home/forge/.cache, which exists only inside the forge container. Bound and run
+# on a Linux host it failed with `mktemp: ... No such file or directory` — a red
+# that says nothing about the product. Left unbound it was silent instead, which
+# is the condition 660-ryhn is about. Neither is acceptable; SKIP is the honest
+# third answer, and the runner already skips for phase and size.
+get_test_host_kind() {
+    local file="$1"
+
+    if command -v yq &>/dev/null; then
+        yq eval '.host_kind // "any"' "$file" 2>/dev/null || echo "any"
+    else
+        awk '
+            /^host_kind: / {
+                gsub(/^host_kind: /, "");
+                print
+                found=1
+                exit
+            }
+            END {
+                if (!found) print "any"
+            }
+        ' "$file"
+    fi
+}
+
+# The kind of host this runner is on. TILLANDSIAS_HOST_KIND is authoritative when
+# set (the forge sets it; check-credential-channel.sh:66 already trusts it);
+# otherwise fall back to uname. Deliberately coarse — this gate exists to keep a
+# forge-only test off a laptop, not to model the full host taxonomy.
+current_host_kind() {
+    if [[ -n "${TILLANDSIAS_HOST_KIND:-}" ]]; then
+        printf '%s' "$TILLANDSIAS_HOST_KIND"
+        return
+    fi
+    case "$(uname -s 2>/dev/null)" in
+        Darwin)                      printf 'macos' ;;
+        Linux)                       printf 'linux' ;;
+        MINGW*|MSYS*|CYGWIN*)        printf 'windows' ;;
+        *)                           printf 'unknown' ;;
+    esac
+}
+
 get_test_size() {
     local file="$1"
 
@@ -995,6 +1042,17 @@ run_tests_for_spec() {
         test_phase="$(get_test_phase "$test_file")"
         if [[ "$FILTER_PHASE" != "all" && "$test_phase" != "$FILTER_PHASE" ]]; then
             log_test_result "$spec_id" "$test_name" "SKIP" "Phase mismatch: $test_phase"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
+
+        # Order 661-emqi. Host-kind gate, before size so a forge-only test on a
+        # laptop reports WHY it did not run rather than looking like a size miss.
+        local test_host_kind
+        test_host_kind="$(get_test_host_kind "$test_file")"
+        if [[ "$test_host_kind" != "any" && "$test_host_kind" != "$(current_host_kind)" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Host-kind mismatch: needs ${test_host_kind}, this host is $(current_host_kind)"
             spec_skipped=1
             test_count=$((test_count+1))
             continue

@@ -155,7 +155,6 @@ specs:
   - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
-  - litmus:pickup-role-grammar-shape
   coverage_ratio: 75
   last_verified: '2026-07-15'
 - spec_id: codex-tray-launcher
@@ -213,6 +212,7 @@ specs:
   - litmus:opencode-vault-auth-content
   - litmus:codex-safe-state-shape
   - litmus:forge-agent-result-format
+  - litmus:forge-policy-binary-discoverability
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build

@@ -3,6 +3,13 @@
 name: litmus:forge-policy-binary-discoverability
 spec: default-image
 phase: pre-build
+# Order 661-emqi. The steps below mktemp under /home/forge/.cache, which exists
+# only inside the forge container; on a host they fail with "No such file or
+# directory" — a red that says nothing about the product. Declaring the host kind
+# makes the runner SKIP with the reason named, so the test can finally be BOUND
+# (it was unbound and therefore silent, which 660-ryhn is about) without
+# reddening host suites.
+host_kind: forge
 description: >
   Pin CARGO_TARGET_DIR-aware binary resolution across script wrappers:
   verify scripts/check-no-python-scripts.sh and scripts/tillandsias-policy
