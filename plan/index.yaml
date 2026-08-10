@@ -31125,6 +31125,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-10T03:55:00Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: >
+            Runtime reproduction ATTEMPTED and INCONCLUSIVE — recorded rather than concluded. Measured on linux_mutable: enclave-only gives DNS FAIL + no HTTPS; dual-homed gives DNS RESOLVED + no HTTPS. Read alone that says the divergence is harmless. The CONTROL says otherwise: the DEFAULT podman network also fails while the host itself gets 200, so container egress is unavailable on this host entirely — an environment condition, not a property of tillandsias-egress (which inspects correctly as internal:false, bridge, one subnet, DNS on). Criteria 2-4 remain OPEN and need a host with working rootless container egress; run both controls there, and only trust the enclave/egress comparison if the default-network control returns 200. Two instrument errors preceded this: the first probe used /dev/tcp, a bash feature, while the image's /bin/sh is busybox, so both initial TCP-BLOCKED readings were pure instrument error. Verify the instrument, then the control, then believe the measurement.
+        - type: progress
           ts: "2026-08-10T03:25:00Z"
           agent_id: "unknown"
           host: linux_mutable

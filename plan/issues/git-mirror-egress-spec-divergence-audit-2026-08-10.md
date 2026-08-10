@@ -108,3 +108,57 @@ visible at the call site, or the next reader re-derives this audit.
   the same pass, or it becomes the next 606-9wqd.
 - This audit did not check the other `ENCLAVE_EGRESS_NETS` uses in `main.rs`
   beyond the three resolved above; 7 uses exist and 3 were located.
+
+---
+
+## Runtime reproduction attempt (same day, linux_mutable) — INCONCLUSIVE
+
+Criteria 2–4 need a runtime reproduction. This host attempted one and the
+environment cannot support it. Recording the attempt because the near-miss is
+more instructive than the result.
+
+### Measured
+
+| posture | DNS | HTTPS (curl, 3 destinations) |
+|---|---|---|
+| `tillandsias-enclave` only | FAIL | `000` — no connection |
+| `tillandsias-enclave,tillandsias-egress` (the mirror's actual posture) | RESOLVED | `000` — no connection |
+| **CONTROL: default podman network** | — | **`000` — no connection** |
+| **CONTROL: the host itself** | — | **`200`** |
+
+`tillandsias-egress` inspects as `internal: false`, bridge driver, one subnet,
+DNS enabled — configured as intended. `tillandsias-enclave` is correctly
+`internal: true`.
+
+### Why this proves nothing about the packet
+
+The control is what matters: **the DEFAULT podman network also fails**, while
+the host reaches GitHub fine. Container egress is unavailable on this host
+altogether — an environment condition, not a property of `tillandsias-egress`.
+
+So the reproduction cannot distinguish "the egress leg grants arbitrary
+outbound access" from "nothing has outbound access here", and criteria 2–4
+remain open. It needs a host with working rootless container egress.
+
+### The wrong conclusion this nearly produced
+
+Read without the control, the first two rows say: *dual-homing grants no working
+egress, therefore the spec divergence is harmless and 606-9wqd can be closed as
+theoretical.* That is comfortable, it matches the numbers, and it is **wrong** —
+it would have closed a security packet on an artifact of the test environment.
+
+It is also the exact failure class this session keeps finding: an environment
+fault wearing the costume of a real result (631-* missing jq read as a drained
+ledger; 643-bnag branching on output volume rather than exit code; a reclaimer
+reporting `reclaimed=0` because it looked in the wrong place). The instrument
+was wrong twice in this one probe before the control caught it — the first pass
+used `/dev/tcp`, which is a bash feature, and `/bin/sh` in that image is
+busybox, so both initial "TCP-BLOCKED" readings were pure instrument error.
+
+**Verify the instrument, then the control, then believe the measurement.**
+
+### What the next host needs
+
+Run the two postures plus BOTH controls (default network, and the host) on a
+machine with working rootless container egress. Only if the default-network
+control returns 200 does the enclave/egress comparison mean anything.
