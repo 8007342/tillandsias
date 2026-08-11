@@ -1,0 +1,46 @@
+events:
+  - packet_id: opentelemetry-evaluation-for-loop-telemetry
+    event:
+      type: completed
+      ts: "2026-08-11T12:31:01Z"
+      agent_id: linux-mutable
+      summary: >
+        682-x8df RESEARCH deliverable complete: decision record
+        plan/issues/opentelemetry-evaluation-2026-08-11.md answering all five
+        questions with a recommendation. DECISION: OpenTelemetry is DECLINED for
+        v0.6 and deferred as a future-only option; the local-telemetry milestone
+        (682-u3si) and distillation packet (682-43mi) proceed UNBLOCKED on the
+        homegrown append-then-distill JSONL model already shipped (682-m8ek
+        per-server MCP usage, 682-epud per-cycle flow/overhead_ratio, 682-emvg
+        build/test timing). RATIONALE grounded in the four local invariants:
+        (1) OTel's one strength is exporting to a live collector, which is
+        exactly the arbitrary network egress the enclave forbids (squid
+        allowlist; 606/654 git-mirror egress work) — a live OTLP/collector does
+        NOT fit; its file/stdout exporters are experimental and emit a heavier
+        OTLP-JSON envelope around facts we store one-line-per-event.
+        (2) OTel has no bash SDK; its only mature SDK (Python) is forbidden by
+        tlatoani_hard_no_python, and every other SDK drags a language runtime +
+        dependency tree into the forge image to replace a printf — high cost,
+        near-zero marginal capability. (3) For finding orchestration
+        bottlenecks the purpose-built flat records already beat a generic
+        observability envelope; OTel's differentiators (cross-service tracing,
+        backend interop, semantic conventions) have no consumer inside the
+        enclave. (4) CRDT: our per-host-append immutable records +
+        coordinator-distill fold IS a G-Set/LWW CRDT (plan/index.d semantics);
+        OTel's temporality/cumulative aggregation is stateful-collector-shaped
+        and must be defeated to become mergeable — it fights, not composes.
+        Recorded SMALLEST FIRST RUNG for any future reconsideration: timing:/span
+        channel only, one non-python SDK, file/stdout exporter only (never OTLP
+        or a collector), pinned to a released 1.x spec with a STABLE non-python
+        file exporter (does not exist today), run strictly beside the existing
+        JSONL logs during migration and never replacing them; gated on three
+        currently-false triggers (real external consumer, sanctioned enclave
+        egress path, stable non-python file exporter). No code, no SDK, no build
+        — decision record only. yq-validated.
+
+status:
+  - packet_id: opentelemetry-evaluation-for-loop-telemetry
+    field: status
+    value: done
+    ts: "2026-08-11T12:31:01Z"
+    host: linux-mutable
