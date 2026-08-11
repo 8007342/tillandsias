@@ -1,0 +1,46 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: windows-20260811t054000z
+status:
+  - packet_id: stranded-in-progress-packets-are-invisible-both-ways
+    field: status
+    value: completed
+    ts: "2026-08-11T05:40:00Z"
+    host: windows
+
+events:
+  - packet_id: secure-channel-maturity-ladder
+    event:
+      type: progress
+      ts: "2026-08-11T05:40:00Z"
+      agent_id: windows-20260811t054000z
+      summary: >
+        RECORDED REASON FOR REMAINING in_progress (641-e2qa closure
+        requirement): this is a kind:master-plan criteria holder for the
+        M0-M4 secure-channel maturity ladder — a long-horizon tracking
+        packet, not an interrupted work claim. It has no parseable activity
+        timestamp in its events, so expire-claims deliberately never touches
+        it (unknown-age is never auto-expired). Its linux owner should
+        either stamp it with a dated progress event when the ladder next
+        advances or convert it to the milestone/burndown pattern so it
+        stops registering as in_progress at all. Until then this entry in
+        check-stranded-in-progress output is EXPLAINED, not stranded.
+
+  - packet_id: stranded-in-progress-packets-are-invisible-both-ways
+    event:
+      type: completed
+      ts: "2026-08-11T05:40:00Z"
+      agent_id: windows-20260811t054000z
+      summary: >
+        CLOSED against its verifiable closure: "stranded=0, or every
+        remaining entry carries a recorded reason for still being in
+        flight." Final state 2026-08-11: checker reports exactly one entry
+        (184, secure-channel-maturity-ladder) and its reason is now
+        recorded on that packet (master-plan criteria holder, not an
+        interrupted claim). The journey, for the record: 21 stranded at
+        filing -> owner dispositions by linux and windows lanes -> 456
+        dispositioned completed with evidence (criterion 1) ->
+        expire-claims subcommand implemented as the mechanical claim-expiry
+        (672-bz7u, criterion 2; first live run returned 394e and 463 after
+        11/16 stranded days) -> detector wired into per-cycle triage with
+        threshold_events + hint (criterion 3). The leak class has a
+        detector, an expiry mechanism, and zero unexplained members.
