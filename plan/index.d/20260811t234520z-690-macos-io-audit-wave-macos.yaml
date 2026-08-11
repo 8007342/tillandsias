@@ -1,0 +1,346 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: macos-tlatoanis-macbook-air-fable5-20260811t234520z
+#
+# WAVE PROVENANCE: all six packets below come from one 2026-08-11 multi-agent
+# I/O audit of the macOS tray / vm-layer / guest path (6 finder lenses, each
+# adversarially verified by an independent agent). 59 findings survived
+# verification with heavy cross-lens duplication; they are grouped here by SEAM,
+# not by finder, so a claimant fixes one thing in one place.
+# Deliberately NOT re-filed here: 689-y2my (heartbeat defeats the exec idle
+# deadline), 689-xpq7 (expect driver drops guest Error envelopes), 689-stig
+# (--exec-guest stdin block, fixed), 689-eux9 (boot/sizing baseline), and the
+# github-login expect-order drift (fixed under 663-acdw).
+# The audit was commissioned by the operator on the hypothesis that macOS
+# carried the same silent killer as the Windows tray's 32 KB download buffer.
+# 690-pz68 is that hypothesis CONFIRMED.
+packets:
+
+  - packet_id: macos-unbuffered-bulk-io-paths
+    order: 690-pz68
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    title: "The Windows 32K silent killer, macOS edition: three bulk paths write through unbuffered Files, one hashes the guest binary synchronously on every boot"
+    kind: performance+fix
+    deliverable: buffered/async bulk I/O on the provisioning and materialization paths, with a measured before/after
+    depends_on: []
+    pickup_role: any
+    capability_tags: [macos, vm-layer, io, buffering, performance]
+    estimated_hours: 5
+    context: >
+      OPERATOR HYPOTHESIS, CONFIRMED. The Windows tray had a download path that
+      moved ~32 KB at a time; the fix was buffered I/O at the bottleneck plus a
+      sweep making neighbouring I/O async and buffered. The macOS/shared paths
+      have the same shape in four places:
+      (1) crates/tillandsias-vm-layer/src/vz.rs:844 — every ~16 KB reqwest chunk
+      is written straight to an UNBUFFERED tokio::fs::File. This is one syscall
+      per chunk for a multi-hundred-MB image. Note fetch.rs already fixed this
+      exact defect once, so the codebase contains both the bug and its remedy.
+      (2) crates/tillandsias-vm-layer/src/materialize/oci.rs:106 — the
+      single-layer fast path decompresses the whole OCI rootfs layer through
+      std::io::copy into an unbuffered File.
+      (3) crates/tillandsias-vm-layer/src/fetch.rs:70 — an async fn performing a
+      multi-GB xz decompression with fully BLOCKING std::io on an 8 KiB
+      BufReader into an unbuffered File; it also occupies an async worker for
+      the duration.
+      (4) crates/tillandsias-vm-layer/src/vz.rs:698 — reads the entire staged
+      guest binary into memory with std::fs::read and SHA-256s it synchronously
+      inside the boot path, on EVERY VM start.
+      HONEST SCOPE NOTE: these are provisioning/first-run paths, not the
+      steady-state loop, and the measured warm boot on this host is ~9s
+      (689-eux9). So this is a real defect of the named class, but the evidence
+      that it is currently costing operators wall-clock time is (1)/(2)/(3) on
+      cold provision and (4) on every boot — measure before and after rather
+      than assuming.
+    outcome: >
+      Bulk transfers move through appropriately sized buffered writers, blocking
+      decompression leaves the async workers, and the per-boot hash is not
+      re-read from scratch synchronously — each change justified by a
+      before/after measurement.
+    exit_criteria:
+      - "each of the four sites uses buffered and/or off-worker I/O appropriate to its path, matching the shape fetch.rs already established"
+      - "a before/after measurement is recorded for at least the download and the materialize paths — no unmeasured performance claim is accepted"
+      - "the per-boot guest-binary hash is either cached against (path, mtime, len) or moved off the boot critical path, with the staleness argument written down"
+    events:
+      - type: filed
+        ts: "2026-08-11T23:45:20Z"
+        agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
+        host: macos
+        summary: >
+          The operator's suspicion was correct: the macOS/shared side does carry
+          the unbuffered-bulk-write defect the Windows tray was fixed for.
+
+  - packet_id: steady-state-polling-and-idle-wakeups
+    order: 690-xeda
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    title: "Near-zero idle is not met: the guest polls an AtomicBool 4x/second forever and shells out to podman every 30s; the tray keeps a timer that guards nothing"
+    kind: fix
+    deliverable: event-driven replacements for the steady-state poll loops, or a recorded justification per site
+    depends_on: []
+    pickup_role: any
+    capability_tags: [idle, polling, doctrine, events, guest, tray]
+    estimated_hours: 6
+    context: >
+      DOCTRINE: polling is forbidden — subscribe to observable event streams;
+      the tray is meant to be near-zero overhead at idle, which is why Rust was
+      chosen. The winsize polls were already converted to SIGWINCH events on
+      2026-07-27, so the pattern is established. These survived:
+      GUEST (runs for the entire life of every VM, whether or not anyone is
+      attached):
+      - crates/tillandsias-headless/src/vsock_server.rs:493 and :561 — an
+        AtomicBool re-read every 250 ms, and an accept loop wrapped in a 250 ms
+        timeout purely to re-read it. 4 wakeups/second, forever. A watch channel
+        or Notify is the event source.
+      - crates/tillandsias-headless/src/main.rs:12237 — an UNCONDITIONAL 30-second
+        podman shell-out for the life of a Ready VM, with no subscriber gate,
+        despite `podman events` already being consumed elsewhere in the file.
+      - main.rs:12259 (2s tick doing a filesystem stat before evaluating its own
+        gates), :12339 (15s filesystem rescan where the code's own comment names
+        a watcher as the correct source), :12360 (500 ms busy-wait for podman
+        readiness, then a fixed 2s restart tick).
+      HOST/macOS:
+      - crates/tillandsias-vm-layer/src/vz.rs:1494 — shutdown completion polls
+        VZVirtualMachine.state every 250 ms instead of observing the delegate's
+        guestDidStop callback; the code acknowledges this in its own comment.
+      - crates/tillandsias-vm-layer/src/transport_macos.rs:383 — VZ connect
+        completion collected by a 20 Hz try_recv spin against a CFRunLoop pump
+        rather than being woken by the channel.
+      - crates/tillandsias-macos-tray/src/action_host.rs:2835 — the 30s fallback
+        timer fires even while the push subscription is healthy and every poll it
+        guards is suppressed, so a fully idle, fully healthy tray still wakes
+        twice a minute to decide to do nothing.
+      FAIR CONTEXT for the tray item: the poll BODIES are already correctly
+      push-gated by should_poll_fallback (order 155/260 work) — this is the
+      residual timer, not the old polling architecture. Rank it accordingly.
+    outcome: >
+      An idle VM with no attached client, and an idle tray with a healthy push
+      subscription, both approach zero periodic wakeups; each remaining timer
+      has a written justification.
+    exit_criteria:
+      - "the 250 ms AtomicBool poll and the accept-loop timeout are replaced by an observable signal (watch/Notify/cancellation token)"
+      - "the 30s podman shell-out is either driven by the existing podman events stream or gated on an actual subscriber"
+      - "the tray's fallback timer stops firing while the push subscription is healthy, and resumes on drop"
+      - "a measurement records idle wakeups/second before and after for both guest and tray — the claim 'near-zero at idle' must be evidenced, not asserted"
+    events:
+      - type: filed
+        ts: "2026-08-11T23:45:20Z"
+        agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
+        host: macos
+        summary: >
+          Filed against the operator's explicit near-zero-idle requirement.
+          Several sites carry comments naming the correct event source, so the
+          intent already exists in-tree; only the wiring is missing.
+
+  - packet_id: podman-invocations-have-no-timeout
+    order: 690-7adz
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    title: "No podman invocation in the product has a timeout — one seam, and every container operation inherits its unboundedness"
+    kind: fix
+    deliverable: a bounded, observable podman transport seam
+    depends_on: []
+    pickup_role: any
+    capability_tags: [podman, fail-loud, timeout, guest]
+    estimated_hours: 4
+    context: >
+      crates/tillandsias-podman/src/backend.rs:119 is the single transport seam
+      for every podman call in the product, and it awaits `cmd.output()` with no
+      deadline. Every container operation therefore inherits an unbounded wait:
+      a podman storage lock, a stuck netavark, or an unhealthy container hangs
+      the caller forever with no output. Concrete downstream instances found in
+      the same audit:
+      - crates/tillandsias-headless/src/vault_bootstrap.rs:2202 — vault readiness
+        delegated to `podman wait --condition=healthy`, which blocks
+        indefinitely, silently, if the container never becomes healthy.
+      - crates/tillandsias-headless/src/main.rs:1069 — the interactive container
+        exec that COLLECTS THE GITHUB TOKEN runs via Command::status() with no
+        timeout (the credential path, which is exactly where unbounded waits
+        have been most expensive this week).
+      - crates/tillandsias-podman/src/client.rs:725 — image builds capture all
+        output via cmd.output() and emit nothing until exit, so a multi-minute
+        (or permanent) build is indistinguishable from a hang. Observed live
+        2026-08-11: a --github-login --with-token run spent >300s inside the
+        login image load with zero bytes of progress reaching the operator.
+      Because it is ONE seam, a bounded+streaming implementation there fixes the
+      whole surface at once.
+    outcome: >
+      A podman call that stops making progress fails loudly within a bounded
+      time, naming the operation, instead of hanging silently.
+    exit_criteria:
+      - "the podman transport seam takes a deadline; callers that legitimately need a long budget pass one explicitly rather than inheriting infinity"
+      - "long-running operations (build, pull, wait) stream progress rather than buffering to completion"
+      - "the vault readiness wait and the token-collecting exec both carry explicit, justified budgets"
+      - "a test drives a deliberately stalled podman stand-in and asserts a bounded, named failure"
+    events:
+      - type: filed
+        ts: "2026-08-11T23:45:20Z"
+        agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
+        host: macos
+        summary: >
+          Filed from the macOS I/O audit; corroborated the same day by a live
+          credential-seed run that sat >300s inside a podman image load with no
+          observable progress.
+
+  - packet_id: exec-seam-observability-and-bounds
+    order: 690-eug2
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "The control-wire exec seam is silent while it works and unbounded where it waits: buffered transcript, untimed handshake and writes, O(n^2) needle rescan"
+    kind: fix
+    deliverable: streaming, bounded exec drivers with progress the operator can see
+    depends_on: [pty-heartbeat-defeats-exec-progress-deadline]
+    pickup_role: any
+    capability_tags: [control-wire, vsock, exec, observability, fail-loud]
+    estimated_hours: 5
+    context: >
+      Companion to 689-y2my (the heartbeat defeating the idle deadline) and
+      689-xpq7 (the dropped Error envelope) — same seam, remaining defects:
+      - crates/tillandsias-vm-layer/src/vsock_exec.rs:619 — the expect driver
+        accumulates ALL guest PTY output into an in-memory Vec and emits it only
+        after PtyClose; on_event fires solely on needle match. So during a long
+        or hung run the operator sees nothing at all, which is what made every
+        wedge this week undiagnosable from the outside. The buffer is also
+        uncapped.
+      - vsock_exec.rs:611 — no wall-clock budget for the whole conversation and
+        no per-expect deadline, so nothing can say "needle 'author name' never
+        arrived in Ns" (which is precisely the failure that occurred; see
+        663-acdw).
+      - vsock_exec.rs:573 — the Hello/HelloAck handshake read uses the bare,
+        UNTIMED read_envelope rather than the deadline-wrapped
+        read_exec_envelope, so a guest that accepts the vsock connection but
+        never answers Hello parks the host forever. Same shape at
+        crates/tillandsias-macos-tray/src/action_host.rs:2489 (push subscription
+        handshake) and crates/tillandsias-macos-tray/src/diagnose.rs:192 (the
+        timeout covers the VZ connect but NOT the Noise handshake that follows).
+      - vsock_exec.rs:65 — frame writes have no timeout on any write_all or the
+        flush, so a peer that stops draining blocks the writer indefinitely.
+      - vsock_exec.rs:624 — the needle scan re-searches the whole unmatched
+        accumulated transcript on every inbound frame via windows().position(),
+        O(total_bytes x frames). Minor next to the rest, but it is on the same
+        line of code being rewritten.
+    outcome: >
+      An exec conversation reports what it is waiting for while it waits, and
+      every read and write on the seam has a deadline.
+    exit_criteria:
+      - "guest output is surfaced as it arrives rather than only at PtyClose, and the retained transcript is capped"
+      - "handshake reads, frame writes, and the overall conversation each carry a deadline; expiry names the pending stage"
+      - "the same bound covers the tray's push-subscription handshake and the Noise handshake after the VZ connect"
+      - "a test drives a peer that connects and then goes silent at each stage and asserts a bounded, stage-named failure"
+    events:
+      - type: filed
+        ts: "2026-08-11T23:45:20Z"
+        agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
+        host: macos
+        summary: >
+          Grouped with 689-y2my because fixing the deadline without fixing the
+          silence would still leave the operator with nothing to read.
+
+  - packet_id: macos-blocking-work-on-async-and-main-threads
+    order: 690-w94k
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "macOS tray runs blocking work on async workers and the main thread, including a discarded CFRunLoopRunInMode result that can spin"
+    kind: fix
+    deliverable: blocking work moved off async workers / the main thread, with the CFRunLoop contract checked
+    depends_on: []
+    pickup_role: macos
+    capability_tags: [macos, async, tokio, appkit, cfrunloop]
+    estimated_hours: 6
+    context: >
+      Audit cluster; the first item is the one to read first.
+      - crates/tillandsias-vm-layer/src/vz.rs:1238 — the CFRunLoopRunInMode
+        RETURN CODE IS DISCARDED. When the calling thread's default-mode run loop
+        has no registered sources or timers, the call returns immediately
+        (kCFRunLoopRunFinished) instead of waiting, turning the intended park
+        into a spin. Verify against the live boot path before assuming it is
+        benign.
+      - crates/tillandsias-macos-tray/src/action_host.rs:1796 — the VM boot
+        worker is launched with runtime.spawn even though VzRuntime::start
+        blocks its calling thread in a CFRunLoop, and start's OWN doc comment
+        says callers must use spawn_blocking. Blocks a cooperative worker for the
+        whole boot.
+      - crates/tillandsias-vm-layer/src/vz.rs:400 — the connect runs on a
+        spawn_blocking task, which tokio cannot cancel, so a caller's
+        tokio::time::timeout abandons the task rather than stopping it. Timeouts
+        on this path are advisory, not enforcing.
+      - vz.rs:870 — two provisioning async fns wait synchronously on long child
+        processes (xz -d, qemu-img convert, qemu-img resize).
+      - crates/tillandsias-macos-tray/src/installation_uuid.rs:50 and
+        action_host.rs:423 — Keychain access is three synchronous security(1)
+        subprocess spawns run inline on a tokio worker, with no timeout, on the
+        30s tray status path.
+      - crates/tillandsias-macos-tray/src/guest_binary.rs:67 — multi-MB
+        std::fs::copy from inside an async fn on a tokio worker, unconditionally.
+      - crates/tillandsias-macos-tray/src/diagnose.rs:610/618 — prompt_line does
+        blocking stdin reads plus two blocking stty subprocess waits from inside
+        the async expect loop on a current-thread runtime, freezing the driver
+        while the human types. Correct-ish for an interactive one-shot, but it is
+        why the login path cannot also service timeouts.
+      - diagnose.rs:723 — the main thread busy-polls a worker's completion flag
+        instead of waiting on a completion signal.
+      - action_host.rs:170 — helper subprocesses are spawned and their Child
+        dropped without wait(), leaving a zombie per spawn for the tray's life.
+    outcome: >
+      Blocking work runs where blocking is allowed, cancellation actually
+      cancels, and no path leaves zombies or spins a run loop.
+    exit_criteria:
+      - "the CFRunLoopRunInMode result is checked and the no-sources case handled explicitly, with a comment naming the contract"
+      - "VzRuntime::start is invoked per its own documented contract, and long child-process waits do not occupy async workers"
+      - "Keychain access is off the async worker and bounded; the 30s status path cannot stall on it"
+      - "spawned helpers are reaped; a test or assertion pins the absence of zombie accumulation"
+    events:
+      - type: filed
+        ts: "2026-08-11T23:45:20Z"
+        agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
+        host: macos
+        summary: >
+          Filed from the macOS I/O audit (blocking-in-async lens), verified
+          independently. The CFRunLoop item is called out first because it is
+          the only one that can burn CPU rather than merely block.
+
+  - packet_id: guest-console-log-growth-and-serial-routing
+    order: 690-cb62
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    title: "console.log grows forever with no rotation, and the tray never routes guest serial to it — the getty stream lands on tray stderr instead"
+    kind: fix
+    deliverable: a bounded console.log with a stated retention policy, and deliberate serial routing for the tray
+    depends_on: []
+    pickup_role: macos
+    capability_tags: [macos, logging, vz, retention]
+    estimated_hours: 3
+    context: >
+      - crates/tillandsias-vm-layer/src/vz.rs:1368 — console.log is opened
+        create+append on every VM start with no rotation, no size cap and no
+        truncation policy; the only code that ever removes it is the destructive
+        reset. Observed on this host: 62 accumulated boot banners, and the
+        getty's terminal-probe escape sequences interleaved, in a file nothing
+        prunes.
+      - vz.rs:1137 — the TRAY never enables serial_to_log (only the headless
+        one-shots do), so in tray mode the guest's virtio-console serial stream
+        is dup'd onto the tray process's stderr and written continuously for the
+        life of the VM. Whether that is intended is a decision, not an accident
+        to preserve: decide it and write it down.
+      LOW PRIORITY BY VOLUME — the file measured 43 KB after 62 boots, so this
+      is a hygiene and decidability issue, not a disk-space emergency. Filed so
+      it is a choice rather than a default.
+    outcome: >
+      console.log has a stated, enforced retention policy, and serial routing in
+      tray mode is deliberate.
+    exit_criteria:
+      - "console.log is bounded by size or rotation, with the policy stated where the file is opened"
+      - "tray-mode serial routing is an explicit decision with a written rationale, not an unset flag"
+    events:
+      - type: filed
+        ts: "2026-08-11T23:45:20Z"
+        agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
+        host: macos
+        summary: >
+          Filed at p3 with the measured volume stated, so nobody spends a cycle
+          on it believing it is urgent.
