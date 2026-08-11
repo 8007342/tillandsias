@@ -87,13 +87,10 @@ fi
 # (plan/issues/podman-proxy-reset-chicken-and-egg-2026-07-08.md). An empty
 # value set in the spawning environment overrides [engine] env — the same
 # pattern as BUILD_PROXY_NEUTRALIZE_VARS in tillandsias-headless. A proxy var
-# the operator really set stays untouched.
-for _proxy_var in http_proxy https_proxy HTTP_PROXY HTTPS_PROXY all_proxy ALL_PROXY; do
-    if [[ -z "${!_proxy_var+x}" ]]; then
-        export "$_proxy_var="
-    fi
-done
-unset _proxy_var
+# the operator really set stays untouched. The loop lived here by hand since
+# order 116; it is now the SHARED neutralizer (order 653-zzkb) so the next
+# call site cannot re-diverge from this one.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/podman-neutralize-proxy.sh"
 
 # ── Helper: exact-match the CONTAINER NAME column (list output is columned,
 #    so a whole-line grep -x can never match) ──────────────────────────────
