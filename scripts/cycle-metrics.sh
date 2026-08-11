@@ -120,6 +120,50 @@ printf 'experts: calls=%s answered=%s unsupported=%s degraded=%s errors=%s answe
     "$calls" "$answered" "$unsupported" "$degraded" "$errors" "$answer_rate" "$tools" "$source_state"
 printf 'experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)\n'
 
+# ── mcp usage (packet 682-ym68) ──────────────────────────────────────────────
+# "Are the servers used?" — per-server call volume, distinct from answer_rate's
+# "are they right?". The usage JSONL carries no `server` dimension: today ONLY
+# the plan expert (forge-plan.sh) writes to it, one row per tool call. project-
+# info and the other servers are NOT yet instrumented — that is packet 682-m8ek,
+# out of scope here. So this line honestly reports what IS logged (plan-expert
+# calls, distinct tools as a server proxy) and NAMES the rest uninstrumented
+# rather than fabricating zeros for servers that emit nothing. When 682-m8ek
+# lands and rows carry a server field, this line grows to real per-server counts.
+mcp_servers=0
+if [ "$tools" != "-" ]; then
+    mcp_servers=$(printf '%s' "$tools" | tr ',' '\n' | grep -c .)
+fi
+printf 'mcp: servers=%s plan-expert-calls=%s other-servers=uninstrumented-see-682-m8ek source=%s\n' \
+    "$mcp_servers" "$calls" "$source_state"
+
+# ── expert accuracy (packet 682-ym68) ────────────────────────────────────────
+# The groundtruth PASS-RATE — "are the experts RIGHT?" — graded against the
+# committed rung-1 query set (openspec/litmus-tests/groundtruth/). This is
+# distinct from answer_rate: an expert can answer every question (high
+# answer_rate) while citing spans that do not support the answer (low accuracy).
+# Accuracy is pass/total of graded cases, never call volume. The grader is cheap
+# (~0.4s over 19 cases) so it runs every cycle; if no binary can grade, the line
+# defers to the litmus gate rather than reporting a number the tooling did not
+# produce.
+GRADE_BIN=""
+for cand in "$REPO_ROOT/target/release/tillandsias-plan" \
+            "$HOME/.local/bin/tillandsias-plan" \
+            "$(command -v tillandsias-plan 2>/dev/null || true)"; do
+    if [ -n "$cand" ] && [ -x "$cand" ]; then GRADE_BIN="$cand"; break; fi
+done
+accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harness'
+if [ -n "$GRADE_BIN" ]; then
+    gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+    if [ -n "$gr" ]; then
+        gp="$(printf '%s' "$gr" | sed -n 's/.*pass=\([0-9]*\).*/\1/p')"
+        gt="$(printf '%s' "$gr" | sed -n 's/.*total=\([0-9]*\).*/\1/p')"
+        if [ -n "$gp" ] && [ -n "$gt" ] && [ "$gt" -gt 0 ]; then
+            accuracy_line="expert_accuracy: pass=${gp} total=${gt} rate=$(( gp * 100 / gt ))% source=groundtruth-rung1"
+        fi
+    fi
+fi
+printf '%s\n' "$accuracy_line"
+
 if [ "$EXPERTS_ONLY" = true ]; then
     exit 0
 fi

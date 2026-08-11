@@ -84,6 +84,27 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: telemetry fail-soft"
 
+  # ── packet 682-ym68: usage AND accuracy surfaced every cycle ──────────────
+  - step: "the mcp usage line is emitted with its pinned fields (are the servers used?)"
+    # Distinct from answer_rate: a volume line. Today only the plan expert logs,
+    # so the other servers must be NAMED uninstrumented, never faked as zero.
+    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp: '); rm -f $L; case \"$out\" in *servers=*plan-expert-calls=*other-servers=uninstrumented-see-682-m8ek*source=*) echo 'ok: mcp usage line intact' ;; *) echo \"observed=$out\"; echo 'fail: mcp usage grammar' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: mcp usage line intact"
+
+  - step: "the expert_accuracy line is emitted (are the experts right?) — pass/total/rate or an honest deferral"
+    # The groundtruth pass-rate, distinct from answer_rate. It either reports
+    # pass=/total=/rate= from groundtruth-rung1, or defers to the litmus gate —
+    # never a fabricated number.
+    command: "L=$(mktemp); printf '{\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^expert_accuracy: '); rm -f $L; case \"$out\" in *pass=*total=*rate=*source=groundtruth-rung1*) echo 'ok: expert_accuracy graded' ;; *deferred*source=litmus:expert-groundtruth-harness*) echo 'ok: expert_accuracy deferred' ;; *) echo \"observed=$out\"; echo 'fail: expert_accuracy grammar' ;; esac"
+    timeout_ms: 40000
+    expected_behavior: "ok: expert_accuracy"
+
+  - step: "both surfaced lines are required by the methodology, not only emitted by the script"
+    command: "grep -Fq 'surfaced_every_cycle' methodology/agent-observability.yaml && grep -Fq 'expert_accuracy' methodology/agent-observability.yaml && grep -Fq 'mcp_usage' methodology/agent-observability.yaml && echo 'ok: surfaced lines recorded in methodology'"
+    timeout_ms: 5000
+    expected_behavior: "ok: surfaced lines recorded in methodology"
+
 failure_modes:
   - "degraded folded into the answer-rate denominator, making a wrong artifact look like a hard question (order 531 recurrence)"
   - "answered reachable without citations, converting a quality signal into a gameable volume signal"

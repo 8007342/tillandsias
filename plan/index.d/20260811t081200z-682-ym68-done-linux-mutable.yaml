@@ -1,0 +1,25 @@
+events:
+  - packet_id: surface-mcp-usage-and-expert-accuracy-in-handoff
+    event:
+      type: completed
+      ts: "2026-08-11T08:12:00Z"
+      agent_id: linux-mutable
+      summary: >
+        cycle-metrics.sh now emits an `mcp:` per-server usage line
+        (servers=<distinct-tools-proxy> plan-expert-calls=<n>
+        other-servers=uninstrumented-see-682-m8ek source=<path|absent>) and an
+        `expert_accuracy:` line (pass/total/rate source=groundtruth-rung1, graded
+        via `tillandsias-plan grade --root .` in ~0.4s; honest `deferred` fallback
+        when no binary). Existing experts/answer_rate line left byte-identical.
+        meta-orchestration SKILL.md Cycle-Metrics and methodology
+        agent-observability.yaml cycle_metrics.surfaced_every_cycle now REQUIRE
+        both lines. Litmus litmus:cycle-metrics-answer-rate-shape
+        (spec methodology-accountability) pins both grammars; executed green
+        (12/12 steps). build.sh --check green; yq-validated.
+
+status:
+  - packet_id: surface-mcp-usage-and-expert-accuracy-in-handoff
+    field: status
+    value: done
+    ts: "2026-08-11T08:12:00Z"
+    host: linux-mutable

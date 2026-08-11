@@ -248,6 +248,32 @@ agent_observability_protocol:
         branch carrying no expert sources, while the launch state truthfully
         reported `experts: ready` and every health signal read green. A call
         counter would have shown healthy adoption throughout the incident.
+    # ── packet 682-ym68: the handoff surfaces usage AND accuracy every cycle ──
+    surfaced_every_cycle:
+      rule: >
+        Every meta-orchestration handoff MUST carry two lines beyond the
+        experts/answer_rate block, because "used" and "right" are different
+        questions and neither substitutes for the other. Measure before optimize.
+      mcp_usage:
+        line: "mcp: servers=<n> plan-expert-calls=<n> other-servers=uninstrumented-see-682-m8ek source=<path|absent>"
+        question: "Are the MCP servers used?"
+        honest_limit: >
+          The usage JSONL carries no server dimension yet: only the plan expert
+          (forge-plan.sh) writes rows. project-info and the other servers are
+          NAMED uninstrumented (packet 682-m8ek), never faked as zero. When
+          682-m8ek adds a server field, this line grows to real per-server counts.
+      expert_accuracy:
+        line: "expert_accuracy: pass=<P> total=<T> rate=<pct> source=groundtruth-rung1"
+        question: "Are the experts RIGHT?"
+        source: "litmus:expert-groundtruth-harness graded against openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml"
+        rule: >
+          The groundtruth pass-rate, distinct from answer_rate: an expert can
+          answer every question yet cite spans that do not support the answer.
+          Accuracy is pass/total of graded cases, NEVER call volume. The grader
+          is cheap (~0.4s over 19 cases) so it runs every cycle; when no binary
+          can grade in-cycle the line reads `deferred
+          source=litmus:expert-groundtruth-harness` and the quick-tier gate
+          carries it, rather than reporting a number the tooling did not produce.
     headline_metric:
       name: answer_rate
       formula: "answered / (answered + unsupported)"

@@ -748,6 +748,19 @@ Run `scripts/cycle-metrics.sh [<since-ref>]` and include its output verbatim in
 the final handoff. It emits one `key=value` line per block — branch on those,
 never on prose.
 
+Every handoff MUST carry these lines; the two questions they answer are
+distinct — measure before you optimize:
+
+- **`mcp:`** — "are the servers used?" Per-server call volume (`servers=`,
+  `plan-expert-calls=`). Today only the plan expert is instrumented; the other
+  servers are named `uninstrumented-see-682-m8ek`, not faked as zero.
+- **`expert_accuracy:`** — "are the experts RIGHT?" The groundtruth pass-rate
+  (`pass=/total=/rate=`), graded against the committed rung-1 query set. Distinct
+  from `answer_rate`: an expert can answer every question yet cite spans that do
+  not support the answer. Accuracy is pass/total of graded cases, never call
+  volume. It reads `deferred source=litmus:expert-groundtruth-harness` when no
+  binary can grade in-cycle (then the quick-tier gate carries it).
+
 The two lines worth reading first:
 
 - **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called
