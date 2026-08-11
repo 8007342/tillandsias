@@ -66,4 +66,19 @@ fi
 args=(check-cheatsheet-tiers --repo-root "${REPO_ROOT}")
 [[ "${QUIET}" == "1" ]] && args+=(--quiet)
 [[ "${STRICT}" == "1" ]] && args+=(--strict)
+
+# Probe runnability before exec (order 672-4nts). On Windows the in-tree
+# target/ holds only stale Linux ELF artifacts (real builds redirect to the
+# WSL2 distro-native CARGO_TARGET_DIR), so a bare exec died with a raw
+# "cannot execute binary file: Exec format error" on every gate run — an
+# ERROR banner that provided zero coverage and trained readers to ignore
+# red gate text. A probe that cannot run on this host is a SKIP, said once.
+# 126 = found but cannot execute (wrong binary format), 127 = not found.
+# Any other exit code means the binary RAN, so the real check may proceed.
+"${POLICY_BIN}" --help >/dev/null 2>&1
+probe=$?
+if [[ "$probe" -eq 126 || "$probe" -eq 127 ]]; then
+    echo "skip:policy-binary-not-host-executable (${POLICY_BIN})"
+    exit 0
+fi
 exec "${POLICY_BIN}" "${args[@]}"

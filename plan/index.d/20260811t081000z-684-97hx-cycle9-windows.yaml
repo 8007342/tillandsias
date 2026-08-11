@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: windows-20260811t081000z
+events:
+  - packet_id: windows-runtime-guest-reprovision-and-lane-verification
+    event:
+      type: progress
+      ts: "2026-08-11T08:10:00Z"
+      agent_id: windows-20260811t081000z
+      summary: >
+        Criteria 2-3 attempted and BLOCKED with a recorded reason (a
+        "cannot" per 648-dvzd's rule): the forge lane launch path is not
+        reachable from an unattended host cycle on this box. The runtime
+        distro deliberately disables /mnt/c automount, so
+        scripts/run-forge-project.sh cannot run inside it against the
+        checkout; and a hand-rolled podman run of
+        localhost/tillandsias-forge:v0.4.260810.1 would not carry the real
+        launcher's TILLANDSIAS_ACCEL_ENVELOPE, making the accel_class read
+        an invalid measurement by construction. Every prerequisite is
+        otherwise staged and verified this cycle: all seven enclave images
+        present at v0.4.260810.1, tillandsias-enclave network exists, vault
+        healthy. Smallest next action: take the two reads (accel envelope
+        first line = cpu-only; env grep for GH_TOKEN/GITHUB_TOKEN/
+        HOMEBREW_GITHUB_API_TOKEN = nothing) inside the FIRST tray- or
+        headless-launched forge lane on this host — one exec, two greps,
+        recordable by whoever is watching that session.
+
+  - packet_id: cheatsheet-tiers-check-skips-not-errors-on-foreign-binary
+    event:
+      type: completed
+      ts: "2026-08-11T08:10:00Z"
+      agent_id: windows-20260811t081000z
+      summary: >
+        Implemented: check-cheatsheet-tiers.sh probes the resolved policy
+        binary before exec ("--help", branching only on exit 126/127 =
+        cannot-execute/not-found) and emits exactly one
+        "skip:policy-binary-not-host-executable (<path>)" advisory instead
+        of the raw bash Exec format error; any exit code proving the binary
+        RAN proceeds to the real check unchanged. Verifiable closure
+        checked on this host: the gate run in this cycle's finalization no
+        longer prints "Exec format error" (grep of the full --check output).
+
+status:
+  - packet_id: cheatsheet-tiers-check-skips-not-errors-on-foreign-binary
+    field: status
+    value: completed
+    ts: "2026-08-11T08:10:00Z"
+    host: windows
