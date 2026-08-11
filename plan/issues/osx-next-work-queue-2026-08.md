@@ -31,3 +31,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-11T07:35Z  (frag)    245 revision slice DONE: 23/23 stale claims corrected in the NA audit doc (7-agent fact-check); re-verification by the 3 named agents remains the gate. Also repaired stranded 606-r42f/421 completions
 - 2026-08-11T08:15Z  (frag)    606-vaua COMPLETED: canonical 30d threshold in methodology; threshold-gated staleness (GNU date -d dialect bug fixed — macOS could never stale); fractional coverage 1.0% (10/1034); 5-fixture self-test litmus step
 - 2026-08-11T09:15Z  (frag)    626-r7kq taken over + CLOSED (Windows implemented, completion stranded; macOS cfg-test exhaustiveness fixed here); 606-um5s CANNOT (no nix on this host)
+- 2026-08-11T11:15Z  (frag)    620-duta macOS half of criterion 3: import-surface litmus authored+bound (OS-only imports verified); windows halves remain
