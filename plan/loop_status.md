@@ -3441,7 +3441,7 @@ individual packets with a reason event.
   and the cross-platform smoke queue. Ship only after the remaining stability
   packet gates and a qualifying host smoke PASS are complete, then bump Minor
   0.3 → 0.4.
-- **v0.5 — ACTIVE (245 open / 390 total tagged): "EXPERTS + cross-platform parity +
+- **v0.5 — ACTIVE (245 open / 391 total tagged): "EXPERTS + cross-platform parity +
   streams/transport + security channel + audits."** Per the 2026-07-21
   operator decision, the forge-local EXPERTS family and its supporting
   plan/inference packets land here together with coupled packets 456–458,
