@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t235200z
+packets:
+
+  - packet_id: spiffe-spire-identity-plane-aspiration
+    order: 692-zjzg
+    status: ready
+    desired_release: v0.6
+    priority: p3
+    title: "PHILOSOPHICAL ASPIRATION: converge the identity plane toward SPIFFE/SPIRE — schedule the long operator talk in v0.6 to shape v0.7+ improvements"
+    kind: discussion
+    deliverable: a scheduled long-form operator discussion (v0.6) that produces a signed direction note on how far to adopt SPIFFE/SPIRE, feeding v0.7+ packets
+    depends_on: []
+    pickup_role: tlatoani
+    capability_tags: [identity, security, mesh, philosophy, horizon]
+    context: >
+      OPERATOR DIRECTIVE 2026-08-11: while ruling the ephemeral epoch-scoped
+      CAs (order 322 Q3), the operator recognized the design is "kinda halfway
+      there" to SPIFFE/SPIRE and wants it captured as a PHILOSOPHICAL
+      ASPIRATION, not near-term work — long-horizon, v0.7+. Why the analogy
+      holds today: short-lived, automatically-rotated cryptographic identities
+      (SPIFFE SVIDs ~ our 30-min lane certs), a workload API that hands
+      identity to a workload without the workload holding key material (SPIRE
+      agent ~ our per-lane ssh-agent signing-oracle sidecar, D5), and
+      attestation-based issuance (the launcher attesting a lane before the
+      sidecar mints ~ SPIRE node/workload attestation). Where we diverge / what
+      the talk must explore for v0.7+: a real SPIFFE trust domain and SVID
+      format vs our SSH-cert principals; SPIRE's federation model as the honest
+      answer to the mesh (order 563) cross-node trust that the epoch-CA design
+      explicitly punts; whether to adopt SPIRE proper or keep a homegrown
+      SPIFFE-shaped plane (the same build-vs-adopt axis as the OTel decision
+      682-x8df, and likely the same enclave-egress / no-python / CRDT-fit
+      constraints apply). ACTION: (1) this packet records the aspiration in the
+      ledger so it is not forgotten; (2) mirror the aspiration into
+      methodology/philosophy.yaml as a long-horizon identity-plane direction;
+      (3) the v0.6 deliverable is the SCHEDULED long talk with the operator to
+      define concrete v0.7+ improvements — the talk's output is a signed
+      direction note, from which implementation packets are filed for v0.7+.
+      This is a milestone-shaped discussion, NOT an implementation packet;
+      no code changes are in scope here.
+    exit_criteria:
+      - a long-form operator discussion on SPIFFE/SPIRE is held in the v0.6 window and produces a signed direction note (build-vs-adopt, trust-domain/SVID shape, mesh federation) recorded under plan/issues/
+      - the philosophical aspiration is durable in methodology/philosophy.yaml so every host and future agent sees the identity-plane direction
+      - v0.7+ implementation candidates are filed as their own packets from the direction note (this packet does not implement them)
+    events:
+      - type: filed
+        ts: "2026-08-11T23:52:00Z"
+        agent_id: linux-mutable-session-20260811
+        host: linux_mutable
+        summary: >
+          Filed from the operator's long-horizon directive after the epoch-CA
+          ruling; SPIFFE/SPIRE recognized as where the identity plane is
+          converging. Talk scheduled for v0.6 to shape v0.7+; not near-term.

@@ -1,0 +1,39 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260812t000500z
+events:
+  - packet_id: forge-clone-fails-git-alias-unresolvable-at-start
+    event:
+      type: progress
+      ts: "2026-08-12T00:05:00Z"
+      agent_id: linux-mutable-night-20260811
+      host: linux_mutable
+      summary: >
+        ROOT CAUSE (code+journald+unit-test evidence) — NOT a missing-retry
+        bug. The clone loop (images/default/lib-common.sh:772) already retries
+        12x over ~54s. The fault is an ALIAS-NAME MISMATCH crossing the
+        659-8faj migration: current SOURCE injects the per-project alias
+        git-<project> into the forge (main.rs:5292/5327; unit tests assert
+        TILLANDSIAS_GIT_SERVICE=git-alpha) and the mirror registers
+        --network-alias git_mirror_service_identity()=git-<project>
+        (main.rs:3014), but the operator's DOA forge requested the RETIRED
+        shared alias 'tillandsias-git' (journald: 'unable to look up
+        tillandsias-git port 9418') which the mirror no longer registers ->
+        unresolvable -> fatal. The forge ran on a STALE IMAGE built before the
+        migration propagated: installed tray is still v0.4.260810.1 even after
+        ./build.sh --install, because --install rebuilds the launcher binary
+        but NOT the forge/git container images (that needs --init, which
+        rebuilds from bundled assets per 683-g7p6 and refuses headless per
+        683-2n4k). So 691-ssw9 is a CONVERGENCE of 659-8faj + 683-g7p6/2n4k
+        surfacing as a clone DOA — more retries would not fix it (12 retries
+        of an unresolvable name still DOAs, just after 54s instead of 5s).
+        FIX DIRECTION: (a) agent-doable slice — replace the conflated fatal
+        with a real reachability probe (getent AND git ls-remote) and a
+        bounded loud timeout that names 'alias unresolvable' distinctly from
+        'not seeded'; (b) the DOA only truly clears once a consistent-alias
+        image is running, which needs a whole image rebuild an agent cannot do
+        headless — couple live create/destroy stress-verification (exit
+        criterion 4) to a fresh image / to 683-g7p6. Also: stale literal
+        'git-service' alias refs remain in scripts/orchestrate-enclave.sh:32,327
+        (dev/test harness, not the main.rs production path — verify before
+        touching). Staying ready with the diagnosis; not fabricating a closure
+        on unverifiable state.
