@@ -12302,6 +12302,12 @@ plan_index:
         - "per-forge credential-issuance design (Vault-sourced, not readable as a file in the forge) + push attribution mechanism"
         - "if adopted: one lane migrated behind a flag with fetch/push parity fixture, then daemon --enable=receive-pack removed"
       events:
+        - type: decision
+          ts: "2026-08-11T21:18:29Z"
+          agent_id: "linux-mutable-session-20260811"
+          host: linux_mutable
+          summary: >
+            OPERATOR RULING (The Tlatoani, 2026-08-11): Q3 resolved — EPHEMERAL EPOCH CAs, rejecting the annual-rotation proposal as too weak. Both SSH CAs are minted inside Vault at stack provision (D2 unchanged), live one stack/Vault epoch, never persist across epochs; rotation = next launch; KRL retained only for intra-epoch single-lane revocation; 451 must enforce that no trust material is cached across epochs; mesh 563 must design its own trust-root lifetime (the 'same CA' inheritance in section 3 is void). Recorded in the design doc Q3 amendment. Remaining before 451 unblocks: Q1 scope call and the S1 signature.
         - type: note
           ts: "2026-08-01T02:00:00Z"
           agent_id: "linux-mutable-macuahuitl-opus5-20260731"
