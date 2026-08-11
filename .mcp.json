@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "forge-plan": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["images/default/config-overlay/mcp/forge-plan.sh"]
+    },
+    "project-info": {
+      "type": "stdio",
+      "command": "bash",
+      "args": ["images/default/config-overlay/mcp/project-info.sh"]
+    }
+  }
+}

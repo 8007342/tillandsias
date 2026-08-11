@@ -1,0 +1,315 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t071500z
+# Operator directive 2026-08-11 (The Tlatoāni): local-only, CRDT-append,
+# non-aggregatable telemetry so we can find orchestration bottlenecks;
+# metrics on expert/MCP usage, packets consumed, build/test time; distilled
+# during multihost-orchestration; OpenTelemetry likely the v0.6 stack.
+packets:
+
+  - packet_id: local-telemetry-for-bottleneck-finding-milestone
+    order: 682-u3si
+    status: ready
+    kind: milestone
+    multi_cycle: true
+    desired_release: v0.6
+    priority: p1
+    title: "MILESTONE: local-only CRDT telemetry so the loop can measure its own bottlenecks (expert/MCP usage, packets consumed, build/test time)"
+    deliverable: plan/index.yaml (criteria holder; children carry the work)
+    depends_on: []
+    pickup_role: any
+    capability_tags: [milestone, telemetry, metrics, crdt, observability, coordination]
+    estimated_hours: 0
+    outcome: >
+      Operator directive 2026-08-11. Foundation ALREADY EXISTS and is the
+      pattern to extend: forge-plan.sh:216 appends
+      {ts,tool,outcome,confidence,citations} JSONL to
+      /tmp/forge-expert-usage.jsonl (CRDT-friendly append, one line per call),
+      and cycle-metrics.sh folds it into the handoff `experts:` line
+      (calls/answered/answer_rate). The milestone extends that ONE pattern to
+      the whole loop so enhancements are measured and shortcomings surface:
+      every MCP server logs usage (not just the plan expert), build/test steps
+      log durations, cycles log packets-consumed, and a multihost-orchestration
+      host semantically distills + buckets the per-host append-logs (they are
+      per-host ephemeral /tmp today — non-aggregatable by design, collapsed
+      later). Metrics stay local-only files agents APPEND to, mirroring how
+      plan/index.d fragments work; no central collector until OTel (682-x8df,
+      v0.6). Criteria: (a) every MCP server + build/test + packet-consumption
+      emits append-log telemetry; (b) a distillation step buckets it during
+      coordination; (c) the handoff surfaces MCP-usage + expert-accuracy; (d)
+      an OTel evaluation decides the v0.6 stack. Children:
+      682-m8ek/emvg/epud/43mi/ym68/x8df.
+    exit_criteria:
+      - all six live MCP servers emit the same append-log usage telemetry the plan expert already does (682-m8ek)
+      - build and test steps append duration telemetry a cycle can read (682-emvg)
+      - each cycle appends packets-consumed telemetry (682-epud)
+      - a multihost-orchestration distillation step buckets the append-logs into a committed summary (682-43mi)
+      - the meta-orchestration handoff surfaces MCP-usage + expert-accuracy every cycle (682-ym68)
+      - an OpenTelemetry evaluation records whether/how OTel becomes the v0.6 telemetry stack (682-x8df)
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: >
+          Filed from the operator's 2026-08-11 telemetry directive; the
+          expert-usage JSONL (forge-plan.sh) is the working seed to generalize.
+
+  - packet_id: all-mcp-servers-emit-usage-telemetry
+    order: 682-m8ek
+    status: ready
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    desired_release: v0.5
+    priority: p2
+    title: "Extend the CRDT append-usage log from the plan expert to every MCP server (project-info, git-tools, dependency-resolver, host-browser, agent-profile)"
+    kind: implementation
+    deliverable: images/default/config-overlay/mcp/*.sh shared usage-log helper + per-server call logging + shape litmus
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [telemetry, mcp, forge, crdt]
+    estimated_hours: 3
+    outcome: >
+      Only forge-plan.sh logs usage today (line 216, to
+      /tmp/forge-expert-usage.jsonl). The other five servers in
+      images/default/config-overlay/mcp/ — project-info, git-tools,
+      dependency-resolver, host-browser, agent-profile — emit NOTHING, so
+      "are the MCP servers used / affordable / discoverable" cannot be
+      answered for them. Extract forge-plan.sh's append-writer into a shared
+      lib (e.g. mcp-usage-log.sh) and call it from every server's
+      tools/call dispatch with {ts,server,tool,outcome,latency_ms}. Keep it
+      append-only, per-host, best-effort (never block a tool call on logging).
+    exit_criteria:
+      - every MCP server appends one usage line per tools/call to a per-host log; a shape litmus pins the record grammar and that logging failure never fails the call
+      - cycle-metrics.sh reads the unified log and reports per-server call counts
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: filed from the telemetry directive; generalizes forge-plan.sh:216.
+
+  - packet_id: build-and-test-duration-telemetry
+    order: 682-emvg
+    status: ready
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    desired_release: v0.5
+    priority: p2
+    title: "Append build/test step durations to a local log so cycles can see where time goes"
+    kind: implementation
+    deliverable: build.sh / local-ci.sh / run-litmus-test.sh duration append-logging + cycle-metrics read
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [telemetry, build, test, timing]
+    estimated_hours: 3
+    context: >
+      cycle-metrics reports commits and expert usage but NO timing — "time
+      spent building, testing" (operator's words) is invisible, and it is the
+      most likely bottleneck. Have build.sh --check, local-ci phases, and the
+      litmus runner append {ts,step,phase,duration_ms,exit} to a per-host log
+      (same append pattern). Best-effort, never gates.
+    exit_criteria:
+      - build/test/litmus steps append duration records; cycle-metrics surfaces a build_ms/test_ms line; a shape litmus pins the grammar
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: filed from the telemetry directive.
+
+  - packet_id: packets-consumed-per-cycle-telemetry
+    order: 682-epud
+    status: ready
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    desired_release: v0.5
+    priority: p3
+    title: "Append packets-consumed-per-cycle telemetry (claimed/completed/filed) so batch economics are measurable"
+    kind: implementation
+    deliverable: a cycle-close append-log of packet-flow counts + cycle-metrics read
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [telemetry, plan, batch, throughput]
+    estimated_hours: 2
+    context: >
+      To answer "is a bigger batch cheaper" (682-yiz7) we need to MEASURE
+      packets-consumed vs cycle overhead. Append {ts,host,claimed,completed,
+      filed,batch_epic,batch_size,seed} at each cycle close (the seed +
+      batch_epic already exist from select-work-batch). This is the evidence
+      base for the greedier-batching decision.
+    exit_criteria:
+      - each cycle appends a packet-flow record; cycle-metrics can report a rolling packets-per-cycle and the overhead ratio
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: filed from the telemetry directive; feeds 682-yiz7.
+
+  - packet_id: telemetry-distillation-and-bucketing-in-multihost
+    order: 682-43mi
+    status: ready
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    desired_release: v0.6
+    priority: p2
+    title: "Multihost-orchestration semantically distills + buckets the per-host append-logs into a committed summary"
+    kind: implementation
+    deliverable: a distillation step in /multihost-orchestration that folds per-host telemetry into bucketed, committed metrics
+    depends_on: [all-mcp-servers-emit-usage-telemetry, build-and-test-duration-telemetry]
+    pickup_role: linux
+    capability_tags: [telemetry, crdt, distillation, coordination, multihost]
+    estimated_hours: 4
+    context: >
+      The append-logs are per-host ephemeral /tmp — non-aggregatable by
+      design (operator: "anonymous non-aggregateable telemetry"). A host doing
+      /multihost-orchestration during its cycle collapses them: read each
+      host's log, bucket by tool/server/phase/day, distill into a committed
+      summary (like the plan-fold but for metrics), then the raw logs can
+      rotate. CRDT property: bucketing is commutative/idempotent so concurrent
+      hosts converge. This is the "collapsing of metrics into buckets" the
+      operator described.
+    exit_criteria:
+      - a distillation step produces a committed bucketed metrics summary from per-host logs; running it twice or on two hosts converges to the same buckets; a litmus pins idempotence
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: filed from the telemetry directive; the CRDT-collapse half.
+
+  - packet_id: surface-mcp-usage-and-expert-accuracy-in-handoff
+    order: 682-ym68
+    status: ready
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    desired_release: v0.5
+    priority: p2
+    title: "meta-orchestration handoff + methodology must surface MCP-server usage AND expert accuracy (groundtruth pass-rate) every cycle"
+    kind: enhancement
+    deliverable: cycle-metrics.sh MCP-usage + expert-accuracy lines + methodology/meta-orchestration handoff contract update
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [telemetry, metrics, methodology, meta-orchestration, experts]
+    estimated_hours: 2
+    context: >
+      Operator ask (2026-08-11): "make sure the orchestration and methodology
+      have agents at least display metrics on mcp server usage, and expert
+      accuracy on their work summaries." Today the handoff shows the experts
+      answer_rate (usefulness) but NOT (a) per-MCP-server usage counts, nor
+      (b) expert ACCURACY — the groundtruth harness grades 19 cases
+      (litmus:expert-groundtruth-harness) but its pass-rate is not in the
+      handoff. Add both to cycle-metrics.sh and make the meta-orchestration
+      Cycle-Metrics section + methodology require them in every handoff. This
+      is the v0.5 quick win of the milestone: measure before we optimize.
+      Note the honest-metric rules already in the skill (never reward activity;
+      answer_rate is usefulness not volume) apply.
+    exit_criteria:
+      - cycle-metrics.sh emits an `mcp:` per-server usage line and an `expert_accuracy:` line (groundtruth pass/total); the meta-orchestration handoff and methodology require both; a litmus pins the grammar
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: filed from the operator's explicit display-metrics ask; v0.5 quick win.
+
+  - packet_id: opentelemetry-evaluation-for-loop-telemetry
+    order: 682-x8df
+    status: ready
+    release_target: local-telemetry-for-bottleneck-finding-milestone
+    desired_release: v0.6
+    priority: p2
+    title: "RESEARCH: evaluate OpenTelemetry as the telemetry stack — must fit the CRDT local-only append-then-distill model, not a central collector"
+    kind: research
+    deliverable: plan/issues/opentelemetry-evaluation-<date>.md decision record
+    depends_on: []
+    pickup_role: any
+    capability_tags: [research, telemetry, opentelemetry, crdt, v0.6]
+    estimated_hours: 4
+    context: >
+      Operator (2026-08-11): "OpenTelemetry should be a solid starting point
+      ... we'll need our metrics to perform in our favorite CRDT fashion ...
+      likely v0.6 unless a small change." Research whether OTel's model (spans,
+      metrics, OTLP, collectors) can be adapted to local-only, per-host,
+      append-then-distill files with no live collector inside the enclave
+      (the enclave forbids arbitrary egress; a collector is a network sink).
+      Evaluate: OTel file exporter / local OTLP-to-file, whether spans map onto
+      the existing JSONL append pattern, the cost of the SDK in forge images,
+      and whether a thin homegrown append+distill (682-m8ek/43mi) is a better
+      fit than OTel for v0.5-v0.6. Decide scope + version. Do NOT adopt OTel
+      before the decision record.
+    exit_criteria:
+      - a committed decision record evaluating OTel against the CRDT local-only model, with a scope/version recommendation and the smallest-viable first rung
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: filed per the operator's explicit request for an OTel research packet.
+
+  - packet_id: greedier-batch-selection-larger-sequential-batches
+    order: 682-yiz7
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "Let non-forge cycles drain LARGER sequential batches to amortize meta-orchestration overhead — decide + implement the budget"
+    kind: research+implementation
+    deliverable: methodology/distributed-work.yaml cycle_batch_triage budget policy + select-work-batch --budget default + evidence
+    depends_on: [packets-consumed-per-cycle-telemetry]
+    pickup_role: linux
+    capability_tags: [batch, orchestration, throughput, methodology, overhead]
+    estimated_hours: 3
+    context: >
+      Operator hypothesis (2026-08-11): meta-orchestration per-cycle overhead
+      (fetch, guards, boundary, merges, handoff, gate, push, attest) is a
+      relatively fixed cost, so draining LARGER batches per cycle would make
+      that overhead relatively smaller. CURRENT STATE: packets ARE grouped in
+      stories (release_target milestones = epics; 171 packets carry one) and
+      consumed in batches — select-work-batch picks ONE cohesive epic and up
+      to `budget` packets (budget=3 non-forge, 1 forge per order 264). The
+      operator wants greedier: raise the non-forge budget and/or drain
+      MULTIPLE sequential batches per cycle. IMPORTANT design tension to
+      resolve, not ignore: the batch selector deliberately picks ONE epic to
+      stop scatter (the anti-pattern in its own header) and forge is
+      deliberately budget=1 (order 264, Tlatoāni ruling "OPPOSITE of greedy",
+      to fit the 600s litmus envelope). So "greedier" should mean LARGER
+      budget WITHIN one cohesive epic (or drain-until-envelope), NOT more
+      unrelated epics — preserving cohesion while amortizing overhead. Gate
+      the decision on the 682-epud packet-flow evidence (measure overhead
+      ratio first). Forge stays budget=1 unless the operator re-rules 264.
+    exit_criteria:
+      - a measured overhead-ratio (682-epud) justifies a specific non-forge budget; select-work-batch default budget updated; methodology records the new policy and that forge budget=1 stands (or is re-ruled by the operator)
+      - a cycle drains the larger batch within one epic without the scatter the selector guards against
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: >
+          Filed from the operator's greedier-batching directive; scoped to
+          larger-within-epic to preserve the anti-scatter design, evidence-gated
+          on 682-epud.
+
+  - packet_id: host-session-mcp-registration-portable
+    order: 682-z5h8
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "Host Claude/agent sessions get the forge-plan + project-info experts via a portable, cross-platform .mcp.json"
+    kind: implementation
+    deliverable: repo .mcp.json hardening + per-host binary resolution + docs + the fold-resolution fix
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [mcp, experts, discoverability, host, cross-platform, velocity]
+    estimated_hours: 3
+    context: >
+      Operator (2026-08-11): agents (including host Claude sessions) should be
+      USING the MCP experts for velocity — "you got them for free". Until this
+      cycle there was NO host-session registration (no .mcp.json); the servers
+      were wired only for in-forge opencode/claude harnesses, so host sessions
+      fell back to the raw CLI all night. SHIPPED THIS CYCLE (seed): a repo
+      .mcp.json registering forge-plan + project-info as stdio servers (bash +
+      the config-overlay scripts), after installing the plan binary to the
+      canonical ~/.local/bin/tillandsias-plan the resolver expects; both
+      servers verified host-side (initialize + tools/list + a real plan_ready
+      call). REMAINING (this packet): (1) portability — macOS/Windows host
+      sessions need the same registration with per-host binary resolution
+      (the resolver checks ~/.local/bin and /usr/*, fine if each host installs
+      there; verify on osx-next/windows-next); (2) an observed bug — an
+      MCP-invoked `plan_status 651-2x5s` returned "no packet matches" while the
+      CLI resolves it, suggesting the MCP path may read the base ledger
+      without the fragment fold — verify and fix so MCP answers match the CLI;
+      (3) decide whether git-tools/dependency-resolver join the host set;
+      (4) a note in CLAUDE.md / methodology that host sessions have the experts
+      and MUST prefer them (the bootstrap already says MCP-first — make it true
+      for host sessions too). NOTE: a new .mcp.json only takes effect on the
+      NEXT session start, and Claude Code prompts for MCP approval on first use.
+    exit_criteria:
+      - a portable .mcp.json gives host Claude sessions on all three platforms the forge-plan + project-info tools, verified by a real tool call on each
+      - MCP answers match the CLI (fragment fold included); the 651-style mismatch is fixed with a litmus
+      - CLAUDE.md/methodology direct host sessions to the MCP experts
+    events:
+      - ts: "2026-08-11T07:15:00Z"
+        event: filed
+        summary: >
+          Filed with the seed .mcp.json shipped this cycle; captures the
+          portability + fold-resolution + docs residual.
