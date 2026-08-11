@@ -1,4 +1,4 @@
-# Cycle 2026-08-10T04:30Z→2026-08-11T14:00Z (macos — operator /loop overnight, hourly meta-orchestration)
+## Cycle 2026-08-10T04:30Z→2026-08-11T14:00Z (macos — operator /loop overnight, hourly meta-orchestration)
 
 Operator mandate: hourly loop until 7am local, standing credential-re-seed
 authorization, Apple-Silicon experts research directive, stale-lease
