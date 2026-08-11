@@ -27,3 +27,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-11T01:00Z  (frag)    657-3mq5 COMPLETED: recipe = native GGML_NATIVE build + Q4_0 repack -> 2.6x ollama decode (187 vs 71 tok/s), engine gap 2.1x isolated; ollama pinned 0.32.6
 - 2026-08-11T02:15Z  (frag)    663-69kp signature refined: rapid sequential boots alone trigger the pre-breadcrumb hang (health-boot pattern indicted); loop switches to one-boot-per-iteration
 - 2026-08-11T02:45Z  (frag)    663-69kp datum #4 (hang 15s after clean tray quit); 598-kibt next_action corrected (only M5 runtime remains, operator-gated)
+- 2026-08-11T03:55Z  (frag)    663-69kp paired datum: success-in-45s then immediate-next hang 400s; console silent while rootfs.img mtime advances during hangs; 663-acdw parked (6 attempts)
