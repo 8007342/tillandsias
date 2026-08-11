@@ -577,6 +577,7 @@ specs:
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
   - litmus:cycle-metrics-answer-rate-shape
+  - litmus:cycle-flow-telemetry-shape
   - litmus:order-id-collision-free
   - litmus:ledger-fragment-convergence
   - litmus:plan-compaction-format-preservation

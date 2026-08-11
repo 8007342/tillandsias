@@ -274,6 +274,21 @@ agent_observability_protocol:
           can grade in-cycle the line reads `deferred
           source=litmus:expert-groundtruth-harness` and the quick-tier gate
           carries it, rather than reporting a number the tooling did not produce.
+      cycle_flow:
+        line: "flow: cycles=<n> avg_completed_per_cycle=<x> avg_commits_per_cycle=<y> overhead_ratio=<commits-per-completed|-> source=<path|absent>"
+        question: "Does work-done-per-cycle outrun the fixed per-cycle overhead as batches grow?"
+        source: "per-host JSONL at ${TILLANDSIAS_CYCLE_FLOW_LOG:-/tmp/tillandsias-cycle-flow.jsonl}, one record per cycle"
+        emitter: "scripts/cycle-metrics.sh --emit-flow host=<h> batch_epic=<id> batch_seed=<s> batch_size=<n> budget=<n> claimed=<n> completed=<n> filed=<n> commits=<n> plan_open=<n> plan_total=<n>"
+        rule: >
+          Packet 682-epud. The greedier-batching decision (682-yiz7) asks whether
+          LARGER batches per cycle amortize the fixed meta-orchestration overhead;
+          that is a MEASUREMENT question a single cycle cannot answer. Each cycle
+          APPENDS one packet-flow record and this line reports the ROLLING view.
+          overhead_ratio = total commits per total completed packet — the
+          per-cycle cost amortized across the work it produced. If greedier
+          batches amortize overhead, the ratio FALLS as batch_size rises. The emit
+          is best-effort by construction (like mcp-usage-log.sh): an unwritable
+          log path never fails the cycle it measures.
     headline_metric:
       name: answer_rate
       formula: "answered / (answered + unsupported)"

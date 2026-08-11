@@ -46,8 +46,30 @@
 #   experts: calls=<n> answered=<n> unsupported=<n> degraded=<n> errors=<n> \
 #            answer_rate=<pct|-> tools=<csv|-> source=<path|absent>
 #   plan:    packets=<n> ready=<n> blocked=<n> pending=<n>
+#   flow:    cycles=<n> avg_completed_per_cycle=<x> avg_commits_per_cycle=<y> \
+#            overhead_ratio=<commits-per-completed|-> source=<path|absent>
 #   repo:    commits_this_cycle=<n|-> worktree=<clean|dirty> traces=<current|stale|unknown>
 #   verdict: <ok|attention>:<reason>
+#
+# THE `flow:` LINE and its emitter (packet 682-epud). The greedier-batching
+# hypothesis (682-yiz7) asks whether LARGER batches per cycle amortize the fixed
+# meta-orchestration overhead. That is a MEASUREMENT question and cannot be
+# answered from a single cycle: you need packets-consumed vs cycle overhead
+# across MANY cycles. So each cycle APPENDS one packet-flow record to a per-host
+# JSONL log (${TILLANDSIAS_CYCLE_FLOW_LOG}) via the `--emit-flow` subcommand, and
+# this reporter reports the ROLLING view over that log. `overhead_ratio` is the
+# number the 682-yiz7 decision consumes: commits (the per-cycle cost) per
+# completed packet (the work done). If greedier batches amortize overhead, this
+# ratio FALLS as batch size rises. The emit is best-effort by construction (a
+# metric may never fail the cycle it measures), exactly like mcp-usage-log.sh.
+#
+# EMIT GRAMMAR (append one record; never fails):
+#   cycle-metrics.sh --emit-flow host=<h> batch_epic=<id> batch_seed=<s> \
+#       batch_size=<n> budget=<n> claimed=<n> completed=<n> filed=<n> \
+#       commits=<n> plan_open=<n> plan_total=<n>
+#   → {"ts":<utc>,"host":<h>,"batch_epic":<id>,"batch_seed":<s>,
+#      "batch_size":<n>,"budget":<n>,"claimed":<n>,"completed":<n>,"filed":<n>,
+#      "commits":<n>,"plan_open":<n>,"plan_total":<n>}
 #
 # Exit status is 0 whenever the report was produced. A metrics reporter that
 # fails the cycle it is measuring is a metric that can take down what it
@@ -59,6 +81,49 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
+FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-/tmp/tillandsias-cycle-flow.jsonl}"
+
+# ── --emit-flow: append one per-cycle packet-flow record (packet 682-epud) ────
+# Best-effort by construction, mirroring images/.../mcp-usage-log.sh: the whole
+# append is wrapped so a full disk, a read-only path, or a missing `date` cannot
+# take down the cycle being measured. Always exits 0. Accepts key=value tokens in
+# any order; absent numeric fields default to 0, absent strings to "-".
+if [ "${1:-}" = "--emit-flow" ]; then
+    shift
+    ef_host="-"; ef_epic="-"; ef_seed="-"
+    ef_batch_size=0; ef_budget=0; ef_claimed=0; ef_completed=0; ef_filed=0
+    ef_commits=0; ef_plan_open=0; ef_plan_total=0
+    for tok in "$@"; do
+        case "$tok" in
+            host=*)        ef_host="${tok#host=}" ;;
+            batch_epic=*)  ef_epic="${tok#batch_epic=}" ;;
+            batch_seed=*)  ef_seed="${tok#batch_seed=}" ;;
+            batch_size=*)  ef_batch_size="${tok#batch_size=}" ;;
+            budget=*)      ef_budget="${tok#budget=}" ;;
+            claimed=*)     ef_claimed="${tok#claimed=}" ;;
+            completed=*)   ef_completed="${tok#completed=}" ;;
+            filed=*)       ef_filed="${tok#filed=}" ;;
+            commits=*)     ef_commits="${tok#commits=}" ;;
+            plan_open=*)   ef_plan_open="${tok#plan_open=}" ;;
+            plan_total=*)  ef_plan_total="${tok#plan_total=}" ;;
+        esac
+    done
+    # Numeric fields must be integers or the rolling arithmetic downstream breaks;
+    # coerce any non-numeric to 0 rather than write a poisoned record.
+    for v in ef_batch_size ef_budget ef_claimed ef_completed ef_filed \
+             ef_commits ef_plan_open ef_plan_total; do
+        eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
+    done
+    {
+        ef_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        printf '{"ts":"%s","host":"%s","batch_epic":"%s","batch_seed":"%s","batch_size":%s,"budget":%s,"claimed":%s,"completed":%s,"filed":%s,"commits":%s,"plan_open":%s,"plan_total":%s}\n' \
+            "$ef_ts" "$ef_host" "$ef_epic" "$ef_seed" \
+            "$ef_batch_size" "$ef_budget" "$ef_claimed" "$ef_completed" \
+            "$ef_filed" "$ef_commits" "$ef_plan_open" "$ef_plan_total" \
+            >>"$FLOW_LOG"
+    } 2>/dev/null || true
+    exit 0
+fi
 
 # --experts-only prints just the expert blocks and skips the plan/repo/verdict
 # work. Those blocks shell out to `tillandsias-plan check` and
@@ -188,6 +253,39 @@ if [ -n "$GRADE_BIN" ]; then
     fi
 fi
 printf '%s\n' "$accuracy_line"
+
+# ── flow (packet 682-epud) ───────────────────────────────────────────────────
+# The ROLLING packets-per-cycle view over the flow log, answering the
+# greedier-batching question (682-yiz7): does work-done-per-cycle rise faster
+# than the fixed per-cycle cost as batches grow? overhead_ratio = total commits
+# per total completed packet — the per-cycle overhead amortized across the work
+# it produced. jq is the only parser (no python — tlatoani_hard_no_python); each
+# line is parsed with `fromjson?` so a malformed row is dropped, never fatal.
+flow_cycles=0
+flow_avg_completed="-"; flow_avg_commits="-"; flow_overhead="-"
+flow_source="absent"
+if [ -r "$FLOW_LOG" ]; then
+    flow_source="$FLOW_LOG"
+    flow_stats="$(jq -R 'fromjson?' "$FLOW_LOG" 2>/dev/null | jq -s -r '
+        map(select(type=="object")) as $r
+        | ($r | length) as $n
+        | if $n == 0 then "0 - - -"
+          else
+            ($r | map(.completed // 0) | add) as $c
+          | ($r | map(.commits   // 0) | add) as $m
+          | "\($n) " +
+            "\(((($c/$n)*100)|round)/100) " +
+            "\(((($m/$n)*100)|round)/100) " +
+            "\(if $c > 0 then ((($m/$c)*100)|round)/100 else "-" end)"
+          end' 2>/dev/null)"
+    if [ -n "$flow_stats" ]; then
+        read -r flow_cycles flow_avg_completed flow_avg_commits flow_overhead <<EOF
+$flow_stats
+EOF
+    fi
+fi
+printf 'flow: cycles=%s avg_completed_per_cycle=%s avg_commits_per_cycle=%s overhead_ratio=%s source=%s\n' \
+    "${flow_cycles:-0}" "${flow_avg_completed:--}" "${flow_avg_commits:--}" "${flow_overhead:--}" "$flow_source"
 
 if [ "$EXPERTS_ONLY" = true ]; then
     exit 0

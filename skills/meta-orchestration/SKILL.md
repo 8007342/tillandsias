@@ -761,6 +761,32 @@ distinct — measure before you optimize:
   volume. It reads `deferred source=litmus:expert-groundtruth-harness` when no
   binary can grade in-cycle (then the quick-tier gate carries it).
 
+- **`flow:`** — "does work-done-per-cycle outrun the fixed per-cycle overhead as
+  batches grow?" The ROLLING packets-per-cycle view (`cycles=`,
+  `avg_completed_per_cycle=`, `avg_commits_per_cycle=`, `overhead_ratio=`) over a
+  per-host append log. `overhead_ratio` is total commits per total completed
+  packet — the fixed per-cycle cost amortized across the work it produced — and
+  is the number the greedier-batching decision (682-yiz7) consumes: if larger
+  batches amortize overhead, this ratio FALLS as batch size rises. It reads
+  `source=absent` until this host has appended at least one flow record.
+
+  Each cycle MUST append its flow record so the rolling view stays live. Emit it
+  here, right after running `scripts/cycle-metrics.sh` for the handoff and before
+  Finalization commits — best-effort, the emit never fails the cycle:
+  ```bash
+  scripts/cycle-metrics.sh --emit-flow \
+    host=<this-host> \
+    batch_epic=<from select-work-batch `batch: epic=`> \
+    batch_seed=<from `batch: seed=`> \
+    batch_size=<from `batch: size=`> \
+    budget=<from `batch: budget=`> \
+    claimed=<packets this cycle claimed> \
+    completed=<packets this cycle completed> \
+    filed=<new packets/issues this cycle filed> \
+    commits=<from cycle-metrics `repo: commits_this_cycle=`> \
+    plan_open=<open packet count> plan_total=<total packet count>
+  ```
+
 The two lines worth reading first:
 
 - **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called

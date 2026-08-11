@@ -1,0 +1,86 @@
+# @trace spec:methodology-accountability
+# @trace order:682-epud
+#
+# Pins the per-cycle packet-flow telemetry (packet 682-epud) the greedier-batching
+# decision (682-yiz7) consumes. To decide whether LARGER batches amortize the
+# fixed meta-orchestration overhead you must MEASURE packets-consumed vs cycle
+# overhead across many cycles — a single cycle cannot answer it. So each cycle
+# APPENDS one flow record and cycle-metrics.sh reports the ROLLING view.
+#
+# THE FAILURES THIS PREVENTS.
+#   * A flow record that drops a field (or reorders the grammar) makes the rolling
+#     view uncomputable — the 682-yiz7 decision reads batch_size vs overhead_ratio
+#     across records, so the record shape is load-bearing.
+#   * A `flow:` line that does not actually AVERAGE the log (e.g. reports the last
+#     row, or call volume) hands the batching decision a number that does not mean
+#     work-per-overhead. This drives the reporter against a FIXTURE log with known
+#     sums and asserts the exact rolling arithmetic (overhead_ratio = total commits
+#     per total completed).
+#   * Telemetry that can break the cycle it measures is worse than none. The emit
+#     is pointed at an unwritable path and must still exit 0.
+#
+# Behavioural, not grep-only: the emitter and reporter are executed and their
+# output inspected, so a rewrite that keeps the words and changes the arithmetic
+# still turns red.
+name: litmus:cycle-flow-telemetry-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Execute scripts/cycle-metrics.sh --emit-flow and the flow reporter against a
+  fixture log and assert the per-cycle record grammar, that the flow: line
+  computes a rolling average and a commits-per-completed overhead_ratio, and that
+  an unwritable log path never fails the cycle.
+severity: high
+size: instant
+
+preconditions:
+  - repository root contains scripts/cycle-metrics.sh
+  - jq is available in PATH
+  - shell utilities (grep, mktemp) are available in PATH
+
+critical_path:
+  - step: "--emit-flow appends one record carrying the pinned packet-flow grammar"
+    command: "F=$(mktemp); TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --emit-flow host=linux-mutable batch_epic=E batch_seed=42 batch_size=3 budget=3 claimed=3 completed=2 filed=1 commits=5 plan_open=118 plan_total=800 >/dev/null 2>&1; out=$(cat $F); rm -f $F; echo \"$out\" | jq -e 'has(\"ts\") and .host==\"linux-mutable\" and .batch_epic==\"E\" and .batch_seed==\"42\" and .batch_size==3 and .budget==3 and .claimed==3 and .completed==2 and .filed==1 and .commits==5 and .plan_open==118 and .plan_total==800' >/dev/null 2>&1 && echo 'ok: flow record grammar' || { echo \"observed=$out\"; echo 'fail: flow record grammar'; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: flow record grammar"
+
+  - step: "the flow: line computes a ROLLING average over the log (not the last row, not call volume)"
+    # Two fixture cycles: completed 1 then 2 (avg 1.5), commits 3 then 5 (avg 4).
+    command: "F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"1\",\"batch_size\":1,\"budget\":1,\"claimed\":1,\"completed\":1,\"filed\":0,\"commits\":3,\"plan_open\":120,\"plan_total\":800}\\n{\"ts\":\"t\",\"host\":\"h\",\"batch_epic\":\"E\",\"batch_seed\":\"2\",\"batch_size\":3,\"budget\":3,\"claimed\":3,\"completed\":2,\"filed\":1,\"commits\":5,\"plan_open\":118,\"plan_total\":800}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *cycles=2*avg_completed_per_cycle=1.5*avg_commits_per_cycle=4*) echo 'ok: rolling average' ;; *) echo \"observed=$out expected cycles=2 avg_completed_per_cycle=1.5 avg_commits_per_cycle=4\"; echo 'fail: rolling average' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: rolling average"
+
+  - step: "overhead_ratio is total commits per total completed (the number 682-yiz7 consumes)"
+    # commits 3+5=8, completed 1+2=3, ratio 8/3=2.67 (2dp). Falls as greedier
+    # batches amortize the fixed per-cycle cost.
+    command: "F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'); rm -f $F; case \"$out\" in *overhead_ratio=2.67*) echo 'ok: overhead_ratio' ;; *) echo \"observed=$out expected overhead_ratio=2.67\"; echo 'fail: overhead_ratio' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: overhead_ratio"
+
+  - step: "an absent flow log reports source=absent with no fabricated numbers"
+    command: "F=$(mktemp -u); out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'); case \"$out\" in *cycles=0*overhead_ratio=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: absent honest"
+
+  - step: "a logging failure (unwritable flow log path) does NOT fail the cycle"
+    command: "TILLANDSIAS_CYCLE_FLOW_LOG=/proc/1/nope-cannot-write.jsonl scripts/cycle-metrics.sh --emit-flow host=h completed=1 commits=2 >/dev/null 2>&1; rc=$?; if [ $rc -eq 0 ]; then echo 'ok: emit survives unwritable log'; else echo \"observed rc=$rc expected 0\"; echo 'fail: a metric must not fail the cycle it measures'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: emit survives unwritable log"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "Per-cycle packet-flow telemetry emits a pinned record and a rolling overhead_ratio"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "cycle-flow-telemetry-shape"
+
+failure_modes:
+  - "a flow record drops or reorders a field, making the rolling view uncomputable"
+  - "the flow: line reports the last row or call volume instead of a rolling average"
+  - "overhead_ratio computed as something other than total-commits-per-total-completed"
+  - "an unwritable flow log path fails the cycle it was measuring"
+
+rollback:
+  on_failure: "inspect scripts/cycle-metrics.sh --emit-flow emitter and the flow: reporting block for grammar or arithmetic drift"
+  command: "F=$(mktemp); printf '{\"completed\":1,\"commits\":3}\\n{\"completed\":2,\"commits\":5}\\n' > $F; TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'; rm -f $F"
