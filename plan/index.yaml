@@ -37744,6 +37744,12 @@ plan_index:
         flag) — either implement it or refuse unknown flags loudly; the silent
         acceptance cost this session two blind runs.
       events:
+        - type: progress
+          ts: "2026-08-11T23:33:30Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260811t233112z"
+          host: macos
+          summary: >
+            macOS 2026-08-11: the host-side half of this wedge is explained and filed as 689-y2my (p1, fleet-wide): the guest's 30s empty-PtyData liveness heartbeat (pty_handler.rs:57,816-826) resets the host's 300s vsock-exec inactivity deadline (vsock_exec.rs:107-124,613-646) on every tick, so the bound can never fire and --github-login parks forever. Evidence: two wedged runs (70min, 6min) with host-side samples taken DURING the wedge (host in kevent, guest vCPUs idle in psynch_cvwait, NAT bridge ~18 B/s, guest kernel answering ping). Separately, this packet's note that the macOS tray silently IGNORES --with-token is FIXED (964bb4ba): unknown flags now exit 2 naming the flag, with a behavioral test plus negative control. The prescribed 'bounded direct guest run' diagnostic could not previously complete because it hit 663-69kp on the way in; that is now root-caused and fixed too (689-stig). NOT yet answered: which guest-side step actually stalls — the decomposed preflight probe (podman/vault/DNS markers) has not produced output yet.
         - type: filed
           ts: 2026-08-10T20:35:00Z
           agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
@@ -37784,6 +37790,12 @@ plan_index:
         still tearing down — retry in N seconds'), never an unbounded silent
         wait.
       events:
+        - type: progress
+          ts: "2026-08-11T23:33:00Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260811t233112z"
+          host: macos
+          summary: >
+            ROOT CAUSE FOUND by macOS 2026-08-11 — see 689-stig (completed). NOT a VZ storage/disk lock: --exec-guest blocked forever in read_to_end(stdin) at diagnose.rs before the VM was ever created. Controlled pair: identical invocation, 12+ min silent wedge with inherited stdin vs 9s clean exit with </dev/null; no Virtualization XPC process existed during the wedge and a host-side sample showed the main thread parked in read(2). Fixed + pinned in 689-stig. Residual for this packet: confirm whether the --github-login variant of the symptom is fully covered by 689-stig plus 689-y2my (heartbeat defeats the exec idle deadline) or whether a third path remains.
         - type: filed
           ts: 2026-08-10T20:35:00Z
           agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z

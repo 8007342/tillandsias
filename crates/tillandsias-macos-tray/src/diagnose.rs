@@ -470,6 +470,58 @@ pub fn provision_main() -> i32 {
     }
 }
 
+/// How long `--exec-guest` waits for piped stdin to reach EOF before giving up
+/// on it and booting anyway. Generous enough for a real producer
+/// (`gh auth token | …`), short enough that an inherited-but-idle stdin costs
+/// seconds instead of forever. A full boot + guest exec measures ~9s on this
+/// host, so this is the same order as the work it precedes.
+const STDIN_FORWARD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Read piped stdin to EOF, but never block the caller past `timeout`.
+///
+/// 663-69kp ROOT CAUSE. The previous shape was `if !stdin().is_terminal() {
+/// read_to_end() }` — treating "not a TTY" as "a pipe that will EOF". That
+/// holds for `printf … | tray --exec-guest`, and fails for every stdin
+/// inherited from a parent that keeps the write end open: an agent harness, a
+/// launchd job, a background shell. There `read_to_end` blocks forever, on the
+/// main thread, BEFORE the first `eprintln!` and before the VM is created —
+/// which is exactly the reported symptom ("hangs before printing even
+/// '[exec-guest] starting VM…', nothing reaches stderr"). Measured live
+/// 2026-08-11: identical invocations, 12+ minutes silent with inherited stdin
+/// vs 9s to completion with `</dev/null`. The packet's standing hypothesis was
+/// a VZ storage/disk lock; it is not — no VM process is ever created.
+///
+/// The read happens on a detached helper thread so the timeout is real: a
+/// thread parked in `read(2)` cannot be cancelled, and this is a one-shot
+/// process, so the thread is left to die with it.
+fn read_piped_stdin_bounded(timeout: std::time::Duration) -> Vec<u8> {
+    use std::io::{IsTerminal, Read};
+
+    if std::io::stdin().is_terminal() {
+        return Vec::new();
+    }
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::stdin().read_to_end(&mut buf);
+        let _ = tx.send(buf);
+    });
+    match rx.recv_timeout(timeout) {
+        Ok(buf) => buf,
+        Err(_) => {
+            eprintln!(
+                "[exec-guest] warning: stdin is not a terminal but sent no EOF within {}s — \
+                 continuing with NO forwarded stdin.\n\
+                 If you meant to pipe input, make sure the producer closes its end \
+                 (e.g. `printf '…' | tillandsias-tray --exec-guest …`).\n\
+                 If you did not, pass `</dev/null` to say so explicitly.",
+                timeout.as_secs()
+            );
+            Vec::new()
+        }
+    }
+}
+
 /// `--exec-guest <argv...>`: boot the provisioned VM, run `argv` in the guest
 /// over the control wire (the same `vsock_exec` path `VzRuntime::exec` uses),
 /// print the guest's output + exit, then stop the VM. The real-path proof for
@@ -514,18 +566,8 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
     let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
 
     // Forward piped host stdin to the guest (delivered on the child's stdin +
-    // /dev/tty), so e.g. `printf 'tok\n' | --exec-guest <login-cmd>` works. Skip
-    // when stdin is a TTY (no piped input) to avoid blocking on read_to_end.
-    let stdin_bytes: Vec<u8> = {
-        use std::io::{IsTerminal, Read};
-        if std::io::stdin().is_terminal() {
-            Vec::new()
-        } else {
-            let mut buf = Vec::new();
-            let _ = std::io::stdin().read_to_end(&mut buf);
-            buf
-        }
-    };
+    // /dev/tty), so e.g. `printf 'tok\n' | --exec-guest <login-cmd>` works.
+    let stdin_bytes: Vec<u8> = read_piped_stdin_bounded(STDIN_FORWARD_TIMEOUT);
 
     rt.block_on(async move {
         use std::time::Duration;
