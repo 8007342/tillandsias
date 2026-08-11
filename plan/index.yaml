@@ -1631,6 +1631,12 @@ plan_index:
       status: ready
       events:
         - type: progress
+          ts: "2026-08-11T22:44:41Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Tick-retirement slice landed. host-shell subscription_health gains TickWake::PollRequested and wait_tick_drop_or_request(period, suppress_timer, health, request): when every fallback gate is closed the 30s timer is dropped for that wait entirely and the loop parks on the health watch plus a fast-poll Notify, so a healthy tray no longer wakes twice a minute to re-decide it has nothing to send (SC-11). A closed health channel always restores the timer — otherwise a dead listener would leave a timer-less waiter with no wake source and the fallback polls, which are what covers a dead listener, would never run. Tray side: FAST_POLL_WAKE + request_fast_poll_burst replace the bare FAST_POLL_COUNT store (a bare store is invisible to a suppressed wait), and tick_timer_suppressed gates on health AND LOCAL_PROJECTS_PUSH_SUBSCRIBED — the stream can be healthy while the legacy-topic fallback is engaged, and there the 10-tick EnumerateLocalProjects poll is still load-bearing. Tests: host-shell subscription_health 10/10 including a suppressed-timer pin that advances ten full periods before asserting, with an unsuppressed negative control so a helper that simply never woke would fail; windows-tray 79 passed, 1 pre-existing unrelated failure (embedded_guest_headless_matches_workspace_version, red at clean HEAD too — filed 689-gipe).
+        - type: progress
           ts: "2026-07-11T20:22:00Z"
           agent_id: "windows-bullo-claude-20260711T182324Z"
           host: windows
@@ -33618,6 +33624,12 @@ plan_index:
         - project-lane click opens a working agent shell (blocked on tray rebuild)
         - workspace tests green incl. interactive_lane_keeps_the_terminal_foreground_process_group
       events:
+        - type: note
+          ts: "2026-08-11T22:44:41Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            CORRECTION to this host's 2026-08-11T22:01Z completion evidence. That evidence cited 'guest_version 0.4.260810.1 == host version, so the fixed binary IS deployed'. The inference does not hold: the tray's staged embedded guest asset is 0.4.260809.2 (13731128 bytes, mtime 2026-08-09 02:22) against a workspace VERSION of 0.4.260810.1, so no tray built in that cycle could have injected 0.4.260810.1 — the guest binary (in-VM, mtime 2026-08-09 21:32) predates the rebuild, and reconcile_adopted_guest returns early on a version match exactly as this packet's next_action warned. The packet's other criteria are unaffected: login reaching the token prompt and the state-T check were field-verified on peke, and interactive_lane_keeps_the_terminal_foreground_process_group is green here. Status left at completed on those; whether the DEPLOYED guest carries the setpgid fix is not established by anything this host observed. Filed as 689-gipe.
         - type: note
           ts: "2026-08-11T22:01:38Z"
           agent_id: "windows-claude-opus5-20260811t215500z"
