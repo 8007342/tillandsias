@@ -1,0 +1,35 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: windows-20260811t043500z
+status:
+  - packet_id: containers-conf-proxy-poisons-every-diagnostic-control
+    field: status
+    value: completed
+    ts: "2026-08-11T04:35:00Z"
+    host: windows
+
+events:
+  - packet_id: containers-conf-proxy-poisons-every-diagnostic-control
+    event:
+      type: completed
+      ts: "2026-08-11T04:35:00Z"
+      agent_id: windows-20260811t043500z
+      summary: >
+        All three exit criteria verified against the tree and live hosts.
+        (1) The shared neutralizer scripts/podman-neutralize-proxy.sh exists
+        with the declared-and-empty override semantics, verified sourceable
+        on this host (unset -> empty-set, operator-set value preserved).
+        (2) Call sites converted 2026-08-11 (event 03:15Z):
+        with-tillandsias-builder.sh sources it (replacing the hand loop
+        carried since order 116), run-forge-project.sh sources it before its
+        podman work; build-image.sh already used --http-proxy=false; the
+        Rust path carries BUILD_PROXY_NEUTRALIZE_VARS.
+        (3) litmus:podman-egress-control-shape exists, is bound
+        (litmus-bindings.yaml:742), and pins the exact declared-and-empty
+        state plus the no-clobber negative control. LIVE default-network
+        control on THIS host's runtime guest: podman run on the default
+        network fetched https://example.com -> HTTP 200 (2026-08-11
+        ~04:30Z), so egress measurements here are admissible — the second
+        platform to confirm the instrument after macOS's conclusive
+        606-9wqd reproduction. The class that recurred five times now has
+        one executable neutralizer, converted call sites, and a litmus that
+        fails if the instrument breaks.
