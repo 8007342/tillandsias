@@ -74,4 +74,17 @@ if [ -n "$rows" ]; then
 fi
 
 [ -n "$out" ] && printf '%s' "$out"
-printf 'summary: in_progress=%s stranded=%s threshold_events=0\n' "$total" "$stranded"
+
+# ORDER 672-bz7u: when the binary carries expire-claims, threshold_events
+# reports how many stranded claims a `tillandsias-plan expire-claims` run
+# would return to ready right now (24h TTL). Advisory only — this script
+# still closes nothing; the expiry is an explicit, separate invocation.
+threshold=0
+if "$PLAN" capabilities 2>/dev/null | grep -qx 'expire-claims'; then
+    threshold=$("$PLAN" expire-claims --dry-run 2>/dev/null \
+        | grep -c '^expire-candidate' || true)
+    if [ "${threshold:-0}" -gt 0 ]; then
+        echo "hint: ${threshold} claim(s) past the 24h TTL — run 'tillandsias-plan expire-claims' to return them to ready (641-e2qa criterion 2)"
+    fi
+fi
+printf 'summary: in_progress=%s stranded=%s threshold_events=%s\n' "$total" "$stranded" "${threshold:-0}"

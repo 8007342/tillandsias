@@ -68,6 +68,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "check",
     "compact",
     "dependencies-of",
+    "expire-claims",
     "fragments",
     "grade",
     "loop-status",
@@ -128,6 +129,14 @@ const USAGE: &str = concat!(
     "                                     is PERMANENT — never renumber it. A prefix shared by two\n",
     "                                     packets is normal. See methodology/distributed-work.yaml\n",
     "                                     -> order_id_allocation.\n",
+    "           expire-claims [--ttl-hours N] [--dry-run] [--now-epoch S] [--host H]\n",
+    "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
+    "                                     ready: any packet whose LAST recorded event activity is\n",
+    "                                     older than the TTL (default 24h) gets a status fragment\n",
+    "                                     flipping it back to ready with a progress event naming\n",
+    "                                     the expiry. --dry-run lists without writing. A packet\n",
+    "                                     with NO parseable activity timestamp is reported as\n",
+    "                                     unknown-age and NEVER expired (fail conservative).\n",
     "           status <id|order>         one packet's status line\n",
     "           blocked-by <id|order>     packets directly blocked by X\n",
     "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
@@ -2235,8 +2244,213 @@ fn main() {
                 path.display()
             );
         }
+        "expire-claims" => {
+            // ORDER 672-bz7u — 641-e2qa criterion 2: a claim that produces no
+            // event within its cycle must return the packet to ready
+            // automatically. Lives HERE and not in bash because the claim age
+            // is only knowable from the folded ledger, and grepping for it
+            // shell-side is the brittle parsing 456 eliminated.
+            let mut ttl_hours: i64 = 24;
+            let mut dry_run = false;
+            let mut now_epoch: Option<i64> = None;
+            let mut host =
+                std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string());
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--ttl-hours" => {
+                        i += 1;
+                        ttl_hours = match args.get(i).and_then(|s| s.parse().ok()) {
+                            Some(n) => n,
+                            None => {
+                                eprintln!("error: --ttl-hours needs an integer argument");
+                                std::process::exit(2);
+                            }
+                        };
+                    }
+                    "--dry-run" => dry_run = true,
+                    "--now-epoch" => {
+                        i += 1;
+                        now_epoch = match args.get(i).and_then(|s| s.parse().ok()) {
+                            Some(n) => Some(n),
+                            None => {
+                                eprintln!("error: --now-epoch needs unix seconds");
+                                std::process::exit(2);
+                            }
+                        };
+                    }
+                    "--host" => {
+                        i += 1;
+                        match args.get(i) {
+                            Some(h) => host = h.clone(),
+                            None => {
+                                eprintln!("error: --host needs a value");
+                                std::process::exit(2);
+                            }
+                        }
+                    }
+                    other => {
+                        eprintln!("error: unknown expire-claims flag '{other}'");
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+            if ttl_hours < 1 {
+                eprintln!("error: --ttl-hours must be >= 1 (got {ttl_hours})");
+                std::process::exit(2);
+            }
+            let now = now_epoch.unwrap_or_else(|| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0)
+            });
+            let cutoff = answer::epoch_to_iso8601(now - ttl_hours * 3600);
+            let now_iso = answer::epoch_to_iso8601(now);
+            let (expired, unknown) = expire_claim_candidates(&ledger, &cutoff);
+            let label = if dry_run {
+                "expire-candidate"
+            } else {
+                "expired-claim"
+            };
+            for (order, pid, last) in &expired {
+                emit(&format!("{label}\t{order}\t{pid}\t{last}"));
+            }
+            for (order, pid) in &unknown {
+                emit(&format!("unknown-age\t{order}\t{pid}\tnever-expired"));
+            }
+            if !dry_run && !expired.is_empty() {
+                let compact = loop_status::iso_to_compact(&now_iso);
+                let suffix = format!(
+                    "{:08x}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.subsec_nanos())
+                        .unwrap_or(0)
+                );
+                let dir = fragments::fragment_dir(&index);
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    eprintln!("error: create {}: {e}", dir.display());
+                    std::process::exit(1);
+                }
+                let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+                let mut body = String::new();
+                body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+                body.push_str("# Written by: tillandsias-plan expire-claims (order 672-bz7u).\n");
+                body.push_str("status:\n");
+                for (_, pid, _) in &expired {
+                    body.push_str(&format!("  - packet_id: {pid}\n"));
+                    body.push_str("    field: status\n");
+                    body.push_str("    value: ready\n");
+                    body.push_str(&format!("    ts: \"{now_iso}\"\n"));
+                    body.push_str(&format!("    host: {host}\n"));
+                }
+                body.push_str("\nevents:\n");
+                for (_, pid, last) in &expired {
+                    body.push_str(&format!("  - packet_id: {pid}\n"));
+                    body.push_str("    event:\n");
+                    body.push_str("      type: progress\n");
+                    body.push_str(&format!("      ts: \"{now_iso}\"\n"));
+                    body.push_str(&format!("      host: {host}\n"));
+                    body.push_str(&format!(
+                        "      summary: >\n        Claim expired by tillandsias-plan expire-claims: in_progress \
+                         with no recorded activity since {last} (TTL {ttl_hours}h). Returned \
+                         to ready automatically per 641-e2qa criterion 2.\n"
+                    ));
+                }
+                if let Err(e) = std::fs::write(&path, body) {
+                    eprintln!("error: write {}: {e}", path.display());
+                    std::process::exit(1);
+                }
+                emit(&format!("fragment: {}", path.display()));
+            }
+            let total = query_packets(
+                &ledger,
+                Some("in_progress"),
+                None,
+                None,
+                None,
+                &[],
+                usize::MAX,
+            )
+            .len();
+            emit(&format!(
+                "summary: in_progress={total} expired={} unknown_age={} ttl_hours={ttl_hours} mode={}",
+                expired.len(),
+                unknown.len(),
+                if dry_run { "dry-run" } else { "write" }
+            ));
+        }
         other => unknown_subcommand(other),
     }
+}
+
+/// ORDER 672-bz7u. The candidate selection for `expire-claims`, split out so
+/// the policy is unit-testable without a filesystem: given the folded ledger
+/// and a cutoff timestamp, partition every `in_progress` packet into
+/// (expired, unknown_age). A packet expires when its NEWEST recorded event
+/// timestamp — any event type; `filed` counts, because a claim filed
+/// in_progress with nothing after it is exactly the stranded signature — is
+/// lexicographically older than the cutoff. Lexicographic comparison is sound
+/// because every ledger timestamp is `YYYY-MM-DDTHH:MM:SSZ` (UTC, fixed
+/// width); a timestamp that does not start with four digits is treated as
+/// unparseable. A packet with NO parseable timestamp is never expired: age
+/// unknown is not age infinite, and guessing marks live work abandoned —
+/// the most expensive version of the 641-e2qa bug.
+///
+/// Expired rows are `(order, packet_id, last_activity_ts)`; unknown-age rows
+/// are `(order, packet_id)`.
+type ExpiredClaim<'a> = (String, &'a str, String);
+type UnknownAgeClaim<'a> = (String, &'a str);
+
+fn expire_claim_candidates<'a>(
+    ledger: &'a Ledger,
+    cutoff_iso: &str,
+) -> (Vec<ExpiredClaim<'a>>, Vec<UnknownAgeClaim<'a>>) {
+    let mut expired: Vec<(String, &str, String)> = Vec::new();
+    let mut unknown: Vec<(String, &str)> = Vec::new();
+    for p in query_packets(
+        ledger,
+        Some("in_progress"),
+        None,
+        None,
+        None,
+        &[],
+        usize::MAX,
+    ) {
+        let Some(pid) = str_field(p, "packet_id") else {
+            continue;
+        };
+        let order = p
+            .get("order")
+            .map(|v| match v {
+                serde_yaml::Value::Number(n) => n.to_string(),
+                serde_yaml::Value::String(s) => s.clone(),
+                _ => "?".into(),
+            })
+            .unwrap_or_else(|| "?".into());
+        let mut last_ts: Option<String> = None;
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
+                    continue;
+                }
+                if last_ts.as_deref().is_none_or(|cur| ts > cur) {
+                    last_ts = Some(ts.to_string());
+                }
+            }
+        }
+        match last_ts {
+            Some(ts) if ts.as_str() < cutoff_iso => expired.push((order, pid, ts)),
+            Some(_) => {}
+            None => unknown.push((order, pid)),
+        }
+    }
+    (expired, unknown)
 }
 
 #[cfg(test)]
@@ -2253,6 +2467,37 @@ mod tests {
     /// Sorted + unique is not cosmetic either: the shell side compares the two
     /// capability sets as sorted token lists, and a duplicate would make a set
     /// difference report a phantom missing capability.
+    /// ORDER 672-bz7u. The expiry policy's three-way partition, pinned:
+    /// stale-in_progress expires, fresh-in_progress is untouched, and a
+    /// packet with no parseable activity timestamp is reported but NEVER
+    /// expired. Completed packets are invisible to the sweep entirely.
+    #[test]
+    fn expire_claims_partitions_stale_fresh_and_unknown_age() {
+        let raw = concat!(
+            "packets:\n",
+            "  - packet_id: stale\n    order: 1\n    title: \"s\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n      - type: filed\n        ts: \"2026-08-01T00:00:00Z\"\n",
+            "  - packet_id: fresh\n    order: 2\n    title: \"f\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n      - type: filed\n        ts: \"2026-08-01T00:00:00Z\"\n",
+            "      - type: progress\n        ts: \"2026-08-10T00:00:00Z\"\n",
+            "  - packet_id: ageless\n    order: 3\n    title: \"a\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "  - packet_id: done\n    order: 4\n    title: \"d\"\n    status: completed\n    desired_release: v0.5\n",
+            "    events:\n      - type: completed\n        ts: \"2026-08-01T00:00:00Z\"\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let (expired, unknown) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        assert_eq!(
+            expired,
+            vec![("1".to_string(), "stale", "2026-08-01T00:00:00Z".to_string())],
+            "only the stale in_progress claim expires; the fresh one's newest event is inside the TTL"
+        );
+        assert_eq!(
+            unknown,
+            vec![("3".to_string(), "ageless")],
+            "no-timestamp packets are reported as unknown-age, never expired"
+        );
+    }
+
     #[test]
     fn the_capability_manifest_is_a_sorted_unique_shell_safe_token_list() {
         let tokens = capability_tokens();

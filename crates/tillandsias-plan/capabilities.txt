@@ -22,6 +22,7 @@ check
 # close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
 compact
 dependencies-of
+expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
 fragments
