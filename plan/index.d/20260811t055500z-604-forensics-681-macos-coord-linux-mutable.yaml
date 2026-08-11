@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t055500z
+packets:
+
+  - packet_id: macos-host-reports-no-eligible-work-while-8-ready-packets-exist
+    order: 681-er9z
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "macOS host reports 'no eligible work' while 8 role=macos ready v0.5 packets exist — stale local osx-next or a selector under-report"
+    kind: coordination+bug
+    deliverable: macOS-side selector output capture + root cause (stale base vs filter bug) + fix or a recorded honest-idle reason
+    depends_on: []
+    pickup_role: macos
+    capability_tags: [coordination, selector, macos, convergence]
+    context: >
+      Operator report 2026-08-11 (~05:54Z): "the macos host says there's no
+      macos eligible work". From the linux coordinator's freshly-merged
+      ledger this is FALSE: `tillandsias-plan query --status ready --release
+      v0.5 --role macos` returns EIGHT role=macos ready packets — 155
+      (tray-stream-refactor), 421 (gatekeeper-overwarn), 598-kibt p0 (M5
+      runtime half, operator-gated), 606-r42f p1 (dead-vz-removal), 635-kagg
+      p1 (bash-lane exec-wire wedge — the tractable unblock of blocked 349),
+      657-s6g8 p1 (metal-sidecar-bringup), 663-acdw p1 + 663-69kp p2 (the
+      boot-hang pair the macOS host parked after 6 attempts). So the macOS
+      queue is NOT converged. Most likely causes, in order: (1) the macOS
+      host's LOCAL osx-next is behind the merged state its selector reads
+      (it last authored 5d74786d at 20:37 local, merged linux at 21:39, idle
+      ~2h since) — pull/re-run the selector; (2) the macOS selector
+      under-filters (e.g. treats parked/attempted 663 + hardware-gated 657
+      + operator-gated 598-M5 as the whole queue and reports empty when the
+      REMAINING tractable ones — 635-kagg, 606-r42f, 421, 155 — should
+      surface); (3) a regression of the 627-53gu bash-3.2/yq selector class.
+      This needs the macОС host to capture its OWN `select-work-batch macos`
+      + `plan next macos` output so linux can compare — a false "no work"
+      idles a host that has a p1 (635-kagg) that unblocks a blocked p0-path.
+    exit_criteria:
+      - the macOS host captures its local selector output; the divergence from the coordinator's 8-ready view is root-caused (stale base / filter bug / genuine gate) and fixed or recorded as an honest idle reason
+      - if it is a real under-report, the selector change is litmus-pinned
+    events:
+      - ts: "2026-08-11T05:55:00Z"
+        event: filed
+        summary: >
+          Filed by the linux coordinator from an operator report; the
+          coordinator's merged ledger shows 8 role=macos ready packets, so
+          the macOS-side "no work" is a divergence to root-cause on that host.
+
+events:
+  - packet_id: opencode-segfault-reproduced-with-a-host-side-coredump
+    event:
+      type: progress
+      ts: "2026-08-11T05:55:00Z"
+      agent_id: linux-mutable-20260811t055500z
+      host: linux_mutable
+      summary: >
+        FORENSICS on the 2026-08-10 12:47 dump (PID 129170, the round-1
+        BigPickle crash while ./build.sh --check compiled under pids.max=512).
+        coredumpctl + gdb on the decompressed core (7.4G uncompressed):
+        signal SIGSEGV; the recoverable thread-1 stack is `#0 abort
+        (libc.so.6+0x1818)` then two frames inside opencode.exe — i.e. the
+        Bun/JSC runtime hit a FATAL condition and called abort(), it is not a
+        wild memory-corruption fault. gdb `info threads` enumerated 13+ live
+        LWPs (1,393,397,403,404,417,418,419,540,544,586,587,590,…) before
+        output truncated — a many-threaded process, and Bun/JSC calls abort()
+        on allocation / thread-spawn failure. This is CONSISTENT WITH (not yet
+        proof of) the 667-se87 pids-exhaustion hypothesis: a controlled abort
+        under resource pressure, not a random SEGV. The dump's per-thread
+        stacks are clipped (core-size limited) and the binary is a stripped
+        Bun single-file exe with no build-id, so the exact failing syscall
+        (pthread_create EAGAIN vs mmap ENOMEM) is NOT recoverable from this
+        dump alone. Decisive next step stays the cold-cache in-forge build
+        under 4096 with pids.peak sampled around the compile window (residual
+        already recorded); a peak >512 there closes it. Packet stays ready.
+        Giant decompressed core removed from scratch after inspection.
