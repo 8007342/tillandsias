@@ -1,0 +1,88 @@
+# @trace spec:methodology-accountability
+# @trace order:682-emvg
+#
+# Pins the build/test/litmus DURATION telemetry (packet 682-emvg): "time spent
+# building, testing" is the most likely bottleneck and was invisible until the
+# heavy entry points began appending one duration record per timed step and
+# cycle-metrics.sh reported the ROLLING view on its timing: line.
+#
+# THE FAILURES THIS PREVENTS.
+#   * A timing record that drops or renames a field makes the rolling view
+#     uncomputable — the timing: line reads step/duration_ms across records, so
+#     the record shape is load-bearing.
+#   * A timing: line that does not actually AVERAGE the log (reports the last row,
+#     or call volume) hands a cycle a number that does not mean per-step
+#     wall-clock. This drives the reporter against a FIXTURE log with known sums
+#     and asserts the exact rolling arithmetic, including that the two named
+#     averages scope to distinct step namespaces (build-check vs ^litmus) so
+#     nested emitters cannot double-count.
+#   * Telemetry that can break the step it measures is worse than none. The emit
+#     is pointed at an unwritable path and must still exit 0, and the shared
+#     helper's timing_emit must never disturb a wrapped step's exit code.
+#
+# Behavioural, not grep-only: the emitter, the reporter, and the shared helper
+# are executed and their output/exit inspected, so a rewrite that keeps the words
+# and changes the arithmetic still turns red.
+name: litmus:build-test-timing-telemetry-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  Execute scripts/cycle-metrics.sh --emit-timing and the timing reporter against
+  a fixture log and assert the per-step record grammar, that the timing: line
+  computes rolling build-check and litmus averages plus the slowest step, and
+  that an unwritable log path never fails the step nor the reporter.
+severity: high
+size: instant
+
+preconditions:
+  - repository root contains scripts/cycle-metrics.sh
+  - repository root contains scripts/timing-log.sh
+  - jq is available in PATH
+  - shell utilities (grep, mktemp) are available in PATH
+
+critical_path:
+  - step: "--emit-timing appends one record carrying the pinned duration grammar"
+    command: "F=$(mktemp); TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --emit-timing host=linux-mutable step=build-check phase=check duration_ms=1234 exit=0 >/dev/null 2>&1; out=$(cat $F); rm -f $F; echo \"$out\" | jq -e 'has(\"ts\") and .host==\"linux-mutable\" and .step==\"build-check\" and .phase==\"check\" and .duration_ms==1234 and .exit==0' >/dev/null 2>&1 && echo 'ok: timing record grammar' || { echo \"observed=$out\"; echo 'fail: timing record grammar'; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: timing record grammar"
+
+  - step: "the timing: line computes ROLLING namespaced averages (not the last row, not call volume)"
+    # build-check durations 100+300 -> avg 200; litmus-suite 1000+3000 -> avg 2000;
+    # slowest across all is litmus-suite:3000. Distinct step namespaces prove no
+    # double-count.
+    command: "F=$(mktemp); printf '{\"ts\":\"t\",\"host\":\"h\",\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":100,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":300,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":1000,\"exit\":0}\\n{\"ts\":\"t\",\"host\":\"h\",\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":3000,\"exit\":0}\\n' > $F; out=$(TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^timing:'); rm -f $F; case \"$out\" in *steps=4*build_check_ms_avg=200*litmus_ms_avg=2000*slowest=litmus-suite:3000*) echo 'ok: rolling namespaced averages' ;; *) echo \"observed=$out expected steps=4 build_check_ms_avg=200 litmus_ms_avg=2000 slowest=litmus-suite:3000\"; echo 'fail: rolling namespaced averages' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: rolling namespaced averages"
+
+  - step: "an absent timing log reports source=absent with no fabricated numbers"
+    command: "F=$(mktemp -u); out=$(TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^timing:'); case \"$out\" in *steps=0*build_check_ms_avg=-*litmus_ms_avg=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: absent honest"
+
+  - step: "an emit to an unwritable log path does NOT fail (a metric must not fail the step it measures)"
+    command: "TILLANDSIAS_TIMING_LOG=/proc/1/nope-cannot-write.jsonl scripts/cycle-metrics.sh --emit-timing step=build-check phase=check duration_ms=5 exit=0 >/dev/null 2>&1; rc=$?; if [ $rc -eq 0 ]; then echo 'ok: emit survives unwritable log'; else echo \"observed rc=$rc expected 0\"; echo 'fail: a metric must not fail the step it measures'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: emit survives unwritable log"
+
+  - step: "the shared helper timing_emit never disturbs a wrapped step's exit, even to an unwritable log"
+    command: "( . scripts/timing-log.sh; TILLANDSIAS_TIMING_LOG=/proc/1/nope.jsonl timing_emit build-check check 0 0 ); rc=$?; if [ $rc -eq 0 ]; then echo 'ok: helper is exit-transparent' ; else echo \"observed rc=$rc expected 0\"; echo 'fail: timing_emit changed the exit code' ; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: helper is exit-transparent"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "Build/test/litmus duration telemetry emits a pinned record and a rolling timing: view"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "build-test-timing-telemetry-shape"
+
+failure_modes:
+  - "a timing record drops or renames a field, making the rolling view uncomputable"
+  - "the timing: line reports the last row or call volume instead of a rolling average"
+  - "the two named averages leak across step namespaces and double-count nested emitters"
+  - "an unwritable timing log path fails the build/test/litmus step it was measuring"
+
+rollback:
+  on_failure: "inspect scripts/cycle-metrics.sh --emit-timing emitter and the timing: reporting block, and scripts/timing-log.sh, for grammar or arithmetic drift"
+  command: "F=$(mktemp); printf '{\"step\":\"build-check\",\"duration_ms\":200}\\n{\"step\":\"litmus-suite\",\"duration_ms\":2000}\\n' > $F; TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^timing:'; rm -f $F"

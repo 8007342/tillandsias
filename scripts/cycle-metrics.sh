@@ -82,6 +82,42 @@ REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
 FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-/tmp/tillandsias-cycle-flow.jsonl}"
+TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-/tmp/tillandsias-timing.jsonl}"
+
+# ── --emit-timing: append one build/test/litmus DURATION record (packet 682-emvg)
+# Best-effort by construction, mirroring --emit-flow above and mcp-usage-log.sh:
+# the whole append is wrapped so a full disk, a read-only path, or a missing
+# `date` cannot take down the build/test/litmus step being measured. Always exits
+# 0. Accepts key=value tokens in any order; absent numeric fields default to 0,
+# absent strings to "-". "time spent building, testing" is the most likely
+# bottleneck and was invisible until this rung existed.
+if [ "${1:-}" = "--emit-timing" ]; then
+    shift
+    et_host="-"; et_step="-"; et_phase="-"
+    et_duration_ms=0; et_exit=0
+    for tok in "$@"; do
+        case "$tok" in
+            host=*)         et_host="${tok#host=}" ;;
+            step=*)         et_step="${tok#step=}" ;;
+            phase=*)        et_phase="${tok#phase=}" ;;
+            duration_ms=*)  et_duration_ms="${tok#duration_ms=}" ;;
+            exit=*)         et_exit="${tok#exit=}" ;;
+        esac
+    done
+    # Numeric fields must be integers or the rolling arithmetic downstream breaks;
+    # coerce any non-numeric to 0 rather than write a poisoned record.
+    for v in et_duration_ms et_exit; do
+        eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
+    done
+    {
+        et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s}\n' \
+            "$et_ts" "$et_host" "$et_step" "$et_phase" \
+            "$et_duration_ms" "$et_exit" \
+            >>"$TIMING_LOG"
+    } 2>/dev/null || true
+    exit 0
+fi
 
 # ── --emit-flow: append one per-cycle packet-flow record (packet 682-epud) ────
 # Best-effort by construction, mirroring images/.../mcp-usage-log.sh: the whole
@@ -286,6 +322,47 @@ EOF
 fi
 printf 'flow: cycles=%s avg_completed_per_cycle=%s avg_commits_per_cycle=%s overhead_ratio=%s source=%s\n' \
     "${flow_cycles:-0}" "${flow_avg_completed:--}" "${flow_avg_commits:--}" "${flow_overhead:--}" "$flow_source"
+
+# ── timing (packet 682-emvg) ─────────────────────────────────────────────────
+# WHERE does a cycle's wall-clock go? "time spent building, testing" is the most
+# likely bottleneck and was invisible until the build/test/litmus entry points
+# began appending one duration record per heavy step (via --emit-timing). This
+# line reports the ROLLING view over that per-host log so a cycle can see which
+# step to attack. jq is the only parser (no python — tlatoani_hard_no_python);
+# each line is parsed with `fromjson?` so a malformed row is dropped, never fatal
+# — fail-soft exactly like the flow: block above. The two named averages scope to
+# distinct step namespaces so nested emitters cannot double-count:
+#   build_check_ms_avg — step == "build-check"     (build.sh --check, the pre-push gate)
+#   litmus_ms_avg      — step matches ^litmus       (run-litmus-test.sh suite)
+# `slowest` is the single step:ms with the largest duration across ALL records —
+# the one fact to look at first, in the spirit of the verdict line.
+timing_steps=0
+timing_build_check_avg="-"; timing_litmus_avg="-"; timing_slowest="-:-"
+timing_source="absent"
+if [ -r "$TIMING_LOG" ]; then
+    timing_source="$TIMING_LOG"
+    timing_stats="$(jq -R 'fromjson?' "$TIMING_LOG" 2>/dev/null | jq -s -r '
+        map(select(type=="object")) as $r
+        | ($r | length) as $n
+        | if $n == 0 then "0 - - -:-"
+          else
+            ($r | map(select(.step=="build-check") | .duration_ms // 0)) as $bc
+          | ($r | map(select((.step|tostring)|test("^litmus")) | .duration_ms // 0)) as $lm
+          | ($r | max_by(.duration_ms // 0)) as $slow
+          | "\($n) " +
+            "\(if ($bc|length)>0 then (($bc|add)/($bc|length)|round) else "-" end) " +
+            "\(if ($lm|length)>0 then (($lm|add)/($lm|length)|round) else "-" end) " +
+            "\($slow.step // "-"):\($slow.duration_ms // 0)"
+          end' 2>/dev/null)"
+    if [ -n "$timing_stats" ]; then
+        read -r timing_steps timing_build_check_avg timing_litmus_avg timing_slowest <<EOF
+$timing_stats
+EOF
+    fi
+fi
+printf 'timing: steps=%s build_check_ms_avg=%s litmus_ms_avg=%s slowest=%s source=%s\n' \
+    "${timing_steps:-0}" "${timing_build_check_avg:--}" "${timing_litmus_avg:--}" \
+    "${timing_slowest:--:-}" "$timing_source"
 
 if [ "$EXPERTS_ONLY" = true ]; then
     exit 0

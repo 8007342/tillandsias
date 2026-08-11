@@ -289,6 +289,29 @@ agent_observability_protocol:
           batches amortize overhead, the ratio FALLS as batch_size rises. The emit
           is best-effort by construction (like mcp-usage-log.sh): an unwritable
           log path never fails the cycle it measures.
+      build_test_timing:
+        line: "timing: steps=<n> build_check_ms_avg=<x> litmus_ms_avg=<y> slowest=<step>:<ms> source=<path|absent>"
+        question: "Where does the cycle's wall-clock go — what is the bottleneck?"
+        source: "per-host JSONL at ${TILLANDSIAS_TIMING_LOG:-/tmp/tillandsias-timing.jsonl}, one record per timed heavy step"
+        emitter: "scripts/cycle-metrics.sh --emit-timing step=<name> phase=<name> duration_ms=<n> exit=<n> host=<h>"
+        record_grammar: '{"ts":<utc>,"host":<h>,"step":<name>,"phase":<name>,"duration_ms":<n>,"exit":<n>}'
+        rule: >
+          Packet 682-emvg. "Time spent building, testing" is the most likely
+          bottleneck and was invisible until the build/test/litmus entry points
+          began appending one duration record per heavy step. build.sh --check
+          (the pre-push gate, run every cycle), each scripts/local-ci.sh litmus
+          phase, and each scripts/run-litmus-test.sh suite self-instrument via a
+          shared best-effort helper (scripts/timing-log.sh). The two named
+          averages scope to distinct step namespaces so nested emitters never
+          double-count: build_check_ms_avg is step=="build-check";
+          litmus_ms_avg is step matching ^litmus. `slowest` is the single
+          step:ms with the largest duration across all records — the one fact to
+          attack first. The emit is best-effort by construction (like
+          mcp-usage-log.sh and --emit-flow): a timing failure NEVER changes the
+          wrapped step's exit code or output, and an unwritable log path never
+          fails the cycle it measures. The reporter parses each row with jq
+          `fromjson?`, so a malformed row is dropped, never fatal.
+
     headline_metric:
       name: answer_rate
       formula: "answered / (answered + unsupported)"

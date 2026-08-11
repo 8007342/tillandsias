@@ -1,0 +1,60 @@
+events:
+  - packet_id: build-and-test-duration-telemetry
+    event:
+      type: completed
+      ts: "2026-08-11T11:30:10Z"
+      agent_id: linux-mutable
+      summary: >
+        682-emvg implemented. Build/test/litmus DURATION telemetry so a cycle can
+        see WHERE its wall-clock goes — "time spent building, testing" was the
+        most likely bottleneck and was invisible. New shared helper
+        scripts/timing-log.sh (portable ms clock timing_now_ms — date +%s%3N with
+        a macOS whole-seconds fallback — plus timing_emit, best-effort with a
+        no-op fallback exactly like mcp-usage-log.sh). New
+        `scripts/cycle-metrics.sh --emit-timing step= phase= duration_ms= exit=
+        host=` appends ONE JSONL record
+        {ts,host,step,phase,duration_ms,exit} to a per-host log
+        (${TILLANDSIAS_TIMING_LOG:-/tmp/tillandsias-timing.jsonl}); the append is
+        wrapped and exits 0 so an unwritable path never fails the step, mirroring
+        --emit-flow. cycle-metrics.sh gained a `timing:` line reporting the
+        ROLLING view: steps=<n> build_check_ms_avg=<x> litmus_ms_avg=<y>
+        slowest=<step>:<ms> source=<path|absent>, parsed with jq `fromjson?` per
+        line (malformed rows dropped, never fatal). The two named averages scope
+        to distinct step namespaces (build_check_ms_avg=step=="build-check";
+        litmus_ms_avg=step matching ^litmus) so nested emitters never
+        double-count; slowest is the single largest step:ms across all records.
+        INSTRUMENTED entry points, best-effort side-channels that NEVER change the
+        wrapped step's exit code or output: build.sh --check (the pre-push gate,
+        run every cycle) via an EXIT trap capturing the real exit even on a set -e
+        abort, cancelled at normal completion for a single record; each
+        scripts/local-ci.sh litmus phase (run_litmus_phase, step
+        local-ci-phase-<phase>); each scripts/run-litmus-test.sh suite (EXIT trap,
+        step litmus-suite). Existing experts:/mcp:/expert_accuracy:/flow: lines
+        left byte-identical. Wired into meta-orchestration SKILL.md Cycle-Metrics
+        (timing: line required) and methodology agent-observability.yaml
+        surfaced_every_cycle.build_test_timing (line + emitter + record grammar).
+        Litmus: new litmus:build-test-timing-telemetry-shape (spec
+        methodology-accountability, bound in openspec/litmus-bindings.yaml) pins
+        (a) the timing record grammar, (b) the timing: line computing rolling
+        namespaced averages + slowest from a fixture log, (c) fail-soft — an
+        unwritable path fails neither the emit nor the reporter, and the shared
+        helper timing_emit is exit-transparent; executed green (5/5),
+        methodology-accountability suite 12/12 executed green. VERIFIED: two
+        sample records emitted, cycle-metrics reported `timing: steps=2
+        build_check_ms_avg=4201 litmus_ms_avg=8701 slowest=litmus-suite:8701`;
+        ./build.sh --check still gates green (exit 0, gate stamp recorded) AND
+        appended {step:build-check,duration_ms:7091,exit:0}. yq-validated +
+        bash -n clean on all touched files. NOTICED-not-fixed: litmus_ms_avg
+        counts both the run-litmus-test.sh self-timed suite and local-ci's
+        per-phase record when both run nested (distinct step names, so not a
+        double-count in the average, but the slowest field can surface either);
+        build.sh --check is timed as one whole step, not per sub-phase (fmt /
+        check / clippy / clippy-vsock / plan-check) — sub-phase timing is the
+        obvious next rung if the whole-gate number points here.
+
+status:
+  - packet_id: build-and-test-duration-telemetry
+    field: status
+    value: done
+    ts: "2026-08-11T11:30:10Z"
+    host: linux-mutable

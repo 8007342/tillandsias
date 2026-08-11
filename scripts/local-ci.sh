@@ -36,6 +36,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 source "$REPO_ROOT/scripts/common.sh"
 
+# Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
+# times each litmus phase; a timing failure must NEVER change local-ci's exit.
+. "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
+command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+
 # Parse flags
 FAST_MODE=0
 VERBOSE=0
@@ -411,11 +416,18 @@ run_litmus_phase() {
         args+=("$arg")
     done < <(litmus_args_for_phase "$phase")
 
+    # Time the phase as a telemetry side-channel (packet 682-emvg). Capturing the
+    # rc first and emitting after preserves the exact return contract below —
+    # 0 on success, the runner's PIPESTATUS[0] on failure — untouched.
+    local _t0 _rc
+    _t0="$(timing_now_ms)"
     if bash scripts/run-litmus-test.sh "${args[@]}" 2>&1 | tee "$log_file"; then
-        return 0
+        _rc=0
+    else
+        _rc="${PIPESTATUS[0]}"
     fi
-
-    return "${PIPESTATUS[0]}"
+    timing_emit "local-ci-phase-$phase" "$phase" "$_t0" "$_rc"
+    return "$_rc"
 }
 
 write_convergence_artifacts() {

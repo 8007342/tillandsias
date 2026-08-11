@@ -787,6 +787,17 @@ distinct — measure before you optimize:
     plan_open=<open packet count> plan_total=<total packet count>
   ```
 
+- **`timing:`** — "where does the cycle's wall-clock go?" The ROLLING view over a
+  per-host duration log (`steps=`, `build_check_ms_avg=`, `litmus_ms_avg=`,
+  `slowest=<step>:<ms>`). "Time spent building, testing" is the most likely
+  bottleneck and was invisible until the build/test/litmus entry points began
+  appending one duration record per heavy step (packet 682-emvg). `build.sh
+  --check` (the pre-push gate), each `scripts/local-ci.sh` litmus phase, and each
+  `scripts/run-litmus-test.sh` suite now self-instrument — best-effort, the
+  timing write never changes the wrapped step's exit code or output. It reads
+  `source=absent` until this host has run one instrumented step. `slowest` names
+  the single step to attack first.
+
 The two lines worth reading first:
 
 - **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called

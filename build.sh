@@ -59,6 +59,13 @@ fi
 
 source "$SCRIPT_DIR/scripts/common.sh"
 
+# Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel:
+# times the pre-push gate so a cycle can see where its wall-clock goes. A timing
+# failure must NEVER change build.sh's exit code or output, so the source and its
+# no-op fallback are both `|| true`-guarded.
+. "$SCRIPT_DIR/scripts/timing-log.sh" 2>/dev/null || true
+command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+
 # Get the actual user's home directory (works with sudo)
 if [[ -n "${SUDO_USER:-}" ]]; then
     ACTUAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
@@ -973,6 +980,13 @@ fi
 
 # Type-check only
 if [[ "$FLAG_CHECK" == true ]]; then
+    # Time the WHOLE --check (the pre-push gate, run every cycle) as a telemetry
+    # side-channel (packet 682-emvg). The trap fires on any exit while set —
+    # including a set -e abort when a sub-step fails — recording the real exit
+    # code; it is cancelled at normal completion so a single record is emitted
+    # and combined-flag runs do not over-count. NEVER alters the gate's exit.
+    _CHECK_T0="$(timing_now_ms)"
+    trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
     _step "Checking Rust formatting..."
     if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
         _error "Rust code not formatted: run 'cargo fmt --all'"
@@ -1026,6 +1040,11 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # hashing the diff costs milliseconds for the same guarantee. Push CI was
     # removed 2026-08-03, so this is the trunk's only remaining protection.
     _write_gate_stamp
+
+    # Normal completion: cancel the abort-trap and emit exactly one success
+    # record for the whole gate. (packet 682-emvg)
+    trap - EXIT
+    timing_emit build-check check "$_CHECK_T0" 0
 
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then

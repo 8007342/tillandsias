@@ -64,6 +64,11 @@ fi
 # ============================================================================
 
 readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
+# times the litmus suite; a timing failure must NEVER change the runner's exit.
+. "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
+command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
 readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"
 readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"
 readonly METHODOLOGY_LITMUS="${PROJECT_ROOT}/methodology/litmus.yaml"
@@ -1408,6 +1413,15 @@ main() {
         log_fail "No specs found in bindings. Check litmus-bindings.yaml."
         exit 1
     fi
+
+    # Time the whole suite run as a telemetry side-channel (packet 682-emvg).
+    # The trap fires on every exit past this point — normal completion AND the
+    # early strict/empty-filter failure exits below — recording the real exit
+    # code without altering it. Named `litmus-suite` so cycle-metrics' timing:
+    # line folds it into litmus_ms_avg.
+    local _suite_t0
+    _suite_t0="$(timing_now_ms)"
+    trap 'timing_emit litmus-suite "$FILTER_PHASE" "$_suite_t0" $?' EXIT
 
     # Execute tests for each spec
     while IFS= read -r spec_id; do
