@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t074500z
+packets:
+
+  - packet_id: forge-rebuild-silently-uses-stale-bundled-assets-not-live-source
+    order: 683-g7p6
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    title: "`tillandsias --init --force` rebuilds forge images from the binary's BUNDLED asset snapshot, not the live checkout — a source fix silently does not propagate"
+    kind: bugfix+dx
+    deliverable: init build-context resolution honoring the invoking checkout + a loud notice when building from bundled assets + docs
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [forge, build, refresh, ephemeral, dx, footgun]
+    context: >
+      Found 2026-08-11 while exercising the operator's ephemeral-refresh
+      directive (rebuild the forge to propagate an MCP fix). Sequence, all
+      reproduced: (1) edited images/default/config-overlay/mcp/forge-plan.sh
+      (the $PWD resolver fix, 682-z5h8) in the working checkout
+      /home/tlatoani/claudia/tillandsias; (2) ran `~/.local/bin/tillandsias
+      --init --force`; it reported building all images and exited 0; (3) the
+      fix was NOT baked — `podman run <fresh forge image> grep PWD/plan
+      .config-overlay/mcp/forge-plan.sh` = absent. ROOT CAUSE: main.rs
+      resolve_runtime_asset_root (line 1048) uses the LIVE checkout ONLY when
+      TILLANDSIAS_ROOT is set; otherwise it calls
+      runtime_assets::ensure_runtime_assets(version), which extracts the
+      images/ snapshot BUNDLED INTO THE INSTALLED BINARY (v0.4.260810.2, built
+      before the fix). So --init faithfully rebuilds from a stale in-binary
+      copy of the source, and a developer/agent editing the tree sees their
+      change vanish. This silently defeats "rebuild to refresh" — the exact
+      pattern the operator wants to rely on. Also misleading: the build
+      progress label prints "Pulling image X" (main.rs:6466) while it is
+      actually running `podman build`, so nothing signals it built from a
+      snapshot. Workarounds that DO propagate: `TILLANDSIAS_ROOT=$PWD
+      tillandsias --init --force` (build from the live checkout), or reinstall
+      the binary first (`./build.sh --install` re-bundles current source) then
+      --init. Companion footgun below (683 sibling): --init also refuses
+      outside the desktop user-session lane.
+    exit_criteria:
+      - a source edit in the invoking checkout propagates to the rebuilt forge image WITHOUT needing TILLANDSIAS_ROOT, OR --init prints a loud, unmissable notice naming the bundled-asset source and the exact command to build from the live checkout
+      - the "Pulling image" label is corrected to distinguish build-from-source vs pull/extract
+    events:
+      - ts: "2026-08-11T07:45:00Z"
+        event: filed
+        summary: >
+          Filed from exercising the operator's ephemeral-refresh directive; the
+          fix was verified host-side but did not reach the forge image because
+          --init built from the binary's stale bundled snapshot.
+
+  - packet_id: forge-init-refuses-outside-desktop-session-lane-no-alt
+    order: 683-2n4k
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    title: "`tillandsias --init` refuses from the headless/service lane with no non-graphical alternative, blocking automated forge refresh"
+    kind: enhancement+dx
+    deliverable: a documented non-desktop init path (or explicit env opt-in) for agent/CI-driven forge rebuilds
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [forge, init, session-lane, automation, dx]
+    context: >
+      Found alongside 683-g7p6: `TILLANDSIAS_ROOT=$PWD tillandsias --init
+      --force` launched from a backgrounded/agent shell refused with
+      "tillandsias --init requires the desktop user-session lane, but this
+      process is running under the headless service-account lane." An agent
+      (or cron, or an unattended loop) that needs to rebuild the forge to
+      propagate a fix has no sanctioned non-graphical path — it must borrow
+      the operator's desktop session. Interestingly a prior --init in this
+      same shell DID run, so the gate may be state/env-sensitive; characterize
+      it and provide either a documented service-lane opt-in
+      (TILLANDSIAS_ALLOW_HEADLESS_INIT?) or a clear reason the graphical lane
+      is mandatory. This is a blocker for the operator's "delegate forge
+      rebuilds to agents" model.
+    exit_criteria:
+      - either a documented, safe non-desktop init/rebuild path exists for automation, or the graphical-lane requirement is justified and the error names the exact supported alternative
+    events:
+      - ts: "2026-08-11T07:45:00Z"
+        event: filed
+        summary: >
+          Filed from the same ephemeral-refresh exercise; --init refused from
+          the agent shell lane with no alternative offered.
