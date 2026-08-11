@@ -3095,7 +3095,11 @@ mod tests {
         let menu_state = Arc::new(Mutex::new(
             tillandsias_host_shell::menu_state::MenuState::initial(),
         ));
-        // initial() starts LoggedOut — reapplying it is a no-op.
+        // initial() starts Unknown (626-r7kq): the FIRST confirmed
+        // LoggedOut observation resolves the "Checking your account…" row
+        // into the actionable login leaf — that IS a change and must
+        // rebuild. Only a repeat of the same confirmed state is a no-op.
+        assert!(apply_login_state(GithubLoginState::LoggedOut, &menu_state));
         assert!(!apply_login_state(GithubLoginState::LoggedOut, &menu_state));
         let logged_in = GithubLoginState::LoggedIn {
             handle: "octocat".into(),

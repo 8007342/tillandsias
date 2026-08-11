@@ -30,3 +30,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-11T03:55Z  (frag)    663-69kp paired datum: success-in-45s then immediate-next hang 400s; console silent while rootfs.img mtime advances during hangs; 663-acdw parked (6 attempts)
 - 2026-08-11T07:35Z  (frag)    245 revision slice DONE: 23/23 stale claims corrected in the NA audit doc (7-agent fact-check); re-verification by the 3 named agents remains the gate. Also repaired stranded 606-r42f/421 completions
 - 2026-08-11T08:15Z  (frag)    606-vaua COMPLETED: canonical 30d threshold in methodology; threshold-gated staleness (GNU date -d dialect bug fixed — macOS could never stale); fractional coverage 1.0% (10/1034); 5-fixture self-test litmus step
+- 2026-08-11T09:15Z  (frag)    626-r7kq taken over + CLOSED (Windows implemented, completion stranded; macOS cfg-test exhaustiveness fixed here); 606-um5s CANNOT (no nix on this host)
