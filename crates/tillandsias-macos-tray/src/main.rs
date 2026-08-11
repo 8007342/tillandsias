@@ -222,6 +222,24 @@ fn main() {
         std::process::exit(diagnose::main(format));
     }
 
+    // Every recognized mode above exits the process. Anything flag-shaped that
+    // reaches here is unknown, and falling through would launch the full tray:
+    // an unrelated GUI comes up AND the tray takes the VM singleton, so the
+    // operator's *next* one-shot refuses (order 277) or wedges on the VZ
+    // storage lock (663-69kp). `--with-token` — a real tillandsias-headless
+    // flag with no macOS equivalent — cost one session two blind credential
+    // runs exactly this way (663-acdw). Refuse loudly instead.
+    if let Some(unknown) = args.iter().skip(1).find(|a| a.starts_with('-')) {
+        eprintln!(
+            "Error: unknown flag {unknown}\n\
+             Run `tillandsias-tray --help` for the supported flags.\n\
+             Note: --with-token is a tillandsias-headless (guest) flag; on macOS the host \
+             drives the guest login over the control wire, so pipe the credentials to \
+             `tillandsias-tray --github-login` on stdin instead."
+        );
+        std::process::exit(2);
+    }
+
     let _singleton_guard =
         match tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray") {
             Ok(Some(guard)) => guard,
