@@ -29,6 +29,7 @@
 #
 # Usage:
 #   scripts/mo-full-attest.sh check <log-file> [timeout-s]
+#   scripts/mo-full-attest.sh self [timeout-s]
 #   scripts/mo-full-attest.sh fixture
 #
 # check — validate a real forge log (used by
@@ -37,10 +38,23 @@
 #   current remote head) for hermetic fixtures; the default probe is
 #   `git ls-remote origin refs/heads/<branch>`.
 #
+# self — DERIVE-and-verify the marker against the LIVE repo, run by a full-mode
+#   cycle on ITSELF right before it emits (so EVERY lane self-checks, not only
+#   the litmus launcher that calls `check`). Reads HEAD, the current branch, and
+#   the converged remote head directly — never a typed value — and FAILS LOUD
+#   (typed `MO-FULL: FAIL`, non-zero exit) if local HEAD is not durably on the
+#   remote, the branch is main/detached, or `git ls-remote` does not converge
+#   within the same bounded window as check. On success it prints ONLY the
+#   derived, verified marker line to stdout, which the cycle emits verbatim, so
+#   a hand-typed or fabricated SHA is structurally impossible. Disposition
+#   defaults to COMPLETE; set MO_FULL_DISPOSITION=BLOCKED for a
+#   blocked-but-pushed cycle. Same $MO_FULL_REMOTE_PROBE override as check.
+#
 # fixture — run the hermetic failure scenarios (missing marker, malformed
-#   marker, unpushed local commit, branch mismatch, remote-head mismatch)
-#   plus a clean pass, against synthetic logs and a fake remote probe.
-#   Never touches a live remote.
+#   marker, unpushed local commit, branch mismatch, remote-head mismatch, and a
+#   well-formed-but-fabricated SHA that matches nothing on the remote — the
+#   2026-08-10 breach shape) plus a clean pass, against synthetic logs and a
+#   fake remote probe. Never touches a live remote.
 #
 # Verdict: exactly one final line `MO-FULL: PASS` or
 #   `MO-FULL: FAIL <one-line reason>`, diagnostic lines before it.
@@ -53,7 +67,7 @@ set -uo pipefail
 SHA_RE='^[0-9a-f]{40}$'
 
 usage() {
-    echo "MO-FULL: FAIL usage: $0 {check <log-file> [timeout-s]|fixture}" >&2
+    echo "MO-FULL: FAIL usage: $0 {check <log-file> [timeout-s]|self [timeout-s]|fixture}" >&2
     exit 1
 }
 
@@ -67,6 +81,29 @@ remote_head() {
         return 0
     fi
     git ls-remote origin "refs/heads/${branch}" 2>/dev/null | awk '{print $1; exit}'
+}
+
+# converge_remote <branch> <want-sha> <timeout-s> — poll the remote head for
+# <branch> until it equals <want-sha> or the bounded window closes. Prints the
+# last observed head to stdout; returns 0 on convergence, 1 otherwise. Shared by
+# check (verifying a marker's claimed remote) and self (verifying live HEAD), so
+# the polling grammar lives in one place.
+converge_remote() {
+    local branch="$1" want="$2" timeout_s="$3"
+    local deadline now actual
+    deadline=$(( $(date +%s) + timeout_s ))
+    while :; do
+        actual="$(remote_head "$branch" | tr -d '[:space:]')"
+        if [ "$actual" = "$want" ]; then
+            printf '%s' "$actual"
+            return 0
+        fi
+        now="$(date +%s)"
+        [ "$now" -lt "$deadline" ] || break
+        sleep 5
+    done
+    printf '%s' "$actual"
+    return 1
 }
 
 # check_log <log-file> <timeout-s> — validate the marker in a real log.
@@ -115,20 +152,56 @@ check_log() {
         return 1
     fi
 
-    local deadline now
-    deadline=$(( $(date +%s) + timeout_s ))
-    while :; do
-        actual="$(remote_head "$branch" | tr -d '[:space:]')"
-        if [ "$actual" = "$remote_sha" ]; then
-            echo "MO-FULL: PASS $disp $branch $remote_sha"
-            return 0
-        fi
-        now="$(date +%s)"
-        [ "$now" -lt "$deadline" ] || break
-        sleep 5
-    done
+    if actual="$(converge_remote "$branch" "$remote_sha" "$timeout_s")"; then
+        echo "MO-FULL: PASS $disp $branch $remote_sha"
+        return 0
+    fi
     echo "MO-FULL: FAIL remote head $remote_sha never reached (observed ${actual:-none} on $branch) after ${timeout_s}s — commit not durably pushed or relay lost"
     echo "MO-FULL:  found marker: $marker"
+    return 2
+}
+
+# self_attest <timeout-s> — DERIVE-and-verify the marker against the LIVE repo,
+# run by a full-mode cycle on ITSELF right before it emits. Reads HEAD and the
+# current branch directly and requires the remote to converge on that HEAD, so a
+# hand-typed or fabricated SHA is impossible: the value printed is the value
+# verified. Fails loud (typed MO-FULL: FAIL, non-zero) on a detached or main
+# branch, an unreadable HEAD, or a remote that never converges within the
+# window. On success prints ONLY the derived, verified marker to stdout.
+self_attest() {
+    local timeout_s="$1"
+    local disp local_sha branch actual
+
+    disp="${MO_FULL_DISPOSITION:-COMPLETE}"
+    case "$disp" in
+        COMPLETE|BLOCKED) ;;
+        *)
+            echo "MO-FULL: FAIL invalid MO_FULL_DISPOSITION '$disp' (want COMPLETE or BLOCKED)"
+            return 1
+            ;;
+    esac
+
+    branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if [ -z "$branch" ] || [ "$branch" = "HEAD" ]; then
+        echo "MO-FULL: FAIL detached HEAD — a marker must name the branch the cycle pushed to"
+        return 1
+    fi
+    if [ "$branch" = "main" ]; then
+        echo "MO-FULL: FAIL refusing to attest on protected branch 'main' — full-mode cycles commit to a platform branch"
+        return 1
+    fi
+
+    local_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+    if ! printf '%s' "$local_sha" | grep -qE "$SHA_RE"; then
+        echo "MO-FULL: FAIL cannot read a valid local HEAD sha (not a git repo, or an unborn branch)"
+        return 1
+    fi
+
+    if actual="$(converge_remote "$branch" "$local_sha" "$timeout_s")"; then
+        printf 'MO-FULL: %s %s %s %s\n' "$disp" "$local_sha" "$branch" "$local_sha"
+        return 0
+    fi
+    echo "MO-FULL: FAIL local HEAD $local_sha is not durably on origin/$branch (observed ${actual:-none}) after ${timeout_s}s — commit unpushed or relay lost; do NOT emit a marker"
     return 2
 }
 
@@ -185,12 +258,24 @@ fixture() {
     printf '%s\n' "MO-FULL: COMPLETE $sha_a $branch $sha_a" > "$work/log-pass"
     run_case "clean-pass" "$work/log-pass" 0 "" "printf '${sha_a}'"
 
+    # 7. NEGATIVE CONTROL (651-2x5s): a well-formed but FABRICATED SHA — valid
+    #    40-hex, local==remote in the marker, correct branch, so it satisfies
+    #    EVERY glance-check — that does not match the remote. This is the exact
+    #    2026-08-10 breach shape: the first 8 chars were copied from `git push`
+    #    output, the remaining 32 invented to look like a SHA. It must be
+    #    REJECTED by ls-remote non-convergence, never accepted as a proof.
+    local sha_real sha_fab
+    sha_real="2a8b69677e19131183b9dc24b1d76e4d90cd872e"   # the true head
+    sha_fab="2a8b6967b0d3d0e7b8a1e0a1b8f0e5c4d3a2b1c0"    # 8 real + 32 invented
+    printf '%s\n' "MO-FULL: COMPLETE $sha_fab $branch $sha_fab" > "$work/log-fabricated"
+    run_case "fabricated-sha" "$work/log-fabricated" 2 "never reached" "printf '${sha_real}'"
+
     if [ "${#failures[@]}" -gt 0 ]; then
         printf 'FAIL: %s\n' "${failures[@]}" >&2
         echo "MO-FULL: FAIL fixture $((${#failures[@]})) scenario(s) did not match expected verdicts"
         return 1
     fi
-    echo "PASS: mo-full-attest fixture 6/6 scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass)"
+    echo "PASS: mo-full-attest fixture 7/7 scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha)"
     return 0
 }
 
@@ -202,6 +287,10 @@ case "$cmd" in
         [ $# -ge 1 ] || usage
         timeout_s="${2:-${LITMUS_GIT_DELTA_TIMEOUT_S:-120}}"
         check_log "$1" "$timeout_s"
+        ;;
+    self)
+        timeout_s="${1:-${LITMUS_GIT_DELTA_TIMEOUT_S:-120}}"
+        self_attest "$timeout_s"
         ;;
     fixture)
         fixture

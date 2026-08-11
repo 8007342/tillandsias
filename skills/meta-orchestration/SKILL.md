@@ -94,8 +94,18 @@ enforces before it accepts exit zero:
 - `MO-SMOKE:` grammar and the shared full-cycle rate limit are unchanged; a
   smoke run never emits `MO-FULL:`.
 
-**DERIVE the marker, never type it.** Emit it from a command that reads the
-values, so a hand-written SHA is structurally impossible:
+**DERIVE the marker, never type it — and let the self-check emit it.** A
+hand-typed SHA, or one half-copied from `git push` output, must be structurally
+impossible. Do NOT assemble the line yourself. Run the self-attestation, which
+reads every field from live git state, verifies local HEAD is durably on the
+remote, and prints the verified line FOR you:
+
+```bash
+scripts/mo-full-attest.sh self   # prints the marker on success; MO-FULL: FAIL + non-zero otherwise
+```
+
+Emit its stdout verbatim as your final line. `self` derives the same values the
+raw form would —
 
 ```bash
 printf 'MO-FULL: COMPLETE %s %s %s\n' \
@@ -104,24 +114,33 @@ printf 'MO-FULL: COMPLETE %s %s %s\n' \
   "$(git ls-remote origin "refs/heads/$(git symbolic-ref --short HEAD)" | cut -f1)"
 ```
 
+— but ALSO refuses to print anything when local HEAD is not the converged
+remote head, so an unpushed or fabricated value is caught at emission, in every
+lane. (`MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self` for a
+blocked-but-pushed cycle.)
+
 This is not pedantry. On 2026-08-10 a full-mode cycle on this host emitted a
 marker whose first eight characters came from the `git push` output and whose
 remaining **32 were invented to look like a SHA**. The work was genuinely
 committed, pushed and green; only the proof was false (651-2x5s).
 
-It went unnoticed because `scripts/mo-full-attest.sh` — which would have
+It went unnoticed because `scripts/mo-full-attest.sh check` — which would have
 rejected it instantly, since it requires `git ls-remote` to converge on the
 claimed value — is wired into exactly one caller, the
 `litmus:opencode-prompt-e2e-shape` launcher. A cycle driven by an operator
 prompt, a `./repeat` loop, or a cron emits the marker into a transcript nothing
-parses. **In those lanes the marker is decorative, and an unverified attestation
-is worse than none: it reads as proof and carries none.**
+parses, so that `check` never runs. **Without a check the marker is decorative,
+and an unverified attestation is worse than none: it reads as proof and carries
+none.** The `self` mode closes that gap by moving the same convergence
+verification to emission time: EVERY lane self-checks, because the cycle proves
+its own marker in the one command that prints it.
 
 Any full-mode run that exits without a valid, converging `MO-FULL:` marker
 has not completed its exit contract — regardless of the process exit code.
 `scripts/mo-full-attest.sh fixture` / `scripts/test-mo-full-attest.sh`
 reproduce the breach shapes hermetically (missing marker, malformed, unpushed
-local commit, branch mismatch, remote-head mismatch, clean pass).
+local commit, branch mismatch, remote-head mismatch, a well-formed but
+fabricated SHA that matches nothing on the remote, clean pass — 7/7).
 
 ## Non-Negotiable Exit Contract
 
@@ -798,10 +817,23 @@ Before exit:
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.
 9. Emit the full-mode terminal marker (order 614-2gqx) as your FINAL output
-   line, computed from the post-push state:
+   line by running the self-attestation, which derives every field from the
+   live post-push state and verifies local HEAD is durably on the remote before
+   it prints — so you emit exactly what was verified, never a typed or
+   fabricated SHA:
+   ```bash
+   scripts/mo-full-attest.sh self                              # COMPLETE cycle
+   MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self  # blocked-but-pushed cycle
+   ```
+   It prints the marker —
    ```text
    MO-FULL: <COMPLETE|BLOCKED> <git rev-parse HEAD> <branch> <remote head>
    ```
-   This line is the machine attestation that finalization steps 1-8 all
-   passed; the outer launcher rejects exit zero without it. See
-   "Full-Mode Terminal Attestation" above for the grammar and invariants.
+   — which you emit verbatim as your final line; do not retype or edit it. If it
+   instead prints `MO-FULL: FAIL …` and exits non-zero, local HEAD is not on the
+   remote: do NOT emit a marker — treat it as a blocker (a missing marker is
+   itself the loud failure). This self-check gives EVERY full-mode lane the same
+   convergence verification the litmus launcher's `check` applies to its one
+   lane. The marker is the machine attestation that finalization steps 1-8 all
+   passed; the outer launcher rejects exit zero without it. See "Full-Mode
+   Terminal Attestation" above for the grammar and invariants.

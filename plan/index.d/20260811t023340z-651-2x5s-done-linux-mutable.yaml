@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t023340z
+status:
+  - packet_id: mo-full-marker-is-unverified-outside-the-litmus-lane
+    field: status
+    value: done
+    ts: "2026-08-11T02:33:40Z"
+    host: linux
+
+events:
+  - packet_id: mo-full-marker-is-unverified-outside-the-litmus-lane
+    event:
+      type: completed
+      ts: "2026-08-11T02:33:40Z"
+      agent_id: linux-mutable-20260811t023340z
+      host: linux
+      summary: >
+        All three exit criteria met and verified. The MO-FULL marker was sound
+        but its convergence check (scripts/mo-full-attest.sh) ran in exactly
+        one lane (the litmus launcher's `check`); operator-prompt / ./repeat /
+        cron cycles emitted the marker into a transcript nothing parsed, so the
+        2026-08-10 fabrication (8 real chars from `git push` output + 32
+        invented) went uncaught. Closed by moving derive-and-verify to emission
+        time in every lane.
+
+        (1) DERIVED marker. skills/meta-orchestration/SKILL.md now instructs the
+        cycle NOT to assemble the line by hand but to run
+        `scripts/mo-full-attest.sh self`, which reads every field from live git
+        state and prints the verified line — a hand-typed SHA is structurally
+        impossible. The "DERIVE, never type" section was strengthened and points
+        at the new self mode; the raw printf remains as illustration but the
+        self mode adds the convergence guard the bare printf lacks.
+
+        (2) NEW `self` mode in scripts/mo-full-attest.sh. `self [timeout-s]`
+        reads live HEAD (git rev-parse HEAD) and branch (rev-parse --abbrev-ref)
+        and requires the remote to converge on that HEAD within the SAME bounded
+        window as check. Fails loud (typed `MO-FULL: FAIL`, non-zero) on a
+        main/detached branch, an unreadable HEAD, or a remote that never
+        converges (unpushed/relay-lost); on success prints ONLY the derived,
+        verified marker to stdout. Disposition defaults to COMPLETE,
+        MO_FULL_DISPOSITION=BLOCKED for a blocked-but-pushed cycle. The
+        convergence loop was extracted into a shared converge_remote() helper
+        reused by both check and self (no duplicated logic); remote_head() reused
+        as-is. check and fixture behavior are byte-identical. Finalization step 9
+        rewired to run `scripts/mo-full-attest.sh self` and emit its stdout
+        verbatim, so every full-mode lane self-checks — not only the litmus lane.
+
+        (3) NEGATIVE CONTROL. fixture() gained a 7th scenario, `fabricated-sha`:
+        a well-formed 40-hex marker (local==remote, correct branch — passes every
+        glance-check) whose value does not match the fixture remote, reproducing
+        the exact 2026-08-10 breach (SHA 2a8b6967 + 32 invented vs true head
+        2a8b6967...872e). Asserted REJECTED with a typed verdict and exit 2
+        (ls-remote non-convergence). scripts/test-mo-full-attest.sh header and
+        the litmus binding (litmus-opencode-prompt-e2e-shape.yaml) updated 6/6 ->
+        7/7.
+
+        VERIFICATION. `scripts/mo-full-attest.sh fixture` -> "PASS:
+        mo-full-attest fixture 7/7 scenarios green"; scripts/test-mo-full-attest.sh
+        green; bash -n clean. `scripts/mo-full-attest.sh self` in this repo
+        correctly FAILS LOUD right now (local HEAD is 2 commits ahead of
+        origin/linux-next — an unpushed state; the guard doing its job); the
+        derive-verify-print PASS path was proven with the probe override
+        (MO_FULL_REMOTE_PROBE='git rev-parse HEAD' -> `MO-FULL: COMPLETE
+        ab2428f7...258 linux-next ab2428f7...258`, exit 0) and BLOCKED
+        disposition confirmed. `./build.sh --check` green (exit 0).
+
+        FINDINGS NOTICED, NOT FIXED. (1) The litmus critical_path exercises the
+        self mode only through the fixture's check-path negative control; a live
+        `self` step was deliberately NOT added to the litmus because it is
+        branch-sensitive (self refuses on main/detached), which would make the
+        litmus flaky if ever run on a PR-to-main checkout. Hermetic self coverage
+        lives in the manual probe-override demonstration. (2) images/default/
+        skills/meta-orchestration/SKILL.md is an untracked, drifted derived copy
+        (not git-tracked, differs from the canonical); left untouched — it is a
+        build-staged artifact, not the source of truth.

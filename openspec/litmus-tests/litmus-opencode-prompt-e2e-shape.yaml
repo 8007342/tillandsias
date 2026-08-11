@@ -39,7 +39,7 @@ critical_path:
   - step: "run full-mode terminal attestation fixture"
     command: "scripts/test-mo-full-attest.sh"
     timeout_ms: 60000
-    expected_behavior: "PASS: mo-full-attest fixture 6/6"
+    expected_behavior: "PASS: mo-full-attest fixture 7/7"
 
   - step: "record pre-smoke HEAD for delta comparison"
     command: "git rev-parse HEAD > /tmp/opencode-e2e-head-before && echo \"ok: recorded $(cat /tmp/opencode-e2e-head-before)\""

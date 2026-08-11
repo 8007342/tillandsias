@@ -8,11 +8,13 @@ set -uo pipefail
 # AFTER a local commit, with no terminal marker — and proves the outer gate
 # rejects exit zero instead of discarding the commit as green. Also covers
 # malformed markers, an unpushed local commit claim, a branch mismatch, a
-# remote head that never converges, and a clean pass.
+# remote head that never converges, a well-formed-but-fabricated SHA that
+# matches nothing on the remote (the 2026-08-10 breach, order 651-2x5s), and a
+# clean pass.
 #
 # The scenarios run inside scripts/mo-full-attest.sh fixture, which injects a
 # fake remote probe (MO_FULL_REMOTE_PROBE) so nothing here touches a live
-# remote. Exit 0 only when all six scenarios match their expected verdicts.
+# remote. Exit 0 only when all seven scenarios match their expected verdicts.
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 exec "$ROOT/scripts/mo-full-attest.sh" fixture
