@@ -7,6 +7,7 @@
 # host load (empty-output flake, gate run 20260710T062934Z), and its
 # assertions relied on the runner's behavior heuristics instead of
 # explicit in-command verdicts.
+# freshness: auditor=linux-macuahuitl-fable5-20260811t0055z date=2026-08-11 verdict=refreshed scope=structural re-validation only: dual binding alive, spec environment-runtime exists, no dangling repo-path references, env-var surface unchanged; BEHAVIORAL execution deferred — test is e2e/post-build tier and the host ran skip:live-runtime-present all night (operator's live enclave); next e2e window should execute it and upgrade this stamp
 name: litmus:environment-isolation
 spec: environment-runtime
 description: >
