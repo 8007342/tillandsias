@@ -1,3 +1,4 @@
+# freshness: auditor=linux-macuahuitl-fable5-20260811t0230z date=2026-08-11 verdict=refreshed scope=historical blocker record, re-validated: the newuidmap/rootless-podman failure it describes is RESOLVED on this host (podman unshare ok, 3 rootless enclave containers running all night, litmus:environment-isolation PASS 1/1 2026-08-11); already distilled into scripts/local-ci.sh podman_runtime_health_probe per event/index.yaml. Record stands as correct 2026-05-07 history; no action, the decision_needed's first branch (repair + keep tests live) is what happened.
 status: distilled
 kind: blocker
 title: Podman runtime availability blocks residual litmus convergence
