@@ -2180,6 +2180,56 @@ fn main() {
                 return;
             }
 
+            // ORDER 650-dq6u — the status write gate. Write time is the hard
+            // gate; `check` stays advisory (operator constraint 2026-07-17:
+            // schemas evolve on the fly). Three refusals:
+            //   1. a value outside plan/schema.yaml's vocabulary
+            //   2. a closure-ladder downgrade without --reopen-evidence
+            //      (which records the mandatory `falsified` event)
+            //   3. a closure rung asserted without --evidence
+            let reopen_evidence = flagged("--reopen-evidence");
+            let evidence = flagged("--evidence");
+            if field == "status" {
+                if !schema.statuses.is_empty() && !schema.statuses.iter().any(|s| s == &value) {
+                    eprintln!(
+                        "error: '{value}' is not in the status vocabulary (plan/schema.yaml): {}",
+                        schema.statuses.join(", ")
+                    );
+                    eprintln!(
+                        "       retired words (claimed, stalled, provisional, failed-retryable, parked, tested) are invalid to write — see methodology/distributed-work.yaml status_transition_protocol"
+                    );
+                    std::process::exit(1);
+                }
+                let cur_rank = tillandsias_plan::closure_rank(&current);
+                let new_rank = tillandsias_plan::closure_rank(&value);
+                let is_downgrade = match (cur_rank, new_rank) {
+                    (Some(c), Some(n)) => n < c,
+                    // Leaving the ladder for a working state is also downward;
+                    // obsoleted (supersession) and failed (attempt ended) are
+                    // lateral terminal moves, not evidence retractions.
+                    (Some(_), None) => !matches!(value.as_str(), "obsoleted" | "failed"),
+                    _ => false,
+                };
+                if is_downgrade && reopen_evidence.is_none() {
+                    eprintln!(
+                        "error: '{current}' -> '{value}' moves DOWN the closure ladder (implemented < completed < verified < done)."
+                    );
+                    eprintln!(
+                        "       The only path down is a falsified event: re-run with --reopen-evidence <ref> naming the falsifying observation (650-dq6u)."
+                    );
+                    std::process::exit(1);
+                }
+                if matches!(value.as_str(), "completed" | "verified" | "done")
+                    && evidence.is_none()
+                    && reopen_evidence.is_none()
+                {
+                    eprintln!(
+                        "error: writing status '{value}' requires --evidence <ref> (commit SHA + a named check result; as-wired check for verified; validation/acceptance for done) — 650-dq6u."
+                    );
+                    std::process::exit(1);
+                }
+            }
+
             let ts = flagged("--ts").unwrap_or_else(|| {
                 let secs = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -2222,17 +2272,40 @@ fn main() {
             body.push_str(&format!("    value: {value}\n"));
             body.push_str(&format!("    ts: \"{ts}\"\n"));
             body.push_str(&format!("    host: {host}\n"));
-            if !reason.is_empty() {
-                body.push_str("\nevents:\n");
-                body.push_str(&format!("  - packet_id: {pid}\n"));
-                body.push_str("    event:\n");
-                body.push_str("      type: note\n");
-                body.push_str(&format!("      ts: \"{ts}\"\n"));
-                body.push_str(&format!("      host: {host}\n"));
-                body.push_str(&format!(
-                    "      summary: >\n        {}\n",
-                    reason.replace('\n', " ")
+            let mut event_blocks: Vec<(String, String)> = Vec::new();
+            if let Some(refs) = &reopen_evidence {
+                // The mandatory record for a ladder downgrade (650-dq6u): the
+                // falsified event IS the transition; the LWW row above merely
+                // mirrors it into the header.
+                event_blocks.push((
+                    "falsified".to_string(),
+                    format!(
+                        "falsified '{current}' claim; evidence: {} — status set to '{value}', new attempt epoch",
+                        refs.replace('\n', " ")
+                    ),
                 ));
+            } else if let Some(refs) = &evidence {
+                event_blocks.push((
+                    "completed".to_string(),
+                    format!(
+                        "status '{value}' with evidence_refs: {}",
+                        refs.replace('\n', " ")
+                    ),
+                ));
+            }
+            if !reason.is_empty() {
+                event_blocks.push(("note".to_string(), reason.replace('\n', " ")));
+            }
+            if !event_blocks.is_empty() {
+                body.push_str("\nevents:\n");
+                for (etype, summary) in &event_blocks {
+                    body.push_str(&format!("  - packet_id: {pid}\n"));
+                    body.push_str("    event:\n");
+                    body.push_str(&format!("      type: {etype}\n"));
+                    body.push_str(&format!("      ts: \"{ts}\"\n"));
+                    body.push_str(&format!("      host: {host}\n"));
+                    body.push_str(&format!("      summary: >\n        {summary}\n"));
+                }
             }
 
             if let Err(e) = std::fs::write(&path, body) {

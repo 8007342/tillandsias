@@ -167,28 +167,42 @@ pub fn count_release(ledger: &Ledger, release: &str) -> (u64, u64) {
 /// Is this status terminal — i.e. does it satisfy a dependency and count as
 /// closed for burndown?
 ///
-/// ORDER 649-b2e4. THE SPEC AND THE LEDGER DISAGREE, and this function is
-/// deliberately the UNION of both rather than a ruling for either.
+/// ORDER 650-dq6u — THE OPERATOR RULING (2026-08-11), superseding the
+/// 649-b2e4 interim union. `completed` and `done` are NOT synonyms and are
+/// never collapsed: statuses on the closure ladder record different evidence
+/// grades (see `closure_rank`), merged by semantic distillation — the higher
+/// rung wins, and only an explicit `falsified` event moves down.
 ///
-/// methodology/distributed-work.yaml -> status_transition_protocol declares the
-/// canonical statuses as pending/ready/claimed/in_progress/blocked/stalled/
-/// DONE/failed. `completed` is documented there as an EVENT TYPE whose effect is
-/// "changes status to done" — it is not a declared status at all. The ledger does
-/// the opposite: 371 packets are `completed` and 3 are `done`.
+///   implemented  — artifact landed, local checks pass, field verification
+///                  outstanding. NOT terminal: dependents wait, visibly.
+///   completed    — claimant-asserted closure with evidence refs. Terminal:
+///                  releases dependents (ruled: matches all 386 historical
+///                  rows; the `falsified` event is the correction path).
+///   verified     — a named falsifiable check passed AS WIRED (litmus counts,
+///                  first-fire e2e, in-target run). Terminal.
+///   done         — validated/accepted against the packet's stated closure.
+///                  Terminal. Historical `done` rows are grandfathered.
 ///
-/// Both readers previously matched only `completed | obsoleted`, so a packet
-/// recorded with the SPEC-CANONICAL value silently failed to satisfy anything. It
-/// was not hypothetical: the macOS lane closed a 5/5-PASS release smoke as `done`
-/// and the stable promotion stayed blocked by finished work.
-///
-/// Accepting the union is the safe direction. Every value here is documented or
-/// overwhelmingly practised as terminal, so widening can only stop CORRECTLY
-/// finished work from blocking; it cannot unblock anything that is genuinely
-/// open. Narrowing to one value would invalidate either 371 packets or the
-/// methodology, and that is an operator decision, not a refactor — tracked by
-/// 649-b2e4.
+/// The canonical vocabulary lives in plan/schema.yaml and
+/// methodology/distributed-work.yaml -> status_transition_protocol; the
+/// set-field write gate refuses values outside it and refuses ladder
+/// downgrades without falsification evidence.
 pub fn is_terminal_status(status: &str) -> bool {
-    matches!(status, "completed" | "done" | "obsoleted")
+    matches!(status, "completed" | "verified" | "done" | "obsoleted")
+}
+
+/// Position on the closure ladder (650-dq6u evidence lattice), or None for
+/// statuses outside it. The single comparator every surface must share:
+/// higher rank = more verification evidence; merges take the max; a
+/// rank-lowering write requires an explicit `falsified` event.
+pub fn closure_rank(status: &str) -> Option<u8> {
+    match status {
+        "implemented" => Some(0),
+        "completed" => Some(1),
+        "verified" => Some(2),
+        "done" => Some(3),
+        _ => None,
+    }
 }
 
 impl Ledger {

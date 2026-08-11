@@ -255,7 +255,20 @@ distributed_work:
           completed:
             fields: [ts, agent_id, host, lease_id, evidence_refs]
             idempotent: true
-            note: "Terminal. Status flips to `done`. Lease is implicitly released."
+            note: >
+              Terminal. evidence_refs REQUIRED (commit SHA + at least one named
+              check result). Sets status to `completed` (claimant-asserted
+              closure) — or directly to `verified`/`done` when the evidence
+              already meets that higher rung's bar. Lease is implicitly
+              released.
+          falsified:
+            fields: [ts, agent_id, host, evidence_refs, falsified_claim]
+            idempotent: false
+            note: >
+              The ONLY transition down the closure ladder (650-dq6u).
+              evidence_refs must name the falsifying observation. Returns
+              status to `ready` and opens a new attempt epoch (precedents:
+              396, 484, brew-attestation).
       depends_on:
         kind: optional
         type: list-of-id
@@ -274,24 +287,94 @@ distributed_work:
     purpose: >
       Keep the top-level status line, event log, and downstream blockers in
       sync so agents do not re-claim finished work or wait on stale blockers.
+    ruling: >
+      650-dq6u (The Tlatoani, 2026-08-11): `completed` and `done` are NOT
+      synonyms and are never collapsed into one winner. They record different
+      events on a monotonic evidence ladder — work completed does not mean
+      tested, and tested does not mean done. Merge is semantic distillation
+      over the event log, not last-write-wins on a scalar. `implemented` is
+      the deliberate pre-field-verification rung (windows-peke,
+      627-sgtt/627-wtrp), kept. The operator further ruled the ladder carries
+      an explicit `verified` rung (IEEE 1012 alignment): verification (built
+      right) and validation/acceptance (right thing built) are distinct.
     canonical_statuses:
+      # Working states (non-terminal; latest event wins among these).
       pending: "Known work, unclaimed, dependencies not yet all satisfied."
-      ready: "Known work, unclaimed, dependencies satisfied, eligible for claim."
-      claimed: "A lease exists, but implementation has not yet produced code or docs."
-      in_progress: "A lease exists and the claimant has started implementation."
-      blocked: "Cannot progress without a named external dependency or decision."
-      stalled: "No heartbeat before expires_at; reclaimable after a fresh read."
-      done: "Completion event exists with evidence refs; do not re-claim."
-      failed: "Attempt ended; retryability must be explicit in the failed event."
+      ready: "Known work, unclaimed, dependencies satisfied. The ONLY claimable status."
+      in_progress: >
+        A lease exists and the claimant has started implementation. Absorbs
+        the retired `claimed`; the retired `stalled` is replaced by lease TTL
+        + expire-claims (672-bz7u), which returns stranded leases to ready.
+      blocked: "Cannot progress without a named external dependency or decision; the blocked event names the blocker."
+      needs_clarification: "Awaiting an operator answer to a named question; tag operator-decision. Dependents waiting on it are reported, never silent."
+      # Closure ladder (monotone: implemented < completed < verified < done;
+      # merge = max; the only path down is a `falsified` event).
+      implemented: >
+        NON-TERMINAL. The artifact landed (commit refs recorded) and
+        local/self verification passed, but field/e2e verification is
+        explicitly outstanding. MUST carry a verification hand-off:
+        next_action names the outstanding check, where it runs, and who can
+        run it. Does not satisfy dependents; tooling MUST report any
+        dependent waiting on it.
+      completed: >
+        TERMINAL — claimant-asserted closure. A `completed` event exists
+        whose evidence_refs record what the writer ran and observed: commit
+        SHA plus at least one named check result. The writer's own assertion
+        that all exit_criteria are met; releases dependents and counts closed
+        in burndown. It does NOT claim as-wired or independent verification —
+        that is what `verified` adds.
+      verified: >
+        TERMINAL — verified closure, strictly above completed. The completion
+        evidence has been evaluated against the packet's exit_criteria via a
+        named falsifiable check that passed AS WIRED, not by proxy: litmus
+        suite counts, first-fire e2e, in-target verification, or an
+        independent verifier's recorded check (the 396 lesson: running the
+        script directly is not the hook firing). Built right.
+      done: >
+        TERMINAL — validated closure, the top rung. The work has been
+        validated against the packet's stated verifiable_closure /
+        acceptance: operator acceptance, observed working in its production
+        seat, or the packet's own acceptance criterion demonstrably satisfied
+        in the field. Right thing built. Do not re-claim. Historical rows
+        that predate the verified rung keep their labels (grandfathered);
+        new writes use `verified` for as-wired check evidence and reserve
+        `done` for validation/acceptance.
+      # Non-success terminals.
+      obsoleted: "TERMINAL. Superseded or no longer applicable; the event names the successor or reason. Satisfies dependents."
+      failed: "Attempt ended; retryable: true|false REQUIRED on the failed event. Does NOT satisfy dependents."
+    retired_statuses:
+      note: >
+        Zero live rows fold to any of these; they are retired words, invalid
+        to write: claimed (absorbed by in_progress), stalled (replaced by
+        lease expiry), provisional, failed-retryable (use failed +
+        retryable: true), parked, tested. `archived` is a mechanism
+        (archived_ids), never a status value.
+    evidence_lattice:
+      order: "implemented < completed < verified < done"
+      merge_rule: >
+        Status is a fold over the grow-only event log. Within the closure
+        ladder the HIGHER rung wins regardless of write order — a
+        less-verified claim never overwrites a more-verified one. The only
+        path DOWN the ladder is an explicit `falsified` event whose
+        evidence_refs name the falsifying observation; it returns the packet
+        to ready (or, for a partial falsification, to the highest rung the
+        surviving evidence supports) and opens a new attempt epoch.
+      terminal_set: >
+        completed | verified | done | obsoleted. ONE shared
+        is_terminal_status definition (crates/tillandsias-plan/src/lib.rs)
+        is consumed by the dependency resolver, burndown, guards, and
+        selectors; no reader defines its own.
     rules:
-      - "A `claim` event changes status from ready/pending to claimed."
-      - "The first implementation `progress` or code checkpoint changes claimed to in_progress."
+      - "A `claim` event changes status from ready to in_progress (mint lease_id; heartbeat per lease rules)."
       - "A `blocked` event must name the blocker, owner host if known, and the next ping time."
-      - "A lease with no heartbeat past expires_at folds to stalled; the next agent may reclaim after recording a fresh read."
-      - "A `completed` event changes status to done and must update dependency mirrors in every queue table that names the item."
+      - "A checkpoint that lands the artifact with field verification still outstanding sets status `implemented` and MUST name the outstanding verification in next_action."
+      - "A `completed` event REQUIRES evidence_refs and sets status to `completed` — or directly to `verified`/`done` when the evidence already meets that bar. Writers without as-wired check evidence write `completed`, never `verified`; writers without validation/acceptance evidence write `verified`, never `done`."
+      - "Promotion up the ladder appends the new-rung evidence (litmus counts, e2e first-fire, in-target check, acceptance ref); it never rewrites prior events and must update dependency mirrors."
+      - "A `falsified` event (falsifying evidence_refs REQUIRED) is the ONLY transition down the ladder; it returns status to ready and starts a new attempt epoch."
       - "A `released` event returns status to ready if dependencies are satisfied, otherwise pending or blocked with the blocker named."
       - "A `failed` event sets status to failed and must include retryable: true|false plus the smallest next diagnostic chain."
-      - "When events and the status header disagree, the latest terminal event wins; immediately patch the header before claiming new work."
+      - "When events and the status header disagree, the HIGHEST closure-ladder event (or the latest terminal event outside the ladder) wins; immediately patch the header before claiming new work."
+      - "Only `ready` is claimable. `implemented` and `needs_clarification` are visible parking states: tooling reports every dependent waiting on them and the named outstanding action."
 
   ping_and_triage_protocol:
     purpose: >
@@ -578,8 +661,11 @@ distributed_work:
           linux-next), then resume code work.
       - id: 7_terminal
         action: >
-          On success: emit `completed` event + commit_sha evidence; update
-          item status to `done`.
+          On success: emit `completed` event + commit_sha evidence; set
+          status to the highest closure-ladder rung the evidence supports —
+          `completed` (claimant-asserted), `verified` (a named as-wired
+          check passed), or `done` (validated/accepted) — per
+          status_transition_protocol.
           On voluntary stop: emit `released` event with reason; status
           returns to `pending` or `blocked`.
           On failure: emit `failed` event with `retryable: true|false` and

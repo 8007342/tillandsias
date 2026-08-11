@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: experts-refresh-on-commit
+    field: status
+    value: ready
+    ts: "2026-08-11T20:49:42Z"
+    host: host
+
+events:
+  - packet_id: experts-refresh-on-commit
+    event:
+      type: falsified
+      ts: "2026-08-11T20:49:42Z"
+      host: host
+      summary: >
+        falsified 'completed' claim; evidence: 396's own FALSIFIED event 2026-07-30T07:05Z (plan/index.yaml:16650-16680): 'The hook has never executed anywhere'; no re-close event exists, so the header's 'completed' was ahead of the evidence. Successor 685-yidq carries the host-side first-fire closure criterion — status set to 'ready', new attempt epoch
+  - packet_id: experts-refresh-on-commit
+    event:
+      type: note
+      ts: "2026-08-11T20:49:42Z"
+      host: host
+      summary: >
+        650-dq6u disposition: fold tainted terminals down honestly. Claimants should weigh obsoleting 396 against the 685 packets rather than re-implementing.

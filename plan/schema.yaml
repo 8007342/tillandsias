@@ -14,20 +14,24 @@ required_fields:
   - title
   - status
 
-# Canonical status vocabulary (order 440). Must match plan/index.yaml
-# default_status_values exactly — the check-plan-schema-divergence.sh
-# gate enforces this.
+# Canonical status vocabulary (order 440; distilled by operator ruling
+# 650-dq6u 2026-08-11: closure ladder implemented < completed < verified
+# < done, merge = max, only a `falsified` event moves down; retired
+# words provisional/failed-retryable had zero live rows). Must match
+# plan/index.yaml default_status_values exactly — the
+# check-plan-schema-divergence.sh gate enforces this.
 statuses:
   - pending
   - ready
   - in_progress
   - blocked
+  - needs_clarification
+  - implemented
   - completed
-  - provisional
+  - verified
+  - done
   - obsoleted
   - failed
-  - failed-retryable
-  - needs_clarification
 
 # Fields whose values must resolve to existing packet_ids (checked by the
 # invariant core; listing them here tells the engine WHERE references live

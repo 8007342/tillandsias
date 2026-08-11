@@ -6,12 +6,13 @@ plan_index:
     - ready
     - in_progress
     - blocked
+    - needs_clarification
+    - implemented
     - completed
-    - provisional
+    - verified
+    - done
     - obsoleted
     - failed
-    - failed-retryable
-    - needs_clarification
 
   selection_policy:
     primary_rule: >

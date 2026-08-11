@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mo-full-marker-is-unverified-outside-the-litmus-lane
+    field: status
+    value: completed
+    ts: "2026-08-11T20:49:42Z"
+    host: host
+
+events:
+  - packet_id: mo-full-marker-is-unverified-outside-the-litmus-lane
+    event:
+      type: falsified
+      ts: "2026-08-11T20:49:42Z"
+      host: host
+      summary: >
+        falsified 'done' claim; evidence: part of its done-grade evidence (the MO-FULL marker) was self-reportedly fabricated by an agent (recorded in the packet history); surviving evidence supports claimant-asserted closure only. Operator disposition 2026-08-11: demote done -> completed — status set to 'completed', new attempt epoch

@@ -65,8 +65,10 @@ while IFS=$'\t' read -r pid want; do
         # on via the LWW channel is NOT a loss — the fold is ahead of the
         # declaration, which is correct. Only flag a declaration the fold is
         # BEHIND: a terminal status that never took effect.
+        # Exactly the resolver's terminal set (is_terminal_status, 650-dq6u) —
+        # a guard laxer OR wider than the resolver is decorative (649-b2e4).
         case "$want" in
-            completed|done|retired|obsolete|blocked|failed)
+            completed|verified|done|obsoleted)
                 violations="${violations}${pid}: declared '${want}' in a fragment, folds as '${got}'"$'\n'
                 ;;
         esac
@@ -107,8 +109,12 @@ if [ -n "$declared_events" ]; then
         [ -n "$pid" ] || continue
         got="$("$PLAN" status "$pid" 2>/dev/null | awk '{print $2}')"
         [ -n "$got" ] || continue
+        # A completed EVENT legitimately pairs with ANY closure-ladder terminal:
+        # per 650-dq6u the event may set status to completed, or directly to
+        # verified/done when the evidence meets that higher rung's bar.
+        # obsoleted is accepted too (supersession recorded over a completion).
         case "$got" in
-            completed|done|retired|obsolete) ;;
+            completed|verified|done|obsoleted) ;;
             *)
                 event_violations="${event_violations}${pid}: has a 'completed' EVENT but folds as '${got}'"$'\n'
                 ;;

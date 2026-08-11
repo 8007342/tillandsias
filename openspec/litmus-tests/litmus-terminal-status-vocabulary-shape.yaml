@@ -2,21 +2,22 @@
 name: litmus:terminal-status-vocabulary-shape
 spec: ci-release
 phase: pre-build
-description: Every terminal status satisfies a dependency, and every reader agrees which statuses are terminal
+description: One status vocabulary, one terminal set, a monotone closure ladder, and a write gate that refuses out-of-vocabulary and downgrade writes
 severity: high
 size: instant
 
-# Order 649-b2e4. The spec and the ledger disagreed about the terminal status
-# and every reader picked its own side:
+# Order 649-b2e4 found the defect (spec, schema, and practice were three
+# different vocabularies and every reader picked its own side; a 5/5-PASS
+# release smoke closed as `done` satisfied nothing). Order 650-dq6u is the
+# OPERATOR RULING (2026-08-11) that resolves it: closure ladder
+# implemented < completed < verified < done, merge = max, the only path down
+# is a `falsified` event, and the vocabulary is enforced at WRITE time
+# (set-field) while `tillandsias-plan check` stays advisory.
 #
-#   methodology/distributed-work.yaml declares DONE canonical and `completed`
-#     an EVENT type, not a status at all
-#   the ledger has 371 `completed` and 3 `done`
-#   the dependency resolver and burndown matched only `completed | obsoleted`
-#
-# So a packet closed with the SPEC-CANONICAL value satisfied nothing. The macOS
-# lane closed a 5/5-PASS release smoke as `done` and the stable promotion stayed
-# blocked by finished work, with no reader reporting a problem.
+# Write-gate steps below run against a THROWAWAY copy of the index under
+# mktemp so that even a regressed gate can only ever mutate the copy —
+# the tracked-file-mutation class (678-er2c) must stay impossible here.
+# Packet ids are selected dynamically from the copy, never pinned (634-39ik).
 
 preconditions:
   - a built tillandsias-plan binary is reachable
@@ -25,40 +26,62 @@ critical_path:
   - step: "every terminal status satisfies a dependency"
     # The property, checked per value rather than by reading the match arm, so a
     # future narrowing of the vocabulary fails here rather than in a promotion.
-    command: "for s in completed done obsoleted; do n=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq 'length'); if [ \"${n:-0}\" -eq 0 ]; then continue; fi; blockers=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq -r '.[].packet_id' | while read -r p; do ./target/release/tillandsias-plan blocked-by \"$p\" 2>/dev/null | awk -v P=\"$p\" '{print P}'; done | head -1); dep=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq -r '.[0].packet_id'); echo \"  $s: $n packets\"; done; echo 'ok: terminal vocabulary enumerated'"
+    command: "for s in completed verified done obsoleted; do n=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq 'length'); echo \"  $s: ${n:-0} packets\"; done; echo 'ok: terminal vocabulary enumerated'"
     timeout_ms: 60000
     expected_behavior: "ok: terminal vocabulary enumerated"
 
   - step: "NEGATIVE CONTROL: a terminal dependency does NOT appear as unsatisfied"
     # The regression that actually happened. Finds any packet whose declared
     # dependency is terminal, and asserts the resolver does not list it.
-    command: "bad=0; for p in $(./target/release/tillandsias-plan query --status ready --limit 700 --json 2>/dev/null | jq -r '.[]|select((.depends_on//[])|length>0)|.packet_id' | head -40); do for d in $(./target/release/tillandsias-plan dependencies-of \"$p\" 2>/dev/null | awk '{print $2}'); do case \"$d\" in completed|done|obsoleted) echo \"FAIL: $p lists a '$d' dependency as unsatisfied\"; bad=1 ;; esac; done; done; [ \"$bad\" -eq 0 ] && echo 'ok: no terminal dependency is reported unsatisfied'"
+    command: "bad=0; for p in $(./target/release/tillandsias-plan query --status ready --limit 700 --json 2>/dev/null | jq -r '.[]|select((.depends_on//[])|length>0)|.packet_id' | head -40); do for d in $(./target/release/tillandsias-plan dependencies-of \"$p\" 2>/dev/null | awk '{print $2}'); do case \"$d\" in completed|verified|done|obsoleted) echo \"FAIL: $p lists a '$d' dependency as unsatisfied\"; bad=1 ;; esac; done; done; [ \"$bad\" -eq 0 ] && echo 'ok: no terminal dependency is reported unsatisfied'"
     timeout_ms: 120000
     expected_behavior: "ok: no terminal dependency is reported unsatisfied"
 
-  - step: "the shared helper exists so readers cannot drift apart again"
-    # Two call sites previously hard-coded the same match arm independently.
-    # One definition is the only thing that keeps burndown and the dependency
-    # resolver agreeing.
-    command: "grep -q 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs && n=$(grep -c 'is_terminal_status' crates/tillandsias-plan/src/lib.rs); if [ \"${n:-0}\" -lt 3 ]; then echo \"FAIL: helper defined but only $n reference(s) — a reader is still hard-coding its own set\"; exit 1; fi; echo 'ok: one shared definition'"
+  - step: "the shared helpers exist so readers cannot drift apart again"
+    # is_terminal_status is the single terminal set; closure_rank is the single
+    # ladder comparator. Multiple references prove call sites consume them
+    # instead of hard-coding their own match arms.
+    command: "grep -q 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs && grep -q 'pub fn closure_rank' crates/tillandsias-plan/src/lib.rs && n=$(grep -c 'is_terminal_status' crates/tillandsias-plan/src/lib.rs); if [ \"${n:-0}\" -lt 3 ]; then echo \"FAIL: helper defined but only $n reference(s) — a reader is still hard-coding its own set\"; exit 1; fi; echo 'ok: shared definitions present'"
     timeout_ms: 10000
-    expected_behavior: "ok: one shared definition"
+    expected_behavior: "ok: shared definitions present"
 
-  - step: "the guard is not more permissive than the resolver"
-    # check-fragment-status-loss.sh accepted done|completed|retired|obsolete
-    # while the resolver accepted only completed|obsoleted, so the guard could
-    # never catch this class. A guard laxer than the thing it guards is decorative.
-    command: "guard=$(grep -oE 'completed\\|done\\|retired\\|obsolete[a-z]*' scripts/check-fragment-status-loss.sh | head -1); code=$(grep -oE '\"completed\" \\| \"done\" \\| \"obsoleted\"' crates/tillandsias-plan/src/lib.rs | head -1); if [ -z \"$code\" ]; then echo 'FAIL: cannot locate the code vocabulary'; exit 1; fi; echo \"ok: guard=[${guard:-none}] code=[${code}] — reconciliation tracked by 649-b2e4\""
+  - step: "guard vocabulary EQUALS resolver vocabulary"
+    # check-fragment-status-loss.sh once accepted done|completed|retired|obsolete
+    # while the resolver accepted only completed|obsoleted — a guard laxer (or
+    # wider) than the thing it guards is decorative. Compare the SETS exactly.
+    command: "guard=$(grep -oE '^[[:space:]]*(completed\\|[a-z|]+)\\)' scripts/check-fragment-status-loss.sh | head -1 | tr -d ' )' | tr '|' '\\n' | sort | tr '\\n' ' '); code=$(grep -A1 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort | tr '\\n' ' '); if [ -z \"$guard\" ] || [ -z \"$code\" ]; then echo 'FAIL: cannot locate guard or code vocabulary'; exit 1; fi; if [ \"$guard\" != \"$code\" ]; then echo \"FAIL: guard=[$guard] != code=[$code]\"; exit 1; fi; echo 'ok: guard set equals resolver set'"
     timeout_ms: 10000
-    expected_behavior: "ok: guard="
+    expected_behavior: "ok: guard set equals resolver set"
+
+  - step: "write gate refuses an out-of-vocabulary status (isolated copy)"
+    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); if ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status bogus-word 2>\"$T/err\"; then echo 'FAIL: out-of-vocabulary status was accepted'; rm -rf \"$T\"; exit 1; fi; grep -q 'not in the status vocabulary' \"$T/err\" && echo 'ok: out-of-vocabulary refused'; rm -rf \"$T\""
+    timeout_ms: 30000
+    expected_behavior: "ok: out-of-vocabulary refused"
+
+  - step: "write gate refuses a closure-ladder downgrade without --reopen-evidence (isolated copy)"
+    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status completed --limit 1 --json | jq -r '.[0].packet_id'); if ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status ready 2>\"$T/err\"; then echo 'FAIL: ladder downgrade was accepted without falsification evidence'; rm -rf \"$T\"; exit 1; fi; grep -q 'moves DOWN the closure ladder' \"$T/err\" && echo 'ok: downgrade refused'; rm -rf \"$T\""
+    timeout_ms: 30000
+    expected_behavior: "ok: downgrade refused"
+
+  - step: "write gate requires --evidence for a closure rung (isolated copy)"
+    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); if ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status completed 2>\"$T/err\"; then echo 'FAIL: closure status accepted without evidence'; rm -rf \"$T\"; exit 1; fi; grep -q 'requires --evidence' \"$T/err\" && echo 'ok: evidence required'; rm -rf \"$T\""
+    timeout_ms: 30000
+    expected_behavior: "ok: evidence required"
+
+  - step: "POSITIVE CONTROL: a compliant closure write succeeds and records evidence (isolated copy)"
+    # A broken stack passes every negative test; prove the gate still admits
+    # the sanctioned shape and lands the fragment in the COPY's index.d.
+    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status completed --evidence 'litmus-selftest-ref' >\"$T/out\" || { echo 'FAIL: compliant write refused'; rm -rf \"$T\"; exit 1; }; ls \"$T/index.d\"/*.yaml >/dev/null 2>&1 && grep -rq 'litmus-selftest-ref' \"$T/index.d\" && echo 'ok: compliant write landed in the isolated copy'; rm -rf \"$T\""
+    timeout_ms: 30000
+    expected_behavior: "ok: compliant write landed in the isolated copy"
 
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "Terminal status vocabulary: every terminal value satisfies a dependency, one shared definition"
+  expected_log: "Status vocabulary: one shared terminal set, monotone ladder, write gate refusing out-of-vocabulary and downgrade writes"
   log_fields:
     spec: "ci-release"
     test: "terminal-status-vocabulary-shape"
 
 rollback:
-  on_failure: "restore crates/tillandsias-plan/src/lib.rs is_terminal_status from git history"
+  on_failure: "restore crates/tillandsias-plan/src/lib.rs and src/main.rs set-field gate from git history"
