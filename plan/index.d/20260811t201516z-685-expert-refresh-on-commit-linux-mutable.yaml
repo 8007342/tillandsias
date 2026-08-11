@@ -1,0 +1,117 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t201516z
+packets:
+
+  - packet_id: host-expert-refresh-on-commit-env-gated
+    order: 685-yidq
+    status: ready
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    priority: p1
+    title: "Host-seat experts never refresh their index on commit — an env-gated post-commit hook must extend the forge refresh mechanism to bare-metal hosts, no-op everywhere else"
+    kind: infra+fix
+    deliverable: env-gated host post-commit expert refresh (installer chaining + refresh body + honest staleness reporting) + spec delta covering the host-session expert lifecycle
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [experts, mcp, git, hooks, host, refresh, freshness, infra]
+    context: >
+      OPERATOR DIRECTIVE 2026-08-11: experts learn their RAG at launch and in
+      theory refresh on commit; on bare-metal development hosts they never do.
+      The mechanism must be commit-triggered, gated on an environment variable
+      present ONLY on machines carrying expert infrastructure (bare-metal dev
+      hosts, git-mirror containers), so it no-ops on GitHub CI and plain
+      checkouts. This should have been part of the testing infrastructure from
+      the beginning. LIVE REPRO the same morning: a fresh host session's
+      forge-plan MCP server answered from citation_root=/home/tlatoani/src/
+      tillandsias at commit 7a5934090, indexed 2026-07-30 — 12 days stale —
+      with confidence=unsupported for packets that exist (682-z5h8 event
+      2026-08-11T07:15Z: "every answer was silently authoritative-but-wrong").
+      The class has been REPORTED REPEATEDLY SINCE 2026-07-16 without a host
+      packet: forge-stale-skill-snapshot-at-launch-2026-07-16.md; the
+      operator-signed experts-construction decision (order 393, 2026-07-17)
+      already included "delta refresh on commit"; order 396 built the
+      post-commit refresh hook but wired it only to the forge's core.hooksPath
+      and its falsification event states the gap verbatim ("Host checkouts have
+      empty .git/hooks and no core.hooksPath, so it never fired there either");
+      claude-mcp-expert-validation-2026-08-01.md names failure class B "stale
+      expert binary with state=ready"; 682-z5h8 then fixed WHICH index host
+      experts read ($PWD-first, commit b005490b) but not WHEN it refreshes; and
+      the plan CLI itself self-reports "the ARTIFACT is stale relative to the
+      checkout" with no rebuild trigger. The spec anchor already exists and is
+      merely forge-scoped: openspec/specs/forge-environment-discoverability
+      "Project index ... MUST refresh on commit where a git hook path exists"
+      (order 606-z389). Complementary open packets, none of which own this:
+      682-z5h8 (which index — launch-time resolution), 683-g7p6/683-2n4k
+      (forge image rebuild footguns), 594-gqeu (forge hook first-fire proof),
+      531 (forge launch-time source honesty). MECHANISM: extend
+      scripts/hooks/post-commit-expert-refresh.sh (order 396 — async, bounded,
+      never blocks the commit), do not reinvent it; install via
+      scripts/install-hooks.sh / build.sh::_ensure_git_hooks_installed, which
+      today install pre-commit and pre-push only. No env var currently marks
+      "this host carries expert infra": TILLANDSIAS_HOST_KIND exists but only
+      the value "forge" is ever tested. Trace targets:
+      spec:forge-environment-discoverability, spec:forge-staleness
+      (source-hash-keyed freshness idiom), spec:knowledge-source-of-truth,
+      order:531 honesty grammar, packet:experts-refresh-on-commit,
+      packet:host-session-mcp-registration-portable,
+      litmus:expert-refresh-cargo-target-shape,
+      litmus:forge-experts-ephemerality-shape (must be scope-split: forge tmpfs
+      ephemerality vs necessarily persistent host index).
+    exit_criteria:
+      - the gating environment variable is NAMED and documented with a closed value set, who exports it and where (dev-host profile/systemd; git-mirror container env), and an explicit no-op contract — on a checkout without it the hook exits 0 in bounded milliseconds doing nothing, proven by fixture; it is never set on GitHub CI
+      - a commit on a gated host observably refreshes the host expert index (a subsequent plan_answer cites the new HEAD as source_commit) — proven by a FIRST-FIRE e2e with recorded evidence, not by running the script directly; 396's falsification ("the hook has never executed anywhere") is the anti-pattern this criterion exists to prevent
+      - host installer chains post-commit without clobbering existing hooks (openspec pre-commit, VERSION-guard pre-push, user hooks) following install-hooks.sh append-not-overwrite discipline, and reuses/extends scripts/hooks/post-commit-expert-refresh.sh rather than shipping a second hook body
+      - refresh is WHOLE and commit-hash-keyed (mirror the forge-staleness .last-build sha256 idiom to decide refresh-needed vs no-op); a failed or partial refresh reports honest degraded(stale-index) in the order-531 grammar instead of serving silently-stale answers, and each refresh appends a record per the 682-m8ek usage-log pattern
+      - spec delta lands: forge-environment-discoverability (or a sibling spec) covers the HOST-session expert lifecycle — launch-time index build, $PWD-first citation_root, refresh-on-commit, persistent-vs-tmpfs ephemerality scope split — so 682-z5h8's fix and this packet stop being spec-less behavior
+    events:
+      - type: filed
+        ts: "2026-08-11T20:15:16Z"
+        agent_id: linux-mutable-session-20260811
+        host: linux_mutable
+        summary: >
+          Filed on operator directive after the third same-morning staleness
+          facet (682-z5h8 stale clone, 683-g7p6 bundled-asset rebuild,
+          version-skew partial refresh). Fourteen recorded encounters since
+          2026-07-16, zero host-side packets until now. Placement per family
+          convention: new top-level order, epic membership via release_target
+          forge-local-experts-milestone (the 396→594 refresh-on-commit line);
+          git-mirror-container leg split as child 685-26wm at the verification
+          boundary, mirroring the 396→594-zm47/594-gqeu split.
+
+  - packet_id: git-mirror-expert-refresh-post-receive
+    order: 685-26wm
+    status: pending
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    priority: p2
+    title: "git-mirror containers carry expert infra but mirrors receive pushes, not commits — specify and wire the post-receive refresh leg"
+    kind: infra
+    deliverable: mirror-side expert index refresh triggered from the post-receive bookkeeping path, same env gate and honesty contract as the host leg
+    depends_on: [host-expert-refresh-on-commit-env-gated]
+    pickup_role: linux_mutable
+    capability_tags: [experts, mcp, git-mirror, hooks, refresh, freshness, infra]
+    context: >
+      Second seat of the operator's 2026-08-11 directive: git-mirror containers
+      will carry expert-refresh infrastructure, but "post-commit" is the wrong
+      event there — mirrors receive pushes. The refresh must hang off the
+      post-receive bookkeeping path (images/git/post-receive-hook.sh), NEVER
+      pre-receive: the pre-receive hook does synchronous ledger validation +
+      atomic upstream relay (spec:git-mirror-service) and per
+      cheatsheets/concurrent-git/git-mirror-enterprise-practices.md nothing
+      slow or fallible may sit in front of the relay. Inherits the env-gate
+      contract, commit-hash keying, whole-refresh discipline, and honest
+      degraded(stale-index) grammar defined by parent 685-yidq. Verification
+      needs a live mirror container, hence the linux_mutable seat
+      (594-gqeu precedent).
+    exit_criteria:
+      - a push accepted by a mirror observably refreshes that container's expert index from the new HEAD, triggered from post-receive (pre-receive byte-untouched), proven in a running tillandsias-git container
+      - the same env gate governs the mirror leg — a mirror image run without the variable performs zero refresh work; the gate's value for the mirror class is documented alongside the parent's contract
+      - refresh failure inside the mirror is honest and non-fatal — it never fails the push, never blocks the relay, and surfaces degraded(stale-index) through the container's diagnostics
+    events:
+      - type: filed
+        ts: "2026-08-11T20:15:16Z"
+        agent_id: linux-mutable-session-20260811
+        host: linux_mutable
+        summary: >
+          Filed pending on parent 685-yidq, which owns the env-var contract and
+          refresh body this leg reuses.
