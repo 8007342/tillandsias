@@ -1,0 +1,153 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:669-egjn (generic-index-deterministic-subset-is-thin)
+# @trace order:619-pfsj (project-answer-uniform-surface, C2/C5 deterministic subset)
+# @trace order:619-3y75 (the committed generic fixtures this test answers against)
+#
+# THE GAP THIS CLOSES
+#
+# Order 619-pfsj's C2 refusal copy advertised "type, status, commands, layout,
+# actions still answer from the index alone", but the generic index carried
+# only path/types/meta — three of the five deterministic classes had NOTHING
+# to answer from off-Tillandsias. Order 669-egjn grew the index: commands from
+# marker files (package.json "scripts", Cargo.toml [package]/[workspace],
+# Makefile targets) with the marker file:line as the citable span; layout from
+# the tree walk anchored to a real top-level span; actions from the detected
+# project type anchored inside the marker file the detection keyed on. Every
+# answer is the RATIFIED envelope and passes `tillandsias-plan verify-answer`
+# — authority.key appears in BOTH the cited span and the answer, so a
+# citation can never be decorative.
+#
+# ALSO PINNED: the README citation CLAMP. The pre-669-egjn overview lane cited
+# README.md:1-5 unconditionally, so a README shorter than 5 lines made
+# verify-answer refuse a truthful confidence=exact answer ("citation line
+# range runs past end of file") — found live by the 669-qcsb litmus work
+# against a 3-line fixture README. A 3-line README must cite 1-3 and verify
+# clean; a >=5-line README must keep the 1-5 window.
+#
+# Everything is EXECUTED: the real engine over real JSON-RPC frames against
+# the COMMITTED 619-3y75 fixtures (git-project: package.json + Makefile +
+# README; plain-dir: Makefile + README), and the real verifier.
+name: litmus:generic-index-deterministic-subset
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin order 669-egjn: the generic index's deterministic subset is no longer
+  thin. commands/layout/actions answer CITED from the enriched index on the
+  619-3y75 generic fixtures — marker-file spans for commands, a tree-walk
+  anchor for layout, detected-type actions — every envelope verify-answer
+  clean; the `index` subcommand emits the enriched document; the manifest
+  declares the new abilities; and the overview README citation clamps to the
+  file's real line count (a 3-line README cites 1-3) while a >=5-line README
+  keeps the 1-5 window.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/config-overlay/mcp/project-info.sh (the engine)
+  - workspace contains openspec/litmus-tests/groundtruth/fixtures/generic-project/ (the 619-3y75 fixtures)
+  - jq is available in PATH
+  - target/release/tillandsias-plan built, or cargo available to build it
+
+critical_path:
+  - step: "FIXTURE: stage a clean HOME, a 3-line-README clamp fixture, and the verifier"
+    # rm -rf first is load-bearing (dead-check trap on fixture state). The
+    # clamp fixture README is deliberately THREE lines — the exact shape that
+    # made verify-answer refuse a truthful answer pre-669-egjn. HOME points
+    # into the fixture in every envelope step so no host tillandsias-plan or
+    # ledger can hijack the lane. The verifier is the prebuilt release binary
+    # when present (the instant path); cargo builds it only on a cold tree.
+    command: "rm -rf /tmp/.litmus-669g && mkdir -p /tmp/.litmus-669g/home /tmp/.litmus-669g/short /tmp/.litmus-669g/bin && printf '# Short Readme Fixture\\n\\nA three-line README for the citation clamp.\\n' > /tmp/.litmus-669g/short/README.md && test \"$(awk 'END { print NR }' /tmp/.litmus-669g/short/README.md)\" = 3 && B=${CARGO_TARGET_DIR:-target}/release/tillandsias-plan; { test -x \"$B\" || cargo build -q -p tillandsias-plan --release; } && cp \"$B\" /tmp/.litmus-669g/bin/verify && echo 'ok: fixture-ready'"
+    timeout_ms: 300000
+    expected_behavior: "ok: fixture-ready"
+
+  - step: "the engine manifest DECLARES the enriched abilities this test proves"
+    # Bridge to the capability verdict surface (669-qcsb discipline): an
+    # engine claiming commands-cited/layout-cited/actions-cited/generic-index
+    # while the behavioural steps below fail would be a manifest lie; a
+    # behaviour without its token is invisible to the skew probe.
+    command: "M=$(bash images/default/config-overlay/mcp/project-info.sh capabilities </dev/null) && for t in actions-cited commands-cited generic-index layout-cited; do printf '%s\\n' \"$M\" | grep -qx \"$t\" || { echo \"missing manifest token: $t\"; exit 1; }; done; echo 'ok: manifest-declares-enriched-subset'"
+    timeout_ms: 15000
+    expected_behavior: "ok: manifest-declares-enriched-subset"
+
+  - step: "BEHAVIOURAL: `project-info.sh index` emits the ENRICHED document — all three new classes carry citations, path/types/meta preserved"
+    # The packet's title was "index.json carries only path/types/meta". The
+    # `index` subcommand is the document the tmpfs builder persists and the
+    # answer lane serves from; the pre-669-egjn keys must survive (existing
+    # readers) and each new class must carry at least one ratified citation
+    # on the committed git-project fixture.
+    command: "bash images/default/config-overlay/mcp/project-info.sh index openspec/litmus-tests/groundtruth/fixtures/generic-project/git-project </dev/null > /tmp/.litmus-669g/index.json && jq -e '(.path | length > 0) and (.types | contains(\"node\")) and (.meta | type == \"object\") and (.commands.citations | length > 0) and (.layout.citations | length > 0) and (.actions.citations | length > 0) and ([.commands, .layout, .actions | .citations[] | (has(\"path\") and has(\"line_start\") and has(\"line_end\") and .kind == \"code\" and (.authority | has(\"key\")))] | all)' /tmp/.litmus-669g/index.json >/dev/null && echo 'ok: index-enriched'"
+    timeout_ms: 30000
+    expected_behavior: "ok: index-enriched"
+
+  - step: "BEHAVIOURAL: COMMANDS answer cited from marker files on the git-project fixture, verifier-clean"
+    # The real JSON-RPC loop against the committed fixture. The citation span
+    # is the package.json \"scripts\" block (and the Makefile target block);
+    # authority.key must appear in the answer AND the span, which is what
+    # verify-answer enforces — so this step failing means either the class
+    # stopped answering or its citations went decorative.
+    command: "R=$PWD; cd openspec/litmus-tests/groundtruth/fixtures/generic-project/git-project && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"how do I build this project\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669g/home bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669g/cmd.json && jq -r '.answer' /tmp/.litmus-669g/cmd.json | grep -qF '\"scripts\"' && jq -r '.answer' /tmp/.litmus-669g/cmd.json | grep -qF 'npm run build' && jq -e '.confidence == \"exact\" and (.citations[0].path == \"package.json\")' /tmp/.litmus-669g/cmd.json >/dev/null && /tmp/.litmus-669g/bin/verify verify-answer < /tmp/.litmus-669g/cmd.json | grep -q '^ok: envelope verified' && echo 'ok: commands-cited-verified'"
+    timeout_ms: 30000
+    expected_behavior: "ok: commands-cited-verified"
+
+  - step: "BEHAVIOURAL: LAYOUT answer from the tree walk, anchored to a real span, verifier-clean"
+    command: "R=$PWD; cd openspec/litmus-tests/groundtruth/fixtures/generic-project/git-project && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what is the layout of this project\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669g/home bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669g/lay.json && jq -r '.answer' /tmp/.litmus-669g/lay.json | head -1 | grep -q '^Layout (top-level): ' && jq -r '.answer' /tmp/.litmus-669g/lay.json | grep -qF 'package.json' && jq -e '.confidence == \"exact\" and (.citations | length > 0)' /tmp/.litmus-669g/lay.json >/dev/null && /tmp/.litmus-669g/bin/verify verify-answer < /tmp/.litmus-669g/lay.json | grep -q '^ok: envelope verified' && echo 'ok: layout-cited-verified'"
+    timeout_ms: 30000
+    expected_behavior: "ok: layout-cited-verified"
+
+  - step: "BEHAVIOURAL: ACTIONS answer from the detected type — the generic-lane landing for \"what's next\" (C4) — verifier-clean"
+    command: "R=$PWD; cd openspec/litmus-tests/groundtruth/fixtures/generic-project/git-project && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what actions come next\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669g/home bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669g/act.json && jq -r '.answer' /tmp/.litmus-669g/act.json | head -1 | grep -q '^Actions (detected types: ' && jq -r '.answer' /tmp/.litmus-669g/act.json | grep -qF 'npm install' && jq -e '.confidence == \"exact\" and (.citations | length > 0)' /tmp/.litmus-669g/act.json >/dev/null && /tmp/.litmus-669g/bin/verify verify-answer < /tmp/.litmus-669g/act.json | grep -q '^ok: envelope verified' && echo 'ok: actions-cited-verified'"
+    timeout_ms: 30000
+    expected_behavior: "ok: actions-cited-verified"
+
+  - step: "BEHAVIOURAL: the plain-dir fixture (Makefile only, non-git) answers COMMANDS cited, verifier-clean"
+    # The second 619-3y75 fixture shape: no package.json, no git — the
+    # Makefile target block alone must carry the class.
+    command: "R=$PWD; cd openspec/litmus-tests/groundtruth/fixtures/generic-project/plain-dir && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what commands are available\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669g/home bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669g/pd.json && jq -r '.answer' /tmp/.litmus-669g/pd.json | grep -qF 'Makefile targets' && jq -e '.confidence == \"exact\" and (.citations[0].path == \"Makefile\")' /tmp/.litmus-669g/pd.json >/dev/null && /tmp/.litmus-669g/bin/verify verify-answer < /tmp/.litmus-669g/pd.json | grep -q '^ok: envelope verified' && echo 'ok: plain-dir-commands-cited'"
+    timeout_ms: 30000
+    expected_behavior: "ok: plain-dir-commands-cited"
+
+  - step: "BEHAVIOURAL (CLAMP): a 3-line README cites 1-3 and the truthful confidence=exact envelope VERIFIES"
+    # The 669-qcsb finding, executed. Pre-669-egjn this envelope cited
+    # README.md:1-5 against a 3-line file and verify-answer refused it —
+    # a truthful answer rendered unverifiable by an over-range citation.
+    command: "R=$PWD; cd /tmp/.litmus-669g/short && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what type of project is this\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669g/home bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669g/clamp.json && jq -e '.confidence == \"exact\" and (.citations[0].line_start == 1) and (.citations[0].line_end == 3)' /tmp/.litmus-669g/clamp.json >/dev/null && /tmp/.litmus-669g/bin/verify verify-answer < /tmp/.litmus-669g/clamp.json | grep -q '^ok: envelope verified' && echo 'ok: readme-clamp-verified'"
+    timeout_ms: 30000
+    expected_behavior: "ok: readme-clamp-verified"
+
+  - step: "NEGATIVE CONTROL: a >=5-line README keeps the 1-5 window and the overview shape is unchanged"
+    # A clamp that shrank every citation to line 1, or rerouted overview
+    # questions into the new classes, would pass the steps above while
+    # regressing the pinned 619-pfsj overview contract ('Project type: '
+    # first line, 1-5 README window).
+    command: "R=$PWD; cd openspec/litmus-tests/groundtruth/fixtures/generic-project/git-project && printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"project_answer\",\"arguments\":{\"question\":\"what type of project is this\"}}}' | env -u TILLANDSIAS_PLAN_BIN -u TILLANDSIAS_PLAN_INDEX HOME=/tmp/.litmus-669g/home bash $R/images/default/config-overlay/mcp/project-info.sh | jq -r '.result.content[0].text' > /tmp/.litmus-669g/ov.json && jq -r '.answer' /tmp/.litmus-669g/ov.json | head -1 | grep -q '^Project type: ' && jq -e '.confidence == \"exact\" and (.citations[0].line_start == 1) and (.citations[0].line_end == 5)' /tmp/.litmus-669g/ov.json >/dev/null && /tmp/.litmus-669g/bin/verify verify-answer < /tmp/.litmus-669g/ov.json | grep -q '^ok: envelope verified' && echo 'ok: overview-window-preserved'"
+    timeout_ms: 30000
+    expected_behavior: "ok: overview-window-preserved"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:669-egjn"
+    - "@trace order:619-pfsj"
+    - "@trace order:619-3y75"
+  expected_log: "enriched deterministic subset pinned: commands/layout/actions answer cited from the generic index on the committed 619-3y75 fixtures, every envelope verifier-clean; index subcommand emits the enriched document; README citation clamps to the real line count with the 1-5 window preserved for long READMEs"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "generic-index-deterministic-subset"
+    engine: "images/default/config-overlay/mcp/project-info.sh"
+    fixtures: "openspec/litmus-tests/groundtruth/fixtures/generic-project"
+    verifier: "tillandsias-plan verify-answer"
+
+rollback:
+  on_failure: >
+    The enriched deterministic subset regressed. If the index step failed,
+    index.json is thin again (path/types/meta only) and the C2 refusal copy
+    is back to advertising classes that cannot answer. If a class step
+    failed, that deterministic class either stopped answering from the
+    generic lane or its citations went decorative/fabricated — verify-answer
+    names which. If the CLAMP step failed, a README shorter than 5 lines
+    once again makes a truthful confidence=exact answer unverifiable
+    ("citation line range runs past end of file"). If the NEGATIVE CONTROL
+    failed, the clamp or the class router broke the pinned 619-pfsj overview
+    contract — check _pa_deterministic_class's closed vocabulary and the
+    line_end clamp expression in the overview jq.
+  command: "jq . /tmp/.litmus-669g/index.json 2>/dev/null | head -40; for f in cmd lay act pd clamp ov; do echo \"== $f\"; jq -c '{answer: (.answer[0:80]), confidence, citations}' /tmp/.litmus-669g/$f.json 2>/dev/null; done; sed -n '/Generic index enrichment/,/^_gi_commands_json/p' images/default/config-overlay/mcp/project-info.sh"

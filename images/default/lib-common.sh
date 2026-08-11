@@ -1082,6 +1082,31 @@ discover_generic_project() {
     local index_dir="$FORGE_EXPERTS_STATE_DIR/project-index"
     mkdir -p "$index_dir" 2>/dev/null || true
 
+    # ORDER 669-egjn — the index carries the FULL deterministic subset
+    # (commands/layout/actions with citable spans), derived by the baked
+    # answer engine (`project-info.sh index`, the order-569 subcommand
+    # pattern), so the document persisted here and the document
+    # project_answer serves from cannot drift apart. The engine is
+    # image-baked (order 459); when it is absent or fails, fall back to the
+    # thin pre-669-egjn path/types/meta shape rather than degrading launch.
+    local engine=""
+    local engine_candidate=""
+    for engine_candidate in \
+        "${TILLANDSIAS_PROJECT_ENGINE:-}" \
+        "/home/forge/.config-overlay/mcp/project-info.sh"; do
+        [ -n "$engine_candidate" ] && [ -r "$engine_candidate" ] || continue
+        engine="$engine_candidate"
+        break
+    done
+    if [ -n "$engine" ] \
+        && bash "$engine" index "$project_path" > "$index_dir/index.json.tmp" 2>/dev/null \
+        && [ -s "$index_dir/index.json.tmp" ]; then
+        mv -f "$index_dir/index.json.tmp" "$index_dir/index.json" 2>/dev/null || true
+        _generic_project_set_state ready
+        return 0
+    fi
+    rm -f "$index_dir/index.json.tmp" 2>/dev/null || true
+
     local types=""
     types="$(detect_project_types "$project_path" 2>/dev/null || echo "unknown")"
     local meta=""

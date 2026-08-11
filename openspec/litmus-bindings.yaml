@@ -344,6 +344,7 @@ specs:
   - litmus:capability-manifest-guard
   - litmus:project-engine-capability-verdict-grammar
   - litmus:project-answer-synthesis-refusal-typed
+  - litmus:generic-index-deterministic-subset
   coverage_ratio: 80
   last_verified: '2026-08-10'
 - spec_id: forge-forward-compat

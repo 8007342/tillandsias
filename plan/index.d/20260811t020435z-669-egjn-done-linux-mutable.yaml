@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t020435z
+status:
+  - packet_id: generic-index-deterministic-subset-is-thin
+    field: status
+    value: done
+    ts: "2026-08-11T02:04:35Z"
+    host: linux
+
+events:
+  - packet_id: generic-index-deterministic-subset-is-thin
+    event:
+      type: completed
+      ts: "2026-08-11T02:04:35Z"
+      agent_id: linux-mutable-20260811t020435z
+      host: linux
+      summary: >
+        Exit criterion met in full, plus the 2026-08-10T23:05Z scope addition:
+        commands, layout, and actions answer CITED on the 619-3y75 generic
+        fixtures with every envelope accepted by `tillandsias-plan
+        verify-answer`, and the README:1-5 over-range citation is clamped to
+        the file's real line count.
+
+        THE ENRICHMENT (images/default/config-overlay/mcp/project-info.sh).
+        Three derivations, each returning {answer, citations[], reason?} with
+        RATIFIED Citation structs whose authority.key appears in BOTH the
+        cited span and the answer (verify-answer's no-decorative-citation
+        rule): commands from marker files — package.json "scripts" block
+        (span = the block's real line range, found by grep -n/awk), Cargo.toml
+        [package]/[workspace] header line, Makefile target lines (specials,
+        pattern rules, and := assignments excluded); layout from the
+        top-level tree walk, anchored to a real span (first line of the first
+        recognizable top-level file, the claim explicit in the answer);
+        actions from the DETECTED type, each action anchored to a citable
+        line INSIDE the marker file the detection keyed on (type detection
+        itself is existence-only and spanless — the 619-pfsj C1 lesson).
+        `build_generic_index` assembles path/types/meta (pre-669-egjn keys
+        preserved for existing readers) + the three classes, exposed as
+        `project-info.sh index [dir]` (order-569 subcommand pattern, answers
+        before the JSON-RPC loop). The generic answer lane routes questions
+        through a CLOSED keyword classifier (_pa_deterministic_class — same
+        no-fuzzy discipline as _pa_is_synthesis; synthesis gating runs
+        first; "what's next" lands on actions, the C4 promise) and serves
+        each class from the index document via _pa_generic_class_envelope:
+        citations present -> confidence=exact; nothing citable -> the one
+        pinned refusal constructor with the derivation's own reason.
+        lib-common.sh discover_generic_project now persists the ENGINE's
+        index output to tmpfs (TILLANDSIAS_PROJECT_ENGINE override, baked
+        default path), so index.json and the served document cannot drift;
+        the thin printf shape remains only as the engine-absent fallback.
+        Engine contract bumped v3 -> v4 with tokens actions-cited,
+        commands-cited, generic-index, layout-cited (manifest rule: the
+        version MUST move when the answer contract changes behaviour).
+
+        THE CLAMP (the 669-qcsb finding). The overview lane cited
+        README.md:1-5 unconditionally; a README shorter than 5 lines made
+        verify-answer refuse a truthful confidence=exact answer. line_end is
+        now min(5, real line count) via awk END{print NR} (counts a final
+        unterminated line, which wc -l misses): a 3-line README cites 1-3
+        and verifies clean; a >=5-line README keeps the 1-5 window (pinned
+        as a negative control).
+
+        VERIFICATION (660-ryhn discipline — everything EXECUTED). New litmus
+        litmus:generic-index-deterministic-subset (9 steps, instant,
+        pre-build, pure shell + the COMMITTED 619-3y75 fixtures), bound
+        under forge-environment-discoverability beside the two 669-qcsb
+        siblings: manifest-token bridge, enriched index shape, commands and
+        layout and actions through the real JSON-RPC loop on git-project
+        (verifier-clean each), plain-dir Makefile-only commands, the 3-line
+        clamp fixture, and the >=5-line window negative control.
+        scripts/run-litmus-test.sh forge-environment-discoverability
+        --phase pre-build --size instant --compact -> 11/11 executed 0 fail
+        (9/9 new steps OK; both 669-qcsb siblings unregressed, incl. the
+        'what type of project is this' anchors my classifier must not
+        intercept). All touched yaml yq-clean. ./build.sh --check green
+        (fmt, check, clippy, ledger, plan-orders, fragment status-loss,
+        gate stamp).
+
+        FINDINGS NOTICED, NOT FIXED: (1) `status` remains the one class of
+        the C2/C5 enumeration with no generic-lane answer — a status-shaped
+        question still lands on the overview; structured git status exists
+        as a tool (git_status) but is not routed into project_answer. (2)
+        lib-common.sh discover_generic_project's FALLBACK path calls
+        detect_project_types/get_project_metadata, which are not defined in
+        lib-common.sh's own context — pre-existing; with an absent engine
+        the fallback degrades to index-failed via its || guards rather than
+        producing the thin index it intends. (3) get_project_metadata
+        reports name=basename(dir), which is "." when the engine is asked
+        about the cwd — the overview answer renders "Name: ." (pre-existing,
+        visible in the clamp fixture output).
