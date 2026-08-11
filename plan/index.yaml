@@ -2116,6 +2116,19 @@ plan_index:
           host: linux-mutable
           summary: |
             Grouped under the socket-audit-master epic (151, 'MASTER AUDIT: Observable streams at all transport boundaries'). It was already the head of this family in name; nothing pointed at it. Operator directive 2026-08-10: group larger, greedier chunks so an orchestration cycle takes a coherent block instead of one packet. This family spans all three hosts by design — 154 windows, 155 macos, 156/157/158 linux, 147/249 any — so each host draws its own slice of ONE theme and the cross-host work converges instead of scattering.
+        - type: progress
+          ts: 2026-08-11T04:50:00Z
+          agent_id: linux-mutable-20260811t045000z
+          host: linux-mutable
+          summary: |
+            AUDIT HALF COMPLETE (read-only over crates/tillandsias-headless/src/tray/ + the headless local interface it calls). Result: the Linux native tray's three named status surfaces are ALREADY event-driven, not timer-polled. VM status is served on demand from TrayPhaseHandle in response to VmStatusRequest (the tray is the source of truth, it does not poll itself — SC-07 pass). Cloud projects use a 5-minute TTL cache refreshed only on events (tray launch, GitHubLogin success, DBusMenu AboutToShow) — no timer (tray/cloud.rs). Login state is confirmed by a ONE-SHOT startup probe (tray/mod.rs ~L3980) — event-shaped. Channel types are clean: the only in-tray channel is a BOUNDED mpsc::sync_channel (AsyncTaskExecutor, ASYNC_EXECUTOR_WORKERS=4); zero mpsc::unbounded_channel and zero broadcast/watch anywhere in the tray path (SC-04 pass; the tray fans UI state out via Arc<Mutex<TrayUiState>> + revision bump + DBusMenu LayoutUpdated, i.e. push-not-poll, though not with the watch primitive the B3 contract names — recorded as an observation). SC matrix over the Linux path: 9 pass, 3 violated (SC-09 no server-push, SC-14 Vault login poll, SC-16 AtomicBool+sleep shutdown poll), 2 partial (SC-06/SC-08: request/reply variants close after one frame), 4 n/a (SC-02 narrow, SC-12/17/18 no PTY in the native tray). TWO real polling sites found and reduced into ready child packets: (1) 679-rp9m — GitHubLogin handler polls Vault 120x@1s for the login token (tray/mod.rs L3676-3688; the WORST offender; SC-14/AP-1); (2) 679-vdi6 — shutdown watched via AtomicBool+250ms sleep at 3 sites (L640-655, L1270, L4081-4082; SC-16). This packet stays `ready`: the audit is done, the refactor children remain, and the 4-verifier completion gate is untouched.
+          evidence:
+          - 'Findings doc: plan/issues/linux-native-stream-audit-findings-2026-08-11.md (polling inventory + channel-type findings + SC-01..SC-18 verdict matrix with file:line evidence).'
+          - 'Child packet 679-rp9m: linux-tray-login-vault-poll-to-event (SC-14 / login-state poll, tray/mod.rs L3676-3688).'
+          - 'Child packet 679-vdi6: linux-tray-shutdown-atomicbool-sleep-to-notify (SC-16 / shutdown-signal poll, tray/mod.rs L640-655 + L4081-4082).'
+          - 'Polling sites found: 2 contract-violating (login Vault poll, shutdown AtomicBool+sleep). Not polls: cloud TTL cache is event-only; VM status is on-demand reply; login startup probe is one-shot; AsyncTaskExecutor recv_timeout and remote_projects subprocess-wait are bounded work drains, not status polls.'
+          - 'SC matrix: 9 verified / 3 violated / 2 partial / 4 n-a over the Linux native tray + headless local path.'
+          - No code changed (read-only audit); ./build.sh not required.
     - packet_id: stable-state-codes-research
       order: 160
       title: "Research: stable finite state codes for host/vm/guest/podman status"
@@ -3612,6 +3625,12 @@ plan_index:
         - "channel advances M0->M4 over multiple releases, one gate at a time, all platforms green, rollback-able until M4"
         - "at M4 the insecure path is gone and downgrade is impossible by construction"
 
+      events:
+        - type: progress
+          ts: 2026-08-11T05:40:00Z
+          agent_id: windows-20260811t054000z
+          summary: |
+            RECORDED REASON FOR REMAINING in_progress (641-e2qa closure requirement): this is a kind:master-plan criteria holder for the M0-M4 secure-channel maturity ladder — a long-horizon tracking packet, not an interrupted work claim. It has no parseable activity timestamp in its events, so expire-claims deliberately never touches it (unknown-age is never auto-expired). Its linux owner should either stamp it with a dated progress event when the ladder next advances or convert it to the milestone/burndown pattern so it stops registering as in_progress at all. Until then this entry in check-stranded-in-progress output is EXPLAINED, not stranded.
     - packet_id: secure-channel-flag-and-maturity-metrics
       order: 185
       title: "Research: secure-channel flag propagation (boot-time, fail-closed) + maturity-gate metrics"
@@ -6575,6 +6594,21 @@ plan_index:
           host: linux-mutable
           summary: |
             Grouped under the new architecture-audit-epic (647-6c3g). Four all-platforms audits that were each competing alone against grouped epics and losing; they are the same kind of work over overlapping subject matter, so an agent holding one has most of the context for the next.
+        - type: claim
+          ts: 2026-08-11T06:25:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          lease_id: macos-245-cycle-20260811t0625z
+          expires_at: 2026-08-11T10:25:00Z
+          summary: |
+            Cycle-scoped claim (multi_cycle) on the operator's nudge: this cycle's slice is the recorded revision obligation — update the deliverable's stale architecture facts (draft predates RuntimeLane, ForgeLaunch dependency modeling, Vault-in-init, mirrored WSL networking docs, cooked-read login fix) and fold in this week's macOS ground truth (VZ NAT + vmnet gateway facts from 657-s6g8 research, the 606-9wqd enclave/egress runtime reproduction, guest CPU feature reality). Re-verification by the three named agents remains the completion gate and is NOT this slice.
+        - type: progress
+          ts: 2026-08-11T07:35:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          lease_id: macos-245-cycle-20260811t0625z
+          summary: |
+            The recorded revision obligation is DISCHARGED: a 7-agent fact-check swept every falsifiable claim in the deliverable against current source (23 stale, 22 confirmed), and all 23 corrections were applied in place with updated file:line citations (183 insertions / 74 deletions). Headlines: the three Observations are RESOLVED (order-253 vault-in-init; the gh-login 401 was bracketed-paste corruption, fixed by the cooked-read script — the draft's own §6.2 network exoneration was right); S3's dual-homed set shrinks to proxy + login-helper (mirror now enclave-only per 0a972411), S4 is RETIRED (browser hardened off host network, 63784ddb); §4 gains the measured macOS VZ ground truth (vmnet NAT, bridge100 gateway = 657-s6g8 sidecar bind target, no GPU passthrough, guest i8mm+SME2); baseline re-stamped 2026-08-11 with Revision-2 provenance. phase stays review: the three named verification agents (opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink) must re-verify NA-01..NA-06 from this revision — that gate is NOT claimed here.
     - packet_id: credential-secrets-architecture-audit
       release_target: architecture-audit-epic
       order: 246
@@ -16455,7 +16489,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "Plan expert rung 1 slice 5 — launch state line, tmpfs placement, teardown proof"
-      status: in_progress
+      status: ready
       kind: implementation
       deliverable: inject_startup_context experts state + /dev/shm placement + ephemerality litmus
       depends_on: [plan-methodology-experts-rung1/plan-expert-binary-shipping]
@@ -16519,6 +16553,11 @@ plan_index:
             state helper's one-line machine grammar breaks with >1 model
             (filed as packet 532). Details:
             plan/issues/forge-local-experts-first-person-experience-2026-07-30.md.
+        - type: progress
+          ts: 2026-08-10T23:50:53Z
+          host: windows
+          summary: |
+            Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-07-30T07:06:00Z (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
     - packet_id: experts-opencode-affordance
       order: 395
       desired_release: v0.5
@@ -16819,6 +16858,20 @@ plan_index:
           host: linux_mutable
           summary: >
             ROOT CAUSE IS SHARPER THAN FILED, and it is not 'forges launch on main'. The forge base branch is NON-DETERMINISTIC. Corroborating evidence from the coordinator's own direct observation the same day: I exec'd into the ANTIGRAVITY forge mid-cycle and read its checkout — HEAD was 8898d5b9, and 'git branch -a --contains 8898d5b9' resolves to linux-next ONLY (not main). So that forge had linux-next while the Claude sibling's forge, launched hours later on the same host, had main. Two forges, one host, one day, different base branches. lib-common.sh:671 clones with NO -b (and :557 records that 'a hard git clone -b <seed> is FORBIDDEN (B6)'), so every forge takes whatever the mirror's exported HEAD happens to point at, unpinned. That dependency has DOCUMENTED drift: order 415 (completed) was exactly 'the mirror's exported refs/heads/main is not fast-forwarded to upstream' after a rejected push, root-caused to a refspec-less fetch updating only FETCH_HEAD. Independent third data point: plan/loop_status.md:203 and :243 record an EARLIER cycle that found itself on main at startup and manually rebased its commits to linux-next — i.e. agents have been silently absorbing this for at least two cycles by noticing, which is the mechanism-by-attentive-agent pattern this project forbids. CONSEQUENCE for grading: the expert failure is not 'the forge is on the wrong branch' but 'the forge's base is unpinned, so whether the expert can answer at all is luck'. The fix must PIN the base (or fail loud when the exported HEAD is not the expected branch), not merely correct main->linux-next once. Suggested added exit criterion: a fresh forge launch either lands on the host's canonical branch or refuses with a named reason; no agent is required to notice.
+        - type: progress
+          ts: 2026-08-11T03:45:24Z
+          agent_id: linux-mutable-20260811t034524z
+          host: linux-mutable
+          summary: |
+            Criterion 2 CLOSED this cycle: "a forge whose checkout lacks the expert subcommands reports an honest experts state (not ready) or a degraded reason that names stale-source — distinguishable from engine failure." ensure_forge_experts (images/default/lib-common.sh) used to write `experts: ready` the instant `install` succeeded, without ever asking the built binary whether it can answer — so a binary compiled from a pre-expert base (no crates/tillandsias-plan/src/answer.rs) reported `ready` truthfully while every plan_answer returned confidence=unsupported (the milestone-blocking condition). Fix: after the stamp write and BEFORE the final `_forge_experts_set_state ready`, the builder now probes the freshly-installed binary's compiled surface via the order-569 `capabilities` subcommand through a new extracted, fail-safe helper `_forge_experts_probe_answer_surface <bin>` (0 iff the token stream contains `answer`). When `answer` is absent — or the binary predates `capabilities` and the invocation exits non-zero — the state becomes `degraded stale-source` with a trace_lifecycle line naming it; only an answer-capable binary keeps `ready`. Fail-soft is preserved (every arm returns 0; no `exit`). The renderer needed no change (the generic `degraded:*` arm renders `degraded(stale-source)`), check-forge-expert-base.sh's litmus-pinned verdict grammar is untouched, and the forge-plan MCP wrapper's reason `case` blocks already fall through to a PERMANENT-for-this-session arm for unknown reasons. Added `stale-source` to the CLOSED reason vocabulary in the pinned grammar comment, the inject_startup_context prose enumeration, and the existing litmus:forge-plan-expert-build-shape closed-vocabulary loop.
+          evidence:
+          - 'new degraded state: `degraded(stale-source)` (state file `degraded:stale-source`); machine-readable experts_state=degraded experts_reason=stale-source'
+          - 'new litmus:forge-experts-stale-source-honesty bound under spec forge-environment-discoverability (3 steps): probe unit (ready/stale/stale), integration probe-gates-ready, renderer honesty'
+          - 'EXECUTED: scripts/run-litmus-test.sh forge-environment-discoverability --size instant --phase pre-build --compact -> 12/12 PASS (100%); the 3 new steps all [OK]'
+          - 'bash -n images/default/lib-common.sh: OK'
+          - './build.sh --check: exit 0 (gate stamp recorded)'
+          - 'yq-validate: new litmus + litmus-bindings.yaml + build-shape litmus clean'
+          - criterion 1 (release/branch decision) still OPEN — packet intentionally stays `ready` (partial reduction)
     - packet_id: inference-state-warm-grammar-multimodel
       order: 532
       desired_release: v0.5
@@ -19770,7 +19823,7 @@ plan_index:
       order: 421
       desired_release: v0.5
       title: "macOS curl installer over-warns about Gatekeeper: the curl+tar+open path is NOT quarantined, so the 'unidentified developer' warning it prints is unnecessary/misleading"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: scripts/install-macos.sh (conditional Gatekeeper messaging)
       depends_on: []
@@ -19822,6 +19875,13 @@ plan_index:
           expires_at: 2026-08-10T02:27:31Z
           summary: |
             Claimed for the operator-directed drain: gate the Gatekeeper right-click-Open guidance in scripts/install-macos.sh on an actual com.apple.quarantine xattr so the curl path stops over-warning.
+        - type: completed
+          ts: 2026-08-11T06:20:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          lease_id: macos-v05-drain-421-20260809t1628z
+          summary: |
+            Completed 2026-08-09 in commit 052d3a19 (event emitted late — this is the stranded-status repair). All three exit criteria met: Gatekeeper hint gated on an actual com.apple.quarantine xattr, message accurate per path, no signing-posture change; delta spec + design + proposal amended; property-shaped litmus pin added (macos-native-tray suite 6/6). Shipped in the published v0.4.260810.1 installer and CONFIRMED live during 644-7w89 (zero over-warn lines vs two on .2).
     - order: 422
       packet_id: git-mirror-image-deploy-gate
       desired_release: v0.4
@@ -23273,7 +23333,7 @@ plan_index:
       order: 463
       desired_release: v0.4
       title: "25h soak broke every host->vault path: netavark DNAT loss on the internal enclave network, loopback bind EIO, first-restart unseal landmine, and lane-lock heal starvation"
-      status: in_progress
+      status: ready
       kind: fix
       deliverable: vault host endpoint via enclave URL everywhere (drop the -p publish), entrypoint unseal-400 classification, bounded lane vault-lock scope
       depends_on: []
@@ -23369,6 +23429,11 @@ plan_index:
             pass. Remaining closure is live restarted-Vault, idle-lane/heal,
             and soak evidence on the rebuilt image.
 
+        - type: progress
+          ts: 2026-08-10T23:50:53Z
+          host: windows
+          summary: |
+            Claim expired by tillandsias-plan expire-claims: in_progress with no recorded activity since 2026-07-25T04:18:02Z (TTL 24h). Returned to ready automatically per 641-e2qa criterion 2.
     - packet_id: mirror-pre-receive-blocks-all-new-branches
       order: 462
       desired_release: v0.4
@@ -29962,6 +30027,17 @@ plan_index:
             Deferred W5 half: grep the RUNNING forge lane's env for GH_TOKEN/GITHUB_TOKEN/HOMEBREW_GITHUB_API_TOKEN. PASS = nothing. This is the first measurement of the post-82160687 contract on Windows.
 
 
+      events:
+        - type: progress
+          ts: 2026-08-11T07:00:00Z
+          agent_id: windows-20260811t070000z
+          summary: |
+            Exit criterion 1 SATISFIED, measured this cycle: the runtime distro's guest reports "Tillandsias v0.4.260810.1" (/usr/local/bin/tillandsias-headless --version), well past the required 0.4.260802.1, installed through the sanctioned tray fetch-headless flow when the operator installed the published v0.4.260810.1 release. The 598-yhu5 W5 measurement of a stale 0.4.260728.1 guest is obsolete. Also this cycle: the guest's tillandsias-headless service was cold after the 2026-08-10 host freeze; started it — vault came up HEALTHY via auto-unseal, proxy up. Criteria 2 and 3 (accel envelope first line = cpu-only, and the post-82160687 no-token grep, both inside a RUNNING forge lane on this guest) remain OPEN: no forge lane was live tonight and git-mirror/inference start on forge demand — those reads need a deliberate forge launch, which deserves an attended cycle rather than a midnight side effect. Packet stays ready with two scoped criteria left.
+        - type: progress
+          ts: 2026-08-11T08:10:00Z
+          agent_id: windows-20260811t081000z
+          summary: |
+            Criteria 2-3 attempted and BLOCKED with a recorded reason (a "cannot" per 648-dvzd's rule): the forge lane launch path is not reachable from an unattended host cycle on this box. The runtime distro deliberately disables /mnt/c automount, so scripts/run-forge-project.sh cannot run inside it against the checkout; and a hand-rolled podman run of localhost/tillandsias-forge:v0.4.260810.1 would not carry the real launcher's TILLANDSIAS_ACCEL_ENVELOPE, making the accel_class read an invalid measurement by construction. Every prerequisite is otherwise staged and verified this cycle: all seven enclave images present at v0.4.260810.1, tillandsias-enclave network exists, vault healthy. Smallest next action: take the two reads (accel envelope first line = cpu-only; env grep for GH_TOKEN/GITHUB_TOKEN/ HOMEBREW_GITHUB_API_TOKEN = nothing) inside the FIRST tray- or headless-launched forge lane on this host — one exec, two greps, recordable by whoever is watching that session.
     - packet_id: plan-append-event-blind-to-fragment-packets
       order: 600-c266
       status: completed
@@ -30288,6 +30364,12 @@ plan_index:
             Filed for the operator's Windows orchestration cycle. Scoped from a 7-agent assessment with adversarial verification; every speculative item was dropped. W1 and W4 are the two that can only be answered on the hardware. origin/windows-next fast-forwarded to db22caa8 in the same cycle, which removed ci.yml from the branch.
 
     - packet_id: macos-v05-validation-bundle
+      next_action: |
+        M1/M2/M3/M4/M6 are GREEN (events on this packet, 2026-08-09/10). The
+        ONLY open item is M5's runtime half: verify the cloud submenu renders
+        "(no repos)" with a ZERO-repo GitHub account — operator-gated (needs
+        such an account attended). Do not re-run M1-M4/M6; their evidence
+        stands at the recorded commits.
       order: 598-kibt
       status: ready
       desired_release: v0.5
@@ -30843,6 +30925,12 @@ plan_index:
           host: linux_mutable
           summary: |
             Suspect mechanism strengthened: the PID-1 SEGV of the third sighting co-occurred with pids.max=512 exhaustion (667-se87, now root-caused to build_stack_common_args). A Bun runtime failing a thread spawn mid-flight is a plausible SEGV path. Not yet proof — the 94.1M coredump remains the evidence to read; if in-forge builds run clean under 4096 across several sessions with no new cores, treat as corroborated.
+        - type: progress
+          ts: 2026-08-11T05:55:00Z
+          agent_id: linux-mutable-20260811t055500z
+          host: linux_mutable
+          summary: |
+            FORENSICS on the 2026-08-10 12:47 dump (PID 129170, the round-1 BigPickle crash while ./build.sh --check compiled under pids.max=512). coredumpctl + gdb on the decompressed core (7.4G uncompressed): signal SIGSEGV; the recoverable thread-1 stack is `#0 abort (libc.so.6+0x1818)` then two frames inside opencode.exe — i.e. the Bun/JSC runtime hit a FATAL condition and called abort(), it is not a wild memory-corruption fault. gdb `info threads` enumerated 13+ live LWPs (1,393,397,403,404,417,418,419,540,544,586,587,590,…) before output truncated — a many-threaded process, and Bun/JSC calls abort() on allocation / thread-spawn failure. This is CONSISTENT WITH (not yet proof of) the 667-se87 pids-exhaustion hypothesis: a controlled abort under resource pressure, not a random SEGV. The dump's per-thread stacks are clipped (core-size limited) and the binary is a stripped Bun single-file exe with no build-id, so the exact failing syscall (pthread_create EAGAIN vs mmap ENOMEM) is NOT recoverable from this dump alone. Decisive next step stays the cold-cache in-forge build under 4096 with pids.peak sampled around the compile window (residual already recorded); a peak >512 there closes it. Packet stays ready. Giant decompressed core removed from scratch after inspection.
     - packet_id: codex-mcp-config-merge-fixture
       order: 605-u9g5
       status: completed
@@ -31353,9 +31441,40 @@ plan_index:
           reason: |
             Released ready for a Nix-daemon-capable x86_64/aarch64 host to supply the remaining build and exact output-size evidence; no source cleanup or Fedora-route work remains in this lease.
 
+        - type: progress
+          ts: 2026-08-11T07:00:06Z
+          agent_id: linux-mutable-20260811t070006z
+          host: linux_mutable
+          summary: |
+            VERIFY + EVIDENCE pass over the four exit criteria (no deletion needed; the source removal was already done). Findings by criterion:
+            (1) SOURCE CLEANUP CONFIRMED COMPLETE. Both stale artifacts are absent: `images/default/mcp-server-browser.js` is not on disk and not git-tracked, and `tillandsias-mcp-browser` is not git-tracked (it exists only as an untracked build-cache ELF under target/, out of scope). flake.nix has zero references to mcp-server-browser / tillandsias-mcp-browser / forgeMcpBrowser. A focused BUILD-surface grep over flake.nix + all Containerfiles + images/** + scripts/** returned NO hits. The only live-tree mention of the names is the negative absence fixture itself, openspec/litmus-tests/litmus-host-browser-mcp-shape.yaml (the proof-of-absence litmus, not a dangling ref). Every other mention lives in the EXCLUDED historical-provenance buckets (docs/audits/, openspec/changes/archive/*, plan/). So NO real dangling build or doc reference exists; no tracked file was changed and no fix was required.
+            (3) LIVE BRIDGE + RUST HOST-SOCKET TESTS GREEN. `cargo test -p tillandsias-browser-mcp` = 103 passed / 0 failed / 0 ignored: 72 lib unit tests (src/lib.rs) + 25 (tests/allowlist_enforcement_ integration.rs) + 6 (tests/window_timeout_enforcement.rs) + 0 doc-tests.
+            (4) SOURCE-SIDE PAYLOAD DELTA RECORDED = exactly 27,249,383 bytes removed (27,243,632-byte x86 ELF + 5,751-byte mock JS), per the 2026-08-06 handoff. The BUILT-OUTPUT byte size and `nix path-info -Sh` closure size are NOT measurable on this host right now — blocked with (2) below — and are deliberately kept separate from the source-side sum per the packet next_action.
+            (2) BLOCKED on this host: nix daemon is unavailable. `nix build .#forge-image` failed with "cannot connect to socket at '/nix/var/nix/daemon-socket/socket': Connection refused"; nix-daemon. service and nix-daemon.socket are both `inactive`, no nix-daemon process is running, and passwordless sudo is refused so the daemon cannot be started from here. The store is a multi-user install (/nix/store = root:nixbld), so even a pure `nix eval .#forge-image.drvPath` fails on the same socket. This is the same "daemon socket path present but connection refused" condition recorded in the 2026-08-06T10:47:11Z progress event — it persists. Therefore BOTH the x86_64 build (+ built-output/closure sizes) AND the aarch64 build remain. aarch64 additionally CANNOT run on this x86_64 host regardless of the daemon.
+            REMAINING WORK (packet stays ready): - x86_64-linux: run `nix build .#forge-image`, record built-output byte
+              size + `nix path-info -Sh` closure size — needs a daemon-capable Linux
+              host (linux_mutable's daemon is currently down).
+            - aarch64-linux: build `.#forge-image` and record the same sizes — needs
+              an arm/macOS host (EXPLICITLY REMAINING; not fakeable from x86_64).
+          partial_artifact_refs:
+          - flake.nix
+          - openspec/litmus-tests/litmus-host-browser-mcp-shape.yaml
+          - crates/tillandsias-browser-mcp
+          - plan/issues/stale-browser-mcp-artifacts-removal-handoff-2026-08-06.md
+          criteria_status:
+            artifacts_absent_no_dangling_refs: confirmed_complete
+            flake_no_arch_specific_binary_and_builds: blocked_x86_daemon_down__aarch64_remaining
+            live_bridge_and_rust_socket_tests_green: green
+            image_size_evidence: source_delta_recorded__built_output_delta_blocked
+          evidence:
+            source_bytes_removed_total: 27249383
+            source_bytes_removed_breakdown: 27,243,632-byte x86 ELF + 5,751-byte mock JS
+            cargo_test_browser_mcp: 103 passed; 0 failed; 0 ignored (72 lib + 25 allowlist + 6 window-timeout + 0 doctests)
+            nix_build_forge_image: 'FAILED: cannot connect to socket ''/nix/var/nix/daemon-socket/socket'': Connection refused (nix-daemon.service + .socket inactive; no passwordless sudo)'
+            dangling_build_reference_found: false
     - packet_id: macos-dead-vz-lifecycle-removal
       order: 606-r42f
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p1
       title: Remove or reconnect dead macOS VzLifecycle code that reaches two unimplemented provisioning panics
@@ -31389,9 +31508,16 @@ plan_index:
           expires_at: 2026-08-10T02:27:31Z
           summary: |
             Claimed for the operator-directed drain: map VzLifecycle/ VzRuntime::provision callers, delete or delegate to action_host's live qcow2 path, pin that tray normal+diagnostic paths cannot reach unimplemented!/todo! placeholders.
+        - type: completed
+          ts: 2026-08-11T06:20:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          lease_id: macos-v05-drain-606-r42f-20260809t1628z
+          summary: |
+            Completed 2026-08-09 in commit e4792602 (event emitted late — this is the stranded-status repair). All three exit criteria met and recorded in the commit + osx-next work-queue ledger: VzLifecycle + vz_real deleted (both unimplemented! panics gone, whole-file pin test), provision keeps idempotency + loud Err naming the live qcow2 path, image-root parity test relocated, stale header claims fixed, 151 unit tests green on Darwin, seeded cold-provision smoke PASS (2.12s).
     - packet_id: freshness-threshold-and-coverage-truth
       order: 606-vaua
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p1
       title: Freshness inventory must apply a real age threshold and report truthful nonzero coverage/delta
@@ -31417,6 +31543,22 @@ plan_index:
         - 7/1011 renders as a nonzero fractional percentage and reports numerator, denominator, and coverage delta
         - fixtures cover boundary age, malformed date, and clock-skew behavior
 
+      events:
+        - type: completed
+          ts: 2026-08-11T08:15:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          lease_id: macos-606-vaua-20260811t0835z
+          summary: |
+            All four exit criteria met. (1) methodology.yaml component_freshness.canonical_threshold now owns the threshold (30d) + clock semantics (UTC date-only; stale iff age > threshold, boundary fresh; future dates clamp fresh but surface as freshness-clock-skew; unparseable dates surface as freshness-malformed). (2) freshness-stale is now threshold-gated (was: emitted for EVERY stamped file) and — the live dialect find — the GNU-only `date -d` age computation silently never staled anything on macOS/BSD hosts; portable iso_to_epoch fixes it fleet-wide. (3) coverage is truthfully fractional with numerator/ denominator/delta: live output `freshness-coverage: 1.0% (10/1034 delta=unknown)` — the old integer floor rendered this 0%. (4) --self-test runs five fixtures (fresh/boundary/stale/malformed/ clock-skew) + unstamped through the real script recursively; wired as a new litmus step. local-ci coverage extraction widened; litmus header grammar updated; suite 10/10 PASS on this host.
+        - type: claim
+          ts: 2026-08-11T08:35:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          lease_id: macos-606-vaua-20260811t0835z
+          expires_at: 2026-08-11T12:35:00Z
+          summary: |
+            Claimed on the macOS overnight loop (any-role packet; pushing the claim first since siblings are looping too). Slice: define the canonical freshness age threshold + clock semantics in methodology, fix scripts/freshness-inventory.sh classification (fresh vs over-threshold vs absent) and truthful fractional coverage (7/1011 must not round to zero; report numerator, denominator, delta), and add fixtures for boundary age, malformed date, and clock skew.
     - packet_id: folded-loop-status-active-release-truth
       split_into:
         - loop-status-readme-exclusion-from-fragment-parse
@@ -31501,6 +31643,27 @@ plan_index:
           host: linux_mutable
           summary: |
             Design half of the packet's next_action executed: amended the UNSIGNED SSH-CA design (plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md) to remove every shared-identity and wildcard-authority artifact the zero-trust audit's corrections 1-2 name. Per section: D3 principals are now til:forge-push:<mirror-id> (opaque, with the project<->mirror-id ledger join for readability); D9 host certs certify exactly one per-project hostname git-<mirror-id>, never the shared aliases; D12 signer identities are per-project with exact sign paths, policies MINTED at provision (no static wildcard file ships); NEW D13 defines the opaque mirror-id scheme (12-byte CSPRNG random - never derived from the guessable project name - persisted once in Vault kv secret/mirror-identity/<project>, distributed only through 659-8faj's single derivation function; DNS opacity is defense-in-depth, certs are the control); section 2.3's role JSON now creates client role <mirror-id> and per-project host role host-<mirror-id> with allowed_domains git-<mirror-id> (shared roles/mirror-host withdrawn); the sign/* policy sample is withdrawn and replaced with exact minted pairs; the enclave-wide source-address is explicitly demoted to defense-in-depth (it never separated projects); ladder rungs T1/T2/T4/T5/T8/T10/T11 updated to match; NEW section 4a enumerates the negative two-project matrix M0-M7 (DNS uniqueness, cross-sign 403, cross-cert rejection, host-cert exactness, fixed repo path, audit completeness incl. the V12 T9 blocker, identity confidentiality) as the executable gate before 451 flips any lane. Doc remains UNSIGNED; Q1 and Q2 remain open and operator-gated (Q2 re-raised by the operator 2026-08-10). Residual for this packet: the implementation itself - vault ssh mounts + per-project roles/policies minting + sshd + the matrix fixtures; criterion 3's DNS half is in flight as 659-8faj.
+        - type: progress
+          ts: 2026-08-10T23:42:24Z
+          agent_id: linux-mutable-20260810t234224z
+          host: linux_mutable
+          summary: |
+            Vault-side substrate of the amended design LANDED (rungs T1/T2 + D13); packet stays ready — the transport rungs are untouched.
+            T1 boot half: images/vault/entrypoint.sh now enables both SSH CA engines (ssh-client-signer, ssh-host-signer) and generates both in-vault ed25519 CAs via the same idempotent enable_endpoint 2xx|400 idiom as approle/kv2/audit; no roles at boot (amended T1 — roles are provision-time). T1 migration half: because the entrypoint provisions on FIRST boot only, provision_mirror_ssh_roles (vault_bootstrap.rs) re-ensures mounts+CAs host-side, so vaults initialized before this shipped gain the engines at first mirror provision.
+            D13: mint_mirror_id — 12 bytes host CSPRNG (getrandom 0.4, already in the tree via uuid; no new lockfile entry), hand-rolled RFC 4648 base32hex lowercase no-pad (20 chars, hostname git-<id> a single 24-char DNS label). provision_mirror_identity mint-or-reads secret/mirror-identity/<project>; the kv entry is the COMMIT MARKER written LAST via a new kv-v2 cas=0 create-only client call (write_secret_if_absent), so concurrent first-provisions converge on one identity (loser re-reads and adopts the winner); a stored id failing the grammar fails LOUD, never re-minted over.
+            T2/§2.3: provision_mirror_ssh_roles writes the exact per-project pair — client role roles/<mirror-id> (allowed_users exactly til:forge-push:<mirror-id>, allowed_extensions empty, force-command + source-address=EFFECTIVE enclave subnet, 30m/1h) and host role roles/host-<mirror-id> (allowed_domains exactly git-<mirror-id>, 24h/48h) — plus both policies MINTED via sys/policies/acl from Rust templates next to provision_approle_roles (no static .hcl ships; Containerfile-COPY/Policy::all() divergence trap not in play). Runtime guard reject_sign_wildcard refuses any policy body containing the withdrawn wildcard before it reaches the server; a source-window test pins guard-before-write, and rendered-output tests grep both policies for the exact sign paths and wildcard absence.
+            Wiring: ensure_shared_git_and_inference_for_launch (forge-launch mirror CREATE branch only) calls ensure_mirror_identity_provisioned — one kv read when already provisioned; the running-mirror reuse path never touches Vault for this. Tests: RFC 4648 vectors, 20-char grammar + uniqueness across 64 mints, stability across re-reads (wiremock proves the read path performs zero writes), corrupt-id refusal, first-provision full call matrix incl. cas=0 body match, cas-race adoption, role-config exactness (incl. subnet override flow-through and shared-alias exclusion), entrypoint pin. cargo test -p tillandsias-headless 324 passed; ./build.sh --check green.
+            REMAINS (packet stays ready): T3-T13 — sshd in the git image, host cert at mirror start, sshd_config/receive wrapper, repo hardening, sidecar + AppRole ssh-lane-signer-<mirror-id> (D6, deliberately not minted yet), forge wiring, negative matrix §4a M0-M7 (live-vault litmus incl. the forge-cannot-read-mirror-identity pin), audit volume T9, DNS swap of git_mirror_service_identity to the opaque hostname (659-8faj's one swap point — deliberately NOT swapped in this slice), and identity provisioning at the three non-forge-launch mirror-create sites (status-check, opencode CLI, opencode web). Design still UNSIGNED; Q1/Q2 operator-gated.
+        - type: progress
+          ts: 2026-08-11T00:48:38Z
+          agent_id: linux-mutable-20260811t004838z
+          host: linux_mutable
+          summary: |
+            Identity provisioning wired into ALL remaining mirror-CREATE sites (finding 2 of the vault-rungs fragment closed); packet stays ready — transport rungs T3-T13 still untouched.
+            All four production build_git_run_args callers now pair with ensure_mirror_identity_provisioned, provision-before-mint, create path only: status-check (run_status_check), opencode CLI (run_opencode_mode), opencode web (run_opencode_web_mode), plus the already-landed forge-launch create branch (ensure_shared_git_and_inference_for_launch). The three new sites are create-by-construction — cleanup_stack_containers removes the per-project mirror and the lanes recreate it unconditionally (--replace); none has a running-mirror reuse branch, so the cheap-on-reuse property is the provision's own one-kv-read fast path.
+            Failure semantics follow each site's existing vault-dependency posture: both opencode lanes hard-fail (`?`) — ensure_vault_running precedes and the relay-credential mint below already fails loud (windows-260716-2); status-check tolerates-but-LOUD (eprintln WARNING, not debug-gated), matching its credential-less-mirror tolerance — the status lane must keep diagnosing hosts whose vault is down, and nothing consumes the identity yet (sshd wiring is T4+). Note the status lane provisions under its fixed pseudo-project name tillandsias-status-check: one idempotent kv entry + role/policy pair, forward-correct for when T4+ makes mirror sshd need an identity.
+            Coverage pin: new source-window test every_mirror_create_lane_provisions_the_service_identity asserts, per lane window, (a) a provision call exists, (b) it precedes the mint, (c) exactly-once — which pins the forge-launch reuse branch (same window) never gaining a Vault touch. cargo test -p tillandsias-headless 325 passed (was 324); ./build.sh --check green.
+            REMAINS (packet stays ready): T3-T13 as listed in the vault-rungs fragment — sshd in the git image, host cert at mirror start, sshd_config/receive wrapper, repo hardening, sidecar + AppRole ssh-lane-signer-<mirror-id>, forge wiring, negative matrix M0-M7, audit volume T9, 659-8faj DNS swap. Design still UNSIGNED; Q1/Q2 operator-gated. Noticed, not fixed (pre-existing): non-vault builds (--no-default-features) hard-fail both opencode lanes at the mint already; the new provision call fails one step earlier with the read_and_handover_root_token stub's message — same lane outcome, different first error string.
     - packet_id: git-mirror-egress-network-spec-drift
       order: 606-9wqd
       status: done
@@ -35019,7 +35182,7 @@ plan_index:
 
     - packet_id: stranded-in-progress-packets-are-invisible-both-ways
       order: 641-e2qa
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p0
       title: 21 packets sit in in_progress with no event ever recorded — neither claimable nor closed
@@ -35139,6 +35302,16 @@ plan_index:
           agent_id: windows-20260810t224500z
           summary: |
             Criterion 2 reduced to a ready implementation packet (plan-expire-claims-subcommand, 672-bz7u) after probing showed query --json exposes no claim timestamp, making a safe bash-side expiry impossible. Criteria 1 (owner dispositions) and 3 (per-cycle visibility) remain satisfied; 6 linux-role stranded packets still await their owner.
+        - type: progress
+          ts: 2026-08-10T23:55:00Z
+          agent_id: windows-20260810t235500z
+          summary: |
+            Criterion 2 CLOSED by plan-expire-claims-subcommand (672-bz7u): the claim protocol now has a mechanical expiry. First live run returned 394e and 463 to ready after 11 and 16 stranded days respectively. Remaining stranded set is exactly one packet (184, secure-channel-maturity-ladder), which has no parseable activity timestamp and is deliberately not auto-expired; its linux owner should disposition it by hand.
+        - type: completed
+          ts: 2026-08-11T05:40:00Z
+          agent_id: windows-20260811t054000z
+          summary: |
+            CLOSED against its verifiable closure: "stranded=0, or every remaining entry carries a recorded reason for still being in flight." Final state 2026-08-11: checker reports exactly one entry (184, secure-channel-maturity-ladder) and its reason is now recorded on that packet (master-plan criteria holder, not an interrupted claim). The journey, for the record: 21 stranded at filing -> owner dispositions by linux and windows lanes -> 456 dispositioned completed with evidence (criterion 1) -> expire-claims subcommand implemented as the mechanical claim-expiry (672-bz7u, criterion 2; first live run returned 394e and 463 after 11/16 stranded days) -> detector wired into per-cycle triage with threshold_events + hint (criterion 3). The leak class has a detector, an expiry mechanism, and zero unexplained members.
     - packet_id: lww-channel-naming-obscures-field-correction
       order: 642-fedr
       status: ready
@@ -35790,7 +35963,7 @@ plan_index:
 
     - packet_id: coordinator-asks-overnight-2026-08-10
       order: 648-dvzd
-      status: ready
+      status: completed
       desired_release: v0.5
       release_target: stable-milestone-v1
       priority: p1
@@ -35860,6 +36033,11 @@ plan_index:
             Ask 2 (646-qde5) is the windows one and CANNOT be closed headless — the remaining criterion is whether the tray ICON appears, which has no structural proxy. Narrowed rather than deferred: the "no flashing consoles" half is now answered from the PE subsystem and the CREATE_NO_WINDOW call sites, recorded on 646-qde5. The human check is one question instead of two.
             Ask 1 (644-7w89) and ask 3 (606-9wqd) were both answered by macOS at 08:55Z — verified before starting, to avoid duplicating a sibling's completed work. Nothing left in this queue that this host can take.
 
+        - type: completed
+          ts: 2026-08-11T01:15:00Z
+          agent_id: windows-20260811t011500z
+          summary: |
+            CLOSED against its verifiable closure: all three named packets carry a terminal status, checked via the folded ledger this cycle. (1) 644-7w89 done — macOS curl-install smoke 5/5 PASS at 05:05Z, recorded on the packet. (2) 646-qde5 completed — the bare tillandsias-tray.exe alias question this queue asked three times was answered TODAY by direct operator GUI observation (icon appears, no console flash; closure recorded on 646-qde5 by the 663-64xi fragment, which also filed the NotifyIconSettings defect that verification surfaced). (3) 606-9wqd done — macOS runtime reproduction conclusive, recorded on the packet. No ask was silently skipped: macOS recorded its CANNOT on ask 2, Windows recorded its dedup check on asks 1 and 3 before this closure.
     - packet_id: github-login-prompts-for-an-unneeded-token
       order: 648-e5pf
       status: ready
@@ -36103,7 +36281,7 @@ plan_index:
 
     - packet_id: mo-full-marker-is-unverified-outside-the-litmus-lane
       order: 651-2x5s
-      status: ready
+      status: done
       desired_release: v0.5
       release_target: convergence-velocity-milestone
       priority: p1
@@ -36147,6 +36325,17 @@ plan_index:
           summary: |
             Filed by the host that did it, on noticing at the start of the next cycle. The work was real; the proof was not.
 
+        - type: completed
+          ts: 2026-08-11T02:33:40Z
+          agent_id: linux-mutable-20260811t023340z
+          host: linux
+          summary: |
+            All three exit criteria met and verified. The MO-FULL marker was sound but its convergence check (scripts/mo-full-attest.sh) ran in exactly one lane (the litmus launcher's `check`); operator-prompt / ./repeat / cron cycles emitted the marker into a transcript nothing parsed, so the 2026-08-10 fabrication (8 real chars from `git push` output + 32 invented) went uncaught. Closed by moving derive-and-verify to emission time in every lane.
+            (1) DERIVED marker. skills/meta-orchestration/SKILL.md now instructs the cycle NOT to assemble the line by hand but to run `scripts/mo-full-attest.sh self`, which reads every field from live git state and prints the verified line — a hand-typed SHA is structurally impossible. The "DERIVE, never type" section was strengthened and points at the new self mode; the raw printf remains as illustration but the self mode adds the convergence guard the bare printf lacks.
+            (2) NEW `self` mode in scripts/mo-full-attest.sh. `self [timeout-s]` reads live HEAD (git rev-parse HEAD) and branch (rev-parse --abbrev-ref) and requires the remote to converge on that HEAD within the SAME bounded window as check. Fails loud (typed `MO-FULL: FAIL`, non-zero) on a main/detached branch, an unreadable HEAD, or a remote that never converges (unpushed/relay-lost); on success prints ONLY the derived, verified marker to stdout. Disposition defaults to COMPLETE, MO_FULL_DISPOSITION=BLOCKED for a blocked-but-pushed cycle. The convergence loop was extracted into a shared converge_remote() helper reused by both check and self (no duplicated logic); remote_head() reused as-is. check and fixture behavior are byte-identical. Finalization step 9 rewired to run `scripts/mo-full-attest.sh self` and emit its stdout verbatim, so every full-mode lane self-checks — not only the litmus lane.
+            (3) NEGATIVE CONTROL. fixture() gained a 7th scenario, `fabricated-sha`: a well-formed 40-hex marker (local==remote, correct branch — passes every glance-check) whose value does not match the fixture remote, reproducing the exact 2026-08-10 breach (SHA 2a8b6967 + 32 invented vs true head 2a8b6967...872e). Asserted REJECTED with a typed verdict and exit 2 (ls-remote non-convergence). scripts/test-mo-full-attest.sh header and the litmus binding (litmus-opencode-prompt-e2e-shape.yaml) updated 6/6 -> 7/7.
+            VERIFICATION. `scripts/mo-full-attest.sh fixture` -> "PASS: mo-full-attest fixture 7/7 scenarios green"; scripts/test-mo-full-attest.sh green; bash -n clean. `scripts/mo-full-attest.sh self` in this repo correctly FAILS LOUD right now (local HEAD is 2 commits ahead of origin/linux-next — an unpushed state; the guard doing its job); the derive-verify-print PASS path was proven with the probe override (MO_FULL_REMOTE_PROBE='git rev-parse HEAD' -> `MO-FULL: COMPLETE ab2428f7...258 linux-next ab2428f7...258`, exit 0) and BLOCKED disposition confirmed. `./build.sh --check` green (exit 0).
+            FINDINGS NOTICED, NOT FIXED. (1) The litmus critical_path exercises the self mode only through the fixture's check-path negative control; a live `self` step was deliberately NOT added to the litmus because it is branch-sensitive (self refuses on main/detached), which would make the litmus flaky if ever run on a PR-to-main checkout. Hermetic self coverage lives in the manual probe-override demonstration. (2) images/default/ skills/meta-orchestration/SKILL.md is an untracked, drifted derived copy (not git-tracked, differs from the canonical); left untouched — it is a build-staged artifact, not the source of truth.
     - packet_id: flock-eintr-reported-a-released-lock-as-held
       order: 652-zqix
       status: completed
@@ -36182,7 +36371,7 @@ plan_index:
 
     - packet_id: containers-conf-proxy-poisons-every-diagnostic-control
       order: 653-zzkb
-      status: ready
+      status: completed
       desired_release: v0.5
       release_target: socket-audit-master
       priority: p1
@@ -36223,6 +36412,16 @@ plan_index:
           summary: |
             Filed on discovering the 606-9wqd reproduction control had been poisoned by our own containers.conf. Fifth instance of a known class.
 
+        - type: progress
+          ts: 2026-08-11T03:15:00Z
+          agent_id: windows-20260811t031500z
+          summary: |
+            Exit criterion 2 (call sites converted) CLOSED this cycle: with-tillandsias-builder.sh's hand-carried order-116 loop is replaced by sourcing scripts/podman-neutralize-proxy.sh, and run-forge-project.sh now sources it before its podman work (its explicit --env proxy flags are untouched and documented as deliberate — that container runs ON the enclave network). Audit of the other named sites: build-image.sh already neutralizes via --http-proxy=false; the Rust build path already carries BUILD_PROXY_NEUTRALIZE_VARS (tillandsias-headless main.rs:6310) — the shell script's header names it as the same pattern, which is as converged as a bash/Rust pair can be without a build-time codegen. Neutralizer semantics verified on this host: unset vars become empty-set (overriding [engine] env), an operator-set value survives. Criteria 1 (shared neutralizer) and 3 (default-network litmus control, litmus-podman-egress-control-shape) existed from the filing lane. Remaining for closure: a host with container egress should confirm the litmus control passes live; this Windows host's podman lives in the runtime guest and was not exercised this cycle.
+        - type: completed
+          ts: 2026-08-11T04:35:00Z
+          agent_id: windows-20260811t043500z
+          summary: |
+            All three exit criteria verified against the tree and live hosts. (1) The shared neutralizer scripts/podman-neutralize-proxy.sh exists with the declared-and-empty override semantics, verified sourceable on this host (unset -> empty-set, operator-set value preserved). (2) Call sites converted 2026-08-11 (event 03:15Z): with-tillandsias-builder.sh sources it (replacing the hand loop carried since order 116), run-forge-project.sh sources it before its podman work; build-image.sh already used --http-proxy=false; the Rust path carries BUILD_PROXY_NEUTRALIZE_VARS. (3) litmus:podman-egress-control-shape exists, is bound (litmus-bindings.yaml:742), and pins the exact declared-and-empty state plus the no-clobber negative control. LIVE default-network control on THIS host's runtime guest: podman run on the default network fetched https://example.com -> HTTP 200 (2026-08-11 ~04:30Z), so egress measurements here are admissible — the second platform to confirm the instrument after macOS's conclusive 606-9wqd reproduction. The class that recurred five times now has one executable neutralizer, converted call sites, and a litmus that fails if the instrument breaks.
     - packet_id: route-mirror-and-login-egress-through-the-proxy-chokepoint
       order: 654-7ur4
       status: ready
@@ -37092,7 +37291,7 @@ plan_index:
 
     - packet_id: aarch64-guest-cpu-inference-tuning
       order: 657-3mq5
-      status: ready
+      status: done
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       priority: p1
@@ -37128,6 +37327,12 @@ plan_index:
           summary: |
             Slice 2: quant A/B matrix recorded (0.5B tier, native build, t=4). Q4_0-with-repack DOMINATES: pp512 1219.7 vs Q4_K_M's 355.2 (3.4x) and tg128 186.7 vs 150.9; Q8_0 lands 1053.8/140.2. Lane guidance fixed: Q4_0 GGUFs for macOS-guest experts. Matrix appended to the 393 decision doc. Remaining criteria: ollama version pin-bench and ground-truth quality spot-check (llama-cli capture failed this run); 1.5-3B tier optional. Exit criteria 1,2,3 now evidenced.
 
+        - type: completed
+          ts: 2026-08-11T01:00:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            All five exit criteria evidenced across three slices (full record in the 393 decision doc): (1) guest features asimddp+i8mm+SME2, no SVE; (2) native build beats the pinned-ollama baseline apples-to-apples — 150.9 vs ~71 tok/s on the SAME Q4_K_M quant (~2.1x engine), 1219.7 vs 355.2 pp on the repack path; (3) quant matrix recorded, Q4_0-repack dominates — lane guidance Q4_0; (4) ollama pinned 0.32.6 with bench evidence, regression #13860 ruled out; (5) winning recipe documented (GGML_NATIVE=ON, 65s build, Q4_0 GGUF, t=4 -> 186.7 tok/s tg, 1219.7 pp) and handed to 657-6s4a as its build recipe. Combined headline for the EXPERTS milestone: ~2.6x decode over the shipped engine on identical guest hardware.
     - packet_id: llama-server-aarch64-image-variant
       order: 657-6s4a
       status: ready
@@ -37567,6 +37772,24 @@ plan_index:
           summary: |
             Filed from repeated live hits (at least four this session). The silent pre-breadcrumb variant is the worst: indistinguishable from a wedged wire without host-side process inspection.
 
+        - type: progress
+          ts: 2026-08-11T02:15:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            Signature REFINED across tonight's occurrences: interrupted teardown is sufficient but NOT necessary — rapid SEQUENTIAL boots alone trigger the pre-breadcrumb hang. Repeated pattern: a health boot completes cleanly, then the NEXT one-shot boot ~1-3 minutes later hangs with zero output; boots after longer gaps (10+ min) succeed. This also indicts the health-boot-then-work-boot cycle pattern itself. Operational mitigation adopted by this host's loop: ONE boot per iteration with all work in that session. Diagnostic value for the fixer: the hang window correlates with proximity to the PREVIOUS boot's teardown, so the suspect is VZ/disk-lock or nvram/socket cleanup latency that vz.start() waits on unboundedly and silently. 663-acdw diagnosis remains blocked behind this (two more attempts consumed tonight).
+        - type: progress
+          ts: 2026-08-11T02:45:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            Datum: pre-breadcrumb hang reproduced 15s after the TRAY's own clean quit (not an interrupted teardown, not a rapid one-shot sequence) — the hazard window follows ANY VM teardown and the safe-gap threshold is racy (10s sometimes works, 15s failed here, 10+ min reliably works). 663-acdw diagnosis attempt #4 consumed; that packet stays blocked behind this one.
+        - type: progress
+          ts: 2026-08-11T03:55:00Z
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
+          host: macos
+          summary: |
+            Paired datum (attempts 5-6): a boot SUCCEEDED end-to-end in <45s starting ~3min after a killed hang — then the IMMEDIATE next boot (~1min later) hung pre-breadcrumb for 400s. Also: during the hung boots since 02:00Z the guest console log never updates while rootfs.img mtime DOES — VZ opens the disk but the guest never reaches the serial console. crashloop.state healthy throughout. Six diagnosis attempts consumed on 663-acdw tonight; both packets need a code-level fix (bounded fail-loud acquisition + breadcrumbs BEFORE the first blocking call), not more black-box sampling. A host-side `sample` of the hung tray is the next diagnostic — take it DURING a hang (process exits too fast on success; first attempt missed the window).
     - packet_id: loop-status-count-goes-stale-on-every-filed-packet
       order: 668-9z9h
       status: ready
@@ -37596,7 +37819,7 @@ plan_index:
 
     - packet_id: in-forge-plan-only-commits-cannot-pass-the-push-gate
       order: 668-2xeh
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p2
       title: An in-forge agent that only files plan fragments cannot push them without a full workspace build
@@ -37622,6 +37845,15 @@ plan_index:
           summary: |
             Filed by the coordinator from the round-2 session's terminal blocker; the agent's refusal to bypass was correct and is the behavior to keep.
 
+        - type: completed
+          ts: 2026-08-10T23:41:50Z
+          agent_id: linux-mutable-20260810t234150z
+          host: linux
+          summary: |
+            The pre-push local gate now carries a plan-only fast lane (668-2xeh): when the build stamp is missing or stale AND every path in the outgoing diff (the pushed range vs the remote ref, per-ref from the hook's stdin) is a NEW top-level plan/index.d/*.yaml or plan/loop_status.d/*.md file, the gate accepts without `./build.sh --check` by validating right there: yq parse of each pushed YAML blob (the blob, not the worktree — the lane vouches for the bytes the remote receives), Cycle-only heading grammar for loop-status fragments (Direction/ACTIVE RELEASE stay operator-only), `target/release/tillandsias-plan check` when the binary exists (skip-with-note when absent — in-forge it exists), plus check-fragment-status-loss.sh and check-no-base64-script-injection.sh when present. The accept is marker-recorded: one "plan-only lane: validated <path>" line per file and a "plan-only lane clean" verdict, so a push record names exactly what was accepted without a build.
+            FAIL CLOSED, demonstrated live in a fixture repo with a real bare origin and a real `git push` through the installed hook: a mixed diff (fragment + src/lib.rs) is refused with the unchanged full-gate message and the remote does not move; modifying an EXISTING fragment (immutable by design) is refused the same way; an invalid-YAML fragment fails lane validation and falls to the full gate; ref deletions, new remote refs (no base to diff), nested paths, and a host with neither yq nor the plan binary all decline the lane. The lane can only accept a strictly smaller class of pushes than the stamp path — a fresh stamp still passes exactly as before.
+            Litmus litmus:plan-only-push-lane-shape (instant, pre-build, pure-shell mktemp git fixtures modeled on committable-branch-guard-shape) pins BOTH halves per the exit criteria: acceptance + marker-line grammar (^plan-only lane: validated plan/(index|loop_status)\.d/...$, final clean verdict counting the files), and the two disqualifications (.rs path, existing-fragment modification) plus the invalid-YAML fail-closed case. Bound under methodology-accountability (the spec owning the gate/hooks; pre-push-local-gate.sh traces it). Executed: `scripts/run-litmus-test.sh methodology-accountability --phase pre-build --size instant --compact` — 8 PASS / 0 FAIL, all 6 lane steps [OK].
+            This removes the main REASON in-forge plan-only pushes failed (round-2's verbatim blocker); 667-se87's fragment-survival staging complements it by removing the LOSS when a push cannot happen at all.
     - packet_id: wedged-vm-start-should-trigger-bounded-shutdown-recovery
       order: 664-frz0
       status: ready
@@ -37655,7 +37887,7 @@ plan_index:
 
     - packet_id: generic-index-deterministic-subset-is-thin
       order: 669-egjn
-      status: ready
+      status: done
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       priority: p2
@@ -37684,9 +37916,19 @@ plan_index:
           summary: |
             Scope addition from the 669-qcsb litmus work, observed live: the generic lane cites README.md lines 1-5 UNCONDITIONALLY, so a README shorter than 5 lines makes verify-answer refuse a truthful confidence=exact answer ("citation line range runs past end of file") — reproduced against a 3-line fixture README. Clamp the citation range to the real line count when this packet reworks the deterministic subset.
 
+        - type: completed
+          ts: 2026-08-11T02:04:35Z
+          agent_id: linux-mutable-20260811t020435z
+          host: linux
+          summary: |
+            Exit criterion met in full, plus the 2026-08-10T23:05Z scope addition: commands, layout, and actions answer CITED on the 619-3y75 generic fixtures with every envelope accepted by `tillandsias-plan verify-answer`, and the README:1-5 over-range citation is clamped to the file's real line count.
+            THE ENRICHMENT (images/default/config-overlay/mcp/project-info.sh). Three derivations, each returning {answer, citations[], reason?} with RATIFIED Citation structs whose authority.key appears in BOTH the cited span and the answer (verify-answer's no-decorative-citation rule): commands from marker files — package.json "scripts" block (span = the block's real line range, found by grep -n/awk), Cargo.toml [package]/[workspace] header line, Makefile target lines (specials, pattern rules, and := assignments excluded); layout from the top-level tree walk, anchored to a real span (first line of the first recognizable top-level file, the claim explicit in the answer); actions from the DETECTED type, each action anchored to a citable line INSIDE the marker file the detection keyed on (type detection itself is existence-only and spanless — the 619-pfsj C1 lesson). `build_generic_index` assembles path/types/meta (pre-669-egjn keys preserved for existing readers) + the three classes, exposed as `project-info.sh index [dir]` (order-569 subcommand pattern, answers before the JSON-RPC loop). The generic answer lane routes questions through a CLOSED keyword classifier (_pa_deterministic_class — same no-fuzzy discipline as _pa_is_synthesis; synthesis gating runs first; "what's next" lands on actions, the C4 promise) and serves each class from the index document via _pa_generic_class_envelope: citations present -> confidence=exact; nothing citable -> the one pinned refusal constructor with the derivation's own reason. lib-common.sh discover_generic_project now persists the ENGINE's index output to tmpfs (TILLANDSIAS_PROJECT_ENGINE override, baked default path), so index.json and the served document cannot drift; the thin printf shape remains only as the engine-absent fallback. Engine contract bumped v3 -> v4 with tokens actions-cited, commands-cited, generic-index, layout-cited (manifest rule: the version MUST move when the answer contract changes behaviour).
+            THE CLAMP (the 669-qcsb finding). The overview lane cited README.md:1-5 unconditionally; a README shorter than 5 lines made verify-answer refuse a truthful confidence=exact answer. line_end is now min(5, real line count) via awk END{print NR} (counts a final unterminated line, which wc -l misses): a 3-line README cites 1-3 and verifies clean; a >=5-line README keeps the 1-5 window (pinned as a negative control).
+            VERIFICATION (660-ryhn discipline — everything EXECUTED). New litmus litmus:generic-index-deterministic-subset (9 steps, instant, pre-build, pure shell + the COMMITTED 619-3y75 fixtures), bound under forge-environment-discoverability beside the two 669-qcsb siblings: manifest-token bridge, enriched index shape, commands and layout and actions through the real JSON-RPC loop on git-project (verifier-clean each), plain-dir Makefile-only commands, the 3-line clamp fixture, and the >=5-line window negative control. scripts/run-litmus-test.sh forge-environment-discoverability --phase pre-build --size instant --compact -> 11/11 executed 0 fail (9/9 new steps OK; both 669-qcsb siblings unregressed, incl. the 'what type of project is this' anchors my classifier must not intercept). All touched yaml yq-clean. ./build.sh --check green (fmt, check, clippy, ledger, plan-orders, fragment status-loss, gate stamp).
+            FINDINGS NOTICED, NOT FIXED: (1) `status` remains the one class of the C2/C5 enumeration with no generic-lane answer — a status-shaped question still lands on the overview; structured git status exists as a tool (git_status) but is not routed into project_answer. (2) lib-common.sh discover_generic_project's FALLBACK path calls detect_project_types/get_project_metadata, which are not defined in lib-common.sh's own context — pre-existing; with an absent engine the fallback degrades to index-failed via its || guards rather than producing the thin index it intends. (3) get_project_metadata reports name=basename(dir), which is "." when the engine is asked about the cwd — the overview answer renders "Name: ." (pre-existing, visible in the clamp fixture output).
     - packet_id: plan-lane-routing-keys-on-binary-not-project
       order: 669-h987
-      status: ready
+      status: done
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       priority: p2
@@ -37709,6 +37951,15 @@ plan_index:
           event: filed
           summary: filed from the 619-pfsj completion report (finding 2).
 
+        - type: completed
+          ts: 2026-08-10T23:36:18Z
+          agent_id: linux-mutable-20260810t233618z
+          host: linux
+          summary: |
+            Exit criterion met in full: a non-Tillandsias fixture with a Tillandsias checkout present in the fallback path answers from the generic lane, PROVEN BY TEST (executed via scripts/run-litmus-test.sh, not merely bound).
+            THE DEFECT. project_answer in images/default/config-overlay/mcp/project-info.sh gated the plan lane on resolve_plan_bin && resolve_plan_index, and resolve_plan_index resolves $HOME/src/tillandsias/plan/index.yaml as a fallback. Inside a forge that is correct (one project mounted); on a dev host with a Tillandsias checkout lying around, a NON-Tillandsias project's question misrouted into that checkout's plan ledger and answered from the wrong project — the 619-pfsj fixture verification had already had to override HOME to dodge this.
+            THE FIX. Lane selection now keys on evidence about the MOUNTED project — its own plan/index.yaml at the project root (./plan/index.yaml) — never on tool reachability. Only a Tillandsias-shaped mounted project enters the plan lane, and it answers from ITS OWN ledger (TILLANDSIAS_PLAN_INDEX stays an explicit override for operator pins and test stubs); everything else answers from the generic lane, whatever the tooling resolves. A Tillandsias-shaped mount with no plan binary falls through to the generic lane (absence never degrades the generic contract). Engine contract bumped v2 -> v3 (669-h987) per the manifest rule that the contract version MUST move whenever the answer contract changes behaviour.
+            VERIFICATION. Extended litmus:project-answer-synthesis-refusal-typed (bound under forge-environment-discoverability, the spec that owns this surface) with a new EXECUTED step staging the exact regression: a plain non-Tillandsias mount (no plan/index.yaml at root) whose HOME carries a fake Tillandsias checkout (src/tillandsias/plan/index.yaml + a stub tillandsias-plan emitting a distinct plan answer) — the generic lane answers with an anchored 'Project type: ' envelope, the fallback's plan answer never leaks, and the envelope passes `tillandsias-plan verify-answer`. The existing plan-lane steps were re-keyed onto a Tillandsias-shaped fixture (own plan/index.yaml) because post-fix the plan lane only exists there. Full run: ./scripts/run-litmus-test.sh forge-environment-discoverability --size instant --phase pre-build -> 10/10 PASS incl. the new 669-h987 step; ./build.sh --check green (fmt, check, strict clippy, ledger check, plan-orders, fragment status-loss, gate stamp).
     - packet_id: project-engine-grammar-litmus-is-ownerless
       order: 669-qcsb
       status: done
@@ -37836,7 +38087,7 @@ plan_index:
 
     - packet_id: cheatsheet-tiers-check-skips-not-errors-on-foreign-binary
       order: 672-4nts
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p3
       title: check-cheatsheet-tiers execs a Linux ELF from the stale in-tree target/ on Windows — probe runnability and skip loud instead of erroring
@@ -37860,9 +38111,14 @@ plan_index:
           event: filed
           summary: Captured from cycle-1 gate output during the overnight drain.
 
+        - type: completed
+          ts: 2026-08-11T08:10:00Z
+          agent_id: windows-20260811t081000z
+          summary: |
+            Implemented: check-cheatsheet-tiers.sh probes the resolved policy binary before exec ("--help", branching only on exit 126/127 = cannot-execute/not-found) and emits exactly one "skip:policy-binary-not-host-executable (<path>)" advisory instead of the raw bash Exec format error; any exit code proving the binary RAN proceeds to the real check unchanged. Verifiable closure checked on this host: the gate run in this cycle's finalization no longer prints "Exec format error" (grep of the full --check output).
     - packet_id: plan-expire-claims-subcommand
       order: 672-bz7u
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       release_target: architecture-audit-epic
@@ -37897,3 +38153,712 @@ plan_index:
           event: filed
           summary: |
             Shaped from 641-e2qa's open criterion 2 during the overnight drain; probing showed the claim age is mechanically unreachable from bash, so the reduction lands the mechanism in the binary.
+        - type: completed
+          ts: 2026-08-10T23:55:00Z
+          agent_id: windows-20260810t235500z
+          summary: |
+            Implemented and live-verified. `tillandsias-plan expire-claims [--ttl-hours N] [--dry-run] [--now-epoch S] [--host H]` partitions in_progress packets by newest event timestamp against the TTL cutoff (default 24h, minimum 1h): stale claims get ONE new fragment (never an edit) flipping status back to ready with a progress event naming the expiry, TTL, and last-activity ts; fresh claims are untouched; packets with no parseable timestamp are reported unknown-age and NEVER expired. Policy pinned by unit test expire_claims_partitions_stale_fresh_and_unknown_age (synthetic stale/fresh/ageless/completed ledger); fragment emission verified LIVE: first real run expired the two claims stranded since July (394e at 2026-07-30, 463 at 2026-07-25), wrote plan/index.d/20260810t235053z-3271e4f5-windows.yaml, and check-stranded-in-progress.sh converged from stranded=3 to stranded=1 (184, unknown-age, correctly untouchable). check-stranded-in-progress.sh now reports threshold_events from a dry-run and prints a hint when claims are past TTL, capability-gated so old binaries degrade to the previous behavior. Residual noted honestly: fragment emission is proven live, not hermetically; a litmus seeding a synthetic claim end-to-end can be added if wanted. Capability manifest + DISPATCH_ARMS + usage updated in the same commit per order 569/583-dv9n.
+    - packet_id: groundtruth-query-set-red-at-head-citation-count
+      order: 673-47dx
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: groundtruth::the_committed_query_set_is_green_at_head is RED at HEAD — plan-upstream-prerequisites-of-experts-milestone now yields 2 citations, query set pins at most 1
+      kind: bug
+      deliverable: crates/tillandsias-plan/src/groundtruth.rs (or the committed query set)
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - plan
+        - experts
+        - tests
+        - ledger
+      context: |
+        Found 2026-08-10 during 672-bz7u implementation: cargo test -p tillandsias-plan fails at CLEAN HEAD (verified via stash) with "plan-upstream-prerequisites-of-experts-milestone: citations: expected at most 1, got 2". The test is ledger-data-driven, so some recent fragment/base change added a second citation source for that committed query. Every host running the crate's tests eats this failure; whoever owns the query set should either ratify the second citation (raise the pin) or fix the duplicate source. NOT fixed in the 672-bz7u commit — absorbing an unrelated red test silently is how drift hides.
+      exit_criteria:
+        - |
+            cargo test -p tillandsias-plan is green at HEAD, with the query-set change (pin raised or duplicate source removed) explained in the closing event.
+
+      events:
+        - ts: 2026-08-10T23:55:00Z
+          event: filed
+          summary: Captured during the overnight drain; pre-existing at HEAD, verified by stash.
+
+    - packet_id: three-litmus-tests-depend-on-a-vm-exec-example-that-never-existed
+      order: 673-y7gy
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: litmus vault-policy-403 / vault-auto-unseal / terminal-attach all invoke `cargo run --example vm-exec` — an instrument with no trace in tree or history
+      kind: bugfix+litmus
+      deliverable: build the vm-exec (and replay-audit-log) host-shell examples OR re-instrument the three tests on what exists; host_kind/precondition gates where a live substrate is required
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - litmus
+        - host-shell
+        - vault
+        - instruments
+      estimated_hours: 4
+      context: |
+        Found during the 2026-08-10 freshness audit of litmus-vault-recreate-mutex.yaml (which PASSED twice — the audit target is healthy). The tillandsias-vault quick tier fails 12/13 via litmus:vault-policy-forge-cannot-read-github-token step 1: "error: no example target named `vm-exec` in `tillandsias-host-shell` package". grep shows THREE bound tests invoking it (litmus-vault-policy-forge-cannot-read-github-token.yaml, litmus-vault-auto-unseal-no-prompt.yaml — which also wants a `replay-audit-log` example, equally absent — litmus-cross-platform-terminal-attach.yaml), and `git log -S vm-exec` finds no commit that ever added it: the tests were authored against a planned instrument that was never built. They are silent in the instant tier and fail loud only when a quick-tier run executes them — phantom coverage in exactly the 660-ryhn sense. CROSS-LINK for 606-bvnp: the amended SSH-CA design's §4a cites the vault-policy-403 test as the M2 cross-sign template; whoever builds M2 must know the template's step-1 instrument is currently broken and should model the ASSERTION shape (403 on cross-policy read), not the vm-exec plumbing.
+      exit_criteria:
+        - the three tests either execute green with a real in-tree instrument or are re-instrumented/gated so the quick tier is honest on every host kind
+        - no bound litmus invokes a cargo example target that does not exist (executable check over bindings)
+      events:
+        - ts: 2026-08-10T23:59:00Z
+          event: filed
+          summary: |
+            Filed from the cycle-5 freshness audit; failure reproduced twice with full capture; instrument absence verified in tree and history.
+
+    - packet_id: vault-entrypoint-mounts-never-reach-existing-volumes
+      order: 674-84bx
+      status: ready
+      priority: p3
+      title: vault entrypoint provisions mounts on FIRST boot only — additions silently never reach existing vault volumes
+      kind: enhancement
+      deliverable: idempotent every-boot mounts pass in the entrypoint, or a loud version-marker refusal + documented Rust-side ensure convention
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - vault
+        - entrypoint
+        - upgrade
+        - idempotence
+      estimated_hours: 2
+      context: |
+        Surfaced by the 606-bvnp vault-rungs slice (1141a72c): the vault entrypoint's mounts/CA section runs only on first boot (later boots exit before the token section), so anything added there silently never reaches a vault volume provisioned before the change. The SSH engines dodged it because the Rust-side ensure re-creates them host-side, but the trap remains armed for every future entrypoint addition. Either make the mounts pass idempotent on every boot (the enable_endpoint 2xx|400 idiom already tolerates re-runs) or stamp a provisioning version in the volume and fail loud on mismatch.
+      exit_criteria:
+        - a mount/CA added to the entrypoint reaches a pre-existing vault volume on next boot (or the boot refuses loudly naming the gap), proven by a fixture
+      events:
+        - ts: 2026-08-11T00:15:00Z
+          event: filed
+          summary: filed from the 606-bvnp vault-rungs completion report (finding 5).
+
+    - packet_id: litmus-runner-filter-should-hint-when-given-a-test-name
+      order: 676-jf87
+      status: done
+      desired_release: v0.5
+      priority: p3
+      title: run-litmus-test.sh filter matches SPEC names; a litmus:-prefixed test name fails loud but unhelpfully — add a did-you-mean hint
+      kind: enhancement
+      deliverable: run-litmus-test.sh no-match branch emits the owning spec when the filter looks like a test name + a litmus pin
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - litmus
+        - dx
+        - fail-loud
+      estimated_hours: 1
+      context: |
+        The 669-qcsb finish-report's finding 2, and independently a coordinator stumble tonight (2026-08-10): passing `run-litmus-test.sh litmus:podman-build-command-shape` — the exact string that names the test in output — fails with the correct-but-opaque "no litmus tests matched filter". The filter matches SPEC ids, not test names. The fail-loud is right (642: an unmatched explicit filter must never pass as zero-selected); only the message is thin. When FILTER_SPEC starts with `litmus:` or `litmus-`, or matches a known test `name:`, the no-match branch should additionally print the owning spec so the user can re-run with it. Small, self-contained, high-DX.
+      exit_criteria:
+        - passing a litmus:-prefixed or test-name filter that has no matching spec prints the owning spec (when resolvable) alongside the existing failure, still exits non-zero
+        - a litmus pins the hint text for a known test name and the unchanged bare-typo behavior
+      events:
+        - ts: 2026-08-11T01:55:00Z
+          event: filed
+          summary: |
+            Filed from 669-qcsb finding 2 plus a same-night coordinator reproduction; sized deliberately as a one-fix in-forge drain candidate.
+        - type: filed
+          ts: 2026-08-11T01:59:00Z
+          agent_id: linux-mutable-20260811t015900z
+          host: forge
+          summary: |
+            Coordinator-leased packet that was never filed; created and completed in the same in-forge cycle.
+        - type: completed
+          ts: 2026-08-11T02:00:00Z
+          agent_id: linux-mutable-20260811t015900z
+          host: forge
+          summary: |
+            The no-match guard in run-litmus-test.sh (around line 1430, the "no litmus tests matched filter" branch) now additionally resolves a litmus:* / litmus-* filter against openspec/litmus-tests/: when a file whose name: equals the filter carries a resolvable spec: line, it prints "hint: '<filter>' is a test name; run its spec: scripts/run-litmus-test.sh <spec>" (log_warn) BEFORE the unchanged exit 1. The failure message and non-zero exit are byte-for-byte unchanged; the hint is strictly additive and only fires for name-shaped filters that resolve.
+            New litmus litmus:litmus-name-filter-hint-shape (bound under spec-traceability) pins BOTH halves: a known test name (litmus:litmus-name-filter-fail-loud-shape) keeps the fail-loud diagnostic + exit 1 AND prints the hint naming spec-traceability; a bare name-shaped typo (litmus:order-300-no-such-test-typo) still fails loud with the unchanged diagnostic and no spurious hint. Executed: scripts/run-litmus-test.sh spec-traceability --size instant --compact — litmus-name-filter-hint-shape 2/2 PASS, sibling fail-loud-shape 3/3 PASS. The suite's one red (hook-install-portability-shape step 4, "post-commit does not resolve the root at run time") was reproduced at HEAD with the diff stashed and matches the already-filed forge condition forge-global-hookspath-shadows-repo-hooks-2026-07-12.md, so it is pre-existing and unrelated. yq-validate clean; ./build.sh --check exit 0 (gate stamp recorded).
+          evidence:
+          - 'direct probe: litmus:litmus-name-filter-fail-loud-shape -> fail + hint naming spec-traceability, exit 1'
+          - 'direct probe: bare spec typo ''spec-traceabilitty-typo'' -> fail, no hint, exit 1'
+          - litmus:litmus-name-filter-hint-shape 2/2 PASS (bound under spec-traceability)
+          - litmus:litmus-name-filter-fail-loud-shape 3/3 PASS (unchanged semantics)
+          - 'yq-validate: run-litmus-test.sh touch N/A, litmus + bindings clean'
+          - 'TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS'
+
+    - packet_id: gate-stamp-per-file-forks-made-pre-push-a-20-minute-hook
+      order: 675-dkif
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      title: gate-stamp compute spawned 2 processes per file — ~20 min pre-push on Windows/MSYS; batch-hashed, now ~5s, stamp values unchanged
+      kind: bug
+      deliverable: scripts/gate-stamp.sh
+      depends_on: []
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - git
+        - hooks
+        - performance
+        - ci
+      context: |
+        Found live 2026-08-11 when every push began hanging silently: the pre-push local gate runs gate-stamp.sh verify, whose compute() spawned sha256sum (plus a $() subshell) once PER worktree file. The "~60ms over 4000 files" costing in the header is a Linux fork number; on this Windows/MSYS host a spawn measures ~150ms (Defender + MSYS fork emulation), so verify took ~20 MINUTES at near-zero CPU — the exact "multi-minute hook gets --no-verify'd" failure mode the stamp design exists to avoid, presenting as a hang with no output. Diagnosed by bisecting hook -> local-gate -> gate-stamp -> compute, then timing 20 bare sha256sum spawns (3.1s).
+      exit_criteria:
+        - |
+            compute() classification uses bash builtins, regular files are batch-hashed via xargs -0 sha256sum, only symlinks pay per-entry spawns, and a digest-count mismatch fails loud rather than stamping an unmeasured tree.
+
+        - |
+            The emitted frames are byte-identical to the per-file implementation so existing stamps stay valid — VERIFIED: old implementation (run in the WSL builder) and new implementation (run on the host) both produce 155fce42c48bfc26 for the same tree.
+
+        - |
+            Host-measured compute time is seconds, not minutes — MEASURED: 5.0s wall on the ~4000-file tree that previously took ~20 min.
+
+      events:
+        - ts: 2026-08-11T02:00:00Z
+          event: filed
+          summary: |
+            Filed and fixed in the same cycle: it was blocking every push of the overnight drain. Old-vs-new hash equality and the 5s timing are recorded in the exit criteria; the stray hung git/push processes it spawned were killed by PID after verification.
+
+    - packet_id: freshness-inventory-conflates-code-and-corpus-populations
+      order: 678-pgzf
+      status: ready
+      priority: p3
+      title: freshness-inventory's unstamped-draw offers cheatsheet corpus, which uses frontmatter last_verified — coverage can never reach 100% by code-stamping
+      kind: enhancement
+      deliverable: freshness-inventory.sh population split (code components vs corpus with last_verified) + honest per-population coverage
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - freshness
+        - cheatsheets
+        - metrics
+      estimated_hours: 2
+      context: |
+        Cycle-9 freshness audit (2026-08-11): the freshness-next unstamped draw offered cheatsheets/data/postgresql-indexing-basics.md. It is curated REFERENCE CORPUS with proper frontmatter provenance (`since`, `last_verified: 2026-04-27`, `sources:`), referenced from cheatsheets/INDEX.md — legitimate seed data for the cheatsheet expert (packet 400), not project code. The `# freshness:` shell/code-comment stamp convention does not fit a markdown+YAML-frontmatter corpus file (a leading comment would corrupt the frontmatter), and corpus already HAS a freshness mechanism: its own `last_verified` field against `sources:`. So freshness-inventory counts ~all of cheatsheets/**.md in its 1000+ unstamped denominator while they can never be code-stamped — coverage is structurally pinned below 100% and the two populations are audited by different, incomparable criteria. Split them: code components tracked by `# freshness:` stamps; corpus tracked by `last_verified` freshness against `sources:`; report coverage per population so neither drags the other's number.
+      exit_criteria:
+        - freshness-inventory distinguishes code components from last_verified-bearing corpus and reports coverage separately; the unstamped-draw for code stops offering corpus files
+      events:
+        - ts: 2026-08-11T03:40:00Z
+          event: filed
+          summary: filed from the cycle-9 freshness audit — the audit of the freshness mechanism itself.
+
+    - packet_id: gate-and-litmus-operations-mutate-tracked-files-unsafely
+      order: 678-er2c
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: 'Recurring class: gate/litmus/install operations mutate tracked files (VERSION, gate-stamp) without kill-safety — a killed run poisons the tree and blocks pushes'
+      kind: research+enhancement
+      deliverable: an inventory of tracked-file-mutating gate/litmus/install steps + a shared kill-safe write discipline (temp+atomic-rename, or untracked location) + guard
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - gates
+        - litmus
+        - safety
+        - tracked-files
+        - cross-host
+      estimated_hours: 4
+      context: |
+        THREE independent instances landed across hosts in ~24h, same shape — a gate/litmus/install step writes a TRACKED file, and an interruption or the write itself leaves the tree dirty/poisoned so pushes break: (1) 671-jvcg (linux, this session): ./build.sh --install auto-bumps tracked VERSION, which the push guard then forbids off-main — every on-branch install leaves mandatory-uncommittable dirt. (2) 675-dkif (windows): gate-stamp computed 2 forks/file, a silent ~20-minute pre-push hang. (3) 677-33be (windows): a litmus mutates tracked VERSION without kill-safety — a killed run poisoned the tree and blocked pushes. Individually each is p2/p3; together they are a CLASS: automation that mutates version-controlled files as a side effect, without atomicity or a rollback-on-interrupt story, against the meta-orchestration exit contract that treats any cycle-created dirt as commit-or-block. The reduction: inventory every gate/litmus/install step that writes a tracked path, and give them ONE discipline — write to an untracked/ external location, or temp+atomic-rename with an interrupt trap that restores — enforced by a guard, not goodwill.
+      exit_criteria:
+        - a committed inventory of tracked-file-mutating gate/litmus/install steps, each dispositioned (moved off tracked paths, or made kill-safe with a restore trap)
+        - an executable guard fails loud if a gate/litmus step leaves a tracked file dirty after an interrupt fixture
+      events:
+        - ts: 2026-08-11T03:40:00Z
+          event: filed
+          summary: |
+            Filed as the consolidating parent of 671-jvcg/675-dkif/677-33be after the third instance in 24h; the pattern is the finding.
+
+    - packet_id: litmus-mutates-tracked-version-without-kill-safety
+      order: 677-33be
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: test-image-build-convergence writes 0.0.0-test-retag into the TRACKED VERSION file — a killed run leaves the tree poisoned and blocks every push
+      kind: bug
+      deliverable: scripts/test-image-build-convergence.sh
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - litmus
+        - ci
+        - hygiene
+        - versioning
+      context: |
+        Hit live 2026-08-11: an instant pre-build litmus sweep was killed mid-run (it had exceeded 15 minutes on a Windows host — the same per-process-spawn cost class as 675-dkif) and left VERSION containing "0.0.0-test-retag" (test-image-build-convergence.sh:104 writes the REAL tracked file and restores it only on a clean exit path). The poisoned VERSION then failed release-preflight monotonicity inside the pre-push hook, blocking every push with "blocked:version-not-monotonic" until a human connected the dots and restored the file. A test that mutates tracked project files owns their restoration under EVERY exit, including SIGTERM/SIGKILL of the runner.
+      exit_criteria:
+        - |
+            The test either stops mutating the tracked VERSION (copy the tree into its tmpdir and mutate there), or installs a trap-based restore covering EXIT/INT/TERM plus a stale-sentinel check at test START that restores a leftover 0.0.0-test-retag before running.
+
+        - |
+            A grep over scripts/ and openspec/litmus-tests/ finds no other test writing to tracked worktree paths without the same protection; offenders found are listed or fixed in the closing event.
+
+      events:
+        - ts: 2026-08-11T03:45:00Z
+          event: filed
+          summary: |
+            Filed from live damage during the overnight drain (cycle 5): a killed litmus run + poisoned VERSION + pre-push refusal chain.
+
+    - packet_id: linux-tray-login-vault-poll-to-event
+      order: 679-rp9m
+      release_target: socket-audit-master
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: Linux tray GitHubLogin handler polls Vault for the token 120x at 1s (login-state timer poll) — drive it from an event source
+      kind: enhancement
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs GitHubLogin click handler (~L3676-3688) — replace the poll loop with an event-driven wait
+      depends_on:
+        - linux-native-stream-audit
+        - vault-blocking-watch
+      pickup_role: linux
+      capability_tags:
+        - linux
+        - tray
+        - headless
+        - streams
+        - vault
+        - login
+      estimated_hours: 3
+      context: |
+        AUDIT finding (order-156 audit half, 2026-08-11). The worst offender in the Linux native tray path. The GitHubLogin click handler spawns a task that literally polls Vault for the login token:
+        
+          // crates/tillandsias-headless/src/tray/mod.rs ~L3676-3688
+          for i in 0..120 {
+              authed = crate::vault_bootstrap::is_github_key_present();
+              if authed { break; }
+              ...
+              std::thread::sleep(std::time::Duration::from_secs(1));
+          }
+        
+        This is exactly anti-pattern AP-1 (sleep-based polling loop) applied to LOGIN STATE — one of the three surfaces packet 156 names ("no polling loops for VM status, login state, or cloud projects") — and it violates SC-14 ("Vault token changes observed via blocking-watch HTTP, not a periodic GET"): is_github_key_present() is a periodic presence GET, fired up to 120 times over a 2-minute window after the user clicks GitHubLogin. The event source that should feed this already has a home: packet 147 (vault-blocking-watch, B6) — Vault's blocking-watch API pushes the token update, which the headless turns into a LoginStatePush / a tokio::sync::watch<LoginState>. The tray's login-confirmation should await that watch edge instead of sleep-looping is_github_key_present(). NOTE: the one-shot launch probe at ~L3980-4047 (is_github_logged_in fired ONCE at tray startup) is already event-shaped and is NOT in scope here; only the 120x1s confirmation loop is the poll.
+      exit_criteria:
+        - No `for _ in 0..120 { ... sleep(1s) }` (or any interval/sleep poll of Vault token presence) remains in the GitHubLogin click handler in crates/tillandsias-headless/src/tray/mod.rs (currently ~L3676-3688).
+        - Login confirmation after `--github-login` arrives via an event source — a tokio::sync::watch (or Notify) fed by the Vault blocking-watch (packet vault-blocking-watch / SC-14), not a periodic is_github_key_present() GET; is_github_key_present is called at most once per confirmation edge.
+        - A litmus/test asserts the login-confirmation path in tray/mod.rs contains no per-second sleep-poll constant (no `Duration::from_secs(1)` loop) for the login surface.
+      events:
+        - ts: 2026-08-11T04:50:00Z
+          event: filed
+          summary: |
+            Filed from the order-156 audit half. Concrete polling site crates/tillandsias-headless/src/tray/mod.rs L3676-3688: login-state Vault poll (120x @ 1s). Event source available: vault-blocking-watch (order 147, B6) -> watch<LoginState>. SC-14 + AP-1 violation.
+
+    - packet_id: linux-tray-shutdown-atomicbool-sleep-to-notify
+      order: 679-vdi6
+      release_target: socket-audit-master
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      title: 'Linux tray watches SIGTERM via AtomicBool+250ms sleep polls (3 sites) — SC-16: use tokio::sync::Notify/watch, not a timer'
+      kind: optimization
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs shutdown watchers (~L640-655, ~L4081-4082) + install_shutdown_signal_handlers (main.rs:13184) — expose a Notify/watch and await it
+      depends_on:
+        - linux-native-stream-audit
+      pickup_role: linux
+      capability_tags:
+        - linux
+        - tray
+        - headless
+        - streams
+        - signal-handling
+        - idle-cost
+      estimated_hours: 3
+      context: |
+        AUDIT finding (order-156 audit half, 2026-08-11). The tray observes the shutdown signal by SLEEP-POLLING an AtomicBool at a 250 ms cadence, at three sites in crates/tillandsias-headless/src/tray/mod.rs:
+        
+          // TrayPhaseHandle::watch_shutdown_and_mark_stopping_blocking ~L640-655
+          while !shutdown.load(Ordering::SeqCst) {
+              std::thread::sleep(std::time::Duration::from_millis(250));
+          }
+          // runtime main-wait loop ~L4081-4082
+          while !shutdown.load(Ordering::SeqCst) {
+              tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+          }
+        
+        (the first is also spawned from start_control_socket_server ~L1270). This is SC-16 verbatim: "No AtomicBool + sleep used as a signaling primitive; use tokio::sync::Notify or watch::channel." It is not a status/login/cloud surface, but it IS timer-based polling that should be event-driven, and it is the only source of periodic idle-time timer wakeups in the Linux tray (works against the contract's "zero idle cost: no timer wakeups" property and SC-11). Fix: have install_shutdown_signal_handlers (main.rs:13184) also publish a tokio::sync::Notify or watch::Sender<bool> alongside the atomic; the main-wait loop awaits `notified()` / `changed()`, and the phase watcher awaits the same edge before flipping phase to Stopping. CPU today is well under 0.1% so this is an idle-cost/correctness-of-primitive optimization, not a hot-path bug.
+      exit_criteria:
+        - No `while !shutdown.load(...) { sleep(250ms) }` remains in crates/tillandsias-headless/src/tray/mod.rs (currently watch_shutdown_and_mark_stopping_blocking ~L640-655 and the runtime main-wait loop ~L4081-4082).
+        - Shutdown/SIGTERM is observed via tokio::sync::Notify or a watch::Receiver fed by install_shutdown_signal_handlers — the watcher and main loop await an event edge, not a 250ms timer; SC-16 satisfied.
+        - A litmus/test asserts no `Duration::from_millis(250)` sleep-poll of the shutdown atomic remains in tray/mod.rs.
+      events:
+        - ts: 2026-08-11T04:50:00Z
+          event: filed
+          summary: |
+            Filed from the order-156 audit half. SC-16 violation at 3 sites in tray/mod.rs (L640-655, L1270 spawn, L4081-4082): AtomicBool + 250ms sleep as shutdown-signal primitive. Event source: promote install_shutdown_signal_handlers (main.rs:13184) to expose Notify/watch.
+
+    - packet_id: groundtruth-cases-must-not-pin-mutable-packet-status
+      order: 680-zphp
+      status: ready
+      desired_release: v0.5
+      release_target: forge-local-experts-milestone
+      priority: p2
+      title: Ground-truth expert cases still pin mutable `status:` on in-flight packets — audit and de-pin so ledger churn stops turning the harness red
+      kind: bugfix
+      deliverable: openspec/litmus-tests/groundtruth/*.yaml audited for mutable-status pins + a guard
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - experts
+        - groundtruth
+        - litmus
+        - robustness
+      estimated_hours: 2
+      context: |
+        Cycle-10 freshness audit (2026-08-11) ran the expert-groundtruth harness at quick tier and found it RED at HEAD (18/19): the plan-active-release-experts-milestone case pinned citation 394e with `status: in_progress`, but 394e had legitimately gone in_progress -> ready via the 672-bz7u expire-claims automation. NOT an expert regression — the expert correctly read the live ledger; the frozen ground truth pinned a MUTABLE field. The case's OWN comment (on sibling 394a) documents exactly this trap — "A query set that pins the MUTABLE status of an in-flight packet goes red on every legitimate ledger update — this case did exactly that the first time 394d was closed" — and 394a/394d were de-statused accordingly, but 394e was missed. Removed 394e's status pin this cycle (harness back to 19/19). The residual: this is the THIRD time this trap has fired (394d twice, now 394e), and every remaining `status:` on an in-flight (non-terminal) packet across the groundtruth sets is a latent red-at-next-churn. The harness is a ratification gate (4 verifiers) and a false red costs a diagnosis round-trip each time.
+      exit_criteria:
+        - every groundtruth citation that pins `status:` on a NON-terminal packet is either de-pinned or justified in a same-line comment; terminal (completed/archived) statuses may stay since they don't churn
+        - a guard (litmus or check) fails loud if a groundtruth case pins `status:` on a packet whose live status is non-terminal, so the trap cannot be reintroduced silently
+      events:
+        - ts: 2026-08-11T04:55:00Z
+          event: filed
+          summary: |
+            Filed from the cycle-10 freshness audit that fixed the 394e instance; the recurrence (394d x2, 394e) is the finding — de-pin the class and guard it.
+
+    - packet_id: macos-host-reports-no-eligible-work-while-8-ready-packets-exist
+      order: 681-er9z
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: macOS host reports 'no eligible work' while 8 role=macos ready v0.5 packets exist — stale local osx-next or a selector under-report
+      kind: coordination+bug
+      deliverable: macOS-side selector output capture + root cause (stale base vs filter bug) + fix or a recorded honest-idle reason
+      depends_on: []
+      pickup_role: macos
+      capability_tags:
+        - coordination
+        - selector
+        - macos
+        - convergence
+      context: |
+        Operator report 2026-08-11 (~05:54Z): "the macos host says there's no macos eligible work". From the linux coordinator's freshly-merged ledger this is FALSE: `tillandsias-plan query --status ready --release v0.5 --role macos` returns EIGHT role=macos ready packets — 155 (tray-stream-refactor), 421 (gatekeeper-overwarn), 598-kibt p0 (M5 runtime half, operator-gated), 606-r42f p1 (dead-vz-removal), 635-kagg p1 (bash-lane exec-wire wedge — the tractable unblock of blocked 349), 657-s6g8 p1 (metal-sidecar-bringup), 663-acdw p1 + 663-69kp p2 (the boot-hang pair the macOS host parked after 6 attempts). So the macOS queue is NOT converged. Most likely causes, in order: (1) the macOS host's LOCAL osx-next is behind the merged state its selector reads (it last authored 5d74786d at 20:37 local, merged linux at 21:39, idle ~2h since) — pull/re-run the selector; (2) the macOS selector under-filters (e.g. treats parked/attempted 663 + hardware-gated 657 + operator-gated 598-M5 as the whole queue and reports empty when the REMAINING tractable ones — 635-kagg, 606-r42f, 421, 155 — should surface); (3) a regression of the 627-53gu bash-3.2/yq selector class. This needs the macОС host to capture its OWN `select-work-batch macos` + `plan next macos` output so linux can compare — a false "no work" idles a host that has a p1 (635-kagg) that unblocks a blocked p0-path.
+      exit_criteria:
+        - the macOS host captures its local selector output; the divergence from the coordinator's 8-ready view is root-caused (stale base / filter bug / genuine gate) and fixed or recorded as an honest idle reason
+        - if it is a real under-report, the selector change is litmus-pinned
+      events:
+        - ts: 2026-08-11T05:55:00Z
+          event: filed
+          summary: |
+            Filed by the linux coordinator from an operator report; the coordinator's merged ledger shows 8 role=macos ready packets, so the macOS-side "no work" is a divergence to root-cause on that host.
+
+    - packet_id: local-telemetry-for-bottleneck-finding-milestone
+      order: 682-u3si
+      status: ready
+      kind: milestone
+      multi_cycle: true
+      desired_release: v0.6
+      priority: p1
+      title: 'MILESTONE: local-only CRDT telemetry so the loop can measure its own bottlenecks (expert/MCP usage, packets consumed, build/test time)'
+      deliverable: plan/index.yaml (criteria holder; children carry the work)
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - milestone
+        - telemetry
+        - metrics
+        - crdt
+        - observability
+        - coordination
+      estimated_hours: 0
+      outcome: |
+        Operator directive 2026-08-11. Foundation ALREADY EXISTS and is the pattern to extend: forge-plan.sh:216 appends {ts,tool,outcome,confidence,citations} JSONL to /tmp/forge-expert-usage.jsonl (CRDT-friendly append, one line per call), and cycle-metrics.sh folds it into the handoff `experts:` line (calls/answered/answer_rate). The milestone extends that ONE pattern to the whole loop so enhancements are measured and shortcomings surface: every MCP server logs usage (not just the plan expert), build/test steps log durations, cycles log packets-consumed, and a multihost-orchestration host semantically distills + buckets the per-host append-logs (they are per-host ephemeral /tmp today — non-aggregatable by design, collapsed later). Metrics stay local-only files agents APPEND to, mirroring how plan/index.d fragments work; no central collector until OTel (682-x8df, v0.6). Criteria: (a) every MCP server + build/test + packet-consumption emits append-log telemetry; (b) a distillation step buckets it during coordination; (c) the handoff surfaces MCP-usage + expert-accuracy; (d) an OTel evaluation decides the v0.6 stack. Children: 682-m8ek/emvg/epud/43mi/ym68/x8df.
+      exit_criteria:
+        - all six live MCP servers emit the same append-log usage telemetry the plan expert already does (682-m8ek)
+        - build and test steps append duration telemetry a cycle can read (682-emvg)
+        - each cycle appends packets-consumed telemetry (682-epud)
+        - a multihost-orchestration distillation step buckets the append-logs into a committed summary (682-43mi)
+        - the meta-orchestration handoff surfaces MCP-usage + expert-accuracy every cycle (682-ym68)
+        - an OpenTelemetry evaluation records whether/how OTel becomes the v0.6 telemetry stack (682-x8df)
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: |
+            Filed from the operator's 2026-08-11 telemetry directive; the expert-usage JSONL (forge-plan.sh) is the working seed to generalize.
+
+    - packet_id: all-mcp-servers-emit-usage-telemetry
+      order: 682-m8ek
+      status: ready
+      release_target: local-telemetry-for-bottleneck-finding-milestone
+      desired_release: v0.5
+      priority: p2
+      title: Extend the CRDT append-usage log from the plan expert to every MCP server (project-info, git-tools, dependency-resolver, host-browser, agent-profile)
+      kind: implementation
+      deliverable: images/default/config-overlay/mcp/*.sh shared usage-log helper + per-server call logging + shape litmus
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - telemetry
+        - mcp
+        - forge
+        - crdt
+      estimated_hours: 3
+      outcome: |
+        Only forge-plan.sh logs usage today (line 216, to /tmp/forge-expert-usage.jsonl). The other five servers in images/default/config-overlay/mcp/ — project-info, git-tools, dependency-resolver, host-browser, agent-profile — emit NOTHING, so "are the MCP servers used / affordable / discoverable" cannot be answered for them. Extract forge-plan.sh's append-writer into a shared lib (e.g. mcp-usage-log.sh) and call it from every server's tools/call dispatch with {ts,server,tool,outcome,latency_ms}. Keep it append-only, per-host, best-effort (never block a tool call on logging).
+      exit_criteria:
+        - every MCP server appends one usage line per tools/call to a per-host log; a shape litmus pins the record grammar and that logging failure never fails the call
+        - cycle-metrics.sh reads the unified log and reports per-server call counts
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: filed from the telemetry directive; generalizes forge-plan.sh:216.
+
+    - packet_id: build-and-test-duration-telemetry
+      order: 682-emvg
+      status: ready
+      release_target: local-telemetry-for-bottleneck-finding-milestone
+      desired_release: v0.5
+      priority: p2
+      title: Append build/test step durations to a local log so cycles can see where time goes
+      kind: implementation
+      deliverable: build.sh / local-ci.sh / run-litmus-test.sh duration append-logging + cycle-metrics read
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - telemetry
+        - build
+        - test
+        - timing
+      estimated_hours: 3
+      context: |
+        cycle-metrics reports commits and expert usage but NO timing — "time spent building, testing" (operator's words) is invisible, and it is the most likely bottleneck. Have build.sh --check, local-ci phases, and the litmus runner append {ts,step,phase,duration_ms,exit} to a per-host log (same append pattern). Best-effort, never gates.
+      exit_criteria:
+        - build/test/litmus steps append duration records; cycle-metrics surfaces a build_ms/test_ms line; a shape litmus pins the grammar
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: filed from the telemetry directive.
+
+    - packet_id: packets-consumed-per-cycle-telemetry
+      order: 682-epud
+      status: ready
+      release_target: local-telemetry-for-bottleneck-finding-milestone
+      desired_release: v0.5
+      priority: p3
+      title: Append packets-consumed-per-cycle telemetry (claimed/completed/filed) so batch economics are measurable
+      kind: implementation
+      deliverable: a cycle-close append-log of packet-flow counts + cycle-metrics read
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - telemetry
+        - plan
+        - batch
+        - throughput
+      estimated_hours: 2
+      context: |
+        To answer "is a bigger batch cheaper" (682-yiz7) we need to MEASURE packets-consumed vs cycle overhead. Append {ts,host,claimed,completed, filed,batch_epic,batch_size,seed} at each cycle close (the seed + batch_epic already exist from select-work-batch). This is the evidence base for the greedier-batching decision.
+      exit_criteria:
+        - each cycle appends a packet-flow record; cycle-metrics can report a rolling packets-per-cycle and the overhead ratio
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: filed from the telemetry directive; feeds 682-yiz7.
+
+    - packet_id: telemetry-distillation-and-bucketing-in-multihost
+      order: 682-43mi
+      status: ready
+      release_target: local-telemetry-for-bottleneck-finding-milestone
+      desired_release: v0.6
+      priority: p2
+      title: Multihost-orchestration semantically distills + buckets the per-host append-logs into a committed summary
+      kind: implementation
+      deliverable: a distillation step in /multihost-orchestration that folds per-host telemetry into bucketed, committed metrics
+      depends_on:
+        - all-mcp-servers-emit-usage-telemetry
+        - build-and-test-duration-telemetry
+      pickup_role: linux
+      capability_tags:
+        - telemetry
+        - crdt
+        - distillation
+        - coordination
+        - multihost
+      estimated_hours: 4
+      context: |
+        The append-logs are per-host ephemeral /tmp — non-aggregatable by design (operator: "anonymous non-aggregateable telemetry"). A host doing /multihost-orchestration during its cycle collapses them: read each host's log, bucket by tool/server/phase/day, distill into a committed summary (like the plan-fold but for metrics), then the raw logs can rotate. CRDT property: bucketing is commutative/idempotent so concurrent hosts converge. This is the "collapsing of metrics into buckets" the operator described.
+      exit_criteria:
+        - a distillation step produces a committed bucketed metrics summary from per-host logs; running it twice or on two hosts converges to the same buckets; a litmus pins idempotence
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: filed from the telemetry directive; the CRDT-collapse half.
+
+    - packet_id: surface-mcp-usage-and-expert-accuracy-in-handoff
+      order: 682-ym68
+      status: ready
+      release_target: local-telemetry-for-bottleneck-finding-milestone
+      desired_release: v0.5
+      priority: p2
+      title: meta-orchestration handoff + methodology must surface MCP-server usage AND expert accuracy (groundtruth pass-rate) every cycle
+      kind: enhancement
+      deliverable: cycle-metrics.sh MCP-usage + expert-accuracy lines + methodology/meta-orchestration handoff contract update
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - telemetry
+        - metrics
+        - methodology
+        - meta-orchestration
+        - experts
+      estimated_hours: 2
+      context: |
+        Operator ask (2026-08-11): "make sure the orchestration and methodology have agents at least display metrics on mcp server usage, and expert accuracy on their work summaries." Today the handoff shows the experts answer_rate (usefulness) but NOT (a) per-MCP-server usage counts, nor (b) expert ACCURACY — the groundtruth harness grades 19 cases (litmus:expert-groundtruth-harness) but its pass-rate is not in the handoff. Add both to cycle-metrics.sh and make the meta-orchestration Cycle-Metrics section + methodology require them in every handoff. This is the v0.5 quick win of the milestone: measure before we optimize. Note the honest-metric rules already in the skill (never reward activity; answer_rate is usefulness not volume) apply.
+      exit_criteria:
+        - cycle-metrics.sh emits an `mcp:` per-server usage line and an `expert_accuracy:` line (groundtruth pass/total); the meta-orchestration handoff and methodology require both; a litmus pins the grammar
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: filed from the operator's explicit display-metrics ask; v0.5 quick win.
+
+    - packet_id: opentelemetry-evaluation-for-loop-telemetry
+      order: 682-x8df
+      status: ready
+      release_target: local-telemetry-for-bottleneck-finding-milestone
+      desired_release: v0.6
+      priority: p2
+      title: 'RESEARCH: evaluate OpenTelemetry as the telemetry stack — must fit the CRDT local-only append-then-distill model, not a central collector'
+      kind: research
+      deliverable: plan/issues/opentelemetry-evaluation-<date>.md decision record
+      depends_on: []
+      pickup_role: any
+      capability_tags:
+        - research
+        - telemetry
+        - opentelemetry
+        - crdt
+        - v0.6
+      estimated_hours: 4
+      context: |
+        Operator (2026-08-11): "OpenTelemetry should be a solid starting point ... we'll need our metrics to perform in our favorite CRDT fashion ... likely v0.6 unless a small change." Research whether OTel's model (spans, metrics, OTLP, collectors) can be adapted to local-only, per-host, append-then-distill files with no live collector inside the enclave (the enclave forbids arbitrary egress; a collector is a network sink). Evaluate: OTel file exporter / local OTLP-to-file, whether spans map onto the existing JSONL append pattern, the cost of the SDK in forge images, and whether a thin homegrown append+distill (682-m8ek/43mi) is a better fit than OTel for v0.5-v0.6. Decide scope + version. Do NOT adopt OTel before the decision record.
+      exit_criteria:
+        - a committed decision record evaluating OTel against the CRDT local-only model, with a scope/version recommendation and the smallest-viable first rung
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: filed per the operator's explicit request for an OTel research packet.
+
+    - packet_id: greedier-batch-selection-larger-sequential-batches
+      order: 682-yiz7
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: Let non-forge cycles drain LARGER sequential batches to amortize meta-orchestration overhead — decide + implement the budget
+      kind: research+implementation
+      deliverable: methodology/distributed-work.yaml cycle_batch_triage budget policy + select-work-batch --budget default + evidence
+      depends_on:
+        - packets-consumed-per-cycle-telemetry
+      pickup_role: linux
+      capability_tags:
+        - batch
+        - orchestration
+        - throughput
+        - methodology
+        - overhead
+      estimated_hours: 3
+      context: |
+        Operator hypothesis (2026-08-11): meta-orchestration per-cycle overhead (fetch, guards, boundary, merges, handoff, gate, push, attest) is a relatively fixed cost, so draining LARGER batches per cycle would make that overhead relatively smaller. CURRENT STATE: packets ARE grouped in stories (release_target milestones = epics; 171 packets carry one) and consumed in batches — select-work-batch picks ONE cohesive epic and up to `budget` packets (budget=3 non-forge, 1 forge per order 264). The operator wants greedier: raise the non-forge budget and/or drain MULTIPLE sequential batches per cycle. IMPORTANT design tension to resolve, not ignore: the batch selector deliberately picks ONE epic to stop scatter (the anti-pattern in its own header) and forge is deliberately budget=1 (order 264, Tlatoāni ruling "OPPOSITE of greedy", to fit the 600s litmus envelope). So "greedier" should mean LARGER budget WITHIN one cohesive epic (or drain-until-envelope), NOT more unrelated epics — preserving cohesion while amortizing overhead. Gate the decision on the 682-epud packet-flow evidence (measure overhead ratio first). Forge stays budget=1 unless the operator re-rules 264.
+      exit_criteria:
+        - a measured overhead-ratio (682-epud) justifies a specific non-forge budget; select-work-batch default budget updated; methodology records the new policy and that forge budget=1 stands (or is re-ruled by the operator)
+        - a cycle drains the larger batch within one epic without the scatter the selector guards against
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: |
+            Filed from the operator's greedier-batching directive; scoped to larger-within-epic to preserve the anti-scatter design, evidence-gated on 682-epud.
+
+    - packet_id: host-session-mcp-registration-portable
+      order: 682-z5h8
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: Host Claude/agent sessions get the forge-plan + project-info experts via a portable, cross-platform .mcp.json
+      kind: implementation
+      deliverable: repo .mcp.json hardening + per-host binary resolution + docs + the fold-resolution fix
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - mcp
+        - experts
+        - discoverability
+        - host
+        - cross-platform
+        - velocity
+      estimated_hours: 3
+      context: |
+        Operator (2026-08-11): agents (including host Claude sessions) should be USING the MCP experts for velocity — "you got them for free". Until this cycle there was NO host-session registration (no .mcp.json); the servers were wired only for in-forge opencode/claude harnesses, so host sessions fell back to the raw CLI all night. SHIPPED THIS CYCLE (seed): a repo .mcp.json registering forge-plan + project-info as stdio servers (bash + the config-overlay scripts), after installing the plan binary to the canonical ~/.local/bin/tillandsias-plan the resolver expects; both servers verified host-side (initialize + tools/list + a real plan_ready call). REMAINING (this packet): (1) portability — macOS/Windows host sessions need the same registration with per-host binary resolution (the resolver checks ~/.local/bin and /usr/*, fine if each host installs there; verify on osx-next/windows-next); (2) an observed bug — an MCP-invoked `plan_status 651-2x5s` returned "no packet matches" while the CLI resolves it, suggesting the MCP path may read the base ledger without the fragment fold — verify and fix so MCP answers match the CLI; (3) decide whether git-tools/dependency-resolver join the host set; (4) a note in CLAUDE.md / methodology that host sessions have the experts and MUST prefer them (the bootstrap already says MCP-first — make it true for host sessions too). NOTE: a new .mcp.json only takes effect on the NEXT session start, and Claude Code prompts for MCP approval on first use.
+      exit_criteria:
+        - a portable .mcp.json gives host Claude sessions on all three platforms the forge-plan + project-info tools, verified by a real tool call on each
+        - MCP answers match the CLI (fragment fold included); the 651-style mismatch is fixed with a litmus
+        - CLAUDE.md/methodology direct host sessions to the MCP experts
+      events:
+        - ts: 2026-08-11T07:15:00Z
+          event: filed
+          summary: |
+            Filed with the seed .mcp.json shipped this cycle; captures the portability + fold-resolution + docs residual.
+        - type: progress
+          ts: 2026-08-11T07:30:00Z
+          agent_id: linux-mutable-20260811t073000z
+          host: linux_mutable
+          summary: |
+            ROOT-CAUSED + FIXED the stale-checkout bug that made the host MCP experts UNTRUSTWORTHY. On resume the operator's Claude session got the forge-plan + project-info tools live, but the FIRST real call returned citation_root=/home/tlatoani/src/tillandsias indexed_at=2026-07-30 — a stale clone weeks behind the session's actual checkout (/home/tlatoani/claudia/tillandsias) — so 682-u3si "did not exist" and every answer was silently authoritative-but-wrong. Cause: resolve_plan_index() in BOTH config-overlay/mcp/forge-plan.sh and project-info.sh checked TILLANDSIAS_PLAN_INDEX then jumped straight to the $HOME/src/tillandsias fallback, never considering $PWD (the checkout the server is actually launched in). Fix: inserted "$PWD/plan/index.yaml" as the first fallback candidate after the explicit env, in both servers. Verified host-side post-fix: forge-plan plan_status 682-u3si -> correct packet; project-info project_answer -> citation_root=/home/tlatoani/claudia/tillandsias, source_commit=83fcde6b (current HEAD), indexed_at=2026-08-11T07:08, confidence=exact. Forge-safe: forges set the env or their cwd is the mounted project; a non-Tillandsias project has no $PWD/plan/index.yaml and falls through. NOTE: a live MCP server holds the script from session-start, so the running session must relaunch to pick up the fix (the .mcp.json server was spawned before the edit). This closes the packet's exit-criterion-2 (MCP answers match the CLI); remaining: cross-platform verification on osx/windows host sessions + a litmus pinning $PWD-preference so the stale-clone regression cannot return.
+        - type: progress
+          ts: 2026-08-11T08:00:00Z
+          agent_id: linux-mutable-20260811t080000z
+          host: linux_mutable
+          summary: |
+            IN-FORGE end-to-end verification of the $PWD resolver fix is DEFERRED to a clean loop-cycle forge launch. The fix itself is DONE: verified host-side (both servers read the session checkout, citation_root + source_commit current) and pushed (b005490b); it is a deterministic COPY into the forge image, so it bakes on any correct build. The in-forge confirmation attempt this turn FAILED for an unrelated, self-inflicted reason: reinstalling the binary mid-session bumped it to v0.4.260811.1 (the 671-jvcg VERSION-bump footgun) while the running vault/proxy/router stack stayed on v0.4.260810.2 — a partial refresh — so the bp-mcp-verify forge launch died within ~2s on version skew and never established a container. Lesson (a third facet of the 683 refresh footguns): a mid-session refresh must be WHOLE — reinstall + rebuild all images + relaunch the stack — or it leaves an inconsistent binary-vs-stack version. The overnight loop's next cycle launches forges through the normal flow and will carry the fix; leave the in-forge plan_status/project_answer check (683-g7p6 resolves + citation_root = mounted project) for that clean launch.
+
+    - packet_id: forge-rebuild-silently-uses-stale-bundled-assets-not-live-source
+      order: 683-g7p6
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      title: '`tillandsias --init --force` rebuilds forge images from the binary''s BUNDLED asset snapshot, not the live checkout — a source fix silently does not propagate'
+      kind: bugfix+dx
+      deliverable: init build-context resolution honoring the invoking checkout + a loud notice when building from bundled assets + docs
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - build
+        - refresh
+        - ephemeral
+        - dx
+        - footgun
+      context: |
+        Found 2026-08-11 while exercising the operator's ephemeral-refresh directive (rebuild the forge to propagate an MCP fix). Sequence, all reproduced: (1) edited images/default/config-overlay/mcp/forge-plan.sh (the $PWD resolver fix, 682-z5h8) in the working checkout /home/tlatoani/claudia/tillandsias; (2) ran `~/.local/bin/tillandsias --init --force`; it reported building all images and exited 0; (3) the fix was NOT baked — `podman run <fresh forge image> grep PWD/plan .config-overlay/mcp/forge-plan.sh` = absent. ROOT CAUSE: main.rs resolve_runtime_asset_root (line 1048) uses the LIVE checkout ONLY when TILLANDSIAS_ROOT is set; otherwise it calls runtime_assets::ensure_runtime_assets(version), which extracts the images/ snapshot BUNDLED INTO THE INSTALLED BINARY (v0.4.260810.2, built before the fix). So --init faithfully rebuilds from a stale in-binary copy of the source, and a developer/agent editing the tree sees their change vanish. This silently defeats "rebuild to refresh" — the exact pattern the operator wants to rely on. Also misleading: the build progress label prints "Pulling image X" (main.rs:6466) while it is actually running `podman build`, so nothing signals it built from a snapshot. Workarounds that DO propagate: `TILLANDSIAS_ROOT=$PWD tillandsias --init --force` (build from the live checkout), or reinstall the binary first (`./build.sh --install` re-bundles current source) then --init. Companion footgun below (683 sibling): --init also refuses outside the desktop user-session lane.
+      exit_criteria:
+        - a source edit in the invoking checkout propagates to the rebuilt forge image WITHOUT needing TILLANDSIAS_ROOT, OR --init prints a loud, unmissable notice naming the bundled-asset source and the exact command to build from the live checkout
+        - the "Pulling image" label is corrected to distinguish build-from-source vs pull/extract
+      events:
+        - ts: 2026-08-11T07:45:00Z
+          event: filed
+          summary: |
+            Filed from exercising the operator's ephemeral-refresh directive; the fix was verified host-side but did not reach the forge image because --init built from the binary's stale bundled snapshot.
+        - type: progress
+          ts: 2026-08-11T08:00:00Z
+          agent_id: linux-mutable-20260811t080000z
+          host: linux_mutable
+          summary: |
+            THIRD facet observed: beyond (a) build-from-stale-bundle and (b) the desktop-lane refusal, a mid-session reinstall+partial-rebuild leaves binary/stack version skew (binary v0.4.260811.1 vs running stack v0.4.260810.2) that makes forge launches fail instantly. The refresh is only safe when WHOLE (idempotent teardown + rebuild + relaunch), which is the ephemeral principle done completely rather than halfway. Reinforces that the fix for 683-g7p6 should make the refresh path atomic/whole or refuse a partial one loudly.
+
+    - packet_id: forge-init-refuses-outside-desktop-session-lane-no-alt
+      order: 683-2n4k
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      title: '`tillandsias --init` refuses from the headless/service lane with no non-graphical alternative, blocking automated forge refresh'
+      kind: enhancement+dx
+      deliverable: a documented non-desktop init path (or explicit env opt-in) for agent/CI-driven forge rebuilds
+      depends_on: []
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - init
+        - session-lane
+        - automation
+        - dx
+      context: |
+        Found alongside 683-g7p6: `TILLANDSIAS_ROOT=$PWD tillandsias --init --force` launched from a backgrounded/agent shell refused with "tillandsias --init requires the desktop user-session lane, but this process is running under the headless service-account lane." An agent (or cron, or an unattended loop) that needs to rebuild the forge to propagate a fix has no sanctioned non-graphical path — it must borrow the operator's desktop session. Interestingly a prior --init in this same shell DID run, so the gate may be state/env-sensitive; characterize it and provide either a documented service-lane opt-in (TILLANDSIAS_ALLOW_HEADLESS_INIT?) or a clear reason the graphical lane is mandatory. This is a blocker for the operator's "delegate forge rebuilds to agents" model.
+      exit_criteria:
+        - either a documented, safe non-desktop init/rebuild path exists for automation, or the graphical-lane requirement is justified and the error names the exact supported alternative
+      events:
+        - ts: 2026-08-11T07:45:00Z
+          event: filed
+          summary: |
+            Filed from the same ephemeral-refresh exercise; --init refused from the agent shell lane with no alternative offered.
