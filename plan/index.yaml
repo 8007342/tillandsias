@@ -28571,6 +28571,12 @@ plan_index:
         - the active spec explicitly supersedes the former <=10 deletion relay semantics and records the lane-exit cleanup compatibility decision
         - focused git-mirror fixtures, the bound litmus, and the full local build gate pass
       events:
+        - type: progress
+          ts: "2026-08-11T22:50:49Z"
+          agent_id: "linux-mutable-session-20260811"
+          host: linux_mutable
+          summary: >
+            Cycle 1 (linux_mutable, host loop): SOURCE fix confirmed present — images/git/entrypoint.sh:164-174 now applies receive.denyNonFastForwards/denyDeletes/fsckObjects on EVERY start, outside the fresh-init branch (criterion 1). BUT live existing-volume verification was INCONCLUSIVE: reading the running tillandsias-git mirror returned EMPTY for all three keys, then the container disappeared mid-read (forge stack churning — git/inference/forge containers torn down while vault/router/proxy stayed up). Cannot distinguish 'fix not applied to this volume' from 'read hit a dying container'. NOT closing on an unreliable read. Criteria 3/4 (existing-volume upgrade litmus) still unwritten. Next: re-verify against a stable forge with the mirror volume tillandsias-mirror-tillandsias, capture config AFTER a confirmed-healthy start.
         - type: priority-evidence
           ts: 2026-08-06T00:45:00Z
           agent_id: linux-mutable-root-codex-20260806t001750z
