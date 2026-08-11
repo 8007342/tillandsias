@@ -374,6 +374,11 @@ running the probes in §0. These four are not.
   enclave topology ("each their own git-mirror, or share one") — the mirror
   itself is settled (one per project, order 443); the signing-sidecar layer is
   this Q2 and still needs The Tlatoāni's call.*
+  *2026-08-11 — **RULED by The Tlatoāni** (interactive session): **per lane**,
+  as D5 specifies. Isolation wins; the per-project single-sidecar alternative
+  is declined. Ledger event on order 322 recorded the same day. Q2 is no
+  longer open; the S1 signature block below still awaits the operator's
+  overall sign-off.*
 - **Q3 — CA rotation cadence, and who is allowed to trigger it.** `sshd` can
   trust several CAs at once, so overlap rotation is mechanically easy. But
   rotating the client CA invalidates every outstanding lane cert within one TTL,
