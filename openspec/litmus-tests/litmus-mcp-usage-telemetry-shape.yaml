@@ -1,0 +1,66 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:682-m8ek
+#
+# Pins the shared MCP usage-telemetry writer (packet 682-m8ek): every MCP server
+# appends ONE JSONL line per tools/call to the shared log, tagged with its own
+# `server` name, and a logging failure NEVER fails the tool call.
+#
+# THE FAILURES THIS PREVENTS.
+#   * A server that logs without a `server` field makes per-server attribution
+#     impossible — cycle-metrics can only guess from tool names, and two servers
+#     expose overlapping tool names (git_status). The field is the load-bearing
+#     addition the 682-ym68 report called for.
+#   * Telemetry that can break the surface it measures is worse than none. The
+#     writer is best-effort by construction; this test points the log at an
+#     unwritable path and asserts the server still returns its tool result.
+#
+# Behavioural, not grep-only: the servers are driven over real JSON-RPC and the
+# emitted log is inspected, so a rewrite that keeps the words and drops the field
+# (or lets a write failure propagate) still turns red.
+name: litmus:mcp-usage-telemetry-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Drive the MCP servers over JSON-RPC and assert each appends one shared-grammar
+  usage line carrying its own server name, and that an unwritable log path does
+  not fail the tool call.
+severity: high
+size: instant
+
+preconditions:
+  - repository root contains images/default/config-overlay/mcp/mcp-usage-log.sh
+  - the git-tools and project-info MCP servers are present
+  - jq is available in PATH
+
+critical_path:
+  - step: "the shared writer emits the pinned record grammar incl. the server field"
+    command: "L=$(mktemp); ( set -e; . images/default/config-overlay/mcp/mcp-usage-log.sh; TILLANDSIAS_EXPERT_USAGE_LOG=$L mcp_log_usage git-tools git_status answered 7 ); out=$(cat $L); rm -f $L; echo \"$out\" | jq -e 'has(\"ts\") and .server==\"git-tools\" and .tool==\"git_status\" and .outcome==\"answered\" and .latency_ms==7' >/dev/null 2>&1 && echo 'ok: record grammar with server field' || { echo \"observed=$out\"; echo 'fail: record grammar'; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: record grammar with server field"
+
+  - step: "the plan expert's richer confidence/citations trailer is preserved alongside the server field"
+    command: "L=$(mktemp); ( . images/default/config-overlay/mcp/mcp-usage-log.sh; TILLANDSIAS_EXPERT_USAGE_LOG=$L mcp_log_usage forge-plan plan_answer answered '' exact 3 ); out=$(cat $L); rm -f $L; echo \"$out\" | jq -e '.server==\"forge-plan\" and .confidence==\"exact\" and .citations==3' >/dev/null 2>&1 && echo 'ok: expert trailer preserved' || { echo \"observed=$out\"; echo 'fail: trailer'; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: expert trailer preserved"
+
+  - step: "git-tools appends a usage line tagged with its own name over real JSON-RPC"
+    command: "L=$(mktemp -u); out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"git_status\",\"arguments\":{}}}' | TILLANDSIAS_EXPERT_USAGE_LOG=$L timeout 15 images/default/config-overlay/mcp/git-tools.sh 2>/dev/null); logged=$(cat $L 2>/dev/null); rm -f $L; if echo \"$out\" | grep -q '\"result\"' && echo \"$logged\" | jq -e '.server==\"git-tools\"' >/dev/null 2>&1; then echo 'ok: git-tools logged'; else echo \"result=$out logged=$logged\"; echo 'fail: git-tools did not log its server name'; fi"
+    timeout_ms: 20000
+    expected_behavior: "ok: git-tools logged"
+
+  - step: "project-info appends a usage line tagged with its own name over real JSON-RPC"
+    command: "L=$(mktemp -u); out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"project_type\",\"arguments\":{\"path\":\".\"}}}' | TILLANDSIAS_EXPERT_USAGE_LOG=$L timeout 15 images/default/config-overlay/mcp/project-info.sh 2>/dev/null); logged=$(cat $L 2>/dev/null); rm -f $L; if echo \"$out\" | grep -q '\"result\"' && echo \"$logged\" | jq -e '.server==\"project-info\"' >/dev/null 2>&1; then echo 'ok: project-info logged'; else echo \"result=$out logged=$logged\"; echo 'fail: project-info did not log its server name'; fi"
+    timeout_ms: 20000
+    expected_behavior: "ok: project-info logged"
+
+  - step: "a logging failure (unwritable log path) does NOT fail the tool call"
+    # Point the log at an unwritable path and assert the server still returns
+    # its result. A metric may never take down the surface it measures.
+    command: "RO=/proc/1/nope-cannot-write.jsonl; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"git_status\",\"arguments\":{}}}' | TILLANDSIAS_EXPERT_USAGE_LOG=$RO timeout 15 images/default/config-overlay/mcp/git-tools.sh 2>/dev/null); if echo \"$out\" | grep -q '\"result\"'; then echo 'ok: tool call survives unwritable log'; else echo \"observed=$out\"; echo 'fail: logging failure propagated into the tool call'; fi"
+    timeout_ms: 20000
+    expected_behavior: "ok: tool call survives unwritable log"
+
+failure_modes:
+  - "a server logs without a server field, making per-server attribution impossible"
+  - "a write failure (full/read-only log) propagates and fails the tool call"
+  - "the plan expert's confidence/citations trailer is dropped, breaking the experts: parser"

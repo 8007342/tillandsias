@@ -1,0 +1,42 @@
+events:
+  - packet_id: all-mcp-servers-emit-usage-telemetry
+    event:
+      type: note
+      ts: "2026-08-11T09:20:40Z"
+      agent_id: linux-mutable-opus
+      summary: >
+        682-m8ek implemented. Extracted the append-writer into a shared helper
+        images/default/config-overlay/mcp/mcp-usage-log.sh exposing
+        mcp_log_usage <server> <tool> <outcome> [latency_ms] [confidence]
+        [citations], appending ONE JSONL line {ts,server,tool,outcome,...} to
+        ${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl};
+        best-effort (guarded, no-op fallback under set -e). The `server` field
+        is the load-bearing addition 682-ym68 called for. Wired into every MCP
+        server that has a tools/call dispatch: forge-plan.sh (record_expert_call
+        refactored to the shared writer, server=forge-plan, richer
+        confidence/citations trailer preserved so the `experts:` parser is
+        unaffected), project-info.sh (server=project-info), git-tools.sh
+        (server=git-tools). cycle-metrics.sh `mcp:` line now reports REAL
+        per-server counts (grouped on the field) when present and falls back
+        byte-identically to the pre-682-m8ek line on legacy untagged logs; the
+        `experts:` block is scoped to plan-expert rows (legacy no-server +
+        server=forge-plan) so non-expert traffic sharing the log cannot inflate
+        the expert's answer-rate. Host-verified over JSON-RPC: project-info
+        project_type and git-tools git_status each appended a {server:...} line;
+        unwritable-log-path test proves a logging failure does NOT fail the tool
+        call. Litmus: new litmus:mcp-usage-telemetry-shape (5/5, bound under
+        forge-environment-discoverability) pins the record grammar incl. server
+        field, the trailer preservation, per-server JSON-RPC logging, and the
+        fail-soft-on-unwritable-path property; litmus:cycle-metrics-answer-rate-
+        shape gained two 682-m8ek steps (per-server mcp line + experts scoping),
+        methodology-accountability suite 10/10 green. ./build.sh --check green;
+        yq-validate + bash -n clean on all touched files. NOT-FIXED: the three
+        remaining scripts in mcp/ are not tools/call dispatchers —
+        dependency-resolver.sh and agent-profile.sh are not registered MCP
+        servers (no JSON-RPC loop; not in opencode/config.json's mcp block) and
+        host-browser.sh is a socat proxy whose calls are dispatched/logged by
+        the tray side — so there is no dispatch chokepoint in them to
+        instrument. Pre-existing (not caused here): litmus:forge-plan-expert-
+        build-shape step 10 fails on this host because target/release/
+        tillandsias-plan exists, so the "no binary present" case finds the
+        cargo fallback; HEAD's unmodified forge-plan.sh fails it identically.

@@ -87,6 +87,15 @@ source_state="absent"
 
 if [ -r "$USAGE_LOG" ]; then
     source_state="$USAGE_LOG"
+    # The `experts:` block measures the PLAN/METHODOLOGY EXPERT specifically —
+    # its answer-rate is a property of that one server. Packet 682-m8ek made the
+    # OTHER MCP servers (project-info, git-tools) write to this same log, tagged
+    # with a `server` field. Counting their rows here would inflate the expert's
+    # call/answer counts with non-expert traffic, so scope to the expert's rows:
+    # legacy rows (written before the field existed — all plan-expert) plus rows
+    # explicitly tagged `server":"forge-plan`. On a legacy-only log this is the
+    # whole file, so the reported numbers are byte-identical to before.
+    PLAN_STREAM="$( { grep -v '"server":"' "$USAGE_LOG"; grep '"server":"forge-plan"' "$USAGE_LOG"; } 2>/dev/null )"
     # jq is the only parser used anywhere in the expert path (no python —
     # methodology tlatoani_hard_no_python). A malformed line must not abort the
     # report, so every read tolerates failure.
@@ -94,14 +103,14 @@ if [ -r "$USAGE_LOG" ]; then
     # `$(grep -c ... || echo 0)` captures BOTH grep's zero and echo's zero and
     # yields the two-line value "0\n0" — which then corrupts every subsequent
     # field of a space-separated grammar line. Assign first, default after.
-    calls=$(grep -c . "$USAGE_LOG" 2>/dev/null) || calls=0
-    answered=$(grep -c '"outcome":"answered"' "$USAGE_LOG" 2>/dev/null) || answered=0
-    unsupported=$(grep -c '"outcome":"unsupported"' "$USAGE_LOG" 2>/dev/null) || unsupported=0
-    degraded=$(grep -c '"outcome":"degraded"' "$USAGE_LOG" 2>/dev/null) || degraded=0
-    errors=$(grep -c '"outcome":"error"' "$USAGE_LOG" 2>/dev/null) || errors=0
+    calls=$(printf '%s\n' "$PLAN_STREAM" | grep -c . 2>/dev/null) || calls=0
+    answered=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"answered"' 2>/dev/null) || answered=0
+    unsupported=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"unsupported"' 2>/dev/null) || unsupported=0
+    degraded=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"degraded"' 2>/dev/null) || degraded=0
+    errors=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"error"' 2>/dev/null) || errors=0
     # `jq -r` renders a missing key as the literal string "null", which would be
     # reported as a tool name. Drop those rather than print a word no tool has.
-    t=$(jq -r '.tool // empty' "$USAGE_LOG" 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
+    t=$(printf '%s\n' "$PLAN_STREAM" | jq -r '.tool // empty' 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
     [ -n "$t" ] && tools="$t"
 fi
 
@@ -120,21 +129,37 @@ printf 'experts: calls=%s answered=%s unsupported=%s degraded=%s errors=%s answe
     "$calls" "$answered" "$unsupported" "$degraded" "$errors" "$answer_rate" "$tools" "$source_state"
 printf 'experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)\n'
 
-# ── mcp usage (packet 682-ym68) ──────────────────────────────────────────────
+# ── mcp usage (packets 682-ym68, 682-m8ek) ───────────────────────────────────
 # "Are the servers used?" — per-server call volume, distinct from answer_rate's
-# "are they right?". The usage JSONL carries no `server` dimension: today ONLY
-# the plan expert (forge-plan.sh) writes to it, one row per tool call. project-
-# info and the other servers are NOT yet instrumented — that is packet 682-m8ek,
-# out of scope here. So this line honestly reports what IS logged (plan-expert
-# calls, distinct tools as a server proxy) and NAMES the rest uninstrumented
-# rather than fabricating zeros for servers that emit nothing. When 682-m8ek
-# lands and rows carry a server field, this line grows to real per-server counts.
-mcp_servers=0
-if [ "$tools" != "-" ]; then
-    mcp_servers=$(printf '%s' "$tools" | tr ',' '\n' | grep -c .)
+# "are they right?". Packet 682-m8ek added a `server` field to the usage JSONL
+# and instrumented every MCP server (forge-plan, project-info, git-tools), so
+# this line now reports REAL per-server counts by grouping on that field.
+#
+# LEGACY FALLBACK: rows written before 682-m8ek carry no `server` field. When
+# the log contains no tagged rows at all, keep the exact pre-682-m8ek line
+# (distinct tools as a server proxy, the rest NAMED uninstrumented) rather than
+# fabricating zeros — this is what keeps the shape byte-identical on old logs.
+if grep -q '"server":"' "$USAGE_LOG" 2>/dev/null; then
+    # Real per-server counts. grep|sed|sort|uniq (no python); tolerant of
+    # malformed lines. `legacy_untagged` counts any pre-682-m8ek rows still in
+    # the same log so the total is not silently under-reported.
+    per_server="$(grep -o '"server":"[^"]*"' "$USAGE_LOG" 2>/dev/null \
+        | sed 's/.*:"//; s/"$//' | sort | uniq -c \
+        | awk '{printf "%s%s=%s", (NR>1?";":""), $2, $1}')"
+    [ -n "$per_server" ] || per_server="-"
+    mcp_servers=$(grep -o '"server":"[^"]*"' "$USAGE_LOG" 2>/dev/null \
+        | sed 's/.*:"//; s/"$//' | sort -u | grep -c .) || mcp_servers=0
+    legacy_untagged=$(grep -vc '"server":"' "$USAGE_LOG" 2>/dev/null) || legacy_untagged=0
+    printf 'mcp: servers=%s per_server=%s legacy_untagged=%s source=%s\n' \
+        "$mcp_servers" "$per_server" "$legacy_untagged" "$source_state"
+else
+    mcp_servers=0
+    if [ "$tools" != "-" ]; then
+        mcp_servers=$(printf '%s' "$tools" | tr ',' '\n' | grep -c .)
+    fi
+    printf 'mcp: servers=%s plan-expert-calls=%s other-servers=uninstrumented-see-682-m8ek source=%s\n' \
+        "$mcp_servers" "$calls" "$source_state"
 fi
-printf 'mcp: servers=%s plan-expert-calls=%s other-servers=uninstrumented-see-682-m8ek source=%s\n' \
-    "$mcp_servers" "$calls" "$source_state"
 
 # ── expert accuracy (packet 682-ym68) ────────────────────────────────────────
 # The groundtruth PASS-RATE — "are the experts RIGHT?" — graded against the

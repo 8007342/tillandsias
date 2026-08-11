@@ -13,6 +13,15 @@
 
 set -euo pipefail
 
+# Shared MCP usage telemetry (packet 682-m8ek). Best-effort, guarded; a no-op
+# fallback guarantees the symbol exists under `set -e` even if sourcing fails.
+for _mcp_log_cand in \
+    "${BASH_SOURCE[0]%/*}/mcp-usage-log.sh" \
+    "/home/forge/.config-overlay/mcp/mcp-usage-log.sh"; do
+    if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
+done
+command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+
 # ── Project type detection ──────────────────────────────────────
 # @trace spec:forge-environment-discoverability
 # Detects project type by examining canonical marker files.
@@ -647,6 +656,7 @@ while IFS= read -r line; do
             args=$(echo "$line" | jq -c '.params.arguments // {}')
             error_code=""
             error_msg=""
+            _mcp_t0=$(date +%s%3N 2>/dev/null || echo "")
             case "$tool" in
                 "project_structure")
                     depth=$(echo "$args" | jq -r '.depth // 3')
@@ -1107,6 +1117,19 @@ ${preview}"
                     error_msg="Unknown tool: $tool"
                     ;;
             esac
+
+            # Packet 682-m8ek: record this call in the shared usage log, tagged
+            # with THIS server's name. Best-effort; never fails the call.
+            _mcp_lat=""
+            if [ -n "$_mcp_t0" ]; then
+                _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+                [ -n "$_mcp_t1" ] && _mcp_lat=$((_mcp_t1 - _mcp_t0))
+            fi
+            if [ -n "$error_code" ]; then
+                mcp_log_usage "project-info" "$tool" "error" "$_mcp_lat"
+            else
+                mcp_log_usage "project-info" "$tool" "answered" "$_mcp_lat"
+            fi
 
             if [ -n "$error_code" ]; then
                 _err_escaped=$(printf '%s' "$error_msg" | jq -Rs .)

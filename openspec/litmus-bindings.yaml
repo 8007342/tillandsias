@@ -346,6 +346,7 @@ specs:
   - litmus:project-engine-capability-verdict-grammar
   - litmus:project-answer-synthesis-refusal-typed
   - litmus:generic-index-deterministic-subset
+  - litmus:mcp-usage-telemetry-shape
   coverage_ratio: 80
   last_verified: '2026-08-10'
 - spec_id: forge-forward-compat

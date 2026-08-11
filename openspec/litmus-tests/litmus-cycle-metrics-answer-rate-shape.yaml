@@ -92,6 +92,22 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: mcp usage line intact"
 
+  - step: "packet 682-m8ek: the mcp line reports REAL per-server counts when rows carry a server field"
+    # Once every server tags its rows (682-m8ek), the mcp line groups by server
+    # instead of naming the rest uninstrumented. Seed a multi-server log and
+    # assert per_server carries each server's count.
+    command: "L=$(mktemp); printf '{\"server\":\"forge-plan\",\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n{\"server\":\"project-info\",\"tool\":\"project_type\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_status\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_log\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^mcp: '); rm -f $L; case \"$out\" in *servers=3*forge-plan=1*git-tools=2*project-info=1*) echo 'ok: per-server counts' ;; *) echo \"observed=$out\"; echo 'fail: mcp per-server counts' ;; esac"
+    timeout_ms: 10000
+    expected_behavior: "ok: per-server counts"
+
+  - step: "packet 682-m8ek: the experts line stays scoped to the plan expert when other servers share the log"
+    # The other servers writing to the same log must NOT inflate the expert's
+    # call/answer counts. One forge-plan answered + three non-expert rows must
+    # still report experts calls=1.
+    command: "L=$(mktemp); printf '{\"server\":\"forge-plan\",\"tool\":\"plan_answer\",\"outcome\":\"answered\"}\\n{\"server\":\"project-info\",\"tool\":\"project_type\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_status\",\"outcome\":\"answered\"}\\n{\"server\":\"git-tools\",\"tool\":\"git_log\",\"outcome\":\"answered\"}\\n' > $L; out=$(TILLANDSIAS_EXPERT_USAGE_LOG=$L scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^experts:'); rm -f $L; if printf '%s' \"$out\" | grep -Eq 'calls=1 answered=1 '; then echo 'ok: experts scoped to plan expert'; else echo \"observed=$out\"; echo 'fail: non-expert rows leaked into experts counts'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: experts scoped to plan expert"
+
   - step: "the expert_accuracy line is emitted (are the experts right?) — pass/total/rate or an honest deferral"
     # The groundtruth pass-rate, distinct from answer_rate. It either reports
     # pass=/total=/rate= from groundtruth-rung1, or defers to the litmus gate —

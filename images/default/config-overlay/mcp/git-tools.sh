@@ -22,6 +22,16 @@
 
 set -euo pipefail
 
+# Shared MCP usage telemetry (packet 682-m8ek). Best-effort: a logging failure
+# must never break a tool call, so sourcing is guarded and a no-op fallback
+# guarantees the symbol exists under `set -e`.
+for _mcp_log_cand in \
+    "${BASH_SOURCE[0]%/*}/mcp-usage-log.sh" \
+    "/home/forge/.config-overlay/mcp/mcp-usage-log.sh"; do
+    if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
+done
+command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+
 # Cache constants — mirror the values set by /usr/local/lib/tillandsias/lib-common.sh
 # so the MCP tools can run in contexts where lib-common.sh wasn't sourced (e.g.,
 # stdio-only MCP processes started directly by the agent runtime).
@@ -98,6 +108,8 @@ while IFS= read -r line; do
         "tools/call")
             tool=$(echo "$line" | jq -r '.params.name')
             args=$(echo "$line" | jq -r '.params.arguments // {}')
+            _mcp_t0=$(date +%s%3N 2>/dev/null || echo "")
+            _mcp_outcome="answered"
             case "$tool" in
                 "git_status")
                     result=$(git status --short 2>&1 || echo "Not a git repo")
@@ -135,8 +147,17 @@ while IFS= read -r line; do
                     ;;
                 *)
                     result="Unknown tool: $tool"
+                    _mcp_outcome="error"
                     ;;
             esac
+            # Packet 682-m8ek: record this call in the shared usage log, tagged
+            # with THIS server's name. Best-effort; never fails the call.
+            _mcp_lat=""
+            if [ -n "$_mcp_t0" ]; then
+                _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+                [ -n "$_mcp_t1" ] && _mcp_lat=$((_mcp_t1 - _mcp_t0))
+            fi
+            mcp_log_usage "git-tools" "$tool" "$_mcp_outcome" "$_mcp_lat"
             # Escape the result for JSON
             escaped=$(echo "$result" | jq -Rs .)
             echo '{"jsonrpc":"2.0","id":"'"$id"'","result":{"content":[{"type":"text","text":'"$escaped"'}]}}'

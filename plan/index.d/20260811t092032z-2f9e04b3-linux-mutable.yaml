@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: all-mcp-servers-emit-usage-telemetry
+    field: status
+    value: completed
+    ts: "2026-08-11T09:20:32Z"
+    host: linux-mutable
+
+events:
+  - packet_id: all-mcp-servers-emit-usage-telemetry
+    event:
+      type: note
+      ts: "2026-08-11T09:20:32Z"
+      host: linux-mutable
+      summary: >
+        all-mcp-servers-emit-usage-telemetry: shared mcp-usage-log.sh writer added; forge-plan/project-info/git-tools all log {ts,server,tool,outcome,...}; cycle-metrics mcp: line reports per-server counts; litmus mcp-usage-telemetry-shape + cycle-metrics per-server steps execute green (682-m8ek)
