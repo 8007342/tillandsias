@@ -26,3 +26,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-10T23:50Z  (frag)    657-3mq5 slice 2: quant matrix — Q4_0 repack dominates (1220 pp / 187 tg vs Q4_K_M 355/151); lane guidance = Q4_0 for experts
 - 2026-08-11T01:00Z  (frag)    657-3mq5 COMPLETED: recipe = native GGML_NATIVE build + Q4_0 repack -> 2.6x ollama decode (187 vs 71 tok/s), engine gap 2.1x isolated; ollama pinned 0.32.6
 - 2026-08-11T02:15Z  (frag)    663-69kp signature refined: rapid sequential boots alone trigger the pre-breadcrumb hang (health-boot pattern indicted); loop switches to one-boot-per-iteration
+- 2026-08-11T02:45Z  (frag)    663-69kp datum #4 (hang 15s after clean tray quit); 598-kibt next_action corrected (only M5 runtime remains, operator-gated)
