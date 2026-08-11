@@ -84,6 +84,11 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 # unchanged asset.
 $assetsDir = Join-Path $RepoRoot 'crates\tillandsias-windows-tray\assets'
 New-Item -ItemType Directory -Force $assetsDir | Out-Null
+# The version every staged guest must carry to be embeddable (order 689-gipe).
+# Read from the repo-root VERSION, the same source build.rs stamps into
+# WORKSPACE_VERSION, so the build-time refusal and the test-time assertion
+# cannot disagree about what "current" means.
+$workspaceVersion = (Get-Content (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
 $hostGuestArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
 $guestArches = @('x86_64', 'aarch64')
 foreach ($guestArch in $guestArches) {
@@ -98,6 +103,43 @@ foreach ($guestArch in $guestArches) {
         continue
     }
     if ((Test-Path $stagedGuest) -and ((Get-Item $stagedGuest).Length -gt 0)) {
+        # Order 689-gipe: a staged binary that predates the checkout is the
+        # dangerous case, and it used to be copied silently — the hash compare
+        # below only asks "did the asset change", never "is it CURRENT". A
+        # tray built that way embeds a guest older than its own source and
+        # injects it into fresh provisions, which is the registered-distro
+        # version skew order 350's identity criterion exists to catch. Nothing
+        # caught it at build time; the only guard was
+        # `embedded_guest_headless_matches_workspace_version` in a test run
+        # that a build does not perform.
+        #
+        # Stale staging is HOST STATE, not a code defect (order 447: any
+        # --install VERSION bump leaves target-guest/ behind), so the response
+        # matches that script's posture — refuse the STALE COPY, not the
+        # build. The asset falls back to the zero-byte placeholder, which is
+        # the sanctioned absent-asset path: a fresh guest fetches the
+        # published release instead of being handed a skewed binary.
+        $stagedVersionOk = $false
+        try {
+            $needle = [System.Text.Encoding]::ASCII.GetBytes($workspaceVersion)
+            $hay = [System.IO.File]::ReadAllBytes($stagedGuest)
+            for ($i = 0; $i -le ($hay.Length - $needle.Length); $i++) {
+                $hit = $true
+                for ($j = 0; $j -lt $needle.Length; $j++) {
+                    if ($hay[$i + $j] -ne $needle[$j]) { $hit = $false; break }
+                }
+                if ($hit) { $stagedVersionOk = $true; break }
+            }
+        } catch {
+            $stagedVersionOk = $false
+        }
+        if (-not $stagedVersionOk) {
+            Write-Host "  WARN: staged guest binary target-guest\$guestBin does not carry workspace VERSION $workspaceVersion - it predates this checkout. NOT embedding it (a stale embed injects a version-skewed guest into fresh provisions); the asset falls back to the zero-byte placeholder and fresh guests fetch the published release. Restage with scripts/build-guest-binaries.sh." -ForegroundColor Yellow
+            if ((Test-Path $assetGuest) -and ((Get-Item $assetGuest).Length -gt 0)) {
+                [System.IO.File]::WriteAllBytes($assetGuest, @())
+            }
+            continue
+        }
         $srcHash = (Get-FileHash $stagedGuest -Algorithm SHA256).Hash
         $dstHash = ''
         if ((Test-Path $assetGuest) -and ((Get-Item $assetGuest).Length -gt 0)) {
