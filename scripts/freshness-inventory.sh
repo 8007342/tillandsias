@@ -64,6 +64,55 @@ set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Canonical staleness threshold — OWNED by methodology.yaml
+# component_freshness.canonical_threshold (order 606-vaua). Env override is
+# for tests/fixtures only. Stale iff age_days > threshold (boundary = fresh).
+THRESHOLD_DAYS="${FRESHNESS_THRESHOLD_DAYS:-$(sed -n '/canonical_threshold:/,/clock_semantics:/p' methodology.yaml 2>/dev/null | grep -m1 'age_days:' | grep -oE '[0-9]+' || true)}"
+[ -n "$THRESHOLD_DAYS" ] || THRESHOLD_DAYS=30
+
+# Portable ISO-date -> epoch: GNU `date -d` first, BSD `date -j -f` fallback.
+# The GNU-only form silently failed on macOS, so age never computed and NO
+# stamp could ever go stale on this host class (606-vaua criterion 2's live
+# failure mode).
+iso_to_epoch() {
+    date -u -d "$1" +%s 2>/dev/null || date -j -u -f '%Y-%m-%d' "$1" +%s 2>/dev/null || true
+}
+
+# --self-test (606-vaua criterion 4): run the classification against five
+# fixtures in a temp inventory — fresh(today), boundary(=threshold),
+# stale(threshold+1), malformed date, future date (clock skew) — and assert
+# each lands on exactly the right report line. Exercises the REAL script
+# recursively with FRESHNESS_FIXTURE_DIR pointing the inventory at fixtures.
+if [ "${1:-}" = "--self-test" ]; then
+    TDIR="$(mktemp -d)"
+    trap 'rm -rf "$TDIR"' EXIT
+    today_st="$(date -u +%Y-%m-%d)"
+    epoch_today="$(iso_to_epoch "$today_st")"
+    day_at_threshold="$(date -u -d "@$((epoch_today - THRESHOLD_DAYS * 86400))" +%Y-%m-%d 2>/dev/null || date -j -u -f '%s' "$((epoch_today - THRESHOLD_DAYS * 86400))" +%Y-%m-%d 2>/dev/null)"
+    day_stale="$(date -u -d "@$((epoch_today - (THRESHOLD_DAYS + 1) * 86400))" +%Y-%m-%d 2>/dev/null || date -j -u -f '%s' "$((epoch_today - (THRESHOLD_DAYS + 1) * 86400))" +%Y-%m-%d 2>/dev/null)"
+    day_future="$(date -u -d "@$((epoch_today + 5 * 86400))" +%Y-%m-%d 2>/dev/null || date -j -u -f '%s' "$((epoch_today + 5 * 86400))" +%Y-%m-%d 2>/dev/null)"
+    printf '# freshness: auditor=selftest date=%s verdict=refreshed scope=fresh fixture\n' "$today_st"      > "$TDIR/fresh.sh"
+    printf '# freshness: auditor=selftest date=%s verdict=refreshed scope=boundary fixture\n' "$day_at_threshold" > "$TDIR/boundary.sh"
+    printf '# freshness: auditor=selftest date=%s verdict=refreshed scope=stale fixture\n' "$day_stale"     > "$TDIR/stale.sh"
+    # 2026-99-99 matches the record grammar's date charset but is not a real
+    # date — the stamped-but-unassessable lane. (A fully alphabetic garbage
+    # date never matches the stamp grammar at all and counts unstamped.)
+    printf '# freshness: auditor=selftest date=2026-99-99 verdict=refreshed scope=malformed fixture\n'      > "$TDIR/malformed.sh"
+    printf '# freshness: auditor=selftest date=%s verdict=refreshed scope=future fixture\n' "$day_future"   > "$TDIR/future.sh"
+    printf '#!/bin/sh\n'                                                                                    > "$TDIR/unstamped.sh"
+    out="$(FRESHNESS_FIXTURE_DIR="$TDIR" "$0")"
+    fail=0
+    echo "$out" | grep -q  '^freshness-stale: stale.sh '        || { echo "SELFTEST-FAIL: stale fixture not flagged stale"; fail=1; }
+    echo "$out" | grep -qv '^freshness-stale: fresh.sh '        || { echo "SELFTEST-FAIL: fresh fixture flagged stale"; fail=1; }
+    echo "$out" | grep -q  '^freshness-stale: boundary.sh '     && { echo "SELFTEST-FAIL: boundary fixture flagged stale (must be fresh at exactly threshold)"; fail=1; }
+    echo "$out" | grep -q  '^freshness-malformed: malformed.sh' || { echo "SELFTEST-FAIL: malformed date not surfaced"; fail=1; }
+    echo "$out" | grep -q  '^freshness-clock-skew: future.sh '  || { echo "SELFTEST-FAIL: future date not surfaced as clock skew"; fail=1; }
+    echo "$out" | grep -q  '^freshness-unstamped: unstamped.sh$' || { echo "SELFTEST-FAIL: unstamped fixture not distinct"; fail=1; }
+    echo "$out" | grep -qE '^freshness-coverage: [0-9]+\.[0-9]% \(5/6' || { echo "SELFTEST-FAIL: coverage not fractional 5/6"; fail=1; }
+    [ "$fail" -eq 0 ] && echo "freshness-selftest: PASS (5 fixtures + unstamped, threshold=${THRESHOLD_DAYS}d)" || exit 1
+    exit 0
+fi
+
 STAMP_RE='^[[:space:]]*(#|//|\*+[[:space:]]*)?[[:space:]]*freshness:[[:space:]]+auditor=([^[:space:]]+)[[:space:]]+date=([0-9T:Z-]+)[[:space:]]+verdict=(refreshed|updated|obsoleted)[[:space:]]*scope=(.*)$'
 
 # Components to inventory, relative to REPO_ROOT.
@@ -80,6 +129,13 @@ INVENTORY_PATHS=(
 # while-read instead of mapfile: macOS ships bash 3.2 (no mapfile), and the
 # litmus runner executes this on every host.
 CANDIDATES=()
+if [ -n "${FRESHNESS_FIXTURE_DIR:-}" ]; then
+    # Self-test fixture mode: inventory exactly the fixture dir.
+    cd "$FRESHNESS_FIXTURE_DIR" || exit 2
+    while IFS= read -r _cand; do
+        CANDIDATES+=("$_cand")
+    done < <(find . -type f -name '*.sh' 2>/dev/null | sed 's|^\./||')
+else
 while IFS= read -r _cand; do
     CANDIDATES+=("$_cand")
 done < <(
@@ -90,6 +146,7 @@ done < <(
         find "$d" -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.md' \) 2>/dev/null
     done
 )
+fi
 
 total=0
 stamped=0
@@ -145,19 +202,29 @@ $f
             verdict="${BASH_REMATCH[4]}"
             stamped=$((stamped + 1))
             STAMP_LINES+=("$rel|$verdict|$fdate|$auditor")
-            # Age in days since the stamp date (best-effort; ignores TZ/time).
-            age_days=""
+            # Age in UTC whole days per methodology
+            # component_freshness.canonical_threshold clock_semantics:
+            # stale iff age > threshold; future dates clamp to 0 but are
+            # surfaced as clock skew; unparseable dates are surfaced as
+            # malformed (stamped-but-unassessable), never silently aged.
             fdate_day="${fdate:0:10}"
             if [[ "$fdate_day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
-                ts_stamp="$(date -u -d "$fdate_day" +%s 2>/dev/null || true)"
-                ts_today="$(date -u -d "$today" +%s 2>/dev/null || true)"
+                ts_stamp="$(iso_to_epoch "$fdate_day")"
+                ts_today="$(iso_to_epoch "$today")"
                 if [[ -n "$ts_stamp" && -n "$ts_today" ]]; then
                     age_days=$(( (ts_today - ts_stamp) / 86400 ))
-                    [[ $age_days -lt 0 ]] && age_days=0
+                    if [[ $age_days -lt 0 ]]; then
+                        printf 'freshness-clock-skew: %s %s (future-dated; clamped fresh)\n' "$rel" "$fdate_day"
+                        age_days=0
+                    fi
+                    if [[ $age_days -gt $THRESHOLD_DAYS ]]; then
+                        printf 'freshness-stale: %s %s %s %s\n' "$rel" "$age_days" "$verdict" "$fdate"
+                    fi
+                else
+                    printf 'freshness-malformed: %s %s (date did not convert)\n' "$rel" "$fdate_day"
                 fi
-            fi
-            if [[ -n "$age_days" ]]; then
-                printf 'freshness-stale: %s %s %s %s\n' "$rel" "$age_days" "$verdict" "$fdate"
+            else
+                printf 'freshness-malformed: %s %s (not ISO-8601)\n' "$rel" "$fdate"
             fi
         fi
     else
@@ -166,14 +233,30 @@ $f
 done
 
 unstamped=$((total - stamped))
+# Truthful fractional coverage (606-vaua criterion 3): 7/1011 must render as
+# 0.7%, not 0%. One decimal via awk (POSIX; no bash float). Numerator and
+# denominator ride the line, plus a cycle-over-cycle delta from the per-host
+# cache (target/ is untracked; first run reports delta=unknown).
 if [[ $total -gt 0 ]]; then
-    pct=$(( stamped * 100 / total ))
+    pct="$(awk -v s="$stamped" -v t="$total" 'BEGIN { printf "%.1f", (s * 100.0) / t }')"
 else
-    pct=0
+    pct="0.0"
+fi
+delta="unknown"
+CACHE="target/freshness-inventory.last"
+if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ]; then
+    if [ -f "$CACHE" ]; then
+        last_stamped="$(cut -d' ' -f1 "$CACHE" 2>/dev/null)"
+        case "$last_stamped" in
+            ''|*[!0-9]*) : ;;
+            *) d=$((stamped - last_stamped)); [ "$d" -ge 0 ] && delta="+$d" || delta="$d" ;;
+        esac
+    fi
+    mkdir -p target 2>/dev/null && printf '%s %s\n' "$stamped" "$today" > "$CACHE" 2>/dev/null || true
 fi
 
 echo "freshness-inventory: $total components, $stamped stamped, $unstamped unstamped"
-echo "freshness-coverage: ${pct}%"
+echo "freshness-coverage: ${pct}% (${stamped}/${total} delta=${delta})"
 for line in "${STAMP_LINES[@]:-}"; do
     [ -z "$line" ] && continue
     IFS='|' read -r rel verdict fdate auditor <<< "$line"

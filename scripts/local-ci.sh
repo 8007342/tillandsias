@@ -775,7 +775,7 @@ if [[ -x "scripts/freshness-inventory.sh" ]]; then
     _fresh_report="$(scripts/freshness-inventory.sh 2>/dev/null || true)"
     _fresh_total="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-inventory:' | grep -oE '[0-9]+ components' | grep -oE '[0-9]+')"
     _fresh_stamped="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-inventory:' | grep -oE '[0-9]+ stamped' | grep -oE '[0-9]+')"
-    _fresh_cov="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-coverage:' | grep -oE '[0-9]+%')"
+    _fresh_cov="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-coverage:' | grep -oE '[0-9]+(\.[0-9]+)?%')"
     if [[ -n "$_fresh_cov" ]]; then
         log_info "FRESHNESS coverage: ${_fresh_cov} (${_fresh_stamped:-0}/${_fresh_total:-?} components stamped)"
     fi
