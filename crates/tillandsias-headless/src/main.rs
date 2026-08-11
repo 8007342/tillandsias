@@ -6992,6 +6992,26 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         let git_container_name = format!("tillandsias-git-{project_name}");
+        // Order 606-bvnp: every mirror CREATE provisions the project's
+        // service identity — the first provision mints the opaque mirror-id
+        // plus the per-project SSH signer roles/policies; every later create
+        // is one kv read (the kv entry is the commit marker). This lane
+        // always creates its mirror fresh (cleanup above), so this is the
+        // create path by construction. Vault is NOT a hard dependency of the
+        // status lane (the mint below tolerates), so identity provisioning
+        // follows the same site rule: tolerate, but LOUD (not debug-gated;
+        // windows-260716-2).
+        if let Err(e) = crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+            project_name,
+            &enclave_subnet(),
+            debug,
+        )
+        .await
+        {
+            eprintln!(
+                "[tillandsias] WARNING: status-check mirror service-identity provisioning skipped: {e}"
+            );
+        }
         let git_vault_secret = match mint_git_mirror_vault_auto_auth(project_name, debug).await {
             Ok(secret) => Some(secret),
             Err(e) => {
@@ -9521,6 +9541,21 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .map(|lease| lease.secret_name());
         #[cfg(not(feature = "vault"))]
         let opencode_vault_secret: Option<&str> = None;
+        // Order 606-bvnp: every mirror CREATE provisions the project's
+        // service identity — the first provision mints the opaque mirror-id
+        // plus the per-project SSH signer roles/policies; every later create
+        // is one kv read. This lane always creates its mirror fresh (cleanup
+        // above; no reuse branch), so this is the create path by
+        // construction. Vault is already a hard dependency of this lane
+        // (ensure_vault_running above; the mint below fails loud), so
+        // failure here is LOUD by the same windows-260716-2 rule.
+        crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+            project_name,
+            &enclave_subnet(),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[OpenCode] mirror service-identity provisioning failed: {e}"))?;
         let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
@@ -10606,6 +10641,19 @@ pub(crate) fn run_opencode_web_mode(
             .map(|lease| lease.secret_name());
         #[cfg(not(feature = "vault"))]
         let opencode_vault_secret: Option<&str> = None;
+        // Order 606-bvnp: mirror CREATE provisions the project's service
+        // identity (first provision mints id + SSH signer roles/policies;
+        // later creates are one kv read). Always-create lane (cleanup above;
+        // no reuse branch) and Vault is already a hard dependency here
+        // (ensure_vault_running above; mint below fails loud), so failure is
+        // LOUD by the same windows-260716-2 rule.
+        crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+            project_name,
+            &enclave_subnet(),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[OpenCode Web] mirror service-identity provisioning failed: {e}"))?;
         let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
         client
             .run_container_observed(
@@ -13752,6 +13800,47 @@ mod tests {
             status.contains("WARNING: status-check mirror launching credential-less"),
             "status-check tolerance must be loud, not debug-gated"
         );
+    }
+
+    #[test]
+    // @trace spec:tillandsias-vault, spec:git-mirror-service
+    fn every_mirror_create_lane_provisions_the_service_identity() {
+        // Order 606-bvnp: each mirror-CREATE site pairs its relay-credential
+        // mint with ensure_mirror_identity_provisioned — first provision
+        // mints the opaque mirror-id + per-project SSH signer roles and
+        // policies; every later create is one kv read. Provisioning belongs
+        // to the CREATE path only: the forge-launch running-mirror reuse
+        // branch must never touch Vault for this, which the exactly-once
+        // count below pins (the reuse branch and the create branch live in
+        // the same source window).
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        for lane in [
+            "fn run_status_check(",
+            "fn run_opencode_mode(",
+            "pub(crate) fn run_opencode_web_mode(",
+            "async fn ensure_shared_git_and_inference_for_launch(",
+        ] {
+            let window = source_window(source, lane);
+            let provision = window
+                .find("ensure_mirror_identity_provisioned(")
+                .unwrap_or_else(|| panic!("{lane} must provision the mirror service identity"));
+            let mint = window
+                .find("mint_git_mirror_vault_auto_auth(")
+                .unwrap_or_else(|| panic!("{lane} must mint the mirror relay credential"));
+            assert!(
+                provision < mint,
+                "{lane}: identity provisioning must precede the relay-credential mint \
+                 (both are create-path prerequisites; the provision is the substrate)"
+            );
+            assert_eq!(
+                window
+                    .matches("ensure_mirror_identity_provisioned(")
+                    .count(),
+                1,
+                "{lane}: exactly one provisioning call — the mirror CREATE site; \
+                 a reuse path must never touch Vault for the identity"
+            );
+        }
     }
 
     #[test]
