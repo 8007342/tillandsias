@@ -334,6 +334,7 @@ specs:
   - litmus:mcp-discoverability-shape
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
+  - litmus:forge-experts-stale-source-honesty
   - litmus:forge-experts-discoverability-shape
   - litmus:forge-experts-ephemerality-shape
   - litmus:plan-answer-envelope-citability

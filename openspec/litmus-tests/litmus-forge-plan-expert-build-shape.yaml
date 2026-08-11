@@ -155,7 +155,7 @@ critical_path:
   - step: "the degraded reason vocabulary is CLOSED and every token is actually emitted"
     # An open-ended reason string is an unfalsifiable state. Each documented
     # reason must correspond to a real code path that sets it.
-    command: "for r in no-checkout no-plan-crate no-cargo build-failed build-timeout binary-missing install-failed; do grep -q \"_forge_experts_set_state degraded $r\" images/default/lib-common.sh || exit 1; done; grep -q \"printf 'degraded(not-built)\" images/default/lib-common.sh && echo 'ok: closed-reason-vocabulary'"
+    command: "for r in no-checkout no-plan-crate no-cargo build-failed build-timeout binary-missing install-failed stale-source; do grep -q \"_forge_experts_set_state degraded $r\" images/default/lib-common.sh || exit 1; done; grep -q \"printf 'degraded(not-built)\" images/default/lib-common.sh && echo 'ok: closed-reason-vocabulary'"
     timeout_ms: 5000
     expected_behavior: "ok: closed-reason-vocabulary"
 
