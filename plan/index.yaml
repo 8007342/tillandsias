@@ -12303,6 +12303,12 @@ plan_index:
         - "if adopted: one lane migrated behind a flag with fetch/push parity fixture, then daemon --enable=receive-pack removed"
       events:
         - type: decision
+          ts: "2026-08-11T21:27:06Z"
+          agent_id: "linux-mutable-session-20260811"
+          host: linux_mutable
+          summary: >
+            OPERATOR RULING (The Tlatoani, 2026-08-11): Q1 resolved — the HOMEBREW_GITHUB_API_TOKEN env-injection hole is a SEPARATE packet, not 451 scope, per the doc's recommendation ('messy and annoying, must not block meaningful work'). Token kept for now under the deviation budget; removal filed as 688-wqy5 remove-homebrew-github-token-env-injection, desired_release v0.6. Q1 and Q3 (epoch CAs) and Q2 (per lane) are now all ruled; only Q4 confirmation and the S1 signature remain before 451 unblocks.
+        - type: decision
           ts: "2026-08-11T21:18:29Z"
           agent_id: "linux-mutable-session-20260811"
           host: linux_mutable

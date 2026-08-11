@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t212626z
+packets:
+
+  - packet_id: remove-homebrew-github-token-env-injection
+    order: 688-wqy5
+    status: ready
+    desired_release: v0.6
+    priority: p2
+    title: "Remove the HOMEBREW_GITHUB_API_TOKEN env injection — the real GitHub token is readable in every forge lane"
+    kind: security+fix
+    deliverable: no forge lane env carries the GitHub token; brew's one consumer served by a brokered or scoped path (or dropped); litmus pins absence; specs restored to the strong reading
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [security, credentials, forge, vault, brew]
+    context: >
+      OPERATOR RULING (The Tlatoani, 2026-08-11, design-doc Q1 of order 322):
+      this is its OWN packet, deliberately NOT part of 451 — "it will likely
+      be messy and annoying, and we don't want it blocking other meaningful
+      work"; the token stays for now under the recorded deviation budget, but
+      removal is definite future work. THE HOLE (322 design doc V14):
+      crates/tillandsias-headless/src/main.rs:11304-11311 injects the real
+      GitHub token into EVERY forge lane's environment as
+      HOMEBREW_GITHUB_API_TOKEN — visible to `podman inspect` and to any
+      agent in the container. It is a brew convenience token with one
+      consumer, and it makes the "forge holds zero readable credentials"
+      invariant false independent of everything 451 fixes; the specs were
+      already weakened to accommodate it (tillandsias-vault
+      security.forge-offline@v2 "no BROAD Vault token"). It has now bitten
+      repeatedly (operator: "biting us again"). WORK: (1) characterize the
+      actual consumer — what inside the forge calls brew with this token,
+      how often, and what breaks without it (rate limits? private taps?);
+      (2) replace with a path that does not place the secret in the lane:
+      drop it entirely if the consumer is vestigial, or serve it through the
+      established broker shape (git-credential-tillandsias / a vault-scoped
+      short-lived token fetched at use time), mirroring the signing-oracle
+      principle of the 322 design — the forge may ASK, it may not HOLD;
+      (3) restore the strong invariant text in openspec forge-offline /
+      git-mirror-service and retire the deviation-budget entry; (4) litmus:
+      no forge lane env or `podman inspect` output contains the token, with
+      a positive control that the brew consumer (if kept) still works.
+    exit_criteria:
+      - no forge lane environment variable carries the GitHub token, proven by podman inspect across a live launch of every lane type
+      - the brew consumer is either removed with a recorded rationale or served credential-lessly from inside the lane via a broker that never materializes the secret in the container
+      - specs restored to the strong forge-holds-no-readable-credentials reading and the corresponding deviation-budget entry retired
+      - a litmus pins the absence (env + inspect) with a positive control on the surviving consumer path
+    events:
+      - type: filed
+        ts: "2026-08-11T21:26:26Z"
+        agent_id: linux-mutable-session-20260811
+        host: linux_mutable
+        summary: >
+          Filed on the operator's Q1 ruling (322 design doc): separate
+          packet so 451's blast radius stays small; token kept for now,
+          removal is committed future work targeted at v0.6.

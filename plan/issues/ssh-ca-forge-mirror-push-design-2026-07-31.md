@@ -365,6 +365,12 @@ running the probes in §0. These four are not.
   radius.)*
   *2026-08-10 (606-bvnp): remains OPEN and operator-gated; deliberately not
   resolved by this amendment.*
+  *2026-08-11 — **RULED by The Tlatoāni** (interactive session): **separate
+  packet**, as recommended — "messy and annoying, and we don't want it
+  blocking other meaningful work." The token stays for now under the
+  recorded deviation budget; removal is committed future work filed as
+  order 688-wqy5 `remove-homebrew-github-token-env-injection`
+  (desired_release v0.6). Q1 is no longer open.*
 - **Q2 — Sidecar per lane, or a single per-project sidecar running one agent
   per lane?** Per-lane is cleaner and is what D5 specifies; per-project is one
   container instead of N and reuses one AppRole. Attribution works either way.
