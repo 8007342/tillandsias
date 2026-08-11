@@ -20,7 +20,7 @@ critical_path:
     expected_behavior: "ok: freshness-inventory.sh present"
 
   - step: "Req: report emits the pinned header grammar"
-    command: "scripts/freshness-inventory.sh >/tmp/freshness-report.txt 2>&1; grep -qE '^freshness-inventory: [0-9]+ components, [0-9]+ stamped, [0-9]+ unstamped$' /tmp/freshness-report.txt && grep -qE '^freshness-coverage: [0-9]+%$' /tmp/freshness-report.txt && echo 'ok: header grammar pinned'"
+    command: "scripts/freshness-inventory.sh >/tmp/freshness-report.txt 2>&1; grep -qE '^freshness-inventory: [0-9]+ components, [0-9]+ stamped, [0-9]+ unstamped$' /tmp/freshness-report.txt && grep -qE '^freshness-coverage: [0-9]+\\.[0-9]% \\([0-9]+/[0-9]+ delta=(unknown|[+-][0-9]+)\\)$' /tmp/freshness-report.txt && echo 'ok: header grammar pinned'"
     timeout_ms: 15000
     expected_behavior: "ok: header grammar pinned"
 
@@ -48,9 +48,14 @@ critical_path:
     # — nine days, +52 components, +0 stamps. The class was not slow, it was
     # closed. If this step ever fails while coverage is under 100%, the path from
     # "never audited" to "audited" has been severed again.
-    command: "out=$(scripts/freshness-inventory.sh); pct=$(printf '%s' \"$out\" | grep '^freshness-coverage:' | sed 's/[^0-9]//g'); [ \"$pct\" -ge 100 ] && { echo 'ok: coverage complete, stale fallback correct'; exit 0; }; printf '%s' \"$out\" | grep -qE '^freshness-next: .* source=unstamped ' && echo 'ok: unstamped component reachable'"
+    command: "out=$(scripts/freshness-inventory.sh); pct=$(printf '%s' \"$out\" | grep '^freshness-coverage:' | grep -oE '[0-9]+\\.[0-9]' | head -1 | cut -d. -f1); [ \"${pct:-0}\" -ge 100 ] && { echo 'ok: coverage complete, stale fallback correct'; exit 0; }; printf '%s' \"$out\" | grep -qE '^freshness-next: .* source=unstamped ' && echo 'ok: unstamped component reachable'"
     timeout_ms: 60000
     expected_behavior: "ok: unstamped component reachable"
+
+  - step: "CLASSIFICATION TRUTH: threshold, boundary, malformed, and clock-skew fixtures classify correctly (606-vaua)"
+    command: "scripts/freshness-inventory.sh --self-test"
+    success_pattern: "freshness-selftest: PASS"
+    timeout_ms: 30000
 
   - step: "REPRODUCIBLE: a fixed seed selects the same next target"
     command: "a=$(FRESHNESS_SEED=litmus-fixed scripts/freshness-inventory.sh | grep '^freshness-next:'); b=$(FRESHNESS_SEED=litmus-fixed scripts/freshness-inventory.sh | grep '^freshness-next:'); [ -n \"$a\" ] && [ \"$a\" = \"$b\" ] && echo 'ok: next target reproducible'"

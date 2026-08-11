@@ -289,3 +289,20 @@ methodology:
       (refreshed|updated|obsoleted), one-line scope note. Detailed schema and
       rollout ladder: plan/issues/component-freshness-lifecycle-2026-07-15.md
       (flag -> soak -> default, per migration_discipline).
+    canonical_threshold:
+      authority: "order 606-vaua (2026-08-11); threshold ownership lives HERE, not in any script"
+      age_days: 30
+      clock_semantics: >
+        Age is computed in UTC, date-only: age_days = (today_utc -
+        stamp_date_utc) in whole days, ignoring time-of-day and host
+        timezone. A stamp is STALE iff age_days > age_days threshold
+        (strictly greater: a stamp exactly at the threshold is still
+        fresh). A stamp dated in the FUTURE (host clock skew or a typo)
+        clamps to age 0 — fresh — but MUST be surfaced on its own
+        `freshness-clock-skew:` line so the anomaly is visible rather than
+        silently absorbed. A stamp whose date field does not parse as
+        ISO-8601 date MUST be surfaced on a `freshness-malformed:` line
+        and counts as stamped-but-unassessable (never silently fresh,
+        never silently stale). Tools MUST read the threshold from this key
+        (env override FRESHNESS_THRESHOLD_DAYS permitted for tests) so a
+        future retuning happens in one place.
