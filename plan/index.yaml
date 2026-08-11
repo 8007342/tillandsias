@@ -34848,6 +34848,12 @@ plan_index:
       notes: |
         NOT SELF-ESCALATING. The loop is forbidden from raising its own bar; this packet is the proposal channel that rule prescribes, and it stays `ready` until the operator rules either way.
       events:
+        - type: decision
+          ts: "2026-08-11T21:41:59Z"
+          agent_id: "linux-mutable-session-20260811"
+          host: linux_mutable
+          summary: >
+            BAR-RAISE APPROVED per methodology/convergence.yaml bar_raise_governance. WHO: The Tlatoani. WHEN: 2026-08-11, interactive session. SCOPE: no NEWLY ADDED litmus step may pin a literal source expression without a negative control; the check is DIFF-SCOPED BY CONSTRUCTION (examines added steps in the outgoing change only) and is structurally incapable of flagging the existing corpus — the 643 matching steps / 166 control-less tests remain accepted standing debt drained via 624-cf9f. OPERATOR PHILOSOPHY RECORDED AS PART OF THE SCOPE (CRDT/Erlang): enforcement never halts the line; when the bar rises, non-compliant state is ACCEPTED and becomes filed ./plan improvement packets drained through iterative orchestration; if the enforcement itself misfires or agents drift around it, the response is likewise filing packets and continuing. The decision half of this packet is CLOSED; the implementation (the diff-scoped check wired into the local gate, with its own negative and positive controls) is now ordinary agent work.
         - ts: 2026-08-09T19:50:00Z
           event: filed
           summary: |

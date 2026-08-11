@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expression-pinning-enforcement-escalation
+    field: pickup_role
+    value: linux
+    ts: "2026-08-11T21:41:59Z"
+    host: host
+
+events:
+  - packet_id: expression-pinning-enforcement-escalation
+    event:
+      type: note
+      ts: "2026-08-11T21:41:59Z"
+      host: host
+      summary: >
+        Ruled ENABLE 2026-08-11; the remaining work (implement the diff-scoped added-steps check at the local gate, negative+positive controls, per the recorded scope) is agent-implementable — re-shaped from tlatoani to linux
