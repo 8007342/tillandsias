@@ -104,7 +104,12 @@ cases:
         - path: plan/index.yaml
           packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
           order: 394e
-          status: in_progress
+          # Status deliberately NOT pinned — same lesson as 394a/394d above.
+          # 394e went in_progress -> ready via the 672-bz7u expire-claims
+          # automation (2026-08-11); the frozen `status: in_progress` made this
+          # case red for exactly the mutable-field reason the 394a comment
+          # warns against. Identity + release_target coverage is what this
+          # citation is here to prove; status is not.
         - path: plan/index.yaml
           packet_id: experts-construction-research
           status: completed
