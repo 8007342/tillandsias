@@ -1,0 +1,34 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t073000z
+events:
+  - packet_id: host-session-mcp-registration-portable
+    event:
+      type: progress
+      ts: "2026-08-11T07:30:00Z"
+      agent_id: linux-mutable-20260811t073000z
+      host: linux_mutable
+      summary: >
+        ROOT-CAUSED + FIXED the stale-checkout bug that made the host MCP
+        experts UNTRUSTWORTHY. On resume the operator's Claude session got the
+        forge-plan + project-info tools live, but the FIRST real call returned
+        citation_root=/home/tlatoani/src/tillandsias indexed_at=2026-07-30 —
+        a stale clone weeks behind the session's actual checkout
+        (/home/tlatoani/claudia/tillandsias) — so 682-u3si "did not exist" and
+        every answer was silently authoritative-but-wrong. Cause:
+        resolve_plan_index() in BOTH config-overlay/mcp/forge-plan.sh and
+        project-info.sh checked TILLANDSIAS_PLAN_INDEX then jumped straight to
+        the $HOME/src/tillandsias fallback, never considering $PWD (the
+        checkout the server is actually launched in). Fix: inserted
+        "$PWD/plan/index.yaml" as the first fallback candidate after the
+        explicit env, in both servers. Verified host-side post-fix:
+        forge-plan plan_status 682-u3si -> correct packet; project-info
+        project_answer -> citation_root=/home/tlatoani/claudia/tillandsias,
+        source_commit=83fcde6b (current HEAD), indexed_at=2026-08-11T07:08,
+        confidence=exact. Forge-safe: forges set the env or their cwd is the
+        mounted project; a non-Tillandsias project has no $PWD/plan/index.yaml
+        and falls through. NOTE: a live MCP server holds the script from
+        session-start, so the running session must relaunch to pick up the
+        fix (the .mcp.json server was spawned before the edit). This closes
+        the packet's exit-criterion-2 (MCP answers match the CLI); remaining:
+        cross-platform verification on osx/windows host sessions + a litmus
+        pinning $PWD-preference so the stale-clone regression cannot return.

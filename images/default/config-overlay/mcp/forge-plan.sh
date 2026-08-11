@@ -221,14 +221,22 @@ record_expert_call() {
     return 0
 }
 
-# Detect the plan index — prefer TILLANDSIAS_PLAN_INDEX, fall back to
-# the canonical repo plan/index.yaml.
+# Detect the plan index — prefer TILLANDSIAS_PLAN_INDEX, then the checkout
+# this server is ACTUALLY running in ($PWD), then the canonical fallbacks.
+# The $PWD check (order 682-z5h8) is load-bearing for host Claude sessions:
+# without it, a host session running in /home/tlatoani/claudia/tillandsias
+# silently answered from a stale $HOME/src/tillandsias clone (indexed
+# 2026-07-30), which is worse than no expert — it reads as authoritative and
+# is weeks wrong. Forge-safe: a forge sets TILLANDSIAS_PLAN_INDEX or its cwd
+# is the mounted project (whose plan/index.yaml this then correctly finds);
+# a non-Tillandsias project has no $PWD/plan/index.yaml and falls through.
 resolve_plan_index() {
     if [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ] && [ -f "${TILLANDSIAS_PLAN_INDEX}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_INDEX"
         return 0
     fi
     for candidate in \
+        "$PWD/plan/index.yaml" \
         "$HOME/src/tillandsias/plan/index.yaml" \
         "$HOME/tillandsias/plan/index.yaml" \
         "/opt/cheatsheets/plan-index.yaml"; do

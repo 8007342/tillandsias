@@ -361,6 +361,7 @@ resolve_plan_index() {
         return 0
     fi
     for candidate in \
+        "$PWD/plan/index.yaml" \
         "$HOME/src/tillandsias/plan/index.yaml" \
         "$HOME/tillandsias/plan/index.yaml" \
         "/opt/cheatsheets/plan-index.yaml"; do
