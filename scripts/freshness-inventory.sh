@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# freshness: auditor=linux-macuahuitl-fable5-20260811t0200z date=2026-08-11 verdict=refreshed scope=behavioral re-validation: emitted the coverage report + freshness-stale/freshness-next grammar live this cycle (6 loop iterations consumed it to pick audit targets), litmus:freshness-inventory-shape PASS; the windows-20260809 freshness-next: unstamped-draw fix is live and working — the queue advanced through podman-mock/tls-test-server/run-litmus-test rather than re-offering the same 8
 # freshness: auditor=windows-claude-20260809t212955z date=2026-08-09 verdict=updated scope=coverage stuck at 0% for 9+ days because the advisory could only rank STAMPED files, so the audit queue re-offered the same 8 and the 1013 unstamped were unreachable; added freshness-next: to draw the next target from the unstamped set
 # =============================================================================
 # freshness-inventory.sh — FRESHNESS rung 2: component inventory + coverage
