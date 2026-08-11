@@ -2,6 +2,12 @@
 # @trace spec:browser-isolation-tray-integration, spec:transparent-https-caching
 set -euo pipefail
 
+# Ambient enclave-proxy env would poison this script's own podman pulls and
+# any container NOT on the enclave network (order 653-zzkb). The explicit
+# --env proxy flags below are unaffected — the forge container deliberately
+# uses the proxy because it runs ON the enclave network.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/podman-neutralize-proxy.sh"
+
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     cat <<'EOF'
 Usage: scripts/run-forge-project.sh <project-path> [kind] [--recreate]

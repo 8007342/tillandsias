@@ -930,6 +930,9 @@ export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 #   build-timeout  cargo build exceeded FORGE_EXPERTS_BUILD_TIMEOUT
 #   binary-missing cargo succeeded but produced no artifact
 #   install-failed the artifact could not be installed to FORGE_EXPERTS_BIN_DIR
+#   stale-source   the binary built + installed but its compiled `capabilities`
+#                  surface lacks `answer` (or predates the order-569 probe) — the
+#                  checkout predates the expert crate (order 531)
 #   not-built      no build was ever started in this container
 _forge_experts_set_state() {
     local state="$1" reason="${2:-}"
@@ -1008,6 +1011,28 @@ _forge_experts_source_hash() {
     fi
     printf '%s\n' "${out:-unknown}"
     return 0
+}
+
+# _forge_experts_probe_answer_surface — does this freshly-installed binary
+# actually carry the expert `answer` subcommand? (order 531)
+#
+# `experts: ready` has only ever meant "the build finished". A binary built from
+# a pre-expert base (no crates/tillandsias-plan/src/answer.rs) installs cleanly
+# and reports `ready` truthfully while every plan_answer returns
+# confidence=unsupported. This asks the binary what it can do — via the order-569
+# `capabilities` subcommand, which prints one lowercase subcommand token per
+# line on stdout, exit 0, touching nothing else — and answers one yes/no: is
+# `answer` in that compiled surface?
+#
+# Returns 0 iff `answer` is present. A binary predating order 569 has no
+# `capabilities` subcommand at all, so the invocation errors / exits non-zero
+# (or emits something other than the token stream); that is ITSELF the stale
+# signal, and it reads as 1 (stale) too. Fail-safe: any doubt is stale.
+_forge_experts_probe_answer_surface() {
+    local bin="$1" caps=""
+    [ -x "$bin" ] || return 1
+    caps="$("$bin" capabilities 2>/dev/null)" || return 1
+    printf '%s\n' "$caps" | grep -qx 'answer'
 }
 
 _generic_project_set_state() {
@@ -1228,6 +1253,21 @@ ensure_forge_experts() {
         return 0
     fi
     printf '%s\n' "$src_hash" > "$stamp" 2>/dev/null || true
+
+    # Order 531. Installing cleanly is NOT the same as being able to answer. A
+    # binary built from a pre-expert base (no src/answer.rs) installs and reports
+    # `ready` truthfully while every plan_answer returns confidence=unsupported —
+    # the milestone-blocking condition. Probe the compiled surface before
+    # claiming ready: if the freshly-installed binary lacks the `answer`
+    # subcommand (or predates the order-569 `capabilities` probe entirely), the
+    # checkout that built it predates the expert crate. Report an honest
+    # `degraded (stale-source)` — distinguishable from an engine failure — rather
+    # than a truthful-but-useless `ready`. Fail-soft like every other arm.
+    if ! _forge_experts_probe_answer_surface "$bin_dst"; then
+        trace_lifecycle "experts" "degraded (stale-source): built binary lacks the \`answer\` subcommand — checkout predates the expert crate (order 531)"
+        _forge_experts_set_state degraded stale-source
+        return 0
+    fi
 
     elapsed=$(( $(date +%s 2>/dev/null || echo 0) - started ))
     [ "$elapsed" -ge 0 ] || elapsed=0
@@ -3617,7 +3657,7 @@ inject_startup_context() {
   - \`experts_state=ready\` only means THE BUILD FINISHED. It has never meant the binary can answer — a forge seeded from a base without the expert sources builds a pre-expert binary and reports \`ready\` truthfully while every \`plan_answer\` returns \`confidence=unsupported\` (order 531). The line above is the honest one. Read it as three answers: \`now=\` is what you can use in THIS session; \`after_relaunch=\` is what the MOUNTED CHECKOUT would give you on the next forge run (so it already includes your uncommitted edits to the expert crate); \`blocked_capabilities=\` is the direct answer to "is my current work blocked pending a relaunch".
   - \`skew\` is the field to branch on, and two of its values demand OPPOSITE actions: \`pending-build\` means the build is still running and the capability WILL appear in this session — wait and retry; \`relaunch-required\` means no build will deliver it here, so retrying is FUTILE and you must relaunch the forge (or rebuild by hand). \`relaunch-regresses\` means the running binary has MORE than the checkout and a relaunch would REMOVE capability. \`none\` means nothing is to be gained by waiting or relaunching. \`now=stale-binary\` means a binary is installed but predates the capability manifest, so its abilities are unknowable — treat everything as blocked.
   - ${_cap_advice}
-  - \`experts_state\` is \`ready\` only once \`tillandsias-plan\` is built and installed on PATH. \`building\` carries elapsed seconds and is TRANSIENT — retry the MCP tool. \`degraded\` always names a reason from a closed set: \`no-plan-crate\` (this project has no plan expert — expected off-tillandsias), \`no-checkout\`, \`no-cargo\`, \`build-failed\`, \`build-timeout\`, \`binary-missing\`, \`install-failed\`, \`not-built\`. There is no indeterminate "may still be building" state.
+  - \`experts_state\` is \`ready\` only once \`tillandsias-plan\` is built and installed on PATH. \`building\` carries elapsed seconds and is TRANSIENT — retry the MCP tool. \`degraded\` always names a reason from a closed set: \`no-plan-crate\` (this project has no plan expert — expected off-tillandsias), \`no-checkout\`, \`no-cargo\`, \`build-failed\`, \`build-timeout\`, \`binary-missing\`, \`install-failed\`, \`stale-source\` (the binary built + installed but its compiled \`capabilities\` surface lacks \`answer\` — the checkout predates the expert crate; order 531), \`not-built\`. There is no indeterminate "may still be building" state.
   - Experts are OPTIONAL: the build is backgrounded right after the project clone and never gates this session. Details: \`/tmp/forge-lifecycle.log\`.
 - **Generic Project Index** — \`project-expert: ${_project_experts_status}\`. Query via the \`project-info\` MCP server (\`project_answer\`, \`project_metadata\`, \`project_structure\`).
   - Machine-readable (branch on this, do not parse the prose): \`project_expert_state=${_project_experts_state} project_expert_reason=${_project_experts_reason} project_expert_elapsed=${_project_experts_elapsed}\`
