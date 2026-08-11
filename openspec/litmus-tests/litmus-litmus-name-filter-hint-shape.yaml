@@ -1,0 +1,54 @@
+# @trace spec:spec-traceability
+#
+# Follow-on to order 300 (litmus-name-filter-silent-noop). An explicit filter
+# that matches zero bound tests fails loud with a non-zero exit; when the
+# filter is a litmus TEST NAME (litmus:* or litmus-*) that resolves to a real
+# litmus file, the runner additionally names the file's owning spec so the
+# user can run the intended suite instead of guessing. A name-shaped typo that
+# resolves to nothing still fails with the unchanged diagnostic and NO
+# spurious hint.
+name: litmus:litmus-name-filter-hint-shape
+spec: spec-traceability
+phase: pre-build
+description: >
+  Pin that an unmatched litmus:* test-name filter both keeps its fail-loud
+  non-zero exit and adds a hint naming the owning spec when the name resolves,
+  while an unresolvable name-shaped typo fails identically without a hint.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/run-litmus-test.sh
+  - openspec/litmus-tests/litmus-litmus-name-filter-fail-loud-shape.yaml exists
+  - bash and grep are available in PATH
+
+critical_path:
+  - step: "a known test name as filter keeps failing loud AND names its owning spec"
+    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh 'litmus:litmus-name-filter-fail-loud-shape' --phase pre-build --size instant --compact 2>&1); rc=$?; [ \"$rc\" -ne 0 ] && grep -Fq \"no litmus tests matched filter 'litmus:litmus-name-filter-fail-loud-shape'\" <<<\"$output\" && grep -Fq \"hint: 'litmus:litmus-name-filter-fail-loud-shape' is a test name; run its spec: scripts/run-litmus-test.sh spec-traceability\" <<<\"$output\" && echo 'ok: known test-name filter fails loud with owning-spec hint'"
+    timeout_ms: 5000
+    expected_behavior: "ok: known test-name filter fails loud with owning-spec hint"
+
+  - step: "a bare name-shaped typo still fails loud WITHOUT a spurious hint"
+    command: "output=$(NO_COLOR=1 scripts/run-litmus-test.sh 'litmus:order-300-no-such-test-typo' --phase pre-build --size instant --compact 2>&1); rc=$?; [ \"$rc\" -ne 0 ] && grep -Fq \"no litmus tests matched filter 'litmus:order-300-no-such-test-typo'\" <<<\"$output\" && ! grep -Fq 'hint:' <<<\"$output\" && echo 'ok: bare typo fails loud with no spurious hint'"
+    timeout_ms: 5000
+    expected_behavior: "ok: bare typo fails loud with no spurious hint"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: "known test name keeps failing loud and hints its owning spec; unresolvable name typo fails loud with no hint"
+  log_fields:
+    spec: "spec-traceability"
+    test: "litmus-name-filter-hint-shape"
+    artifact: "scripts/run-litmus-test.sh"
+
+rollback:
+  on_failure: >
+    The runner's name-filter hint regressed or an unmatched explicit filter
+    lost its fail-loud contract. Restore the post-selection TESTS_RUN guard
+    before print_summary: keep log_fail + exit 1 unconditional on a non-empty
+    FILTER_SPEC, and keep the owning-spec hint strictly additive, printed only
+    when the filter is litmus:* / litmus-* and a file whose name: equals the
+    filter carries a resolvable spec: line. Do not let the hint change the exit
+    code or mask the original diagnostic.
+  command: 'grep -n "no litmus tests matched filter\|is a test name; run its spec\|TESTS_RUN -eq 0" scripts/run-litmus-test.sh'

@@ -1428,6 +1428,23 @@ main() {
     # are counted as skips, so this guard preserves those pass semantics.
     if [[ -n "$FILTER_SPEC" && $TESTS_RUN -eq 0 ]]; then
         log_fail "no litmus tests matched filter '$FILTER_SPEC'"
+        # @trace spec:spec-traceability
+        # A litmus:*/litmus-* filter is a TEST NAME, not a spec id. The runner
+        # selects tests by spec binding, so a name-shaped filter always matches
+        # zero tests. When the name resolves to a real litmus file, name its
+        # owning spec so the user can run the intended suite. The failure and
+        # its non-zero exit are unchanged: an unmatched explicit filter must
+        # still fail (642 semantics).
+        if [[ "$FILTER_SPEC" == litmus:* || "$FILTER_SPEC" == litmus-* ]]; then
+            local name_file owner_spec
+            name_file="$(grep -rlF "name: ${FILTER_SPEC}" "${LITMUS_TESTS_DIR}" 2>/dev/null | head -n 1)"
+            if [[ -n "$name_file" ]]; then
+                owner_spec="$(grep -m1 -F 'spec: ' "$name_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
+                if [[ -n "$owner_spec" ]]; then
+                    log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+                fi
+            fi
+        fi
         exit 1
     fi
 

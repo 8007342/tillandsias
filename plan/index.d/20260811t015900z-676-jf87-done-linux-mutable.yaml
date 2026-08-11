@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t015900z
+# 676-jf87 was leased to the forger by the coordinator but never filed in the
+# ledger; this fragment files it alongside its completion in the same cycle.
+packets:
+  - packet_id: litmus-runner-filter-should-hint-when-given-a-test-name
+    order: 676-jf87
+    status: ready
+    priority: p3
+    title: "run-litmus-test.sh: an unmatched litmus test-name filter should hint its owning spec"
+    kind: enhancement
+    deliverable: scripts/run-litmus-test.sh
+    depends_on: [litmus-name-filter-silent-noop]
+    pickup_role: linux
+    capability_tags: [litmus, testing, shell, gate-integrity]
+    estimated_hours: 1
+    context: >
+      Follow-on to order 300 (litmus-name-filter-silent-noop). An explicit
+      filter that matches zero tests now fails loud with a non-zero exit, but
+      a user who passes a litmus TEST NAME (litmus:foo) instead of a spec id
+      still gets only "no litmus tests matched filter" — the runner selects
+      tests by spec binding, so a name-shaped filter always matches zero
+      tests, and nothing tells the user which spec owns that test. When the
+      filter is litmus:* / litmus-* and a file under openspec/litmus-tests/
+      has a name: equal to the filter, resolve and print that file's spec:
+      as a hint. The failure message and non-zero exit stay unchanged
+      (642 semantics: an unmatched explicit filter must still fail).
+    exit_criteria:
+      - "an unmatched litmus:* / litmus-* filter naming a real test prints the owning spec as a hint"
+      - "an unresolvable name-shaped typo fails loud with the unchanged diagnostic and NO spurious hint"
+      - "the existing fail-loud message and non-zero exit are unchanged"
+    events:
+      - ts: "2026-08-11T01:59:00Z"
+        event: filed
+        summary: >
+          Leased by the coordinator (never present in plan/index.yaml or
+          plan/index.d); filed by the forger in the completion cycle.
+
+events:
+  - packet_id: litmus-runner-filter-should-hint-when-given-a-test-name
+    event:
+      type: filed
+      ts: "2026-08-11T01:59:00Z"
+      agent_id: linux-mutable-20260811t015900z
+      host: forge
+      summary: >
+        Coordinator-leased packet that was never filed; created and completed
+        in the same in-forge cycle.
+  - packet_id: litmus-runner-filter-should-hint-when-given-a-test-name
+    event:
+      type: completed
+      ts: "2026-08-11T02:00:00Z"
+      agent_id: linux-mutable-20260811t015900z
+      host: forge
+      summary: >
+        The no-match guard in run-litmus-test.sh (around line 1430, the
+        "no litmus tests matched filter" branch) now additionally resolves a
+        litmus:* / litmus-* filter against openspec/litmus-tests/: when a
+        file whose name: equals the filter carries a resolvable spec: line,
+        it prints
+        "hint: '<filter>' is a test name; run its spec: scripts/run-litmus-test.sh <spec>"
+        (log_warn) BEFORE the unchanged exit 1. The failure message and
+        non-zero exit are byte-for-byte unchanged; the hint is strictly
+        additive and only fires for name-shaped filters that resolve.
+
+        New litmus litmus:litmus-name-filter-hint-shape (bound under
+        spec-traceability) pins BOTH halves: a known test name
+        (litmus:litmus-name-filter-fail-loud-shape) keeps the fail-loud
+        diagnostic + exit 1 AND prints the hint naming spec-traceability; a
+        bare name-shaped typo (litmus:order-300-no-such-test-typo) still
+        fails loud with the unchanged diagnostic and no spurious hint.
+        Executed: scripts/run-litmus-test.sh spec-traceability --size
+        instant --compact — litmus-name-filter-hint-shape 2/2 PASS, sibling
+        fail-loud-shape 3/3 PASS. The suite's one red
+        (hook-install-portability-shape step 4, "post-commit does not
+        resolve the root at run time") was reproduced at HEAD with the diff
+        stashed and matches the already-filed forge condition
+        forge-global-hookspath-shadows-repo-hooks-2026-07-12.md, so it is
+        pre-existing and unrelated. yq-validate clean; ./build.sh --check
+        exit 0 (gate stamp recorded).
+      evidence:
+        - "direct probe: litmus:litmus-name-filter-fail-loud-shape -> fail + hint naming spec-traceability, exit 1"
+        - "direct probe: bare spec typo 'spec-traceabilitty-typo' -> fail, no hint, exit 1"
+        - "litmus:litmus-name-filter-hint-shape 2/2 PASS (bound under spec-traceability)"
+        - "litmus:litmus-name-filter-fail-loud-shape 3/3 PASS (unchanged semantics)"
+        - "yq-validate: run-litmus-test.sh touch N/A, litmus + bindings clean"
+        - "TILLANDSIAS_HOST_KIND=forge ./build.sh --check: PASS"
