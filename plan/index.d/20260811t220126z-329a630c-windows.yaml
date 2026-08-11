@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wt-reparse-breaks-every-quoted-lane
+    field: status
+    value: completed
+    ts: "2026-08-11T22:01:26Z"
+    host: windows
+
+events:
+  - packet_id: wt-reparse-breaks-every-quoted-lane
+    event:
+      type: completed
+      ts: "2026-08-11T22:01:26Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: tray rebuilt from c73ce7ca; cargo test -p tillandsias-windows-tray --release project_lane_argv_is_never_routed_through_wt => 1 passed (Windows host); rebuilt tray installed to %LOCALAPPDATA%\Programs\Tillandsias and --diagnose exit 0 with wt_present=true, so the wt-reparse guard is as-wired on a wt-capable host

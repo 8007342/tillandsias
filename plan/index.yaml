@@ -30042,6 +30042,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-11T22:01:38Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Windows runtime distro reprovisioned this cycle: --provision-once returned 'VM Ready — control wire up', and --diagnose --json went exit 2 (wire unreachable, WSA 10004/10060 handshake failures dating to 2026-08-10) -> exit 0 (reachable, phase Ready, podman_ready true, guest_version 0.4.260810.1). The guest is now healthy and carries the rebuilt binary; the two deferred lane READS remain outstanding because they require a tray menu click.
+        - type: progress
           ts: 2026-08-11T07:00:00Z
           agent_id: windows-20260811t070000z
           summary: |
@@ -33612,6 +33618,18 @@ plan_index:
         - project-lane click opens a working agent shell (blocked on tray rebuild)
         - workspace tests green incl. interactive_lane_keeps_the_terminal_foreground_process_group
       events:
+        - type: note
+          ts: "2026-08-11T22:01:38Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            RESIDUAL, stated plainly: 'completed' here is claimant-asserted, NOT click-verified. The tray exposes no CLI to trigger a menu lane (--help lists provision/reset/status/diagnose/logs only), so the live 'project-lane click opens a working agent shell' read still needs an operator click or GUI automation. Promote to 'verified' only on that as-wired observation.
+        - type: progress
+          ts: "2026-08-11T21:53:58Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            windows-next cycle 2026-08-11T21:53:58Z: this host is taking the recorded hand-off (tray rebuild + lane re-verification on a clean guest). No claim flip: the ladder forbids implemented -> in_progress without falsifying evidence.
         - type: filed
           ts: 2026-08-09T07:30:00Z
           agent_id: windows-peke-claude-opus5-20260809t073000z
@@ -33662,6 +33680,18 @@ plan_index:
         - project click opens a working agent shell on a wt-capable host
         - argv_survives_wt_reparse rejects the real project argv (DONE, unit test)
       events:
+        - type: note
+          ts: "2026-08-11T22:01:38Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            RESIDUAL, stated plainly: 'completed' here is claimant-asserted, NOT click-verified. The tray exposes no CLI to trigger a menu lane (--help lists provision/reset/status/diagnose/logs only), so the live 'project-lane click opens a working agent shell' read still needs an operator click or GUI automation. Promote to 'verified' only on that as-wired observation.
+        - type: progress
+          ts: "2026-08-11T21:53:58Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            windows-next cycle 2026-08-11T21:53:58Z: this host is taking the recorded hand-off (tray rebuild + lane re-verification on a clean guest). No claim flip: the ladder forbids implemented -> in_progress without falsifying evidence.
         - type: filed
           ts: 2026-08-09T08:00:00Z
           agent_id: windows-peke-claude-opus5-20260809t073000z
