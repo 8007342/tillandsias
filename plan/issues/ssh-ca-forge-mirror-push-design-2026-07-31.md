@@ -3,7 +3,8 @@
 - Date: 2026-07-31
 - Class: research/decision — the deliverable of order 322 `mirror-authenticated-push-transport`
 - Owner host: linux (`linux-next`)
-- Status: **UNSIGNED.** Order 451 stays `blocked` until The Tlatoāni signs §1.
+- Status: **SIGNED 2026-08-11** (The Tlatoāni, interactive session; all four
+  open questions ruled — see the amendments in the §1 signature block).
 - Amended 2026-08-10 (packet 606-bvnp `git-mirror-cross-project-service-identity`):
   shared aliases and the `sign/*` wildcard replaced with an opaque per-project
   mirror identity (D13), exact per-project client AND host roles/policies, exact
@@ -415,18 +416,42 @@ running the probes in §0. These four are not.
   read path stays anonymous rather than also moving to SSH. *(Recommendation:
   keep it — it is the property that lets clone work before any credential
   exists, and it eliminates all CA/credential config from the read path.)*
+  *2026-08-11 — **RULED by The Tlatoāni** (interactive session): **keep**.
+  Rationale accepted: bootstrap-first (a fresh checkout must have zero
+  credential prerequisites — now the every-click path of the 687-wrsa
+  cloud-only UX), the mirror is enclave-only so anonymous ≠ public, and the
+  residual cross-project read risk (M7 hostname opacity is defense-in-depth,
+  not an auth boundary) is acceptable in the current single-trust-domain
+  reality; reversible later by moving reads onto the existing per-lane
+  client certs at the cost of coupling checkout to identity plumbing.*
 
 ### Signature
 
 ```
 Decision record for order 322 — SSH certificate authority, forge → mirror push.
 
-Signed: ______________________  (The Tlatoāni)      Date: ____________
+Signed: The Tlatoāni  (approved interactively 2026-08-11; recorded by the
+        linux-mutable session agent at the operator's explicit direction)
+Date:   2026-08-11
 
 Amendments, if any:
+  - Q1: the HOMEBREW_GITHUB_API_TOKEN env-injection hole is a SEPARATE
+    packet — 688-wqy5, desired_release v0.6; token stays under the recorded
+    deviation budget until then.
+  - Q2: signing sidecar PER LANE (D5's primary reading; the per-project
+    single-sidecar alternative is declined).
+  - Q3: EPHEMERAL EPOCH-SCOPED CAs — both CAs minted inside Vault at stack
+    provision (D2 unchanged), live one stack/Vault epoch, never persisted
+    across epochs; no rotation schedule (rotation = next launch); KRL
+    retained for intra-epoch single-lane revocation only; 451 must enforce
+    that no trust material is cached across epochs; the mesh (563) owes its
+    own trust-root lifetime design — §3's "same CA" inheritance is void.
+  - Q4: git:// anonymous read KEPT (bootstrap-first, enclave-bounded;
+    hostname opacity is defense-in-depth, not an authentication boundary).
 ```
 
-Order 451 remains `blocked` until this block is filled in.
+Signed 2026-08-11: order 451's design gate is CLEARED — its remaining block
+is its four dependency packets (322 closure, 579, 606-bvnp, 610-txvr).
 
 ---
 

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mirror-authenticated-push-transport
+    field: status
+    value: completed
+    ts: "2026-08-11T21:34:51Z"
+    host: host
+
+events:
+  - packet_id: mirror-authenticated-push-transport
+    event:
+      type: completed
+      ts: "2026-08-11T21:34:51Z"
+      host: host
+      summary: >
+        status 'completed' with evidence_refs: plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md SIGNED 2026-08-11 by The Tlatoani (interactive session): S1 signature block filled with all four question rulings as amendments (Q1 separate packet 688-wqy5; Q2 per-lane; Q3 ephemeral epoch CAs; Q4 keep anonymous read). The packet's deliverable — the credential-issuance decision record — is complete and operator-ratified.
+  - packet_id: mirror-authenticated-push-transport
+    event:
+      type: note
+      ts: "2026-08-11T21:34:51Z"
+      host: host
+      summary: >
+        322's deliverable was the signed design; every open question is now ruled and the signature block is filled. 451's design gate is cleared.
