@@ -28,3 +28,4 @@ This host is the fleet's only macOS builder.
 - 2026-08-11T02:15Z  (frag)    663-69kp signature refined: rapid sequential boots alone trigger the pre-breadcrumb hang (health-boot pattern indicted); loop switches to one-boot-per-iteration
 - 2026-08-11T02:45Z  (frag)    663-69kp datum #4 (hang 15s after clean tray quit); 598-kibt next_action corrected (only M5 runtime remains, operator-gated)
 - 2026-08-11T03:55Z  (frag)    663-69kp paired datum: success-in-45s then immediate-next hang 400s; console silent while rootfs.img mtime advances during hangs; 663-acdw parked (6 attempts)
+- 2026-08-11T07:35Z  (frag)    245 revision slice DONE: 23/23 stale claims corrected in the NA audit doc (7-agent fact-check); re-verification by the 3 named agents remains the gate. Also repaired stranded 606-r42f/421 completions
