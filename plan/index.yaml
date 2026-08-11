@@ -37745,6 +37745,12 @@ plan_index:
         acceptance cost this session two blind runs.
       events:
         - type: progress
+          ts: "2026-08-11T23:41:00Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260811t231515z"
+          host: macos
+          summary: >
+            ROOT CAUSE FOUND (macOS 2026-08-11): EXPECT-ORDER DRIFT, exactly the packet's own second hypothesis ('the login expect needles drifting from the current guest prompt text'). The guest prompts CREDENTIAL FIRST since operator directive 2026-07-29 — token, then git name, then email (crates/tillandsias-headless/src/main.rs:7647-7665, the directive quoted verbatim in the comment). The macOS host's expect vec was still the pre-07-29 order name -> email -> token (crates/tillandsias-macos-tray/src/diagnose.rs:862-902). DynamicExpect is strictly sequential, so the guest sat blocked on its token prompt while the host scanned for an 'author name' needle that could not appear until the host answered the token prompt first: a mutual wait. It is SILENT because the expect driver only emits an event on needle match, and UNBOUNDED because the guest's 30s PTY heartbeat resets the host's 300s idle deadline every tick (689-y2my). This also explains the packet's own note that the 2026-07-24 attended login DID work: it predates the guest reorder by five days. FIXED: expects reordered to token -> name -> email, plus a cross-crate contract pin (crates/tillandsias-macos-tray/tests/github_login_expect_order.rs) that reads BOTH files and fails when the orders diverge — verified falsifiable by reverting the fix and observing the pin fail with the exact mismatch, then pass again. Negative control asserts the extraction actually discriminates order, so it cannot pass vacuously (bar-raise 634-39ik).
+        - type: progress
           ts: "2026-08-11T23:33:30Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260811t233112z"
           host: macos

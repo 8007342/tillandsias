@@ -859,7 +859,32 @@ pub fn github_login_main() -> i32 {
         eprintln!(
             "[github-login] control wire ready; guest auth preflight runs before credential prompts"
         );
+        // ORDER IS LOAD-BEARING and must track the GUEST, which prompts
+        // CREDENTIAL FIRST, identity second — see the operator directive of
+        // 2026-07-29 quoted at crates/tillandsias-headless/src/main.rs:7647
+        // ("Prompting for name/email before the token led operators to believe
+        // those fields WERE their GitHub credentials").
+        //
+        // This list said name -> email -> token, i.e. the pre-07-29 guest, and
+        // `DynamicExpect` is strictly sequential: the host scanned for "author
+        // name" while the guest sat blocked on its token prompt, and neither
+        // side could move. That deadlock is silent and, because the guest's 30s
+        // PTY heartbeat keeps resetting the exec idle deadline (689-y2my), it
+        // is also unbounded — the 70-minute wedges of 2026-08-10/11. The
+        // attended login of 2026-07-24 worked precisely because it predates the
+        // guest's reorder.
         let expects = vec![
+            DynamicExpect {
+                needle: b"authentication token".to_vec(),
+                label: "github token".to_string(),
+                response: Box::new(|| {
+                    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
+                    if pat.is_empty() {
+                        return Err("--github-login: a GitHub token is required".to_string());
+                    }
+                    Ok(format!("{pat}\n").into_bytes())
+                }),
+            },
             DynamicExpect {
                 needle: b"author name".to_vec(),
                 label: "git author name".to_string(),
@@ -888,19 +913,8 @@ pub fn github_login_main() -> i32 {
                     Ok(format!("{email}\n").into_bytes())
                 }),
             },
-            DynamicExpect {
-                needle: b"authentication token".to_vec(),
-                label: "github token".to_string(),
-                response: Box::new(|| {
-                    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
-                    if pat.is_empty() {
-                        return Err("--github-login: a GitHub token is required".to_string());
-                    }
-                    Ok(format!("{pat}\n").into_bytes())
-                }),
-            },
         ];
-        eprintln!("[github-login] driving guest login (git name -> email -> token)…");
+        eprintln!("[github-login] driving guest login (token -> git name -> email)…");
         let result = exec_over_stream_expect_dynamic(
             stream,
             &[
