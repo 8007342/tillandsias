@@ -948,8 +948,9 @@ specs:
   - litmus:no-raw-error-in-status-chip
   - litmus:pty-attach-project-threading-symmetric
   - litmus:installer-wsl-preflight-shape
+  - litmus:tray-import-surface-os-only
   coverage_ratio: 100
-  last_verified: '2026-07-15'
+  last_verified: '2026-08-12'
 - spec_id: wsl-daemon-orchestration
   status: active
   litmus_tests:
