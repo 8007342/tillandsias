@@ -962,6 +962,86 @@ pub fn github_login_main() -> i32 {
             |ev| eprintln!("[github-login] {ev}"),
         )
         .await;
+
+        // 701-g98y: capture the NEW epoch's handover into the host Keychain
+        // BEFORE stopping the VM.
+        //
+        // A successful login initializes a fresh Vault inside the guest, so the
+        // guest now holds a share and root token the host has never seen — the
+        // Keychain still holds the PREVIOUS epoch. Until this call existed, that
+        // divergence was permanent for a CLI login: the capture half runs only
+        // from the GUI tray's paths (action_host.rs), and when the tray next
+        // connected it would DELIVER its stale Keychain values into the guest
+        // first — overwriting the epoch this command had just created — and only
+        // then ask for a handover that was no longer pending. Seeding from the
+        // CLI and then opening the tray could therefore destroy the credential
+        // the CLI had just proven durable.
+        //
+        // Capture only, never deliver: this process is the one that CAUSED the
+        // new epoch, so anything it holds is older by construction.
+        //
+        // Best-effort by design — the login itself has already succeeded and its
+        // exit code must not change here. A failure is reported loudly because
+        // the consequence (a later tray launch clobbering a good credential) is
+        // silent and expensive.
+        if matches!(&result, Ok(out) if out.exit.code == 0) {
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(hstream) => {
+                    use tillandsias_control_wire::transport::Transport;
+                    use tillandsias_host_shell::vsock_client::Client;
+                    let mut client = Client::from_stream(
+                        Box::new(hstream),
+                        Transport::Vsock {
+                            // Same guest CID the VzRuntime was constructed with
+                            // at the top of this function.
+                            cid: 3,
+                            port: CONTROL_WIRE_VSOCK_PORT,
+                        },
+                    );
+                    match client.handshake().await {
+                        Ok(_) => {
+                            match crate::installation_uuid::capture_vault_handover(&mut client).await
+                            {
+                                Ok(true) => eprintln!(
+                                    "[github-login] host Keychain updated with this login's vault handover"
+                                ),
+                                // Say what actually happened. A guest holds a
+                                // pending handover ONLY after a FRESH Vault init;
+                                // a login that reused an already-initialized
+                                // Vault has nothing to hand over, and claiming
+                                // "updated" there is a success message with no
+                                // evidence behind it. IMPORTANT for the operator:
+                                // this branch means the Keychain still holds
+                                // whatever epoch it held before, which may be
+                                // OLDER than the guest's — 701-g98y's hazard is
+                                // NOT cleared by this path.
+                                Ok(false) => eprintln!(
+                                    "[github-login] no pending vault handover to capture — the guest reused an \
+                                     already-initialized Vault, so the host Keychain is UNCHANGED. If it was \
+                                     already older than the guest's epoch it still is; re-verify with \
+                                     --list-cloud-projects after the first tray start (701-g98y)."
+                                ),
+                                Err(e) => eprintln!(
+                                    "[github-login] WARNING: could not capture the vault handover ({e}). \
+                                     The login succeeded, but the host Keychain still holds an OLDER epoch — \
+                                     opening the tray may overwrite this credential. Re-verify with \
+                                     --list-cloud-projects after the first tray start (701-g98y)."
+                                ),
+                            }
+                        }
+                        Err(e) => eprintln!(
+                            "[github-login] WARNING: handover capture handshake failed ({e}); host Keychain not updated (701-g98y)"
+                        ),
+                    }
+                }
+                Err(e) => eprintln!(
+                    "[github-login] WARNING: handover capture could not connect ({e}); host Keychain not updated (701-g98y)"
+                ),
+            }
+        }
+
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
