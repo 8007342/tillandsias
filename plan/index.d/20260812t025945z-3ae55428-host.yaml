@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: malformed-fragment-passes-the-gate-silently
+    field: status
+    value: obsoleted
+    ts: "2026-08-12T02:59:45Z"
+    host: host
+
+events:
+  - packet_id: malformed-fragment-passes-the-gate-silently
+    event:
+      type: note
+      ts: "2026-08-12T02:59:45Z"
+      host: host
+      summary: >
+        SUPERSEDED by sibling 698-7n6q (windows), which implemented the identical fix — scripts/check-added-fragments-parse.sh, diff-scoped, wired into build.sh, refusing newly-added unparseable fragments and citing 697-s3by as its trigger case. Convergent multi-host work: I filed 697-sy8w for this class the same cycle windows shipped the fix. My 697-s3by re-declaration (rescuing the invisible packet's content) stands; the malformed macos file remains inherited debt for removal (698-7n6q criterion / 697-s3by canonical).

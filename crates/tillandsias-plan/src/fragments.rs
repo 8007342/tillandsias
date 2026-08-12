@@ -259,6 +259,79 @@ pub fn fold(base: &Value, fragments: &[Fragment]) -> Value {
     fold_with_sources(base, fragments).0
 }
 
+/// Does `frag` carry a `falsified` event for `pid`? The falsified event is the
+/// ONLY sanctioned move DOWN the closure ladder (order 650-dq6u), so the fold
+/// accepts a rank-lowering status write only when the same fragment records it.
+fn fragment_falsifies(frag: &Fragment, pid: &str) -> bool {
+    let Some(events) = frag.doc.get("events").and_then(Value::as_sequence) else {
+        return false;
+    };
+    events.iter().any(|e| {
+        e.get("packet_id").and_then(Value::as_str) == Some(pid)
+            && e.get("event")
+                .and_then(|ev| ev.get("type"))
+                .and_then(Value::as_str)
+                == Some("falsified")
+    })
+}
+
+/// Rank-aware LWW decision for the `status` field (686-7qcm / 650-dq6u).
+/// Returns whether the incoming status entry should replace the current winner.
+///
+/// The closure ladder implemented<completed<verified<done is a monotone
+/// lattice: you climb UP freely and move DOWN only through a `falsified` event.
+/// `obsoleted`/`failed` are LATERAL terminals (supersession / attempt-ended),
+/// not rungs, and are decided by plain LWW. Every remaining value is a WORKING
+/// state (ready/pending/in_progress/blocked/needs_clarification), the floor
+/// beneath the ladder.
+///
+///   prev rung  vs incoming rung   → higher wins; equal = LWW; lower = falsified
+///   prev working vs incoming rung → UP onto the ladder: incoming wins
+///   prev rung  vs incoming working → DOWN off the ladder: needs falsified
+///   anything involving a lateral terminal, or working-vs-working → plain LWW
+///
+/// This keeps the fold's notion of "down the ladder" aligned with the
+/// set-field write gate, so a stale working-state write can never silently
+/// clobber a verified/done rung regardless of arrival order.
+fn status_entry_wins(
+    incoming: Option<&str>,
+    incoming_ts: &str,
+    incoming_host: &str,
+    incoming_falsified: bool,
+    prev: Option<&str>,
+    prev_ts: &str,
+    prev_host: &str,
+) -> bool {
+    let lww = || (incoming_ts, incoming_host) > (prev_ts, prev_host);
+    let (Some(inc), Some(pv)) = (incoming, prev) else {
+        return lww();
+    };
+    let is_lateral = |s: &str| matches!(s, "obsoleted" | "failed");
+    // A lateral terminal on either side is not a ladder move: plain LWW.
+    if is_lateral(inc) || is_lateral(pv) {
+        return lww();
+    }
+    match (crate::closure_rank(inc), crate::closure_rank(pv)) {
+        // Both on the ladder: monotone. Higher wins, equal LWW, lower falsified.
+        (Some(i), Some(p)) => {
+            if i > p {
+                true
+            } else if i < p {
+                incoming_falsified
+            } else {
+                lww()
+            }
+        }
+        // Climbing UP from a working state onto the ladder: always accept —
+        // recording that verification happened does not need a newer clock.
+        (Some(_), None) => true,
+        // Moving DOWN off the ladder to a working state: needs falsified.
+        (None, Some(_)) => incoming_falsified,
+        // Working state vs working state: plain LWW.
+        (None, None) => lww(),
+    }
+}
+
 /// [`fold`] plus the provenance of every winning decision. The merged Value is
 /// byte-for-byte the one `fold` returns; provenance is sidecar state consumed
 /// by `Ledger::load_with_fragments` to attribute citations (order 606-h9vy).
@@ -329,7 +402,14 @@ pub fn fold_with_sources(base: &Value, fragments: &[Fragment]) -> (Value, FoldPr
             }
         }
 
-        // LWW-Register: whole-field updates, highest (ts, host) wins.
+        // LWW-Register: whole-field updates, highest (ts, host) wins — EXCEPT
+        // the `status` field, whose closure ladder (order 650-dq6u) is a
+        // monotone lattice: a more-verified rung wins regardless of write
+        // order, and the ONLY move DOWN the ladder is a fragment that also
+        // carries a `falsified` event for that packet. This makes "a stale
+        // in_progress clobbers done" and "completed overwrites verified"
+        // structurally impossible in the fold, not merely refused at write
+        // time (686-7qcm; the set-field gate is the write-time half).
         if let Some(us) = frag.doc.get("status").and_then(Value::as_sequence) {
             for u in us {
                 let (Some(pid), Some(field), Some(value)) = (
@@ -352,8 +432,20 @@ pub fn fold_with_sources(base: &Value, fragments: &[Fragment]) -> (Value, FoldPr
                 let key = format!("{pid}\u{1}{field}");
                 let better = match lww.get(&key) {
                     None => true,
-                    Some((prev_ts, prev_host, _, _)) => {
-                        (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                    Some((prev_ts, prev_host, prev_val, _)) => {
+                        if field == "status" {
+                            status_entry_wins(
+                                value.as_str(),
+                                &ts,
+                                &host,
+                                fragment_falsifies(frag, pid),
+                                prev_val.as_str(),
+                                prev_ts,
+                                prev_host,
+                            )
+                        } else {
+                            (ts.as_str(), host.as_str()) > (prev_ts.as_str(), prev_host.as_str())
+                        }
                     }
                 };
                 if better {
@@ -1420,6 +1512,155 @@ packets:
         let merged = fold(&base(), &[]);
         assert_eq!(packet_ids(&merged), vec!["alpha"]);
         assert_eq!(events_of(&merged, "alpha"), vec!["born"]);
+    }
+
+    // ── Rank-aware status merge (686-7qcm / 650-dq6u closure ladder) ─────────
+    // These pin `status_entry_wins` directly: the higher closure rung wins
+    // regardless of arrival order, and only a falsified move goes down.
+
+    #[test]
+    fn higher_rung_wins_regardless_of_timestamp_order() {
+        // verified(older) vs completed(newer): verified is higher, must win
+        // EVEN though completed carries the later timestamp — proves order
+        // independence in the "newer is lower" arrival.
+        assert!(!status_entry_wins(
+            Some("completed"),
+            "2026-02-02T00:00:00Z",
+            "h",
+            false,
+            Some("verified"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+        // The reverse arrival (verified newer than completed): still wins.
+        assert!(status_entry_wins(
+            Some("verified"),
+            "2026-02-02T00:00:00Z",
+            "h",
+            false,
+            Some("completed"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+    }
+
+    #[test]
+    fn a_stale_working_state_cannot_clobber_a_terminal_rung() {
+        // in_progress written LATER than done must NOT win without falsified —
+        // the classic "stale in_progress clobbers done" the fold must prevent.
+        assert!(!status_entry_wins(
+            Some("in_progress"),
+            "2026-03-03T00:00:00Z",
+            "h",
+            false,
+            Some("done"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+        // With a falsified event in the same fragment, the downgrade is allowed.
+        assert!(status_entry_wins(
+            Some("ready"),
+            "2026-03-03T00:00:00Z",
+            "h",
+            true,
+            Some("done"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+    }
+
+    #[test]
+    fn a_lower_rung_needs_falsified_but_a_higher_one_does_not() {
+        // completed cannot overwrite verified without falsified…
+        assert!(!status_entry_wins(
+            Some("completed"),
+            "2026-05-05T00:00:00Z",
+            "h",
+            false,
+            Some("verified"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+        // …but WITH a falsified event it may (a re-attempt after refutation).
+        assert!(status_entry_wins(
+            Some("completed"),
+            "2026-05-05T00:00:00Z",
+            "h",
+            true,
+            Some("verified"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+    }
+
+    #[test]
+    fn equal_rung_and_working_states_use_plain_lww() {
+        // equal rung → later (ts,host) wins
+        assert!(status_entry_wins(
+            Some("completed"),
+            "2026-02-02T00:00:00Z",
+            "h",
+            false,
+            Some("completed"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+        // two working states → plain LWW, newer wins
+        assert!(status_entry_wins(
+            Some("blocked"),
+            "2026-02-02T00:00:00Z",
+            "h",
+            false,
+            Some("ready"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+    }
+
+    #[test]
+    fn obsoleted_and_failed_are_lateral_terminal_moves_not_downgrades() {
+        // obsoleted (supersession) may overwrite a ranked terminal by plain LWW
+        // without a falsified event — it is not a rung retraction.
+        assert!(status_entry_wins(
+            Some("obsoleted"),
+            "2026-04-04T00:00:00Z",
+            "h",
+            false,
+            Some("done"),
+            "2026-01-01T00:00:00Z",
+            "h",
+        ));
+    }
+
+    #[test]
+    fn rank_aware_merge_is_commutative_end_to_end() {
+        // Two fragments, one lifting alpha ready->verified (with evidence event)
+        // and one stale ready re-declaration; the verified wins no matter which
+        // fragment sorts later.
+        let verified = "\
+status:
+    - packet_id: alpha
+      field: status
+      value: verified
+      ts: \"2026-06-06T00:00:00Z\"
+      host: a
+";
+        let stale_ready = "\
+status:
+    - packet_id: alpha
+      field: status
+      value: ready
+      ts: \"2026-07-07T00:00:00Z\"
+      host: b
+";
+        for order in [
+            vec![frag("01", verified), frag("02", stale_ready)],
+            vec![frag("01", stale_ready), frag("02", verified)],
+        ] {
+            let merged = fold(&base(), &order);
+            let got = merged["packets"][0]["status"].as_str().unwrap();
+            assert_eq!(got, "verified", "verified must survive a later stale ready");
+        }
     }
 }
 
