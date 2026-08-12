@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-forge-config-trust-live-parity
+    field: status
+    value: ready
+    ts: "2026-08-12T05:09:31Z"
+    host: macos
+
+events:
+  - packet_id: macos-forge-config-trust-live-parity
+    event:
+      type: note
+      ts: "2026-08-12T05:09:31Z"
+      host: macos
+      summary: >
+        Blocker cleared: the vault github token is present and durable as of 2026-08-12T05:09Z (694-mhz8 VERIFIED, cross-restart proof). The 'blocked' state recorded 'closing run needs the operator vault github token' since 2026-07-16; that token now survives VM restarts. Criteria 1 and 2 were already PASS live 2026-07-16; only criterion 3 remains (real mirror push + TLS parity sweep in the public macOS forge lane). Moving to ready, NOT to a closure rung — no criterion-3 evidence exists yet.

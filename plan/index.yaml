@@ -12004,6 +12004,12 @@ plan_index:
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
         - type: progress
+          ts: "2026-08-12T05:09:30Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t050913z"
+          host: macos
+          summary: >
+            BLOCKER CLEARED — the vault github token is PRESENT and DURABLE on this host as of 2026-08-12T05:09Z. This packet has been blocked since the 2026-07-27 re-provision on 'operator vault github token absent'; the cause was 694-mhz8 (now VERIFIED), where the Vault partial-init guard wiped the store on every bootstrap so each successful login was erased. Proof: --github-login completed (exit_code 0, authenticated 8007342), the one-shot stopped the VM, and a SEPARATE fresh-boot --list-cloud-projects read secret/data/github/token and listed the operator's repos with exit_code 0 — the same command 404'd twice earlier the same night. The 'do NOT re-run --github-login on this host' standing order is now OBSOLETE and should be lifted; it was correct only while the fix was undeployed. WHAT REMAINS for this packet is its own criterion 3, unchanged and untouched by tonight: the real mirror push plus the TLS parity sweep (git/curl/Node/Python) inside the public macOS forge lane, with no host or repository config edits and no per-client CA override variables. Criteria 1 and 2 were already PASS live on 2026-07-16. That closing run is now genuinely runnable for the first time since 07-27.
+        - type: progress
           ts: "2026-08-12T00:35:30Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t003451z"
           host: macos
