@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: append-event-cannot-reach-fragment-only-packets
+    field: status
+    value: implemented
+    ts: "2026-08-12T10:45:55Z"
+    host: macos
+
+events:
+  - packet_id: append-event-cannot-reach-fragment-only-packets
+    event:
+      type: progress
+      ts: "2026-08-12T10:45:55Z"
+      host: macos
+      summary: >
+        status 'implemented' (not terminal) with evidence_refs: append-event now falls back to writing a NEW FRAGMENT when the target packet has no block in the base ledger, instead of refusing with "packet_id not found" for a packet that status resolves fine. Root cause was not resolution but the WRITE: that arm inserts text into plan/index.yaml at the packet item span, and a fragment-only packet has no span there. New helper base_hosts_packet() (lib.rs) makes the choice explicit; the fragment shape matches what set-field already emits, so the fold sees an identical event either way. PROVEN LIVE on the exact call that failed twice tonight: append-event on 701-iu9b now succeeds and names the fragment it wrote. TWO NEGATIVE CONTROLS, both with REAL exit codes captured (not through a pipe — reading an exit code through tail is the artifact that produced a false success report earlier tonight): a genuinely unknown packet_id still refuses with exit 1, and a BASE-hosted packet still edits the base with the fragment count unchanged at 47, so the fix cannot degrade into spawning a fragment for every append; that probe was reverted. 11 plan tests green, gate green. NOT completed: the packets second half is untouched — set-field with an unchanged value still NO-OPS and silently discards an explicitly supplied --reason, so there is still no way to record a note via that verb without changing a field. That half is what made this bug expensive, because it was the documented workaround.

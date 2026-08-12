@@ -1230,6 +1230,18 @@ pub mod edit {
     /// (see [`event_block`]). Creates the `events:` block if the packet has
     /// none. Does NOT validate — the caller flushes only after
     /// [`validate_candidate`] returns no violations.
+    /// True when the BASE ledger text actually contains a block for `target_id`
+    /// — i.e. when a text-level append can find somewhere to insert (699-usxc).
+    ///
+    /// A packet declared only in an uncompacted `plan/index.d/` fragment folds
+    /// into every READ but has no item span in the base, so `append_event`
+    /// below cannot place anything. Callers use this to decide between editing
+    /// the base and writing a new fragment, instead of surfacing the miss as
+    /// "packet_id not found" for a packet the reader can plainly see.
+    pub fn base_hosts_packet(raw: &str, target_id: &str) -> bool {
+        item_span(raw, target_id).is_some()
+    }
+
     pub fn append_event(raw: &str, target_id: &str, event_block: &str) -> Result<String, String> {
         let mut lines: Vec<String> = raw.lines().map(String::from).collect();
         let (start, end) = item_span(raw, target_id)

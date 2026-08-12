@@ -2294,6 +2294,66 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
+            // 699-usxc. A packet declared only in an uncompacted fragment has no
+            // block in the BASE to append into — this arm locates packets by
+            // their item prefix in plan/index.yaml. Until now that produced
+            // "packet_id not found" for a packet `status` resolves perfectly
+            // well, so the natural workflow "file a packet, then record progress
+            // on it" failed for exactly the packets filed this cycle.
+            //
+            // Worse in practice than it sounds: the documented workaround
+            // (`set-field <same-value> --reason`) NO-OPS when the value is
+            // unchanged and writes nothing at all, so there was NO path to
+            // annotate such a packet without also changing a field. That bites
+            // hardest when someone is correcting a mistake in the record —
+            // exactly when the ledger most needs to accept a write.
+            //
+            // So: if the base cannot host the event, write it as a NEW FRAGMENT,
+            // which is what the overlay is for and what set-field already does.
+            // The fold reads events from fragments, so the result is identical
+            // to a base append from every reader's point of view.
+            if !edit::base_hosts_packet(&raw, &target) {
+                let compact = loop_status::iso_to_compact(&ts);
+                let suffix = format!(
+                    "{:08x}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.subsec_nanos())
+                        .unwrap_or(0)
+                );
+                let dir = fragments::fragment_dir(&index);
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    eprintln!("error: create {}: {e}", dir.display());
+                    std::process::exit(1);
+                }
+                let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+                let mut body = String::new();
+                body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+                body.push_str("# Written by: tillandsias-plan append-event (order 699-usxc).\n");
+                body.push_str(
+                    "#\n# The target packet is declared only in an uncompacted fragment, so the\n\
+                     # BASE ledger has no block to append into. Recording the event here keeps\n\
+                     # it visible to the fold, which is what every reader consults.\n",
+                );
+                body.push_str("events:\n");
+                body.push_str(&format!("  - packet_id: {target}\n"));
+                body.push_str("    event:\n");
+                body.push_str(&format!("      type: {etype}\n"));
+                body.push_str(&format!("      ts: \"{ts}\"\n"));
+                body.push_str(&format!("      agent_id: {agent}\n"));
+                body.push_str(&format!("      host: {host}\n"));
+                body.push_str("      summary: >\n");
+                for line in summary.replace('\n', " ").split('\n') {
+                    body.push_str(&format!("        {line}\n"));
+                }
+                if let Err(e) = std::fs::write(&path, body) {
+                    eprintln!("error: write {}: {e}", path.display());
+                    std::process::exit(1);
+                }
+                println!("appended {etype} event to {target} ({})", path.display());
+                return;
+            }
             let candidate = match edit::append_event(&raw, &target, &block) {
                 Ok(c) => c,
                 Err(e) => {

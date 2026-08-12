@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: guest-fetch-unit-and-build-flag-latent-wipe-traps
+    event:
+      type: note
+      ts: "2026-08-12T10:47:00Z"
+      agent_id: macos-699usxc-verify
+      host: macos
+      summary: >
+        LIVE VERIFICATION of the 699-usxc fix: this note was written by append-event itself against a fragment-only packet, the exact call that answered "packet_id not found" twice earlier tonight and forced a hand-authored fragment to repair a corrupted record.
