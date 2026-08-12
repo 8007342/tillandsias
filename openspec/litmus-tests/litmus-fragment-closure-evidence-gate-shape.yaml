@@ -1,0 +1,48 @@
+# @trace spec:ci-release
+name: litmus:fragment-closure-evidence-gate-shape
+spec: ci-release
+phase: pre-build
+description: The closure-evidence gate refuses a fragment recording a closure rung with no evidence event, admits one that carries evidence, and ignores lateral terminals
+severity: high
+size: instant
+
+# Order 686-7qcm criterion 3. The set-field write gate requires --evidence to
+# write completed/verified/done and emits the matching event; this is the
+# gate-time backstop for HAND-AUTHORED fragments that bypass set-field. Pins the
+# closure-evidence-check binary surface against isolated fixture files so the
+# assertion never depends on the branch diff.
+
+preconditions:
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "NEGATIVE CONTROL: a closure rung with no evidence event is REFUSED"
+    command: "T=$(mktemp -d); printf 'status:\\n  - packet_id: bar\\n    field: status\\n    value: verified\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\n' > \"$T/f.yaml\"; if ./target/release/tillandsias-plan closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1; then echo 'FAIL: closure without evidence admitted'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: closure without evidence refused'"
+    timeout_ms: 15000
+    expected_behavior: "ok: closure without evidence refused"
+
+  - step: "POSITIVE CONTROL: a closure WITH an evidence event is admitted"
+    command: "T=$(mktemp -d); printf 'status:\\n  - packet_id: foo\\n    field: status\\n    value: completed\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\nevents:\\n  - packet_id: foo\\n    event:\\n      type: completed\\n      summary: \"status completed with evidence_refs: commit abc + litmus 5/5\"\\n' > \"$T/f.yaml\"; ./target/release/tillandsias-plan closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1 && echo 'ok: closure with evidence admitted'; rm -rf \"$T\""
+    timeout_ms: 15000
+    expected_behavior: "ok: closure with evidence admitted"
+
+  - step: "NEGATIVE CONTROL: a lateral terminal (obsoleted) needs no evidence event"
+    command: "T=$(mktemp -d); printf 'status:\\n  - packet_id: baz\\n    field: status\\n    value: obsoleted\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\n' > \"$T/f.yaml\"; ./target/release/tillandsias-plan closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1 && echo 'ok: lateral terminal admitted without evidence'; rm -rf \"$T\""
+    timeout_ms: 15000
+    expected_behavior: "ok: lateral terminal admitted without evidence"
+
+  - step: "the diff-scoped wrapper reports its grammar over the branch"
+    command: "scripts/check-fragment-closure-evidence-added.sh | grep -qE '^ok:closure-evidence:[0-9]+ checked' && echo 'ok: wrapper grammar holds'"
+    timeout_ms: 30000
+    expected_behavior: "ok: wrapper grammar holds"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "closure-evidence gate: closures without evidence refused, evidence-bearing closures admitted, lateral terminals exempt"
+  log_fields:
+    spec: "ci-release"
+    test: "fragment-closure-evidence-gate-shape"
+
+rollback:
+  on_failure: "restore scripts/check-fragment-closure-evidence-added.sh, the closure-evidence-check subcommand, and the build.sh wiring from git history"

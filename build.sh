@@ -1062,6 +1062,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Expression-pinning enforcement passed"
 
+    # Order 686-7qcm criterion 3. Refuse a NEWLY ADDED fragment that records a
+    # closure rung (completed/verified/done) with no evidence-bearing event —
+    # the gate-time backstop to set-field's write-time --evidence requirement,
+    # catching hand-authored fragments that bypass set-field. Diff-scoped, so
+    # the base ledger's historical closures are never re-judged.
+    _step "Checking that added fragment closures carry evidence (686-7qcm)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-closure-evidence-added.sh" 2>&1; then
+        _error "this change adds a fragment recording a closure (completed/verified/done) with no evidence-bearing event (686-7qcm)"
+        exit 1
+    fi
+    _info "Closure-evidence enforcement passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

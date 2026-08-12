@@ -66,6 +66,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "burndown",
     "capabilities",
     "check",
+    "closure-evidence-check",
     "compact",
     "dependencies-of",
     "expire-claims",
@@ -122,6 +123,9 @@ const USAGE: &str = concat!(
     "                                     that absence is itself the stale-binary signal the forge\n",
     "                                     wrapper branches on.\n",
     "           check                     integrity + schema validation (exit 1 on violations)\n",
+    "           closure-evidence-check <fragment.yaml>\n",
+    "                                     exit 1 if the fragment sets a closure rung\n",
+    "                                     (completed/verified/done) with no evidence event (686-7qcm)\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
@@ -1877,6 +1881,138 @@ fn main() {
                     "{}\t{}\t{}\t{}",
                     pb.dependent, pb.dependency, pb.status, pb.outstanding
                 ));
+            }
+        }
+        "closure-evidence-check" => {
+            // 686-7qcm criterion 3. A single-FILE gate: a fragment that sets a
+            // closure-ladder terminal (completed/verified/done) — via the
+            // `status:` LWW channel OR an inline `packets:` status — must carry
+            // an evidence-bearing event for that packet, so a closure can never
+            // be recorded without a trace of what justified it. This is the
+            // gate-time backstop to the set-field write-time --evidence
+            // requirement; a shell wrapper diff-scopes it to newly ADDED
+            // fragments so the base ledger's history is exempt. Exit 1 on a
+            // closure with no evidence event, naming the packet.
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan closure-evidence-check <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                // A parse failure is the sibling gate's job (added-fragments-parse);
+                // here it is a pass-through, not this check's violation.
+                Err(_) => {
+                    println!(
+                        "ok:closure-evidence:0 checked (unparseable — see added-fragments-parse)"
+                    );
+                    return;
+                }
+            };
+            let is_closure = |s: &str| matches!(s, "completed" | "verified" | "done");
+            // packet_id -> does the fragment carry an evidence-bearing event?
+            let evidence_event_for = |pid: &str| -> bool {
+                let has_marker = |ev: &serde_yaml::Value| -> bool {
+                    let ty = ev
+                        .get("type")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if matches!(ty, "completed" | "verified" | "falsified") {
+                        return true;
+                    }
+                    // evidence_refs field, or the word in the summary text.
+                    ev.get("evidence_refs").is_some()
+                        || ev
+                            .get("summary")
+                            .and_then(serde_yaml::Value::as_str)
+                            .is_some_and(|s| s.to_lowercase().contains("evidence"))
+                };
+                // top-level events: [{packet_id, event: {...}}]
+                if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                    for e in evs {
+                        if e.get("packet_id").and_then(serde_yaml::Value::as_str) == Some(pid)
+                            && e.get("event").is_some_and(has_marker)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                // inline packet events: packets:[{packet_id, events:[{type,...}]}]
+                if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                    for p in pkts {
+                        if p.get("packet_id").and_then(serde_yaml::Value::as_str) == Some(pid)
+                            && p.get("events")
+                                .and_then(serde_yaml::Value::as_sequence)
+                                .is_some_and(|evs| evs.iter().any(has_marker))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                false
+            };
+            let mut offenders: Vec<String> = Vec::new();
+            let mut checked = 0u32;
+            // status: LWW closures
+            if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
+                for u in us {
+                    let field = u
+                        .get("field")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    let value = u
+                        .get("value")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    let pid = u
+                        .get("packet_id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if field == "status" && is_closure(value) && !pid.is_empty() {
+                        checked += 1;
+                        if !evidence_event_for(pid) {
+                            offenders.push(format!("{pid} (status:{value})"));
+                        }
+                    }
+                }
+            }
+            // inline packets: closures
+            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                for p in pkts {
+                    let value = p
+                        .get("status")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    let pid = p
+                        .get("packet_id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if is_closure(value) && !pid.is_empty() {
+                        checked += 1;
+                        if !evidence_event_for(pid) {
+                            offenders.push(format!("{pid} (packets:{value})"));
+                        }
+                    }
+                }
+            }
+            if offenders.is_empty() {
+                println!("ok:closure-evidence:{checked} checked");
+            } else {
+                for o in &offenders {
+                    eprintln!(
+                        "violation:closure-without-evidence: {o} sets a closure rung with no evidence-bearing event in the same fragment"
+                    );
+                }
+                eprintln!(
+                    "  A closure (completed/verified/done) must carry an event with evidence_refs (or type completed/verified/falsified). Use set-field --evidence, or add the event (686-7qcm)."
+                );
+                std::process::exit(1);
             }
         }
         "status" => {

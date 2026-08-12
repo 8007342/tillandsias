@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: portable-zero-dependency-runtime-audit
+    field: status
+    value: completed
+    ts: "2026-08-12T04:31:58Z"
+    host: windows
+
+events:
+  - packet_id: portable-zero-dependency-runtime-audit
+    event:
+      type: completed
+      ts: "2026-08-12T04:31:58Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: All four exit criteria closed across cycles 4-8 on windows-next. (1) --diagnose --json exposes guest_wiring {tray_version, guest_version_before, outcome in skipped-version-match|reinjected|failed, ts, error}, cheatsheet updated as schema authority; as-wired on this host. (2) headless startup emits 'preflight vsock_loopback loaded|missing' before binding; as-wired on the live guest, which printed 'loaded' while the kernel independently reported /sys/module present and one /proc/modules line. (3) litmus:tray-import-surface-os-only bound under windows-native-tray and PASSING, backed by scripts/check-tray-import-surface.sh reading the real PE import table; it falsified the promise on first run (vcruntime140.dll, a VC++ redist component) and the fix is static CRT for the *-pc-windows-msvc targets, taking imports from 17 to 11 all in-box. (4) inventory distilled into openspec/specs/windows-native-tray/spec.md as a Runtime dependency surface section plus an import-surface invariant, and plan/issues/portable-zero-dependency-runtime-audit-2026-08-08.md reduced to a tombstone pointer. Named check results: windows-tray 83 passed 0 failed; litmus windows-native-tray suite PASS; ./build.sh --check green including the 634-39ik expression-pinning gate.
