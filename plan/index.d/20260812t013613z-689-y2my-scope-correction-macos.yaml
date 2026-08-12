@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: macos-tlatoanis-macbook-air-fable5-20260812t013613z
+events:
+  - packet_id: pty-heartbeat-defeats-exec-progress-deadline
+    event:
+      type: progress
+      ts: "2026-08-12T01:36:13Z"
+      host: macos
+      summary: >
+        SCOPE CORRECTION — THIS PACKET'S OWN EXIT CRITERION 1 IS REFUTED. I
+        wrote it last night ("heartbeat frames MUST NOT extend the progress
+        deadline; only non-empty output or a satisfied expect does") and
+        implemented exactly that today. It broke two PRE-EXISTING tests, and
+        they were right: `streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline`
+        and `streaming_exec_times_out_when_slow_guest_sends_no_frames` pin
+        commit 4c9da7cc / order 332, "keep silent guest exec sessions live".
+        The heartbeat is LOAD-BEARING: a guest command that legitimately
+        produces no output for longer than the idle deadline (a build, an image
+        load) must not be killed, and heartbeats are what keeps it alive.
+        Treating "no output" as "no progress" would have regressed that for
+        every host.
+        WORSE, it would have broken the very flow this packet was filed from:
+        the legitimate first-run `--github-login` spends MINUTES loading a
+        ~580MB login image before it prompts at all (measured on this host
+        2026-08-11: ~1290s wall for a first run that then completed
+        successfully). A 300s per-expect deadline kills a WORKING login. A
+        deadlock and a slow-but-healthy command are indistinguishable by timing
+        alone, so no timing rule can separate them — which is precisely why the
+        original design chose liveness over a progress bound.
+        WHAT WAS ACTUALLY WRONG on 2026-08-11 was not the bound but the
+        SILENCE. `on_event` fired only on a needle match, so a host waiting for
+        a prompt the guest would never print emitted nothing for 70 minutes and
+        was externally indistinguishable from healthy progress. The operator had
+        no signal to act on and neither did I.
+        SHIPPED THIS CYCLE (the safe half): every heartbeat received while an
+        expect is pending now reports what is being waited for, how long it has
+        been, and how many bytes of guest output have arrived — so the same
+        wedge is legible within 30 seconds instead of never. No deadline
+        semantics changed; all 10 pre-existing vsock_exec tests still pass, plus
+        2 new ones (positive + a negative control asserting a TALKING guest
+        produces no waiting reports, so the signal cannot decay into noise).
+        REMAINING SCOPE for whoever claims this next — do NOT reinstate
+        criterion 1: (a) decide whether any backstop is wanted at all, and if so
+        it must be a generous WALL-CLOCK ceiling far above legitimate
+        first-run durations, configurable, and explicitly justified against the
+        332 invariant; (b) the deeper fix is protocol-level, not timing-level —
+        a guest that is BLOCKED ON INPUT could say so in its heartbeat, which
+        would let the host distinguish "working" from "waiting for me" exactly
+        rather than by guessing from elapsed time. That is a real reduction of
+        the ambiguity and is where the value is.

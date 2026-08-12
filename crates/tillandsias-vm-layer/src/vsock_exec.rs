@@ -607,6 +607,16 @@ where
     let mut pending = expects.into_iter();
     let mut current = pending.next();
     let idle_timeout = exec_idle_timeout()?;
+    // 689-y2my: make the WAIT observable. The deadline deliberately stays as it
+    // is — heartbeats extending it is load-bearing (order 332, 4c9da7cc: a
+    // silent long-running guest command must not be killed), and the legitimate
+    // first-run `--github-login` spends minutes loading a ~580MB image before it
+    // prompts at all. What was actually wrong on 2026-08-11 was not the bound
+    // but the SILENCE: `on_event` fired only on a needle match, so a host
+    // waiting for a prompt the guest would never print produced no output for 70
+    // minutes and was indistinguishable from progress. Each heartbeat now says
+    // what is being waited for, so the same wedge is legible within 30 seconds.
+    let started = std::time::Instant::now();
 
     loop {
         let env = read_exec_envelope(&mut stream, idle_timeout).await?;
@@ -616,6 +626,19 @@ where
                 direction: PtyDirection::ToHost,
                 bytes,
             } if sid == session_id => {
+                if bytes.is_empty() {
+                    // A liveness heartbeat, not output. Report the wait; do NOT
+                    // treat it as progress and do NOT alter the deadline.
+                    if let Some(exp) = current.as_ref() {
+                        on_event(&format!(
+                            "still waiting for {} — {}s elapsed, {} bytes of guest output so far",
+                            exp.label,
+                            started.elapsed().as_secs(),
+                            stdout.len()
+                        ));
+                    }
+                    continue;
+                }
                 stdout.extend_from_slice(&bytes);
                 // Satisfy as many sequential expects as the new output allows.
                 while current.is_some() {
@@ -680,6 +703,209 @@ mod tests {
             exec_idle_timeout_from(Some("invalid"))
                 .unwrap_err()
                 .contains("must be an integer")
+        );
+    }
+
+    /// 689-y2my. A host waiting on a prompt the guest never sends must SAY SO.
+    ///
+    /// On 2026-08-11 two `--github-login` runs parked for 70 and 6 minutes
+    /// emitting nothing at all: `on_event` fired only on a needle match, so a
+    /// deadlocked wait and a working-but-slow one looked identical from outside.
+    /// The fix is observability, NOT a tighter deadline — heartbeats extending
+    /// the deadline is load-bearing (order 332 / 4c9da7cc keeps silent
+    /// long-running commands alive, and a real first-run login spends minutes
+    /// loading an image before it prompts). So this asserts the WAIT is
+    /// reported; it deliberately asserts nothing about timing.
+    #[tokio::test]
+    async fn heartbeats_report_what_the_host_is_waiting_for() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+
+        tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![CAP_PTY_HEARTBEAT_V1.to_string()],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+
+            // Three heartbeats while the child is busy and silent...
+            for _ in 0..3 {
+                write_envelope(
+                    &mut guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: 2,
+                        body: ControlMessage::PtyData {
+                            session_id: 1,
+                            direction: PtyDirection::ToHost,
+                            bytes: Vec::new(),
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+            }
+            // ...then it finally prompts, and the exchange completes.
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 3,
+                    body: ControlMessage::PtyData {
+                        session_id: 1,
+                        direction: PtyDirection::ToHost,
+                        bytes: b"authentication token: ".to_vec(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // our response
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 4,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = events.clone();
+        let out = exec_over_stream_expect_dynamic(
+            client,
+            &["/bin/login"],
+            vec![DynamicExpect {
+                needle: b"authentication token".to_vec(),
+                label: "github token".to_string(),
+                response: Box::new(|| Ok(b"tok\n".to_vec())),
+            }],
+            move |ev| sink.lock().unwrap().push(ev.to_string()),
+        )
+        .await
+        .expect("exchange completes");
+
+        assert_eq!(out.exit.code, 0);
+        let seen = events.lock().unwrap().clone();
+        let waiting: Vec<&String> = seen
+            .iter()
+            .filter(|e| e.contains("still waiting"))
+            .collect();
+        assert_eq!(
+            waiting.len(),
+            3,
+            "every heartbeat must report the wait, so silence is never mistaken for progress. got: {seen:?}"
+        );
+        assert!(
+            waiting[0].contains("github token"),
+            "the report must NAME the pending prompt — that is the whole diagnostic. got: {}",
+            waiting[0]
+        );
+        assert!(
+            seen.iter().any(|e| e.contains("matched: github token")),
+            "the match event must still fire. got: {seen:?}"
+        );
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above. A build that
+    /// emitted "still waiting" unconditionally would satisfy it. When the guest
+    /// is actually producing output there is nothing to wait on, so no such
+    /// event may appear — otherwise the signal becomes noise and stops meaning
+    /// "this exchange is stuck".
+    #[tokio::test]
+    async fn a_talking_guest_produces_no_waiting_reports() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+
+        tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap();
+            // Real output only — no heartbeats at all.
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 2,
+                    body: ControlMessage::PtyData {
+                        session_id: 1,
+                        direction: PtyDirection::ToHost,
+                        bytes: b"working...\nauthentication token: ".to_vec(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 3,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = events.clone();
+        exec_over_stream_expect_dynamic(
+            client,
+            &["/bin/login"],
+            vec![DynamicExpect {
+                needle: b"authentication token".to_vec(),
+                label: "github token".to_string(),
+                response: Box::new(|| Ok(b"tok\n".to_vec())),
+            }],
+            move |ev| sink.lock().unwrap().push(ev.to_string()),
+        )
+        .await
+        .expect("exchange completes");
+
+        let seen = events.lock().unwrap().clone();
+        assert!(
+            !seen.iter().any(|e| e.contains("still waiting")),
+            "a guest that is talking is not stuck; reporting a wait here would make the \
+             signal meaningless. got: {seen:?}"
         );
     }
 
