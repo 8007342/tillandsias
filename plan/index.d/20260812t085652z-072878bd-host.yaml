@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: opencode-npm-install-not-idempotent
+    field: status
+    value: implemented
+    ts: "2026-08-12T08:56:52Z"
+    host: host
+
+events:
+  - packet_id: opencode-npm-install-not-idempotent
+    event:
+      type: progress
+      ts: "2026-08-12T08:56:52Z"
+      host: host
+      summary: >
+        status 'implemented' (not terminal) with evidence_refs: commit (this cycle) + as-wired litmus. Fix landed in images/default/lib-common.sh: _clear_stale_npm_staging(pkg) removes npm's leftover atomic-staging dirs (.<name>-<hash>) before , called inside _require_harness — the single shared install path, so it covers EVERY npm harness (criterion 3). Handles unscoped (opencode-ai) and scoped (@openai/codex) names; never touches the installed package. litmus:npm-harness-install-idempotent-shape bound to default-image, 4/4 green as-wired (stale staging removed = the ENOTEMPTY cause; negative control: installed package preserved; scoped handling; coverage: cleanup precedes install in the shared path). Verified against the REAL function body (awk-extracted) with a fixture npm prefix, no npm/network.
+  - packet_id: opencode-npm-install-not-idempotent
+    event:
+      type: note
+      ts: "2026-08-12T08:56:52Z"
+      host: host
+      summary: >
+        VERIFICATION HAND-OFF (criterion 2 outstanding): 'the forge reaches the agent stage on a launch with a pre-seeded stale temp dir' is a LIVE forge e2e that an agent cannot run headless — it needs the operator's fresh stack (same blocker as 691-ssw9/579). Runs on: a bare-metal Linux forge launch with a pre-seeded /usr/local/lib/node_modules/.opencode-ai-<hash> before launch; expect the harness install to succeed (no ENOTEMPTY) and the forge to reach the agent prompt. Criteria 1+3 verified as-wired; 2 pending fresh stack.

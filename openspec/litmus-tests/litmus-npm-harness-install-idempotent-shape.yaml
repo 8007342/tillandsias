@@ -1,0 +1,54 @@
+# @trace spec:default-image
+name: litmus:npm-harness-install-idempotent-shape
+spec: default-image
+phase: pre-build
+description: The npm-harness install path clears a stale atomic-staging dir (the ENOTEMPTY cause) without touching the installed package, and does so for every harness
+severity: high
+size: instant
+
+# Order 559. npm stages a global install as <parent>/.<name>-<hash> then renames
+# it into place. A killed install leaves that staging dir behind and the next
+# `npm i -g` fails ENOTEMPTY, blocking the harness and the forge launch. The fix
+# clears the stale STAGING dir before install. These steps exercise the REAL
+# _clear_stale_npm_staging body (awk-extracted from lib-common.sh, which cannot
+# be sourced whole on the host because of its in-image trust bootstrap), against
+# a fixture npm prefix — no npm or network needed. A negative control proves the
+# installed package is never removed.
+
+preconditions:
+  - images/default/lib-common.sh is present
+
+critical_path:
+  - step: "the cleanup removes a stale unscoped staging dir (.opencode-ai-<hash>) — the ENOTEMPTY cause"
+    command: "F=$(mktemp -d); trace_lifecycle() { :; }; eval \"$(awk '/^_clear_stale_npm_staging\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; mkdir -p \"$F/bin\"; printf '#!/bin/sh\\nexit 1\\n' > \"$F/bin/npm\"; chmod +x \"$F/bin/npm\"; export PATH=\"$F/bin:$PATH\" NPM_CONFIG_PREFIX=\"$F/p\"; NMR=\"$F/p/lib/node_modules\"; mkdir -p \"$NMR/.opencode-ai-abc123\" \"$NMR/opencode-ai\"; _clear_stale_npm_staging opencode-ai; ok=0; [ ! -d \"$NMR/.opencode-ai-abc123\" ] && ok=1; rm -rf \"$F\"; [ \"$ok\" = 1 ] && echo 'ok: stale staging removed' || { echo 'FAIL: staging survived'; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: stale staging removed"
+
+  - step: "NEGATIVE CONTROL: the installed package dir is NOT removed"
+    command: "F=$(mktemp -d); trace_lifecycle() { :; }; eval \"$(awk '/^_clear_stale_npm_staging\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; mkdir -p \"$F/bin\"; printf '#!/bin/sh\\nexit 1\\n' > \"$F/bin/npm\"; chmod +x \"$F/bin/npm\"; export PATH=\"$F/bin:$PATH\" NPM_CONFIG_PREFIX=\"$F/p\"; NMR=\"$F/p/lib/node_modules\"; mkdir -p \"$NMR/.opencode-ai-abc123\" \"$NMR/opencode-ai\"; _clear_stale_npm_staging opencode-ai; ok=0; [ -d \"$NMR/opencode-ai\" ] && ok=1; rm -rf \"$F\"; [ \"$ok\" = 1 ] && echo 'ok: installed package preserved' || { echo 'FAIL: cleanup removed the real package'; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: installed package preserved"
+
+  - step: "the cleanup handles a scoped package (@openai/.codex-<hash>)"
+    command: "F=$(mktemp -d); trace_lifecycle() { :; }; eval \"$(awk '/^_clear_stale_npm_staging\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; mkdir -p \"$F/bin\"; printf '#!/bin/sh\\nexit 1\\n' > \"$F/bin/npm\"; chmod +x \"$F/bin/npm\"; export PATH=\"$F/bin:$PATH\" NPM_CONFIG_PREFIX=\"$F/p\"; NMR=\"$F/p/lib/node_modules\"; mkdir -p \"$NMR/@openai/.codex-deadbeef\" \"$NMR/@openai/codex\"; _clear_stale_npm_staging @openai/codex; ok=0; [ ! -d \"$NMR/@openai/.codex-deadbeef\" ] && [ -d \"$NMR/@openai/codex\" ] && ok=1; rm -rf \"$F\"; [ \"$ok\" = 1 ] && echo 'ok: scoped staging cleared, package kept' || { echo 'FAIL: scoped handling wrong'; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: scoped staging cleared, package kept"
+
+  - step: "COVERAGE: every harness is covered — the cleanup runs inside _require_harness before npm install"
+    # _require_harness is the single shared install path all npm harnesses route
+    # through, so the call there covers them all (criterion 3). Property check
+    # (call precedes the install), not a literal source pin.
+    command: "call=$(grep -n '_clear_stale_npm_staging \"$pkg\"' images/default/lib-common.sh | head -1 | cut -d: -f1); inst=$(grep -n 'npm install -g --no-audit' images/default/lib-common.sh | head -1 | cut -d: -f1); if [ -n \"$call\" ] && [ -n \"$inst\" ] && [ \"$call\" -lt \"$inst\" ]; then echo 'ok: cleanup precedes install in the shared path'; else echo \"FAIL: cleanup not before install (call=$call inst=$inst)\"; exit 1; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: cleanup precedes install in the shared path"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "npm harness install: stale staging cleared, installed package preserved, scoped handled, covered in the shared path"
+  log_fields:
+    spec: "default-image"
+    test: "npm-harness-install-idempotent-shape"
+
+rollback:
+  on_failure: "restore images/default/lib-common.sh _clear_stale_npm_staging and its call site from git history"

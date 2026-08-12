@@ -2184,6 +2184,29 @@ find_project_dir() {
 # the bare `require_*` call propagated the return 1 through the entrypoint).
 # Entrypoints whose PRIMARY agent is missing must check `[ -x "$*_BIN" ]`
 # themselves and fail with an actionable message (see harness_missing_fatal).
+# order 559. npm stages a global install as <parent>/.<name>-<hash> then
+# atomically renames it into place. A KILLED install (podman reset mid-launch,
+# an OOM, a cancelled forge) leaves that staging dir behind, and the NEXT
+# `npm i -g <name>` fails with ENOTEMPTY trying to reuse the name — which
+# blocks the harness install and the forge launch that depends on it. Clearing
+# the stale STAGING dir (never the installed package) before install makes the
+# launch-path install idempotent. Every npm harness routes through
+# _require_harness, so calling this there covers all of them.
+_clear_stale_npm_staging() {
+    local pkg="$1" nm parent base
+    nm="$(npm root -g 2>/dev/null)"
+    [ -n "$nm" ] || nm="${NPM_CONFIG_PREFIX:-/usr/local}/lib/node_modules"
+    [ -d "$nm" ] || return 0
+    # dirname handles both unscoped (opencode-ai -> .) and scoped
+    # (@openai/codex -> @openai) package names.
+    parent="$nm/$(dirname "$pkg")"
+    base="$(basename "$pkg")"
+    [ -d "$parent" ] || return 0
+    # Only npm's atomic-staging dirs match `.<name>-<hash>`. The real package is
+    # `<name>` — no leading dot, no `-<hash>` — so it is never removed.
+    find "$parent" -maxdepth 1 -type d -name ".${base}-*" -exec rm -rf {} + 2>/dev/null || true
+}
+
 _require_harness() {
     # $1=friendly-name  $2=npm-package  $3=bin-name  → echoes resolved path
     local name="$1" pkg="$2" bin="$3" path errlog
@@ -2210,6 +2233,9 @@ _require_harness() {
     fi
     if [ ! -x "$path" ]; then
         trace_lifecycle "harness" "$name missing — install latest"
+        # order 559: clear any stale npm atomic-staging dir so a killed prior
+        # install cannot block this one with ENOTEMPTY.
+        _clear_stale_npm_staging "$pkg"
         errlog="$(mktemp /tmp/npm-install-${bin}.XXXXXX 2>/dev/null || echo /tmp/npm-install-$bin.err)"
         if ! npm install -g --no-audit --no-fund "$pkg@latest" >"$errlog" 2>&1; then
             trace_lifecycle "harness" "$name install FAILED (non-fatal): $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
