@@ -116,4 +116,3 @@ crates/tillandsias-windows-tray/assets/tillandsias-headless-*
 node_modules/
 *.rlib
 *.o
-*.d
