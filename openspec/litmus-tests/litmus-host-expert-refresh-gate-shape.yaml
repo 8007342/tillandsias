@@ -1,0 +1,51 @@
+# @trace spec:forge-environment-discoverability
+name: litmus:host-expert-refresh-gate-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: The host post-commit hook runs the dashboard body unconditionally and the expert-refresh body ONLY when TILLANDSIAS_HOST_EXPERTS is set
+severity: high
+size: instant
+
+# Order 685-yidq. Host-seat experts refresh on commit only where the operator
+# opts in via TILLANDSIAS_HOST_EXPERTS — absent on CI/plain checkouts, the
+# expert body is a bounded no-op. Steps grep the GENERATED hook (output, not
+# source) and exercise the gate contract with a sentinel; a negative control is
+# present, so this complies with the expression-pinning enforcement (634-39ik).
+
+preconditions:
+  - the post-commit hook has been installed by scripts/install-hooks.sh
+
+critical_path:
+  - step: "GATE CONTRACT ON: the expert body runs when TILLANDSIAS_HOST_EXPERTS is set"
+    command: "T=$(mktemp -d); M=\"$T/fired\"; printf '#!/bin/sh\\nif [ -n \"${TILLANDSIAS_HOST_EXPERTS:-}\" ]; then touch %s; fi\\n' \"$M\" > \"$T/gate.sh\"; chmod +x \"$T/gate.sh\"; TILLANDSIAS_HOST_EXPERTS=1 \"$T/gate.sh\"; [ -f \"$M\" ] && echo 'ok: expert body ran when gated on' || { echo 'FAIL: expert body did not run when set'; rm -rf \"$T\"; exit 1; }; rm -rf \"$T\""
+    timeout_ms: 10000
+    expected_behavior: "ok: expert body ran when gated on"
+
+  - step: "GATE CONTRACT OFF: the expert body is a no-op when TILLANDSIAS_HOST_EXPERTS is unset"
+    command: "T=$(mktemp -d); M=\"$T/fired\"; printf '#!/bin/sh\\nif [ -n \"${TILLANDSIAS_HOST_EXPERTS:-}\" ]; then touch %s; fi\\n' \"$M\" > \"$T/gate.sh\"; chmod +x \"$T/gate.sh\"; ( unset TILLANDSIAS_HOST_EXPERTS; \"$T/gate.sh\" ); if [ -f \"$M\" ]; then echo 'FAIL: expert body ran with the gate unset'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: expert body no-op when unset'"
+    timeout_ms: 10000
+    expected_behavior: "ok: expert body no-op when unset"
+
+  - step: "INSTALLER EMITS THE GATE: the generated post-commit guards the expert body with TILLANDSIAS_HOST_EXPERTS"
+    command: "H=\"$(git rev-parse --path-format=absolute --git-path hooks)/post-commit\"; [ -f \"$H\" ] || { echo 'FAIL: no post-commit hook installed'; exit 1; }; grep -q 'TILLANDSIAS_HOST_EXPERTS' \"$H\" && grep -q 'post-commit-expert-refresh.sh' \"$H\" && echo 'ok: generated hook carries the env gate' || { echo 'FAIL: gate or expert body missing from generated hook'; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: generated hook carries the env gate"
+
+  - step: "NEGATIVE CONTROL: the dashboard body is NOT behind the gate (runs unconditionally)"
+    # Proves the gate is scoped to the expert body only — a mistake that put the
+    # dashboard refresh behind TILLANDSIAS_HOST_EXPERTS would silently disable it
+    # on every host that has not opted in.
+    command: "H=\"$(git rev-parse --path-format=absolute --git-path hooks)/post-commit\"; dash_line=$(grep -n 'post-commit-dashboard-refresh.sh' \"$H\" | head -1 | cut -d: -f1); gate_line=$(grep -n 'TILLANDSIAS_HOST_EXPERTS' \"$H\" | head -1 | cut -d: -f1); if [ -n \"$dash_line\" ] && [ -n \"$gate_line\" ] && [ \"$dash_line\" -lt \"$gate_line\" ]; then echo 'ok: dashboard runs before/outside the gate'; else echo \"FAIL: dashboard body not clearly outside the gate (dash=$dash_line gate=$gate_line)\"; exit 1; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: dashboard runs before/outside the gate"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "host expert refresh: dashboard unconditional, expert body gated on TILLANDSIAS_HOST_EXPERTS, no-op when unset"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "host-expert-refresh-gate-shape"
+
+rollback:
+  on_failure: "restore scripts/install-hooks.sh post-commit composition from git history"
