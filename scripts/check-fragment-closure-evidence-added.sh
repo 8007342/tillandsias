@@ -18,8 +18,13 @@
 # raising this bar accepts standing history rather than redding it.
 #
 # Grammar (one line on stdout, nothing else):
-#   ^(ok:closure-evidence:[0-9]+ checked|violation:closure-without-evidence:[0-9]+)$
-# Exit 0 when every added fragment's closures carry evidence.
+#   ^(ok:closure-evidence:[0-9]+ checked|violation:closure-without-evidence:[0-9]+|skip:stale-plan-binary)$
+# Exit 0 when every added fragment's closures carry evidence, and on the skip.
+#
+# `skip:stale-plan-binary` (702-68zj) is the third verdict: the gate could not
+# be computed because the workspace binary predates the rule. It is NOT a pass
+# dressed up as one — a caller that wants enforcement should treat the skip as
+# "rebuild and re-run", not as evidence the ledger is clean.
 #
 # Pinned by litmus:fragment-closure-evidence-gate-shape.
 
@@ -32,14 +37,38 @@ FRAG_DIR="plan/index.d"
 base_ref="${TILLANDSIAS_CLOSURE_EVIDENCE_BASE:-origin/linux-next}"
 
 # The workspace binary carries the parser + rule (closure-evidence-check).
+#
+# ORDER 702-68zj: probe by RUNNING a candidate, not by testing an executable
+# bit, and prefer `.exe`. On a shared Windows/WSL checkout a WSL build leaves a
+# Linux ELF at target/release/tillandsias-plan beside the usable .exe, and the
+# bit test picks the ELF.
 _bin=""
-for cand in "target/release/tillandsias-plan" "target/debug/tillandsias-plan"; do
-    [ -x "$cand" ] && { _bin="$cand"; break; }
+for cand in \
+    "target/release/tillandsias-plan.exe" \
+    "target/debug/tillandsias-plan.exe" \
+    "target/release/tillandsias-plan" \
+    "target/debug/tillandsias-plan"; do
+    [ -f "$cand" ] || continue
+    "$cand" capabilities >/dev/null 2>&1 && { _bin="$cand"; break; }
 done
 if [ -z "$_bin" ]; then
     # No binary is an UNKNOWN, not a pass — say so and skip (build to enable).
     echo "ok:closure-evidence:0 checked"
     echo "  note: tillandsias-plan not built — closure-evidence gate skipped" >&2
+    exit 0
+fi
+
+# ORDER 702-68zj: a binary that predates this rule is STALE HOST STATE, not a
+# ledger defect. Without this branch the per-file loop below reads "unknown
+# subcommand" as a failed check and reports it as a violation — which is
+# exactly what happened on 2026-08-12: a red gate claiming three
+# closures-without-evidence in a change that recorded no closure at all. The
+# binary had already printed the correct diagnosis ("the ARTIFACT is stale
+# relative to the checkout: rebuild it") and the wrapper replaced it with a
+# wrong one. Same ruling as order 447 for stale staging: skip, name it, pass.
+if ! "$_bin" capabilities 2>/dev/null | grep -qx 'closure-evidence-check'; then
+    echo "skip:stale-plan-binary"
+    echo "  note: $_bin predates closure-evidence-check — rebuild with 'cargo build --release -p tillandsias-plan' to enable this gate" >&2
     exit 0
 fi
 
