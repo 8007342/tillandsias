@@ -33667,6 +33667,12 @@ plan_index:
       notes: |
         Assignment is cheap per packet but wide; it suits a coordinator cycle or a batch of small fragments. Do NOT bulk-assign by guessing — a wrong epic is worse than none, because it makes an incoherent batch look cohesive.
       events:
+        - type: progress
+          ts: "2026-08-12T04:34:00Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t043302z"
+          host: macos
+          summary: >
+            PARTIAL PROGRESS + the structural finding that should reshape this packet (macos 2026-08-12). Filed milestone 700-nz4n (fail-loud-diagnosis) under criterion 2 and assigned 8 children via the LWW release_target channel. macos triage moved grouped=10->14, ungrouped=45->42, epics=5->6. Still far from criterion 3's <20%. THE FINDING: criterion 1 is NOT the bottleneck — criterion 2 is. Only FIVE of the thirteen milestones are desired_release v0.5 (architecture-audit-epic, credential-lifecycle-audit, ephemeral-runtime-destroy-recreate-sweep, harness-mcp-expert-validation, stable-milestone-v1); the other eight are v0.6. So the ~42 ungrouped v0.5 packets have almost nowhere VALID to go, and a cross-release release_target is exactly the 'wrong epic is worse than none' error this packet warns about — it would make an incoherent batch look cohesive AND break release-scoped selection. I nearly assigned five packets to convergence-velocity-milestone before checking its release. Two more near-misses worth recording so the next claimant does not repeat them: local-telemetry-for-bottleneck-finding is the natural home for 697-s3by by SUBJECT but is v0.6; and credential-lifecycle-audit-milestone is about credentials LEAKING into lanes, the opposite direction from 694-mhz8 where a credential was DESTROYED, so subject-adjacency is not fit. RECOMMENDATION: reshape the remaining work as 'file the missing v0.5 milestones first, then assign' — the assignment step is cheap and safe only once a correct home exists. Anyone driving ungrouped down without filing milestones first will either stall or start guessing.
         - ts: 2026-08-09T08:00:00Z
           event: filed
           summary: |
