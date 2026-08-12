@@ -1,0 +1,49 @@
+# @trace spec:forge-environment-discoverability
+name: litmus:groundtruth-no-mutable-status-pin-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: The groundtruth status-pin guard refuses a case pinning status on a live non-terminal packet, admits a terminal pin, and passes the real corpus
+severity: high
+size: instant
+
+# Order 680-zphp. Pins the guard that stops the mutable-status trap from being
+# reintroduced (394d twice, 394e). Fixtures cite REAL packet ids so status
+# resolves against the live ledger — 394 is ready (non-terminal, a trap) and
+# 394a is completed (terminal, stable). Steps grep the guard's OUTPUT, and the
+# test carries a negative control, so it complies with the expression-pinning
+# enforcement (634-39ik).
+
+preconditions:
+  - a built tillandsias-plan binary is reachable at target/release/tillandsias-plan
+
+critical_path:
+  - step: "NEGATIVE CONTROL: a case pinning status on a live NON-TERMINAL packet (394, ready) is REFUSED"
+    command: "D=$(mktemp -d); printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: plan-methodology-experts-rung1\\n          status: ready\\n' > \"$D/case.yaml\"; if scripts/check-groundtruth-mutable-status-pins.sh \"$D\" >/dev/null 2>&1; then echo 'FAIL: a non-terminal status pin was admitted'; rm -rf \"$D\"; exit 1; fi; rm -rf \"$D\"; echo 'ok: non-terminal status pin refused'"
+    timeout_ms: 20000
+    expected_behavior: "ok: non-terminal status pin refused"
+
+  - step: "POSITIVE CONTROL: a case pinning status on a live TERMINAL packet (394a, completed) is admitted"
+    command: "D=$(mktemp -d); printf 'cases:\\n  - query: x\\n    expect:\\n      citations_include:\\n        - path: plan/index.yaml\\n          packet_id: plan-methodology-experts-rung1/plan-expert-binary-shipping\\n          status: completed\\n' > \"$D/case.yaml\"; scripts/check-groundtruth-mutable-status-pins.sh \"$D\" >/dev/null 2>&1 && echo 'ok: terminal status pin admitted'; rm -rf \"$D\""
+    timeout_ms: 20000
+    expected_behavior: "ok: terminal status pin admitted"
+
+  - step: "the REAL groundtruth corpus is clean (no live non-terminal status pins)"
+    command: "scripts/check-groundtruth-mutable-status-pins.sh | grep -qE '^ok:groundtruth-status-pins:[0-9]+ live-checked' && echo 'ok: real corpus clean'"
+    timeout_ms: 20000
+    expected_behavior: "ok: real corpus clean"
+
+  - step: "the expert groundtruth harness itself grades green (the de-pin did not break it)"
+    command: "./target/release/tillandsias-plan grade 2>/dev/null | grep -qE 'pass=19 fail=0' && echo 'ok: harness 19/19'"
+    timeout_ms: 30000
+    expected_behavior: "ok: harness 19/19"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "groundtruth status-pin guard: non-terminal pins refused, terminal pins admitted, real corpus clean, harness green"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "groundtruth-no-mutable-status-pin-shape"
+
+rollback:
+  on_failure: "restore scripts/check-groundtruth-mutable-status-pins.sh and the rung1 de-pin from git history"

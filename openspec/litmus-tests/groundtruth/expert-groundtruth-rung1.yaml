@@ -84,7 +84,11 @@ cases:
         - path: plan/index.yaml
           packet_id: plan-methodology-experts-rung1
           order: "394"
-          status: ready
+          # Status deliberately NOT pinned (680-zphp) — 394 is a live
+          # non-terminal packet (ready), so a `status:` pin here goes red the
+          # moment it is legitimately claimed (ready -> in_progress) or closed.
+          # Same mutable-field trap as 394a/394d/394e below. Identity +
+          # release_target coverage is what this citation proves; status is not.
           span_contains:
             - "packet_id: plan-methodology-experts-rung1"
             - "release_target: forge-local-experts-milestone"

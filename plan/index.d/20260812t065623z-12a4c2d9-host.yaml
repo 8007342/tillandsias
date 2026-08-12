@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: groundtruth-cases-must-not-pin-mutable-packet-status
+    field: status
+    value: verified
+    ts: "2026-08-12T06:56:23Z"
+    host: host
+
+events:
+  - packet_id: groundtruth-cases-must-not-pin-mutable-packet-status
+    event:
+      type: completed
+      ts: "2026-08-12T06:56:23Z"
+      host: host
+      summary: >
+        status 'verified' with evidence_refs: commit (this cycle) + as-wired litmus + grade harness. Criterion 1: audited all groundtruth CASE files; the one remaining LIVE-ledger non-terminal status pin (order 394 plan-methodology-experts-rung1, status: ready) DE-PINNED with a justification comment matching 394a/394d/394e; grade harness stays 19/19. Fixture-backed pins (fragment-provenance, plan-next cite frozen fixture-* packets) and terminal pins (394a completed, experts-construction-research completed) correctly retained. Criterion 2: scripts/check-groundtruth-mutable-status-pins.sh resolves each case pin against the LIVE ledger and fails if the packet's live status is non-terminal (terminal + fixture pins exempt); wired into build.sh --check; litmus:groundtruth-no-mutable-status-pin-shape bound to forge-environment-discoverability, 4/4 green as-wired (negative control refuses a reintroduced 394-ready pin, positive admits a 394a-completed pin, real corpus clean, harness 19/19). Manually verified the guard exits 1 on a reintroduced non-terminal pin and 0 clean.
+  - packet_id: groundtruth-cases-must-not-pin-mutable-packet-status
+    event:
+      type: note
+      ts: "2026-08-12T06:56:23Z"
+      host: host
+      summary: >
+        Third firing of this trap (394d twice, 394e) is now structurally prevented: a reintroduced mutable-status pin fails the gate loudly instead of surfacing as a false RED in the 4-verifier ratification harness a diagnosis round-trip later.
