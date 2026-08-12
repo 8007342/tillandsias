@@ -41,7 +41,7 @@ critical_path:
   # check and reported it as a violation — a red gate naming three
   # closures-without-evidence in a change that recorded no closure at all.
   - step: "a plan binary predating the rule yields skip:stale-plan-binary, not a violation"
-    command: "T=$(mktemp -d); mkdir -p \"$T/target/release\" \"$T/scripts\" \"$T/plan/index.d\"; printf '#!/bin/sh\\n[ \"$1\" = capabilities ] && { printf \"check\\\\nquery\\\\n\"; exit 0; }\\nexit 1\\n' > \"$T/target/release/tillandsias-plan.exe\"; chmod +x \"$T/target/release/tillandsias-plan.exe\"; cp scripts/check-fragment-closure-evidence-added.sh \"$T/scripts/\"; out=$(cd \"$T\" && bash scripts/check-fragment-closure-evidence-added.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'skip:stale-plan-binary' ] && echo 'ok: stale binary skips' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    command: "T=$(mktemp -d); mkdir -p \"$T/target/release\" \"$T/scripts\" \"$T/plan/index.d\"; printf '#!/bin/sh\\n[ \"$1\" = capabilities ] && { printf \"check\\\\nquery\\\\n\"; exit 0; }\\nexit 1\\n' > \"$T/target/release/tillandsias-plan.exe\"; chmod +x \"$T/target/release/tillandsias-plan.exe\"; cp scripts/check-fragment-closure-evidence-added.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; out=$(cd \"$T\" && bash scripts/check-fragment-closure-evidence-added.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'skip:stale-plan-binary' ] && echo 'ok: stale binary skips' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 15000
     expected_behavior: "ok: stale binary skips"
 
