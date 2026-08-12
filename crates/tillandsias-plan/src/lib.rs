@@ -1847,7 +1847,15 @@ steps:
         for s in ["implemented", "needs_clarification", "blocked", "failed"] {
             assert!(is_parked_status(s), "{s} must be parked");
         }
-        for s in ["ready", "pending", "in_progress", "completed", "verified", "done", "obsoleted"] {
+        for s in [
+            "ready",
+            "pending",
+            "in_progress",
+            "completed",
+            "verified",
+            "done",
+            "obsoleted",
+        ] {
             assert!(!is_parked_status(s), "{s} must NOT be parked");
         }
     }
