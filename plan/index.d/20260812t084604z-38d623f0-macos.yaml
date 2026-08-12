@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-check-emits-no-timing-record
+    field: status
+    value: implemented
+    ts: "2026-08-12T08:46:04Z"
+    host: macos
+
+events:
+  - packet_id: build-check-emits-no-timing-record
+    event:
+      type: progress
+      ts: "2026-08-12T08:46:04Z"
+      host: macos
+      summary: >
+        status 'implemented' (not terminal) with evidence_refs: ROOT CAUSE FOUND AND FIXED, proven as-wired on macOS. timing_emit resolved its sibling cycle-metrics.sh at CALL time from ${BASH_SOURCE[0]%/*} — the path the file was SOURCED with. Callers legitimately source it relatively (run-litmus-test.sh:70 uses $(dirname ${BASH_SOURCE[0]})/timing-log.sh, which is ./timing-log.sh whenever that script is itself invoked by a relative path), so the strip yielded _dir=. and _cm=./cycle-metrics.sh, unreadable from the build's CWD. The shell-out therefore never ran and every record was dropped. SILENTLY, because the whole body is { ... } 2>/dev/null || true; return 0 — correct for the 'must never break the step it measures' contract, and exactly why it went unnoticed while build.sh --check ran five times in one session. Measured live with a file-based trace (a stderr trace is swallowed by that same redirect — my first attempt was inconclusive for precisely that reason): _dir=. readable=no. FIX: resolve the directory ONCE at source time via cd/pwd into TILLANDSIAS_TIMING_LOG_DIR, making the lookup independent of both CWD and how the sourcing script was invoked; the empty-value fallback keeps the existing readability guard harmless. Parses under bash 3.2 (macOS system bash) as well as 5.x. EVIDENCE: after the fix a real ./build.sh --check appended {"step":"build-check","phase":"check","duration_ms":9000,"exit":0} and cycle-metrics now reports 'timing: steps=1 build_check_ms_avg=9000 slowest=build-check:9000' where it had read source=absent all night — criterion 2 met. NEGATIVE CONTROL (criterion 3) PROVEN LIVE: a deliberately broken source made the gate exit 1 and it STILL emitted its record with exit:1, so the instrumentation cannot be 'fixed' by recording only successes; source restored and the gate re-verified green. NOT completed: criterion 1 names macOS AND Linux and only macOS is proven here — the fix is in the shared scripts/timing-log.sh so Linux should behave identically, but a linux host must confirm before this goes higher on the ladder. Also noted for whoever does: macOS has no date +%s%3N, so the second-granularity fallback reports sub-second steps as duration_ms=0 (visible in the negative-control record).

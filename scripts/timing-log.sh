@@ -21,6 +21,29 @@
 # build/test/litmus step being measured. A metric that can break what it measures
 # is worse than none.
 
+# Absolute directory of THIS file, resolved ONCE at source time (697-s3by).
+#
+# `timing_emit` used to resolve its sibling `cycle-metrics.sh` at CALL time from
+# `${BASH_SOURCE[0]%/*}`. That is the path this file was SOURCED with, and
+# callers legitimately source it relatively — `run-litmus-test.sh:70` uses
+# `$(dirname "${BASH_SOURCE[0]}")/timing-log.sh`, which is `./timing-log.sh`
+# whenever that script is itself invoked by a relative path. The prefix strip
+# then yields `_dir=.`, `_cm=./cycle-metrics.sh`, and the file is unreadable
+# from whatever CWD the build happens to be in — so the shell-out never ran and
+# the record was silently dropped.
+#
+# Silently, because the whole body is `{ … } 2>/dev/null || true; return 0` —
+# correct for the "must never break the step it measures" contract, and exactly
+# why this went unnoticed: `timing:` read `source=absent` on every cycle while
+# `build.sh --check` ran five times in one session. Measured live 2026-08-12:
+# `_dir=.` / `readable=no`.
+#
+# Resolving here, once, makes the lookup independent of both the CWD and of how
+# the sourcing script was invoked. `cd … && pwd` yields an absolute path; if
+# even that fails the value stays empty and the existing readability guard keeps
+# the call harmless.
+TILLANDSIAS_TIMING_LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null && pwd)"
+
 # Portable millisecond clock. `date +%s%3N` is GNU-only; on a host without it
 # (macOS/BSD) the %3N is emitted literally, so detect a non-numeric result and
 # fall back to whole seconds * 1000. Always prints a bare integer.
@@ -41,7 +64,10 @@ timing_emit() {
     local _step="${1:-unknown}" _phase="${2:-unknown}" _t0="${3:-0}" _rc="${4:-0}"
     {
         local _dir _cm _now _dur _host
-        _dir="${BASH_SOURCE[0]%/*}"
+        # 697-s3by: use the absolute directory captured at SOURCE time, not a
+        # call-time strip of BASH_SOURCE, which resolved to "." for relatively
+        # sourced callers and made cycle-metrics.sh unreadable.
+        _dir="${TILLANDSIAS_TIMING_LOG_DIR:-${BASH_SOURCE[0]%/*}}"
         _cm="$_dir/cycle-metrics.sh"
         _now="$(timing_now_ms)"
         case "$_t0" in '' | *[!0-9]*) _t0=0 ;; esac
