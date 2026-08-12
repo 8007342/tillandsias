@@ -28,6 +28,88 @@ use crate::wsl_probe_policy::{
     classify_nonzero_distro_exec, distro_exec_probe_decision,
 };
 
+/// What the last `reconcile_adopted_guest` actually DID to the adopted guest
+/// (order 620-duta). Recorded to disk so `--diagnose` can report it.
+///
+/// This exists because "the guest reports the same version as the tray" is not
+/// the same claim as "this tray deployed that guest", and the two are
+/// indistinguishable from the outside. `reconcile_adopted_guest` returns early
+/// on a version match, so a tray carrying a NEW binary at an UNCHANGED VERSION
+/// injects nothing and leaves a guest that looks correct by every field
+/// `--diagnose` previously exposed. That ambiguity cost this project a false
+/// "the fix is deployed" reading on 2026-08-11 (627-sgtt), and the packet's own
+/// next_action had warned about it beforehand — which is the point: a warning
+/// in a plan packet cannot be observed at runtime, and this can.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct GuestWiringRecord {
+    /// `WORKSPACE_VERSION` of the tray that performed the reconcile.
+    pub tray_version: String,
+    /// Headless version the adopted guest reported BEFORE the reconcile.
+    /// `None` means no binary was found at all.
+    pub guest_version_before: Option<String>,
+    /// What the reconcile did. See [`GuestWiringOutcome`].
+    pub outcome: GuestWiringOutcome,
+    /// UTC RFC3339 timestamp of the reconcile.
+    pub ts: String,
+    /// Failure detail when `outcome` is `Failed`; `None` otherwise.
+    pub error: Option<String>,
+}
+
+/// The three things a reconcile can conclude, kept distinct on purpose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GuestWiringOutcome {
+    /// Versions matched, so nothing was injected. The guest's binary is
+    /// whatever some EARLIER tray put there — this run did not touch it.
+    /// Distinguishing this from `Reinjected` is the entire reason the record
+    /// exists.
+    SkippedVersionMatch,
+    /// The guest was stale or absent and the bootstrap injection ran to
+    /// completion: binary, systemd units, and modules-load entry are this
+    /// tray's.
+    Reinjected,
+    /// Injection was attempted and failed; the guest's wiring is in an
+    /// unknown state.
+    Failed,
+}
+
+/// UTC RFC3339 stamp for the reconcile record, seconds precision.
+fn now_rfc3339_utc() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+/// Serialize the outcome of a reconcile so `--diagnose` can report it.
+/// Best-effort by design: a tray must never fail to provision because a
+/// diagnostic breadcrumb could not be written.
+pub fn write_guest_wiring_record(record: &GuestWiringRecord) {
+    let path = WslLifecycle::guest_wiring_record_path();
+    if let Some(dir) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        tracing::debug!(%e, "could not create guest wiring state dir");
+        return;
+    }
+    match serde_json::to_vec_pretty(record) {
+        Ok(bytes) => {
+            if let Err(e) = std::fs::write(&path, bytes) {
+                tracing::debug!(%e, "could not write guest wiring record");
+            }
+        }
+        Err(e) => tracing::debug!(%e, "could not serialize guest wiring record"),
+    }
+}
+
+/// Read back the last recorded reconcile outcome, or `None` when the file is
+/// absent or unreadable/corrupt. A missing record is the honest answer for a
+/// tray that has not reconciled since the feature landed — it is NOT reported
+/// as a version match, which would be the very conflation this record exists
+/// to remove.
+pub fn read_guest_wiring_record() -> Option<GuestWiringRecord> {
+    let path = WslLifecycle::guest_wiring_record_path();
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
 /// Committed per-release pins (rootfs + headless binary URLs and checksums).
 /// Embedded so an installed, checkout-free tray still provisions correctly.
 ///
@@ -293,6 +375,22 @@ impl WslLifecycle {
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
         base.join("tillandsias").join("wsl")
+    }
+
+    /// Where the last reconcile outcome is recorded for `--diagnose`
+    /// (order 620-duta): `%LOCALAPPDATA%\tillandsias\state\guest-wiring.json`.
+    ///
+    /// It has to be a FILE rather than a process-global. `--diagnose` runs as
+    /// its own short-lived process and never performs a reconcile, so an
+    /// in-memory record would be empty in exactly the invocation that wants to
+    /// report it.
+    pub fn guest_wiring_record_path() -> PathBuf {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
+        base.join("tillandsias")
+            .join("state")
+            .join("guest-wiring.json")
     }
 
     pub fn cache_root() -> PathBuf {
@@ -658,7 +756,21 @@ impl WslLifecycle {
     ) -> Result<(), String> {
         let workspace = env!("WORKSPACE_VERSION");
         let guest = self.adopted_guest_headless_version().await;
+        // Order 620-duta: record what this reconcile concluded, on EVERY exit
+        // path including the early return. The early return is the one that
+        // most needs recording — it is invisible from the outside and looks
+        // identical to a successful injection in every other diagnose field.
+        let record = |outcome: GuestWiringOutcome, error: Option<String>| {
+            write_guest_wiring_record(&GuestWiringRecord {
+                tray_version: workspace.to_string(),
+                guest_version_before: guest.clone(),
+                outcome,
+                ts: now_rfc3339_utc(),
+                error,
+            });
+        };
         if guest.as_deref() == Some(workspace) {
+            record(GuestWiringOutcome::SkippedVersionMatch, None);
             return Ok(());
         }
         tracing::info!(
@@ -667,6 +779,22 @@ impl WslLifecycle {
             "adopted guest wiring is stale — re-injecting bootstrap logic"
         );
         progress.report_message("\u{1F504} Updating Tillandsias guest components…");
+        let injected = self.inject_stale_guest_wiring(progress).await;
+        match &injected {
+            Ok(()) => record(GuestWiringOutcome::Reinjected, None),
+            Err(e) => record(GuestWiringOutcome::Failed, Some(e.clone())),
+        }
+        injected
+    }
+
+    /// The injection half of [`Self::reconcile_adopted_guest`], split out so
+    /// every `?` inside it lands on ONE result the caller records. Folding the
+    /// record into each early return by hand is how a later edit adds a fourth
+    /// `?` and silently stops recording failures.
+    async fn inject_stale_guest_wiring(
+        &self,
+        _progress: &Arc<dyn ProvisionProgress>,
+    ) -> Result<(), String> {
         self.ensure_base_packages().await?;
         // A provision interrupted between ensure_base_packages and
         // configure_recipe_distro leaves an adopted guest that boots WITHOUT
