@@ -344,6 +344,7 @@ specs:
   - litmus:plan-answer-envelope-citability
   - litmus:methodology-path-query-citability
   - litmus:groundtruth-no-mutable-status-pin-shape
+  - litmus:host-expert-refresh-gate-shape
   - litmus:expert-groundtruth-harness
   - litmus:expert-refresh-cargo-target-shape
   - litmus:expert-capability-skew-honesty

@@ -1,5 +1,11 @@
 //! Order 398 — deterministic query/validation engine for the plan ledger.
 //!
+//! Freshness note (order 685-yidq): on hosts that carry expert infrastructure
+//! (`TILLANDSIAS_HOST_EXPERTS` set), a commit touching this crate triggers the
+//! installed post-commit hook to rebuild and reinstall this binary from the
+//! committed revision, so a host expert never answers from a stale artifact —
+//! the same refresh the forge already performs at launch.
+//!
 //! Design constraints (The Tlatoāni, 2026-07-17, recorded in the packet):
 //!
 //! * **Open-world**: the corpus grew organically; packets are kept as raw

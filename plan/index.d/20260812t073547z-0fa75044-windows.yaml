@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: checkers-report-verdicts-they-could-not-compute
+    field: status
+    value: completed
+    ts: "2026-08-12T07:35:47Z"
+    host: windows
+
+events:
+  - packet_id: checkers-report-verdicts-they-could-not-compute
+    event:
+      type: completed
+      ts: "2026-08-12T07:35:47Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: Both checkers now emit a third verdict, and all three exit criteria were exercised on this host. check-stranded-in-progress.sh: probes candidates by RUNNING 'capabilities' instead of testing an executable bit (which lies on a shared Windows/WSL checkout), prefers .exe, and distinguishes a failed query from an empty one; verdicts summary:unavailable:{no-runnable-plan-binary,no-jq,plan-query-failed,plan-query-unparseable}. Verified: PATH without jq => 'unavailable:no-jq'; a directory with no binary => 'unavailable:no-runnable-plan-binary'. NEGATIVE CONTROL satisfied live rather than synthetically — with both dependencies present the sweep reported a genuinely stranded packet (702-68zj itself, mid-cycle), so the fix is not 'always report unavailable'. check-fragment-closure-evidence-added.sh: same run-to-probe change, plus a capability check that turns a binary predating the rule into 'skip:stale-plan-binary' exit 0 instead of counting 'unknown subcommand' as a violation; verified against a stub binary lacking the subcommand, and the current binary still returns 'ok:closure-evidence:1 checked'. litmus:fragment-closure-evidence-gate-shape updated: grammar widened to include the skip, one step pins the stale-binary skip, and a NEGATIVE CONTROL step asserts the CURRENT binary does not skip — without which a wrapper that skipped unconditionally would pass while disabling the gate. FINDING WHILE FIXING: the tillandsias-build WSL distro, where ./build.sh and the litmus corpus actually run, has neither jq nor yq — so the stranded sweep was reporting a false all-clear there on every run of every cycle, a far larger blast radius than the Windows ELF path that first exposed it. ./build.sh --check green.

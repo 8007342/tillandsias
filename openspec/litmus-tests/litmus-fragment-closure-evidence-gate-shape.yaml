@@ -32,9 +32,28 @@ critical_path:
     expected_behavior: "ok: lateral terminal admitted without evidence"
 
   - step: "the diff-scoped wrapper reports its grammar over the branch"
-    command: "scripts/check-fragment-closure-evidence-added.sh | grep -qE '^ok:closure-evidence:[0-9]+ checked' && echo 'ok: wrapper grammar holds'"
+    command: "scripts/check-fragment-closure-evidence-added.sh | grep -qE '^(ok:closure-evidence:[0-9]+ checked|violation:closure-without-evidence:[0-9]+|skip:stale-plan-binary)$' && echo 'ok: wrapper grammar holds'"
     timeout_ms: 30000
     expected_behavior: "ok: wrapper grammar holds"
+
+  # 702-68zj. A binary predating the rule is stale HOST STATE, not a ledger
+  # defect. Before this, the per-file loop read "unknown subcommand" as a failed
+  # check and reported it as a violation — a red gate naming three
+  # closures-without-evidence in a change that recorded no closure at all.
+  - step: "a plan binary predating the rule yields skip:stale-plan-binary, not a violation"
+    command: "T=$(mktemp -d); mkdir -p \"$T/target/release\" \"$T/scripts\" \"$T/plan/index.d\"; printf '#!/bin/sh\\n[ \"$1\" = capabilities ] && { printf \"check\\\\nquery\\\\n\"; exit 0; }\\nexit 1\\n' > \"$T/target/release/tillandsias-plan.exe\"; chmod +x \"$T/target/release/tillandsias-plan.exe\"; cp scripts/check-fragment-closure-evidence-added.sh \"$T/scripts/\"; out=$(cd \"$T\" && bash scripts/check-fragment-closure-evidence-added.sh 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'skip:stale-plan-binary' ] && echo 'ok: stale binary skips' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: stale binary skips"
+
+  # NEGATIVE CONTROL for the step above: the workspace's own current binary must
+  # NOT take the skip. Without this, a wrapper that skipped unconditionally
+  # would pass the stale-binary step while disabling the gate entirely — the
+  # precise failure mode 702-68zj was filed about, reintroduced from the other
+  # side.
+  - step: "a current plan binary does NOT skip"
+    command: "out=$(scripts/check-fragment-closure-evidence-added.sh 2>/dev/null); case \"$out\" in skip:*) echo \"FAIL: current binary skipped the gate: $out\"; exit 1;; *) echo 'ok: current binary enforces';; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: current binary enforces"
 
 observability:
   traces:
