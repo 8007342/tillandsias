@@ -158,6 +158,16 @@ cd "$ROOT" || exit 1
 # one p0 plus the FULL four-packet audit epic. That is a greedy chunk that is
 # still one theme, which is the only kind worth making greedy.
 #
+# Operator directive 2026-08-12: the overnight run (16 stable cycles, 7 verified
+# closures, overhead_ratio steady) is the evidence 682-yiz7 asked for that
+# larger batches amortize the fixed per-cycle overhead without loss of cohesion.
+# Non-forge default raised 6 -> 10. The score-weighted entropy still keeps the
+# batch inside ONE minimax-ranked epic, so a bigger budget drains a coherent
+# theme deeper per cycle rather than scattering; when an epic carries fewer than
+# the budget, size just clamps to what is there (no forced scatter). Override
+# with --budget N per cycle. The flow: overhead_ratio telemetry keeps measuring
+# it, so a regression is visible and reversible.
+#
 # Forge stays at ONE (order 264, The Tlatoani 2026-07-10): a litmus-launched
 # forge lives inside a 600s step budget, and that constraint is unchanged by
 # how the rest of the fleet is tuned.
@@ -165,7 +175,7 @@ if [ -z "$BUDGET" ]; then
     if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
         BUDGET=1
     else
-        BUDGET=6
+        BUDGET=10
     fi
 fi
 case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac
