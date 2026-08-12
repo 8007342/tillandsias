@@ -373,6 +373,103 @@ pub fn retrieval_only_answer(chunks: &[Chunk]) -> String {
     s
 }
 
+/// Answer a cheatsheet question deterministically by scoring matching sections
+/// across the cheatsheet corpus and returning a verifiable answer envelope.
+pub fn answer_cheatsheet_query(root: &Path, chunks: &[Chunk], query: &str) -> Envelope {
+    let lower = query.to_ascii_lowercase();
+    const STOP_WORDS: &[&str] = &[
+        "what", "which", "where", "when", "why", "how", "is", "are", "was", "were", "do", "does",
+        "did", "the", "a", "an", "and", "or", "in", "on", "to", "of", "for", "with", "by", "from",
+        "at", "about", "can", "i", "you", "we", "my", "your",
+    ];
+
+    let query_tokens: Vec<&str> = lower
+        .split_whitespace()
+        .map(|t| t.trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_')))
+        .filter(|t| !t.is_empty() && t.len() > 1 && !STOP_WORDS.contains(t))
+        .collect();
+
+    if query_tokens.is_empty() {
+        return Envelope::unsupported(
+            "unsupported: empty query",
+            Freshness::for_source(&root.join("cheatsheets")),
+        );
+    }
+
+    let cheatsheet_chunks: Vec<&Chunk> = chunks.iter().filter(|c| c.kind == "cheatsheet").collect();
+
+    if cheatsheet_chunks.is_empty() {
+        return Envelope::unsupported(
+            "unsupported: no cheatsheet chunks available in corpus",
+            Freshness::for_source(&root.join("cheatsheets")),
+        );
+    }
+
+    let mut scored: Vec<(&Chunk, usize)> = cheatsheet_chunks
+        .iter()
+        .map(|&c| {
+            let mut score = 0usize;
+            let key_lower = c.key.to_ascii_lowercase();
+            let path_lower = c.path.to_ascii_lowercase();
+            let text_lower = c.text.to_ascii_lowercase();
+            let is_main_title = c.text.trim_start().starts_with("# ");
+
+            let mut key_hits = 0usize;
+            let mut text_hits = 0usize;
+
+            for &token in &query_tokens {
+                if path_lower.contains(token) {
+                    score += 5;
+                }
+                if key_lower.contains(token) || (token.len() > 4 && key_lower.contains(&token[..4]))
+                {
+                    score += 25;
+                    key_hits += 1;
+                }
+                if text_lower.contains(token)
+                    || (token.len() > 4 && text_lower.contains(&token[..4]))
+                {
+                    score += 10;
+                    text_hits += 1;
+                }
+            }
+
+            if key_hits > 0 && text_hits > 0 {
+                score += 25;
+            }
+            if !is_main_title && key_hits > 0 {
+                score += 30;
+            }
+
+            (c, score)
+        })
+        .collect();
+
+    scored.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.path.cmp(&b.0.path)));
+
+    if let Some(&(best_chunk, score)) = scored.first()
+        && score >= 35
+    {
+        let answer = format!("Section: {}\n\n{}", best_chunk.key, best_chunk.text);
+        let mut authority = BTreeMap::new();
+        authority.insert("key".to_string(), best_chunk.key.clone());
+        let citation = Citation::new(
+            best_chunk.path.clone(),
+            best_chunk.line_start,
+            best_chunk.line_end,
+            CitationKind::Cheatsheet,
+            authority,
+        );
+        let freshness = Freshness::for_source(&root.join(&best_chunk.path));
+        Envelope::supported(answer, vec![citation], Confidence::Exact, freshness)
+    } else {
+        Envelope::unsupported(
+            format!("unsupported: no cheatsheet section matches query {query:?}"),
+            Freshness::for_source(&root.join("cheatsheets")),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -457,6 +554,21 @@ mod tests {
         );
         assert_eq!(env2.confidence(), Confidence::Retrieved);
         assert_eq!(env2.citations().len(), 1);
+    }
+
+    #[test]
+    fn cheatsheet_query_answers_and_verifies() {
+        let text = "# Concurrent Git\n\n## The three primitives you actually need\n- G-Set\n- LWW-Register\n";
+        let chunks = chunk_markdown(
+            "cheatsheets/concurrent-git/crdt-ledger-fragments.md",
+            "cheatsheet",
+            text,
+        );
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let env = answer_cheatsheet_query(&root, &chunks, "three primitives CRDT");
+        assert_eq!(env.confidence(), Confidence::Exact);
+        assert_eq!(env.citations().len(), 1);
+        assert_eq!(env.citations()[0].kind(), CitationKind::Cheatsheet);
     }
 
     #[test]
