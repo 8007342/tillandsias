@@ -1630,6 +1630,12 @@ plan_index:
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
       status: ready
       events:
+        - type: progress
+          ts: "2026-08-12T13:43:51Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            SC-11 MEASURED LIVE, and NOT closed: the criterion's unit is unstated and the result straddles it. Setup: freshly installed tray started clean, 'vm status push subscription established (polls suppressed, SC-07)' at 13:31:22Z, no drop or backoff logged for the rest of the window, wire reachable phase=Ready — so this is genuinely the healthy-subscription condition SC-11 names. Four measurements of the tray process on a 16-core host: 120s => 0.0781% of one core; 180s => 0.1302%; 300s => 0.1146%; lifetime 735s => 0.1126%. Converted to whole-machine share (the normalisation Windows Task Manager shows per process): ~0.007%. So against '<0.1%' the answer is PASS by ~14x if the unit is share-of-machine, and a marginal FAIL at ~0.11% if the unit is share-of-one-core. I am not picking the reading that closes the packet. RESIDUAL for whoever does: pin the unit in the criterion, then re-measure. Also worth knowing — the retired 30s tick cannot be what is left: 0.828 CPU-seconds over 735s is ~1.1ms/s of steady work, which at 24 wakes in that window would be implausibly expensive per wake. The remainder is more likely the Win32 message pump plus the push listener. That is a hypothesis from arithmetic, not a profile, and it should be treated as one.
         - type: note
           ts: "2026-08-12T10:32:57Z"
           agent_id: "windows-claude-opus5-20260811t215500z"
