@@ -3671,12 +3671,14 @@ fn control_socket_host_dir() -> PathBuf {
     let base = if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
         PathBuf::from(runtime_dir)
     } else {
-        // PLEASE REVIEW: linux — non-unix fallback added to keep the
-        // workspace compiling on Windows (libc::getuid is unix-only);
-        // mirrors router_dynamic_caddyfile_host_path's temp_dir fallback.
         #[cfg(unix)]
         {
-            PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }))
+            let run_user = PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }));
+            if run_user.is_dir() && std::fs::create_dir_all(run_user.join("tillandsias")).is_ok() {
+                run_user
+            } else {
+                std::env::temp_dir().join("tillandsias-embedded")
+            }
         }
         #[cfg(not(unix))]
         {
@@ -3686,17 +3688,28 @@ fn control_socket_host_dir() -> PathBuf {
     base.join("tillandsias")
 }
 
-/// Host directory holding the NDJSON MCP tool socket (`mcp.sock`) the tray
-/// serves for in-forge agents (order 363). The DIRECTORY — not the socket
-/// file — is bind-mounted into forge containers so a tray restart's
-/// re-bind stays visible inside an already-running forge. Deliberately a
-/// sibling of `control.sock`, never the control socket itself: the postcard
-/// control plane (VmShutdownRequest, IssueWebSession, …) must not be
-/// reachable from agent code.
+/// Host directory holding the NDJSON MCP tool socket (`mcp.sock`) for a lane
+/// `(project, instance)` (order 505). Lives in its OWN per-lane subdirectory
+/// `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>` so that only this lane's
+/// socket is bind-mounted into the forge container.
 ///
-/// @trace spec:host-browser-mcp
-fn mcp_socket_host_dir() -> PathBuf {
-    control_socket_host_dir().join("mcp")
+/// The DIRECTORY — not the socket file — is bind-mounted into forge containers so a
+/// tray restart's re-bind stays visible inside an already-running forge. Deliberately a
+/// sibling of `control.sock`, never the control socket itself: the postcard control plane
+/// (VmShutdownRequest, IssueWebSession, …) must not be reachable from agent code.
+///
+/// Attribution is kernel/filesystem-enforced: derived strictly from WHICH per-lane listener
+/// accepted the connection. Process environ (/proc/<pid>/environ) is untrusted and never read.
+///
+/// @trace spec:mcp-tool-socket
+fn mcp_socket_host_dir(project_name: &str, instance: Option<&str>) -> PathBuf {
+    let instance = instance
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("default");
+    control_socket_host_dir()
+        .join("mcp")
+        .join(format!("{project_name}-{instance}"))
 }
 
 /// Build `podman run` args for the Caddy reverse-proxy router container.
@@ -11626,14 +11639,14 @@ fn build_forge_agent_run_args_with_vault(
         );
     }
 
-    // Order 363: mount the host MCP tool socket directory so the in-forge
-    // socat bridge (config-overlay/mcp/host-browser.sh) can reach the
-    // tray's NDJSON tool surface (publish_local / service_status /
-    // service_stop). Read-only — connect() needs no filesystem write —
-    // and the tray attributes the project from SO_PEERCRED, so a forge
-    // can only ever publish its own project. The postcard control socket
-    // is deliberately NOT mounted (full control plane).
-    let mcp_dir = mcp_socket_host_dir();
+    // Order 505: mount only the per-lane MCP tool socket directory
+    // ($XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>) so the in-forge
+    // socat bridge (config-overlay/mcp/host-browser.sh) reaches this lane's
+    // dedicated listener. Read-only — connect() needs no filesystem write.
+    // Attribution is derived directly from which listener accepted the
+    // connection, kernel/filesystem-enforced; /proc/<pid>/environ is untrusted.
+    let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let mcp_dir = mcp_socket_host_dir(project_name, raw_instance.as_deref());
     if std::fs::create_dir_all(&mcp_dir).is_ok() {
         spec = spec
             .bind_mount(
@@ -13461,6 +13474,17 @@ pub(crate) async fn publish_local_service(
         ));
     }
 
+    // Order 505: project label MUST be validated by EQUALITY against enumerated
+    // local projects (never sanitized) before use in paths or container names.
+    let known_projects =
+        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
+    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
+        return Err(format!(
+            "Project '{project_name}' is not an enumerated local project in {}",
+            crate::local_projects::host_project_root().display()
+        ));
+    }
+
     crate::container_deps::ensure_service_catalog(debug)?;
 
     let image = "tillandsias-web";
@@ -13530,6 +13554,15 @@ pub(crate) async fn publish_local_service(
 
 #[cfg(feature = "tray")]
 pub(crate) async fn service_status(project_name: &str) -> Result<String, String> {
+    // Order 505: project label validation by equality against enumerated local projects
+    let known_projects =
+        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
+    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
+        return Err(format!(
+            "Project '{project_name}' is not an enumerated local project"
+        ));
+    }
+
     let client = tillandsias_podman::PodmanClient::new();
     let container_name = format!("tillandsias-{project_name}-web");
 
@@ -13552,6 +13585,16 @@ pub(crate) async fn service_stop(
             category
         ));
     }
+
+    // Order 505: project label validation by equality against enumerated local projects
+    let known_projects =
+        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
+    if !known_projects.is_empty() && !known_projects.iter().any(|p| p.label == project_name) {
+        return Err(format!(
+            "Project '{project_name}' is not an enumerated local project"
+        ));
+    }
+
     let client = tillandsias_podman::PodmanClient::new();
     let container_name = format!("tillandsias-{project_name}-web");
 
@@ -20216,6 +20259,61 @@ esac
 
         rt.block_on(service_stop("WEB", "test-publish-e2e", false))
             .expect("service_stop should succeed");
+    }
+    /// Order 505: mcp_socket_host_dir returns per-lane isolated subdirectories.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[test]
+    fn mcp_socket_host_dir_is_per_lane_scoped() {
+        let dir_alpha_w1 = mcp_socket_host_dir("alpha", Some("w1"));
+        let dir_alpha_default = mcp_socket_host_dir("alpha", None);
+        let dir_beta_w2 = mcp_socket_host_dir("beta", Some("w2"));
+
+        assert!(dir_alpha_w1.ends_with("tillandsias/mcp/alpha-w1"));
+        assert!(dir_alpha_default.ends_with("tillandsias/mcp/alpha-default"));
+        assert!(dir_beta_w2.ends_with("tillandsias/mcp/beta-w2"));
+
+        assert_ne!(dir_alpha_w1, dir_alpha_default);
+        assert_ne!(dir_alpha_w1, dir_beta_w2);
+    }
+
+    /// Order 505: forge container spec builder mounts ONLY the per-lane MCP dir,
+    /// never the full control socket directory or control.sock.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[test]
+    fn forge_container_spec_mounts_only_per_lane_mcp_dir() {
+        let args = build_forge_agent_run_args_with_vault(
+            &PathBuf::from("/tmp/project"),
+            "testproj",
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::OpenCode,
+            false,
+            None,
+            None,
+        );
+
+        let args_str = args.join(" ");
+
+        // Mounts /run/host/tillandsias-mcp (read-only)
+        assert!(
+            args_str.contains("/run/host/tillandsias-mcp:ro")
+                || args_str.contains("/run/host/tillandsias-mcp"),
+            "forge spec must bind mount /run/host/tillandsias-mcp; args: {args_str}"
+        );
+
+        // Sets TILLANDSIAS_CONTROL_SOCKET to /run/host/tillandsias-mcp/mcp.sock
+        assert!(
+            args_str.contains("TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock"),
+            "forge spec must set TILLANDSIAS_CONTROL_SOCKET; args: {args_str}"
+        );
+
+        // Must NOT mount control.sock
+        assert!(
+            !args_str.contains("control.sock"),
+            "forge spec must NEVER mount control.sock; args: {args_str}"
+        );
     }
 
     // Order 281: overlay corruption classifier + self-heal tests
