@@ -1074,6 +1074,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Closure-evidence enforcement passed"
 
+    # Order 680-zphp. Fail loud if an expert-groundtruth case pins `status:` on a
+    # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
+    # ratification harness on the next legitimate ledger update (it fired 3x:
+    # 394d twice, 394e). Terminal pins and frozen-fixture pins are exempt.
+    _step "Checking groundtruth cases for mutable-status pins (680-zphp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
+        _error "an expert-groundtruth case pins status on a live non-terminal packet — it will red the harness on the next ledger update (680-zphp)"
+        exit 1
+    fi
+    _info "Groundtruth status-pin guard passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while
