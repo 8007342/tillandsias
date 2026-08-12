@@ -628,6 +628,36 @@ _check_trace_coverage() {
 }
 
 # ---------------------------------------------------------------------------
+# Router sidecar staging (order 710-w9kc). The tillandsias-headless build.rs
+# include_bytes!()s images/router/tillandsias-router-sidecar as a REQUIRED
+# runtime asset, and the router Containerfile COPYs it into the image. It is a
+# BUILD ARTIFACT and is gitignored — NEVER committed to the repo. Stage a
+# freshly-compiled sidecar before any cargo invocation so cargo build/check/test
+# finds it. build-sidecar.sh is a cheap no-op when already up to date, and a
+# build-number bump (VERSION touch) forces a fresh, version-matched recompile.
+# ---------------------------------------------------------------------------
+_stage_router_sidecar() {
+    [[ -f "$SCRIPT_DIR/scripts/build-sidecar.sh" ]] || return 0
+    _step "Staging router sidecar (build artifact — not committed)..."
+    bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
+}
+
+# Stage before every dispatch that compiles Rust. Pure teardown flags
+# (--remove/--wipe/--clean-alone/--init) never invoke cargo, so they skip it and
+# stay usable without a rustup/musl toolchain.
+_stage_router_sidecar_if_compiling() {
+    local f
+    for f in FLAG_INSTALL FLAG_CI FLAG_CI_FULL FLAG_RELEASE FLAG_CHECK FLAG_TEST FLAG_OBSERVATORIUM; do
+        if [[ "${!f:-false}" == true ]]; then _stage_router_sidecar; return; fi
+    done
+    if [[ "$FLAG_REMOVE" != true && "$FLAG_WIPE" != true \
+       && "$FLAG_CLEAN" != true && "$FLAG_INIT" != true ]]; then
+        _stage_router_sidecar   # bare debug build (no standalone flag)
+    fi
+}
+_stage_router_sidecar_if_compiling
+
+# ---------------------------------------------------------------------------
 # Standalone operations
 # ---------------------------------------------------------------------------
 
