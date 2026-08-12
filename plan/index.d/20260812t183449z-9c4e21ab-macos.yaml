@@ -1,0 +1,113 @@
+packets:
+  - packet_id: on-demand-image-ensure-ignores-source-digest
+    order: 702-griq
+    status: ready
+    desired_release: v0.5
+    priority: p0
+    title: "On-demand image ensure skips on VERSION tag alone, serving stale forge images forever"
+    kind: defect
+    deliverable: "crates/tillandsias-headless/src/main.rs (ensure_image_exists)"
+    pickup_role: any
+    capability_tags:
+      - images
+      - forge
+      - staleness
+      - podman
+    estimated_hours: 3
+    context: |
+      OPERATOR-BLOCKING, observed live on macOS 2026-08-12: every forge lane
+      failed to clone with
+
+        fatal: unable to look up tillandsias-git (port 9418) (Name or service not known)
+        [forge] FATAL: git clone failed from git://tillandsias-git/tillandsias
+        [forge] The git mirror service is unreachable or has not finished initialising.
+
+      The operator read this as "a race condition that always times out". It is
+      neither a race nor a timeout: `Name or service not known` is NXDOMAIN, and
+      it fails identically on every attempt.
+
+      MEASURED CHAIN (each link probed in the live guest, not inferred):
+
+      1. Order 659-8faj retired the shared aliases `git-service` /
+         `tillandsias-git` and gave each mirror a PER-PROJECT DNS identity.
+         The current launcher creates container `tillandsias-git-<project>`
+         with `--network-alias git-<project>` (main.rs build_git_run_args).
+         Nothing registers `tillandsias-git` any more.
+      2. The materialized runtime assets in the guest ARE current —
+         /root/.local/share/tillandsias/runtime/0.4.260810.1/images/default/lib-common.sh
+         materialized 2026-08-12T05:01:10Z, with git_mirror_host()=1,
+         691-ssw9=2, 659-8faj=4, literal `git://tillandsias-git`=0.
+         `validate_runtime_assets` byte-compares every asset against the
+         embedded set, so this layer self-heals correctly.
+      3. The RUNNING forge image does not. localhost/tillandsias-forge:v0.4.260810.1
+         bakes /usr/local/lib/tillandsias/lib-common.sh with git_mirror_host()=0,
+         691-ssw9=0, 659-8faj=0, and SEVEN literal `git://tillandsias-git`
+         occurrences — line 764 is
+         `git clone "git://tillandsias-git/${TILLANDSIAS_PROJECT}"`.
+         It predates both 659-8faj and 691-ssw9.
+      4. ROOT CAUSE — main.rs:1957, inside ensure_image_exists:
+
+           if client.image_exists(image_tag).await
+               && client.image_uses_managed_layer_policy(image_tag).await
+           { return Ok(()); }
+
+         `image_tag` is versioned_image_tag(...) = the VERSION string. VERSION
+         has been 0.4.260810.1 since 2026-08-10, so the tag exists and the
+         build is skipped — no matter how far the SOURCE has moved. Content
+         changed; tag did not; the stale image wins forever.
+
+      THE PROJECT ALREADY HAS THE RIGHT ANSWER AND THIS PATH DOES NOT ASK IT.
+      `run_init` computes an `image_identity` from the runtime asset root and
+      routes it through observe_image_build/decide_image_build
+      (image_builder.rs:180), which rebuilds on `DigestMissing` or
+      `LabelMismatch` against SOURCE_DIGEST_LABEL. Its own comment states the
+      invariant this defect violates: "VERSION changes only move aliases.
+      Content identity comes from the exact context digest and OCI label."
+      So there are TWO freshness rules for the same images — a correct
+      declarative one on `--init`, and a version-tag-only one on the
+      lane-launch hot path that every real user actually takes.
+
+      This is milestone 700-nz4n's shape exactly: the system holds a correct
+      diagnosis and nothing consults it. Compounding it, order 422's
+      check-running-image-freshness.sh classifies a VERSION-tagged image as
+      `indeterminate` rather than stale (see the header of
+      scripts/test-running-image-freshness.sh), so the one gate built to catch
+      this cannot fail on the shape that actually occurred.
+
+      SECOND-ORDER EFFECT — why it read as a timeout. The stale image also
+      predates 691-ssw9, whose probe_mirror_reachable was written to fast-fail
+      precisely this `alias-unresolvable` class with the right remedy. Without
+      it the forge burns the full retry budget (12 attempts, 6x2s + 6x5s) and
+      then prints the generic "unreachable or has not finished initialising".
+      A deterministic name fault wearing a timeout's clothes. The fix for the
+      symptom shipped weeks ago and could not reach the operator, because the
+      thing that delivers fixes was itself stale.
+
+      INTERIM UNBLOCK APPLIED 2026-08-12T18:20Z (macOS, operator-authorized):
+      removed the stale tag and rebuilt from the current runtime assets
+      (forge-base retained; the forge layer is COPY-only on top of it, so the
+      rebuild is seconds). Rebuilt image verified: git_mirror_host()=1,
+      691-ssw9=2, 659-8faj=4, literal `git://tillandsias-git`=0. That is a
+      HAND repair of one host and is explicitly NOT the fix.
+    outcome: |
+      The on-demand image path answers the same content-identity question
+      `--init` already answers, so a source change without a VERSION bump can
+      never leave a stale image serving a lane.
+    exit_criteria:
+      - "ensure_image_exists consults image source-digest identity (SOURCE_DIGEST_LABEL via observe_image_build/decide_image_build) rather than deciding on version-tag presence alone; the version-tag-only skip is gone from the lane-launch path."
+      - "Unit test: given an existing image whose SOURCE_DIGEST_LABEL differs from the current runtime-asset identity, the ensure path decides Build, not Skip. Negative control: identical digests must decide Skip, so the test cannot pass by rebuilding unconditionally."
+      - "Hand-falsification recorded: reverting the fix makes the above test FAIL. A test that still passes with the fix reverted is vacuous and does not close this packet."
+      - "scripts/check-running-image-freshness.sh no longer returns `indeterminate` for a VERSION-tagged image whose source digest is knowable; it returns a decisive stale/current verdict, and scripts/test-running-image-freshness.sh gains a case pinning that (its existing negative control retained)."
+      - "Rebuild cost is not regressed for the common case: an unchanged tree must still Skip. Evidence must include a measured back-to-back launch showing no rebuild on the second run."
+    events:
+      - type: filed
+        ts: "2026-08-12T18:34:49Z"
+        host: macos
+        summary: |
+          Filed from a live operator-blocking failure. Root cause proven by
+          direct probe of the guest: current runtime assets carry the
+          659-8faj/691-ssw9 fixes, the running forge image does not, and
+          ensure_image_exists skips the rebuild purely because the VERSION tag
+          exists. Interim hand-rebuild applied and verified on this host; the
+          durable fix is to make the on-demand path use the content-identity
+          machinery run_init already uses.
