@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: low-end-bridge-eof-diagnosability
+    field: status
+    value: completed
+    ts: "2026-08-12T12:34:05Z"
+    host: windows
+
+events:
+  - packet_id: low-end-bridge-eof-diagnosability
+    event:
+      type: completed
+      ts: "2026-08-12T12:34:05Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: Criterion 1 now holds AS-WIRED on the exact path that was bare one cycle ago. Root cause CONFIRMED rather than eliminated: the reap is raced — the child's stdout pipe closes at exit but the process is not reapable at that instant, so the single non-blocking try_wait in poll_read lost the race essentially every time. Fix: on first EOF with an unreaped child, wait one bounded 150ms grace (a pinned Sleep on the bridge) before deciding, then apply the existing enrichment; a still-unreaped child yields the clean EOF it always did, and the grace is spent once so a normal end-of-stream cannot loop on it. The wait is paid only at end-of-stream on a connection that is already over, never on a healthy wire. EVIDENCE, cold distro to force the post-grace case: '[620-cine] enriched at EOF after 2.599s: wsl stdio bridge exited (exit code: 1): socat[241] E connect(5, AF=40 cid:1 port:42999, 16): Connection reset by peer' — 10x the 250ms startup grace, previously a bare Ok(0). Warm distro re-run also passes. The fixture now asserts the PROPERTY (the cause is named) rather than the door, because which door a failure takes is itself the race this packet is about: a child dying inside the grace is enriched by open_wsl_stdio_bridge, one dying after by the EOF path, and both were observed on this host within ten minutes. NEGATIVE CONTROL passes: a live control-wire port does not report a dead child, so the assertions cannot be met by a bridge that always errors. Regression: tillandsias-vm-layer 55 passed 0 failed. Criterion 2 half-verified and stated as such: the live-child case is the passing negative control, while clean exit-0 EOF stays clean by construction (the !status.success() guard is untouched) — its only behaviour change is that a clean EOF may now arrive up to 150ms later, which I did not construct a live fixture for.

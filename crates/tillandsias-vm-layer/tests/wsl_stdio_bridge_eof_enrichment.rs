@@ -27,12 +27,40 @@ use tokio::io::AsyncReadExt;
 /// guest, so socat exits non-zero — after the grace, which is the point.
 const DEAD_PORT: u32 = 42999;
 
+/// A failing bridge can report through EITHER of two doors, and which one it
+/// takes is a race — that race IS the packet. When the child dies inside the
+/// 250 ms startup grace, `open_wsl_stdio_bridge` returns the enriched error
+/// itself; when it dies after (the common case on low-end hosts, and on any
+/// host with a cold distro), the failure has to surface at EOF instead.
+///
+/// Both are correct. The defect is a bare EOF that names nothing, so assert
+/// the PROPERTY — the cause is named — rather than the door it came through.
+fn assert_names_the_cause(where_: &str, err: &str) {
+    assert!(
+        err.contains("exited"),
+        "{where_}: must carry the child's exit, got: {err}"
+    );
+    assert!(
+        err.contains("socat") || err.contains("connect"),
+        "{where_}: must carry the child's captured stderr — an exit code alone is a \
+         bare eof with extra words, got: {err}"
+    );
+}
+
 #[tokio::test]
 #[ignore = "field fixture: needs a Windows host with the tillandsias WSL distro"]
 async fn eof_from_a_dead_child_names_the_real_cause() {
-    let mut bridge = tillandsias_vm_layer::transport_windows::open_wsl_stdio_bridge(DEAD_PORT)
-        .await
-        .expect("spawning the bridge child must succeed — it is the CONNECT that fails");
+    let mut bridge =
+        match tillandsias_vm_layer::transport_windows::open_wsl_stdio_bridge(DEAD_PORT).await {
+            Ok(b) => b,
+            Err(e) => {
+                // Died inside the startup grace: the open path already named it.
+                let err = e.to_string();
+                eprintln!("[620-cine] enriched at OPEN (child died within the grace): {err}");
+                assert_names_the_cause("open", &err);
+                return;
+            }
+        };
 
     let started = std::time::Instant::now();
     let mut buf = [0u8; 1024];
@@ -58,19 +86,8 @@ async fn eof_from_a_dead_child_names_the_real_cause() {
         Err(e) => e.to_string(),
     };
 
-    eprintln!("[620-cine] enriched EOF after {elapsed:?}: {err}");
-
-    assert!(
-        err.contains("wsl stdio bridge exited"),
-        "EOF must carry the child's exit, got: {err}"
-    );
-    // The captured stderr is the half that names the REAL cause. Without it the
-    // message would say only that something exited, which is a bare eof with
-    // extra words.
-    assert!(
-        err.contains("socat") || err.contains("connect"),
-        "EOF must carry the child's captured stderr, got: {err}"
-    );
+    eprintln!("[620-cine] enriched at EOF after {elapsed:?}: {err}");
+    assert_names_the_cause("eof", &err);
 }
 
 /// NEGATIVE CONTROL for the assertions above. They must not be satisfiable by

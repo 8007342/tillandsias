@@ -316,7 +316,32 @@ pub struct WslStdioBridge {
     stdin: tokio::process::ChildStdin,
     stdout: tokio::process::ChildStdout,
     stderr_buf: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    /// Bounded grace for the reap race at EOF (order 620-cine). `None` until
+    /// the first EOF is observed; then a timer the reader waits on so the
+    /// child has a chance to become reapable before the EOF is called clean.
+    ///
+    /// The pipe closes when the child exits, but the process is not reaped at
+    /// that instant, so the single non-blocking `try_wait` in the original
+    /// enrichment lost the race essentially every time — measured on this host
+    /// 2026-08-12, a socat failing 4091 ms after spawn (16x the startup grace)
+    /// still produced a bare EOF. Best-effort that never fires is the same as
+    /// absent, and the July–August N100 field logs are full of the result.
+    eof_grace: Option<std::pin::Pin<Box<tokio::time::Sleep>>>,
+    /// Set once the grace has been spent, so a bridge that legitimately ends
+    /// at EOF cannot loop on the timer forever.
+    eof_grace_spent: bool,
 }
+
+/// How long a reader waits at EOF for the child to become reapable
+/// (order 620-cine).
+///
+/// Deliberately small. This is paid ONCE per bridge, only at end-of-stream,
+/// and only on the last read of a connection that is already over — so it
+/// cannot slow a working wire. It is sized for a process-table reap, which is
+/// microseconds-to-milliseconds work, not for the child's own runtime: a
+/// socat that takes four seconds to fail has already exited by the time its
+/// pipe closes.
+const EOF_REAP_GRACE: std::time::Duration = std::time::Duration::from_millis(150);
 
 impl tokio::io::AsyncRead for WslStdioBridge {
     fn poll_read(
@@ -330,9 +355,32 @@ impl tokio::io::AsyncRead for WslStdioBridge {
             // EOF. A socat that fails AFTER the startup grace — wsl.exe
             // launch latency alone exceeds it on low-end hosts — otherwise
             // surfaces as the handshake's bare "early eof". If the child is
-            // already reapable with a non-zero status, name the cause with
-            // its exit + captured stderr. Best-effort: a child that has not
-            // been reaped yet leaves the clean EOF standing.
+            // reapable with a non-zero status, name the cause with its exit +
+            // captured stderr.
+            //
+            // ORDER 620-cine: the reap is RACED, and the original single
+            // non-blocking `try_wait` here lost that race essentially every
+            // time. The stdout pipe closes when the child exits; the process
+            // is reaped a moment later. So give it one bounded grace before
+            // calling the EOF clean, rather than sampling once and giving up.
+            //
+            // The wait is paid once, at end-of-stream, on a connection that is
+            // already finished — never on a healthy wire.
+            if !self.eof_grace_spent && matches!(self.child.try_wait(), Ok(None)) {
+                let sleep = self
+                    .eof_grace
+                    .get_or_insert_with(|| Box::pin(tokio::time::sleep(EOF_REAP_GRACE)));
+                match sleep.as_mut().poll(cx) {
+                    std::task::Poll::Pending => return std::task::Poll::Pending,
+                    std::task::Poll::Ready(()) => {
+                        // Grace spent: whatever `try_wait` says below is the
+                        // answer, and a still-unreaped child now yields the
+                        // clean EOF it always did.
+                        self.eof_grace_spent = true;
+                        self.eof_grace = None;
+                    }
+                }
+            }
             if let Ok(Some(status)) = self.child.try_wait()
                 && !status.success()
             {
@@ -468,6 +516,8 @@ pub async fn open_wsl_stdio_bridge(port: u32) -> io::Result<WslStdioBridge> {
         stdin,
         stdout,
         stderr_buf,
+        eof_grace: None,
+        eof_grace_spent: false,
     })
 }
 
