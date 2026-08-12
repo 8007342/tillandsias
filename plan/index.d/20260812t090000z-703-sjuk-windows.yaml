@@ -1,0 +1,59 @@
+packets:
+  - packet_id: wsl2-builder-lacks-jq-yq-and-marker-cannot-see-changes
+    order: 703-sjuk
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    title: "The WSL2 build distro had no jq/yq and its init marker could never notice a changed package list, so every check that runs there was silently degraded"
+    kind: fix
+    deliverable: scripts/with-wsl2-builder.sh
+    depends_on: []
+    pickup_role: windows
+    owner_host: windows
+    capability_tags:
+      - windows
+      - wsl
+      - build
+      - tooling
+    estimated_hours: 2
+    outcome: >
+      The build distro carries jq and yq, and its init marker is stamped with a
+      digest of the init script so a changed package list re-provisions every
+      already-initialized host instead of only new ones.
+    exit_criteria:
+      - "jq and yq are present in the build distro after a normal ./build.sh run"
+      - "changing the init script re-runs it on an already-initialized distro"
+      - "NEGATIVE CONTROL: an unchanged init script does NOT re-run — a fix that always re-provisioned would satisfy the criterion above while adding a dnf transaction to every build"
+    events:
+      - type: completed
+        ts: "2026-08-12T09:00:00Z"
+        agent_id: "windows-claude-opus5-20260811t215500z"
+        host: windows
+        summary: >
+          evidence_refs: commit on windows-next + named check results below.
+          The build distro is where ./build.sh re-execs and where the litmus
+          corpus runs, and it had NEITHER jq nor yq — both packaged in Fedora,
+          so the absence was an omission rather than a constraint. Consequences
+          that had gone unnoticed for as long as the distro existed:
+          run-litmus-test.sh silently graded the corpus with its fallback
+          grep parser, and check-stranded-in-progress.sh took its jq-absent
+          branch, which until 702-68zj printed a clean all-clear on every run.
+          The marker gate was the second half: a bare existence file cannot see
+          that the package list changed, so adding jq/yq would have fixed new
+          hosts only — including not this one, which found the problem. The
+          marker now holds a digest of the init region and is written from the
+          host side only after the init returns zero, so a failed dnf run
+          cannot record success and leave a permanently under-provisioned
+          distro.
+          VERIFIED: ./build.sh re-initialized on the digest change and
+          installed jq+yq (both now on PATH, marker reads f63750c90f815f9a);
+          NEGATIVE CONTROL — the next ./build.sh did NOT re-initialize
+          (0 occurrences of the Initializing line), so this is not
+          "re-provision every build"; the stranded sweep in that distro now
+          reports a real zero instead of a blind one.
+          CONSEQUENCE WORTH MORE THAN THE PACKET: with real parsers the
+          ci-release litmus spec went from 3 failures to 1. Two were
+          degraded-parser artifacts (terminal-status-vocabulary-shape,
+          selector-urgency-not-inert-shape) — the reds I declined to file on
+          last cycle precisely because I could not tell artifact from defect.
+          The remaining one was genuine and is fixed in the same commit.

@@ -106,19 +106,50 @@ fi
 # Marker probe goes via STDIN: Git Bash (MSYS) rewrites leading-slash
 # ARGUMENTS into C:/Program Files/Git/... paths, so `-- test -f /root/...`
 # can never match; stdin bytes are never converted.
-if ! echo 'test -f /root/.cache/tillandsias/wsl2-builder-initialized' \
+#
+# ORDER 703-sjuk: the marker records WHICH init produced this distro, not
+# merely that some init once ran. A bare existence marker cannot see that the
+# package list changed, so every already-initialized host silently keeps the
+# old toolchain forever — the jq/yq omission above would have been fixed for
+# new hosts only, and this host, which found it, would never have picked it up.
+# That is the same "a staleness check that cannot see what changed" shape as
+# 695-r7k8 (staging skipped on a VERSION match) and 689-gipe (the tray embedded
+# whatever was staged); the fix is the same in kind — stamp the marker with a
+# digest of the thing that can change, and re-run when it differs.
+init_digest="$(
+    sed -n '/^# WSL2_INIT_BEGIN$/,/^WSL2_INIT$/p' "${BASH_SOURCE[0]}" \
+        | { command -v sha256sum >/dev/null 2>&1 && sha256sum || shasum -a 256; } \
+        | cut -c1-16
+)"
+marker="/root/.cache/tillandsias/wsl2-builder-initialized"
+if ! printf 'test "$(cat %s 2>/dev/null)" = "%s"\n' "$marker" "$init_digest" \
         | wsl.exe -d "$BUILD_DISTRO" -u root -- sh 2>/dev/null; then
-    echo "[wsl2-builder] Initializing '$BUILD_DISTRO' with build tools (one-time)..."
+    echo "[wsl2-builder] Initializing '$BUILD_DISTRO' with build tools (init digest ${init_digest})..."
     # Same package set as the Silverblue toolbox init, plus curl for rustup
     # and shellcheck/git for the CI helpers. stdin-delivered script: wsl
     # arg-joined multi-line scripts get re-parsed by the guest login shell
     # and arrive shredded (order-326 live repro, 2026-07-15).
+    # The digest above is computed over the region between WSL2_INIT_BEGIN and
+    # the heredoc terminator, so editing ANY line of the init below invalidates
+    # every host's marker on the next run. Keep the marker write last.
     wsl.exe -d "$BUILD_DISTRO" -u root -- sh <<'WSL2_INIT'
+# WSL2_INIT_BEGIN
 set -eu
 # musl-gcc/musl-devel/musl-libc-static: the cargo fallback in
 # scripts/build-guest-binaries.sh cross-compiles the musl guest binary, and
 # ring's build script hard-requires x86_64-linux-musl-gcc (first hit on the
 # Esmeralda Windows host, 2026-08-08).
+# jq/yq (order 703-sjuk): this distro is where ./build.sh re-execs and where
+# the litmus corpus runs, and it had NEITHER. Two consequences went unnoticed
+# for as long as the distro has existed:
+#   - run-litmus-test.sh warns "yq/jq not found; using fallback grep-based
+#     parsing - reduced functionality" and silently grades the corpus with a
+#     weaker parser;
+#   - check-stranded-in-progress.sh took its jq-absent branch, which until
+#     702-68zj printed `in_progress=0 stranded=0` — a clean all-clear, on every
+#     run, in the one environment where checks actually execute.
+# Both tools are packaged in Fedora, so the absence was an omission, not a
+# constraint.
 dnf install -y \
     gcc pkg-config file cmake make \
     musl-gcc musl-devel musl-libc-static \
@@ -126,6 +157,7 @@ dnf install -y \
     ruby perl-FindBin \
     procps-ng findutils diffutils \
     git curl tar xz ShellCheck awk \
+    jq yq \
     2>&1 | sed 's/^/  [dnf] /'
 if ! command -v rustup >/dev/null 2>&1 && [ ! -x /root/.cargo/bin/rustup ]; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
@@ -136,9 +168,17 @@ fi
 rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl \
     2>&1 | sed 's/^/  [rustup] /'
 mkdir -p /root/.cache/tillandsias
-touch /root/.cache/tillandsias/wsl2-builder-initialized
 echo "[wsl2-builder] init complete"
 WSL2_INIT
+    # Stamp the marker with the digest ONLY after the init returned zero, and
+    # from the host, which is the side that knows the digest. A marker written
+    # inside the init could not name the version it came from, and a marker
+    # written unconditionally would record success for a failed dnf run — the
+    # distro would then be permanently, silently under-provisioned, which is
+    # the failure this whole change is about.
+    printf 'mkdir -p /root/.cache/tillandsias && printf %%s "%s" > %s\n' \
+        "$init_digest" "$marker" \
+        | wsl.exe -d "$BUILD_DISTRO" -u root -- sh
 fi
 
 # ── Re-exec inside the build distro ───────────────────────────────────────
