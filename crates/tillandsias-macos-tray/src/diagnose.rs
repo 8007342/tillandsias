@@ -244,6 +244,19 @@ pub struct DiagnoseReport {
     pub release_tag: &'static str,
     pub manifest_pin_aarch64_qcow2: Option<String>,
     pub provisioned: bool,
+    /// 701-kgvk. Which guest binary this bundle carries, versus the one actually
+    /// staged for the guest to install on its next boot. The staging path is
+    /// keyed only on `$HOME` and the guest reinstalls from it unconditionally,
+    /// so an older `.app` started later silently downgrades the guest — stickily,
+    /// across reboots and guest resets. Nothing surfaced that before: the only
+    /// integrity gate compares a VERSION string that does not roll between
+    /// builds. A real skew on this host had to be found by hashing by hand.
+    pub guest_binary_bundle_sha256: Option<String>,
+    pub guest_binary_staged_sha256: Option<String>,
+    /// `Some(false)` means the guest will boot a DIFFERENT binary than this
+    /// bundle carries. `None` means undecidable (no bundle, or nothing staged
+    /// yet) and must never be read as "fine".
+    pub guest_binary_staged_matches_bundle: Option<bool>,
 }
 
 /// Entry point invoked from `main` when `--diagnose` is on argv.
@@ -274,6 +287,7 @@ fn collect_report() -> DiagnoseReport {
     let provisioned = rootfs_present;
 
     let manifest_pin_aarch64_qcow2 = parse_aarch64_qcow2_sha(BUNDLED_MANIFEST_TOML);
+    let provenance = crate::guest_binary::guest_binary_provenance();
 
     DiagnoseReport {
         version: env!("CARGO_PKG_VERSION"),
@@ -290,6 +304,9 @@ fn collect_report() -> DiagnoseReport {
         release_tag: crate::action_host::FEDORA_BASELINE,
         manifest_pin_aarch64_qcow2,
         provisioned,
+        guest_binary_bundle_sha256: provenance.bundle_sha256,
+        guest_binary_staged_sha256: provenance.staged_sha256,
+        guest_binary_staged_matches_bundle: provenance.staged_matches_bundle,
     }
 }
 
@@ -341,6 +358,46 @@ fn print_human(r: &DiagnoseReport) {
     // Additive — does NOT affect the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     println!("Guest health: {}", guest_health_verdict());
+    println!();
+    // 701-kgvk. The guest reinstalls its headless binary from the staged copy on
+    // EVERY boot, and that path is keyed only on $HOME — so an older .app
+    // started later silently downgrades the guest, and stays downgraded. Print
+    // it here because a skew is otherwise invisible: the only integrity gate
+    // compares a VERSION string that does not roll between builds.
+    println!("Guest binary:");
+    match (
+        &r.guest_binary_bundle_sha256,
+        &r.guest_binary_staged_sha256,
+        r.guest_binary_staged_matches_bundle,
+    ) {
+        (Some(b), Some(_), Some(true)) => {
+            println!(
+                "  in sync — staged copy matches this bundle ({}…)",
+                &b[..12]
+            );
+        }
+        (Some(b), Some(s), Some(false)) => {
+            println!(
+                "  *** SKEW *** the guest will install a DIFFERENT binary than this bundle carries."
+            );
+            println!("      this bundle : {}…", &b[..12]);
+            println!("      staged copy : {}…", &s[..12]);
+            println!("      The staged copy wins on the guest's next boot. Another (likely older)");
+            println!("      Tillandsias.app staged it. Re-stage from the build you intend to run.");
+        }
+        (None, _, _) => {
+            println!("  unknown — no bundled guest binary found (running outside .app?);");
+            println!("      a run like this stages NOTHING, so the guest keeps whatever it has.");
+        }
+        (_, None, _) => {
+            println!("  not staged yet — the guest has never been given a binary from this host.");
+        }
+        // Both hashes present but no verdict is structurally impossible today;
+        // report it as unknown rather than silently implying agreement.
+        (Some(_), Some(_), None) => {
+            println!("  unknown — both binaries readable but comparison unavailable.");
+        }
+    }
     println!();
     if r.provisioned {
         println!("Status: PROVISIONED — first-launch materialization complete.");
@@ -1596,6 +1653,10 @@ mod tests {
             release_tag: "fedora-44",
             manifest_pin_aarch64_qcow2: Some("55c60a3b80d3".to_string()),
             provisioned: true,
+            // 701-kgvk: the healthy shape — bundle and staged agree.
+            guest_binary_bundle_sha256: Some("26f120b6b1ef".to_string()),
+            guest_binary_staged_sha256: Some("26f120b6b1ef".to_string()),
+            guest_binary_staged_matches_bundle: Some(true),
         }
     }
 

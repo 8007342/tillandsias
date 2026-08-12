@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-binary-staging-is-last-writer-wins-and-invisible
+    field: status
+    value: implemented
+    ts: "2026-08-12T07:48:11Z"
+    host: macos
+
+events:
+  - packet_id: guest-binary-staging-is-last-writer-wins-and-invisible
+    event:
+      type: progress
+      ts: "2026-08-12T07:48:11Z"
+      host: macos
+      summary: >
+        status 'implemented' (not terminal) with evidence_refs: Skew detection shipped — the 'macOS has NO skew detection' half of this packet, which is what made the 2026-08-11 downgrade invisible. --diagnose now reports guest_binary_bundle_sha256, guest_binary_staged_sha256 and guest_binary_staged_matches_bundle, in BOTH --json and human output (a JSON-only field would not reach anyone reading a terminal). Deliberately THREE states, not a boolean: Some(false)=SKEW, Some(true)=in sync, None=UNDECIDABLE (no bundle, or nothing staged) — collapsing undecidable into 'fine' is how the original invisibility happened, and the code says so. ALL THREE BRANCHES OBSERVED LIVE, not inferred: (1) in-sync from the installed bundle ('staged copy matches this bundle 26f120b6b1ef'); (2) SKEW by perturbing the staged copy by one byte — printed the mismatch, both hashes, and the 'staged copy wins on the guest's next boot' guidance — after which the staged binary was restored and verified byte-identical by sha256; (3) undecidable from a non-bundled target/release run, which ALSO surfaced WRONG-VERSION PATH #1 from the audit ('a run like this stages NOTHING, so the guest keeps whatever it has') — previously silent on 5 of 6 entry points, now visible on the first probe. Tests: differing_contents_are_reported_as_skew_not_agreement, the NEGATIVE CONTROL identical_contents_are_reported_as_agreement (a detector that shouted SKEW at everything would pass the first test while burning the only signal), and an_unreadable_side_is_undecidable_never_agreement. 82 unit + 6 integration green; the locked --diagnose JSON schema fixture was extended rather than bypassed. NOT completed: exit criterion 1 (staging REFUSES a downgrade rather than merely reporting it) and criterion 3 (a non-bundled run that cannot stage says so at the point of ACTION, not only under --diagnose) are untouched — this slice makes the condition visible, it does not prevent it.
