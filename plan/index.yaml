@@ -40208,6 +40208,12 @@ plan_index:
         - 'a NEGATIVE CONTROL proves the recovery still fires: simulate a genuine partial init (data volume present, share genuinely absent from the real location) and assert the wipe still happens'
         - 349's closing evidence pass is re-run once this lands; the credential half of that packet has never actually been testable
       events:
+        - type: note
+          ts: "2026-08-12T13:44:30Z"
+          agent_id: "macos-handback-20260812t134430z"
+          host: macos
+          summary: >
+            HANDBACK RE-VERIFICATION 2026-08-12T13:44Z: the credential is still durable ~8.5 hours and a dozen VM boots after the 05:09Z seed. A fresh --list-cloud-projects (separate VM boot, no login in between) read secret/data/github/token and listed the operator repositories, exit 0. Also confirmed via the 701-kgvk detector shipped this session that the installed bundle and the staged guest binary are IN SYNC (26f120b6b1ef), so the guest is booting the binary carrying a56cbbd1 rather than a silently downgraded one — the failure mode that made every earlier seed evaporate. Nothing in the nights subsequent work (expect-order fix, stdin bound, handover capture, share-fallback persistence, skew detection, console.log rotation, plan-tooling fixes) disturbed it.
         - type: filed
           ts: 2026-08-12T00:34:51Z
           agent_id: macos-tlatoanis-macbook-air-fable5-20260812t003451z
