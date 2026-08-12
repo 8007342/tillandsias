@@ -12140,6 +12140,39 @@ mod pty_handler;
 #[cfg(feature = "listen-vsock")]
 mod vsock_server;
 
+/// Classify `vsock_loopback` availability from the two places the kernel
+/// reports a module (order 620-duta). Pure so the states can be tested
+/// without a kernel.
+///
+/// Both sources are checked because they answer different questions.
+/// `/proc/modules` lists LOADABLE modules that are currently loaded; a module
+/// compiled INTO the kernel never appears there but does get a
+/// `/sys/module/<name>` directory. Checking only `/proc/modules` would report
+/// `missing` on a kernel that has the feature built in — the working case —
+/// which is a worse failure than not reporting at all, because it sends
+/// whoever reads it to modprobe a module that cannot be loaded.
+fn classify_vsock_loopback(sys_module_dir_present: bool, proc_modules: &str) -> &'static str {
+    if sys_module_dir_present
+        || proc_modules
+            .lines()
+            .any(|l| l.split_whitespace().next() == Some("vsock_loopback"))
+    {
+        "loaded"
+    } else {
+        "missing"
+    }
+}
+
+/// Read the host kernel's view and classify it. Unreadable sources are
+/// treated as absent evidence, which classifies as `missing` — the honest
+/// direction, since the line's job is to explain a failure and a false
+/// `loaded` would deny the reader the one clue they came for.
+fn probe_vsock_loopback() -> &'static str {
+    let sys_present = std::path::Path::new("/sys/module/vsock_loopback").is_dir();
+    let proc_modules = std::fs::read_to_string("/proc/modules").unwrap_or_default();
+    classify_vsock_loopback(sys_present, &proc_modules)
+}
+
 /// Spawn the vsock control-wire listener when `--listen-vsock <port>` was
 /// passed AND the binary was compiled with `--features listen-vsock`. Returns
 /// the join handle so the shutdown path can drain it.
@@ -12554,6 +12587,23 @@ async fn run_headless_async(
     // socket permission), we log a warning and continue — headless MUST
     // NOT refuse to start because the diagnostic surface is unavailable.
     let metrics_http_handle = spawn_metrics_http_server();
+
+    // Order 620-duta: report whether `vsock_loopback` is available BEFORE
+    // binding. The in-VM socat bridge (the non-elevated host path) needs it,
+    // and its absence surfaces later as an opaque connect failure on the host
+    // side — `WSA_ERROR(10060)`, a handshake that times out with nothing in
+    // the guest log explaining why. One line at startup turns that into a
+    // fact someone can read.
+    //
+    // Diagnostic only, never a gate: the host↔VM virtio path does not need
+    // the module, so refusing to start here would break the working case to
+    // report on the broken one.
+    if listen_vsock_port.is_some() {
+        eprintln!(
+            "[tillandsias] preflight vsock_loopback {}",
+            probe_vsock_loopback()
+        );
+    }
 
     // @trace spec:vsock-transport — when `--listen-vsock <PORT>` was supplied,
     // bind the control wire on virtio-vsock instead of the Linux Unix
@@ -16024,6 +16074,52 @@ mod tests {
         assert!(normalized.contains(
             "ForgeAgentMode::Codex | ForgeAgentMode::Claude | ForgeAgentMode::OpenCode | ForgeAgentMode::Antigravity"
         ));
+    }
+
+    /// Order 620-duta: the startup preflight must distinguish a kernel that
+    /// has `vsock_loopback` from one that does not, and must get the
+    /// BUILT-IN case right.
+    ///
+    /// A module compiled into the kernel never appears in `/proc/modules` but
+    /// does get a `/sys/module/<name>` directory. An implementation reading
+    /// only `/proc/modules` would report `missing` on a working kernel and
+    /// send whoever read it off to modprobe something that cannot be loaded —
+    /// worse than printing nothing, because it looks like an answer. That case
+    /// is the third assertion below.
+    #[test]
+    fn vsock_loopback_preflight_classifies_loaded_builtin_and_missing() {
+        let loaded_line = "vsock_loopback 16384 0 - Live 0xffffffffc0a12000\n\
+                           vmw_vsock_virtio_transport_common 45056 1 vsock_loopback, Live 0x0\n";
+        assert_eq!(
+            classify_vsock_loopback(false, loaded_line),
+            "loaded",
+            "a loadable module present in /proc/modules is loaded"
+        );
+
+        // Built-in: absent from /proc/modules, present in /sys/module.
+        assert_eq!(
+            classify_vsock_loopback(true, ""),
+            "loaded",
+            "a module built into the kernel must not be reported missing"
+        );
+
+        // Negative control. Without this the two assertions above would pass
+        // for a function that returned "loaded" unconditionally, which is
+        // exactly the useless-but-green shape this line exists to avoid.
+        assert_eq!(
+            classify_vsock_loopback(false, "vmw_vsock_virtio_transport 28672 0 - Live 0x0\n"),
+            "missing",
+            "neither source reports it: the answer is missing"
+        );
+
+        // A different module whose name merely CONTAINS the needle must not
+        // count — /proc/modules lines are matched on the first field, not a
+        // substring.
+        assert_eq!(
+            classify_vsock_loopback(false, "vsock_loopback_helper 16384 0 - Live 0x0\n"),
+            "missing",
+            "a longer module name that starts with the needle is a different module"
+        );
     }
 
     #[test]
