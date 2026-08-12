@@ -585,6 +585,7 @@ specs:
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
   - litmus:cycle-metrics-answer-rate-shape
+  - litmus:timing-telemetry-implausible-guard-shape
   - litmus:cycle-flow-telemetry-shape
   - litmus:build-test-timing-telemetry-shape
   - litmus:order-id-collision-free

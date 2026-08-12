@@ -71,8 +71,23 @@ timing_emit() {
         _cm="$_dir/cycle-metrics.sh"
         _now="$(timing_now_ms)"
         case "$_t0" in '' | *[!0-9]*) _t0=0 ;; esac
+        # 693-tf79: a zero/absent start time makes `_now - _t0` equal `_now`,
+        # i.e. an absolute epoch-ms (~1.78e12 = a ~56-year "duration"), not an
+        # elapsed time. That happens when the caller captured t0 with the no-op
+        # stub `timing_now_ms(){ echo 0; }` (path-skew fallback) or passed
+        # nothing. Such a record is meaningless — skip it rather than poison the
+        # rolling averages. Best-effort contract preserved: still return 0.
+        if [ "$_t0" -eq 0 ] 2>/dev/null; then
+            return 0
+        fi
         _dur=$((_now - _t0))
         [ "$_dur" -ge 0 ] 2>/dev/null || _dur=0
+        # Defense-in-depth: no single build/test/litmus step legitimately runs
+        # longer than a day. A value that large means a bad start time slipped
+        # through — drop it instead of emitting garbage.
+        if [ "$_dur" -ge 86400000 ] 2>/dev/null; then
+            return 0
+        fi
         _host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}"
         if [ -x "$_cm" ] || [ -r "$_cm" ]; then
             bash "$_cm" --emit-timing \

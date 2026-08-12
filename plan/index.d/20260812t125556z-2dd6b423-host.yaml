@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: cycle-metrics-timing-line-emits-overflow-garbage
+    field: status
+    value: verified
+    ts: "2026-08-12T12:55:56Z"
+    host: host
+
+events:
+  - packet_id: cycle-metrics-timing-line-emits-overflow-garbage
+    event:
+      type: completed
+      ts: "2026-08-12T12:55:56Z"
+      host: host
+      summary: >
+        status 'verified' with evidence_refs: commit (this cycle) + as-wired litmus. ROOT CAUSE identified: timing_emit (scripts/timing-log.sh) set _t0=0 when the start time was absent/stubbed (the no-op timing_now_ms fallback under path-skew), so _dur = now - 0 = an absolute epoch-ms (1786481285460 ~= 56 years); the >= 0 check passed and the garbage record was emitted. Exit criterion 2 (source) FIXED: timing_emit now skips when _t0 == 0 or the computed duration >= 24h. Exit criterion 1 (aggregation) FIXED: cycle-metrics.sh timing: aggregation filters durations to numeric [0, 86400000) before averaging and the slowest pick, so pre-existing bad records in old logs cannot poison it. litmus:timing-telemetry-implausible-guard-shape bound to methodology-accountability, 4/4 green as-wired: aggregation excludes an epoch-sized record and reports sane averages (steps=2, litmus_ms_avg=9308), an all-sane log reports correct averages, timing_emit with a zero start emits NOTHING, and a valid start emits one plausible record (~100ms). Verified live: the real /tmp/tillandsias-timing.jsonl bad record no longer pollutes the timing line.
+  - packet_id: cycle-metrics-timing-line-emits-overflow-garbage
+    event:
+      type: note
+      ts: "2026-08-12T12:55:56Z"
+      host: host
+      summary: >
+        The slowest-step signal is usable again — an implausible duration is skipped at source and excluded from aggregation, so a bad start time can never again make the timing line report a ~56-year average.

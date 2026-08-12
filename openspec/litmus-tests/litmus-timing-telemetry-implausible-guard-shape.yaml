@@ -1,0 +1,50 @@
+# @trace spec:methodology-accountability
+name: litmus:timing-telemetry-implausible-guard-shape
+spec: methodology-accountability
+phase: pre-build
+description: The timing telemetry rejects an implausible duration both at source (timing_emit skips a zero start) and in aggregation (cycle-metrics excludes it from the averages and slowest pick)
+severity: high
+size: instant
+
+# Order 693-tf79. A timing record whose duration_ms is really an absolute
+# epoch-ms (~1.78e12, produced when the start time was 0/absent so
+# `now - 0 == now`) polluted the rolling `timing:` line — it reported a ~56-year
+# litmus average and slowest step, making the one number that names the slowest
+# step useless. Fixed in two places: timing_emit (scripts/timing-log.sh) skips a
+# zero/absent start, and cycle-metrics.sh filters durations to [0, 24h) before
+# averaging. timing-log.sh has no in-image bootstrap, so it is sourced directly.
+
+preconditions:
+  - scripts/timing-log.sh and scripts/cycle-metrics.sh are present
+
+critical_path:
+  - step: "AGGREGATION: a log containing an epoch-sized duration reports a SANE timing line (bad record excluded)"
+    command: "T=$(mktemp -d); printf '{\"step\":\"litmus-suite\",\"phase\":\"all\",\"duration_ms\":9308,\"exit\":0}\\n{\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":3745,\"exit\":0}\\n{\"step\":\"litmus-suite\",\"phase\":\"pre-build\",\"duration_ms\":1786481285460,\"exit\":1}\\n' > \"$T/timing.jsonl\"; out=$(TILLANDSIAS_TIMING_LOG=\"$T/timing.jsonl\" scripts/cycle-metrics.sh 2>/dev/null | grep '^timing:'); rm -rf \"$T\"; echo \"$out\" | grep -q 'steps=2 ' && echo \"$out\" | grep -q 'litmus_ms_avg=9308' && ! echo \"$out\" | grep -q '1786481285460' && echo 'ok: implausible duration excluded, sane averages' || { echo \"FAIL: $out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: implausible duration excluded, sane averages"
+
+  - step: "AGGREGATION POSITIVE CONTROL: an all-sane log reports the correct averages"
+    command: "T=$(mktemp -d); printf '{\"step\":\"build-check\",\"phase\":\"check\",\"duration_ms\":4000,\"exit\":0}\\n{\"step\":\"litmus-suite\",\"phase\":\"all\",\"duration_ms\":6000,\"exit\":0}\\n' > \"$T/timing.jsonl\"; out=$(TILLANDSIAS_TIMING_LOG=\"$T/timing.jsonl\" scripts/cycle-metrics.sh 2>/dev/null | grep '^timing:'); rm -rf \"$T\"; echo \"$out\" | grep -q 'build_check_ms_avg=4000' && echo \"$out\" | grep -q 'litmus_ms_avg=6000' && echo 'ok: sane averages reported' || { echo \"FAIL: $out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: sane averages reported"
+
+  - step: "SOURCE: timing_emit with a zero start time emits NOTHING (no epoch-as-duration record)"
+    command: ". scripts/timing-log.sh; L=$(mktemp); TILLANDSIAS_TIMING_LOG=\"$L\" timing_emit litmus-suite pre-build 0 1; n=$(wc -l < \"$L\" 2>/dev/null || echo 0); rm -f \"$L\"; [ \"${n:-0}\" -eq 0 ] && echo 'ok: zero-start record skipped at source' || { echo \"FAIL: emitted $n record(s) for a zero start\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: zero-start record skipped at source"
+
+  - step: "SOURCE POSITIVE CONTROL: timing_emit with a valid start emits one plausible record"
+    command: ". scripts/timing-log.sh; L=$(mktemp); now=$(timing_now_ms); TILLANDSIAS_TIMING_LOG=\"$L\" timing_emit build-check check $((now-100)) 0; d=$(grep -o '\"duration_ms\":[0-9]*' \"$L\" 2>/dev/null | head -1 | cut -d: -f2); rm -f \"$L\"; [ -n \"$d\" ] && [ \"$d\" -ge 0 ] && [ \"$d\" -lt 86400000 ] && echo \"ok: plausible record emitted (${d}ms)\" || { echo \"FAIL: bad or missing duration ($d)\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: plausible record emitted"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "timing telemetry: implausible durations skipped at source and excluded from aggregation"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "timing-telemetry-implausible-guard-shape"
+
+rollback:
+  on_failure: "restore scripts/timing-log.sh timing_emit guard and scripts/cycle-metrics.sh duration filter from git history"

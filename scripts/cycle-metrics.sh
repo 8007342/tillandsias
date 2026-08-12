@@ -342,7 +342,15 @@ timing_source="absent"
 if [ -r "$TIMING_LOG" ]; then
     timing_source="$TIMING_LOG"
     timing_stats="$(jq -R 'fromjson?' "$TIMING_LOG" 2>/dev/null | jq -s -r '
-        map(select(type=="object")) as $r
+        # 693-tf79: reject implausible durations (negative, or >= 24h in ms).
+        # A record whose duration_ms is really an absolute epoch (~1.78e12,
+        # from a zero start time) must never enter the averages or the slowest
+        # pick. This is defense-in-depth for logs written before the source
+        # guard in timing-log.sh; the source now skips such records entirely.
+        map(select(type=="object"
+              and (.duration_ms | type)=="number"
+              and .duration_ms >= 0
+              and .duration_ms < 86400000)) as $r
         | ($r | length) as $n
         | if $n == 0 then "0 - - -:-"
           else
