@@ -147,6 +147,34 @@ pub async fn deliver_credentials_and_check_handover(
         }
     }
 
+    capture_vault_handover(client).await.map(|_| ())
+}
+
+/// The CAPTURE half of the handover, without the deliver half (701-g98y).
+///
+/// Split out because the two halves are needed independently and delivering
+/// when you only meant to capture is actively harmful. A CLI one-shot
+/// (`--github-login`) creates a NEW Vault epoch inside the guest; the host
+/// Keychain still holds the PREVIOUS one. If such a caller used
+/// `deliver_credentials_and_check_handover`, it would push the stale Keychain
+/// values into the guest FIRST — overwriting the epoch it just created — and
+/// only then ask for a handover that is no longer pending.
+///
+/// So: a caller that has just caused a new epoch calls THIS. A caller that is
+/// re-attaching to an existing guest and needs to seed it calls the full
+/// deliver-then-capture above.
+///
+/// Returns whether anything was actually written. A guest only holds a PENDING
+/// handover after a FRESH Vault init — a login that reuses an already
+/// initialized Vault legitimately has nothing to hand over. Callers must be able
+/// to tell those apart: reporting "Keychain updated" when the reply was empty is
+/// a success claim with no evidence behind it, which is exactly the failure this
+/// codebase keeps being bitten by. (Observed: the first version of this call
+/// site printed "host Keychain updated" on a run where both fingerprints were
+/// provably unchanged.)
+pub async fn capture_vault_handover(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+) -> Result<bool, String> {
     let seq = client.allocate_seq();
     let env = tillandsias_control_wire::ControlEnvelope {
         wire_version: tillandsias_control_wire::WIRE_VERSION,
@@ -164,24 +192,24 @@ pub async fn deliver_credentials_and_check_handover(
             root_token,
             ..
         } => {
+            let mut wrote = false;
             if let Some(s) = unseal_share_b64 {
                 write_credential_string("vault-shamir-share-v1", &s)
                     .map_err(|e| format!("write share failed: {e}"))?;
+                wrote = true;
             }
             if let Some(t) = root_token {
                 write_credential_string("vault-root-token-v1", &t)
                     .map_err(|e| format!("write token failed: {e}"))?;
+                wrote = true;
             }
+            Ok(wrote)
         }
         tillandsias_control_wire::ControlMessage::Error { message, .. } => {
-            return Err(format!("GetVaultHandover failed: {message}"));
+            Err(format!("GetVaultHandover failed: {message}"))
         }
-        other => {
-            return Err(format!("unexpected reply to GetVaultHandover: {other:?}"));
-        }
+        other => Err(format!("unexpected reply to GetVaultHandover: {other:?}")),
     }
-
-    Ok(())
 }
 
 /// Generate a fresh UUIDv4 string. We avoid pulling in the `uuid` crate
