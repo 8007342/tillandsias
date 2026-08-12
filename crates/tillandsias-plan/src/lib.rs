@@ -44,6 +44,8 @@ pub mod groundtruth;
 /// justification and the fail-closed guards.
 pub mod loop_status;
 pub mod methodology;
+/// ORDER 706-f7mq — modular semantic explanation and fallback for documentation & plan corpora.
+pub mod semantic_expert;
 /// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,
 /// cosine retrieval, verifiable envelope construction). Embedding and synthesis
 /// happen outside the crate; see `spec.rs`.

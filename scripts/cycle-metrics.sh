@@ -196,7 +196,7 @@ if [ -r "$USAGE_LOG" ]; then
     # legacy rows (written before the field existed — all plan-expert) plus rows
     # explicitly tagged `server":"forge-plan`. On a legacy-only log this is the
     # whole file, so the reported numbers are byte-identical to before.
-    PLAN_STREAM="$( { grep -v '"server":"' "$USAGE_LOG"; grep '"server":"forge-plan"' "$USAGE_LOG"; } 2>/dev/null )"
+    PLAN_STREAM="$( { grep -v '"server":"' "$USAGE_LOG"; grep '"server":"forge-plan"' "$USAGE_LOG"; grep '"server":"cli"' "$USAGE_LOG"; } 2>/dev/null )"
     # jq is the only parser used anywhere in the expert path (no python —
     # methodology tlatoani_hard_no_python). A malformed line must not abort the
     # report, so every read tolerates failure.

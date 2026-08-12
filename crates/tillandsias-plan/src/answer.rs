@@ -125,9 +125,10 @@ impl Citation {
                 .authority
                 .get("packet_id")
                 .map(|id| format!("packet_id: {id}"))
+                .or_else(|| self.authority.get("key").cloned())
                 .ok_or_else(|| {
                     format!(
-                        "{}:{}-{}: plan citation carries no authority.packet_id, so nothing can be verified against its span",
+                        "{}:{}-{}: plan citation carries no authority.packet_id or authority.key, so nothing can be verified against its span",
                         self.path, self.line_start, self.line_end
                     )
                 }),
@@ -389,7 +390,7 @@ pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
         // well-formed lie. `packet_id` is already covered by `span_key` above.
         if c.kind == CitationKind::Plan {
             for (key, value) in &c.authority {
-                if key == "packet_id" {
+                if key == "packet_id" || key == "section" || key == "key" {
                     continue;
                 }
                 if !span_substantiates(&span, key, value) {
@@ -690,6 +691,18 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
         .unwrap_or_else(|| Freshness::new("unknown".into(), "unknown".into()));
 
     let Some(intent) = classify(ledger, question) else {
+        // ORDER 706-f7mq. Fallback to modular semantic explanation over plan documents
+        let root = ledger
+            .source_path()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .unwrap_or_else(|| Path::new("."));
+        let provider = crate::semantic_expert::PlanSectionProvider::new(root);
+        let explainer = crate::semantic_expert::SemanticExplainer::default();
+        if let Some(env) = explainer.explain_query(&provider, question, &freshness) {
+            return env;
+        }
+
         return Envelope::unsupported(
             format!(
                 "no packet in the ledger matches any token in {:?}, and it is not a recognised ready/burndown query",

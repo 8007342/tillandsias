@@ -534,6 +534,62 @@ fn known_releases(ledger: &Ledger) -> Vec<String> {
     releases
 }
 
+/// ORDER 706-ddw6. Active claim lease state, parsed from the claim-ledger-node
+/// filesystem contract (${TILLANDSIAS_LEDGER_LEASE_ROOT} or
+/// ${XDG_RUNTIME_DIR}/tillandsias-locks/ledger-nodes or /tmp/tillandsias-locks/ledger-nodes).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct PacketLease {
+    holder: String,
+    host: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acquired_at: Option<String>,
+    expires_epoch: u64,
+    is_active: bool,
+}
+
+fn inspect_lease(packet_id: &str) -> Option<PacketLease> {
+    let lease_root = std::env::var("TILLANDSIAS_LEDGER_LEASE_ROOT")
+        .map(PathBuf::from)
+        .or_else(|_| {
+            std::env::var("XDG_RUNTIME_DIR")
+                .map(|r| PathBuf::from(r).join("tillandsias-locks/ledger-nodes"))
+        })
+        .unwrap_or_else(|_| PathBuf::from("/tmp/tillandsias-locks/ledger-nodes"));
+    let safe = packet_id.replace('/', "__");
+    let holder_file = lease_root.join(format!("{safe}.lease")).join("holder");
+    if !holder_file.is_file() {
+        return None;
+    }
+    let content = std::fs::read_to_string(&holder_file).ok()?;
+    let mut holder = String::new();
+    let mut host = String::new();
+    let mut acquired_at = None;
+    let mut expires_epoch: u64 = 0;
+    for line in content.lines() {
+        if let Some(val) = line.strip_prefix("lease_id=") {
+            holder = val.trim().to_string();
+        } else if let Some(val) = line.strip_prefix("host=") {
+            host = val.trim().to_string();
+        } else if let Some(val) = line.strip_prefix("acquired_at=") {
+            acquired_at = Some(val.trim().to_string());
+        } else if let Some(val) = line.strip_prefix("expires_epoch=") {
+            expires_epoch = val.trim().parse().unwrap_or(0);
+        }
+    }
+    let now_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let is_active = expires_epoch > now_epoch;
+    Some(PacketLease {
+        holder,
+        host,
+        acquired_at,
+        expires_epoch,
+        is_active,
+    })
+}
+
 fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     for key in [
@@ -568,6 +624,19 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
                 serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
             );
         }
+    }
+    // ORDER 706-ddw6. Project active lease information directly.
+    if let Some(packet_id) = packet.get("packet_id").and_then(serde_yaml::Value::as_str) {
+        if let Some(lease) = inspect_lease(packet_id) {
+            obj.insert(
+                "lease".to_string(),
+                serde_json::to_value(&lease).unwrap_or(serde_json::Value::Null),
+            );
+        } else {
+            obj.insert("lease".to_string(), serde_json::Value::Null);
+        }
+    } else {
+        obj.insert("lease".to_string(), serde_json::Value::Null);
     }
     // These are the release-query contract, not opportunistic metadata.
     // A missing field is explicit JSON null so consumers can distinguish
@@ -1284,7 +1353,84 @@ fn evidence_event_shape(status: &str) -> (&'static str, String) {
     }
 }
 
+/// ORDER 706-jmi7. Lightweight UTC ISO-8601 timestamp generator without external crate deps.
+fn utc_now_iso() -> String {
+    let now = std::time::SystemTime::now();
+    match now.duration_since(std::time::UNIX_EPOCH) {
+        Ok(dur) => {
+            let secs = dur.as_secs();
+            let s = secs % 60;
+            let m = (secs / 60) % 60;
+            let h = (secs / 3600) % 24;
+            let mut days = (secs / 86400) as i64;
+
+            let mut year = 1970;
+            loop {
+                let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+                let ydays = if leap { 366 } else { 365 };
+                if days < ydays {
+                    break;
+                }
+                days -= ydays;
+                year += 1;
+            }
+            let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+            let mdays = [
+                31,
+                if leap { 29 } else { 28 },
+                31,
+                30,
+                31,
+                30,
+                31,
+                31,
+                30,
+                31,
+                30,
+                31,
+            ];
+            let mut month = 1;
+            for &dim in &mdays {
+                if days < dim {
+                    break;
+                }
+                days -= dim;
+                month += 1;
+            }
+            let day = days + 1;
+            format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
+        }
+        Err(_) => "unknown".to_string(),
+    }
+}
+
+/// ORDER 706-jmi7. Record direct CLI invocations to the shared telemetry channel
+/// (${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}).
+pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
+    if std::env::var_os("TILLANDSIAS_NO_TELEMETRY").is_some() {
+        return;
+    }
+    let log_path = std::env::var("TILLANDSIAS_EXPERT_USAGE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/tmp/forge-expert-usage.jsonl"));
+
+    let ts = utc_now_iso();
+    let line = format!(
+        "{{\"ts\":\"{}\",\"server\":\"cli\",\"tool\":\"{}\",\"outcome\":\"{}\",\"latency_ms\":{}}}\n",
+        ts, tool, outcome, latency_ms
+    );
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
 fn main() {
+    let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut index = PathBuf::from("plan/index.yaml");
     let mut index_explicit = false;
@@ -1299,6 +1445,7 @@ fn main() {
     if args.is_empty() {
         usage();
     }
+    let subcommand = args.first().cloned().unwrap_or_else(|| "none".to_string());
 
     // ORDER 569. `capabilities` runs FIRST and touches nothing — no ledger, no
     // methodology corpus, no filesystem at all beyond the embedded manifest.
@@ -2830,6 +2977,7 @@ fn main() {
         }
         other => unknown_subcommand(other),
     }
+    log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
 }
 
 /// ORDER 672-bz7u. The candidate selection for `expire-claims`, split out so
@@ -3376,5 +3524,28 @@ mod tests {
                     .to_string()
             })
             .collect()
+    }
+
+    #[test]
+    fn query_json_projection_includes_lease_field() {
+        let raw = concat!(
+            "packet_id: unleased-sample\n",
+            "order: 123\n",
+            "title: \"Unleased\"\n",
+            "status: ready\n",
+            "desired_release: v0.5\n",
+        );
+        let val: serde_yaml::Value = serde_yaml::from_str(raw).unwrap();
+        let proj = query_json_projection(&val);
+        assert!(proj.get("lease").is_some());
+        assert_eq!(proj["lease"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn utc_now_iso_produces_non_empty_utc_format() {
+        let ts = utc_now_iso();
+        assert!(ts.ends_with('Z'));
+        assert!(ts.contains('T'));
+        assert_eq!(ts.len(), 20);
     }
 }
