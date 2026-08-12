@@ -32740,6 +32740,12 @@ plan_index:
         - litmus pins the installed tray's dependency/import surface
         - inventory distilled to specs; deliverable becomes a tombstone pointer
       events:
+        - type: progress
+          ts: "2026-08-12T03:38:07Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Criterion 3 DONE, and writing the litmus immediately falsified the promise it was written to pin. The tray's PE import table carried vcruntime140.dll — a Visual C++ Redistributable component, NOT an OS component — because Rust's MSVC targets link the C runtime dynamically by default. Every developer machine has the redist, so nothing ever failed where the binary was tested; a clean Windows box would have refused to start it. Fixed by giving the MSVC targets the same static-CRT posture .cargo/config.toml already applied to the musl launcher; the import table went from 17 entries to 11, all in-box (kernel32, ntdll, user32, shell32, advapi32, combase, oleaut32, ws2_32, bcrypt, bcryptprimitives, api-ms-win-core-synch). New scripts/check-tray-import-surface.sh emits ^(ok:import-surface-os-only|non-os:<dlls>|skip:(no-tray-binary|no-import-reader))$ by reading the built binary's actual imports via objdump, with a TILLANDSIAS_IMPORT_FIXTURE seam so both directions are exercisable without building a binary that deliberately needs a redist. litmus:tray-import-surface-os-only bound under windows-native-tray and PASSING; its steps include the negative control that vcruntime140.dll is REFUSED (without which every assertion would pass for a checker returning ok unconditionally), the UCRT-in / redist-out distinction, all-offenders-named, and a clean skip:no-tray-binary so non-Windows hosts are not gated. Static-CRT tray installed; --diagnose exit 0. Remaining: criterion 4 (inventory distilled to specs, deliverable becomes a tombstone pointer).
         - type: note
           ts: "2026-08-12T02:40:14Z"
           agent_id: "windows-claude-opus5-20260811t215500z"
