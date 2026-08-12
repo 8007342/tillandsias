@@ -130,13 +130,58 @@ if [[ "$VERIFY_ONLY" == true ]]; then
     exit 0
 fi
 
+# Order 695-r7k8: is any Rust source newer than the staged binaries?
+#
+# `verify_binaries` alone is NOT a currency check. It tests existence, arch,
+# staticness and the VERSION *string* — and a VERSION stamp only rolls on
+# release, so every source change between releases satisfies all of it while
+# leaving the staged binary stale. The script then printed "up-to-date" and
+# verified SUCCESS, and the old code shipped: into the tray's embedded asset,
+# and from there into fresh guests. (That was the first link of the chain
+# 689-gipe and 620-duta walked back from; see the deliverable.)
+#
+# mtime, not a content hash: the failure to kill is "silently skipped", and a
+# timestamp comparison kills it for a fraction of the complexity. Prefer
+# rebuilding a touched-but-unchanged tree over skipping a changed one — cargo
+# makes the false positive cheap, while the false negative ships stale code.
+sources_newer_than_staging() {
+    # Absent staging is trivially out of date; verify_binaries also catches
+    # this, but returning early keeps `find -newer` from running without a
+    # reference file (where it would error and be read as "no hits").
+    [[ -f "$X86_64_DEST" && -f "$AARCH64_DEST" ]] || return 0
+
+    # Compare against the OLDER of the two staged binaries, so a source edit
+    # between the two builds cannot hide behind the newer one.
+    local reference="$X86_64_DEST"
+    [[ "$AARCH64_DEST" -ot "$reference" ]] && reference="$AARCH64_DEST"
+
+    local root_file
+    for root_file in "$ROOT/Cargo.toml" "$ROOT/Cargo.lock"; do
+        [[ -f "$root_file" && "$root_file" -nt "$reference" ]] && return 0
+    done
+
+    # -quit on the first hit: this runs on every tray build and the answer is
+    # boolean, so there is no reason to walk the rest of the tree.
+    local hit
+    hit="$(find "$ROOT/crates" \
+        \( -type d -name target -prune \) -o \
+        -type f \( -name '*.rs' -o -name 'Cargo.toml' \) -newer "$reference" -print -quit \
+        2>/dev/null)"
+    [[ -n "$hit" ]]
+}
+
 # Build path
-# First check if current staged files are already present and valid.
-# If so, skip the build step to keep dev fast.
+# First check if current staged files are already present, valid, AND at least
+# as new as every source they are built from. If so, skip the build to keep dev
+# fast.
 if verify_binaries >/dev/null 2>&1; then
-    echo "[build-guest-binaries] Staged binaries are up-to-date. Skipping build."
-    verify_binaries
-    exit 0
+    if sources_newer_than_staging; then
+        echo "[build-guest-binaries] Staged binaries carry VERSION $VERSION_VAL but a source file is newer — rebuilding (order 695-r7k8; a VERSION match is not a currency check)."
+    else
+        echo "[build-guest-binaries] Staged binaries are up-to-date. Skipping build."
+        verify_binaries
+        exit 0
+    fi
 fi
 
 build_with_nix() {
