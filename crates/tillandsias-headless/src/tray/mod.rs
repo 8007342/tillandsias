@@ -496,26 +496,68 @@ fn control_socket_path() -> PathBuf {
     runtime_dir.join("tillandsias/control.sock")
 }
 
-/// Path of the NDJSON MCP tool socket served for in-forge agents (order
-/// 363). Lives in its OWN subdirectory so the directory — not the socket
-/// file — can be bind-mounted into forge containers: a tray restart
-/// re-binds the socket inode, and a file bind-mount would go stale while
-/// a directory mount picks the fresh socket up.
+/// Base host directory holding per-lane MCP tool socket subdirectories (order 505).
+/// Lives under `$XDG_RUNTIME_DIR/tillandsias/mcp` (falling back to `/run/user/<uid>/tillandsias/mcp`).
 ///
-/// This is deliberately NOT `control.sock`. The control socket speaks
-/// postcard-framed `ControlEnvelope`s and carries the whole host control
-/// plane (VmShutdownRequest, IssueWebSession, …); the repo — including the
-/// wire format — is checked out inside every forge, so exposing it would
-/// hand agent code the full control plane. The MCP socket carries ONLY the
-/// JSON-RPC tool surface, and the project label is derived host-side from
-/// SO_PEERCRED, never from the request.
+/// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
+fn mcp_socket_base_dir() -> PathBuf {
+    let runtime_dir = if let Ok(xdg) = env::var("XDG_RUNTIME_DIR") {
+        PathBuf::from(xdg)
+    } else {
+        #[cfg(unix)]
+        {
+            let run_user = PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() }));
+            if run_user.is_dir() && std::fs::create_dir_all(run_user.join("tillandsias")).is_ok() {
+                run_user
+            } else {
+                std::env::temp_dir().join("tillandsias-embedded")
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            std::env::temp_dir().join("tillandsias-embedded")
+        }
+    };
+    runtime_dir.join("tillandsias/mcp")
+}
+
+/// Host directory holding the NDJSON MCP tool socket (`mcp.sock`) for a specific
+/// lane `(project, instance)` (order 505).
 ///
-/// @trace spec:host-browser-mcp, spec:tray-host-control-socket
-fn mcp_socket_path() -> PathBuf {
-    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })));
-    runtime_dir.join("tillandsias/mcp/mcp.sock")
+/// @trace spec:mcp-tool-socket
+pub fn mcp_socket_host_dir_for_lane(project: &str, instance: &str) -> PathBuf {
+    let inst = if instance.trim().is_empty() {
+        "default"
+    } else {
+        instance.trim()
+    };
+    mcp_socket_base_dir().join(format!("{project}-{inst}"))
+}
+
+/// Path of the NDJSON MCP tool socket served for in-forge agents of lane `(project, instance)`
+/// (order 505). Lives in its OWN per-lane subdirectory
+/// `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`
+/// so ONLY that lane's directory — never any other lane's directory — is bind-mounted into
+/// that lane's forge container.
+///
+/// The DIRECTORY — not the socket file — is bind-mounted into the container at
+/// `/run/host/tillandsias-mcp` so a tray restart's re-bind stays visible inside an
+/// already-running forge.
+///
+/// Attribution is kernel/filesystem-enforced: derived strictly from WHICH per-lane listener
+/// accepted the connection. Process environ (/proc/<pid>/environ) is untrusted and never read.
+///
+/// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
+pub fn mcp_socket_path_for_lane(project: &str, instance: &str) -> PathBuf {
+    mcp_socket_host_dir_for_lane(project, instance).join("mcp.sock")
+}
+
+/// Legacy fallback socket path.
+///
+/// @trace spec:mcp-tool-socket
+#[allow(dead_code)]
+pub fn mcp_socket_path() -> PathBuf {
+    mcp_socket_base_dir().join("mcp.sock")
 }
 
 // Env var that overrides the default Linux-native host project root.
@@ -655,39 +697,25 @@ impl TrayPhaseHandle {
     }
 }
 
-/// Resolve the peer's project label from its process environment:
-/// SO_PEERCRED → `/proc/<pid>/environ` → `TILLANDSIAS_PROJECT`. Works for
-/// in-forge peers because `--userns=keep-id` maps the forge uid onto the
-/// tray's host uid, so the environ file is readable. Returns `None` when
-/// the peer cannot be attributed to a project — callers must deny, loudly.
+/// Attribution identity bound to an MCP listener context (order 505).
 ///
-/// @trace spec:host-browser-mcp
-fn resolve_peer_project(stream: &UnixStream) -> Option<String> {
-    #[cfg(target_os = "linux")]
-    {
-        // SO_PEERCRED via nix (std's UCred::pid() is behind the unstable
-        // peer_credentials_unix_socket feature — broke the all-features/
-        // tray builds on stable Rust).
-        let cred = nix::sys::socket::getsockopt(stream, nix::sys::socket::sockopt::PeerCredentials)
-            .ok()?;
-        let pid = cred.pid();
-        if pid <= 0 {
-            return None;
+/// Identity `(project, instance)` is kernel/filesystem-enforced and derived
+/// from which per-lane listener accepted the connection, requiring zero `/proc`
+/// reads. Process environment is untrusted and never read for attribution.
+///
+/// @trace spec:mcp-tool-socket
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaneIdentity {
+    pub project: String,
+    pub instance: String,
+}
+
+impl LaneIdentity {
+    pub fn new(project: impl Into<String>, instance: impl Into<String>) -> Self {
+        Self {
+            project: project.into(),
+            instance: instance.into(),
         }
-        let env_str = std::fs::read_to_string(format!("/proc/{}/environ", pid as u32)).ok()?;
-        env_str.split('\0').find_map(|kv| {
-            let mut parts = kv.splitn(2, '=');
-            if parts.next() == Some("TILLANDSIAS_PROJECT") {
-                parts.next().map(String::from)
-            } else {
-                None
-            }
-        })
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        let _ = stream;
-        None
     }
 }
 
@@ -830,28 +858,62 @@ fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<se
 }
 
 /// Serve one NDJSON MCP connection: one JSON-RPC object per line in, one
-/// per line out (notifications get no line). An unattributed peer gets a
-/// single loud deny naming the project gate, then the connection closes —
-/// the same fail-closed contract as the envelope arm.
+/// per line out (notifications get no line).
 ///
-/// @trace spec:host-browser-mcp
-fn serve_mcp_connection(stream: UnixStream, project_label: Option<String>) {
-    use std::io::{BufRead, BufReader};
+/// Identity `(project, instance)` comes directly from the accepting listener
+/// context (order 505). An unattributable peer gets a single loud deny (-32000)
+/// naming the attribution gate, then the connection closes — deny loudly, then fail closed.
+///
+/// Project labels are validated by EQUALITY against enumerated local projects
+/// before tool dispatch. Process environ is untrusted and never read.
+///
+/// @trace spec:mcp-tool-socket
+pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) {
+    use std::io::{BufRead, BufReader, Write};
 
     let mut writer = stream;
 
-    let Some(project_label) = project_label else {
+    let Some(identity) = identity else {
+        warn!(
+            spec = "mcp-tool-socket",
+            "unattributable MCP connection denied and closed (-32000)"
+        );
         let deny = serde_json::json!({
             "jsonrpc": "2.0",
             "id": serde_json::Value::Null,
             "error": {
                 "code": -32000,
-                "message": "Missing or unresolvable TILLANDSIAS_PROJECT in peer environment",
+                "message": "Connection cannot be attributed to a valid project lane (listener attribution required)",
             }
         });
         let _ = writeln!(writer, "{deny}");
         return;
     };
+
+    let project_label = identity.project;
+
+    // Validate project label by equality against enumerated local projects (never sanitize).
+    let known_projects =
+        crate::local_projects::scan_project_root(&crate::local_projects::host_project_root());
+    let is_valid_project =
+        known_projects.is_empty() || known_projects.iter().any(|p| p.label == project_label);
+    if !is_valid_project {
+        warn!(
+            spec = "mcp-tool-socket",
+            project = %project_label,
+            "MCP connection for non-enumerated project denied and closed (-32000)"
+        );
+        let deny = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": serde_json::Value::Null,
+            "error": {
+                "code": -32000,
+                "message": format!("Project '{project_label}' is not an enumerated local project"),
+            }
+        });
+        let _ = writeln!(writer, "{deny}");
+        return;
+    }
 
     let Ok(read_half) = writer.try_clone() else {
         return;
@@ -883,17 +945,41 @@ fn serve_mcp_connection(stream: UnixStream, project_label: Option<String>) {
     }
 }
 
-/// Bind the NDJSON MCP tool socket and serve it from detached threads,
-/// mirroring `start_control_socket_server`'s std::thread shape. The socket
-/// is 0600 — with `--userns=keep-id` the forge peer maps to the tray's own
-/// uid, so in-forge agents can connect while other host users cannot.
+/// Global registry tracking active per-lane MCP listeners.
+static ACTIVE_LANE_LISTENERS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+
+fn lane_listener_registry() -> &'static Mutex<std::collections::HashSet<String>> {
+    ACTIVE_LANE_LISTENERS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+/// Bind the NDJSON MCP tool socket for lane `(project, instance)` and serve
+/// it from detached threads (order 505).
+/// The socket is mode 0600 in `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`.
 ///
-/// @trace spec:host-browser-mcp, spec:tray-host-control-socket
-fn start_mcp_socket_server() -> Result<(), String> {
-    let socket_path = mcp_socket_path();
+/// Stale sockets from previous tray instances are unlinked before binding.
+///
+/// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
+pub fn start_mcp_socket_server_for_lane(project: &str, instance: &str) -> Result<(), String> {
+    let instance_clean = if instance.trim().is_empty() {
+        "default"
+    } else {
+        instance.trim()
+    };
+    let lane_key = format!("{project}-{instance_clean}");
+    {
+        let mut reg = lane_listener_registry().lock().expect("lane registry lock");
+        if reg.contains(&lane_key) {
+            return Ok(());
+        }
+        reg.insert(lane_key);
+    }
+
+    let socket_path = mcp_socket_path_for_lane(project, instance_clean);
     if let Some(parent) = socket_path.parent() {
         fs::create_dir_all(parent)
             .map_err(|err| format!("failed to create mcp socket directory: {err}"))?;
+        #[cfg(unix)]
+        let _ = fs::set_permissions(parent, fs::Permissions::from_mode(0o700));
     }
     if socket_path.exists() {
         fs::remove_file(&socket_path)
@@ -902,23 +988,41 @@ fn start_mcp_socket_server() -> Result<(), String> {
 
     let listener = UnixListener::bind(&socket_path)
         .map_err(|err| format!("failed to bind mcp socket: {err}"))?;
+    #[cfg(unix)]
     fs::set_permissions(&socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|err| format!("failed to chmod mcp socket: {err}"))?;
 
+    let identity = LaneIdentity::new(project, instance_clean);
     std::thread::spawn(move || {
         for incoming in listener.incoming() {
             match incoming {
                 Ok(stream) => {
+                    let lane_id = identity.clone();
                     std::thread::spawn(move || {
-                        let project = resolve_peer_project(&stream);
-                        serve_mcp_connection(stream, project);
+                        serve_mcp_connection(stream, Some(lane_id));
                     });
                 }
-                Err(err) => warn!(error = %err, "mcp socket accept failed"),
+                Err(err) => {
+                    warn!(error = %err, lane = %format!("{}-{}", identity.project, identity.instance), "mcp socket accept failed")
+                }
             }
         }
     });
 
+    Ok(())
+}
+
+/// Bind the NDJSON MCP tool sockets for all discovered local projects (order 505).
+///
+/// @trace spec:mcp-tool-socket, spec:tray-host-control-socket
+pub fn start_mcp_socket_server() -> Result<(), String> {
+    let projects = discover_projects();
+    for project in &projects {
+        let _ = start_mcp_socket_server_for_lane(&project.name, "default");
+    }
+    if projects.is_empty() {
+        let _ = start_mcp_socket_server_for_lane("default", "default");
+    }
     Ok(())
 }
 
@@ -1111,53 +1215,21 @@ fn handle_control_connection(
                         "VmShutdownRequest on unix socket; phase=Draining (drain wiring is follow-on)"
                     );
                 }
-                ControlMessage::McpFrame {
-                    session_id: in_session_id,
-                    payload,
-                } => {
-                    // Project label comes from the SESSION (peer attribution
-                    // via SO_PEERCRED), never from the request. Shared with
-                    // the NDJSON mcp.sock transport — the two paths dispatch
-                    // through the same `handle_mcp_jsonrpc` so they can
-                    // never disagree on the tool surface.
-                    //
-                    // @trace spec:host-browser-mcp
-                    let Some(project_label) = resolve_peer_project(&stream) else {
-                        let err = ControlEnvelope {
-                            wire_version: WIRE_VERSION,
-                            seq: first.seq,
-                            body: ControlMessage::Error {
-                                seq_in_reply_to: Some(first.seq),
-                                code: ErrorCode::Unsupported,
-                                message: "Missing or unresolvable TILLANDSIAS_PROJECT in peer environment".to_string(),
-                            },
-                        };
-                        let _ = write_control_envelope(&mut stream, &err);
-                        return;
-                    };
-
-                    let Ok(req_str) = std::str::from_utf8(&payload) else {
-                        return;
-                    };
-
-                    let Ok(req) = serde_json::from_str::<serde_json::Value>(req_str) else {
-                        return;
-                    };
-
-                    // Notifications get no reply frame (JSON-RPC 2.0).
-                    let Some(resp) = handle_mcp_jsonrpc(&project_label, &req) else {
-                        return;
-                    };
-
-                    let reply = ControlEnvelope {
+                ControlMessage::McpFrame { .. } => {
+                    // Postcard control.sock is NOT a per-lane socket (order 505).
+                    // Environ reading is untrusted and deleted; MCP surface is served
+                    // over per-lane Unix listeners. McpFrame on control.sock is refused with
+                    // ErrorCode::Unsupported.
+                    let err = ControlEnvelope {
                         wire_version: WIRE_VERSION,
                         seq: first.seq,
-                        body: ControlMessage::McpFrame {
-                            session_id: in_session_id,
-                            payload: serde_json::to_vec(&resp).unwrap(),
+                        body: ControlMessage::Error {
+                            seq_in_reply_to: Some(first.seq),
+                            code: ErrorCode::Unsupported,
+                            message: "Unattributable MCP frame on control socket: MCP tool surface requires per-lane socket listener".to_string(),
                         },
                     };
-                    let _ = write_control_envelope(&mut stream, &reply);
+                    let _ = write_control_envelope(&mut stream, &err);
                 }
                 other => {
                     // Matrix says Handle but no inner arm yet. Write a
@@ -1820,6 +1892,23 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             "/etc/tillandsias/ca.crt",
             true,
         );
+    }
+
+    let raw_instance = std::env::var("TILLANDSIAS_FORGE_INSTANCE").ok();
+    let instance = raw_instance.as_deref().unwrap_or("default");
+    let mcp_dir = mcp_socket_host_dir_for_lane(project_name, instance);
+    if std::fs::create_dir_all(&mcp_dir).is_ok() {
+        let _ = start_mcp_socket_server_for_lane(project_name, instance);
+        spec = spec
+            .bind_mount(
+                mcp_dir.display().to_string(),
+                "/run/host/tillandsias-mcp",
+                true,
+            )
+            .env(
+                "TILLANDSIAS_CONTROL_SOCKET",
+                "/run/host/tillandsias-mcp/mcp.sock",
+            );
     }
 
     match kind {
@@ -4345,27 +4434,25 @@ mod tests {
             } => {
                 assert_eq!(seq_in_reply_to, Some(42));
                 assert_eq!(code, ErrorCode::Unsupported);
-                // Order 363: McpFrame on the unix socket is now HANDLED, but
-                // gated on the peer's TILLANDSIAS_PROJECT (SO_PEERCRED →
-                // /proc/<pid>/environ). This test process has no project env,
-                // so the deny must name the project gate — a caller that
-                // cannot be attributed to a project gets refused, loudly.
+                // Order 505: McpFrame on control.sock is refused because control.sock
+                // is not a per-lane socket. MCP tool surface is served over per-lane
+                // listeners only.
                 assert!(
-                    message.contains("TILLANDSIAS_PROJECT"),
-                    "McpFrame deny must name the project gate; got {message:?}"
+                    message.contains("per-lane") || message.contains("control socket"),
+                    "McpFrame deny must name the refusal reason; got {message:?}"
                 );
             }
             other => panic!("expected Error variant, got {other:?}"),
         }
     }
 
-    /// Order 363: the MCP method surface a real client needs. `initialize`
+    /// Order 363 & 505: the MCP method surface a real client needs. `initialize`
     /// and `tools/list` answer without podman, the advertised tool family
     /// is exactly the publish trio, and notifications are absorbed without
     /// a reply (JSON-RPC 2.0). The project label is a function parameter —
-    /// NOT process env — so this cannot race the project-gate test above.
+    /// NOT process env.
     ///
-    /// @trace spec:host-browser-mcp
+    /// @trace spec:mcp-tool-socket
     #[test]
     fn mcp_initialize_and_tools_list_advertise_publish_tool_family() {
         let init =
@@ -4402,7 +4489,7 @@ mod tests {
     /// with an actionable JSON-RPC error. The deny happens BEFORE any
     /// podman call — this test runs without podman.
     ///
-    /// @trace spec:host-browser-mcp, spec:subdomain-routing-via-reverse-proxy
+    /// @trace spec:mcp-tool-socket, spec:subdomain-routing-via-reverse-proxy
     #[test]
     fn mcp_tools_call_non_web_category_denied_loud() {
         let call = serde_json::json!({
@@ -4426,11 +4513,10 @@ mod tests {
         assert_eq!(resp["error"]["code"], -32601);
     }
 
-    /// The NDJSON mcp.sock transport: a peer that cannot be attributed to
-    /// a project gets ONE loud deny line naming the gate, then EOF. Same
-    /// fail-closed contract as the envelope arm.
+    /// Order 505: The NDJSON mcp.sock transport: a peer that cannot be attributed to
+    /// a lane gets ONE loud deny line (-32000) naming the attribution gate, then EOF.
     ///
-    /// @trace spec:host-browser-mcp
+    /// @trace spec:mcp-tool-socket
     #[test]
     fn mcp_ndjson_connection_denies_unattributed_peer() {
         use std::io::{BufRead, BufReader};
@@ -4443,23 +4529,26 @@ mod tests {
         let mut lines = BufReader::new(client_side).lines();
         let deny_line = lines.next().expect("one deny line").expect("readable");
         let deny: serde_json::Value = serde_json::from_str(&deny_line).expect("valid JSON-RPC");
+        assert_eq!(deny["error"]["code"], -32000);
         assert!(
             deny["error"]["message"]
                 .as_str()
                 .unwrap_or("")
-                .contains("TILLANDSIAS_PROJECT"),
-            "deny must name the project gate; got {deny_line:?}"
+                .contains("attributed")
+                || deny["error"]["message"]
+                    .as_str()
+                    .unwrap_or("")
+                    .contains("lane"),
+            "deny must name the attribution gate; got {deny_line:?}"
         );
         assert!(lines.next().is_none(), "connection closes after the deny");
         server.join().expect("server thread joined");
     }
 
-    /// The NDJSON transport round-trips the MCP handshake for an attributed
-    /// peer — one JSON-RPC object per line, replies in order. This is the
-    /// exact byte protocol the in-forge socat bridge
-    /// (`config-overlay/mcp/host-browser.sh`) carries.
+    /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
+    /// lane peer — one JSON-RPC object per line, replies in order.
     ///
-    /// @trace spec:host-browser-mcp
+    /// @trace spec:mcp-tool-socket
     #[test]
     fn mcp_ndjson_connection_round_trips_handshake() {
         use std::io::{BufRead, BufReader, Write};
@@ -4467,8 +4556,8 @@ mod tests {
 
         let (server_side, client_side) =
             UnixStream::pair().expect("UnixStream::pair available on linux");
-        let server =
-            std::thread::spawn(move || serve_mcp_connection(server_side, Some("demo".to_string())));
+        let identity = LaneIdentity::new("demo", "default");
+        let server = std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
 
         let mut writer = client_side.try_clone().expect("clone client side");
         let mut lines = BufReader::new(client_side).lines();
@@ -4500,6 +4589,118 @@ mod tests {
         drop(writer);
         drop(lines);
         server.join().expect("server thread joined");
+    }
+    /// Order 505: per-lane socket location and 0600 permissions.
+    /// Asserts $XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock path shape
+    /// and mode 0600.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[test]
+    fn mcp_per_lane_socket_location_and_permissions_0600() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let host_dir = mcp_socket_host_dir_for_lane("alpha", "w1");
+        let sock_path = mcp_socket_path_for_lane("alpha", "w1");
+
+        assert!(
+            host_dir.ends_with("tillandsias/mcp/alpha-w1"),
+            "host dir must end with tillandsias/mcp/alpha-w1, got: {:?}",
+            host_dir
+        );
+        assert!(
+            sock_path.ends_with("tillandsias/mcp/alpha-w1/mcp.sock"),
+            "sock path must end with tillandsias/mcp/alpha-w1/mcp.sock, got: {:?}",
+            sock_path
+        );
+
+        // Test listener creation and permissions
+        let res = start_mcp_socket_server_for_lane("testperlane", "w99");
+        assert!(
+            res.is_ok(),
+            "start_mcp_socket_server_for_lane failed: {res:?}"
+        );
+
+        let created_path = mcp_socket_path_for_lane("testperlane", "w99");
+        assert!(created_path.exists(), "socket file must exist");
+        let meta = std::fs::metadata(&created_path).expect("metadata");
+        let mode = meta.permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o600,
+            "socket permissions must be 0600, got: {:o}",
+            mode
+        );
+    }
+
+    /// Order 505: Listener-derived project attribution ignores forged peer environment.
+    /// When an agent in lane (alpha, w1) has TILLANDSIAS_PROJECT=beta in its environ,
+    /// the call is still attributed strictly to alpha (the accepting listener).
+    /// Process environ is not read or trusted.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[test]
+    fn mcp_listener_derived_project_attribution_ignores_forged_environ() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        // Set a forged environment variable in the test process
+        unsafe {
+            std::env::set_var("TILLANDSIAS_PROJECT", "attacker-wins");
+        }
+
+        let (server_side, client_side) =
+            UnixStream::pair().expect("UnixStream::pair available on linux");
+        // Listener context attributes this connection to project "alpha", instance "w1"
+        let identity = LaneIdentity::new("alpha", "w1");
+        let server = std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+
+        let mut writer = client_side.try_clone().expect("clone client side");
+        let mut lines = BufReader::new(client_side).lines();
+
+        // Send tools/call for a non-WEB category
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"publish_local","arguments":{{"category":"INVALID"}}}}}}"#
+        )
+        .expect("write tools/call");
+
+        let resp: serde_json::Value =
+            serde_json::from_str(&lines.next().expect("reply").expect("readable"))
+                .expect("valid JSON");
+
+        // The error code is -32000
+        assert_eq!(resp["id"], 1);
+        assert_eq!(resp["error"]["code"], -32000);
+
+        drop(writer);
+        drop(lines);
+        server.join().expect("server thread joined");
+
+        // Clean up env
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_PROJECT");
+        }
+    }
+
+    /// Order 505: Different lanes have isolated socket subdirectories.
+    /// (alpha, w1) vs (beta, w2) vs (alpha, w2) are all separate.
+    ///
+    /// @trace spec:mcp-tool-socket
+    #[test]
+    fn mcp_different_lanes_have_isolated_socket_subdirectories() {
+        let dir_a1 = mcp_socket_host_dir_for_lane("alpha", "w1");
+        let dir_b2 = mcp_socket_host_dir_for_lane("beta", "w2");
+        let dir_a2 = mcp_socket_host_dir_for_lane("alpha", "w2");
+        let dir_adefault = mcp_socket_host_dir_for_lane("alpha", "default");
+
+        assert_ne!(dir_a1, dir_b2);
+        assert_ne!(dir_a1, dir_a2);
+        assert_ne!(dir_a1, dir_adefault);
+        assert_ne!(dir_b2, dir_a2);
+
+        assert!(dir_a1.ends_with("tillandsias/mcp/alpha-w1"));
+        assert!(dir_b2.ends_with("tillandsias/mcp/beta-w2"));
+        assert!(dir_a2.ends_with("tillandsias/mcp/alpha-w2"));
+        assert!(dir_adefault.ends_with("tillandsias/mcp/alpha-default"));
     }
 
     /// `VmStatusRequest` is the third matrix-Handle-but-no-handler variant

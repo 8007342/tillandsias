@@ -480,3 +480,33 @@ cases:
       answer_contains:
         - "unsupported:"
         - "no canonical methodology question matches"
+
+  # ══ CHEATSHEET EXPERT ═════════════════════════════════════════════════════
+  # ORDER 707-tiqw: committed cheatsheet domain expert question citing real
+  # technical cheatsheet with CitationKind::Cheatsheet, exact path, and span_contains.
+
+  - id: cheatsheet-crdt-primitives
+    engine: cheatsheet.ask
+    query: "what three primitives are needed for CRDT ledger fragments?"
+    why: >
+      ORDER 707-tiqw. The cheatsheet domain expert returns cited technical
+      guidance from committed cheatsheets. The three CRDT primitives (G-Set,
+      G-Set of events, LWW-Register) must be cited directly from the concurrent git
+      cheatsheet with exact line span and CitationKind::Cheatsheet.
+    expect:
+      confidence: exact
+      citation_kind: cheatsheet
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: cheatsheets/concurrent-git/crdt-ledger-fragments.md
+          kind: cheatsheet
+          key: "The three primitives you actually need"
+          span_contains:
+            - "G-Set"
+            - "LWW-Register"
+            - "tombstone"
+      answer_contains:
+        - "The three primitives you actually need"
+        - "G-Set"
+        - "LWW-Register"
