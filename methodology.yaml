@@ -406,3 +406,37 @@ on_demand_experts:
       NOT add a low-compute mode — the fleet is efficient enough to be GREEDY
       with compute. On fatter hardware, INCREASE the synthesis model size where
       it helps (measured per corpus) rather than shrinking the technique.
+  detection_and_pull_granularity:
+    authority: "The Tlatoāni, 2026-08-12 (order 707-t3mz Q5 ruling)"
+    rule: >
+      Pulls are DEMAND-DRIVEN, not manifest-bulk. Do NOT parse a manifest and
+      pull docs for every declared dependency. On a forge for a Rust project the
+      launcher seeds the PRIMARY tech (Rust + its basic related stuff) up front;
+      thereafter the AGENT pulls each additional topic on demand AS IT WORKS
+      (needs tokio -> pull tokio; needs something else -> pull that). Most doc
+      sets are a few pages (cheap); only a handful (Flutter, Java, ...) run to
+      hundreds of MB. Pull-on-demand for whatever is relevant to the current,
+      highly-targeted work — quick, idempotent, ephemeral. NO threshold or
+      eviction policy yet: adding "only N topics at a time" / eviction is a
+      LATER optimization to make only if this becomes unruly (do not
+      pre-optimize). This resolves the 707-t3mz P4 auto-detect open question:
+      P4 seeds the primary tech + enables agent-driven incremental pulls, it
+      does NOT bulk-pull the dependency graph.
+
+  build_cache_hygiene:
+    authority: "The Tlatoāni, 2026-08-12"
+    rule: >
+      LONG-DURABLE hosts (bare-metal dev machines / out-of-forge coordinators —
+      NOT ephemeral forges, which discard their whole substrate on teardown)
+      accumulate a large disposable build cache (target/ measured at 63G on the
+      linux dev host 2026-08-12). At the END of a meta-orchestration cycle a
+      durable host SHOULD reclaim it when it is genuinely bloated OR stale, and
+      NOT on every cycle (a full `cargo clean` forces a full rebuild next cycle,
+      so it must be rare). Trigger (whichever first): target/ exceeds 40 GiB, OR
+      a `.last-build-cache-sweep` marker under the cache dir is older than 14
+      days. Action: `cargo clean` (+ `nix-collect-garbage --delete-older-than
+      14d` / `nix store gc` when nix is present), then stamp the marker. END of
+      cycle, not beginning, so the reclaim happens after the cycle's work and
+      the cost (a fuller next-build) is paid during the idle gap. Ephemeral
+      forges are EXEMPT — their target/ dies with the container. Implemented +
+      litmus-pinned by the ledger packet build-cache-sweep-on-durable-hosts.

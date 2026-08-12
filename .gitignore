@@ -106,3 +106,14 @@ crates/tillandsias-windows-tray/assets/tillandsias-headless-*
 **/cheatsheets-pulled/
 **/docs-pulled/
 .cache/
+
+# Leaked/launch log shapes not caught by the build-*/diag*/out*/smoke*/err* prefixes
+# (audit 2026-08-12: init-debug*.log, tray_output.log were tracked before any pattern existed)
+/init-*.log
+/tray_output.log
+# Defense-in-depth against the artifact-leak class that put target-musl/** in history:
+# catch Rust/obj artifacts and node_modules even if they ever land OUTSIDE a target*/ dir.
+node_modules/
+*.rlib
+*.o
+*.d
