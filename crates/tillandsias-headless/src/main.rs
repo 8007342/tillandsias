@@ -76,6 +76,28 @@ mod local_projects;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 pub mod remote_projects;
 mod runtime_assets;
+// 701-iu9b. The in-VM guest binary must never be built without `vault`.
+//
+// `listen-vsock` is how the guest binary is produced (scripts/build-macos-tray.sh:
+// `cargo zigbuild -p tillandsias-headless --features listen-vsock`). Without
+// `vault` the whole `vault_bootstrap` module below is cfg'd out, so the guest
+// would ship with no Vault bootstrap at all — and today that surfaces only as a
+// cascade of "cannot find `vault_bootstrap` in `crate`" errors from unrelated
+// call sites, which says nothing about the cause.
+//
+// This assertion must live HERE, outside the module, precisely because the
+// module does not exist in the configuration being guarded against. An earlier
+// version of this guard was placed inside vault_bootstrap.rs and was therefore
+// dead code that could never fire — the mistake worth recording, since the
+// `cfg(not(feature = "vault"))` stubs in that file are unreachable for the same
+// reason.
+#[cfg(all(feature = "listen-vsock", not(feature = "vault")))]
+compile_error!(
+    "the in-VM guest binary (--features listen-vsock) must also enable `vault`; \
+     without it the vault_bootstrap module is cfg'd out entirely and the guest \
+     ships with no Vault bootstrap (701-iu9b)."
+);
+
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;

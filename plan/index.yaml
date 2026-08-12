@@ -39783,6 +39783,12 @@ plan_index:
         - a before/after measurement is recorded for at least the download and the materialize paths — no unmeasured performance claim is accepted
         - the per-boot guest-binary hash is either cached against (path, mtime, len) or moved off the boot critical path, with the staleness argument written down
       events:
+        - type: note
+          ts: "2026-08-12T09:43:00Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t094300z"
+          host: macos
+          summary: >
+            MEASUREMENT CONSTRAINT discovered on macOS 2026-08-12, before claiming: this packet's criterion 2 ('a before/after measurement is recorded for at least the download and the materialize paths — no unmeasured performance claim is accepted') is NOT satisfiable on a host whose guest Vault holds a live credential. Three of the four sites (vz.rs:844 chunked download, materialize/oci.rs:106 decompress, fetch.rs:70 xz) execute only on COLD PROVISION; re-running them requires discarding rootfs.img, and the only supported way to do that is --reset-guest, which the tray's own help states wipes 'the guest disk (and with it the in-VM vault)'. On this host that would destroy the GitHub token seeded and verified at 05:09Z and force a re-auth — so the measurement was NOT taken and the packet was NOT claimed tonight rather than either faking the number or wiping an operator credential without being asked. TWO WAYS FORWARD for whoever picks this up: (a) do it on a host with no live credential, or immediately before an intended re-provision, which is the natural pairing; or (b) split the fourth site out — vz.rs:698 reads the entire staged guest binary into memory and SHA-256s it SYNCHRONOUSLY on every VM start, so unlike the other three it is on the HOT path, runs every boot, and is now measurable per-boot since the timing telemetry was repaired this session (697-s3by; build.sh --check measured at 9s, the first real number the instrument produced). Option (b) is the better first slice: it needs no destruction, it is the only one of the four an operator feels on every launch, and it can carry a real before/after.
         - type: filed
           ts: 2026-08-11T23:45:20Z
           agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
