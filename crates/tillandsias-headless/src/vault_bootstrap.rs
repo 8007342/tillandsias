@@ -84,6 +84,7 @@ pub fn set_in_vm_credentials(
         return;
     }
 
+    let share_for_disk = unseal_share_b64.clone();
     let cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
         *guard = Some(InVmCredentials {
@@ -93,11 +94,17 @@ pub fn set_in_vm_credentials(
         });
     }
 
-    if let Some(token) = root_token
-        && let Ok(cache_dir) = crate::init_cache_dir()
-    {
-        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
-        let _ = std::fs::write(&fallback_file, token);
+    // 701-se6x: persist BOTH, not just the token. This function used to write
+    // `fallback_vault-root-token-v1` and drop the delivered share on the floor —
+    // the identical asymmetry 694-mhz8 fixed at the fresh-init site, surviving
+    // here. It matters because `has_shamir_share_in_keyring` (the predicate the
+    // partial-init WIPE turns on) consults an OS keychain, absent in this guest,
+    // and then this file. So a guest that had lost only its share file would be
+    // handed a perfectly good share by the host, use it in memory, still fail
+    // the predicate, and have its intact Vault wiped on the next launch — the
+    // host had the evidence and the guest threw it away.
+    if let Ok(cache_dir) = crate::init_cache_dir() {
+        write_vm_credential_fallbacks(&cache_dir, root_token.as_deref(), share_for_disk.as_deref());
     }
 }
 
@@ -3778,6 +3785,96 @@ mod tests {
     use super::*;
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    /// 701-se6x. The HOST-DELIVERED share must be persisted too, not just the
+    /// host-delivered root token.
+    ///
+    /// `set_in_vm_credentials` is the tray's delivery path into a running guest.
+    /// It wrote `fallback_vault-root-token-v1` and dropped the share — the exact
+    /// asymmetry 694-mhz8 fixed at the fresh-init site, surviving at this one.
+    /// The consequence is not cosmetic: a guest that has lost only its share
+    /// file gets handed a good share by the host, uses it in memory, still fails
+    /// `has_shamir_share_in_keyring`, and has its intact Vault WIPED on the next
+    /// launch. The host held the evidence and the guest discarded it.
+    ///
+    /// Exercised through `set_in_vm_credentials` ITSELF, not through the shared
+    /// writer. An earlier version of this test called the writer directly and
+    /// was VACUOUS: reverting the call site to pass `None` for the share left it
+    /// passing, because it never touched the code being fixed. That is this
+    /// project's named recurring failure — "verified where it was written is not
+    /// verified where it runs" — reproduced in the test for the fix against it.
+    #[test]
+    fn host_delivered_share_is_persisted_not_only_the_token() {
+        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+
+        let cache_root = std::env::temp_dir().join(format!(
+            "tillandsias-701-delivered-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&cache_root).expect("temp cache root");
+        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
+
+        set_in_vm_credentials(
+            Some("ZGVsaXZlcmVk".to_string()),
+            "test-installation".to_string(),
+            Some("s.delivered-token".to_string()),
+        );
+
+        let dir = cache_root.join("tillandsias");
+        let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "the token half must still be delivered (pre-701 behavior preserved)"
+        );
+        assert!(
+            share.is_file(),
+            "the DELIVERED share must be recorded where the wipe predicate reads, or \
+             the next launch destroys an intact Vault the host could have saved. \
+             This assertion must fail if set_in_vm_credentials stops passing the share."
+        );
+        assert_eq!(
+            std::fs::read_to_string(&share)
+                .expect("share readable")
+                .trim(),
+            "ZGVsaXZlcmVk",
+            "a corrupted share cannot unseal, so it must round-trip verbatim"
+        );
+
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        let _ = std::fs::remove_dir_all(&cache_root);
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above, and the reason
+    /// this fix is not "always write a share file". The partial-init wipe must
+    /// still fire when NO share was ever captured — a Vault initialized with an
+    /// unknown key can never unseal, and preserving it strands the guest
+    /// permanently. A delivery carrying only a token must therefore leave the
+    /// share file absent.
+    #[test]
+    fn delivery_without_a_share_leaves_the_wipe_predicate_able_to_fire() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701-tokenonly-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        write_vm_credential_fallbacks(&dir, Some("s.delivered-token"), None);
+
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "the token half of the delivery is still recorded"
+        );
+        assert!(
+            !dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+                .is_file(),
+            "a share that was never delivered must NOT be recorded as captured — \
+             otherwise a genuine partial init is preserved and Vault can never unseal"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// 694-mhz8. In-VM init must persist BOTH credential fallbacks. The share
     /// file is the only evidence, inside a VM, that `operator init` completed:
