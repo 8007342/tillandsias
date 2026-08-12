@@ -156,6 +156,7 @@ specs:
   - litmus:local-ci-self-clean-evidence
   - litmus:installer-ascii-expansion-safety
   - litmus:litmus-expression-pinning-enforcement-shape
+  - litmus:parked-blocks-visibility-shape
   coverage_ratio: 75
   last_verified: '2026-08-12'
 - spec_id: codex-tray-launcher

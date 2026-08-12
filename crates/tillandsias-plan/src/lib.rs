@@ -205,6 +205,51 @@ pub fn closure_rank(status: &str) -> Option<u8> {
     }
 }
 
+/// A PARKED status is non-terminal but not actively progressing: a dependent
+/// waiting on it is stuck with no work happening behind it, and the fold
+/// leaves it silently blocked unless tooling surfaces it (686-7qcm). `ready`,
+/// `pending` and `in_progress` are NOT parked — they advance on their own.
+/// `implemented` parks pending field verification; `needs_clarification` on an
+/// operator answer; `blocked` on a named external dependency; `failed` on a
+/// re-attempt.
+pub fn is_parked_status(status: &str) -> bool {
+    matches!(
+        status,
+        "implemented" | "needs_clarification" | "blocked" | "failed"
+    )
+}
+
+/// One "invisibly blocked" edge: `dependent` waits on `dependency`, which sits
+/// in a parked `status` with `outstanding` naming the action that would free
+/// it (its `next_action`, first line). Ordered for deterministic reporting.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ParkedBlock {
+    pub dependency: String,
+    pub status: String,
+    pub dependent: String,
+    pub outstanding: String,
+}
+
+impl ParkedBlock {
+    fn new(dependent: &str, dependency: &str, status: &str, dep_packet: &Value) -> Self {
+        let outstanding = str_field(dep_packet, "next_action")
+            .map(|s| {
+                s.lines()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("")
+                    .trim()
+            })
+            .unwrap_or("")
+            .to_string();
+        ParkedBlock {
+            dependency: dependency.to_string(),
+            status: status.to_string(),
+            dependent: dependent.to_string(),
+            outstanding,
+        }
+    }
+}
+
 impl Ledger {
     /// Load the ledger from a plan index file. Walks the whole YAML tree
     /// collecting every mapping that carries a `packet_id` — resilient to
@@ -541,6 +586,69 @@ impl Ledger {
         }
 
         Some(result)
+    }
+
+    /// Direct dependencies of `reference` that are in a PARKED status —
+    /// non-terminal but not actively progressing (implemented / blocked /
+    /// needs_clarification / failed). A dependent waiting on one of these is
+    /// stuck with no work happening behind it (686-7qcm).
+    pub fn parked_dependencies_of(&self, reference: &str) -> Vec<ParkedBlock> {
+        let Some(target) = self.resolve(reference) else {
+            return Vec::new();
+        };
+        let dependent = self.id_of(target);
+        let mut out = Vec::new();
+        for dependency in str_list(target, "depends_on") {
+            if self.archived_ids.contains(&dependency) {
+                continue;
+            }
+            let Some(dep) = self.resolve(&dependency) else {
+                continue;
+            };
+            let status = str_field(dep, "status").unwrap_or("");
+            if is_parked_status(status) {
+                out.push(ParkedBlock::new(
+                    &dependent,
+                    self.id_of(dep).as_str(),
+                    status,
+                    dep,
+                ));
+            }
+        }
+        out.sort();
+        out
+    }
+
+    /// Every (dependent → parked-dependency) edge in the whole ledger, so the
+    /// gate and status readers can SURFACE work invisibly blocked behind a
+    /// parked packet instead of leaving it silently stuck (686-7qcm / 650-dq6u:
+    /// "implemented and needs_clarification are visible parking states —
+    /// tooling reports every dependent waiting on them").
+    pub fn parked_blocks(&self) -> Vec<ParkedBlock> {
+        let mut out = Vec::new();
+        for packet in &self.packets {
+            let dependent = self.id_of(packet);
+            for dependency in str_list(packet, "depends_on") {
+                if self.archived_ids.contains(&dependency) {
+                    continue;
+                }
+                let Some(dep) = self.resolve(&dependency) else {
+                    continue;
+                };
+                let status = str_field(dep, "status").unwrap_or("");
+                if is_parked_status(status) {
+                    out.push(ParkedBlock::new(
+                        &dependent,
+                        self.id_of(dep).as_str(),
+                        status,
+                        dep,
+                    ));
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
     }
 
     /// Transitive closure of blocked_by (everything downstream of X).
@@ -1669,6 +1777,79 @@ steps:
             vec!["downstream"],
             "adding the upstream query must not change downstream semantics"
         );
+    }
+
+    #[test]
+    fn parked_blocks_surface_dependents_stuck_behind_parked_packets() {
+        // 686-7qcm: a dependent of a PARKED packet (implemented / blocked /
+        // needs_clarification / failed) is invisibly stuck and must be
+        // reported; a dependent of a terminal or actively-progressing packet
+        // must NOT be — the negative control that keeps the report meaningful.
+        let raw = r#"
+steps:
+  - packet_id: impl-dep
+    order: 920
+    status: implemented
+    next_action: |
+      rebuild the tray and re-verify on a clean guest
+      (second line ignored)
+  - packet_id: ready-dep
+    order: 921
+    status: ready
+  - packet_id: done-dep
+    order: 922
+    status: done
+  - packet_id: waits-on-parked
+    order: 923
+    status: pending
+    depends_on: [impl-dep]
+  - packet_id: waits-on-ready
+    order: 924
+    status: pending
+    depends_on: [ready-dep]
+  - packet_id: waits-on-done
+    order: 925
+    status: pending
+    depends_on: [done-dep]
+"#;
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+
+        let blocks = ledger.parked_blocks();
+        assert_eq!(blocks.len(), 1, "exactly one parked-block edge expected");
+        let b = &blocks[0];
+        assert_eq!(b.dependent, "waits-on-parked");
+        assert_eq!(b.dependency, "impl-dep");
+        assert_eq!(b.status, "implemented");
+        assert_eq!(
+            b.outstanding, "rebuild the tray and re-verify on a clean guest",
+            "the outstanding action is the first non-empty next_action line"
+        );
+
+        // ready and done dependencies never surface — they progress or are
+        // finished, not parked.
+        assert!(
+            !blocks.iter().any(|b| b.dependency == "ready-dep"),
+            "a ready dependency is not a parked block"
+        );
+        assert!(
+            !blocks.iter().any(|b| b.dependency == "done-dep"),
+            "a terminal dependency is not a parked block"
+        );
+
+        // The per-packet view agrees with the whole-ledger view.
+        let one = ledger.parked_dependencies_of("waits-on-parked");
+        assert_eq!(one, blocks);
+        assert!(ledger.parked_dependencies_of("waits-on-ready").is_empty());
+    }
+
+    #[test]
+    fn parked_status_classification_matches_the_ladder() {
+        for s in ["implemented", "needs_clarification", "blocked", "failed"] {
+            assert!(is_parked_status(s), "{s} must be parked");
+        }
+        for s in ["ready", "pending", "in_progress", "completed", "verified", "done", "obsoleted"] {
+            assert!(!is_parked_status(s), "{s} must NOT be parked");
+        }
     }
 
     #[test]

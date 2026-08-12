@@ -81,6 +81,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "methodology-index",
     "next",
     "next-order",
+    "parked-blocks",
     "query",
     "ready",
     "spec-envelope",
@@ -141,6 +142,9 @@ const USAGE: &str = concat!(
     "           blocked-by <id|order>     packets directly blocked by X\n",
     "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
+    "           parked-blocks [id|order]  dependents invisibly blocked behind a PARKED\n",
+    "                                     packet (implemented/needs_clarification/blocked/\n",
+    "                                     failed); no arg = whole ledger (order 686-7qcm)\n",
     "           ready [role]              ready packets (optionally for a pickup role)\n",
     "           next [role] [--release V] [--limit N]\n",
     "                                     ORDER 606-xu52. The cold-start selector: at most FIVE\n",
@@ -1823,10 +1827,31 @@ fn main() {
             for s in ledger.validate_against_schema(&schema) {
                 eprintln!("advisory (schema drift): {s}");
             }
+            // 686-7qcm — the invisible-block report. A dependent waiting on a
+            // PARKED packet (implemented / needs_clarification / blocked /
+            // failed) is otherwise silently stuck: `ready` skips it and
+            // burndown does not count the block. Surface every such edge as an
+            // advisory so parked work with waiting dependents is visible.
+            let parked = ledger.parked_blocks();
+            for pb in &parked {
+                eprintln!(
+                    "parked-block: {} waits on {} [{}]{}",
+                    pb.dependent,
+                    pb.dependency,
+                    pb.status,
+                    if pb.outstanding.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" — {}", pb.outstanding)
+                    }
+                );
+            }
             if report.violations.is_empty() {
                 println!(
-                    "ok: {} packets, ids unique, live references sound",
-                    ledger.packets.len()
+                    "ok: {} packets, ids unique, live references sound ({} parked-block edge{})",
+                    ledger.packets.len(),
+                    parked.len(),
+                    if parked.len() == 1 { "" } else { "s" }
                 );
             } else {
                 for v in &report.violations {
@@ -1835,12 +1860,48 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "parked-blocks" => {
+            // 686-7qcm. List every dependent invisibly blocked behind a parked
+            // packet. With a reference argument, only that packet's parked
+            // dependencies; with none, the whole ledger. One TSV row per edge:
+            // dependent<TAB>dependency<TAB>status<TAB>outstanding.
+            let edges = match args.get(1) {
+                Some(reference) => {
+                    warn_if_unresolved(&ledger, reference);
+                    ledger.parked_dependencies_of(reference)
+                }
+                None => ledger.parked_blocks(),
+            };
+            for pb in &edges {
+                emit(&format!(
+                    "{}\t{}\t{}\t{}",
+                    pb.dependent, pb.dependency, pb.status, pb.outstanding
+                ));
+            }
+        }
         "status" => {
             let Some(reference) = args.get(1) else {
                 usage()
             };
             match ledger.resolve(reference) {
-                Some(p) => println!("{}", line(&ledger, p)),
+                Some(p) => {
+                    println!("{}", line(&ledger, p));
+                    // 686-7qcm: name any parked dependency so a single-packet
+                    // status read shows WHY the packet cannot progress and what
+                    // would free it, instead of an unexplained blocked/pending.
+                    for pb in ledger.parked_dependencies_of(reference) {
+                        eprintln!(
+                            "  blocked-on-parked: {} [{}]{}",
+                            pb.dependency,
+                            pb.status,
+                            if pb.outstanding.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" — {}", pb.outstanding)
+                            }
+                        );
+                    }
+                }
                 None => {
                     eprintln!("error: {}", unresolved_reason(&ledger, reference));
                     std::process::exit(1);

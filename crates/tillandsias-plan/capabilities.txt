@@ -42,6 +42,7 @@ next
 next-order
 # One filename, two readers, so the "available now" and "available after a
 # ONE token per line: the subcommands this expert can answer. Sorted, unique,
+parked-blocks
 query
 # reader.
 ready

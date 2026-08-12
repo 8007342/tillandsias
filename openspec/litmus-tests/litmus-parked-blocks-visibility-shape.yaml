@@ -1,0 +1,48 @@
+# @trace spec:ci-release
+name: litmus:parked-blocks-visibility-shape
+spec: ci-release
+phase: pre-build
+description: The parked-blocks report surfaces a dependent stuck behind a parked packet and never a dependent of a progressing or terminal one
+severity: high
+size: instant
+
+# Order 686-7qcm criterion 2. A dependent of a PARKED packet
+# (implemented/needs_clarification/blocked/failed) is otherwise invisible —
+# `ready` skips it and burndown does not count the block (the 627-sgtt class).
+# This pins the binary-level surface against an isolated fixture ledger so the
+# assertion never depends on the live ledger's contents.
+
+preconditions:
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "POSITIVE CONTROL: a dependent of an implemented packet is surfaced with its outstanding action"
+    command: "T=$(mktemp -d); printf 'steps:\\n  - packet_id: impl-dep\\n    order: 930\\n    status: implemented\\n    next_action: |\\n      rebuild and re-verify on a clean guest\\n  - packet_id: waiter\\n    order: 931\\n    status: pending\\n    depends_on: [impl-dep]\\n' > \"$T/index.yaml\"; out=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; echo \"$out\" | grep -q 'waiter	impl-dep	implemented	rebuild and re-verify on a clean guest' && echo 'ok: parked block surfaced'"
+    timeout_ms: 15000
+    expected_behavior: "ok: parked block surfaced"
+
+  - step: "NEGATIVE CONTROL: a dependent of a ready (progressing) packet is NOT surfaced"
+    command: "T=$(mktemp -d); printf 'steps:\\n  - packet_id: ready-dep\\n    order: 932\\n    status: ready\\n  - packet_id: waiter2\\n    order: 933\\n    status: pending\\n    depends_on: [ready-dep]\\n' > \"$T/index.yaml\"; out=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; if echo \"$out\" | grep -q 'waiter2'; then echo 'FAIL: a ready dependency was reported as a parked block'; exit 1; fi; echo 'ok: ready dependency not surfaced'"
+    timeout_ms: 15000
+    expected_behavior: "ok: ready dependency not surfaced"
+
+  - step: "NEGATIVE CONTROL: a dependent of a terminal (done) packet is NOT surfaced"
+    command: "T=$(mktemp -d); printf 'steps:\\n  - packet_id: done-dep\\n    order: 934\\n    status: done\\n  - packet_id: waiter3\\n    order: 935\\n    status: pending\\n    depends_on: [done-dep]\\n' > \"$T/index.yaml\"; out=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; if echo \"$out\" | grep -q 'waiter3'; then echo 'FAIL: a terminal dependency was reported as a parked block'; exit 1; fi; echo 'ok: terminal dependency not surfaced'"
+    timeout_ms: 15000
+    expected_behavior: "ok: terminal dependency not surfaced"
+
+  - step: "the check command counts parked-block edges in its ok line"
+    command: "./target/release/tillandsias-plan check 2>/dev/null | grep -qE 'parked-block edge' && echo 'ok: check reports parked-block edge count'"
+    timeout_ms: 30000
+    expected_behavior: "ok: check reports parked-block edge count"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "parked-blocks: dependents behind parked packets surfaced; progressing and terminal dependencies excluded"
+  log_fields:
+    spec: "ci-release"
+    test: "parked-blocks-visibility-shape"
+
+rollback:
+  on_failure: "restore crates/tillandsias-plan/src/lib.rs and main.rs parked-blocks additions from git history"
