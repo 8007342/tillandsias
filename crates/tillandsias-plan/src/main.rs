@@ -2452,8 +2452,78 @@ fn main() {
                 std::process::exit(1);
             };
             let current = str_field(packet, &field).unwrap_or("<unset>").to_string();
+            // 699-usxc, second half. A no-op on the FIELD must not silently
+            // discard a note the caller explicitly asked to record.
+            //
+            // This branch used to return here unconditionally, so
+            // `set-field <id> <field> <same-value> --reason "..."` printed `ok`
+            // and wrote NOTHING — not the row, not the reason. Combined with
+            // append-event being unable to reach fragment-only packets (the
+            // other half of this packet), that left NO way to annotate such a
+            // packet without also changing a field, and it bit hardest while
+            // trying to correct a corrupted record: the one moment the ledger
+            // most needs to accept a write. `ok` for "I discarded your text" is
+            // the same unevidenced-success shape as 700-nz4n's other members.
+            //
+            // A bare no-op stays quiet and cheap. A no-op carrying --reason or
+            // --evidence records the note and says so.
             if current == value {
-                println!("ok: no-op — {pid}.{field} is already '{value}'");
+                let note = flagged("--reason")
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| flagged("--evidence").filter(|s| !s.trim().is_empty()));
+                let Some(note) = note else {
+                    println!("ok: no-op — {pid}.{field} is already '{value}'");
+                    return;
+                };
+                // Same defaults the field-changing path below uses, so a note
+                // written here is indistinguishable from one written there.
+                let ts = flagged("--ts").unwrap_or_else(|| {
+                    let secs = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    answer::epoch_to_iso8601(secs)
+                });
+                let host = flagged("--host").unwrap_or_else(|| {
+                    std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
+                });
+                let compact = loop_status::iso_to_compact(&ts);
+                let suffix = format!(
+                    "{:08x}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.subsec_nanos())
+                        .unwrap_or(0)
+                );
+                let dir = fragments::fragment_dir(&index);
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    eprintln!("error: create {}: {e}", dir.display());
+                    std::process::exit(1);
+                }
+                let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+                let mut body = String::new();
+                body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+                body.push_str("# Written by: tillandsias-plan set-field (order 699-usxc).\n");
+                body.push_str(&format!(
+                    "#\n# {pid}.{field} was ALREADY '{value}', so no field changed — but the caller\n\
+                     # supplied a note, and discarding it silently is what this packet is about.\n"
+                ));
+                body.push_str("events:\n");
+                body.push_str(&format!("  - packet_id: {pid}\n"));
+                body.push_str("    event:\n");
+                body.push_str("      type: note\n");
+                body.push_str(&format!("      ts: \"{ts}\"\n"));
+                body.push_str(&format!("      host: {host}\n"));
+                body.push_str("      summary: >\n");
+                body.push_str(&format!("        {}\n", note.replace('\n', " ")));
+                if let Err(e) = std::fs::write(&path, body) {
+                    eprintln!("error: write {}: {e}", path.display());
+                    std::process::exit(1);
+                }
+                println!(
+                    "ok: no-op — {pid}.{field} is already '{value}'; note recorded ({})",
+                    path.display()
+                );
                 return;
             }
 

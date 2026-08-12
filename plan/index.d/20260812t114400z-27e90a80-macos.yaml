@@ -1,0 +1,13 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 699-usxc).
+#
+# guest-fetch-unit-and-build-flag-latent-wipe-traps.status was ALREADY 'implemented', so no field changed — but the caller
+# supplied a note, and discarding it silently is what this packet is about.
+events:
+  - packet_id: guest-fetch-unit-and-build-flag-latent-wipe-traps
+    event:
+      type: note
+      ts: "2026-08-12T11:44:00Z"
+      host: macos
+      summary: >
+        LIVE VERIFICATION of 699-usxc second half: this note was recorded by a set-field call whose field value was ALREADY implemented. The identical call last cycle printed ok and wrote nothing, discarding a correction to a corrupted evidence string.

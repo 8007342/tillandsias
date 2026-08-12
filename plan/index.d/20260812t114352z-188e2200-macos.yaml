@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: append-event-cannot-reach-fragment-only-packets
+    field: status
+    value: completed
+    ts: "2026-08-12T11:43:52Z"
+    host: macos
+
+events:
+  - packet_id: append-event-cannot-reach-fragment-only-packets
+    event:
+      type: completed
+      ts: "2026-08-12T11:43:52Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: BOTH HALVES NOW FIXED. Half 1 (70052567): append-event writes a NEW FRAGMENT when the base ledger has no item span for the target, instead of refusing with "packet_id not found" for a packet status resolves fine — root cause was the WRITE (text insertion into plan/index.yaml), not resolution; new base_hosts_packet() makes the choice explicit. Half 2 (this commit): a set-field whose field value is UNCHANGED no longer discards an explicitly supplied --reason/--evidence; it records the note as a fragment and names the file. That half is what made half 1 expensive, because set-field --reason was the documented workaround and it silently wrote nothing while printing ok — the same unevidenced-success shape as the rest of milestone 700-nz4n. EXIT CRITERIA: (1) append-event resolves and appends to a fragment-only packet — PROVEN LIVE on 701-iu9b, the exact call that failed twice; (2) a packet filed into a fragment can be appended to WITHOUT an intervening compaction — same proof, no compaction ran; (3) NEGATIVE CONTROLS, all with real exit codes captured directly rather than through a pipe: an unknown packet_id still refuses with exit 1, a BASE-hosted packet still edits the base with the fragment count unchanged at 47, and a BARE no-op with no note still stays quiet and writes nothing (53 fragments before and after) so the fix cannot degrade into littering the ledger on every idempotent call. 11 plan tests green; ledger checks green (766 packets, no fragment status loss, added fragments parse); gate green.
