@@ -1256,6 +1256,60 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
 /// completion in the event stream while the status channel said otherwise, and
 /// `check-fragment-status-loss.sh` refused it AFTER the write and AFTER a
 /// commit. It cost two cycles on this host inside one hour.
+/// Write one event for a packet that lives only in `plan/index.d/`
+/// (order 692-u57i). Returns the fragment path on success.
+///
+/// The shape mirrors what `set-field` emits and what a human had to hand-write
+/// before this existed: an `events:` channel keyed by `packet_id`. Fragments
+/// are immutable, so this always creates a NEW file — never edits one — which
+/// is what makes the fold order-independent and keeps two hosts from
+/// conflicting on the same path.
+#[allow(clippy::too_many_arguments)]
+fn append_event_fragment(
+    index: &std::path::Path,
+    packet_id: &str,
+    etype: &str,
+    ts: &str,
+    agent: &str,
+    host: &str,
+    summary: &str,
+) -> Result<std::path::PathBuf, String> {
+    let dir = fragments::fragment_dir(index);
+    std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
+    let compact = loop_status::iso_to_compact(ts);
+    let suffix = format!(
+        "{:08x}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0)
+    );
+    let path = dir.join(fragments::fragment_name(&compact, &suffix, host));
+
+    let mut body = String::new();
+    body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+    body.push_str("# Written by: tillandsias-plan append-event (order 692-u57i).\n");
+    body.push_str("#\n");
+    body.push_str("# This packet lives only in plan/index.d/, so the event goes to a NEW\n");
+    body.push_str("# fragment rather than into the base — the base has nothing to append to.\n");
+    body.push_str("events:\n");
+    body.push_str(&format!("  - packet_id: {packet_id}\n"));
+    body.push_str("    event:\n");
+    body.push_str(&format!("      type: {etype}\n"));
+    body.push_str(&format!("      ts: \"{ts}\"\n"));
+    body.push_str(&format!("      agent_id: \"{agent}\"\n"));
+    body.push_str(&format!("      host: {host}\n"));
+    body.push_str("      summary: >\n");
+    // Fold the summary into a block scalar so quotes, colons and newlines in
+    // an operator's text cannot produce an unparseable fragment.
+    for line in summary.replace('\r', "").split('\n') {
+        body.push_str(&format!("        {}\n", line.trim_end()));
+    }
+
+    std::fs::write(&path, body).map_err(|e| format!("write {}: {e}", path.display()))?;
+    Ok(path)
+}
+
 fn evidence_event_shape(status: &str) -> (&'static str, String) {
     if tillandsias_plan::is_terminal_status(status) {
         ("completed", format!("status '{status}' with evidence_refs"))
@@ -2294,6 +2348,30 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+            // ORDER 692-u57i. `resolve` above already searched the FOLDED
+            // ledger, so `target` may name a packet that exists only in
+            // plan/index.d/. The base edit below cannot reach one, and used to
+            // fail with "packet_id not found" — one command after `status`
+            // printed that same packet's line. The documented filing path
+            // (write a NEW fragment, never touch the base) was producing
+            // packets the documented annotation path could not touch.
+            //
+            // Route those to an events-channel fragment, which is what a human
+            // had to hand-write instead. The base path is unchanged for base
+            // packets: events keep landing where they always did, so this does
+            // not quietly migrate the whole ledger into fragments.
+            if edit::item_span(&raw, &target).is_none() {
+                match append_event_fragment(&index, &target, etype, &ts, &agent, &host, summary) {
+                    Ok(path) => {
+                        println!("appended {etype} event to {target} ({})", path.display());
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!("error: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
             let candidate = match edit::append_event(&raw, &target, &block) {
                 Ok(c) => c,
                 Err(e) => {

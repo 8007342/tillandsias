@@ -1,0 +1,14 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 692-u57i).
+#
+# This packet lives only in plan/index.d/, so the event goes to a NEW
+# fragment rather than into the base — the base has nothing to append to.
+events:
+  - packet_id: one-shared-plan-binary-probe
+    event:
+      type: note
+      ts: "2026-08-12T10:32:57Z"
+      agent_id: "windows-claude-opus5-20260811t215500z"
+      host: windows
+      summary: >
+        692-u57i verification: this event was written by append-event itself, to a packet that exists only in plan/index.d/. Before this change the same command exited 1 with 'packet_id not found'.
