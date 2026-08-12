@@ -66,37 +66,44 @@ if ! is_stale; then
     exit 0
 fi
 
-# Ensure the rustup target is installed. Idempotent — fast no-op on
-# subsequent runs. If rustup itself is missing, surface the message
-# immediately (we can't proceed without it).
+# Ensure the rustup target is installed if rustup is present.
+# If rustup is missing or target addition fails (e.g. in containerized forge environments),
+# fall back to compiling for the default host target so cargo build/check/test can proceed.
+USE_TARGET=true
 if ! command -v rustup >/dev/null 2>&1; then
-    echo "[build-sidecar] ERROR: rustup not found in PATH." >&2
-    echo "[build-sidecar] Install rustup first: https://rustup.rs/" >&2
-    exit 2
-fi
-if ! rustup target list --installed | grep -q "^${TARGET}\$"; then
-    echo "[build-sidecar] Installing rust target ${TARGET}..."
-    rustup target add "${TARGET}"
+    USE_TARGET=false
+elif ! rustup target list --installed | grep -q "^${TARGET}\$"; then
+    if ! rustup target add "${TARGET}" 2>/dev/null; then
+        USE_TARGET=false
+    fi
 fi
 
-# @trace spec:cross-platform
-# Windows host (Git Bash / MSYS) has no `cc` in PATH, so the default
-# linker probe for the musl target fails with "linker `cc` not found".
-# Pin rust-lld + link-self-contained=yes so the cross-link to ELF musl
-# works without an external toolchain. Linux/macOS hosts skip this and
-# keep using the system cc resolution they have always used.
-case "${OSTYPE:-}" in
-    msys*|cygwin*|win32*)
-        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER="rust-lld"
-        export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C link-self-contained=yes"
-        ;;
-esac
+if [[ "$USE_TARGET" == true ]]; then
+    # @trace spec:cross-platform
+    # Windows host (Git Bash / MSYS) has no `cc` in PATH, so the default
+    # linker probe for the musl target fails with "linker `cc` not found".
+    # Pin rust-lld + link-self-contained=yes so the cross-link to ELF musl
+    # works without an external toolchain. Linux/macOS hosts skip this and
+    # keep using the system cc resolution they have always used.
+    case "${OSTYPE:-}" in
+        msys*|cygwin*|win32*)
+            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER="rust-lld"
+            export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C link-self-contained=yes"
+            ;;
+    esac
 
-echo "[build-sidecar] cargo build --release --target ${TARGET} --bin tillandsias-router-sidecar --features unix-only"
-( cd "$ROOT" && CARGO_TARGET_DIR="${SIDECAR_TARGET_DIR}" \
-    cargo build --release --target "${TARGET}" --bin tillandsias-router-sidecar --features unix-only )
+    echo "[build-sidecar] cargo build --release --target ${TARGET} --bin tillandsias-router-sidecar --features unix-only"
+    ( cd "$ROOT" && CARGO_TARGET_DIR="${SIDECAR_TARGET_DIR}" \
+        cargo build --release --target "${TARGET}" --bin tillandsias-router-sidecar --features unix-only )
+    SRC="${SIDECAR_TARGET_DIR}/${TARGET}/release/tillandsias-router-sidecar"
+else
+    echo "[build-sidecar] rustup/musl target not present — building sidecar with host target"
+    echo "[build-sidecar] cargo build --release --bin tillandsias-router-sidecar --features unix-only"
+    ( cd "$ROOT" && CARGO_TARGET_DIR="${SIDECAR_TARGET_DIR}" \
+        cargo build --release --bin tillandsias-router-sidecar --features unix-only )
+    SRC="${SIDECAR_TARGET_DIR}/release/tillandsias-router-sidecar"
+fi
 
-SRC="${SIDECAR_TARGET_DIR}/${TARGET}/release/tillandsias-router-sidecar"
 if [[ ! -f "$SRC" ]]; then
     echo "[build-sidecar] ERROR: build succeeded but binary not found at $SRC" >&2
     exit 3
