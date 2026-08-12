@@ -27,10 +27,12 @@ fn order_of(haystack: &str, markers: &[&str]) -> Vec<(String, usize)> {
     markers
         .iter()
         .map(|m| {
-            let at = haystack
-                .find(m)
-                .unwrap_or_else(|| panic!("marker {m:?} no longer appears — prompt text changed; \
-                                           update BOTH sides and this pin together"));
+            let at = haystack.find(m).unwrap_or_else(|| {
+                panic!(
+                    "marker {m:?} no longer appears — prompt text changed; \
+                                           update BOTH sides and this pin together"
+                )
+            });
             ((*m).to_string(), at)
         })
         .collect()
