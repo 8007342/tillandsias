@@ -1,0 +1,38 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+
+  - packet_id: uncommit-router-sidecar-build-artifact
+    order: 710-w9kc
+    status: ready
+    desired_release: v0.6
+    priority: p3
+    title: "Un-commit images/router/tillandsias-router-sidecar (1.9M static ELF build artifact) — gitignore it and build/stage it at image-build time"
+    kind: chore
+    deliverable: the prebuilt sidecar ELF is no longer tracked; the router image build stages it fresh (build-sidecar.sh) or CI produces it; .gitignore guards the path
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [hygiene, images, build, gitignore]
+    context: >
+      Git-hygiene audit (operator, 2026-08-12) flagged a committed 1.9M static
+      musl ELF at images/router/tillandsias-router-sidecar as suspicious. It is
+      NOT malicious: scripts/build-sidecar.sh compiles the in-repo crate
+      crates/tillandsias-router-sidecar and stages the binary at that exact
+      path, and images/router/Containerfile:81 COPYs it into the router image.
+      So it is a legitimately-built artifact of our own source, committed so the
+      image build need not compile Rust inside itself. But it violates the
+      build-not-commit policy the same audit enforces elsewhere (committed
+      binaries are build cache, not source). Clean fix: gitignore the path and
+      make the router image build depend on build-sidecar.sh staging it fresh
+      (or a CI step), so the tree never carries the binary. Verify the router
+      image still builds end-to-end before removing the tracked blob — the
+      Containerfile COPY must find the staged file. Low priority, no user impact.
+    exit_criteria:
+      - "images/router/tillandsias-router-sidecar is gitignored and no longer tracked (git ls-files shows it gone)"
+      - "the router image build stages the binary fresh (build-sidecar.sh invoked by the build path or CI) and images/router/Containerfile still finds it at COPY time"
+      - "a build of the router image succeeds with the binary absent from the tree"
+    events:
+      - type: filed
+        ts: "2026-08-12T19:46:19Z"
+        agent_id: linux-mutable-session-20260812
+        host: linux_mutable
+        summary: "Filed from the git-hygiene audit — committed build artifact, legit content but build-not-commit policy smell."
