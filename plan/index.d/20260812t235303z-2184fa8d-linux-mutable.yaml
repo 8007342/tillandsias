@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: uncommit-router-sidecar-build-artifact
+    event:
+      type: verified
+      ts: "2026-08-12T23:53:03Z"
+      agent_id: linux-mutable-session-20260812
+      host: linux_mutable
+      summary: >
+        E2E-VERIFIED as-wired: scripts/build-image.sh router built tillandsias-router:v0.4.260812.1 (114MB, current source version) with the committed blob NOT tracked (git ls-files --error-unmatch fails) — build-image.sh staged a fresh sidecar via build-sidecar.sh and the Containerfile COPY succeeded (a missing COPY source fails podman build, so the green build proves the binary is present-because-staged, not present-because-committed). Satisfies exit criterion 3 (router image builds with the binary absent from the tree). Criteria 1 (gitignored+untracked) and 2 (staged fresh + Containerfile finds it) already met. Release-asset publication (flake.nix + release.yml) exercises on the next real release.
