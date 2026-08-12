@@ -1123,6 +1123,32 @@ fn vault_data_volume_exists() -> bool {
     dir.exists()
 }
 
+/// Persist the in-VM credential fallback files.
+///
+/// Inside the VM there is no OS keychain, so these files are the only durable
+/// record that `operator init` completed and the host-visible handover was
+/// produced. Each value is written only when present: a caller that has the
+/// token but not the share writes only the token, which keeps a genuine
+/// partial init detectable (694-mhz8).
+///
+/// Best-effort by design — a failure here must not abort a successful init;
+/// the worst case is the pre-694 behavior.
+fn write_vm_credential_fallbacks(
+    cache_dir: &std::path::Path,
+    token: Option<&str>,
+    share_b64: Option<&str>,
+) {
+    if let Some(token) = token {
+        let _ = fs::write(cache_dir.join("fallback_vault-root-token-v1"), token);
+    }
+    if let Some(share_b64) = share_b64 {
+        let _ = fs::write(
+            cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")),
+            share_b64,
+        );
+    }
+}
+
 /// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
 /// unseal share. Used to distinguish a subsequent-boot launch (data volume
 /// contains a fully-initialized Vault the host can re-unseal) from a
@@ -3094,11 +3120,28 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 });
             }
 
-            // Also proactively update the fallback file so child processes (like GithubLogin)
-            // running right after init can use the fresh token before the host re-delivers it.
+            // Also proactively update the fallback files so child processes (like
+            // GithubLogin) running right after init can use the fresh credentials
+            // before the host re-delivers them.
+            //
+            // 694-mhz8: the SHARE write is not a convenience — it is what keeps the
+            // next bootstrap from destroying this Vault. `has_shamir_share_in_keyring`
+            // decides `is_partial_init` (see the wipe branch below) by looking for an
+            // OS keychain entry and then this file. Inside the VM there is no OS
+            // keychain, so this file is the ONLY evidence that the share was ever
+            // captured. Writing only the token — as this block did until now — left
+            // the predicate permanently false, so every subsequent bootstrap
+            // classified a healthy initialized Vault as a crashed partial init and
+            // wiped it, taking the stored GitHub token with it. Observed live on
+            // macOS 2026-08-11: `--github-login` succeeded and verified its own
+            // Vault write, and the secret was 404 on the next boot.
+            //
+            // Writing it here (rather than relaxing the predicate) preserves the
+            // genuine partial-init case: if init crashes before reaching this line,
+            // the file is absent, the predicate is false, and the wipe still fires —
+            // which is exactly what it is for.
             if let Ok(cache_dir) = crate::init_cache_dir() {
-                let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
-                let _ = std::fs::write(&fallback_file, &token);
+                write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64));
             }
 
             // Update in-memory credentials so the current process has the new token.
@@ -3735,6 +3778,78 @@ mod tests {
     use super::*;
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    /// 694-mhz8. In-VM init must persist BOTH credential fallbacks. The share
+    /// file is the only evidence, inside a VM, that `operator init` completed:
+    /// `has_shamir_share_in_keyring` consults an OS keychain (absent in the
+    /// guest) and then this file, and its answer decides whether the next
+    /// bootstrap treats the data volume as a crashed partial init and WIPES it.
+    /// Writing only the token — the pre-694 behavior — made that predicate
+    /// permanently false in the guest, so every boot destroyed a healthy Vault
+    /// and the stored GitHub token with it.
+    #[test]
+    fn in_vm_init_persists_both_credential_fallbacks() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-694-both-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        let token = dir.join("fallback_vault-root-token-v1");
+        assert!(
+            token.is_file(),
+            "root-token fallback must still be written (pre-694 behavior preserved)"
+        );
+        assert!(
+            share.is_file(),
+            "SHAMIR SHARE fallback must be written — without it the next bootstrap \
+             classifies this initialized Vault as a partial init and wipes it (694-mhz8)"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&share)
+                .expect("share readable")
+                .trim(),
+            "c2hhcmU=",
+            "the share must round-trip verbatim; a corrupted share cannot unseal"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above. The wipe branch
+    /// this fix protects must still fire on a GENUINE partial init — an init that
+    /// crashed before the share was ever captured. If the fix had instead relaxed
+    /// the predicate (or if this helper wrote a share unconditionally), a Vault
+    /// initialized with an unknown key would be preserved and could never unseal.
+    /// So: no share in hand => no share file => partial init stays detectable.
+    #[test]
+    fn absent_share_writes_no_share_file_so_partial_init_stays_detectable() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-694-partial-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        // Init got far enough to mint a root token, then crashed before the
+        // Shamir handover — exactly the case the wipe exists to recover.
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), None);
+
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "token was captured in this scenario"
+        );
+        assert!(
+            !dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+                .is_file(),
+            "a share that was never captured must NOT be recorded as captured — \
+             otherwise a genuine partial init is preserved and Vault can never unseal"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn empty_handover_reply_does_not_close_first_boot_retry_window() {
