@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-binary-staging-skips-on-version-match
+    field: status
+    value: completed
+    ts: "2026-08-12T02:40:14Z"
+    host: windows
+
+events:
+  - packet_id: guest-binary-staging-skips-on-version-match
+    event:
+      type: completed
+      ts: "2026-08-12T02:40:14Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: scripts/build-guest-binaries.sh fast path is now source-aware: it skips only when the staged binaries are present, valid AND at least as new as every *.rs / Cargo.toml under crates/ plus the root Cargo.toml/Cargo.lock, compared against the OLDER of the two staged binaries so an edit between the two builds cannot hide behind the newer one. All three exit criteria exercised on this host in one run. (1) touching crates/tillandsias-headless/src/main.rs => 'a source file is newer - rebuilding' and a real rebuild. (2) NEGATIVE CONTROL, immediately after, with no further change => 'Staged binaries are up-to-date. Skipping build.' - so the fix is not just 'always rebuild'. (3) --verify unchanged: verify:ok on current staging, and verify:skip-stale-staging (exit 0) when the x86_64 stamp is removed, preserving order 447. First real run also caught genuine staleness: the cycle-5 vsock preflight edit had never been staged, exactly the silent skip this closes. Tray rebuilt on the now-current asset; windows-tray 83 passed 0 failed.

@@ -32740,6 +32740,12 @@ plan_index:
         - litmus pins the installed tray's dependency/import surface
         - inventory distilled to specs; deliverable becomes a tombstone pointer
       events:
+        - type: note
+          ts: "2026-08-12T02:40:14Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Chain context: 695-r7k8 (staging skipped rebuilds on a VERSION match) is now closed, so the staged guest binary this host embeds is genuinely current for the first time. With 689-gipe fixed and this packet's criterion 1 making reconcile's early return visible, all three faces of 'version equality implies currency' are now either fixed or observable.
         - type: progress
           ts: "2026-08-12T01:38:57Z"
           agent_id: "windows-claude-opus5-20260811t215500z"
