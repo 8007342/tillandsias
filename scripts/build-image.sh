@@ -165,6 +165,15 @@ if [[ ! -f "$CONTAINERFILE" ]]; then
     exit 1
 fi
 
+# order 710-w9kc: the router image COPYs images/router/tillandsias-router-sidecar,
+# a static-musl BUILD ARTIFACT that is gitignored and never committed. Stage a
+# freshly-compiled sidecar into the build context before podman build, so a
+# direct `build-image.sh router` succeeds without a prior full build.sh run.
+if [[ "$IMAGE_NAME" == "router" ]]; then
+    echo "[build-image] Staging router sidecar (build artifact — not committed)..."
+    bash "$ROOT/scripts/build-sidecar.sh"
+fi
+
 # ---------------------------------------------------------------------------
 # Step 1: Aggressive stale-state cleanup + staleness detection
 # ---------------------------------------------------------------------------

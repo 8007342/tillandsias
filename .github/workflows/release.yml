@@ -104,6 +104,9 @@ jobs:
           nix build -L .#tillandsias-x86_64-musl              --out-link result-host
           nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
           nix build -L .#tillandsias-headless-aarch64-musl  --out-link result-ha
+          # order 710-w9kc: version-matched router sidecar, published as a
+          # signed release asset instead of a committed blob in the repo.
+          nix build -L .#tillandsias-router-sidecar-x86_64-musl --out-link result-sidecar
 
       - name: Verify release builds use binary-self-hash (no dev seed fallback)
         run: |
@@ -168,6 +171,7 @@ jobs:
           install -m 0755 result-host/bin/tillandsias           release-artifacts/tillandsias-linux-x86_64
           install -m 0755 result-hx/bin/tillandsias             release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
           install -m 0755 result-ha/bin/tillandsias             release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
+          install -m 0755 result-sidecar/bin/tillandsias-router-sidecar release-artifacts/tillandsias-router-sidecar-x86_64-unknown-linux-musl
           install -m 0755 scripts/install.sh   release-artifacts/install.sh
           install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
           install -m 0755 scripts/verify.sh    release-artifacts/verify.sh
@@ -178,6 +182,7 @@ jobs:
           grep -F "x86-64" /tmp/f.txt
           file release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl | grep -F "x86-64"
           file release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl | grep -F "aarch64"
+          file release-artifacts/tillandsias-router-sidecar-x86_64-unknown-linux-musl | grep -F "x86-64"
 
           # Smoke the host binary's headless mode (runs on this x86_64 runner).
           release-artifacts/tillandsias-linux-x86_64 --version

@@ -6,8 +6,13 @@
 # for runtime extraction in deployed binaries.
 #
 # Run by:
-#   - build.sh / build-osx.sh (before `cargo tauri build`)
-#   - scripts/build-image.sh router (defensive re-run before podman build)
+#   - build.sh (staged before EVERY compiling dispatch — check/test/build/
+#     install/ci/release — via _stage_router_sidecar; the binary is a gitignored
+#     build artifact that tillandsias-headless build.rs include_bytes!()s, so it
+#     MUST exist before any cargo invocation)
+#   - build-osx.sh (before `cargo tauri build`)
+#   - .github/workflows/release.yml (built + published as a version-matched,
+#     cosign-signed release asset alongside the linux/macos/windows binaries)
 #   - manually for first-time setup or when sidecar source changes
 #
 # DO NOT run from `src-tauri/build.rs`: the nested `cargo build` here
@@ -42,12 +47,16 @@ SIDECAR_TARGET_DIR="$ROOT/target-musl"
 is_stale() {
     [[ ! -f "$SIDECAR_DEST" ]] && return 0
     local newest
+    # VERSION is included so a build-number bump forces a fresh, version-matched
+    # recompile (order 710-w9kc: idempotent + ephemeral local builds; the sidecar
+    # is a version-matched release artifact, never a committed blob).
     newest="$(find \
         "$ROOT/crates/tillandsias-router-sidecar" \
         "$ROOT/crates/tillandsias-otp" \
         "$ROOT/crates/tillandsias-control-wire" \
         "$ROOT/Cargo.toml" \
         "$ROOT/Cargo.lock" \
+        "$ROOT/VERSION" \
         -type f -newer "$SIDECAR_DEST" -print -quit 2>/dev/null)"
     [[ -n "$newest" ]]
 }
