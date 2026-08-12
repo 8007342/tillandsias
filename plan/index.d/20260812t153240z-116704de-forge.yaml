@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: inference-deferred-model-pulls-litmus-destructive-and-red
+    field: release_target
+    value: fail-loud-diagnosis-milestone
+    ts: "2026-08-12T15:32:40Z"
+    host: forge
+
+events:
+  - packet_id: inference-deferred-model-pulls-litmus-destructive-and-red
+    event:
+      type: note
+      ts: "2026-08-12T15:32:40Z"
+      host: forge
+      summary: >
+        Group under fail-loud-diagnosis-milestone (order 625-jd5f)
