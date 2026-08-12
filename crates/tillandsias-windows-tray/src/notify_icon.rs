@@ -2746,6 +2746,45 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FAST_POLL_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(5);
 
+/// Signalled whenever [`FAST_POLL_COUNT`] is raised by a user action (order
+/// 154, tick-retirement slice). The count alone is only observable by looking
+/// at it, so the tick loop could not notice a burst without waking on a timer
+/// to check — which is precisely the timer this slice retires. The signal
+/// carries the same news as an edge, so the loop can park indefinitely while
+/// the push subscription is healthy and still start a confirming round the
+/// instant a click asks for one.
+static FAST_POLL_WAKE: std::sync::LazyLock<tokio::sync::Notify> =
+    std::sync::LazyLock::new(tokio::sync::Notify::new);
+
+/// Raise a fast-poll burst and wake the tick loop for it.
+///
+/// Always go through this rather than storing to [`FAST_POLL_COUNT`] directly:
+/// a bare store is invisible to a timer-suppressed wait, so the confirming
+/// round would not run until something else happened to wake the loop.
+fn request_fast_poll_burst(rounds: u32) {
+    FAST_POLL_COUNT.store(rounds, std::sync::atomic::Ordering::SeqCst);
+    FAST_POLL_WAKE.notify_one();
+}
+
+/// Whether the tick loop's 30s timer can be suppressed for this wait
+/// (order 154, SC-11).
+///
+/// True exactly when every fallback gate in the loop body is closed, so a
+/// wake would find nothing to do: `should_poll_vm_status`,
+/// `should_poll_login_and_cloud`, and `should_poll_local_projects` all
+/// require either an unhealthy stream or a burst. Note the LOCAL projects
+/// subscription is tracked separately — the stream can be healthy while the
+/// legacy-topic fallback is engaged, and in that state the 10-tick
+/// `EnumerateLocalProjects` poll is still load-bearing and the timer must
+/// stay.
+fn tick_timer_suppressed(
+    push_stream_healthy: bool,
+    local_projects_push_subscribed: bool,
+    fast_poll_burst: bool,
+) -> bool {
+    push_stream_healthy && local_projects_push_subscribed && !fast_poll_burst
+}
+
 /// Set by the bounded auto-reset policy and drained by the message loop,
 /// which spawns the wipe+reprovision task in the LocalSet context — the
 /// exact mirror of `RETRY_REQUESTED`'s flag→LocalSet-spawn shape. There is
@@ -2967,9 +3006,11 @@ fn spawn_provisioning(hwnd: HWND) {
                         // only while that subscription is down (SC-07
                         // fallback) or a user-action fast-poll burst forces
                         // a round. With a healthy subscription the tick
-                        // sends NOTHING on the wire; retiring the tick task
-                        // itself (watch-channel wakeups + SubscriptionHealth)
-                        // is the packet's next slice.
+                        // sends NOTHING on the wire — and since the
+                        // tick-retirement slice it does not even wake: the
+                        // wait below drops its timer in that state and parks
+                        // on the health watch plus the fast-poll signal
+                        // (`tick_timer_suppressed`).
                         // Holds `_keepalive` for the tray's lifetime; see the
                         // TEARDOWN CONTRACT above — the explicit Quit drain
                         // stops the VM, not task cancellation.
@@ -3036,10 +3077,28 @@ fn spawn_provisioning(hwnd: HWND) {
                             // cadence. Up-transitions never shorten the
                             // period; a closed channel degrades to the
                             // plain 30s timer.
+                            //
+                            // Tick retirement (order 154, SC-11): when every
+                            // fallback gate is closed the timer is dropped
+                            // for this wait entirely, so a healthy tray parks
+                            // on the watch channel and the fast-poll signal
+                            // instead of waking twice a minute to re-decide
+                            // that it has nothing to send. The wake sources
+                            // that remain are the two that mean something —
+                            // the stream going down, and a click asking for
+                            // a confirming round.
+                            let suppress_timer = tick_timer_suppressed(
+                                VM_STATUS_PUSH_HEALTH.is_healthy(),
+                                LOCAL_PROJECTS_PUSH_SUBSCRIBED
+                                    .load(std::sync::atomic::Ordering::SeqCst),
+                                FAST_POLL_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0,
+                            );
                             let wake =
-                                tillandsias_host_shell::subscription_health::wait_tick_or_subscription_drop(
+                                tillandsias_host_shell::subscription_health::wait_tick_drop_or_request(
                                     std::time::Duration::from_secs(30),
+                                    suppress_timer,
                                     &mut health_rx,
+                                    &FAST_POLL_WAKE,
                                 )
                                 .await;
                             tick = tillandsias_host_shell::subscription_health::tick_after_wake(
@@ -3517,7 +3576,7 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
                         state.login = GithubLoginState::LoggingIn;
                     }
                 }
-                FAST_POLL_COUNT.store(5, std::sync::atomic::Ordering::SeqCst);
+                request_fast_poll_burst(5);
             }
             launch_open_shell_terminal(&action);
         }
@@ -3751,6 +3810,31 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 154 (SC-11): the timer may be dropped only in the state where a
+    /// wake would find every fallback gate closed. The three false cases are
+    /// the negative control — each is a state in which the tick loop still
+    /// has real work, so a helper that simply returned `true` (retiring the
+    /// timer unconditionally and stalling the fallback polls) fails here.
+    #[test]
+    fn tick_timer_is_suppressed_only_when_every_fallback_gate_is_closed() {
+        assert!(
+            tick_timer_suppressed(true, true, false),
+            "healthy stream, local projects pushed, no burst: a wake would do nothing"
+        );
+        assert!(
+            !tick_timer_suppressed(false, true, false),
+            "an unhealthy stream is exactly when the fallback polls own freshness"
+        );
+        assert!(
+            !tick_timer_suppressed(true, false, false),
+            "legacy-topic fallback: the 10-tick EnumerateLocalProjects poll still runs"
+        );
+        assert!(
+            !tick_timer_suppressed(true, true, true),
+            "a user action asked for a confirming round"
+        );
+    }
 
     /// Every project lane died instantly on `/bin/bash: -c: line 1: unexpected
     /// EOF while looking for matching '"'` because its inline script went

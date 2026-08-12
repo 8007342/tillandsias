@@ -1,0 +1,36 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260812t001000z
+packets:
+
+  - packet_id: cycle-metrics-timing-line-emits-overflow-garbage
+    order: 693-tf79
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    title: "cycle-metrics timing: line emits impossible values (litmus_ms_avg=2.9e11, slowest=1.7e12 ms) — a duration-telemetry defect"
+    kind: fix
+    deliverable: sane duration aggregation in the timing rolling view (guard against bad/overflow records)
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [telemetry, cycle-metrics, robustness]
+    context: >
+      Observed 2026-08-12 night cycle 2: scripts/cycle-metrics.sh timing: line
+      printed litmus_ms_avg=297746886916 and slowest=litmus-suite:1786481285460
+      ms (~56 years) — impossible. build_check_ms_avg=4691 is sane, so the
+      aggregation over /tmp/tillandsias-timing.jsonl is ingesting a malformed
+      or non-ms record (likely a nanosecond value, an epoch timestamp mistaken
+      for a duration, or an unparsed field) and averaging it in. From 682-emvg
+      (build/test/litmus duration telemetry). Fix: validate/clamp records on
+      read (drop or flag implausible durations like the flow line already
+      drops malformed rows via jq fromjson?), and identify which writer emits
+      the bad value. Low severity (telemetry only) but it makes the 'slowest
+      step' signal useless, which is the one number that line exists to give.
+    exit_criteria:
+      - the timing: line rejects or flags implausible duration records instead of averaging them, and reports a sane litmus_ms_avg and slowest step
+      - the writer emitting the overflow value is identified and corrected at source
+    events:
+      - type: filed
+        ts: "2026-08-12T00:10:00Z"
+        agent_id: linux-mutable-night-20260811
+        host: linux_mutable
+        summary: "Filed from cycle-2 handoff metrics; timing telemetry emitting ~56-year durations."

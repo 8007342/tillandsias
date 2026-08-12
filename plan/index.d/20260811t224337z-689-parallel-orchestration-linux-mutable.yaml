@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260811t224337z
+packets:
+
+  - packet_id: forge-delegation-concurrency-ramp
+    order: 689-zwzm
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    title: "Staged concurrency ramp for parallel orchestration flows — host loop + in-forge delegates, telemetry-gated stage lifts"
+    kind: infra+orchestration
+    deliverable: the ramp protocol live at stage 0 (2 parallel flows), stage-lift gates defined against the 682 CRDT telemetry set, stage log in the ledger
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [orchestration, forge, concurrency, telemetry, delegation]
+    context: >
+      OPERATOR DIRECTIVE (The Tlatoani, interactive, 2026-08-11 night).
+      Sibling harnesses (BigPickle/opencode, GPT-Sol/codex, Gemini-Flash)
+      are logged in on this host and in its vault, and run ONLY inside
+      tillandsias forges — host-side sibling agents would corrupt the sacred
+      dev checkout and share memory/filesystem; in-forge they get their own
+      git-mirrors and concurrency support by architecture. RAMP: stage 0
+      (NOW, operator-authorized): exactly TWO parallel orchestration flows —
+      the host meta-orchestration loop plus ONE in-forge delegate running a
+      surgical validation prompt, lifecycle per
+      methodology/in-forge-delegation.yaml (fresh tray rebuild + relaunch at
+      cycle end; finished delegate -> terminate, rebuild, relaunch; running
+      delegate -> skip this cycle). Stage 1: multiple delegates on SMALL
+      surgical tasks. Stage 2: larger task envelopes. Stage 3: several
+      harnesses concurrently on aggressive eager chunks of workplan. EVERY
+      stage lift requires (a) the 682 CRDT telemetry set showing stability
+      at the current stage — overhead_ratio not degrading, expert accuracy
+      green, stranded claims zero, no fold conflicts, no silent mid-task
+      delegate deaths — and (b) a recorded operator approval; the loop never
+      lifts its own concurrency gate (bar_raise_governance shape). Known
+      platform gate: order 494 (macos concurrent lane launch kills sibling)
+      must be closed before any macOS host joins multi-delegate stages.
+      Validation-by-destruction is the point: the ephemeral contract is
+      proven by blowing the stack up and re-running from scratch every
+      cycle; delegates validate the operator of the stack from inside it.
+    exit_criteria:
+      - stage 0 runs across at least one full night with cycle records - both flows produce ledger evidence, delegate sessions end with a recorded outcome (never silently), and the tray/container lifecycle is managed per methodology/in-forge-delegation.yaml with zero corrupted checkouts and zero version-skew incidents
+      - stage-lift gates are DEFINED numerically against the 682 telemetry set (which metrics, which thresholds, over how many cycles) and recorded in the methodology, so lifting to stage 1+ is a measurement plus an operator approval, never a vibe
+      - a stage log exists in the ledger (event per lift with telemetry evidence and the operator approval reference)
+    events:
+      - type: filed
+        ts: "2026-08-11T22:43:37Z"
+        agent_id: linux-mutable-session-20260811
+        host: linux_mutable
+        summary: >
+          Filed from the operator's night directive; stage 0 (two flows)
+          authorized and starting tonight on linux_mutable with BigPickle
+          (opencode) as the first delegate.
+
+  - packet_id: unified-model-runtime-flag-across-harnesses
+    order: 689-jxb2
+    status: ready
+    desired_release: v0.6
+    priority: p2
+    title: "Unified --model runtime param mapped per harness — one caller-side model flag, delegated to each harness's native runtime flag"
+    kind: enhancement+dx
+    deliverable: tillandsias launch accepts --model <name> plus a harness selector and translates to the harness-appropriate runtime flag; registry maps model names to harness/flag pairs
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [harness, ux, launcher, dx]
+    context: >
+      OPERATOR SCOPING (The Tlatoani, 2026-08-11): keep a unified runtime
+      flag model while supporting multiple underlying harnesses — e.g.
+      `--model opus-6-5 --claude`, `--model gpt-sol --codex`,
+      `--model big-pickle --opencode`. The launcher does NOT interpret the
+      model value; it delegates the runtime arg to the selected harness's
+      native flag and ensures the caller used a param valid for that
+      harness. Until this lands, delegation uses each harness's configured
+      default (stage-0 protocol in methodology/in-forge-delegation.yaml).
+      Design notes: a small registry (model name -> harness -> native flag
+      spelling) so new models are data, not code; unknown model/harness
+      pairs refuse loudly at launch, never inside the forge; --prompt
+      passthrough discipline unchanged (no escaped quotes).
+    exit_criteria:
+      - one documented --model flag works across at least the claude, codex, and opencode harness launch paths, translating to each harness's native runtime flag, with a loud pre-launch refusal for unknown pairs
+      - the mapping is data-driven (registry), covered by a litmus with a negative control (unknown model refused) and a positive control per harness
+    events:
+      - type: filed
+        ts: "2026-08-11T22:43:37Z"
+        agent_id: linux-mutable-session-20260811
+        host: linux_mutable
+        summary: "Filed per operator scoping: v0.6; stage-0 delegation meanwhile uses harness defaults."

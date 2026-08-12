@@ -356,3 +356,29 @@ capability_ladder:
     one laptop to a distributed cluster serving millions. Exposure is
     progressive; capability is not. A rung we cannot implement is a rung we must
     not imply.
+
+# ── The identity plane converges toward SPIFFE/SPIRE (2026-08-11) ─────────────
+identity_plane_aspiration:
+  decided_by: "The Tlatoāni, 2026-08-11 (long-horizon aspiration, not near-term)"
+  status: "aspiration — v0.6 talk shapes v0.7+; tracked by packet spiffe-spire-identity-plane-aspiration (692-zjzg)"
+  rule: >
+    Workload identity in Tillandsias should converge toward the SPIFFE/SPIRE
+    model, which the ephemeral epoch-scoped CA design (order 322) is already
+    halfway to: short-lived automatically-rotated cryptographic identities
+    (SVIDs ~ the 30-min per-lane certs), a workload that receives identity
+    WITHOUT ever holding key material (the SPIRE agent ~ the per-lane
+    ssh-agent signing-oracle sidecar), and attestation-based issuance (the
+    launcher attesting a lane before minting ~ SPIRE node/workload
+    attestation).
+  where_it_becomes_load_bearing: >
+    Cross-node trust — the mesh (order 563) — is the case the single-machine
+    epoch-CA design explicitly punts, and it is exactly where SPIFFE's trust
+    domains and SPIRE's federation are the honest, well-documented answer
+    rather than a homegrown invention. Per capability_ladder, the interface
+    must not change as topology grows; the identity plane getting more robust
+    as nodes are added is the same "we decide for them, reversibly" obligation.
+  the_open_question: >
+    Adopt SPIRE proper, or keep a homegrown SPIFFE-SHAPED plane — the same
+    build-vs-adopt axis as the OpenTelemetry decision (682-x8df), under the
+    same enclave-egress / no-python / CRDT-fit constraints. The v0.6 operator
+    talk decides the direction; v0.7+ packets implement it.

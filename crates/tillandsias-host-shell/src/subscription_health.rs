@@ -36,6 +36,11 @@ pub enum TickWake {
     /// freshness again and should run a full round now, not up to a full
     /// slow-cadence period later.
     SubscriptionDropped,
+    /// A user action asked for a confirming round (the fast-poll burst).
+    /// Delivered as a signal rather than noticed at the next tick, which is
+    /// what lets the timer be suppressed entirely while the stream is
+    /// healthy — see [`wait_tick_drop_or_request`].
+    PollRequested,
 }
 
 /// Wait out one poll period, waking early only on a healthy→down transition
@@ -64,13 +69,62 @@ pub async fn wait_tick_or_subscription_drop(
     }
 }
 
+/// Wait for the next reason to run a fallback round, with the poll timer
+/// OPTIONAL (order 154, tick-retirement slice).
+///
+/// `wait_tick_or_subscription_drop` always wakes at the end of the period.
+/// While the subscription is healthy every fallback gate is closed, so that
+/// wake does no work — it just costs a timer and a scheduler round trip
+/// forever, which is what SC-11 (idle CPU < 0.1%) is measuring. Passing
+/// `suppress_timer: true` drops the timer for exactly that state: the wait
+/// then ends only on a healthy→down transition or an explicit `request`
+/// signal, both of which are real reasons to poll.
+///
+/// A closed health channel ALWAYS degrades to the plain timer, even with
+/// `suppress_timer` set. Without that the listener task dying would leave a
+/// timer-less waiter with nothing left to wake it, and the fallback polls —
+/// the very thing that covers a dead listener — would never run again.
+///
+/// The `request` signal is edge-triggered with a stored permit
+/// (`Notify::notify_one`), so a request raised while the caller was between
+/// waits is delivered to the next wait rather than lost.
+pub async fn wait_tick_drop_or_request(
+    period: Duration,
+    suppress_timer: bool,
+    health: &mut watch::Receiver<bool>,
+    request: &tokio::sync::Notify,
+) -> TickWake {
+    let sleep = tokio::time::sleep(period);
+    tokio::pin!(sleep);
+    let requested = request.notified();
+    tokio::pin!(requested);
+    loop {
+        tokio::select! {
+            _ = &mut sleep, if !suppress_timer => return TickWake::Timer,
+            _ = &mut requested => return TickWake::PollRequested,
+            changed = health.changed() => {
+                if changed.is_err() {
+                    // Listener gone: the timer is the only remaining wake
+                    // source, so honour it regardless of `suppress_timer`.
+                    sleep.as_mut().await;
+                    return TickWake::Timer;
+                }
+                if !*health.borrow_and_update() {
+                    return TickWake::SubscriptionDropped;
+                }
+            }
+        }
+    }
+}
+
 /// Next tick counter after a wake. A subscription drop rewinds to tick 0 so
 /// the next iteration replays the first-tick full round instead of waiting
-/// out the slow-cadence period.
+/// out the slow-cadence period. A user-requested round rewinds for the same
+/// reason: the point of the request is a confirming round NOW.
 pub fn tick_after_wake(tick: u32, wake: &TickWake) -> u32 {
     match wake {
         TickWake::Timer => tick.wrapping_add(1),
-        TickWake::SubscriptionDropped => 0,
+        TickWake::SubscriptionDropped | TickWake::PollRequested => 0,
     }
 }
 
@@ -227,5 +281,101 @@ mod tests {
         assert_eq!(tick_after_wake(4, &TickWake::Timer), 5);
         assert_eq!(tick_after_wake(u32::MAX, &TickWake::Timer), 0);
         assert_eq!(tick_after_wake(7, &TickWake::SubscriptionDropped), 0);
+        assert_eq!(tick_after_wake(7, &TickWake::PollRequested), 0);
+    }
+
+    /// Order 154 tick retirement: with the timer suppressed the wait must
+    /// outlive many poll periods and end ONLY on a real reason to poll.
+    ///
+    /// The negative control is the whole point of the test — asserting that a
+    /// drop wakes the wait proves nothing on its own, because the un-suppressed
+    /// timer would have woken it too. Advancing well past the period FIRST is
+    /// what distinguishes "the timer was suppressed" from "the timer fired".
+    #[tokio::test(start_paused = true)]
+    async fn suppressed_timer_waits_only_for_a_real_poll_reason() {
+        let health = SubscriptionHealth::new();
+        health.set(true);
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let request = tokio::sync::Notify::new();
+
+        let wait = wait_tick_drop_or_request(Duration::from_secs(30), true, &mut rx, &request);
+        tokio::pin!(wait);
+        // Ten full poll periods with the timer suppressed: nothing may wake.
+        for _ in 0..10 {
+            tokio::time::advance(Duration::from_secs(30)).await;
+            tokio::select! {
+                biased;
+                _ = &mut wait => panic!("suppressed timer still woke the wait"),
+                _ = tokio::task::yield_now() => {}
+            }
+        }
+        health.set(false);
+        assert_eq!(wait.await, TickWake::SubscriptionDropped);
+    }
+
+    /// Negative control for the pin above: the SAME elapsed time with
+    /// `suppress_timer: false` DOES end the wait. Without this, a helper that
+    /// simply never woke on the timer would pass the suppression test.
+    #[tokio::test(start_paused = true)]
+    async fn unsuppressed_timer_still_ends_the_wait_after_one_period() {
+        let health = SubscriptionHealth::new();
+        health.set(true);
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let request = tokio::sync::Notify::new();
+        assert_eq!(
+            wait_tick_drop_or_request(Duration::from_secs(30), false, &mut rx, &request).await,
+            TickWake::Timer
+        );
+    }
+
+    /// A user action raises the request while the timer is suppressed — the
+    /// confirming round must start on the signal, not at some later tick.
+    /// Also pins the stored-permit behaviour: a request raised BEFORE the
+    /// wait begins is delivered to that wait rather than lost.
+    #[tokio::test(start_paused = true)]
+    async fn poll_request_wakes_a_timer_suppressed_wait() {
+        let health = SubscriptionHealth::new();
+        health.set(true);
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let request = tokio::sync::Notify::new();
+
+        // Raised before the wait exists: the permit must survive.
+        request.notify_one();
+        assert_eq!(
+            wait_tick_drop_or_request(Duration::from_secs(30), true, &mut rx, &request).await,
+            TickWake::PollRequested
+        );
+
+        // And raised mid-wait.
+        let wait = wait_tick_drop_or_request(Duration::from_secs(30), true, &mut rx, &request);
+        tokio::pin!(wait);
+        tokio::select! {
+            biased;
+            _ = &mut wait => panic!("wait ended with no request and no transition"),
+            _ = tokio::task::yield_now() => {}
+        }
+        request.notify_one();
+        assert_eq!(wait.await, TickWake::PollRequested);
+    }
+
+    /// If the listener task dies the health channel closes, and the fallback
+    /// polls are exactly what has to take over. A timer-suppressed wait must
+    /// therefore RE-ARM the timer on channel close rather than parking
+    /// forever with no wake source left.
+    #[tokio::test(start_paused = true)]
+    async fn closed_health_channel_restores_the_timer_even_when_suppressed() {
+        let health = SubscriptionHealth::new();
+        health.set(true);
+        let mut rx = health.subscribe();
+        rx.borrow_and_update();
+        let request = tokio::sync::Notify::new();
+        drop(health);
+        assert_eq!(
+            wait_tick_drop_or_request(Duration::from_secs(30), true, &mut rx, &request).await,
+            TickWake::Timer
+        );
     }
 }

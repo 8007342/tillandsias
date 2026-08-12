@@ -1631,6 +1631,18 @@ plan_index:
       status: ready
       events:
         - type: progress
+          ts: "2026-08-11T23:41:45Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            The 'cargo test -p tillandsias-windows-tray all pass' exit criterion is now MET on this host: 80 passed, 0 failed, after restaging the guest binaries (the single failure was 689-gipe's stale staged asset, not order 154's slice). Remaining for this packet: the live SC-11 idle-CPU read on a running tray, which needs a healthy subscription held long enough to sample and so wants an attended window.
+        - type: progress
+          ts: "2026-08-11T22:44:41Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Tick-retirement slice landed. host-shell subscription_health gains TickWake::PollRequested and wait_tick_drop_or_request(period, suppress_timer, health, request): when every fallback gate is closed the 30s timer is dropped for that wait entirely and the loop parks on the health watch plus a fast-poll Notify, so a healthy tray no longer wakes twice a minute to re-decide it has nothing to send (SC-11). A closed health channel always restores the timer — otherwise a dead listener would leave a timer-less waiter with no wake source and the fallback polls, which are what covers a dead listener, would never run. Tray side: FAST_POLL_WAKE + request_fast_poll_burst replace the bare FAST_POLL_COUNT store (a bare store is invisible to a suppressed wait), and tick_timer_suppressed gates on health AND LOCAL_PROJECTS_PUSH_SUBSCRIBED — the stream can be healthy while the legacy-topic fallback is engaged, and there the 10-tick EnumerateLocalProjects poll is still load-bearing. Tests: host-shell subscription_health 10/10 including a suppressed-timer pin that advances ten full periods before asserting, with an unsuppressed negative control so a helper that simply never woke would fail; windows-tray 79 passed, 1 pre-existing unrelated failure (embedded_guest_headless_matches_workspace_version, red at clean HEAD too — filed 689-gipe).
+        - type: progress
           ts: "2026-07-11T20:22:00Z"
           agent_id: "windows-bullo-claude-20260711T182324Z"
           host: windows
@@ -28571,6 +28583,12 @@ plan_index:
         - the active spec explicitly supersedes the former <=10 deletion relay semantics and records the lane-exit cleanup compatibility decision
         - focused git-mirror fixtures, the bound litmus, and the full local build gate pass
       events:
+        - type: progress
+          ts: "2026-08-11T22:50:49Z"
+          agent_id: "linux-mutable-session-20260811"
+          host: linux_mutable
+          summary: >
+            Cycle 1 (linux_mutable, host loop): SOURCE fix confirmed present — images/git/entrypoint.sh:164-174 now applies receive.denyNonFastForwards/denyDeletes/fsckObjects on EVERY start, outside the fresh-init branch (criterion 1). BUT live existing-volume verification was INCONCLUSIVE: reading the running tillandsias-git mirror returned EMPTY for all three keys, then the container disappeared mid-read (forge stack churning — git/inference/forge containers torn down while vault/router/proxy stayed up). Cannot distinguish 'fix not applied to this volume' from 'read hit a dying container'. NOT closing on an unreliable read. Criteria 3/4 (existing-volume upgrade litmus) still unwritten. Next: re-verify against a stable forge with the mirror volume tillandsias-mirror-tillandsias, capture config AFTER a confirmed-healthy start.
         - type: priority-evidence
           ts: 2026-08-06T00:45:00Z
           agent_id: linux-mutable-root-codex-20260806t001750z
@@ -30041,6 +30059,12 @@ plan_index:
 
 
       events:
+        - type: progress
+          ts: "2026-08-11T22:01:38Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Windows runtime distro reprovisioned this cycle: --provision-once returned 'VM Ready — control wire up', and --diagnose --json went exit 2 (wire unreachable, WSA 10004/10060 handshake failures dating to 2026-08-10) -> exit 0 (reachable, phase Ready, podman_ready true, guest_version 0.4.260810.1). The guest is now healthy and carries the rebuilt binary; the two deferred lane READS remain outstanding because they require a tray menu click.
         - type: progress
           ts: 2026-08-11T07:00:00Z
           agent_id: windows-20260811t070000z
@@ -33612,6 +33636,24 @@ plan_index:
         - project-lane click opens a working agent shell (blocked on tray rebuild)
         - workspace tests green incl. interactive_lane_keeps_the_terminal_foreground_process_group
       events:
+        - type: note
+          ts: "2026-08-11T22:44:41Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            CORRECTION to this host's 2026-08-11T22:01Z completion evidence. That evidence cited 'guest_version 0.4.260810.1 == host version, so the fixed binary IS deployed'. The inference does not hold: the tray's staged embedded guest asset is 0.4.260809.2 (13731128 bytes, mtime 2026-08-09 02:22) against a workspace VERSION of 0.4.260810.1, so no tray built in that cycle could have injected 0.4.260810.1 — the guest binary (in-VM, mtime 2026-08-09 21:32) predates the rebuild, and reconcile_adopted_guest returns early on a version match exactly as this packet's next_action warned. The packet's other criteria are unaffected: login reaching the token prompt and the state-T check were field-verified on peke, and interactive_lane_keeps_the_terminal_foreground_process_group is green here. Status left at completed on those; whether the DEPLOYED guest carries the setpgid fix is not established by anything this host observed. Filed as 689-gipe.
+        - type: note
+          ts: "2026-08-11T22:01:38Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            RESIDUAL, stated plainly: 'completed' here is claimant-asserted, NOT click-verified. The tray exposes no CLI to trigger a menu lane (--help lists provision/reset/status/diagnose/logs only), so the live 'project-lane click opens a working agent shell' read still needs an operator click or GUI automation. Promote to 'verified' only on that as-wired observation.
+        - type: progress
+          ts: "2026-08-11T21:53:58Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            windows-next cycle 2026-08-11T21:53:58Z: this host is taking the recorded hand-off (tray rebuild + lane re-verification on a clean guest). No claim flip: the ladder forbids implemented -> in_progress without falsifying evidence.
         - type: filed
           ts: 2026-08-09T07:30:00Z
           agent_id: windows-peke-claude-opus5-20260809t073000z
@@ -33662,6 +33704,18 @@ plan_index:
         - project click opens a working agent shell on a wt-capable host
         - argv_survives_wt_reparse rejects the real project argv (DONE, unit test)
       events:
+        - type: note
+          ts: "2026-08-11T22:01:38Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            RESIDUAL, stated plainly: 'completed' here is claimant-asserted, NOT click-verified. The tray exposes no CLI to trigger a menu lane (--help lists provision/reset/status/diagnose/logs only), so the live 'project-lane click opens a working agent shell' read still needs an operator click or GUI automation. Promote to 'verified' only on that as-wired observation.
+        - type: progress
+          ts: "2026-08-11T21:53:58Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            windows-next cycle 2026-08-11T21:53:58Z: this host is taking the recorded hand-off (tray rebuild + lane re-verification on a clean guest). No claim flip: the ladder forbids implemented -> in_progress without falsifying evidence.
         - type: filed
           ts: 2026-08-09T08:00:00Z
           agent_id: windows-peke-claude-opus5-20260809t073000z
