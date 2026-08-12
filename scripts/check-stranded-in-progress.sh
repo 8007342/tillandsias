@@ -27,7 +27,12 @@
 #
 # GRAMMAR — one line per stranded packet, then one summary line:
 #   ^stranded\t<order>\t<role>\t<packet_id>$
-#   ^summary: in_progress=<n> stranded=<n> threshold_events=<n>$
+#   ^summary: (in_progress=<n> stranded=<n> threshold_events=<n>|unavailable:<reason>)$
+#
+# `unavailable:<reason>` (702-68zj) is a THIRD verdict for "this sweep could not
+# be computed" — no runnable plan binary, no jq, a failed or unparseable query.
+# It is deliberately not an all-zero summary: reporting zero because the sweep
+# could not look is how a stranded packet became invisible in a third way.
 # Exit 0 always: this is an advisory report, not a gate. A packet legitimately
 # in flight right now is indistinguishable from one abandoned an hour ago, so
 # failing a build on it would block work for a state that is often correct.
@@ -37,19 +42,59 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
+# ORDER 702-68zj. Probe candidates by RUNNING one, not by testing an executable
+# bit. On a shared Windows/WSL checkout a WSL build leaves a Linux ELF at
+# ./target/release/tillandsias-plan beside the usable .exe, and the bit test
+# picks the ELF: every later query dies with `Exec format error`, stderr is
+# discarded, and empty output was counted as zero stranded packets. The sweep
+# printed a clean all-clear while a stranded packet sat in the ledger.
+#
+# `.exe` candidates come first for the same reason — on the host where both
+# exist, the runnable one is the .exe.
 PLAN=""
-for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
-    [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
+for c in \
+    ./target/release/tillandsias-plan.exe \
+    ./target/debug/tillandsias-plan.exe \
+    ./target/release/tillandsias-plan \
+    ./target/debug/tillandsias-plan \
+    "$(command -v tillandsias-plan 2>/dev/null)"; do
+    [ -n "$c" ] || continue
+    [ -f "$c" ] || continue
+    # The probe IS the executability test: a binary that cannot run here fails
+    # this, whatever its mode bits or extension claim.
+    "$c" capabilities >/dev/null 2>&1 && { PLAN="$c"; break; }
 done
-[ -n "$PLAN" ] || { echo "summary: in_progress=0 stranded=0 threshold_events=0"; exit 0; }
 
-command -v jq >/dev/null 2>&1 || {
-    echo "summary: in_progress=0 stranded=0 threshold_events=0"
+# UNAVAILABLE is a THIRD verdict, not a quiet zero (702-68zj). This sweep exists
+# to catch work that is invisible in both directions — `ready` queries skip an
+# in_progress packet and burndown does not count it. Reporting zero because the
+# sweep could not look makes that work invisible in a third way, and does it
+# while printing the exact line an operator reads as "checked, nothing there".
+# Same convention as verify:skip-stale-staging (447) and skip:no-tray-binary
+# (620-duta). Exit stays 0: this is advisory, and an unavailable sweep is not a
+# build failure.
+[ -n "$PLAN" ] || {
+    echo "summary: unavailable:no-runnable-plan-binary"
     exit 0
 }
 
-rows="$("$PLAN" query --status in_progress --limit 200 --json 2>/dev/null \
-    | jq -r '.[] | [(.order|tostring), (.pickup_role // "unassigned"), .packet_id] | @tsv' 2>/dev/null)"
+command -v jq >/dev/null 2>&1 || {
+    echo "summary: unavailable:no-jq"
+    exit 0
+}
+
+# Keep the query's own failure distinguishable from "the query found nothing"
+# (702-68zj). Piping straight into jq collapses both into an empty string, which
+# is how the original false all-clear was produced.
+if ! raw="$("$PLAN" query --status in_progress --limit 200 --json 2>/dev/null)"; then
+    echo "summary: unavailable:plan-query-failed"
+    exit 0
+fi
+if ! rows="$(printf '%s' "$raw" \
+    | jq -r '.[] | [(.order|tostring), (.pickup_role // "unassigned"), .packet_id] | @tsv' 2>/dev/null)"; then
+    echo "summary: unavailable:plan-query-unparseable"
+    exit 0
+fi
 
 total=0
 [ -n "$rows" ] && total="$(printf '%s\n' "$rows" | grep -c .)"
