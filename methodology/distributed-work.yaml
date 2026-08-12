@@ -1340,17 +1340,13 @@ distributed_work:
     forge_cycle_budget:
       decided_by: "The Tlatoāni (order 264, updated order 707-3x9d 2026-08-12)"
       rule: >
-        Agents running inside a forge container (TILLANDSIAS_HOST_KIND=forge)
-        distinguish between unattended litmus runs and autonomous/pairing cycles:
-        1. Litmus Runs (TILLANDSIAS_LITMUS_STEP): Drain AT MOST ONE plan packet per
-           cycle to safely fit within litmus:opencode-prompt-e2e-shape STEP 3's 600s
-           hard timeout.
-        2. Autonomous / Pairing Cycles: Take an ADAPTIVE BATCH BUDGET (default 4,
-           configurable up to 6) drawn from a single cohesive epic (release_target).
-           Agents maximize throughput by dispatching targeted subagents with local
-           expert self-verification (tillandsias-plan answer/query/check), emitting
-           isolated LWW CRDT fragments in plan/index.d/, and executing a single
-           consolidated pre-push gate (./build.sh --check) across the batch.
+        Agents running INSIDE a forge container (TILLANDSIAS_HOST_KIND=forge)
+        drain AT MOST ONE plan packet per cycle when running in unattended litmus
+        gates (TILLANDSIAS_LITMUS_STEP) and must SPLIT the packet into smaller ready
+        child packets if it will not fit within the 600s launch budget. Autonomous
+        and pairing forge cycles scale to an ADAPTIVE BATCH BUDGET (default 4,
+        configurable up to 6 via TILLANDSIAS_CYCLE_BUDGET) drawn from a single
+        cohesive epic (release_target) to maximize the work-to-orchestration ratio.
       supersedes: >
         The static 1-packet-per-cycle limitation across all forge sessions.
       interim_note: >
