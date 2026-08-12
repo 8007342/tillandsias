@@ -32741,6 +32741,12 @@ plan_index:
         - inventory distilled to specs; deliverable becomes a tombstone pointer
       events:
         - type: progress
+          ts: "2026-08-12T01:38:57Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Criterion 2 DONE and as-wired verified. The headless startup preflight now emits '[tillandsias] preflight vsock_loopback loaded|missing' before binding the vsock listener; diagnostic only, never a gate, since the host<->VM virtio path does not need the module and refusing to start would break the working case to report on the broken one. Classification reads BOTH /sys/module/vsock_loopback and /proc/modules because they answer different questions: a module compiled INTO the kernel never appears in /proc/modules but does get a /sys/module directory, so a /proc-only check reports 'missing' on a working kernel and sends the reader to modprobe something unloadable — worse than silence, because it looks like an answer. Unit test pins loaded / builtin / missing plus two negative controls (a function returning 'loaded' unconditionally fails, and a longer module name starting with the needle must not match). AS-WIRED on the live guest: the freshly built musl binary run with --listen-vsock printed 'preflight vsock_loopback loaded', and the guest kernel independently reports /sys/module/vsock_loopback present and one matching /proc/modules line. Remaining: criteria 3 (import-surface litmus) and 4 (inventory distilled to specs).
+        - type: progress
           ts: "2026-08-12T00:40:12Z"
           agent_id: "windows-claude-opus5-20260811t215500z"
           host: windows
