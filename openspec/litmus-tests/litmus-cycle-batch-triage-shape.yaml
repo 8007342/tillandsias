@@ -82,10 +82,28 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: minimax dominant"
 
+  # The four coverage fields stay pinned in order; the anchor moved off `$` so
+  # a LATER field cannot break the pin. It already did: the urgency work added
+  # `urgency_unscored=<n>` to this line and the `$` anchor turned an intended
+  # extension into a corpus-wide red (windows host, 2026-08-12, first seen once
+  # this distro had real jq/yq — the degraded parser had been masking it).
+  # Widening here is deliberate and cannot mask the property under test: the
+  # four fields, their names, their order, and their numeric shape are all still
+  # required. The negative control below is what keeps the widening honest.
   - step: "reports epic coverage so the ungrouped gap cannot hide"
-    command: "scripts/select-work-batch.sh linux | grep -qE '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+$' && echo 'ok: triage line'"
+    command: "scripts/select-work-batch.sh linux | grep -qE '^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=[0-9]+)*$' && echo 'ok: triage line'"
     timeout_ms: 30000
     expected_behavior: "ok: triage line"
+
+  # NEGATIVE CONTROL for the widening above: the relaxed pattern must still
+  # reject a triage line that is missing a required field or has them out of
+  # order. Without this, `( [a-z_]+=[0-9]+)*` could be mistaken for "anything
+  # goes after epics", and a future edit that dropped `ungrouped` entirely would
+  # sail through the step above.
+  - step: "the coverage pin still rejects a malformed triage line"
+    command: "pat='^triage: eligible=[0-9]+ grouped=[0-9]+ ungrouped=[0-9]+ epics=[0-9]+( [a-z_]+=[0-9]+)*$'; echo 'triage: eligible=1 grouped=2 epics=4' | grep -qE \"$pat\" && { echo 'FAIL: missing ungrouped accepted'; exit 1; }; echo 'triage: eligible=1 ungrouped=3 grouped=2 epics=4' | grep -qE \"$pat\" && { echo 'FAIL: out-of-order accepted'; exit 1; }; echo 'triage: eligible=1 grouped=2 ungrouped=3 epics=4 urgency_unscored=5' | grep -qE \"$pat\" && echo 'ok: pin discriminates' || { echo 'FAIL: valid extended line rejected'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: pin discriminates"
 
   - step: "NEGATIVE CONTROL: an unknown role is refused, not silently defaulted"
     command: "scripts/select-work-batch.sh nonsense >/dev/null 2>&1 && { echo 'FAIL: bad role accepted'; exit 1; }; scripts/select-work-batch.sh nonsense 2>&1 | grep -q '^refused:bad-role:' && echo 'ok: bad role refused'"
