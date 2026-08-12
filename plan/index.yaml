@@ -11994,6 +11994,12 @@ plan_index:
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
         - type: progress
+          ts: "2026-08-12T00:35:30Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t003451z"
+          host: macos
+          summary: >
+            macOS 2026-08-12: the credential half of this packet has NEVER been testable, and now we know why. tillandsias-tray --github-login now completes successfully end-to-end on macOS (all prompts answered, gh authenticated as 8007342, exit_code 0, in-container vault write verification PASSED) after fixing the expect-order drift under 663-acdw — but on the next VM boot secret/data/github/token is 404 again. Root cause filed as 694-mhz8 (p0): vault_bootstrap.rs:2015 decides whether to wipe the Vault data volume using has_shamir_share_in_keyring(), which looks for an OS-KEYCHAIN entry while running INSIDE THE LINUX GUEST; it can only ever return false there, so the partial-init 'safe recovery' wipes a healthy initialized Vault — and the stored GitHub token — on every bootstrap. The guard's own comment says it exists to prevent exactly this. So every re-auth attempt on this host since the 07-27 re-provision succeeded and was then erased. 349 STAYS BLOCKED, but the blocker is now identified rather than mysterious: it needs 694-mhz8, not another login attempt. Do not spend further cycles re-running --github-login here.
+        - type: progress
           ts: "2026-07-16T10:20:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260716T0924Z"
           host: macos
@@ -37798,6 +37804,12 @@ plan_index:
         flag) — either implement it or refuse unknown flags loudly; the silent
         acceptance cost this session two blind runs.
       events:
+        - type: progress
+          ts: "2026-08-12T00:35:45Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t003451z"
+          host: macos
+          summary: >
+            macOS 2026-08-12 VERIFIED FIX: after the expect-order correction, an unattended re-seed drove the guest login to completion — host log shows 'matched: github token' then 'matched: git author name' then 'matched: git author email' in the NEW order, guest printed 'GitHub authentication complete for 8007342', {"status":"login-finished","exit_code":0}. The wedge this packet describes is GONE. Two follow-ons, both filed rather than folded in: (1) 694-mhz8 p0 — the token does not survive the next VM boot because the vault partial-init guard wipes the store; that is why the seed still cannot close 349. (2) The --with-token lane over --exec-guest is NOT a working macOS substitute: stdin forwarding itself works (proven: a piped string arrived as GOT:[...] with the child's stdin on /dev/pts/0), but the bytes are delivered eagerly at session open while the consuming container reads minutes later, so the queued line is gone by then and the container's read blocks forever (observed: two runs killed at their bounds, 137). The expect-driven lane is correct precisely because it delivers on demand.
         - type: progress
           ts: "2026-08-11T23:41:00Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260811t231515z"
