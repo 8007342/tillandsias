@@ -42,28 +42,15 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
-# ORDER 702-68zj. Probe candidates by RUNNING one, not by testing an executable
-# bit. On a shared Windows/WSL checkout a WSL build leaves a Linux ELF at
-# ./target/release/tillandsias-plan beside the usable .exe, and the bit test
-# picks the ELF: every later query dies with `Exec format error`, stderr is
-# discarded, and empty output was counted as zero stranded packets. The sweep
-# printed a clean all-clear while a stranded packet sat in the ledger.
-#
-# `.exe` candidates come first for the same reason — on the host where both
-# exist, the runnable one is the .exe.
-PLAN=""
-for c in \
-    ./target/release/tillandsias-plan.exe \
-    ./target/debug/tillandsias-plan.exe \
-    ./target/release/tillandsias-plan \
-    ./target/debug/tillandsias-plan \
-    "$(command -v tillandsias-plan 2>/dev/null)"; do
-    [ -n "$c" ] || continue
-    [ -f "$c" ] || continue
-    # The probe IS the executability test: a binary that cannot run here fails
-    # this, whatever its mode bits or extension claim.
-    "$c" capabilities >/dev/null 2>&1 && { PLAN="$c"; break; }
-done
+# ORDER 702-68zj / 704-zcgi. The binary probe lives in one shared file, because
+# three scripts independently wrote the same wrong version of it. Its rule: an
+# executable BIT is a claim, RUNNING the binary is evidence. Testing the bit
+# picked a Linux ELF sitting at ./target/release/tillandsias-plan on a shared
+# Windows/WSL checkout, every query died with `Exec format error`, stderr was
+# discarded, and empty output was counted as zero stranded packets — a clean
+# all-clear while a stranded packet sat in the ledger.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary)" || PLAN=""
 
 # UNAVAILABLE is a THIRD verdict, not a quiet zero (702-68zj). This sweep exists
 # to catch work that is invisible in both directions — `ready` queries skip an

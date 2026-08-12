@@ -176,19 +176,25 @@ case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive 
 # query-failed refusals are untestable on exactly the hosts CI runs on — the ones
 # whose binary is current — which is how the hole they close survived in the first
 # place.
-PLAN=""
-if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
-    [ -x "${TILLANDSIAS_PLAN_BIN}" ] || {
-        echo "refused:no-plan-binary:TILLANDSIAS_PLAN_BIN=${TILLANDSIAS_PLAN_BIN} is not executable"
-        exit 1
-    }
-    PLAN="${TILLANDSIAS_PLAN_BIN}"
-else
-    for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
-        [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
-    done
-fi
-[ -n "$PLAN" ] || { echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"; exit 1; }
+# Order 704-zcgi: one shared probe, because this script's own copy of the
+# `[ -x ... ]` first-match probe refused on a Windows host whose `.exe` was
+# sitting right there — the third script to write that same bug. An executable
+# BIT is a claim; RUNNING the binary is evidence.
+#
+# TILLANDSIAS_PLAN_BIN still overrides (the shared probe tries it first), so the
+# litmus can point this script at a stub that fails the way a stale binary
+# fails. Without it the stale-binary and query-failed refusals are untestable on
+# exactly the hosts CI runs on — the ones whose binary is current — which is how
+# the hole they close survived in the first place.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary)" || {
+    if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+        echo "refused:no-plan-binary:TILLANDSIAS_PLAN_BIN=${TILLANDSIAS_PLAN_BIN} did not run"
+    else
+        echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"
+    fi
+    exit 1
+}
 
 # jq is load-bearing for every projection below. Absence is an environment
 # fault, never a statement about the ledger — refuse with its own token.

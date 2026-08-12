@@ -42,15 +42,8 @@ base_ref="${TILLANDSIAS_CLOSURE_EVIDENCE_BASE:-origin/linux-next}"
 # bit, and prefer `.exe`. On a shared Windows/WSL checkout a WSL build leaves a
 # Linux ELF at target/release/tillandsias-plan beside the usable .exe, and the
 # bit test picks the ELF.
-_bin=""
-for cand in \
-    "target/release/tillandsias-plan.exe" \
-    "target/debug/tillandsias-plan.exe" \
-    "target/release/tillandsias-plan" \
-    "target/debug/tillandsias-plan"; do
-    [ -f "$cand" ] || continue
-    "$cand" capabilities >/dev/null 2>&1 && { _bin="$cand"; break; }
-done
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+_bin="$(resolve_plan_binary)" || _bin=""
 if [ -z "$_bin" ]; then
     # No binary is an UNKNOWN, not a pass — say so and skip (build to enable).
     echo "ok:closure-evidence:0 checked"
@@ -66,7 +59,7 @@ fi
 # binary had already printed the correct diagnosis ("the ARTIFACT is stale
 # relative to the checkout: rebuild it") and the wrapper replaced it with a
 # wrong one. Same ruling as order 447 for stale staging: skip, name it, pass.
-if ! "$_bin" capabilities 2>/dev/null | grep -qx 'closure-evidence-check'; then
+if ! plan_binary_has "$_bin" closure-evidence-check; then
     echo "skip:stale-plan-binary"
     echo "  note: $_bin predates closure-evidence-check — rebuild with 'cargo build --release -p tillandsias-plan' to enable this gate" >&2
     exit 0

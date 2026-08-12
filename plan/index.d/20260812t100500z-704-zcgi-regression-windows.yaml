@@ -1,0 +1,29 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written: append-event cannot reach a packet that lives only in
+# plan/index.d/ (692-u57i).
+
+events:
+  - packet_id: one-shared-plan-binary-probe
+    event:
+      type: note
+      ts: "2026-08-12T10:05:00Z"
+      agent_id: "windows-claude-opus5-20260811t215500z"
+      host: windows
+      summary: >
+        The corpus caught a regression in this very change on its first run,
+        recorded rather than quietly fixed. My shared probe ran `capabilities`
+        on TILLANDSIAS_PLAN_BIN as well as on auto-discovered candidates, which
+        collapsed a distinction select-work-batch.sh depends on: the litmus
+        injects a stub that fails the way a STALE binary fails, and a stale
+        binary must refuse as `stale-plan-binary`, never as `no-plan-binary`.
+        litmus:cycle-batch-triage-shape step 14 is precisely that negative
+        control, and it failed.
+        Fixed by honouring an EXPLICIT override on existence alone — the
+        override is the caller naming the binary, not a candidate to be judged
+        — while auto-discovery still probes by execution. Re-run: ci-release
+        100% (7/7) PASS; all three consumer scripts working; the isolated
+        non-runnable-candidate control still rejects.
+        The lesson is the one this packet is about, pointed the other way: I
+        generalised a rule and the generalisation ate a distinction someone had
+        deliberately built a test for. The test is why it cost ten minutes
+        instead of appearing on another host as an unexplained refusal.
