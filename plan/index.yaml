@@ -39171,6 +39171,12 @@ plan_index:
         - MCP answers match the CLI (fragment fold included); the 651-style mismatch is fixed with a litmus
         - CLAUDE.md/methodology direct host sessions to the MCP experts
       events:
+        - type: progress
+          ts: "2026-08-12T18:28:58Z"
+          agent_id: "forge-opencode-20260812t182800z"
+          host: forge
+          summary: >
+            IN-FORGE verify of the deferred 682-z5h8 $PWD-resolver check PASSES against groundtruth. Both MCP experts served the LIVE mounted checkout from a fresh launch-built index: forge-plan plan_answer and project-info project_answer both returned citation_root=/home/forge/src/tillandsias, source_commit=55633745dbe07aebdb23ff7443a2f3e00a5f518a (= live HEAD 55633745), indexed_at=2026-08-12T18:27:39Z (launch-time, NOT the 2026-07-30 stale-clone signature), confidence=exact, citations resolving 682-z5h8 with status=ready. project-info independently answered project_type=git,nix,rust,rust-workspace and project_structure from the live checkout (distinct server, own $PWD-first resolver at images/default/config-overlay/mcp/project-info.sh:368-373). CLI parity re-confirmed: 'tillandsias-plan status 682-z5h8' == MCP output. 6/6 groundtruth checks pass; no filing needed. This closes the deferred in-forge verification left open 2026-08-11 (the bp-mcp-verify version-skew relaunch failure).
         - ts: "2026-08-11T07:15:00Z"
           event: filed
           summary: |
