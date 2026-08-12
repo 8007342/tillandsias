@@ -32865,6 +32865,12 @@ plan_index:
         - 'EOF with dead non-zero child carries ''wsl stdio bridge exited (<status>): <stderr>'''
         - clean exit-0 EOF and live-child EOF behavior unchanged
       events:
+        - type: progress
+          ts: "2026-08-12T11:33:37Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            FIELD OBSERVATION DONE, and it FALSIFIES the packet's first exit criterion on this host. The enrichment recorded as implemented on 2026-08-08 does not fire: a bridge child that dies non-zero after the grace still produces a BARE EOF. Fixture committed at crates/tillandsias-vm-layer/tests/wsl_stdio_bridge_eof_enrichment.rs (#[ignore]d, so it does not red the corpus; run with --ignored). It drives the REAL wsl.exe and socat rather than a mock, because the defect is entirely about real timing. Measurements on this host: a standalone 'wsl -d tillandsias -- socat STDIO VSOCK-CONNECT:1:42999' exits 1 after 4091ms with stderr 'socat E connect(...): Connection reset by peer' — ~16x the 250ms grace, so this host reproduces the packet's condition rather than the race that occasionally caught it. Through the bridge, read() returned Ok(0) after the grace with no cause attached. MECHANISM, by elimination rather than assertion: exit status is non-zero and stderr is non-empty (measured standalone), so the only remaining explanation consistent with these observations is that self.child.try_wait() returned Ok(None) at the instant EOF was observed — the child's stdout pipe closes at exit but the process is not yet reaped, and the enrichment is documented as best-effort in exactly that case. If so it is best-effort in a way that never fires in the common path, which is the path the field logs are full of. CHEAP CONFIRMATION for the next claimant: instrument the EOF branch to record what try_wait returned. LIKELY FIX: on first EOF, give the child a bounded wait (tens of ms) before deciding, instead of a single non-blocking reap. NEGATIVE CONTROL in the same file passes: the live control-wire port does NOT report a dead child, so the assertions cannot be satisfied by a bridge that always errors.
         - type: filed
           ts: 2026-08-08T22:45:00Z
           agent_id: windows-esmeralda-claude-fable-20260808t235000z
