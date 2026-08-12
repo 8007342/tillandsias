@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: stale-browser-mcp-artifacts-cleanup
+    field: status
+    value: completed
+    ts: "2026-08-12T18:13:07Z"
+    host: forge
+
+events:
+  - packet_id: stale-browser-mcp-artifacts-cleanup
+    event:
+      type: completed
+      ts: "2026-08-12T18:13:07Z"
+      host: forge
+      summary: >
+        status 'completed' with evidence_refs: 84c2b07c cargo-test-browser-mcp:103/103-pass litmus:host-browser-mcp-shape:pass source-delta:27249383B-removed
+  - packet_id: stale-browser-mcp-artifacts-cleanup
+    event:
+      type: note
+      ts: "2026-08-12T18:13:07Z"
+      host: forge
+      summary: >
+        Verified complete absence of mock browser JS and ELF artifacts across git index, flake.nix, and Containerfiles; all 103 browser-mcp tests and litmus absence check pass

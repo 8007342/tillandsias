@@ -336,12 +336,11 @@ raw="$(printf '%s' "$raw" | jq -c --argjson done "$terminal_ids" \
     '[.[] | select([(.depends_on // [])[] | select((. as $d | $done | index($d)) | not)] | length == 0)]' 2>/dev/null)"
 [ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:no ready packet for role ${ROLE} is both claimable and dependency-clear"; exit 1; }
 
-# LEASES REMAIN UNCHECKED, and that is stated rather than hidden. `query`'s
-# projection carries no lease field, so this script cannot tell whether another
-# host is already working a packet; the duplication half of 660-z774 needs the
-# constraint pushed into the plan binary. Until then a batch may still overlap a
-# sibling's active claim — which is a wasted cycle, not a corrupted ledger,
-# since claim-ledger-node.sh still refuses the second claimant at claim time.
+# ORDER 706-ddw6. `query`'s JSON projection carries native `.lease` state.
+# Filter out any packet that currently holds an active, unexpired claim lease so
+# this cycle does not attempt work another host is already driving.
+raw="$(printf '%s' "$raw" | jq -c '[.[] | select(.lease == null or .lease.is_active != true)]' 2>/dev/null)"
+[ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:no ready packet for role ${ROLE} is claimable, dependency-clear, and unleased"; exit 1; }
 
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
 # packet can be the thing a macos packet is waiting on, and that downstream

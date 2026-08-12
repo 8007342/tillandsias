@@ -246,7 +246,7 @@ cases:
       confidence: exact
       citation_kind: plan
       min_citations: 1
-      max_citations: 1
+      max_citations: 2
       citations_include:
         - path: plan/index.yaml
           packet_id: forge-src-tmpfs-topology

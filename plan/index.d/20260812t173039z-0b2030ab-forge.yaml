@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expert-cli-telemetry-attribution-channel
+    field: status
+    value: completed
+    ts: "2026-08-12T17:30:39Z"
+    host: forge
+
+events:
+  - packet_id: expert-cli-telemetry-attribution-channel
+    event:
+      type: completed
+      ts: "2026-08-12T17:30:39Z"
+      host: forge
+      summary: >
+        status 'completed' with evidence_refs: 57e72dec cycle-metrics:mcp-servers=1:per_server=cli=9:100%-answer-rate
+  - packet_id: expert-cli-telemetry-attribution-channel
+    event:
+      type: note
+      ts: "2026-08-12T17:30:39Z"
+      host: forge
+      summary: >
+        Added log_cli_usage and ISO timestamp emitter to tillandsias-plan main(); updated cycle-metrics.sh to include server:cli rows in expert adoption telemetry

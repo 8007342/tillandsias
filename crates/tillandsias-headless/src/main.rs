@@ -7608,7 +7608,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--name",
             &container,
             "--network",
-            ENCLAVE_EGRESS_NETS,
+            ENCLAVE_ONLY_NET,
             "--secret",
             &format!(
                 "{},{GIT_VAULT_TOKEN_SECRET_OPTS}",
@@ -7644,7 +7644,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--name",
             &container,
             "--network",
-            ENCLAVE_EGRESS_NETS,
+            ENCLAVE_ONLY_NET,
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
@@ -7652,6 +7652,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         if let Some(mount) = tool_cache_mount.as_deref() {
             run.args(["--volume", mount]);
         }
+        run.args(proxy_env_args());
         run.args([
             "--entrypoint",
             "/bin/sh",
@@ -15828,32 +15829,31 @@ mod tests {
         }
     }
 
-    // Regression: github-login/enclave-egress-regression. The GitHub login
-    // helper must dual-home onto the managed egress network so `gh auth login`
-    // can reach api.github.com from the internal enclave.
+    // Order 654-7ur4: The provider login helper routes outbound strictly through
+    // the enclave proxy chokepoint using ENCLAVE_ONLY_NET and proxy_env_args(),
+    // dropping the unsanctioned direct tillandsias-egress network attachment.
     #[test]
-    fn github_login_helper_dual_homes_onto_managed_egress_network() {
+    fn provider_login_routes_via_enclave_only_net_and_proxy() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
         let login_window = source_window(
             source,
             "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
         );
         assert!(
-            login_window.contains("ENCLAVE_EGRESS_NETS"),
-            "run_provider_login must use ENCLAVE_EGRESS_NETS not ENCLAVE_NET: {login_window}"
+            login_window.contains("ENCLAVE_ONLY_NET"),
+            "run_provider_login must use ENCLAVE_ONLY_NET: {login_window}"
         );
         assert!(
-            !login_window.contains("ENCLAVE_NET,"),
-            "run_provider_login must not reference ENCLAVE_NET (no egress): {login_window}"
+            !login_window.contains("ENCLAVE_EGRESS_NETS"),
+            "run_provider_login must not reference unsanctioned ENCLAVE_EGRESS_NETS: {login_window}"
         );
-        // The dual-home leg only resolves if the managed egress network exists.
-        // `--github-login` can run without a prior full `--init`, so the login
-        // path now routes infrastructure bring-up through the container
-        // dependency graph (order 227) which ensures enclave+egress networks
-        // as GitLogin prerequisites.
+        assert!(
+            login_window.contains("proxy_env_args()"),
+            "run_provider_login must configure proxy env args: {login_window}"
+        );
         assert!(
             login_window.contains("ensure_git_login(debug)?"),
-            "run_provider_login must ensure enclave+egress+ca+vault+proxy via the dependency model: {login_window}"
+            "run_provider_login must ensure enclave+ca+vault+proxy via the dependency model: {login_window}"
         );
     }
 
