@@ -346,3 +346,63 @@ methodology:
         candidates and size/kind heuristics for batchability. This key records
         the operator's near-term ruling; the bucketed model supersedes the
         flat rate when that work lands.
+
+# ── On-Demand-Subject-Experts (2026-08-12, operator rulings) ──────────────────
+# Order 707-t3mz. When a project depends on a technology or best-practice domain,
+# the forge stands up a small RAG expert giving CITED, QUOTABLE answers to the
+# official docs — the "hard quote to a real span" that IS a verifiable litmus.
+on_demand_experts:
+  authority: "The Tlatoāni, 2026-08-12 (order 707-t3mz rulings)"
+  doc_lifecycle:
+    rule: >
+      External docs are PULL-ON-DEMAND, NEVER BUNDLED into images, NEVER
+      committed to the project. This dissolves all license/attribution
+      complexity by honoring ephemerality + idempotency: nothing is
+      redistributed; an ephemeral forge that loses the pulled docs simply
+      re-pulls them next launch, by design. No license-allowlist / bundle tier
+      is needed because nothing is baked or shipped.
+    three_zones_in_forge: >
+      All Tillandsias-owned state lives INSIDE /home (never /var, /etc, /opt —
+      it must be easy for an entry-level Linux user to find) and OUTSIDE the
+      project checkout at /home/<user>/src/<project>. Three zones with distinct
+      lifecycles: (1) HARD FORGE — the Linux/image components (dnf-installed,
+      rarely change); (2) EPHEMERAL FORGE — cached-but-not-committed state under
+      ~/.cache/tillandsias/ (build artifacts, warm nix cache, cheatsheets,
+      PULLED EXPERT DOCS); dies with the container, re-materialized on launch;
+      (3) PROJECT — the GitHub-backed checkout at ~/src/<project>, the only zone
+      that is version-controlled. Pulled docs and expert corpora live in zone 2,
+      never zone 3.
+    development_machine: >
+      On a bare-metal DEVELOPMENT host the same pull lands OUTSIDE the repo
+      (~/.cache/tillandsias/) and is additionally .gitignore-guarded against any
+      repo-relative pull, so on-demand docs never pollute the committed project.
+      Dev-machine and in-forge share the pull mechanism but differ in lifecycle:
+      the forge's cache dies with the container; the dev host's persists until
+      cleared.
+    cache_buckets: >
+      Some doc sets are hundreds of MB. They ride the cache-overlay volatility
+      buckets (order 687 + the 691-raj8 slow layer): LARGE, SLOW, STABLE
+      (rarely-changing, cache-friendly heavy corpora) and ON-DEMAND (pulled per
+      launch because their license forbids baking). Never the per-cycle VOLATILE
+      layer for the heavy ones — they would re-download every rebuild.
+  authority_labeling:
+    rule: >
+      Every expert corpus and every cited answer carries an authority label:
+      AUTHORITATIVE (the tech provider or a standards body — e.g. the A+ Promises
+      spec, ECMAScript, Reactive Streams) or COMMUNITY (widely-used patterns
+      whose source is essays/books/consensus — e.g. Fowler-style IoC/Factories/
+      DI). COMMUNITY patterns are NOT first-class but MUST be included: they are
+      often about to converge into authoritative ones (everything is a CRDT; we
+      love convergence). They may CONTRADICT each other, so the label lets an
+      in-forge agent decide when the AUTHORITATIVE approach suffices and when a
+      COMMUNITY approach has acceptable tradeoffs for a specific case. If an
+      authoritative source later supersedes a community pattern, the record
+      notes the supersession (CRDT convergence, not deletion).
+  technique:
+    rule: >
+      ALWAYS full chunk+embed RAG — one path for every corpus, small or large.
+      No summarize/Modelfile-stuffing branch: a single simple path is the most
+      trustworthy and consistent, and query latency is already near-instant. Do
+      NOT add a low-compute mode — the fleet is efficient enough to be GREEDY
+      with compute. On fatter hardware, INCREASE the synthesis model size where
+      it helps (measured per corpus) rather than shrinking the technique.

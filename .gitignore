@@ -97,3 +97,12 @@ crates/tillandsias-windows-tray/assets/tillandsias-headless-*
 # launch; tracking them dirties the checkout on every forge start (order 444).
 .opencode/package-lock.json
 .opencode/node_modules
+
+# @trace order:707-t3mz — On-Demand-Subject-Experts. Pulled external docs are
+# EPHEMERAL and NEVER committed (pull-on-demand, re-pulled per forge launch by
+# design). Canonical location is OUTSIDE the repo (~/.cache/tillandsias/), but
+# guard against any repo-relative pull polluting the project on a dev machine.
+**/experts-pulled/
+**/cheatsheets-pulled/
+**/docs-pulled/
+.cache/
