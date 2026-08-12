@@ -312,6 +312,75 @@ text for the same failure class.
 - **Expression**: `wt_on_path => spawn_terminal_uses(wt.exe)`
 - **Measurable**: true
 
+### Invariant: The tray imports only DLLs Windows ships in-box
+- **ID**: windows-native-tray.invariant.import-surface-os-only
+- **Expression**: `imports(tillandsias-tray.exe) ⊆ os_shipped_dlls`
+- **Measurable**: true
+
+The product promise is a zero-dependency, ephemeral, portable tool: an operator
+drops the exe on a clean Windows machine and runs it. A single import from a
+redistributable nobody installed ends that, and the failure appears only on
+machines no developer owns.
+
+`os_shipped_dlls` means shipped with Windows 10+: the `api-ms-win-*` API-set
+stubs **including the UCRT** (`api-ms-win-crt-*`), plus the system DLLs
+enumerated in `scripts/check-tray-import-surface.sh`. It does NOT include the
+Visual C++ Redistributable (`vcruntime140.dll`, `msvcp140.dll`). That
+distinction is the whole invariant — the UCRT is an OS component and the redist
+is not, and collapsing the two readmits the dependency.
+
+Rust's MSVC targets link the C runtime dynamically by default, so holding this
+invariant requires `-C target-feature=+crt-static` for the
+`*-pc-windows-msvc` targets in `.cargo/config.toml` — the same posture the musl
+launcher uses, for the same reason.
+
+**Corrects the record**: the 2026-08-08 field inventory
+(`plan/issues/portable-zero-dependency-runtime-audit-2026-08-08.md`) asserted
+"no VC redist" in prose. It was wrong, and had been wrong for as long as there
+was a Windows tray. Nothing detected it because every machine that ran the
+binary already had the redist installed. Pinned falsifiably by
+`litmus:tray-import-surface-os-only` (order 620-duta).
+
+## Runtime dependency surface
+
+Distilled from the 2026-08-08 N100 field audit (order 620-duta, criterion 4);
+that deliverable is now a tombstone pointer to this section.
+
+The rule the inventory exists to enforce: **runtime dependencies are tracked
+separately from dev-time ones, and the separation is detectable at runtime
+rather than asserted in prose.** Prose is what failed above.
+
+**Runtime, on an end-user machine:**
+
+- `tillandsias-tray.exe` — one portable binary, subject to the import-surface
+  invariant above. The per-arch guest headless binary is embedded (static musl
+  ELF), so a fresh provision needs no release download. That embed is only as
+  current as the staging that produced it; see order 695-r7k8 and
+  `litmus:guest-binary-embed-integrity`.
+- The WSL2 platform (`wsl.exe`) — the one host-level runtime dependency, and a
+  first-class provisioning precondition: classified by the platform preflight
+  and installable by the tray itself (`wsl --install --no-distribution`).
+- In-guest packages (systemd, podman, socat, dbus-broker, …) — self-provisioned
+  into the ephemeral `tillandsias` distro at first provision/reconcile. Network
+  is required for that first provision only, everything lands inside the
+  disposable distro, and `wsl --unregister tillandsias` removes all of it. That
+  is the ephemerality contract.
+- The `vsock_loopback` kernel module, which the WSL2 kernel ships — required
+  only by the non-elevated socat bridge path. Reported at headless startup as
+  `preflight vsock_loopback loaded|missing`, so its absence is a readable fact
+  rather than an opaque host-side handshake timeout.
+
+**Dev-time only, never consulted by the shipped binary:** rustup/cargo, MSVC
+Build Tools and the Windows SDK on Windows; the dedicated `tillandsias-build`
+WSL distro with gcc/musl-gcc/cmake. The build distro is deliberately separate
+from the runtime distro so destructive smoke cannot wipe toolchains and the
+product never touches the build environment.
+
+**Observable at runtime**, rather than promised: `--diagnose --json` reports
+`guest_wiring` (what the last reconcile actually did to the adopted guest, not
+merely what version is present), the headless startup emits the
+`vsock_loopback` line, and the import surface is pinned by litmus.
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:

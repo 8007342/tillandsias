@@ -1,81 +1,50 @@
-# portable-zero-dependency-runtime-audit — keep the "zero dependencies, ephemeral, portable" promise measurable
+# portable-zero-dependency-runtime-audit — TOMBSTONE
 
-Filed 2026-08-08 from the Intel N100 field host (`Esmeralda`). Deliverable for
-the packet of the same id (order 620-duta). Operator directive: the product
-promise is a "zero dependencies ephemeral portable tool" — runtime dependencies
-must be tracked carefully and separated from dev-time dependencies, and the
-separation must be DETECTABLE at runtime, not asserted in prose.
+Filed 2026-08-08 from the Intel N100 field host (`Esmeralda`) for packet
+`portable-zero-dependency-runtime-audit` (order 620-duta). **Distilled into the
+owning spec 2026-08-12 (criterion 4); this file is now a pointer.**
 
-trace: spec:linux-native-portable-executable, spec:windows-native-tray,
-spec:vm-provisioning-lifecycle
+The content lives at:
 
-## Dependency inventory as of this session (Windows host)
+- `openspec/specs/windows-native-tray/spec.md` → **Runtime dependency surface**
+  (the inventory: what an end-user machine actually needs, what is dev-time
+  only, and which of it is observable at runtime)
+- `openspec/specs/windows-native-tray/spec.md` → **Invariant: The tray imports
+  only DLLs Windows ships in-box** (the promise, made falsifiable)
 
-**Runtime (end-user machine) — unchanged by this session's fixes:**
+## What the audit got wrong, and why that is the point
 
-- `tillandsias-tray.exe`: single portable binary. Links only OS-shipped
-  Windows libraries (kernel32/ntdll/ws2_32/dbghelp/ucrt); no VC redist, no
-  installer prerequisite. The guest headless binary is EMBEDDED per-arch
-  (static musl ELF), so a fresh provision needs no release download.
-- WSL2 platform (`wsl.exe`): the one host-level runtime dependency; already a
-  first-class provisioning precondition (order 323 classifier; the tray can
-  drive `wsl --install --no-distribution` itself).
-- In-guest packages (systemd, podman, socat, dbus-broker, …): self-provisioned
-  by the tray INTO the ephemeral `tillandsias` distro via dnf at first
-  provision/reconcile (`ensure_base_packages`). Network is required for that
-  first provision; everything lands inside the disposable distro, never on the
-  host. `wsl --unregister tillandsias` (or installer -Purge) removes all of it
-  — the ephemerality contract.
-- `vsock_loopback` kernel module (WSL2 kernel ships it): loaded via the
-  injected `/etc/modules-load.d/tillandsias-vsock.conf`. Required ONLY by the
-  non-elevated socat bridge path.
+The original inventory asserted in prose that the tray "links only OS-shipped
+Windows libraries … no VC redist". **That was false**, and had been false for as
+long as there was a Windows tray: Rust's MSVC targets link the C runtime
+dynamically by default, so `vcruntime140.dll` — a Visual C++ Redistributable
+component — sat in the binary's import table. No machine that ever ran the
+binary noticed, because every machine that ran it was a developer machine with
+the redist already installed.
 
-**Dev-time only (build hosts; never consulted by the shipped binary):**
+An inventory written as prose cannot catch that. The packet's own operator
+directive said so on the day it was filed: runtime dependencies must be
+*detectable at runtime*, not asserted. Criterion 3 built the detector, and the
+detector found it immediately.
 
-- Windows: rustup + cargo + MSVC Build Tools + Windows SDK (installed on this
-  host 2026-08-08 purely to build; the installed tray was verified to run
-  before any of them existed — the release binary ran and failed for guest-
-  state reasons, not missing host libraries).
-- WSL: the dedicated `tillandsias-build` distro (with-wsl2-builder.sh) with
-  gcc/musl-gcc/cmake/etc. Deliberately separate from the runtime distro so
-  destructive smoke can never wipe toolchains, and vice versa the product
-  never touches the build distro. musl-gcc/musl-devel/musl-libc-static were
-  missing from the builder init and are now added (ring's build script
-  hard-requires x86_64-linux-musl-gcc for the musl guest).
+Fixed by `-C target-feature=+crt-static` for the `*-pc-windows-msvc` targets;
+pinned by `litmus:tray-import-surface-os-only`.
 
-**This session added ZERO new runtime dependencies.** The three fixes
-(adopted-guest reconciliation, inference gate, bridge EOF attribution) reuse
-existing product mechanisms (wsl exec, dnf ensure, systemd injection).
+## Where each exit criterion landed
 
-## Why the downloaded release binary failed here (for the record)
+1. `--diagnose --json` reports guest wiring + last reconcile outcome →
+   `guest_wiring` field, cheatsheet
+   `cheatsheets/runtime/windows-tray-diagnostics.md` is schema authority.
+2. Headless preflight reports `vsock_loopback loaded|missing` →
+   `crates/tillandsias-headless/src/main.rs`, emitted before the listener binds.
+3. Litmus pins the tray's import surface →
+   `scripts/check-tray-import-surface.sh` +
+   `openspec/litmus-tests/litmus-tray-import-surface-os-only.yaml`.
+4. Inventory distilled to the owning spec → this tombstone.
 
-The v0.4.260804.1 zip was CORRECT — the release pipeline hard-gates on the
-embedded source-matched guest binary. It failed on this host because the
-existing `tillandsias` distro carried July-era wiring (stale v0.3.260712.1
-guest binary, retired hardened unit, no vsock_loopback) and the adopt fast
-path never reconciles adopted guests. Portable-binary correctness cannot fix
-stale ephemeral-substrate state unless the binary VERIFIES that state at
-runtime — which the reconciliation fix now does on every adopt.
+## Related
 
-## Exit criteria (runtime detectability)
-
-- [ ] `--diagnose --json` reports the guest wiring version and the last
-      reconcile outcome (adopted-in-sync | reconciled | reconcile-failed), so
-      "stale adopted guest" is an observable state, not an inference from
-      handshake failures.
-- [ ] `headless-preflight.sh` asserts `vsock_loopback` is loaded (warn line at
-      minimum) so the non-elevated bridge's kernel prerequisite is visible in
-      the guest journal.
-- [ ] A litmus asserting the installed tray binary imports/links nothing
-      outside the OS-shipped set (e.g. dumpbin /dependents allowlist), pinning
-      the zero-runtime-deps promise falsifiably.
-- [ ] Docs: dependency inventory above distilled into the owning spec(s), with
-      this file left as a tombstone pointer.
-
-## Evidence / handoff
-
-- Branch: this note + fragment on linux-next; no code owned by this packet yet
-  (the three exit-criteria items are unclaimed follow-up work).
-- Related: low-end-adopted-guest-reconciliation (the runtime verifier),
-  low-end-no-local-inference-gate (footprint), scripts/with-wsl2-builder.sh
-  (dev-only builder init, musl-gcc gap closed 2026-08-08).
+- 627-sgtt — the packet the "stale adopted guest" section of the original audit
+  was written about; its deployment question is now answered by `guest_wiring`.
+- 695-r7k8 — the staging skip that let stale guest binaries into the embed.
+- 689-gipe — the tray build embedding a stale staged binary.
