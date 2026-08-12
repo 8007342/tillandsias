@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: freshness-coverage-rate-decision
+    field: pickup_role
+    value: linux
+    ts: "2026-08-12T18:36:07Z"
+    host: host
+
+events:
+  - packet_id: freshness-coverage-rate-decision
+    event:
+      type: note
+      ts: "2026-08-12T18:36:07Z"
+      host: host
+      summary: >
+        Operator decision made 2026-08-12 and recorded in methodology; the remaining work (freshness-inventory reports against the defined subset + a litmus) is agent-implementable linux work, not a tlatoani decision.

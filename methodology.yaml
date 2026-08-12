@@ -306,3 +306,43 @@ methodology:
         never silently stale). Tools MUST read the threshold from this key
         (env override FRESHNESS_THRESHOLD_DAYS permitted for tests) so a
         future retuning happens in one place.
+    coverage_target:
+      authority: "The Tlatoāni, 2026-08-12 (order 640-iujb ruling)"
+      scope: defined-subset
+      rule: >
+        Coverage is NOT measured against every file. Only components that
+        ENCODE DESIGN INTENT are in scope — executable/source code, scripts,
+        litmus tests, specs (openspec/specs), and methodology docs — because
+        only those can go stale in the sense the audit asks about ("is this
+        still meaningful, sound, complete?"). EXCLUDED from the denominator:
+        generated files (regenerated from source), vendored/third-party trees,
+        and append-only event logs / ledgers / loop-status history. The
+        freshness advisory MUST report coverage against THIS subset, not an
+        implicit 100% of all files — an implicit-100% target was divergent
+        (~1013 files, +52 in nine days) and mostly meaningless.
+      rationale: >
+        A defined subset makes coverage both CONVERGENT and HONEST. Auditing a
+        generated or vendored or log file for "still meaningful?" is busywork
+        that inflates the denominator and never retires. bar_raise_governance
+        routed this scope choice to the operator; the loop's job was to make
+        the queue reachable and report the rate honestly (both done, 640-iujb).
+    audit_rate:
+      authority: "The Tlatoāni, 2026-08-12 (order 640-iujb ruling)"
+      rule: >
+        A cycle MAY BATCH the re-stamp of an UNCHANGED component — one whose
+        current content-hash matches the hash recorded at its last audit needs
+        no re-review, only a stamp refresh. "Unchanged since last stamp" is
+        script-checkable (compare content-hash), so what counts as a trivial
+        batchable audit is defined, not a judgment call. Components that
+        CHANGED since their last stamp, or were NEVER audited, still get the
+        careful ONE-per-cycle review that ends in refreshed | updated |
+        obsoleted. This retires the unchanged bulk cheaply while keeping real
+        review where content actually moved.
+      future_work: >
+        A richer design is filed for later (freshness-buckets, see the ledger):
+        criticality BUCKETS — a frequent, close-eye audit for critical-path
+        components and a batched "quick look" for the globally-unimportant
+        bulk — plus telemetry that flags UNTRACKED components as freshness
+        candidates and size/kind heuristics for batchability. This key records
+        the operator's near-term ruling; the bucketed model supersedes the
+        flat rate when that work lands.
