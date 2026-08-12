@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: status-ladder-enforcement-wave-2
+    field: status
+    value: verified
+    ts: "2026-08-12T04:58:15Z"
+    host: host
+
+events:
+  - packet_id: status-ladder-enforcement-wave-2
+    event:
+      type: completed
+      ts: "2026-08-12T04:58:15Z"
+      host: host
+      summary: >
+        status 'verified' with evidence_refs: commit (this cycle) + as-wired litmus. Criterion 1 (rank-aware fold merge): fragments.rs status_entry_wins — monotone ladder, higher rung wins regardless of arrival order, down only via falsified; 6 unit tests incl. commutativity. Criterion 2 (invisible-block report): is_parked_status + parked_blocks/parked_dependencies_of, wired into check + status + parked-blocks subcommand; 2 unit tests + litmus:parked-blocks-visibility-shape 4/4 green. Criterion 3 (new-fragment closure-evidence gate): closure-evidence-check subcommand + check-fragment-closure-evidence-added.sh diff-scoped wrapper + build.sh wiring; litmus:fragment-closure-evidence-gate-shape 4/4 green. 124 crate tests green, clippy clean, all as-wired via run-litmus-test.sh.
+  - packet_id: status-ladder-enforcement-wave-2
+    event:
+      type: note
+      ts: "2026-08-12T04:58:15Z"
+      host: host
+      summary: >
+        Criterion 4 (plan_next surfaces implemented packets as verification pickups) is REASONED-DECLINED, which the criterion explicitly permits. Rationale: criterion 2's parked-blocks report already surfaces every implemented packet with its outstanding verification action and waiting dependents; plan_next is a CLAIM selector and implemented packets are not claimable (verification belongs with the packet's original implementing context, not a fresh claim), so routing them through plan_next would conflate 'claim new work' with 'verify landed work'. parked-blocks is the correct surface for the latter. Wave-2 enforcement complete.
