@@ -52,6 +52,83 @@ fn exec_idle_timeout() -> Result<std::time::Duration, String> {
     exec_idle_timeout_from(std::env::var(EXEC_IDLE_TIMEOUT_ENV).ok().as_deref())
 }
 
+/// Wall-clock ceiling on one expect-driven exec (689-y2my, remaining item (a)).
+///
+/// This is NOT the progress deadline the packet originally asked for. That idea
+/// was refuted on 2026-08-12: the heartbeat is load-bearing (order 332), a
+/// legitimate first-run `--github-login` was measured at ~1290s of silence
+/// before it prompted, and a deadlock is indistinguishable from a slow-but-
+/// healthy command *by timing alone*. Any bound tight enough to catch a wedge
+/// promptly is tight enough to kill working work.
+///
+/// So this ceiling is deliberately far above every legitimate duration anyone
+/// has measured — four hours against a 21-minute worst case, a ~11x margin. It
+/// exists for the one property a purely observational fix cannot provide:
+/// **termination**. An unattended cycle that wedges at 02:00 currently holds
+/// the session until a human notices. With the heartbeat reports shipped in the
+/// safe half, that wedge is already legible within 30 seconds to anyone
+/// watching; this is what happens when nobody is.
+///
+/// Justified against order 332 by the margin, not by an argument that no output
+/// means no progress: a command that genuinely runs for four hours under an
+/// exec expect is outside anything this transport has ever been used for, and
+/// the ceiling is configurable for the host that finds one.
+const EXEC_WALL_CLOCK_CEILING_SECS: u64 = 14_400;
+const MIN_EXEC_WALL_CLOCK_CEILING_SECS: u64 = 300;
+const EXEC_WALL_CLOCK_CEILING_ENV: &str = "TILLANDSIAS_VSOCK_EXEC_WALL_CLOCK_CEILING_SECS";
+
+fn exec_wall_clock_ceiling_from(
+    value: Option<&str>,
+) -> Result<Option<std::time::Duration>, String> {
+    let Some(value) = value else {
+        return Ok(Some(std::time::Duration::from_secs(
+            EXEC_WALL_CLOCK_CEILING_SECS,
+        )));
+    };
+    // An explicit `0` disables the ceiling. A host with a genuinely unbounded
+    // exec should be able to say so out loud rather than setting a number so
+    // large it reads as a typo.
+    if value == "0" {
+        return Ok(None);
+    }
+    let seconds = value.parse::<u64>().map_err(|_| {
+        format!("{EXEC_WALL_CLOCK_CEILING_ENV} must be an integer number of seconds, got {value:?}")
+    })?;
+    if seconds < MIN_EXEC_WALL_CLOCK_CEILING_SECS {
+        return Err(format!(
+            "{EXEC_WALL_CLOCK_CEILING_ENV} must be at least {MIN_EXEC_WALL_CLOCK_CEILING_SECS} seconds (or 0 to disable), got {seconds}"
+        ));
+    }
+    Ok(Some(std::time::Duration::from_secs(seconds)))
+}
+
+fn exec_wall_clock_ceiling() -> Result<Option<std::time::Duration>, String> {
+    exec_wall_clock_ceiling_from(std::env::var(EXEC_WALL_CLOCK_CEILING_ENV).ok().as_deref())
+}
+
+/// The message a ceiling breach produces. Separate from the send site so the
+/// test asserts the operator-visible text, not a timing coincidence.
+///
+/// It names what the exec was waiting for and how much guest output arrived,
+/// because "it timed out" without those two facts is what made the 70-minute
+/// wedge unreadable in the first place.
+fn wall_clock_ceiling_error(
+    ceiling: std::time::Duration,
+    pending_label: Option<&str>,
+    bytes_seen: usize,
+) -> String {
+    let waiting_on = match pending_label {
+        Some(label) => format!("still waiting for {label}"),
+        None => "no expect pending".to_string(),
+    };
+    format!(
+        "vsock_exec: exec exceeded the {}s wall-clock ceiling — {waiting_on}, {bytes_seen} bytes of guest output seen. \
+         The wire was alive (the guest was heartbeating), so this is a wedged or blocked guest rather than a dead connection. \
+         Raise or disable with {EXEC_WALL_CLOCK_CEILING_ENV} (0 disables).",
+        ceiling.as_secs()
+    )
+}
+
 /// Outcome of a non-interactive guest exec.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecOutput {
@@ -617,8 +694,26 @@ where
     // minutes and was indistinguishable from progress. Each heartbeat now says
     // what is being waited for, so the same wedge is legible within 30 seconds.
     let started = std::time::Instant::now();
+    // 689-y2my item (a): a generous wall-clock ceiling, so an UNATTENDED wedge
+    // terminates. The heartbeat reports above make a wedge legible to someone
+    // watching within 30 seconds; this is what happens when nobody is.
+    let wall_clock_ceiling = exec_wall_clock_ceiling()?;
 
     loop {
+        // Checking at the top of the loop is sufficient precisely BECAUSE the
+        // heartbeat exists: a live guest wakes this loop every 30s, so the
+        // ceiling fires within one heartbeat of expiry. A guest that stops
+        // heartbeating entirely is the other failure, and the idle deadline
+        // below already owns it.
+        if let Some(ceiling) = wall_clock_ceiling
+            && started.elapsed() >= ceiling
+        {
+            return Err(wall_clock_ceiling_error(
+                ceiling,
+                current.as_ref().map(|e| e.label.as_str()),
+                stdout.len(),
+            ));
+        }
         let env = read_exec_envelope(&mut stream, idle_timeout).await?;
         match env.body {
             ControlMessage::PtyData {
@@ -1052,6 +1147,103 @@ mod tests {
         );
         assert_eq!(out.stdout, b"HELLO\n");
         guest_task.await.unwrap();
+    }
+
+    /// 689-y2my item (a). The ceiling parser's contract, including the two
+    /// ways a host can opt out of the default and the one way it cannot.
+    #[test]
+    fn wall_clock_ceiling_parses_default_disable_and_floor() {
+        assert_eq!(
+            exec_wall_clock_ceiling_from(None).unwrap(),
+            Some(std::time::Duration::from_secs(EXEC_WALL_CLOCK_CEILING_SECS)),
+            "unset means the default ceiling, not unbounded"
+        );
+        assert_eq!(
+            exec_wall_clock_ceiling_from(Some("0")).unwrap(),
+            None,
+            "an explicit 0 disables the ceiling — a host with a genuinely \
+             unbounded exec should say so out loud"
+        );
+        assert_eq!(
+            exec_wall_clock_ceiling_from(Some("7200")).unwrap(),
+            Some(std::time::Duration::from_secs(7200))
+        );
+        // Floor: a ceiling short enough to kill legitimate work is the exact
+        // mistake criterion 1 was refuted for. Refuse it rather than honour it.
+        assert!(
+            exec_wall_clock_ceiling_from(Some("30")).is_err(),
+            "a sub-floor ceiling must be refused, not silently accepted"
+        );
+        assert!(exec_wall_clock_ceiling_from(Some("banana")).is_err());
+    }
+
+    /// The breach message must carry the two facts whose absence made the
+    /// 2026-08-11 wedge unreadable: what it was waiting for, and how much the
+    /// guest had said.
+    #[test]
+    fn wall_clock_ceiling_error_names_the_pending_expect_and_bytes() {
+        let msg = wall_clock_ceiling_error(
+            std::time::Duration::from_secs(14_400),
+            Some("github device prompt"),
+            42,
+        );
+        assert!(msg.contains("14400s"), "{msg}");
+        assert!(msg.contains("github device prompt"), "{msg}");
+        assert!(msg.contains("42 bytes"), "{msg}");
+        // It must not read as a dead wire — that misdirection is the defect.
+        assert!(
+            msg.contains("wire was alive"),
+            "a ceiling breach is a wedged guest, not a stale connection: {msg}"
+        );
+
+        // Negative control: with nothing pending the message must NOT invent a
+        // label. A formatter that always printed one would pass the assertion
+        // above while lying whenever the exec was between expects.
+        let none_pending = wall_clock_ceiling_error(std::time::Duration::from_secs(300), None, 0);
+        assert!(none_pending.contains("no expect pending"), "{none_pending}");
+        assert!(
+            !none_pending.contains("still waiting for"),
+            "{none_pending}"
+        );
+    }
+
+    /// The ORDER-332 GUARD, restated as a negative control for this cycle's
+    /// change: a guest that heartbeats through silence longer than the idle
+    /// deadline must still not be killed. The ceiling added here is four hours;
+    /// nothing in this suite may come near it. If a future edit tightens the
+    /// ceiling toward the idle deadline, this is the test that should fail.
+    #[test]
+    fn wall_clock_ceiling_leaves_enormous_headroom_over_measured_first_run() {
+        // Measured on macOS 2026-08-12: ~1290s of legitimate silence during a
+        // first-run --github-login that then SUCCEEDED.
+        let measured_worst_case_secs = 1290u64;
+        let ceiling = exec_wall_clock_ceiling_from(None)
+            .expect("default ceiling parses")
+            .expect("the default is a ceiling, not unbounded")
+            .as_secs();
+        assert!(
+            ceiling >= measured_worst_case_secs * 10,
+            "the ceiling ({ceiling}s) must stay far above every legitimate duration \
+             anyone has measured ({measured_worst_case_secs}s); a bound tight enough to \
+             catch a wedge promptly is tight enough to kill working work (order 332, \
+             689-y2my criterion-1 refutation)"
+        );
+
+        // The configurable FLOOR must not sit below the idle deadline either,
+        // or a host could set a ceiling that preempts the liveness bound it is
+        // layered above. Read both through the parsers so this compares the
+        // values callers actually get.
+        let floor = exec_wall_clock_ceiling_from(Some("300"))
+            .expect("floor value parses")
+            .expect("a floor value is a ceiling")
+            .as_secs();
+        let idle = exec_idle_timeout_from(None)
+            .expect("default idle timeout parses")
+            .as_secs();
+        assert!(
+            floor >= idle,
+            "the ceiling floor ({floor}s) must not sit below the idle deadline ({idle}s)"
+        );
     }
 
     #[tokio::test]
