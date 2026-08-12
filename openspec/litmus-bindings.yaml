@@ -592,6 +592,7 @@ specs:
   - litmus:ledger-fragment-convergence
   - litmus:plan-compaction-format-preservation
   - litmus:loop-status-fragment-overlay
+  - litmus:loop-status-count-advisory-shape
   - litmus:no-unprotected-plan-ledger-readers
   - litmus:idiomatic-layers-doctrine-shape
   - litmus:large-packet-eligibility-doctrine-shape

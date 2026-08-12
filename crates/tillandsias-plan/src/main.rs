@@ -985,7 +985,7 @@ fn run_loop_status(args: &[String], base: &Path) {
                 }
             };
             let active = loop_status::active_release(base).unwrap_or_default();
-            let mut problems = loop_status::verify_active_release(&folded, &active);
+            let problems = loop_status::verify_active_release(&folded, &active);
 
             let (open, total) = match Ledger::load_with_fragments(&ledger_path) {
                 Ok(l) => count_release(&l, &active),
@@ -1005,6 +1005,17 @@ fn run_loop_status(args: &[String], base: &Path) {
                 .filter(|b| b.active)
                 .count();
             let mut count_ok = true;
+            // ORDER 668-9z9h. The committed `(N open / M total)` count is a
+            // point-in-time snapshot: EVERY subsequently filed release-tagged
+            // packet changes the live count, so an exact-match gate went red
+            // within half an hour of every green — a treadmill, not a control.
+            // The count is now DERIVED live (`canonical` below) and reported as
+            // an ADVISORY (`count_ok` in the verdict line + the canonical
+            // splice), NOT a gate: count drift alone never fails verify. The
+            // STRUCTURAL truths that CAN be wrong — the active-release name, a
+            // single `## ACTIVE RELEASE:` heading, a single `— ACTIVE` bullet
+            // on the right release — stay hard failures via `verify_active_release`.
+            let mut count_advisories: Vec<String> = Vec::new();
             if render_only {
                 // `--render` is not a gate: emit the canonical line so a
                 // coordinator can splice it, and leave consistency checking to a
@@ -1020,14 +1031,14 @@ fn run_loop_status(args: &[String], base: &Path) {
                     (Some(o), Some(t)) if o == open && t == total => {}
                     (Some(o), Some(t)) => {
                         count_ok = false;
-                        problems.push(format!(
-                            "active release {active} count is stale — committed ({o} open / {t} total tagged) should be {canonical}"
+                        count_advisories.push(format!(
+                            "active release {active} count drifted — committed ({o} open / {t} total tagged), live is {canonical} (advisory, not a gate — 668-9z9h)"
                         ));
                     }
                     _ => {
                         count_ok = false;
-                        problems.push(format!(
-                            "active release {active} bullet has no parseable count — should be {canonical}"
+                        count_advisories.push(format!(
+                            "active release {active} bullet has no parseable count — live is {canonical} (advisory)"
                         ));
                     }
                 }
@@ -1045,6 +1056,12 @@ fn run_loop_status(args: &[String], base: &Path) {
             );
             for p in &problems {
                 eprintln!("problem: {p}");
+            }
+            // Count drift is surfaced but never gates (668-9z9h): a coordinator
+            // splices `canonical` when convenient, and filing a packet in the
+            // meantime does not turn a green control red.
+            for a in &count_advisories {
+                eprintln!("advisory: {a}");
             }
             if !problems.is_empty() {
                 std::process::exit(1);
