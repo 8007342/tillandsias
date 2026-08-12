@@ -14,6 +14,7 @@ summary_generated_by: hand-curated
 bundled_into_image: false
 committed_for_project: false
 pull_recipe: see-section-pull-on-demand
+# freshness: auditor=forge-antigravity-20260812t1500z date=2026-08-12 verdict=refreshed scope=re-validated: ollama API endpoints (/api/generate, /api/chat, /api/pull, /api/embed, /api/version, /api/tags), port 11434, OLLAMA_HOST env var, tier table T0-T4, and json format patterns verified sound and matching current runtime
 ---
 
 # Local inference inside the forge

@@ -1,5 +1,3113 @@
 # Multi-Host Coordination Loop Status
 
+## Cycle 2026-08-12T14:51Z (linux_mutable — OVERNIGHT CLOSE-OUT, loop STOPS)
+
+First cycle after 07:00 local: writing the close-out and deleting the cron. 16 host-flow
+cycles ran from ~22:48Z 2026-08-11. Delegate flow stayed SUSPENDED all night (691-ssw9 open);
+no BigPickle launched after the cycle-0 DOA, per the gate.
+
+**FLEET AT HANDOFF**: healthy. Stranded=0 fleet-wide. loop-status-verify verdict=ok
+(count_ok=yes, 264 open / 441 total). All three hosts converged; osx-next + windows-next
+merged to HEAD.
+
+**SEVEN VERIFIED CLOSURES** (all through the 650-dq6u ladder with as-wired evidence, zero
+fabricated):
+- 634-39ik — diff-scoped expression-pin enforcement wired into build.sh (operator bar-raise)
+- 686-7qcm — full status-ladder enforcement wave: rank-aware fold merge, parked-blocks
+  visibility, closure-evidence gate (4 criteria; crit-4 reasoned-declined per its terms)
+- 630-6hyc — selector urgency term made a live signal (priority>kind>unscored, absence visible)
+- 680-zphp — groundtruth mutable-status pins de-pinned + gate guard (3rd firing prevented)
+- 685-yidq — env-gated host expert refresh on commit, recorded first-fire e2e (the PERMANENT
+  fix for the stale-host-expert class that OPENED the session, 682-z5h8)
+- 693-tf79 — timing telemetry rejects implausible durations at source + aggregation
+- 668-9z9h — loop-status count is advisory not a treadmill gate
+Plus 322 completed (SSH-CA design SIGNED, all 4 questions ruled) and 2 implemented awaiting a
+fresh stack (559 npm-idempotent, 691-ssw9 clone reachability probe).
+
+**OPERATOR HANDOFF — the accessible solo queue is drained; the rest needs YOU:**
+1. A desktop-lane `tillandsias --init --force` (fresh consistent-alias image, defeats the
+   683-g7p6 stale-image trap) cascades to unblock: 691-ssw9 crit4, 559 crit2, 579, the
+   606-bvnp -> 610-txvr -> 451 release-blocker chain (design signed), and stage-0 delegation.
+2. macOS: one interactive `tillandsias-tray --github-login` (349 + the p0 654-7ur4 last leg).
+3. Ruling 640-iujb (freshness coverage target/rate).
+Remaining v0.5 audits 245-248 are multi_cycle + 3-agent-gated + chained (not solo-closeable).
+
+The 650-dq6u status ladder is now enforced end-to-end. Good night's work. Loop stopped.
+
+## Cycle 2026-08-11T22:00Z→2026-08-12T14:45Z (macos — OVERNIGHT CLOSE-OUT; loop STOPPED per standing orders)
+
+Operator window ended 07:00 local; this is the first wake after it. Fourteen
+`/loop` cycles plus the operator session that preceded them. The loop is stopped
+here, not paused.
+
+### WHAT THE NIGHT WAS ACTUALLY ABOUT
+
+The operator reported two things: a tray login window that crashed, and a Linux
+orchestrator claiming an auth-token block that "doesn't seem to be the case".
+Both reports were accurate and neither had the cause anyone assumed. The crash
+was a stale build. The "blocker" was FOUR independent defects stacked on one
+path, each hiding the next:
+
+1. **Expect-order drift (663-acdw).** The guest has prompted CREDENTIAL FIRST
+   since operator directive 2026-07-29; the macOS host still asked
+   name→email→token. `DynamicExpect` is sequential, so this was a mutual wait —
+   the guest blocked on its token prompt while the host scanned for a needle
+   that could not appear. Explains the packet's own puzzle that the 2026-07-24
+   attended login worked: it predates the reorder by five days.
+2. **Heartbeat defeats the exec deadline (689-y2my).** A 30s liveness heartbeat
+   reset a 300s inactivity bound, so the deadlock ran 70 minutes instead of
+   failing in 5.
+3. **`read_to_end(stdin)` before boot (663-69kp / 689-stig).** Blocked on the
+   main thread before the first log line and before the VM existed, so every
+   attempt to DIAGNOSE the above also hung. The packet's standing
+   VZ-storage-lock hypothesis was refuted: no VM process exists during the wedge.
+4. **The Vault wipe (694-mhz8).** The partial-init guard checked for a Shamir
+   share in an OS keychain while running inside a Linux guest, so it could never
+   find one and wiped an initialized Vault — with the stored token — on EVERY
+   bootstrap. Every re-auth since 2026-07-27 had succeeded and then been erased.
+
+### THE RESULT
+
+**The credential is seeded and proven durable.** 694-mhz8 is `verified` by
+cross-restart proof, re-verified at handback ~8.5 hours and a dozen VM boots
+later. **349 moved blocked → ready** after two weeks; only its criterion 3 (real
+mirror push + TLS parity sweep) remains.
+
+Getting there needed all four fixes together: the expect-order correction let
+the login complete, the stdin bound let it be diagnosed, the unknown-flag
+refusal stopped `--with-token` silently launching a GUI, and the share-fallback
+write let the result persist.
+
+### THE PATTERN, AND THE MILESTONE IT PRODUCED
+
+Eight defects across three unrelated subsystems shared one shape: **the system
+diagnosed the problem correctly and then did nothing that stopped anyone.**
+`check` printed "does not parse and was SKIPPED" and exited 0. The gate passed
+every check then warned it could not stamp. `set-field` wrote an accurate status
+with a contradicting event. A heartbeat proved the wire while the work was dead.
+The Vault guard's own comment said it existed to prevent the destruction it
+performed. Filed as milestone **700-nz4n** from that evidence, and nearly every
+fix tonight was the same edit in different clothes: wire an existing, correct
+diagnosis to something that refuses.
+
+### CLOSED / IMPLEMENTED
+
+- `completed`: **699-usxc** (both halves — append-event reaches fragment-only
+  packets; a no-op set-field no longer discards the note you asked it to
+  record), **689-stig**.
+- `verified`: **694-mhz8** — the only rung reached by as-wired, in-target proof.
+- `implemented` with named residuals: 690-cb62, 696-6byc, 697-s3by, 698-7n6q,
+  701-g98y, 701-se6x, 701-kgvk, 701-iu9b.
+
+### FIVE TIMES I WAS WRONG, AND HOW IT SURFACED
+
+Recorded because the corrections were more valuable than the fixes.
+
+1. Reported a seed as successful from `LOGIN-RC=0` that was **`tail`'s** exit
+   code, not the login's. Caught by verifying against the product surface
+   (`--list-cloud-projects`) instead of a self-reported code.
+2. Guessed stdin forwarding was broken; a ten-second controlled test proved it
+   works perfectly.
+3. **Implemented my own p1 packet's stated fix (689-y2my) and it was wrong** —
+   pre-existing tests caught that it regresses order 332's "keep silent guest
+   exec sessions live" and would kill a legitimately slow first-run login.
+   Reverted; only the observability half shipped; criterion 1 refuted on the
+   packet.
+4. **Filed 701-iu9b trap 2 from reading a stub without checking its module could
+   exist** — `mod vault_bootstrap` is itself feature-gated, so the stub is dead
+   code. Refuted. My first guard for it was ALSO dead code, inside the very
+   module that disappears.
+5. Shipped a fix that printed "host Keychain updated" while both fingerprints
+   were provably unchanged — an unevidenced success claim, written an hour after
+   filing the milestone about exactly that.
+
+The through-line: **the log line is not the evidence.** Hand-falsification —
+breaking each fix and checking the test fails — changed the outcome once
+(a vacuous test that passed with the fix reverted) after looking like ceremony
+six times.
+
+### FILED (13 packets + 3 issues + 1 milestone)
+
+690 wave (6, from a verified 6-lens I/O audit — the operator's Windows-32K
+buffering hypothesis CONFIRMED as 690-pz68), 701 wave (4, credential
+durability), 695-nvnd, 696-6byc, 697-s3by, 698-7n6q, 699-usxc, 699-dycj,
+700-nz4n, plus research issues on a transient self-signed-cert anomaly and the
+build-check timing gap.
+
+### MEASUREMENTS THAT REPLACED ASSUMPTIONS
+
+- `build.sh --check` is **~10s** (avg over 15 recorded steps; slowest 15s). Read
+  `source=absent` for the first half of the night until 697-s3by was fixed.
+- Full VM stage+boot+exec+stop: **9 seconds**. Every "macOS boot is slow"
+  reading resting on a wedged one-shot was measuring the stdin bug.
+- Guest is **4 GiB / ≤4 vCPU** hardcoded, not the 8 GiB assumed. Raising it was
+  considered and REJECTED on that evidence.
+- `guest_binary_fingerprint` is **20-30 ms** on a 12.7 MB binary (~0.3% of a
+  boot) — measured, then DECLINED as an optimisation target, and struck from
+  690-pz68 with numbers so nobody re-derives it.
+- console.log grows **~680 bytes per VM start**, strictly monotonic — which set
+  the 4 MiB rotation cap.
+
+### WHAT I DELIBERATELY DID NOT DO
+
+- **690-7adz** (no podman timeout) left untouched twice: it needs a generous
+  CONFIGURABLE budget because legitimate builds run for minutes, and rushing a
+  timeout is exactly how order 332 was regressed earlier the same night.
+- **690-pz68's measurement**: three of four sites are cold-provision-only, the
+  only route is `--reset-guest`, and that wipes the in-VM vault. Not taken, not
+  faked, not wiped.
+- Three packets stop at the line between implementing a MECHANISM and choosing a
+  BEHAVIOUR — 701-g98y (epoch delivery), 690-cb62 (tray serial routing),
+  689-y2my (whether any bound is wanted at all). Left to the operator.
+
+### METRICS AT CLOSE
+
+```
+experts: calls=30 answered=29 answer_rate=96%
+expert_accuracy: pass=19 total=19 rate=100%
+flow: cycles=14 avg_completed_per_cycle=0.07 avg_commits_per_cycle=1.64 overhead_ratio=23
+timing: steps=15 build_check_ms_avg=10067 slowest=build-check:15000
+plan: packets=766 ready=285
+```
+
+`overhead_ratio=23` — twenty-three commits per completed packet — had no
+denominator at all until the first terminal closure in cycle 12. Read it
+plainly: this host's cycles are commit-heavy relative to closures, which is what
+a night of small fixes with honestly-named residuals produces. Whether that is
+the right trade is an operator judgement; the point is it is now MEASURED.
+
+### LIVE HAZARD AT HANDBACK
+
+**701-g98y** — the host Keychain holds a pre-05:09Z epoch while the guest Vault
+was fresh-initialized at 05:09Z, so a GUI tray launch can still deliver stale
+credentials over good ones. Capture-at-fresh-init cannot repair an
+already-diverged host. **Re-verify with `--list-cloud-projects` after any first
+tray start.**
+
+### LOOP STOPPED
+
+Cron job deleted. Not paused — stopped, per the standing orders' terms.
+
+## Cycle 2026-08-12T14:30Z (windows — OVERNIGHT CLOSE-OUT, loop stopping)
+
+First wake after 07:00 local (07:30). This is the close-out record; the loop stops here.
+
+Merged `origin/linux-next` 645fac5f; guards clean; **stranded zero, expired zero** at close, as
+they were at every cycle boundary tonight.
+
+### The p0 pair, which was priority 1
+
+**627-sgtt and 627-wtrp are both `completed`.** Their named tests are green
+(`interactive_lane_keeps_the_terminal_foreground_process_group`,
+`project_lane_argv_is_never_routed_through_wt`), the tray was rebuilt and installed, and the
+guest reprovisioned to healthy.
+
+What is NOT done, stated plainly because it is the thing an operator would most want to know:
+neither is `verified`, and neither can be from here. Both want a live menu click, and 627-sgtt
+additionally wants a guest whose wiring is known to be this tray's — one `--reset-guest` in an
+attended window, since the vault wipe forces a re-login. Every prerequisite this host can
+supply is in place, and `guest_wiring` (built tonight) will make the result of that reset
+legible for the first time.
+
+### What tonight actually was
+
+Seventeen working cycles. The p0 pair moved on the first, and then the loop spent most of the
+night on something it did not set out to do: **a chain of stale-artifact and blind-checker
+defects that had been silently corrupting evidence across the whole project.**
+
+Closed: **695-r7k8** (staging skipped rebuilds on a VERSION match), **689-gipe**→`implemented`
+(the tray embedded whatever was staged), **620-duta** (all four criteria — including a litmus
+that immediately proved the "zero dependencies" promise false: the tray required the VC++
+redist, now statically linked), **702-68zj** (two checkers answering questions they could not
+compute), **703-sjuk** (the build distro had no jq/yq, and its marker could not see the package
+list change), **704-zcgi** (three copies of one wrong binary probe), **692-u57i**
+(append-event could not reach fragment-born packets), **620-cine** (bridge EOF named its cause,
+fixed after a field reproduction).
+
+The through-line, five times in different files: *a check that cannot see what changed, or
+cannot run, reporting a confident answer anyway.* It cost this host three cycles of wrong
+inference about 627-sgtt before `--diagnose` could answer the question directly.
+
+### Deliberately left open, with reasons
+
+- **154** — SC-11 measured live (~0.11% of one core, ~0.007% of the machine). The criterion
+  says `<0.1%` and not of what. I did not pick the reading that closes it.
+- **689-y2my** — item (a) shipped (a wall-clock ceiling); item (b), the protocol-level
+  blocked-on-input heartbeat, needs a wire change across three crates and did not fit a cycle.
+- **599-3b9h, 350** — both gated on an attended lane; 350's remaining half is operator-gated
+  by its own record.
+- **689-gipe** at `implemented` — its second criterion needs a distro with no prior guest.
+
+### Two things I got wrong, recorded rather than buried
+
+1. Cycle 1 read `guest_version == tray version` as proof the rebuild reached the guest. It did
+   not follow, and cycle 3 corrected it on the packet.
+2. Cycle 13 wrote an order token into three files before minting it. The mint-first rule exists
+   precisely because tokens leak into commit messages that cannot be corrected; I caught it
+   only because minting was still a step I had to take.
+
+### One collision to flag for the coordinator
+
+**692-u57i and 699-usxc are the same fix, made independently on two hosts within hours.** I
+filed and fixed the windows side; macOS filed and fixed theirs; the merge kept one
+implementation (theirs), it works, and the gate is green — but two hosts paid for one defect.
+That is the `plan/issues/agent-concurrency-collisions` shape, and the node-closure claim
+protocol exists for exactly it. Neither of us claimed the node.
+
+Also for the coordinator: `scripts/cycle-metrics.sh` reports `plan_bin=absent` on this host —
+it carries a fourth copy of the probe 704-zcgi consolidated. Small, known, and not fixed
+tonight because it surfaced in the close-out itself.
+
+Loop stopping as ordered.
+
+## Cycle 2026-08-12T13:57Z (linux_mutable — host-flow cycle 16)
+
+Delegate suspended (691-ssw9). **668-9z9h CLOSED → verified** (loop-status count treadmill) —
+found another self-contained closeable packet. loop-status-verify required the committed
+(N open / M total) count to EXACTLY match the live folded-ledger count, so every filed
+release-tagged packet flipped it red — red within half an hour of every green. FIX (main.rs):
+the count is now DERIVED live and reported as an ADVISORY (count_ok + an advisory: line with the
+canonical splice); count drift NEVER gates. Structural truths (active-release name, one heading,
+one — ACTIVE bullet on the right release) stay HARD failures. litmus:loop-status-count-advisory-shape
+(methodology-accountability, 3/3: drift green with advisory, wrong-active-release fails hard,
+in-sync reports count_ok=yes). Verified live: real corpus now verdict=ok (was red on 267 vs 265
+drift). 124 crate tests + clippy clean. Merged siblings. Stranded=0. Seventh verified closure.
+
+## Cycle 2026-08-12T13:30Z (windows — SC-11 measured, deliberately not closed)
+
+Merged `origin/linux-next` 6d4317ae; guards clean; stranded zero.
+
+Took 154's last live criterion — SC-11, idle CPU with a healthy VM — which only became
+measurable once this loop's tick-retirement slice landed. Setup was clean: freshly installed
+tray started from scratch, `vm status push subscription established (polls suppressed, SC-07)`
+at 13:31:22Z, no drop or backoff for the rest of the window, wire reachable and Ready. So this
+was genuinely the condition SC-11 names, not a fallback-polling state wearing its clothes.
+
+Four measurements on a 16-core host: 120 s → **0.0781%** of one core; 180 s → **0.1302%**;
+300 s → **0.1146%**; lifetime 735 s → **0.1126%**. As a share of the whole machine — the
+normalisation Windows Task Manager shows per process — that is **~0.007%**.
+
+**The criterion says `<0.1%` and does not say of what.** Share of the machine: pass, by about
+14x. Share of one core: a marginal fail at ~0.11%. I took the first sample, saw 0.078%, and
+could have stopped there and closed it; the second sample is why I did not. Three more samples
+agree with each other and disagree with the first, and the honest summary is that the number
+sits on the threshold under one reading and nowhere near it under the other.
+
+I am not picking the reading that closes the packet. 154 returns to `ready` with the
+measurement recorded and one blocker: pin the unit, then re-measure. That is a smaller and much
+more answerable question than the one the criterion currently asks.
+
+One piece of context for whoever closes it: the retired 30 s tick cannot be what remains.
+0.828 CPU-seconds over 735 s is ~1.1 ms/s of steady work, and at roughly 24 wakes in that
+window the per-wake cost would have to be implausible. The remainder is more likely the Win32
+message pump plus the push listener. That is arithmetic, not a profile, and it is recorded on
+the packet as a hypothesis rather than a finding.
+
+## Cycle 2026-08-12T13:41Z→2026-08-12T13:45Z (macos — /loop cycle 14: last working cycle; verified the state being handed back)
+
+Guards green, boundary clean. Merged `origin/linux-next` (6d4317ae) FIRST.
+
+The operator window closes at 07:00 local (now 06:42), so this cycle verified
+the handback state rather than starting work that could not be finished
+carefully. Starting a fix at 06:42 and leaving it half-done would be worse than
+not starting it — the same reasoning that left 690-7adz alone last cycle.
+
+### HANDBACK VERIFICATION — all three green
+
+- **Credential still durable.** A fresh `--list-cloud-projects` (separate VM
+  boot, no login in between) read `secret/data/github/token` and listed the
+  operator's repositories, exit 0. That is ~8.5 hours and a dozen VM boots after
+  the 05:09Z seed, and after every subsequent change this session. Recorded as a
+  note on 694-mhz8.
+- **Guest binary in sync.** The 701-kgvk detector shipped this session answers
+  in one line what previously required hashing files by hand: installed bundle
+  and staged copy match (`26f120b6b1ef…`), so the guest boots the binary
+  carrying a56cbbd1 rather than a silently downgraded one — the exact failure
+  mode that made every earlier seed evaporate.
+- **Ledger clean.** 766 packets, ids unique, live references sound.
+
+### A SIBLING HARDENED THE SAME INSTRUMENT INDEPENDENTLY
+
+The merge brought linux's 693-tf79 into `scripts/timing-log.sh`: guards that
+skip a record whose start time is zero (which would emit an absolute epoch-ms as
+a ~56-year "duration") and drop anything over a day. Independent of, and
+complementary to, the CWD-relative path fix this host landed two cycles ago
+(697-s3by) — the two coexist untouched. Two hosts hardening the same telemetry
+from different angles on the same night is a reasonable sign the instrument is
+being USED rather than merely present.
+
+### METRICS
+
+```
+flow: cycles=12 avg_completed_per_cycle=0.08 avg_commits_per_cycle=1.75 overhead_ratio=21
+timing: steps=12 build_check_ms_avg=9917 slowest=build-check:15000
+plan: packets=766 ready=288
+```
+
+### NEXT WAKE
+
+The next firing is the first after 07:00 local: write the overnight close-out
+cycle record and STOP the loop, per standing orders.
+
+## Cycle 2026-08-12T12:55Z (linux_mutable — night stage-0 cycle 15, host-flow only)
+
+Delegate suspended (691-ssw9). **693-tf79 CLOSED → verified** (cycle-metrics timing overflow) —
+found one self-contained closeable packet (my own cycle-2 finding). ROOT CAUSE: timing_emit
+set _t0=0 when the start was absent/stubbed, so _dur = now - 0 = an absolute epoch-ms
+(1786481285460 ~= 56 years); the >=0 check passed and the garbage shipped, poisoning the
+rolling timing: average + slowest-step signal. Fixed both ends: timing_emit (timing-log.sh)
+skips a zero start or a >=24h duration; cycle-metrics.sh aggregation filters durations to
+[0, 24h) before averaging/max. litmus:timing-telemetry-implausible-guard-shape
+(methodology-accountability, 4/4 green as-wired: aggregation excludes the epoch record and
+reports sane averages, positive control, zero-start skipped at source, valid start emits ~100ms).
+The slowest-step signal (the one number that line exists to give) is usable again. Merged
+osx-next + windows-next. Stranded=0. Sixth full closure tonight; no fabrication.
+
+## Cycle 2026-08-12T12:41Z→2026-08-12T12:46Z (macos — /loop cycle 13: console.log bounded; a timeout fix deliberately NOT started)
+
+Guards green, boundary clean. Merged `origin/linux-next` (87bb6b27) FIRST.
+
+### WORK SELECTION WAS THE FIRST DECISION
+
+With ~1h of window left, 690-7adz (no podman invocation has a timeout) was the
+higher-priority candidate and was DELIBERATELY NOT STARTED. That fix needs a
+GENEROUS, CONFIGURABLE budget — legitimate container builds and image loads run
+for minutes — and rushing a timeout is exactly how order 332's "keep silent
+guest exec sessions live" was regressed earlier tonight while implementing
+689-y2my. Better left clean for someone with room to do it carefully than
+half-done at 05:45 local.
+
+### 690-cb62 — console.log BOUNDED (implemented)
+
+Nothing pruned this file; the only code that ever removed it was the destructive
+reset. MEASURED across the session: 43,178 bytes / 62 boot banners, then 54,107
+/ 78 about 22 hours later — **~680 bytes per VM start, strictly monotonic**.
+
+POLICY, stated where the file is opened: at most TWO generations
+(`console.log` + `console.log.prev`), each bounded at 4 MiB, so on-disk is
+bounded by twice that. The cap is derived from the measured rate — roughly six
+thousand boots of history before anything is displaced.
+
+ROTATION, NOT TRUNCATION, deliberately: a boot problem is usually diagnosed from
+the boot BEFORE the one that failed to come up, and truncating in place would
+discard exactly that.
+
+Best-effort by construction — runs on the VM start path and swallows every
+error, because a logging-hygiene failure must never stop a VM booting; worst
+case is the previous unbounded behaviour.
+
+### THE NEGATIVE CONTROL IS THE TEST THAT MATTERS
+
+A rotator that fired unconditionally would satisfy the rotation test while
+destroying history on EVERY boot — leaving an operator with one boot of context
+exactly when they need several. So `console_log_under_the_cap_is_left_alone`
+asserts an under-cap log is untouched AND byte-identical. Plus a first-boot case
+for an absent log. 60 vm-layer tests green.
+
+### WHY `implemented` AND NOT `completed`
+
+Criterion 2 is a DECISION, not code. The tray never enables `serial_to_log`, so
+in tray mode the guest serial stream goes to the tray process's stderr for the
+life of the VM instead of to console.log. That is an operator-visible UX choice.
+Recommendation recorded (route it to the now-bounded log), decision left to the
+operator — the third packet tonight stopped at the boundary between
+"implement the mechanism" and "choose the behaviour".
+
+### METRICS
+
+```
+flow: cycles=12 avg_completed_per_cycle=0.08 avg_commits_per_cycle=1.75 overhead_ratio=21
+timing: steps=12 build_check_ms_avg=9917 slowest=build-check:15000
+plan: packets=766 ready=288
+```
+
+### RESIDUAL
+
+701-g98y still live on this host. 690-7adz untouched and explicitly recommended
+for a cycle with room. Window ends 07:00 local; the next wake after that writes
+the overnight close-out and STOPS the loop.
+
+## Cycle 2026-08-12T12:30Z (windows — 620-cine fixed; the race was the packet all along)
+
+Merged `origin/linux-next` 87bb6b27; guards clean; stranded zero.
+
+Last cycle I diagnosed 620-cine by elimination and deliberately stopped short of patching the
+transport with twenty minutes left. With a full cycle, I did it — and the first run confirmed
+the diagnosis by contradicting my fixture.
+
+**Root cause, now confirmed rather than eliminated.** The reap is raced: the child's stdout
+pipe closes at exit, but the process is not reapable at that instant, so the single
+non-blocking `try_wait` in `poll_read` lost essentially every time. Fix: on first EOF with an
+unreaped child, wait one bounded 150 ms grace before deciding, then apply the existing
+enrichment. A still-unreaped child yields the clean EOF it always did, and the grace is spent
+once so a normal end-of-stream cannot loop on it. The wait is paid only at end-of-stream, on a
+connection that is already over — never on a healthy wire.
+
+**The first run failed in a way that taught me something.** With a warm distro, the failure
+surfaced at OPEN, not at EOF: `open_wsl_stdio_bridge` returned the enriched error itself,
+because the child died *inside* the 250 ms startup grace. My fixture asserted on the EOF door
+and called that a failure. It was not — it was the other correct outcome, and which door a
+failure takes is precisely the race this packet describes ("surfaced only twice when a race
+caught the exit within the grace"). I had built the fixture around the door instead of the
+property. It now asserts that the cause is NAMED, wherever it surfaces, and both doors were
+observed on this host within ten minutes.
+
+**Evidence on the path that was bare.** Terminating the distro forces a cold start and pushes
+the failure past the grace:
+
+`[620-cine] enriched at EOF after 2.599s: wsl stdio bridge exited (exit code: 1): socat[241] E
+connect(5, AF=40 cid:1 port:42999, 16): Connection reset by peer`
+
+— ten times the startup grace, previously a bare `Ok(0)`. Warm re-run passes too; the negative
+control (live port does not report a dead child) still passes; vm-layer 55 passed / 0 failed.
+Guest reprovisioned afterwards, wire Ready.
+
+**Criterion 2 is half-verified and recorded that way.** The live-child case IS the passing
+negative control. Clean exit-0 EOF stays clean by construction — the `!status.success()` guard
+is untouched — but its behaviour does change in one respect I did not build a live fixture
+for: a clean EOF may now arrive up to 150 ms later. I would rather write that down than let
+"unchanged" cover a thing I did not measure.
+
+## Cycle 2026-08-12T11:47Z (linux_mutable — night stage-0 cycle 14, COORDINATOR health pass)
+
+Delegate suspended (691-ssw9). No new cleanly-closeable solo work — the accessible v0.5
+queue is genuinely drained (confirmed cycle 13): remaining audits 245-248 are multi_cycle +
+3-agent-gated + chained; everything else needs a live stack. So this is an honest coordinator
+pass, not a manufactured closure.
+
+**Fleet health**: all three hosts converging — linux_mutable, osx (cycle 12, 699-usxc closed
+completed), windows (620-cine vsock fixture). Stranded claims = 0 fleet-wide. v0.5 at 217 open.
+No thrashing, no idle-with-work, no unmerged sibling state (osx-next + windows-next merged).
+
+**THE OPERATOR-UNBLOCK CASCADE** — one action clears most of what's left. A desktop-lane
+`tillandsias --init --force` (bakes a fresh consistent-alias forge image, defeating the
+683-g7p6 stale-image trap) cascades to unblock:
+  - 691-ssw9 (implemented) criterion 4: live create/destroy zero-DOA verification
+  - 559 (implemented) criterion 2: forge reaches agent stage on a pre-seeded-stale launch
+  - 579 (ready): re-verify existing-volume receive hardening against a healthy mirror
+  - 606-bvnp -> 610-txvr -> 451 (the ONLY release-blocker-v0.5, design SIGNED): the SSH-CA
+    T3-T13 implementation + negative matrix, all needing a live stack
+  - stage-0 in-forge delegation (BigPickle) — resumes once 691-ssw9 closes
+Plus one macOS action (interactive tillandsias-tray --github-login) for 349, and ruling 640-iujb.
+
+**Night close-out context (13 prior cycles)**: 5 verified closures (634-39ik expression-pin
+enforcement, 686-7qcm full ladder-enforcement wave, 630-6hyc selector urgency, 680-zphp
+groundtruth mutable-status guard, 685-yidq host expert refresh-on-commit — the permanent fix
+for the stale-expert class that opened the session), 322 completed (SSH-CA signed), 2
+implemented (559, 691-ssw9). Zero fabricated closures. The 650-dq6u status ladder is enforced
+end-to-end (rank-aware fold, evidence at write+gate time, parked-block visibility).
+
+## Cycle 2026-08-12T11:41Z→2026-08-12T11:46Z (macos — /loop cycle 12: 699-usxc CLOSED to `completed`, the first terminal closure of the night)
+
+Guards green, boundary clean. Merged `origin/linux-next` (8b0a81e1) FIRST.
+
+### 699-usxc — SECOND HALF FIXED, PACKET CLOSED
+
+`set-field <id> <field> <same-value> --reason "..."` printed `ok` and wrote
+NOTHING — not the LWW row, not the reason. With half 1 (append-event unable to
+reach fragment-only packets, fixed last cycle in 70052567) that left NO way to
+annotate such a packet without also changing a field, and it bit hardest while
+correcting a corrupted evidence string: the one moment the ledger most needs to
+accept a write. `ok` for "I discarded your text" is the same unevidenced-success
+shape as every other member of milestone 700-nz4n.
+
+A bare no-op stays quiet and cheap. A no-op carrying `--reason`/`--evidence` now
+records the note as a fragment and NAMES the file it wrote.
+
+### THE NEGATIVE CONTROLS ARE THE REASON TO TRUST IT
+
+- unknown packet_id → still refuses, **exit 1**
+- base-hosted packet → still edits the base, fragments unchanged **47→47**
+- BARE no-op, no note → still silent, fragments unchanged **53→53**
+
+The third is the one that mattered: without it the "fix" could have degraded
+into writing a fragment on every idempotent call and quietly bloating the
+ledger. All exit codes captured DIRECTLY, not through a pipe — `tail` swallowing
+an exit code produced a false success report earlier tonight, and repeating that
+while verifying a fix about honest records would have been its own failure.
+
+### CLOSED TO `completed`
+
+All three exit criteria met with as-wired evidence. 11 plan tests green; 766
+packets, no fragment status loss, added-fragment parse and closure-evidence
+checks green; gate green.
+
+**First terminal closure of the night.** Worth noting how it arrived: filed two
+cycles ago when append-event refused a write, SHARPENED last cycle when the
+documented workaround also silently failed, closed now. Every step was the
+tooling failing while trying to record something honestly — a reasonable way to
+discover that the recording path itself was the weak link.
+
+### METRICS
+
+```
+flow: cycles=11 avg_completed_per_cycle=0 avg_commits_per_cycle=1.82
+timing: steps=10 build_check_ms_avg=9500 slowest=build-check:15000
+plan: packets=766 ready=289
+```
+
+`avg_completed_per_cycle` still reads 0 because the flow record for THIS cycle
+is emitted below, after the closure; it should move to non-zero next cycle. That
+is the first time all night the number has had anywhere to go.
+
+### RESIDUAL
+
+701-g98y still live on this host — Keychain holds a pre-05:09Z epoch, so a GUI
+tray launch can still deliver stale credentials; re-verify with
+`--list-cloud-projects` after any first tray start.
+
+## Cycle 2026-08-12T11:30Z (windows — 620-cine observed in the field, and the fix does not work)
+
+Merged `origin/linux-next` 8b0a81e1; guards clean; stranded zero.
+
+620-cine asked for one thing this host can uniquely give: **observe the enriched bridge error
+on the field host**. The enrichment was recorded as implemented on 2026-08-08 and the packet
+has been waiting since for someone to look at it. I looked. It does not fire.
+
+First I checked that this host reproduces the packet's condition rather than the race that
+occasionally masked it. A standalone `wsl -d tillandsias -- socat STDIO VSOCK-CONNECT:1:42999`
+exits 1 after **4091 ms** with `socat E connect(...): Connection reset by peer` — about 16x the
+250 ms startup grace. That is squarely the post-grace case the packet is about.
+
+Then I drove the real bridge through it. `read()` returned **Ok(0) — a bare EOF**, after the
+grace, with no cause attached. That is the exact defect 620-cine was filed for, still present.
+
+The fixture is committed at
+`crates/tillandsias-vm-layer/tests/wsl_stdio_bridge_eof_enrichment.rs`, `#[ignore]`d so it does
+not red the corpus, and it drives real `wsl.exe` and real `socat` rather than a mock — a mock
+picks its own timing and would prove nothing about the window that actually matters. It ships
+FAILING on purpose: it is the reproduction, and the next claimant should watch it go green.
+
+**Mechanism, by elimination rather than assertion.** Exit status is non-zero and stderr is
+non-empty — both measured standalone — so the only explanation consistent with the
+observations is that `child.try_wait()` returned `Ok(None)` at the instant EOF was seen: the
+stdout pipe closes when the child exits, but the process is not yet reaped, and the code
+documents itself as best-effort in exactly that case. If that holds, it is best-effort in a way
+that never fires in the common path — the path the July–August field logs are full of. I am
+NOT recording that as measured: the cheap confirmation is to instrument the branch and record
+what `try_wait` returned, and I say so on the packet rather than leaving a plausible story to
+harden into fact (637-df4z was closed mis-diagnosed for less).
+
+The likely fix is a bounded wait on first EOF instead of a single non-blocking reap. I did not
+attempt it this cycle: it changes `poll_read` in the transport every host depends on, and
+starting it with twenty minutes left is how a careful diagnosis becomes a careless patch.
+
+The **negative control** in the same file passes: the live control-wire port does not report a
+dead child, so the assertions cannot be satisfied by a bridge that simply always errors.
+
+Packet stays `ready`, now with an observation instead of an assumption.
+
+## Cycle 2026-08-12T10:05Z (linux_mutable — night stage-0 cycle 13, host-flow only)
+
+Delegate suspended (691-ssw9). **CONSOLIDATION SWEEP** — after 12 cycles of additions +
+many merges, ran the bound litmus suites for every spec the night touched (ci-release,
+forge-environment-discoverability, git-mirror-service, default-image). Caught 2 reds,
+neither from my cycle-13 work: (1) ci-release litmus:fragment-closure-evidence-gate-shape
+step 5 — the sibling's 702-68zj stale-binary fixture copied the wrapper but not its new
+dependency scripts/plan-binary-probe.sh, so the source failed and it fell through to
+'not built' instead of skip:stale-plan-binary. FIXED (one line: copy plan-binary-probe.sh
+into the fixture); ci-release back to 100% (14/14). (2) forge-environment-discoverability
+litmus:forge-plan-expert-build-shape step 10 — the 682-z5h8 $PWD-first resolver (b005490b,
+discussed at session start) makes the wrapper resolve the checkout binary even with empty
+HOME, so 'no binary present names the build step' can't trigger; the 531-era premise is
+invalidated. FILED with precise diagnosis (needs the step to isolate from every resolution
+path). Neither red was in ./build.sh --check, so pushes weren't blocked — latent quality
+signal. Value: the sweep is exactly the regression-catch a night of heavy additions warrants.
+git-mirror-service + default-image both 100%. Merged siblings. Stranded=1 (184). No fabrication.
+
+## Cycle 2026-08-12T10:41Z→2026-08-12T10:48Z (macos — /loop cycle 11: an optimisation MEASURED AND DECLINED; 699-usxc fixed)
+
+Guards green, boundary clean. Merged `origin/linux-next` (eb30eb56) FIRST.
+
+### 690-pz68 SITE 4 — MEASURED, THEN DECLINED
+
+The packet's own note says measure rather than assume, and the repaired timing
+instrument (697-s3by) finally made that possible. `guest_binary_fingerprint()`
+reads the whole staged guest binary and SHA-256s it synchronously on every VM
+start (call site vz.rs:488).
+
+MEASURED: 12,748,416 bytes, 20-30 ms (0.03s / 0.03s / 0.02s). Against a boot
+measured in SECONDS — a full stage+boot+exec+stop cycle timed at 9s this session
+— that is ~0.3%.
+
+**Not worth optimising, and actively risky to try.** The fingerprint is not
+diagnostic: it is an INPUT to the cloud-init instance-id (vz.rs:648), the
+mechanism that forces a per-instance re-run of user-data when the guest binary
+changes. Caching it by (path, mtime, len) would trade 30 ms for a correctness
+hazard on the path that decides whether a NEW guest binary takes effect — the
+same class as 701-kgvk.
+
+Recommended on the packet: strike site 4. The remaining three are all
+cold-provision-only and remain blocked here by the credential constraint. So
+690-pz68 is now three blocked sites plus one measured-and-declined — materially
+different from the four-site packet filed, and it should be re-scoped rather
+than worked as listed.
+
+An optimisation refused on evidence is a reduction: it stops the next agent
+spending a cycle on 0.3%.
+
+### 699-usxc FIXED (implemented) — the bug that blocked repairing a record
+
+Root cause was the WRITE, not resolution: `append-event` inserts text into
+plan/index.yaml at the packet's item span, and a fragment-only packet has no
+span there, so the miss surfaced as "packet_id not found" for a packet `status`
+resolves fine. New `base_hosts_packet()` makes the choice explicit; fragment-only
+targets now get a NEW fragment carrying the same event, shaped like set-field's,
+so the fold sees an identical event either way.
+
+PROVEN LIVE on the exact call that failed twice last cycle. TWO NEGATIVE
+CONTROLS with REAL exit codes captured — deliberately not read through a pipe,
+since `tail` swallowing an exit code is the artifact that produced a false
+success report earlier tonight, and it seemed worth not repeating that while
+verifying a fix about honest records:
+- unknown packet_id → still refuses, exit 1
+- base-hosted packet → still edits the base, fragment count unchanged 47→47, so
+  the fix cannot degrade into spawning a fragment for every append (probe
+  reverted)
+
+`implemented`, not higher: the packet's SECOND half is untouched — `set-field`
+with an unchanged value still no-ops and silently discards an explicitly
+supplied `--reason`. That half is what made the bug expensive, because it was
+the documented workaround.
+
+### METRICS
+
+```
+flow: cycles=10 avg_completed_per_cycle=0 avg_commits_per_cycle=1.9
+timing: steps=7 build_check_ms_avg=9000 slowest=build-check:15000
+plan: packets=765 ready=289
+```
+
+## Cycle 2026-08-12T10:30Z (windows — 692-u57i: the annotation path can finally reach the filing path)
+
+Merged `origin/linux-next` eb30eb56; guards clean; stranded zero.
+
+**692-u57i `completed`.** The ledger's documented filing path says: write a NEW fragment, never
+touch the base. The documented annotation path — `append-event` — edited the base only. So the
+two halves of the same discipline disagreed, and the symptom was a packet whose status
+`tillandsias-plan status` would happily print one command before `append-event` said
+`packet_id 'x' not found`. I hit it twice in this loop and hand-wrote the fragment both times.
+
+`append-event` already resolved against the FOLDED ledger; only the write was base-only. It now
+checks whether the resolved packet has a span in the base and, when it does not, writes an
+events-channel fragment in the same shape `set-field` emits — the shape I had been hand-writing.
+
+All three criteria exercised here:
+
+1. `append-event` on 704-zcgi, which exists only in `plan/index.d/`, succeeded and named the
+   fragment it wrote; `check-added-fragments-parse.sh` accepts it and `check` stays green.
+2. **Negative control**: `append-event` on 154, a base-resident packet, still took the BASE
+   path — fragment count 49 before, 49 after. Without this the fix could have quietly migrated
+   every event in the project into fragments, which would have been a much larger change than
+   the one anyone asked for, wearing the same green check.
+3. An unknown id still refuses, exit 1. The two failure modes stay distinct: "not in the base"
+   is now a routing decision, "not anywhere" is still an error.
+
+The branch is entered only when `item_span` finds no span, so for base packets nothing about
+the write path changed by construction rather than by testing — though the control tests it
+anyway, because "by construction" is an argument and the fragment count is a fact.
+
+Small note on the loop itself: this is the second packet I have closed that was filed FROM this
+loop after the tooling obstructed the loop's own work (the first was 702-68zj). Neither was on
+the operator's list. Both were found by using the instruments rather than by looking for
+problems in them, which is the only reason they were worth the cycle.
+
+## Cycle 2026-08-12T09:54Z (linux_mutable — night stage-0 cycle 12, host-flow only)
+
+Delegate suspended (691-ssw9). **691-ssw9 → implemented** — advanced the operator's #1
+priority as far as an agent can headless. Added litmus:forge-clone-reachability-probe-shape
+(git-mirror-service, 4/4 green as-wired) reproducing the alias-unresolvable DOA race against
+the real awk-extracted probe: unresolvable alias fast-fails with the stale-image/659-8faj/
+683-g7p6 remedy; resolvable-but-not-serving DEFERS (neg-control, seeding not regressed);
+probe precedes the clone loop. Criteria 1-3 verified as-wired; criterion 4 (live create/destroy
+zero-DOA) is operator-gated — the DOA only clears with a fresh consistent-alias image an agent
+cannot build headless (683-g7p6), so it needs a desktop-lane tillandsias --init --force. Status
+implemented (not verified — never fabricate on an unrun e2e); delegate flow stays correctly
+suspended. Merged osx-next + windows-next. Stranded=1 (184). No fabricated closures.
+
+## Cycle 2026-08-12T09:41Z→2026-08-12T09:49Z (macos — /loop cycle 10: a second self-refutation, and no CLI path to fix a corrupted record)
+
+Guards green, boundary clean. Merged `origin/linux-next` (54f6599e) FIRST.
+
+### 690-pz68 NOT CLAIMED — its measurement conflicts with a live credential
+
+Checked feasibility BEFORE claiming. Criterion 2 demands a before/after
+measurement of the download and materialize paths; three of the four sites run
+only on COLD PROVISION, and the only supported way to re-run them is
+`--reset-guest`, which the tray's own help says wipes "the guest disk (and with
+it the in-VM vault)". On this host that destroys the GitHub token seeded and
+verified at 05:09Z. So the measurement was NOT taken and the packet was NOT
+claimed, rather than faking a number or wiping an operator credential unasked.
+Recorded on the packet with two ways forward — do it on a host with no live
+credential (or immediately before an intended re-provision), or split out the
+FOURTH site (vz.rs:698, whole-guest-binary read + sha256 synchronously on EVERY
+boot), which is on the hot path, needs no destruction, and is measurable now
+that 697-s3by repaired the timing instrument.
+
+### 701-iu9b — TRAP 2 AS I FILED IT IS REFUTED
+
+I claimed the `cfg(not(feature = "vault"))` stub of
+`has_shamir_share_in_keyring` could ship and make the wipe unconditional. It
+cannot: the module declaration itself is `#[cfg(feature = "vault")]`
+(main.rs:79-81), so with vault off the whole module — and every
+`cfg(not(vault))` item inside it — is never compiled. Those stubs are
+permanently dead code. I had filed the hazard from reading the stub without
+checking whether its module could exist in that configuration.
+
+WHAT IS REAL and now guarded: a `listen-vsock` build without `vault` ships a
+guest with NO vault bootstrap, surfacing only as a cascade of "cannot find
+vault_bootstrap in crate" that names nothing. Added `compile_error!` at the
+module declaration.
+
+**Placement was the lesson.** My first guard went INSIDE vault_bootstrap.rs —
+dead code that could never fire, for exactly the reason that refutes the trap.
+Caught only by running the guarded build and seeing the old E0433 cascade
+instead of my message. Relocated and proven BOTH ways: real guest build compiles
+clean; `--no-default-features --features listen-vsock` now fails with the named
+message.
+
+TRAP 1 (fetch unit unordered vs the virtiofs mount) untouched, still open, still
+a code-shape claim never observed firing.
+
+### THE LEDGER FOUGHT BACK, AND 699-usxc IS WORSE THAN FILED
+
+The 701-iu9b evidence string lost a word to shell command substitution:
+backticks inside a double-quoted argument executed the identifier (the shell
+printed "command not found: mod") and stored an EMPTY string, leaving a sentence
+with no subject.
+
+Repairing it exposed a sharper defect than 699-usxc records:
+- `append-event` refused — "packet_id not found" for a packet `status` resolves
+  fine (the filed bug: fragment-only packets are unreachable).
+- the workaround documented IN that packet — `set-field <same-value> --reason` —
+  **NO-OPS**, writing nothing at all (not the row, not the reason note) while
+  reporting `ok`.
+So for a fragment-only packet there is **no CLI path** to record a note without
+also changing a field. Hand-authoring a fragment was the only route, and is what
+carries both repairs.
+
+That combination lands hardest exactly when someone is correcting a mistake in
+the record — when the ledger most needs to accept a write. 699-usxc updated with
+both halves to fix.
+
+### METRICS
+
+```
+flow: cycles=9 avg_completed_per_cycle=0 avg_commits_per_cycle=2
+timing: steps=5 build_check_ms_avg=8600 slowest=build-check:15000   <- live
+plan: packets=764 ready=291
+```
+
+The timing instrument repaired last cycle is already earning: five recorded
+steps, and the slowest gate run so far is 15s (avg 8.6s).
+
+## Cycle 2026-08-12T09:30Z (windows — the same wrong probe, three times, now in one file)
+
+Merged `origin/linux-next` 54f6599e; guards clean; stranded zero.
+
+`select-work-batch.sh windows` refused this cycle with `refused:no-plan-binary` — on a host
+with a perfectly good `tillandsias-plan.exe` sitting beside the Linux ELF. The script had
+arrived from another host carrying a fresh copy of the `[ -x ./target/release/tillandsias-plan ]`
+first-match probe: the same bug I fixed in two other scripts one cycle earlier under 702-68zj.
+
+Three independent copies of one wrong idea is not three bugs. It is a missing abstraction, and
+fixing the third instance in place would have been the wrong lesson. **704-zcgi** puts the
+probe in `scripts/plan-binary-probe.sh`, sourced by all three, encoding the rule as one
+sentence: *an executable BIT is a claim; RUNNING the binary is evidence.* The bit lies across
+the Windows/WSL boundary in both directions, and a file extension cannot tell you which
+artifact a shared `target/` last received.
+
+Verified on this host: the selector prints a batch again; the sweep and the closure gate still
+work through the shared probe. **Negative controls in an isolated tree**, which are the half
+that matters: with no binary the sweep says `unavailable:no-runnable-plan-binary` and the
+selector refuses; with a NON-RUNNABLE file at `target/release/tillandsias-plan` (chmod +x, not
+a binary) the sweep still says unavailable rather than selecting it — the exact regression the
+bit-test caused; and a runnable stub IS selected, so the probe is not simply refusing
+everything.
+
+**A mistake of mine, corrected before it became durable.** I wrote the order token into three
+files' comments before running `next-order`, guessing `704-mqx3`. The minted token is
+`704-zcgi`, and every reference was rewritten before commit. The methodology's rule — mint
+first, never compute the next free order yourself — exists because tokens leak into comments,
+`@trace` headers and commit messages, and a pushed commit message can never be corrected. I
+got the ordering wrong and caught it only because minting is a separate step I still had to
+take. Worth recording as a near-miss rather than a clean cycle.
+
+That makes five instances this week of one shape: a check that cannot see what changed, or
+cannot run, reporting a confident answer anyway (689-gipe, 695-r7k8, 702-68zj, 703-sjuk, this).
+The remedy has been the same every time and is now written down in one place.
+
+## Cycle 2026-08-12T08:56Z (linux_mutable — night stage-0 cycle 11, host-flow only)
+
+Delegate suspended (691-ssw9). **559 → implemented** (opencode npm install not idempotent):
+added _clear_stale_npm_staging(pkg) in images/default/lib-common.sh — removes npm's leftover
+atomic-staging dirs (.<name>-<hash>, the ENOTEMPTY cause) before `npm install -g`, called
+inside the shared _require_harness so it covers EVERY npm harness. Handles unscoped + scoped
+names, never touches the installed package. litmus:npm-harness-install-idempotent-shape
+(default-image, 4/4 green as-wired: staging removed, package-preserved neg-control, scoped,
+coverage) against the awk-extracted real function. Criteria 1+3 verified; criterion 2 (forge
+reaches agent stage on that launch) is a LIVE forge e2e needing the operator's fresh stack —
+recorded as the verification hand-off, so honestly `implemented` not `verified`. LESSON: avoid
+backticks in set-field --evidence/--reason free-text (shell command-substitution ate a phrase).
+Merged osx-next + windows-next. Stranded=1 (184). No fabricated closures.
+
+## Cycle 2026-08-12T08:41Z→2026-08-12T08:48Z (macos — /loop cycle 9: the missing timing telemetry root-caused and fixed; `timing:` is live for the first time)
+
+Guards green, boundary clean. Merged `origin/linux-next` (c9403e87) FIRST.
+Claimed 697-s3by deliberately BEFORE 690-pz68: that packet refuses unmeasured
+performance claims, and this is the instrument it needs. Measure before you
+optimise.
+
+### ROOT CAUSE — a CWD-relative sibling lookup, silenced by its own safety contract
+
+`timing_emit` resolved `cycle-metrics.sh` at CALL time from
+`${BASH_SOURCE[0]%/*}` — the path the file was SOURCED with. Callers source it
+relatively (`run-litmus-test.sh:70` uses
+`$(dirname "${BASH_SOURCE[0]}")/timing-log.sh`, i.e. `./timing-log.sh` whenever
+that script is invoked by a relative path), so the strip produced `_dir=.` and
+`_cm=./cycle-metrics.sh` — unreadable from the build's CWD. The shell-out never
+ran; every record was dropped.
+
+SILENTLY, because the body is `{ … } 2>/dev/null || true; return 0`. That is
+CORRECT for the "a metric must never break the step it measures" contract, and
+is exactly why it survived while `./build.sh --check` ran five times in one
+session with `timing: source=absent` every cycle.
+
+### THE DIAGNOSIS ALMOST WENT WRONG THE SAME WAY
+
+My first trace wrote to `>&2` — swallowed by that same `2>/dev/null`. Seeing
+nothing, I nearly concluded the no-op stub was in play (it is also a `function`,
+so `type -t` cannot tell them apart). Re-traced to a FILE and got
+`_dir=. readable=no` immediately. A stderr trace inside a stderr-silenced block
+is not evidence of absence.
+
+### FIX + AS-WIRED PROOF
+
+Resolve the directory ONCE at source time via `cd`/`pwd` into
+`TILLANDSIAS_TIMING_LOG_DIR`, so the lookup depends on neither the CWD nor how
+the sourcing script was invoked. Parses under bash 3.2 (macOS system bash) and
+5.x.
+
+- after: a real `./build.sh --check` appended
+  `{"step":"build-check","phase":"check","duration_ms":9000,"exit":0}` and
+  `cycle-metrics` reports `timing: steps=1 build_check_ms_avg=9000
+  slowest=build-check:9000` where it had read `absent` all night.
+- NEGATIVE CONTROL, proven live: a deliberately broken source made the gate
+  exit 1 and it STILL emitted `{"duration_ms":0,"exit":1}` — the instrumentation
+  cannot be "fixed" by recording only successes, which would hide the slow path
+  that matters most. Source restored, gate re-verified green.
+
+### WHY `implemented` AND NOT HIGHER
+
+Criterion 1 names macOS AND Linux; only macOS is proven here. The fix is in the
+shared `scripts/timing-log.sh` so Linux should behave identically, but a linux
+host must confirm. Noted for them: macOS has no `date +%s%3N`, so the
+second-granularity fallback reports sub-second steps as `duration_ms=0` — visible
+in the negative-control record.
+
+### FIRST REAL NUMBER OUT OF THE NEW INSTRUMENT
+
+`build.sh --check` is **9 seconds** on this host. Every "the gate is the slowest
+step" claim in these records (695-nvnd's double-gate cost included) was an
+estimate until now; it can be measured from here on.
+
+### METRICS
+
+```
+flow: cycles=8 avg_completed_per_cycle=0 avg_commits_per_cycle=2.13
+timing: steps=3 build_check_ms_avg=6000 slowest=build-check:9000   <- LIVE
+plan: packets=763 ready=293
+```
+
+### RESIDUAL
+
+701-g98y still live on this host (Keychain holds a pre-05:09Z epoch; a GUI tray
+launch can still deliver stale credentials). 690-pz68 is now unblocked for its
+before/after measurement.
+
+## Cycle 2026-08-12T08:30Z (windows — the build distro could not see, and two reds were never real)
+
+Merged `origin/linux-next` c9403e87; guards clean; stranded zero.
+
+**703-sjuk, filed and closed this cycle.** Last cycle's finding was that the `tillandsias-build`
+distro has neither `jq` nor `yq`. Both are packaged in Fedora, so that was an omission, not a
+constraint — and it is the distro where `./build.sh` re-execs and the whole litmus corpus
+runs. The corpus had been graded by the fallback grep parser, and the stranded sweep had been
+taking its `jq`-absent branch, on every run, on every host.
+
+Adding the packages was half the fix. The other half is that the init is **marker-gated on
+file existence**, and a bare existence marker cannot see that the package list changed — so
+adding jq/yq would have fixed new hosts only, including not this one, which found the problem.
+The marker now holds a digest of the init region, and is written from the host side only after
+the init returns zero: a failed `dnf` cannot record success and leave a permanently
+under-provisioned distro.
+
+That is the fourth instance this week of one shape — a staleness check that cannot see the
+thing that changed. 689-gipe, 695-r7k8, 702-68zj, this. Different files, same sentence.
+
+Verified: `./build.sh` re-initialized on the digest change and installed both tools; the
+**negative control** — the next `./build.sh` did NOT re-initialize — matters because a fix that
+re-provisioned every build would satisfy the first criterion while adding a dnf transaction to
+every compile.
+
+**The consequence is worth more than the packet.** With real parsers, the `ci-release` litmus
+spec went from **3 failures to 1**. Two were degraded-parser artifacts — precisely the reds I
+declined to file on last cycle because I could not tell an artifact from a defect. That
+judgement now has an answer rather than a guess.
+
+The one genuine red: `cycle-batch-triage-shape` pinned the triage line with a `$` anchor, and
+tonight's urgency work appended `urgency_unscored=<n>` to it. An intended extension became a
+corpus-wide red, masked until this distro could parse properly. I fixed the pin rather than
+leaving it: the four coverage fields stay required in order and only a trailing-field
+allowance was added, plus a **negative control** asserting the relaxed pattern still rejects a
+line missing `ungrouped` or with fields out of order — otherwise the widening could be read as
+"anything goes after epics".
+
+I touched a linux-authored litmus deliberately and say so plainly: it is a stale anchor
+blocking the shared corpus for every host, not a linux-seated packet, and the repair is
+faithful to what the urgency author intended. `ci-release` is now **100% (13/13), PASS**.
+
+## Cycle 2026-08-12T08:00Z (linux_mutable — night stage-0 cycle 10, host-flow only)
+
+Delegate suspended (691-ssw9). **685-yidq — env-gated host expert refresh on commit**
+(the permanent fix for the stale-host-expert class that opened this session, 682-z5h8).
+scripts/install-hooks.sh now installs a v3 post-commit hook composing the unconditional
+dashboard body + an expert-refresh body GATED on TILLANDSIAS_HOST_EXPERTS, reusing the
+proven forge hook (post-commit-expert-refresh.sh, order 396). Absent the var (CI, plain
+checkout) the expert body is a bounded no-op. Spec delta added: a new
+forge-environment-discoverability requirement for the host-session expert lifecycle
+(persistent, env-gated commit-refresh). litmus:host-expert-refresh-gate-shape (4/4 green:
+gate-on runs, gate-off no-ops, installer emits the gate, dashboard-outside-gate neg-control).
+FIRST-FIRE e2e recorded this cycle on this host (see closing evidence). Merged siblings.
+
+## Cycle 2026-08-12T07:41Z→2026-08-12T07:50Z (macos — /loop cycle 8: guest-binary skew made visible; all three branches observed live)
+
+Guards green, boundary clean. Merged `origin/linux-next` (56c16cc0) FIRST.
+
+### 701-kgvk — the invisibility half, shipped (implemented)
+
+macOS had NO guest/host skew detection. The only integrity gate compares a
+VERSION string that does not roll between builds, and the tray discards the
+guest version from the control-wire handshake — so when an older `.app`
+silently downgraded the guest on 2026-08-11 it had to be found by hashing files
+by hand. `--diagnose` now reports the bundle's guest-binary hash, the staged
+hash, and whether they agree, in BOTH `--json` and human output (a JSON-only
+field would not reach the audience that hits this: someone reading a terminal).
+
+**THREE states, not a boolean** — `Some(false)`=SKEW, `Some(true)`=in sync,
+`None`=UNDECIDABLE. Collapsing undecidable into "fine" is precisely how the
+original invisibility happened, so the type, the JSON, and the printed text all
+keep it distinct.
+
+### ALL THREE BRANCHES OBSERVED LIVE, NOT REASONED ABOUT
+
+- **in-sync** — from the installed bundle (`26f120b6b1ef…`).
+- **SKEW** — perturbed the staged copy by one byte; it printed both hashes and
+  "the staged copy wins on the guest's next boot"; the staged binary was then
+  restored and verified BYTE-IDENTICAL by sha256 before anything could boot.
+- **undecidable** — from a non-bundled `target/release` run, which ALSO
+  surfaced WRONG-VERSION PATH #1 from the collision audit ("a run like this
+  stages NOTHING, so the guest keeps whatever it has"). Previously silent on 5
+  of 6 entry points; it appeared on the FIRST probe without the case being
+  constructed.
+
+Tests: skew-is-reported; the NEGATIVE CONTROL that identical bytes read as
+agreement (a detector shouting SKEW at everything would pass the first test
+while BURNING the only signal operators have); absent-side-is-undecidable. 82
+unit + 6 integration green. The locked `--diagnose` JSON schema fixture was
+EXTENDED rather than bypassed — that lock exists so a schema change breaks the
+build instead of the consumer.
+
+### WHY `implemented` AND NOT `completed`
+
+This makes the condition VISIBLE; it does not PREVENT it. Criterion 1 (staging
+refuses a downgrade) and criterion 3 (a run that cannot stage says so at the
+point of ACTION, not only under `--diagnose`) are untouched.
+
+### METRICS
+
+```
+flow: cycles=7 avg_completed_per_cycle=0 avg_commits_per_cycle=2.29
+plan: packets=763 ready=295
+triage: eligible=58 grouped=15 ungrouped=43 epics=6 urgency_unscored=13
+```
+
+### RESIDUAL
+
+701-g98y remains the live hazard on this host: the Keychain still holds a
+pre-05:09Z epoch while the guest Vault was fresh-initialized at 05:09Z, so a GUI
+tray launch can still deliver stale credentials. Capture-at-fresh-init cannot
+repair an already-diverged host; closing it needs the guest able to report its
+CURRENT share/token on demand, or the tray refusing to deliver an epoch the
+guest did not ask for — both left to the operator as design calls.
+
+## Cycle 2026-08-12T07:30Z (windows — 702-68zj closed, and the sweep was blind everywhere that matters)
+
+Merged `origin/linux-next` 56c16cc0; guards clean; stranded zero at cycle start.
+
+**702-68zj `completed`.** Both checkers now emit a third verdict instead of answering a
+question they could not compute.
+
+`check-stranded-in-progress.sh` probes candidates by RUNNING `capabilities` rather than
+testing an executable bit — which lies on a shared Windows/WSL checkout — prefers `.exe`, and
+distinguishes a failed query from an empty one. Verdicts:
+`unavailable:{no-runnable-plan-binary,no-jq,plan-query-failed,plan-query-unparseable}`.
+
+`check-fragment-closure-evidence-added.sh` gets the same probe change plus a capability
+check, so a binary predating the rule yields `skip:stale-plan-binary` and exit 0 instead of
+counting "unknown subcommand" as a violation.
+
+The negative control was satisfied live rather than synthetically: with both dependencies
+present, the sweep reported a genuinely stranded packet — **702-68zj itself**, mid-cycle,
+because I had claimed it and not yet written a progress event. The instrument caught its own
+author. That is the strongest form of the control the packet asked for.
+
+The litmus grammar was widened to admit the skip, with a step pinning the stale-binary skip
+and a **negative control asserting the CURRENT binary does not skip** — without which a
+wrapper that skipped unconditionally would pass the new step while disabling the gate
+entirely, reintroducing 702-68zj from the other side.
+
+**The finding while fixing is bigger than the packet.** The `tillandsias-build` WSL distro —
+where `./build.sh` re-execs and where the litmus corpus actually runs — has neither `jq` nor
+`yq`. So in that environment the stranded sweep was hitting its silent `jq`-absent branch and
+printing `in_progress=0 stranded=0` on **every run, of every cycle, on every host that runs
+checks there**. The Windows ELF path I diagnosed last cycle was the instance that happened to
+be visible; the blast radius is the whole build environment. It now says
+`unavailable:no-jq` there, which is the truth.
+
+**Reporting, not fixing, someone else's red:** the `ci-release` litmus spec fails in this
+build distro — 3 failures at clean HEAD, 2 with my change (`terminal-status-vocabulary-shape`,
+`cycle-batch-triage-shape`, `selector-urgency-not-inert-shape`). I confirmed they pre-exist by
+stashing and re-running, so none is mine. I am NOT filing a packet on them: the runner warns
+`yq/jq not found; using fallback grep-based parsing - reduced functionality` in exactly this
+distro, so I cannot tell a genuine red from a degraded-parser artifact, and filing on the
+wrong premise is the mistake 637-df4z was closed for. The missing `jq`/`yq` is the fact worth
+passing on; whoever owns those tests can tell in one run on a host that has them.
+
+## Cycle 2026-08-12T06:56Z (linux_mutable — night stage-0 cycle 9, host-flow only)
+
+Delegate suspended (691-ssw9). **680-zphp CLOSED → verified** (groundtruth mutable-status
+pins). Audited all expert-groundtruth CASE files; de-pinned the one remaining LIVE-ledger
+non-terminal pin (order 394, status: ready — a trap that reds the moment 394 is claimed),
+matching the 394a/394d/394e justification pattern; grade harness stays 19/19. Fixture-backed
+pins (frozen fixture-* corpora) and terminal pins (394a/experts-construction-research
+completed) correctly retained. GUARD: check-groundtruth-mutable-status-pins.sh resolves each
+pin against the live ledger and fails if the packet is non-terminal (terminal + fixture
+exempt); wired into build.sh; litmus:groundtruth-no-mutable-status-pin-shape (4/4 green:
+neg-control refuses reintroduced 394-ready pin, pos admits 394a-completed, real corpus clean,
+harness 19/19). Third firing of this trap (394d x2, 394e) now structurally prevented at the
+gate. Merged windows-next + osx-next. Stranded=1 (184). Fourth full closure tonight; no fabrication.
+
+## Cycle 2026-08-12T06:41Z→2026-08-12T06:54Z (macos — /loop cycle 7: 701-g98y implemented; my own fix caught claiming success with no evidence)
+
+Guards green, boundary clean. Merged `origin/linux-next` (8f7582d9) FIRST.
+
+### A TRANSIENT TLS ANOMALY ON THE HOST GIT PATH (filed, low priority)
+
+The cycle's first `git fetch` failed with `SSL certificate problem: self signed
+certificate` against github.com. Immediate retry, same shell, succeeded. Ruled
+out at once: no `http_proxy`/`https_proxy`/`all_proxy`, no `http.*` git config at
+repo or global scope, no `SSL_CERT_*`/`CURL_CA_BUNDLE`/`GIT_SSL_*`. Filed as
+`plan/issues/research-transient-self-signed-cert-on-host-git-2026-08-12.md` —
+one occurrence with a clean retry does not justify a packet, but a *self-signed*
+error means something answered the handshake with an untrusted cert, on a host
+doing credential work, so it is worth being able to correlate later. The issue
+records explicitly NOT to "fix" it with `sslVerify=false` or by trusting the
+ephemeral CA: that converts a visible anomaly into a silent one on the path that
+carries push credentials.
+
+### 701-g98y IMPLEMENTED — root cause confirmed in code, not inferred
+
+`deliver_credentials_and_check_handover` is called ONLY from `action_host.rs`
+(the GUI tray paths), never from the `diagnose.rs` one-shots, and it DELIVERS
+the host Keychain's values before capturing. So a CLI `--github-login` creates a
+fresh Vault epoch the host has never seen, and the next tray launch pushes stale
+credentials into the guest first — overwriting the epoch the CLI just created —
+then asks for a handover that is no longer pending.
+
+`capture_vault_handover` split out and called from `github_login_main` before the
+VM stops. CAPTURE-ONLY by design: the process that CAUSED the new epoch holds
+only older values by construction, so delivering there would recreate the bug.
+
+### THE LIVE RUN EXPOSED A DEFECT IN MY OWN FIX
+
+It printed "host Keychain updated with this login's vault handover" while both
+Keychain fingerprints were **provably unchanged** (hashed before/after:
+share `ab725d6b…`, token `37ddb098…`, identical). Cause: `PENDING_HANDOVER` is
+set ONLY on a FRESH Vault init; this login reused an already-initialized Vault,
+and capture returned `Ok(())` identically for "wrote both" and "wrote nothing".
+
+A success claim with no evidence behind it — written by me, an hour after filing
+a milestone (700-nz4n) about exactly that class. Now returns `Ok(bool)` and
+reports the two cases distinctly; the empty case warns the Keychain may still
+hold an older epoch than the guest.
+
+### WHY THIS IS `implemented` AND NOT `verified`
+
+The plumbing is proven: connect, handshake, GetVaultHandover, clean return, no
+regression, and the credential still resolves (`--list-cloud-projects`, repos
+listed, exit 0). But the scenario that MATTERS — a fresh epoch being captured —
+was never exercised, because this login did not create one. Recording `verified`
+on that evidence would be the same failure the packet is about.
+
+### RESIDUAL, SHARPER THAN WHEN FILED
+
+Capture-at-fresh-init is NECESSARY BUT NOT SUFFICIENT: it cannot repair a host
+that has ALREADY diverged, and **this host is currently diverged** — Keychain
+holds a pre-05:09Z epoch, guest Vault was fresh-initialized at 05:09Z. The
+hazard is still live here; the operator was told so directly, correcting an
+earlier claim of mine that this run would repair it. Closing it needs the guest
+able to report its CURRENT share/token on demand, or the tray refusing to
+deliver an epoch the guest did not ask for — both design calls left to the
+operator rather than chosen unilaterally.
+
+### METRICS
+
+```
+flow: cycles=6 avg_completed_per_cycle=0 avg_commits_per_cycle=2.5
+plan: packets=762 ready=295
+triage: eligible=58 grouped=15 ungrouped=43 epics=6 urgency_unscored=13
+```
+
+New `urgency_unscored=13` term appeared from linux's 630-6hyc (urgency is now a
+live signal with absence made visible) — worth watching next cycle.
+
+## Cycle 2026-08-12T06:30Z (windows — 702-68zj: two checkers answering questions they could not compute)
+
+Merged `origin/linux-next` 8f7582d9; guards clean.
+
+**This cycle's work is a finding, and it started with two sweeps disagreeing.**
+`expire-claims --dry-run` reported `in_progress=1 expired=1` naming packet 184, while
+`check-stranded-in-progress.sh` reported `in_progress=0 stranded=0`. The ledger agreed with
+the expiry tool: 184 was `in_progress`. The same sweep had reported `stranded=1` one cycle
+earlier with the ledger unchanged.
+
+Cause, verified directly: the sweep's binary probe takes the first match of
+`./target/release/tillandsias-plan`, and my own cycle-9 WSL rebuild left a **Linux ELF** at
+exactly that path beside the usable `.exe`. `query` fails with `Exec format error`, stderr is
+discarded, and empty rows are counted as zero stranded packets. Its two explicit early exits
+— no `jq`, no binary — print the same all-zero line.
+
+That is the worse of two instances of one class. The sweep exists to catch work that is
+invisible in both directions (`ready` queries skip an `in_progress` packet; burndown does not
+count it). Reporting zero *because it could not look* makes that work invisible in a third
+way, while printing the exact line an operator reads as "checked, nothing there".
+
+The second instance was cycle 9's red gate: `check-fragment-closure-evidence-added.sh`
+printed `violation:closure-without-evidence:3` when no fragment in the change recorded any
+closure. The plan binary was stale and lacked the subcommand — and said so on stderr, in
+those words. The wrapper discarded a correct diagnosis and substituted a wrong one.
+
+Filed as **702-68zj** (p1, any host). The fix is not novel: this project already has the
+convention and applies it in `verify:skip-stale-staging` (447) and `skip:no-tray-binary`
+(620-duta). These two scripts just do not follow it. Closure requires a negative control —
+with dependencies present and a genuinely stranded packet, the sweep must still report it —
+because a fix that emitted `unavailable:` unconditionally would satisfy the first criterion
+while disabling the sweep entirely.
+
+**Stranded returned to zero** via `expire-claims --host windows` (my 672-bz7u automation, per
+standing orders): 184 `in_progress -> ready` with an expiry event, last activity
+2026-08-11T05:40Z. Expiry returns a claim to `ready`; it closes nothing and decides nothing
+about the work, so this is ledger hygiene rather than touching a linux-seated packet. Both
+sweeps now agree at zero.
+
+I want to name the pattern, since this is the third instance in two days and my own hands
+are on two of them. Cycle 3: a stale staged asset that satisfied every check that existed.
+Cycle 9: a stale binary reported as a violation. This cycle: an unusable binary reported as
+an all-clear. In every case a tool could not do its job and said something confident instead
+of saying so. The convention that fixes it is already written down here — the gap is that it
+was applied where someone thought of it rather than everywhere a checker has a dependency.
+
+## Cycle 2026-08-12T06:02Z (linux_mutable — night stage-0 cycle 8, host-flow only)
+
+Delegate suspended (691-ssw9). **630-6hyc CLOSED → verified** (selector urgency term
+inert). Three-tier fix in select-work-batch.sh: explicit priority dominates → kind-derived
+urgency when absent (kind is 202-populated vs 38 with priority) → rank-99 UNSCORED for
+neither, excluded from the term and COUNTED. Triage now emits urgency_unscored (live: 43);
+the '.priority // p3' silent default is gone. litmus:selector-urgency-not-inert-shape
+(ci-release, 3/3): step 1 distinguishes bug-epic from research-epic with NO priority on
+either (the exact regression the old code hid), step 2 asserts unmapped-kind → reported
+not scored-0, step 3 neg-control equal-priority→equal-urgency. Portability: byte-identical
+under GNU awk AND busybox awk (macOS/BSD proxy) — the documented awk hazard addressed.
+Satisfies all 3 exit criteria (signal decided, absence visible, inertness-guarded).
+Merged osx-next + windows-next. Stranded=1 (184). Third full closure tonight; no fabrication.
+
+## Cycle 2026-08-12T05:30Z→2026-08-12T05:37Z (macos — /loop cycle 6: corrected the loop's own stale orders; 701-se6x fixed; a vacuous test caught by falsification)
+
+Guards green, boundary clean, `origin/linux-next` already merged.
+
+### THE LOOP'S OWN STANDING ORDERS HAD GONE STALE
+
+The hourly cron prompt still carried "349 STAYS BLOCKED and is NOT claimable; do
+NOT re-run `tillandsias-tray --github-login`". Both were disproved at 05:09Z by
+the operator-prompted verification: 349 is `ready`, 694-mhz8 is `verified`, and
+the token is seeded and restart-durable. Left alone, every future wake would
+skip genuinely claimable work and misinform any sibling reading the record.
+
+Replaced the cron job (ed489368 supersedes 9421b377, same `:13` schedule),
+preserving every operator directive VERBATIM and rewriting only the factually
+wrong PRIORITY-1 block. Added forward-carried facts a future cycle needs: the
+701 credential-durability hazards, the re-seed recipe (rebuild the tray FIRST so
+a fresh guest binary is staged; the guest prompts TOKEN first), 689-y2my's
+REFUTED criterion 1, the 700-nz4n grouping, and 625-jd5f's corrected bottleneck.
+
+### 701-se6x FIXED (implemented) — the 694 asymmetry at its second site
+
+`set_in_vm_credentials` — the tray's delivery path into a running guest — wrote
+`fallback_vault-root-token-v1` and dropped the DELIVERED share. Since
+`has_shamir_share_in_keyring` consults an OS keychain (absent in a Linux guest)
+and then that file, a guest that had lost only its share file would be handed a
+good share by the host, use it in memory, still fail the predicate, and have its
+intact Vault WIPED on the next launch. The host held the evidence and the guest
+discarded it. Now routed through the same `write_vm_credential_fallbacks` helper
+694 introduced, so the two sites cannot drift apart again.
+
+### THE TEST WAS VACUOUS, AND ONLY FALSIFICATION FOUND IT
+
+The first version called the helper DIRECTLY. Reverting the call site to pass
+`None` left it PASSING — it never touched the code being fixed. That is this
+project's named recurring failure, *"verified where it was written is not
+verified where it runs"*, reproduced inside the test for a fix against it.
+
+Rewritten to drive `set_in_vm_credentials` itself with `XDG_CACHE_HOME`
+redirected under `ENV_LOCK`. Reverting the call site now FAILS it with the
+intended diagnostic; restoring it passes. 43 vault_bootstrap tests green.
+NEGATIVE CONTROL: a token-only delivery must NOT create a share file, so a
+genuine partial init still wipes and Vault cannot be stranded unsealable — which
+is why the fix is "persist what was delivered", not "always write a share file".
+
+WORTH GENERALISING: the falsification step is the only reason the vacuous test
+was caught. It was green. Every fix tonight that carried a negative control also
+got falsified by hand; this is the first time that step changed the outcome
+rather than merely confirming it.
+
+### METRICS
+
+```
+flow: cycles=5 avg_completed_per_cycle=0 avg_commits_per_cycle=2.8
+plan: packets=762 ready=297
+triage: eligible=59 grouped=15 ungrouped=44 epics=6
+```
+
+### RESIDUAL
+
+701-se6x criterion 2 open: the share write is still best-effort with its error
+discarded, so one failed 30-byte write silently re-arms the 694 wipe. 701-g98y
+(p0) untouched and still the highest-value macOS item — a GUI tray launch after
+a CLI login can overwrite the seeded credentials with a stale Keychain epoch.
+
+## Cycle 2026-08-12T05:30Z (windows — 689-y2my item (a): a ceiling, not the refuted deadline)
+
+Merged `origin/linux-next` 1def75b5; guards clean; `expire-claims --dry-run` `expired=0`,
+stranded for this host zero.
+
+Took 689-y2my from `next windows` (p1, release-targeted, `pickup_role: any`). Before
+touching anything I read why the tree already carried a 689-y2my change: the macOS host had
+filed the packet, implemented its own criterion 1, watched two PRE-EXISTING order-332 tests
+refuse it, and recorded the refutation rather than deleting the tests. Their scope correction
+tells the next claimant not to reinstate criterion 1 and names two remaining items. I did
+item (a).
+
+**The question was whether any backstop is wanted at all.** Answer: yes, for exactly one
+property the observational fix cannot provide — **termination**. The heartbeat reports
+shipped in the safe half make a wedge legible within 30 seconds *to someone watching*. A
+ceiling is what happens when nobody is, which is the normal case for an unattended cycle that
+wedges at 02:00.
+
+It is not the refuted progress deadline and never asks whether output means progress. One
+wall-clock bound, 14400s against a measured 1290s worst-case legitimate first-run silence — a
+~11x margin — configurable, with an explicit `0` to disable and a 300s floor so a host cannot
+quietly reintroduce a bound tight enough to kill working work. The breach message names the
+pending expect and the bytes seen, and says the wire was ALIVE: a ceiling breach is a wedged
+guest, not a stale connection, and reporting it as the latter is the misdirection that made
+the 70-minute wedge unreadable.
+
+Checking at the top of the read loop is sufficient *because* the heartbeat exists — a live
+guest wakes the loop every 30s. A guest that stops heartbeating is the other failure, and the
+idle deadline already owns it.
+
+vm-layer vsock_exec: 15 passed / 0 failed, both order-332 pins untouched. Three added: the
+parser contract, the breach message with a negative control that an empty pending slot must
+NOT invent a label, and a guard asserting the ceiling stays at least 10x the measured worst
+case — the test that should fail if a later edit tightens it back toward the idle deadline.
+
+**Left open deliberately.** Item (b) is the protocol-level fix and is where the value is: a
+guest BLOCKED ON INPUT saying so in its heartbeat, which distinguishes "working" from
+"waiting for me" exactly instead of guessing from elapsed time. It is a wire-format change
+across control-wire, the guest PTY handler and the host exec client, and it needs capability
+negotiation so a version-skewed guest keeps working — which, after this week, is not a
+hypothetical concern on this host. It does not fit one recurring-loop cycle and I did not
+start it; the packet stays `ready` carrying it.
+
+Worth recording as a pattern rather than an incident: this is the second packet this session
+whose stated criterion was wrong and whose correction was the actual work. The macOS host
+caught theirs by trusting two old tests over a fresh belief. Mine was caught in cycle 3 by
+`.gitignore`. Both times the ledger held the correction instead of the mistake quietly
+disappearing.
+
+## Cycle 2026-08-12T04:58Z (linux_mutable — night stage-0 cycle 7, host-flow only)
+
+Delegate suspended (691-ssw9). **686-7qcm CLOSED → verified** — the closure-ladder
+enforcement wave is complete. Criterion 3 landed this cycle: a `closure-evidence-check`
+subcommand + diff-scoped `check-fragment-closure-evidence-added.sh` wrapper + build.sh
+wiring, refusing a NEW fragment that records completed/verified/done with no
+evidence-bearing event (the gate-time backstop to set-field's write-time --evidence;
+catches hand-authored fragments). litmus:fragment-closure-evidence-gate-shape 4/4 green
+(negative + positive + lateral-exempt + wrapper grammar). With criteria 1 (rank-aware
+fold merge, cycle 5) and 2 (parked-blocks report, cycle 6), all three enforcement
+criteria are implemented + verified as-wired; criterion 4 (plan_next verification
+pickups) reasoned-DECLINED per the criterion's own terms (parked-blocks already
+surfaces implemented packets; plan_next is a claim-selector, not a verify-surface).
+124 crate tests, clippy clean. Three diff-scoped gate checks now compose in build.sh
+(634-39ik mine, 698-7n6q + 686-7qcm). Merged osx-next (ed1d3f8c). Stranded=1 (184).
+Second full closure of the night; no fabricated closures.
+
+## Cycle 2026-08-12T04:30Z→2026-08-12T04:37Z (macos — /loop cycle 5: acted on 625-jd5f instead of reporting it a fifth time)
+
+Guards green, boundary clean. Merged `origin/linux-next` (2f9e1abf) FIRST.
+Compaction not eligible. This host had reported the selector blockage in four
+consecutive cycle records without claiming the packet that fixes it; this cycle
+claimed 625-jd5f and worked it.
+
+### 700-nz4n FILED — a milestone from evidence, not from a theory
+
+Eight defects found in one night across three unrelated subsystems — the
+credential path, the exec wire, and the plan ledger's own write path — share one
+shape: **the system diagnosed the problem correctly and then did nothing that
+stopped anyone.**
+
+- `tillandsias-plan check` prints "does not parse and was SKIPPED — its contents
+  are not in the answers below" and exits 0 (698-7n6q)
+- `build.sh --check` passes every check, then warns it could not stamp, so the
+  whole gate silently runs twice (695-nvnd)
+- `set-field --evidence` writes an accurate status plus an event contradicting
+  it, caught only later, after the commit (696-6byc)
+- the guest heartbeat proves the WIRE while the WORK is dead; the host reported
+  only on needle match, so a deadlocked login was externally identical to a
+  healthy slow one for 70 minutes (689-y2my, 690-eug2)
+- timing telemetry is wired, produces no record, and the metric naming the
+  slowest step reads `absent` forever (697-s3by)
+- the Vault partial-init guard's own comment says it exists to prevent
+  destroying the stored token — and destroyed it on every bootstrap for two
+  weeks while every login reported success (694-mhz8)
+
+Every fix tonight was the same edit in different clothes: wire an existing,
+already-correct diagnosis to something that refuses. 8 children grouped via the
+LWW `release_target` channel. macos triage: grouped 10→14, ungrouped 45→42,
+epics 5→6.
+
+### THE STRUCTURAL FINDING (recorded on 625-jd5f)
+
+**Criterion 1 is not the bottleneck; criterion 2 is.** Only FIVE of thirteen
+milestones are `desired_release: v0.5` — the other eight are v0.6. So the ~42
+ungrouped v0.5 packets have almost nowhere VALID to go, and a cross-release
+`release_target` is exactly the "wrong epic is worse than none" error the packet
+warns about: it makes an incoherent batch look cohesive AND breaks
+release-scoped selection.
+
+I nearly committed that error — five packets were about to be assigned to
+`convergence-velocity-milestone` before I checked its release. Two further
+near-misses recorded so they are not repeated: `local-telemetry` is the natural
+home for 697-s3by BY SUBJECT but is v0.6; `credential-lifecycle-audit` is about
+credentials LEAKING into lanes, the opposite direction from 694-mhz8 where one
+was DESTROYED. Subject adjacency is not fit.
+
+Recommendation left on the packet: reshape the remainder as "file the missing
+v0.5 milestones FIRST, then assign". Driving the number down without that either
+stalls or starts guessing.
+
+### METRICS
+
+```
+flow: cycles=4 avg_completed_per_cycle=0 avg_commits_per_cycle=3.25
+plan: packets=758 ready=295
+```
+
+### RESIDUAL
+
+625-jd5f stays `ready` — criterion 3 (<20% ungrouped, all three roles) is far
+off and the remaining work is milestone-filing, which is a coordinator-shaped
+job rather than a macOS one. 349 unchanged: blocked pending a cross-restart
+proof against a guest image carrying a56cbbd1; do not re-run `--github-login`
+here until then.
+
+## Cycle 2026-08-12T04:30Z (windows — 620-duta CLOSED, all four criteria)
+
+Merged `origin/linux-next` 2f9e1abf; guards clean; `expire-claims --dry-run` `expired=0`,
+stranded for this host zero.
+
+**620-duta `completed`** — the last criterion was documentation, and doing it honestly meant
+correcting the document rather than copying it forward.
+
+The 2026-08-08 field inventory asserted in prose that the tray "links only OS-shipped Windows
+libraries … no VC redist". That was false, and had been false for as long as there was a
+Windows tray. Distilling it into the spec therefore could not be a transcription: the
+inventory's central claim was the thing cycle 7's litmus disproved. The spec now carries a
+**Runtime dependency surface** section and an **import-surface invariant** that states the
+UCRT-vs-redist distinction explicitly, notes that holding it requires the static-CRT
+rustflags, and records that the prose claim was wrong and why nothing caught it — every
+machine that ran the binary already had the redist.
+
+`plan/issues/portable-zero-dependency-runtime-audit-2026-08-08.md` is now a tombstone pointer
+naming where each of the four criteria landed.
+
+Worth stating plainly, because it is the packet's own lesson: the operator directive that
+opened this packet said runtime dependencies must be *detectable at runtime, not asserted*.
+The packet then spent its first three criteria building detectors — and the moment the third
+detector existed, it found a dependency the prose inventory had confidently denied. The
+directive was not a style preference. It was a prediction.
+
+All four criteria, with evidence:
+
+1. `--diagnose --json` exposes `guest_wiring` (what the last reconcile DID, not just what
+   version is present); cheatsheet is schema authority; as-wired here.
+2. Headless startup emits `preflight vsock_loopback loaded|missing`; as-wired on the live
+   guest, cross-checked against the kernel's own two sources.
+3. `litmus:tray-import-surface-os-only` bound and PASSING; found `vcruntime140.dll`, fixed by
+   static CRT, imports 17 → 11 all in-box.
+4. Inventory distilled to the spec; deliverable tombstoned.
+
+Named checks at close: windows-tray 83 passed / 0 failed; `litmus` windows-native-tray suite
+PASS 9/9; `./build.sh --check` green including the 634-39ik expression-pinning gate.
+
+Open on this host and NOT closable unattended, unchanged: 627-sgtt and 627-wtrp both want a
+live menu click, and 627-sgtt additionally wants a guest whose wiring is known to be this
+tray's — one `--reset-guest` in an attended window, since the vault wipe forces a re-login.
+Every prerequisite this host can supply is now in place, and `guest_wiring` will make the
+result of that reset legible for the first time.
+
+## Cycle 2026-08-12T04:00Z (linux_mutable — night stage-0 cycle 6, host-flow only)
+
+Delegate suspended (691-ssw9). **686-7qcm criterion 2 (invisible-block report)
+IMPLEMENTED + verified as-wired**: is_parked_status() + Ledger::parked_blocks()/
+parked_dependencies_of() surface every dependent stuck behind a parked packet
+(implemented/needs_clarification/blocked/failed) with its status + outstanding
+action. Wired into `check` (advisory per edge + count in ok line), `status <id>`
+(blocked-on-parked line — live: 348 waits on blocked 349), and a new
+`parked-blocks [id]` subcommand (DISPATCH_ARMS + capabilities.txt + usage,
+consistency tests green). 2 unit tests + litmus:parked-blocks-visibility-shape
+(ci-release, 4/4 green: positive + 2 negative controls + check-count). 124 crate
+tests green. Closes the 690-2kwd/627-sgtt visibility gap. Criteria 1+2 of 4 done;
+3 (evidence gate) + 4 (plan_next pickups) remain. Merged osx-next (56c1ae68);
+windows-next merge deferred to post-commit (bindings overlap). Stranded=1 (184).
+
+## Cycle 2026-08-12T03:30Z (windows — 620-duta criterion 3; the portable promise was false)
+
+Merged `origin/linux-next` 3aab5dbc; guards clean; `expire-claims --dry-run` `expired=0`,
+stranded for this host zero.
+
+**Criterion 3 landed, and writing the litmus immediately falsified the promise it was
+written to pin.** The tray's PE import table carried `vcruntime140.dll` — a Visual C++
+Redistributable component, not an OS component — because Rust's MSVC targets link the C
+runtime dynamically by default. Every developer machine has the redist, so nothing ever
+failed anywhere the binary was tested; a clean Windows box would have refused to start it.
+The "zero dependencies ephemeral portable tool" promise had been untrue for as long as there
+has been a Windows tray, and untestable the whole time.
+
+Fixed by giving the MSVC targets the same static-CRT posture `.cargo/config.toml` already
+applied to the musl launcher — the same reasoning, one platform later. The import table went
+from 17 entries to 11, all in-box: kernel32, ntdll, user32, shell32, advapi32, combase,
+oleaut32, ws2_32, bcrypt, bcryptprimitives, api-ms-win-core-synch.
+
+`scripts/check-tray-import-surface.sh` emits
+`^(ok:import-surface-os-only|non-os:<dlls>|skip:(no-tray-binary|no-import-reader))$` from the
+binary's ACTUAL imports via objdump, with a `TILLANDSIAS_IMPORT_FIXTURE` seam so both
+directions are exercisable without building a binary that deliberately needs a redist.
+`litmus:tray-import-surface-os-only` is bound under `windows-native-tray` and PASSING.
+
+The step that carries the test is the negative control: `vcruntime140.dll` must be REFUSED.
+Without it every other assertion would pass for a checker that returned `ok` unconditionally
+— which is exactly the shape that let the dependency ship. The UCRT distinction is pinned
+separately and deliberately: `api-ms-win-crt-*` is an OS component since Windows 10 and stays
+allowed, while `vcruntime140.dll` and `msvcp140.dll` do not. Collapsing that distinction
+would let the redist back in through the door the fix just closed.
+
+Static-CRT tray built and installed; `--diagnose` exit 0, wire Ready, and `guest_wiring`
+reports `skipped-version-match` as expected on an unchanged VERSION.
+
+620-duta stays `ready`: criterion 4 (inventory distilled to specs, deliverable reduced to a
+tombstone pointer) is the last one, and it is documentation work rather than field work.
+
+## Cycle 2026-08-12T03:30Z→2026-08-12T03:37Z (macos — /loop cycle 4: cross-host reconciliation; a dedup that would have lost a requirement)
+
+Guards green, boundary clean, `ok:clean-tree`. Merged `origin/linux-next`
+(3aab5dbc) FIRST. Compaction not eligible (16 fragments, malformed=0 — the
+malformed count is back to zero and this cycle's own fragment was validated on
+the way in by the gate shipped last cycle, its first real use).
+
+### CONVERGENT MULTI-HOST WORK, AND A DEDUP THAT DROPPED A REQUIREMENT
+
+linux filed 697-sy8w for the same fold-time SKIP that macOS filed as 698-7n6q,
+~35 minutes apart — both hosts hit it the same night. The coordinator then
+obsoleted 697-sy8w as "SUPERSEDED by 698-7n6q, which implemented the identical
+fix."
+
+**It is not the identical fix.** 697-sy8w criterion 1 was FLEET-WIDE ("check
+exits non-zero when ANY fragment does not parse"); what shipped is DIFF-SCOPED,
+refusing only fragments the current change adds. The scoping was deliberate — a
+fleet-wide hard failure lets one host's typo red-gate every other host until
+someone else fixes it, the same reasoning 634-39ik used the same day — and I
+still think it is right for the AUTHOR-side gate. But the two are
+COMPLEMENTARY and only one shipped: nothing yet makes an ALREADY-LANDED
+malformed fragment loud, and once it has landed the data genuinely IS invisible
+fleet-wide, which is exactly when everyone should know.
+
+Filed **699-dycj** to carry that residual (methodology
+`obsolete_mechanism_live_intent`), with the design constraint recorded so the
+claimant re-reads why 698 scoped itself before reaching for a global gate.
+
+Also corrected two details of the obsoletion note: 698-7n6q was filed and
+implemented on **macOS**, not windows; and the malformed macOS fragment it
+lists as "inherited debt for removal" was already `git rm`'d in 02a080d7 before
+that note was written (the coordinator had not yet merged osx-next). Neither
+changes a decision — but provenance that drifts is how the next reader reaches a
+wrong conclusion confidently.
+
+### 699-usxc — the fold contract holds per-verb, not uniformly
+
+`append-event` refuses any packet that exists only in an uncompacted fragment
+("packet_id not found"), while `status` resolves it and `set-field` writes to
+it. Reproduced against two fragment-only packets, one of them NOT obsoleted, so
+it is not a status filter. The stated contract for filing into `plan/index.d/`
+is "queryable immediately"; it holds for some verbs and not others, so the
+natural workflow "file a packet, then record progress on it" silently fails for
+exactly the packets filed this cycle. The asymmetry is the diagnosis: whatever
+resolver `status` and `set-field` share is what `append-event` lacks.
+
+### TRIAGE — fourth consecutive cycle, now flat at the top
+
+`eligible=55 grouped=10 ungrouped=45`. Flat vs last cycle rather than rising,
+but the structural fact is unchanged: the selector has offered
+`architecture-audit-epic` in all four cycles, its p0 is the operator-only
+598-kibt M5, and every packet this host has usefully claimed was reachable only
+because the standing orders named it. 625-jd5f gates the discoverability of
+everything else here.
+
+### METRICS
+
+```
+flow: cycles=3 avg_completed_per_cycle=0 avg_commits_per_cycle=4
+timing: source=absent   <- 697-s3by (now visible, and rescued twice over)
+plan: packets=757 ready=294
+```
+
+`avg_completed_per_cycle=0` across four cycles remains accurate and is worth
+stating plainly rather than dressing up: this host has shipped five code fixes
+and filed eleven packets tonight without CLOSING one, because every fix landed
+at `implemented` with a named residual it could not honestly clear.
+
+### RESIDUAL
+
+349 unchanged — blocked pending a cross-restart proof against a guest image
+carrying a56cbbd1. Do not re-run `--github-login` here until then.
+
+## Cycle 2026-08-12T03:05Z (linux_mutable — night stage-0 cycle 5, host-flow only)
+
+Delegate suspended (691-ssw9). **686-7qcm criterion 1 IMPLEMENTED + unit-verified**:
+the status-field LWW fold merge in fragments.rs is now rank-aware over the
+650-dq6u closure ladder — a higher rung wins regardless of (ts,host) arrival
+order, equal rung is plain LWW, and a move DOWN (lower rung, or a working state
+over a rung) needs a `falsified` event in the same fragment; obsoleted/failed are
+lateral terminals; climbing up always wins. 6 new unit tests (both arrival orders,
+stale-in_progress-vs-done, completed-vs-verified, falsified exemption, lateral
+terminals, end-to-end commutativity), 122 crate tests green. Packet stays ready
+(criteria 2-4 remain). **Rescued a lost packet**: macOS's 697-s3by (build-check
+timing) was INVISIBLE — its origin fragment has an unquoted colon-space in a
+`deliverable:` scalar and doesn't parse; re-declared it valid on linux-next.
+**Convergence**: filed 697-sy8w (malformed fragment passes the gate silently) —
+then found Windows had already SHIPPED the identical fix (698-7n6q,
+check-added-fragments-parse.sh, diff-scoped, citing 697-s3by); obsoleted 697-sy8w
+→ 698-7n6q. Two diff-scoped gate checks (mine 634-39ik, theirs 698-7n6q) now
+compose cleanly in build.sh. Merged osx-next (851bafb3) + windows-next (281e7a29).
+Stranded=1 (184). One rescue, one convergence, criterion-1 landed; no fabricated
+closures.
+
+## Cycle 2026-08-12T02:30Z→2026-08-12T02:43Z (macos — /loop cycle 3: two ledger-integrity defects found by hitting them, both fixed)
+
+Guards green, boundary clean. Merged `origin/linux-next` (bbe7a5e2) FIRST — it
+fast-forwarded, so the Linux coordinator has already absorbed this host's
+osx-next work. 634-39ik's expression-pinning enforcement is now live; ran it
+against last night's source-scanning expect-order pin and it PASSES (that test
+carries a negative control).
+
+### 698-7n6q — an unparseable fragment passes every gate (FIXED, implemented)
+
+Last cycle's 697-s3by **never existed**. Its fragment had an unquoted scalar
+containing a colon-space, YAML read it as a nested mapping, and the fold SKIPPED
+it — the packet sat in git and in NO ANSWER: absent from plan status, plan next,
+burndown, unclaimable, invisible to every sibling. It passed
+`tillandsias-plan check`, passed `./build.sh --check`, was stamped and pushed.
+
+The warning existed and was accurate the entire time; `check` prints it and
+exits 0. So nothing failed and total silent loss looked exactly like success.
+The sibling failure (the fold DISCARDING a declared status) already earns a hard
+failure; a fragment the fold cannot READ was strictly weaker.
+
+`scripts/check-added-fragments-parse.sh`, wired into the gate. **Diff-scoped by
+construction**, mirroring 634-39ik: failing on any malformed fragment anywhere
+would let one host's typo red-gate every other host until someone else fixed it,
+turning a local error into a fleet outage. You break it, your push fails; you
+inherit it, you are warned. Verified by falsification (a deliberately malformed
+added fragment is REFUSED naming file + parse position; valid tree passes), and
+CONFIRMED EXECUTING at line 75 of a full --check run — a gate that is wired but
+never runs is the same defect one layer up.
+
+### 696-6byc — set-field emitted a terminal event for any status (FIXED, implemented)
+
+Bit TWICE on this host inside one hour, exactly as the packet predicted when I
+filed it last cycle. The event type was hardcoded `completed`; the canonical
+`is_terminal_status` predicate already existed at lib.rs:190 and the write path
+simply never consulted it. `evidence_event_shape()` now derives it.
+
+Dogfooded immediately: the next set-field on a non-terminal rung emitted
+`type: progress` and the checker passed on the FIRST try, where the identical
+command had failed twice. Negative control asserts terminal statuses STILL emit
+completions, so a fix that stopped emitting them everywhere cannot pass.
+
+### THE PATTERN WORTH NAMING
+
+695, 696, 698 are all the same shape as the four credential defects: **the system
+does the right thing and fails silently when it does not.** Accurate warnings
+nobody is required to act on; green gates over lost work; a heartbeat that
+proves the wire while the work is dead. Every fix tonight has been "make the
+existing, correct diagnosis actually stop something".
+
+### METRICS
+
+```
+experts: calls=3 answered=2 unsupported=1 answer_rate=66%
+expert_accuracy: pass=19 total=19 rate=100%
+flow: cycles=2 avg_completed_per_cycle=0 avg_commits_per_cycle=5
+timing: source=absent   <- 697-s3by, now VISIBLE again after the re-file
+plan: packets=754 ready=295
+```
+
+### TRIAGE
+
+`eligible=55 grouped=10 ungrouped=45` — third consecutive cycle worsening (43 →
+44 → 45). The selector again offered only `architecture-audit-epic`, whose p0 is
+the operator-only 598-kibt M5. Every packet this host has usefully claimed for
+three cycles was reachable only because the standing orders named it. 625-jd5f
+is now the highest-leverage open item on this host: it gates the discoverability
+of everything else.
+
+### RESIDUAL
+
+349 unchanged: blocked pending a cross-restart proof against a guest image
+carrying a56cbbd1. Do not re-run `--github-login` here until then.
+
+## Cycle 2026-08-12T02:30Z (windows — 695-r7k8 closed; the version-equality chain is now shut)
+
+Merged `origin/linux-next` bbe7a5e2; guards clean; `expire-claims --dry-run` `expired=0`,
+stranded for this host zero.
+
+**695-r7k8 closed — `completed` with as-run evidence.** `build-guest-binaries.sh` now skips
+only when the staged binaries are present, valid AND at least as new as every `*.rs` /
+`Cargo.toml` under `crates/` plus the root `Cargo.toml`/`Cargo.lock`. The comparison is
+against the OLDER of the two staged binaries, so a source edit landing between the x86_64
+and aarch64 builds cannot hide behind the newer one.
+
+mtime rather than a content hash, deliberately: the failure worth killing is "silently
+skipped", and a timestamp comparison kills it for a fraction of the complexity. It biases
+toward rebuilding a touched-but-unchanged tree, because cargo makes that false positive cheap
+while the false negative ships stale code.
+
+All three exit criteria exercised in a single run:
+
+1. touching `crates/tillandsias-headless/src/main.rs` → "a source file is newer — rebuilding"
+   and an actual rebuild;
+2. **negative control**, immediately after with no further change → "Staged binaries are
+   up-to-date. Skipping build." A fix that simply always rebuilt would pass (1) and fail
+   here, and would quietly cost every tray build minutes;
+3. `--verify` untouched — `verify:ok` on current staging, `verify:skip-stale-staging` (exit
+   0) once the x86_64 stamp is removed, so order 447's ruling stands.
+
+The first run also caught real staleness rather than a synthetic case: cycle 5's vsock
+preflight edit had never been staged, which is precisely the silent skip this closes. The
+staged asset and the tray's embedded guest are now genuinely current for the first time in
+this sequence; tray rebuilt and installed, 83 passed / 0 failed.
+
+**The chain is now shut.** All three faces of *version equality implies currency* are fixed
+or observable: staging no longer skips a changed source (this cycle), the tray no longer
+embeds a stale staged binary (689-gipe), and reconcile's early return is visible in
+`--diagnose` as `outcome: skipped-version-match` (620-duta criterion 1). A guest-side fix
+developed between releases can no longer traverse the build-and-deploy path and reach nothing
+while every step reports success.
+
+What remains for the p0 pair is unchanged and is not a code problem: 627-sgtt and 627-wtrp
+both want a live menu click, and 627-sgtt additionally wants a guest whose wiring is known to
+be this tray's — which now means one `--reset-guest` in an attended window, since the vault
+wipe forces a re-login. Every prerequisite this host can supply is in place.
+
+## Cycle 2026-08-12T02:00Z (linux_mutable — night stage-0 cycle 4, host-flow only)
+
+Delegate suspended (691-ssw9). Pivoted to agent-doable work since 691-ssw9/579
+both need a fresh live stack (operator's desktop-lane —init). **634-39ik CLOSED →
+verified**: implemented the diff-scoped expression-pinning ENFORCEMENT the operator
+approved. scripts/check-litmus-expression-pinning-added.sh refuses newly-added
+litmus steps that pin a literal source expression without a negative control —
+diff-scoped by construction (git diff vs base + untracked files), so the 643-step
+corpus (624-cf9f) is structurally unreachable. Detection is pipe-aware so
+`./build.sh | grep -F output` is NOT false-red'd (the exact class the operator
+hates). Wired into build.sh --check; dogfooded by a new bound litmus (4/4 green
+as-wired; ci-release suite 11/11); full gate green. Operator CRDT/Erlang posture
+recorded: the bar-raise accepts standing debt rather than redding it. Merged
+origin/osx-next (1fb81aa0) + origin/windows-next (d072e66d). Stranded=1 (184).
+One real closure, zero fabricated. Boundary clean.
+
+## Cycle 2026-08-12T01:30Z→2026-08-12T01:45Z (macos — /loop cycle 2: 689-y2my's own fix REFUTED, safe half shipped)
+
+Guards green, boundary clean, `ok:clean-tree`, `origin/linux-next` already an
+ancestor. Compaction not eligible (5 fragments). Stranded: `in_progress=1
+stranded=1`, flat. E2E: `skip:live-runtime-present`, recorded once.
+
+### THE RESULT THAT MATTERS: I refuted my own p1 packet
+
+689-y2my (filed by this host last night) asserted as exit criterion 1 that
+heartbeat frames MUST NOT extend the exec deadline. I implemented exactly that
+today. **It broke two pre-existing tests and they were right.**
+`streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline` and
+`streaming_exec_times_out_when_slow_guest_sends_no_frames` pin commit 4c9da7cc
+(order 332, "keep silent guest exec sessions live"): the heartbeat is
+LOAD-BEARING, because a guest command that legitimately produces no output for
+longer than the deadline — a build, an image load — must not be killed.
+
+It would also have broken the exact flow the packet was filed from: a legitimate
+first-run `--github-login` spends minutes loading a ~580MB image before it
+prompts (MEASURED ~1290s on this host for a run that then SUCCEEDED). A
+per-expect deadline kills a working login. A deadlock and a slow-but-healthy
+command are not separable by timing alone, which is why the original design
+chose liveness over a progress bound. Reverted in full; baseline restored green.
+
+What was actually wrong on 2026-08-11 was the SILENCE, not the bound: `on_event`
+fired only on a needle match, so a host waiting for a prompt that would never
+come emitted nothing for 70 minutes and looked identical to healthy progress.
+
+### SHIPPED (1eaa50f4) — the safe half only
+
+Every heartbeat received while an expect is pending now reports the pending
+label, elapsed seconds, and bytes of guest output seen. The same wedge is
+legible in 30s instead of never. **No deadline semantics changed**: all 10
+pre-existing vsock_exec tests still pass, plus 2 new (positive + a negative
+control asserting a TALKING guest emits no waiting reports, so the signal cannot
+decay into noise). 689-y2my re-scoped by event, telling the next claimant NOT to
+reinstate criterion 1 and pointing at the protocol-level fix: a guest BLOCKED ON
+INPUT could say so in its heartbeat, separating "working" from "waiting for me"
+exactly rather than guessing from elapsed time.
+
+### FILED
+
+- **697-s3by p2** (+ research issue) — `build.sh --check` emits no timing record.
+  Ran FIVE times this session; `/tmp/tillandsias-timing.jsonl` never existed and
+  `timing:` reads `source=absent` every cycle. So the metric the skill calls "the
+  most likely bottleneck" is unmeasured on every host, and this session paid the
+  gate five times with no record of the cost. Filed as `research/` with BOTH
+  obvious hypotheses already tested and REFUTED (the emitter works standalone;
+  bash 3.2 parses timing-log.sh fine and defines the real function, not the
+  stub), so the next claimant starts at the actual unknown.
+
+### TRIAGE SIGNAL, WORSENING
+
+`triage: eligible=54 grouped=10 ungrouped=44 epics=5`. Up from 43 ungrouped one
+cycle ago. The selector again offered `architecture-audit-epic`, whose p0 is the
+operator-only 598-kibt M5; 689-y2my ranked nowhere because it is ungrouped, and
+was claimable only because the standing orders named it. Two cycles running, the
+batch selector has been unable to surface the highest-value work on this host.
+That is 625-jd5f's ground truth.
+
+### METRICS
+
+```
+experts: calls=3 answered=2 unsupported=1 answer_rate=66%
+expert_accuracy: pass=19 total=19 rate=100% source=groundtruth-rung1
+flow: cycles=2 avg_completed_per_cycle=0 avg_commits_per_cycle=5 overhead_ratio=-
+timing: source=absent   <- now filed as 697-s3by
+plan: packets=752 ready=293
+```
+
+`avg_completed_per_cycle=0` across two cycles is accurate and worth reading
+plainly: both cycles produced shipped code and filed reductions, but neither
+CLOSED a packet, because both landed at `implemented` with honest residuals
+(694-mhz8 needs a cross-restart proof; 689-y2my needs a design decision I
+deliberately did not make unilaterally).
+
+### RESIDUAL
+
+349 still blocked; do not re-run `--github-login` here until a guest image
+carrying a56cbbd1 proves the token survives a restart.
+
+## Cycle 2026-08-12T01:30Z (windows — 620-duta criterion 2; the version-equality chain named)
+
+Merged `origin/linux-next` efc2d76d; guards clean; `expire-claims --dry-run` `expired=0`,
+stranded for this host zero.
+
+**Criterion 2 landed and as-wired verified.** The headless startup preflight now emits
+`[tillandsias] preflight vsock_loopback loaded|missing` before binding the listener.
+Diagnostic only, never a gate — the host↔VM virtio path does not need the module, so
+refusing to start would break the working case in order to report on the broken one. Its
+absence otherwise surfaces on the host as `WSA_ERROR(10060)`, a handshake that times out with
+nothing in the guest log explaining why.
+
+The classification reads BOTH `/sys/module/vsock_loopback` and `/proc/modules`, because they
+answer different questions: a module compiled INTO the kernel never appears in
+`/proc/modules` but does get a `/sys/module` directory. A `/proc`-only check would report
+`missing` on a working kernel and send whoever read it off to modprobe something that cannot
+be loaded — worse than printing nothing, because it looks like an answer. Unit test pins
+loaded / builtin / missing, with two negative controls: a function returning `loaded`
+unconditionally fails, and a longer module name starting with the needle must not match.
+
+AS-WIRED on the live guest: the freshly built musl binary run with `--listen-vsock` printed
+`preflight vsock_loopback loaded`, and the guest kernel independently reports
+`/sys/module/vsock_loopback` present with one matching `/proc/modules` line.
+
+**695-r7k8 filed (p1) — and it names the root of the chain the last four cycles kept
+tripping over.** Restaging the guest to observe the line I had just added, the script said
+`Staged binaries are up-to-date. Skipping build.` and then verified SUCCESS with a checkmark.
+Its fast path calls `verify_binaries`, which checks existence, arch, staticness and the
+VERSION string — none of which is a currency check against SOURCE. A VERSION stamp only rolls
+on release, so every source change between releases leaves the staged binary stale while
+satisfying every condition tested.
+
+That is the third face of ONE mistaken equivalence — *version equality implies currency* —
+and the three compound:
+
+1. staging skips the rebuild on a VERSION match (695-r7k8, this cycle);
+2. the tray embedded whatever was staged without a currency check (689-gipe, fixed);
+3. reconcile returns early on a VERSION match (visible since 620-duta criterion 1 as
+   `outcome: skipped-version-match`).
+
+Any one is survivable. Together they mean a guest-side fix developed between releases can
+traverse the entire build-and-deploy path and reach nothing, with every step reporting
+success. That is exactly what happened to 627-sgtt, and it cost three cycles and a new
+diagnose field to establish. Step 3 is arguably right as designed; it is only safe if steps 1
+and 2 cannot hand it a lie about what "this version" contains.
+
+620-duta stays `ready`: criteria 3 (import-surface litmus) and 4 (inventory distilled to
+specs) remain.
+
+## Cycle 2026-08-12T01:00Z (linux_mutable — night stage-0 cycle 3, host-flow only)
+
+Delegate suspended (691-ssw9 open). **691-ssw9 probe slice IMPLEMENTED**
+(criteria 1-2): added probe_mirror_reachable() to images/default/lib-common.sh —
+a bounded `git ls-remote` classifier before the clone loop that fast-fails ONLY
+the confirmed unresolvable-alias class (the operator's DOA) with the real remedy
+(rebuild stale images so injected TILLANDSIAS_GIT_SERVICE matches the mirror
+--network-alias, 659-8faj/683-g7p6), and defers every seed-delay case to the
+existing tolerant loop so slow mirrors aren't regressed. Verified in isolation
+(bogus alias → ALIAS UNRESOLVABLE + return 1; real git error text matches
+classifier); bash -n clean. Packet stays READY: criterion 3 (committed fixture)
+and criterion 4 (live create/destroy zero-DOA) need a FRESH image an agent can't
+build headless (683-g7p6/2n4k) — the DOA truly clears only once a consistent-alias
+image runs. Merged origin/osx-next (37c2588c) + origin/windows-next (db788294):
+siblings filed 694 (macos vault partial-init guard inverts in guest) among others.
+Stranded=1 (184, known advisory). No fabricated closures; boundary clean.
+
+## Cycle 2026-08-12T00:44Z→2026-08-12T01:00Z (macos — /loop cycle 1: 694-mhz8 implemented, ledger compacted)
+
+Guards green (`ok:gh-keyring`, `ok:branch-osx-next`, `ok:expert-base-ready`),
+boundary clean, `ok:clean-tree`. Merged `origin/linux-next` (ed03c70f) before any
+committable work. Stranded sweep: `in_progress=1 stranded=1` — down from 21 on
+2026-08-09, windows' expire-claims automation is holding.
+
+### BATCH
+
+`batch: epic=architecture-audit-epic role=macos release=v0.5 size=2 budget=6
+seed=host-20260812 pick=1/3`. Its p0 (598-kibt) is the operator-only M5 item and
+was NOT claimed. Took 694-mhz8 instead per the operator's standing orders —
+p0, and the blocker for the whole credential path.
+
+`triage: eligible=53 grouped=10 ungrouped=43 epics=5`. **ungrouped=43 of 53
+eligible** — selection is degrading toward flat priority order regardless of what
+the selector does. 694-mhz8 itself is ungrouped, which is why the selector could
+not offer it. This is 625-jd5f's ground truth and it is getting worse, not better.
+
+### 694-mhz8 → implemented (a56cbbd1)
+
+Root-caused to ONE missing write. `vault_bootstrap.rs:2015` classifies a data
+volume as a crashed partial init via `vault_data_volume_exists() &&
+!has_shamir_share_in_keyring()`, then wipes it. That predicate consults an OS
+keychain, then a fallback file — but in the VM branch of init the guest wrote
+`fallback_vault-root-token-v1` and NEVER `fallback_vault-shamir-share-v1`.
+Inside a Linux guest there is no OS keychain, so the unwritten file was the only
+possible evidence the share was captured: the predicate was permanently false and
+every bootstrap destroyed a HEALTHY Vault plus the stored GitHub token. The
+guard's own comment says it exists to prevent exactly that.
+
+Fixed by writing the share fallback where the token fallback already goes
+(`write_vm_credential_fallbacks`), NOT by relaxing the predicate — an init that
+crashes before capturing the share still leaves the file absent, so the genuine
+partial-init wipe still fires. The negative control asserts precisely that.
+Falsifiability verified: disabling the share write fails the positive test with
+its intended diagnostic; restoring it passes. 41 vault tests green.
+
+Recorded at `implemented`, NOT `completed`: exit criteria 2-3 demand a
+cross-restart proof (write a secret, stop the VM, boot, read it back) that has
+not been run, and the guest binary in the current VM image predates the fix.
+Shared guest crate — Linux and Windows inherit the fix.
+
+### FILED
+
+- **695-nvnd p2** (+ `plan/issues/optimization-gate-stamp-refuses-deleted-worktree-entries-2026-08-12.md`)
+  — `gate-stamp write` refuses any worktree containing DELETIONS, and compaction
+  deletes the fragments it folds, so a green gate reports
+  `stale:cannot-write-stamp` and every compacting cycle runs the slowest step in
+  the cycle TWICE. Filed with the two wrong fixes named up front: do not skip
+  compaction, do not stamp before the deletions.
+
+### LEDGER COMPACTION (7af6d5b8)
+
+41 fragments, 0 malformed, folded. Diff 1204 added / **15 removed** against a
+stated invariant of zero removals — so the 15 were inspected individually rather
+than accepted: every one is an in-place LWW field replacement paired with its
+added line (status corrections, one `pickup_role: tlatoani -> linux`). Verified
+the fold is a no-op on reads by querying the same packets with fragments restored
+and after: byte-identical. No packet, event, or comment line lost.
+
+### METRICS
+
+```
+experts: calls=3 answered=2 unsupported=1 answer_rate=66% tools=methodology_ask,plan_next,plan_status
+expert_accuracy: pass=19 total=19 rate=100% source=groundtruth-rung1
+mcp: servers=1 per_server=forge-plan=3
+flow: cycles=1 avg_completed_per_cycle=0 avg_commits_per_cycle=8 overhead_ratio=-
+timing: steps=0 source=absent
+plan: packets=750 ready=292
+```
+
+`answer_rate=66%` — the one `unsupported` was `methodology_ask "how do I file a
+new work packet?"`, refused as unroutable prose with the routed forms listed. The
+refusal was correct and its guidance was actionable, so this is the expert
+working as designed, not a gap. `timing: source=absent` because this host has not
+yet run an instrumented heavy step since 682-emvg landed; it will populate from
+the next gate run.
+
+### RESIDUAL
+
+349 stays blocked and is NOT claimable — it needs 694-mhz8 proven across a VM
+restart, not another login attempt. Do not re-run `--github-login` on this host
+until the guest image carries a56cbbd1.
+
+## Cycle 2026-08-12T00:30Z (windows — 620-duta criterion 1: diagnose-visible reconcile state)
+
+Merged `origin/linux-next` ed03c70f; guards clean; `expire-claims --dry-run` `expired=0`,
+stranded for this host zero. Batch triage offered 599-3b9h again (still gated on a menu
+click) so I took 620-duta from `next windows`, which is claimable on any host.
+
+**Criterion 1 landed: `--diagnose --json` now exposes `guest_wiring`.** Fields
+`{tray_version, guest_version_before, outcome, ts, error}`, outcome one of
+`skipped-version-match | reinjected | failed`.
+
+Why it needed a file rather than a process-global: `--diagnose` runs as its own
+short-lived process and never performs a reconcile, so an in-memory record would be empty in
+exactly the invocation that wants to report it. It persists to
+`%LOCALAPPDATA%\tillandsias\state\guest-wiring.json`.
+
+`reconcile_adopted_guest` records on EVERY exit including the early return — the early
+return being the one that most needs it, since it is invisible from outside and looks
+identical to a successful injection in every other diagnose field. Its injection half moved
+into `inject_stale_guest_wiring` so all the `?` paths land on ONE recorded result; folding a
+record into each early return by hand is how a later edit adds a fourth `?` and silently
+stops recording failures.
+
+Cheatsheet updated as schema authority, including a section on reading the field — the
+`skipped-version-match` case is the one an operator will otherwise misread, because
+`guest_version == version` reads as healthy everywhere else in the report.
+
+Tests 83 passed / 0 failed. Two pins carry the value: the three outcomes must serialize
+DISTINCTLY (a field reporting the same value for skipped and reinjected would satisfy
+"exposes last reconcile outcome" while answering nothing), and an absent record must be
+`null` rather than a version match ("never checked" and "checked and matched" are different
+facts, and collapsing them rebuilds the ambiguity the field removes).
+
+**It paid for itself on first run.** The installed tray reports
+`outcome: skipped-version-match`, `guest_version_before: 0.4.260810.1` — so reconcile
+returned early and this host's guest binary was NOT placed by any tray rebuilt this session.
+That is empirical confirmation of what cycle 3 had inferred from the stale staged asset, and
+it is exactly the reading cycle 1 got wrong. The question took three cycles of inference and
+one field to answer. Noted on 627-sgtt; it does not disturb that packet's criteria 1 and 2,
+which were field-verified on peke — a different host with a different guest.
+
+620-duta returned to `ready`: criteria 2-4 (preflight `vsock_loopback` assert,
+import-surface litmus, inventory distilled to specs) remain.
+
+## Cycle 2026-08-11T22:00Z→2026-08-12T00:35Z (macos — operator session: 3 root causes fixed, credential blocker identified, I/O audit wave)
+
+Operator reported the tray login window crashing and the Linux orchestrator
+reporting an auth-token block that "doesn't seem to be the case". Both reports
+were correct and neither had the cause anyone assumed. Synced and merged
+origin/linux-next first (c73ce7ca); osx-next never drifted.
+
+### ROOT CAUSES FOUND (3 stacked defects on one path)
+
+- **663-acdw CLOSED-CAUSE — expect-order drift.** The guest has prompted
+  CREDENTIAL FIRST since operator directive 2026-07-29 (token → name → email,
+  quoted verbatim at headless/src/main.rs:7647). The macOS host's expect vec
+  was still the pre-directive order. `DynamicExpect` is strictly sequential, so
+  this is a mutual wait: the guest blocks on its token prompt while the host
+  scans for an "author name" needle that cannot appear until the host answers
+  the token prompt. Explains the packet's own puzzle that the 2026-07-24
+  attended login worked — it predates the reorder by five days. FIXED, plus a
+  cross-crate contract pin (nothing else coupled the two crates), verified
+  falsifiable by reverting the fix and watching the pin fail.
+- **689-y2my FILED p1 fleet-wide — liveness is not progress.** The guest emits
+  an empty PtyData heartbeat every 30s unconditionally (pty_handler.rs:57,
+  816-826); the host treats it as data and restarts its 300s inactivity
+  deadline (vsock_exec.rs:107-124, 613-646). 30s < 300s, so the bound can never
+  fire. This is why the deadlock above ran 70 minutes instead of failing in 5.
+  Not macOS-specific — shared crates, every host that drives a guest exec.
+- **663-69kp ROOT CAUSE / 689-stig CLOSED — stdin, not a storage lock.**
+  `--exec-guest` read piped stdin with `if !is_terminal() { read_to_end() }`,
+  treating "not a TTY" as "a pipe that will EOF". False for any inherited stdin
+  whose writer stays open (agent harness, launchd, background shell): blocks
+  forever, on the main thread, before the first eprintln and before the VM is
+  created. The packet's standing VZ-storage-lock hypothesis is REFUTED — no VM
+  process exists during the wedge. Controlled pair: identical invocation, 12+
+  min silent vs 9s clean exit with `</dev/null`.
+
+### FIXED THIS CYCLE
+
+- macOS tray refuses unknown flags loudly (exit 2, names the flag). They used
+  to fall through to launching the AppKit tray, which also took the VM
+  singleton — so the operator's NEXT one-shot refused or wedged. `--with-token`
+  (a guest flag) hit this, which is why the orchestrator's suggested command
+  looked like a no-op. Behavioral test + negative control.
+- `--exec-guest` stdin is now bounded (5s) and announces giving up.
+- github-login expect order matches the guest, pinned cross-crate.
+
+### MEASURED (displaces an assumption)
+
+Full `--exec-guest` cycle — stage, boot, phase Ready, guest exec, stop — is
+**9 seconds** on this host. Every "macOS boot is slow" reading resting on a
+wedged one-shot was measuring the stdin bug. Guest is 4 GiB / ≤4 vCPU
+hardcoded (vz.rs:1379-1381), NOT the 8 GiB widely assumed; raising it was
+considered and rejected on this evidence rather than on intuition (689-eux9
+records the baseline so the sizing becomes an explicit decision).
+
+### 690 WAVE FILED (multi-agent I/O audit, 6 lenses, each adversarially verified)
+
+59 findings survived verification; grouped by SEAM, not by finder.
+- **690-pz68 p1** — the operator's Windows-32K hypothesis CONFIRMED on macOS:
+  16 KB chunks to an unbuffered File (vz.rs:844), unbuffered `io::copy`
+  decompress (materialize/oci.rs:106), blocking multi-GB xz on an async worker
+  (fetch.rs:70), synchronous whole-binary hash every boot (vz.rs:698).
+  fetch.rs already holds the remedy for its own sibling bug.
+- **690-xeda p1** — near-zero-idle is not met: guest re-reads an AtomicBool
+  4×/s forever and shells out to podman every 30s with no subscriber gate;
+  tray keeps a 30s timer whose polls are all push-suppressed. Several sites
+  already carry comments naming the correct event source.
+- **690-7adz p1** — NO podman invocation anywhere has a timeout; one seam
+  (backend.rs:119) from which everything inherits unboundedness. Corroborated
+  live: a seed run sat >300s inside an image load emitting nothing.
+- **690-eug2 p2** exec-seam observability/bounds · **690-w94k p2** blocking
+  work on async/main threads (incl. a discarded CFRunLoopRunInMode result that
+  can spin) · **690-cb62 p3** console.log growth, filed WITH its measured
+  volume (43 KB / 62 boots) so nobody burns a cycle thinking it is urgent.
+- **689-xpq7 p2** — expect driver drops guest Error envelopes. Recorded at
+  VERIFIED strength: the finder called it critical/unbounded, a verifier proved
+  the wait is actually bounded at 300s and the emission sites all predate the
+  session. Filed as diagnosability, not liveness.
+
+### CREDENTIAL PATH
+
+Operator-authorized re-seed executed via the guest's `--with-token` automation
+lane (the correct macOS adaptation — `--with-token` is a tillandsias-headless
+flag reached through `--exec-guest`, never a host tray flag). Vault bootstrapped
+healthy (12 policies), proxy up, login container ran the token script.
+
+### FOR THE FLEET
+
+- 689-y2my is fleet-wide and affects Linux and Windows exec paths identically.
+- The expect-order drift class deserves a look on windows-tray: it drives the
+  same guest through the same directive change, and only macOS was pinned.
+
+### CREDENTIAL PATH — RESOLVED CAUSE, STILL BLOCKED
+
+The expect-order fix WORKS: an unattended re-seed drove the guest login to
+completion (needles matched token → name → email in the new order, guest
+printed "GitHub authentication complete for 8007342", exit_code 0, and the
+in-container vault write verification passed).
+
+The token is nonetheless 404 on the next boot. **694-mhz8 filed p0**:
+vault_bootstrap.rs:2015 decides whether to wipe the Vault data volume via
+`has_shamir_share_in_keyring()`, which probes an OS KEYCHAIN while running
+INSIDE THE LINUX GUEST. It can only ever return false there, so the
+"partial-init safe recovery" wipes a healthy initialized Vault — and the stored
+GitHub token — on every bootstrap. The guard's own comment states it exists to
+prevent exactly this. Every re-auth attempt on this host since the 07-27
+re-provision therefore succeeded and was then erased.
+
+349 stays BLOCKED, but on an identified defect rather than a mystery: it needs
+694-mhz8, not another login attempt. Do not burn cycles re-running
+--github-login on macOS until that lands.
+
+Also established: `--with-token` over `--exec-guest` is NOT a macOS substitute.
+stdin forwarding works (a piped string arrived as GOT:[...] with the child on
+/dev/pts/0), but bytes are delivered eagerly at session open while the consuming
+container reads minutes later, so the queued line is gone and the read blocks
+forever (two runs killed at their bounds, rc 137). On-demand delivery — what the
+expect lane does — is the correct shape.
+
+### HONEST NOTE ON THIS CYCLE'S OWN METHOD
+
+One intermediate report of "seed succeeded" was wrong: `LOGIN-RC=$?` was read
+after a pipe, so it measured `tail`, not the login. Corrected within the cycle
+by verifying against the product surface (`--list-cloud-projects`) instead of a
+self-reported code. Worth repeating fleet-wide: verify credentials with a read
+of the credential, never with an exit status.
+
+## Cycle 2026-08-12T00:10Z (linux_mutable — night stage-0 cycle 2, host-flow only)
+
+Delegate flow SUSPENDED (691-ssw9 open, per the cron gate). Host flow root-caused
+the DOA. **691-ssw9 diagnosed**: not a missing-retry bug — the clone loop already
+retries 12x. It is an ALIAS-NAME MISMATCH crossing the 659-8faj migration: source
+correctly injects/registers the per-project alias `git-<project>`, but the
+operator's DOA forge ran on a STALE IMAGE requesting the retired shared
+`tillandsias-git` (journald confirmed), unresolvable → fatal. A convergence of
+659-8faj + 683-g7p6/2n4k (—install rebuilds the launcher binary, not the forge
+images; headless —init refuses). More retries wouldn't fix it. Left ready with the
+full diagnosis + fix direction; live create/destroy verification is coupled to a
+fresh consistent-alias image an agent can't build headless — flagged for operator
+desktop-lane —init or 683-g7p6 resolution. **Captured** per operator directive:
+SPIFFE/SPIRE identity-plane aspiration (692-zjzg, v0.6 talk → v0.7+) + mirrored into
+methodology/philosophy.yaml. **Filed** 693 (cycle-metrics timing: line emits ~56-year
+overflow durations — telemetry defect). Merged origin/windows-next (3 sibling cycles).
+Experts 19/19 accuracy, 90% answer_rate. Stranded=1 (184, the known old advisory).
+No fabricated closures. Boundary clean start; only cycle-authored files at exit.
+
+## Cycle 2026-08-11T23:30Z (windows — 689-gipe re-framed and fixed at the real gap)
+
+Merged `origin/linux-next` 4f45dfcf; guards clean; `expire-claims --dry-run`
+`in_progress=1 expired=0`, stranded for this host zero.
+
+**689-gipe: my own filing from last cycle was wrong, and the correction is the work.**
+I filed it as "restage the guest asset and commit it". Both halves were wrong.
+`crates/tillandsias-windows-tray/assets/tillandsias-headless-*` is gitignored
+(`.gitignore:94`), as is `target-guest/` — there is nothing to commit, the asset is
+per-host staging state. And order 447 had already ruled on the condition: stale staging is
+HOST STATE, not a code regression, which is exactly why `build-guest-binaries.sh --verify`
+skips cleanly on it. I should have read 447 before filing.
+
+The real gap sits one step upstream. `build-windows-tray.ps1` decided whether to embed a
+staged guest by comparing CONTENT HASHES — "did the asset change" — and never asked whether
+the staged binary was CURRENT. A stale-but-non-empty staging directory was therefore copied
+into `assets/` silently; the existing WARN fires only when staging is ABSENT. That is the
+dangerous direction of the failure: a tray embeds a guest older than its own source and
+injects it into fresh provisions, which is the registered-distro version skew order 350's
+first criterion exists to catch. Nothing caught it at build time — the only guard was a test
+assertion that a build does not run.
+
+Fixed: the script now scans the staged binary for the workspace VERSION, read from the
+repo-root `VERSION` (the same source `build.rs` stamps into `WORKSPACE_VERSION`, so the
+build-time refusal and the test-time assertion cannot disagree about what "current" means).
+Following 447's posture it refuses the STALE COPY, not the build — the asset falls back to
+the zero-byte placeholder, the sanctioned absent-asset path, so a fresh guest fetches the
+published release rather than being handed a skewed binary.
+
+Evidence in both directions, the negative being the load-bearing half since a check that
+never refuses would pass the positive case. POSITIVE: current staging still embeds and
+`cargo test -p tillandsias-windows-tray` went 79 passed/1 failed to **80 passed / 0 failed**.
+NEGATIVE: staged file replaced with a payload stamped 0.4.260809.2 — build printed the WARN,
+refused the copy, and left the asset at 0 bytes rather than the stale content. Staging
+restored and the tray rebuilt + installed afterwards; `--diagnose` exit 0, build_commit
+66e75329. Packet left at `implemented`, not `completed`: its second criterion needs a distro
+with no prior guest, and this host's guest already reports 0.4.260810.1 so
+`reconcile_adopted_guest` returns early and the injection path is never exercised. That
+needs `--reset-guest`, which wipes the vault and wants an attended re-login.
+
+Guest binaries restaged here with `scripts/build-guest-binaries.sh` (local cargo fallback;
+no Nix on this host). **Note for the next host that tries it:** the first attempt looked like
+a missing aarch64 musl linker, but the cause was `$PATH` being expanded by the outer Windows
+shell before it reached WSL. Both targets build fine in `tillandsias-build` with
+`~/.cargo/bin` and the toolchain's `rust-lld` directory on PATH. Worth knowing before someone
+files a linker packet that isn't real.
+
+**154**: its "cargo test all pass" criterion is now MET (80/0) — the single failure was
+689-gipe's, not the tick-retirement slice. Remaining is the live SC-11 idle-CPU read, which
+wants an attended window.
+
+**692-u57i filed** (p2, any host): `tillandsias-plan append-event` edits the base
+`plan/index.yaml` only, so it reports "packet_id not found" for a packet that exists solely
+in `plan/index.d/` — one command after `status` resolved that same packet through the fold.
+The documented filing path (write a NEW fragment, never touch the base) produces packets the
+documented annotation path cannot touch. Worked around here by hand-writing an events-channel
+fragment, which folds cleanly.
+
+## Cycle 2026-08-11T22:55Z (linux_mutable — night stage-0 cycle 1)
+
+First cycle of the operator-authorized two-flow protocol (host loop + one
+in-forge delegate). **Delegate flow**: BigPickle launched in a ptyxis window on
+the 682-z5h8 in-forge verify directive; at cycle end its process was gone, the
+forge containers torn down, and NO ledger evidence recovered — filed as
+**690-2kwd** (delegate disposition unobservable; the exact "ended without a
+recorded outcome" finding the methodology warns of). **Host flow**: claimed 579,
+confirmed the SOURCE fix is present (every-start receive hardening at
+entrypoint.sh:164-174) but live existing-volume verification was **inconclusive**
+— the mirror container returned empty config then vanished mid-read as the forge
+stack churned; did NOT close on an unreliable read, released the claim, recorded
+a progress event. git-mirror-service litmus 17/17 green. **Net**: two honest
+findings, zero fabricated closures. Ramp stays stage 0; 690-2kwd gates lifts
+until delegate outcomes are observable. Sibling windows-next advanced to
+fc9862a3 (not yet merged this cycle). Boundary clean at start and exit.
+
+## Cycle 2026-08-11T22:30Z (windows — order 154 tick retirement; a correction to cycle 1)
+
+`origin/linux-next` unchanged at c73ce7ca, already merged; guards `ok:clean-tree`,
+`ok:gh-keyring`, `ok:branch-windows-next`. `expire-claims --dry-run`:
+`in_progress=1 expired=0`, stranded for this host zero.
+
+**Order 154, tick-retirement slice — landed.** `host-shell::subscription_health` gains
+`TickWake::PollRequested` and `wait_tick_drop_or_request(period, suppress_timer, health,
+request)`. While every fallback gate is closed the 30s timer is dropped for that wait
+entirely and the loop parks on the health watch plus a fast-poll `Notify`, so a healthy
+tray stops waking twice a minute to re-decide it has nothing to send (SC-11). Two details
+that are the whole correctness of it: a closed health channel ALWAYS restores the timer
+(otherwise a dead listener leaves a timer-less waiter with no wake source, and the fallback
+polls — the thing that covers a dead listener — never run again), and `tick_timer_suppressed`
+gates on `LOCAL_PROJECTS_PUSH_SUBSCRIBED` as well as health, because the stream can be
+healthy while the legacy-topic fallback is engaged and there the 10-tick
+`EnumerateLocalProjects` poll is still load-bearing. The tray's bare `FAST_POLL_COUNT` store
+is now `request_fast_poll_burst`, since a bare store is invisible to a suppressed wait.
+Tests: subscription_health 10/10, including a suppressed-timer pin that advances ten full
+poll periods before asserting and an unsuppressed negative control — without the control, a
+helper that simply never woke would pass. Packet returned to `ready`: the live SC-11
+idle-CPU read and the "all tests pass" criterion remain.
+
+**689-gipe filed (p1, windows) — and it corrects this host's cycle-1 evidence.**
+`cargo test -p tillandsias-windows-tray` is RED at a clean HEAD (confirmed by stashing the
+cycle's edits and re-running): the staged x86_64 guest asset is 0.4.260809.2 — the PUBLISHED
+release — against a workspace VERSION of 0.4.260810.1. The test is a true positive; the asset
+is what is wrong.
+
+The consequence worth stating plainly: cycle 1 promoted 627-sgtt citing `guest_version ==
+host tray version` as showing the rebuilt binary reached the guest. **That inference does not
+hold.** The tray's embedded guest is 0.4.260809.2, so no tray built in that cycle could have
+injected 0.4.260810.1; the in-VM binary (mtime 2026-08-09 21:32) predates the rebuild, and
+`reconcile_adopted_guest` returns early on a version match — the exact trap 627-sgtt's own
+`next_action` warned about. A correcting note is on the packet. Its other criteria stand on
+their own evidence (peke field-verified the token prompt and the state-T check; the named
+workspace test is green here), so status stays `completed`, but nothing this host observed
+establishes that the DEPLOYED guest carries the setpgid fix. The second consequence is
+forward-looking: any tray built on this host embeds a guest older than its checkout, which is
+the version skew order 350's first exit criterion exists to catch.
+
+**350 not claimed, with a reason.** Its deliverable is an attended evidence packet and its
+2026-07-16 event records the remaining half as operator-gated (a refreshed provision wipes
+the vault and needs an attended re-login). 689-gipe now also blocks its criterion 1 on this
+host — identity evidence would record a tray/guest skew rather than parity.
+
+**Also observed, not yet a packet:** `tillandsias-headless --status-check` in the guest
+failed once on stage `status-proxy` with `podman run --detach --replace --name
+tillandsias-proxy` reporting the name "already in use" *by the container that same argv had
+just created*, classified `retry Permanent`. An immediate re-run passed. That is a race
+window, and a `Permanent` classification on a transient name collision means it cannot
+self-recover. Not filed this cycle because one occurrence does not tell me whether the race
+is in the stage sequencing or in podman's replace/storage window; recorded here so the next
+occurrence is the second data point rather than the first.
+
+## Cycle 2026-08-11T21:52Z (windows — p0 tray packets promoted, guest reprovisioned)
+
+Branch `windows-next` at 52f7b219; merged `origin/linux-next` c73ce7ca first (pre-push
+gate). Guards: `ok:clean-tree`, `ok:gh-keyring`, `ok:branch-windows-next`. Plan binary
+rebuilt (`cargo build --release -p tillandsias-plan`) so the 650-dq6u ladder gate is live —
+it correctly REFUSED `implemented -> in_progress` on both p0 packets, which is why this
+cycle carried them forward with progress events instead of re-claiming them.
+
+PRIORITY 1 — both p0 packets promoted `implemented -> completed` with field evidence:
+
+- **627-sgtt** login-lane-background-process-group-stop. Tray rebuilt from c73ce7ca;
+  `interactive_lane_keeps_the_terminal_foreground_process_group` => 1 passed (run in the
+  `tillandsias-build` WSL distro; Smart App Control blocks fresh unsigned test exes on the
+  Windows host).
+- **627-wtrp** wt-reparse-breaks-every-quoted-lane.
+  `project_lane_argv_is_never_routed_through_wt` => 1 passed on the Windows host.
+
+The recorded next_action for 627-sgtt worried that a VERSION bump was required for the fix
+to reach a provisioned guest (reconcile returns early on a version match). It did reach it:
+post-reprovision `guest_version` is `0.4.260810.1`, equal to the host tray version, so the
+rebuilt binary IS deployed. No ad-hoc VERSION handling was needed and none was done.
+
+**Residual, stated plainly:** `completed` here is claimant-asserted, not click-verified.
+`--help` exposes provision/reset/status/diagnose/logs and no lane trigger, so the live
+"project-lane click opens a working agent shell" read still needs an operator click or GUI
+automation. Neither packet was written to `verified`.
+
+**599-3b9h** (progress, not closed): the runtime distro was reprovisioned this cycle.
+`--diagnose --json` went **exit 2 -> exit 0**: before, the wire was unreachable with
+`WSA_ERROR(10004)` and a log tail of nine handshake timeouts ending in a failed provisioning
+run dated 2026-08-10T19:29Z; after `--provision-once` ("VM Ready — control wire up"), the
+wire reports reachable / phase Ready / podman_ready true. Its first exit criterion (guest at
+v0.4.260802.1 or newer via a sanctioned path) is satisfied at 0.4.260810.1. The deferred W4
+(accel envelope) and W5 (no GH_TOKEN in lane env) halves remain outstanding for the same
+reason as above — both read a RUNNING forge lane, and `podman ps` in the guest shows no lane
+container because creating one is a menu click.
+
+Sweeps: `expire-claims --dry-run` => `in_progress=1 expired=0 unknown_age=0`, stranded for
+this host **zero**. `check-stranded-in-progress.sh` names one stranded packet, 184
+secure-channel-maturity-ladder, seated `linux` — left to its host, not touched.
+`fragments` reports `eligible=true fragments=25 reason=fragment-count`; compaction was
+deliberately NOT run here. It rewrites the shared base, and doing that from a platform branch
+while linux hosts are actively appending invites a fold collision the coordinator is better
+placed to avoid. Flagging it for the linux-mutable coordinator rather than acting on it.
+
+Metrics: `answer_rate=100%` (calls=2), `expert_accuracy: 19/19`, `plan: packets=729
+ready=274`, `verdict: attention:worktree-dirty` (this cycle's own uncommitted plan
+fragments, resolved by the commit below).
+
+## Cycle 2026-08-11T13:31Z→14:00Z (linux_mutable — loop iter 18, OVERNIGHT CLOSE-OUT at 07:00 PDT horizon)
+
+### This cycle
+- Healed macOS's overnight close-out loop-status fragment (silently dropped
+  from the fold: `# Cycle` vs `## Cycle`) — their 13-closure night is now
+  visible. Filed 684-awhm: the fold SILENTLY DROPS single-# headings (third
+  fleet occurrence) — should tolerate or reject-loud, not vanish.
+- Compaction not eligible (8 fragments). Stranded: 184 (old, advisory).
+
+### OVERNIGHT SESSION ARC (linux coordinator, 18 cycles, 47247539→HEAD, ~120 commits)
+Operator directive: hourly /loop meta-orchestration + drain v0.5 + expert
+system + telemetry, delegate to in-forge/host agents, visible tray forges.
+
+HEADLINE DELIVERABLES:
+- EXPERT SYSTEM made TRUSTWORTHY: 659-8faj (per-project mirror DNS identity),
+  619-pfsj (uniform cited project_answer + no-inference refusals), 669-egjn
+  (generic index enrichment + README clamp), 669-qcsb (grammar litmus),
+  669-h987 (mounted-project routing, self-served in-forge), 531-crit2
+  (honest degraded(stale-source)); ground truth caught RED and fixed
+  (394e mutable-status drift, 680-zphp); MCP experts wired for HOST sessions
+  (.mcp.json) + the $PWD resolver fix (682-z5h8) so they read the live
+  checkout not a stale clone.
+- TELEMETRY MILESTONE (operator directive) — v0.5 set COMPLETE + dogfooded:
+  682-ym68 (mcp-usage + expert-accuracy in handoff), 682-m8ek (all real MCP
+  servers log per-server), 682-epud (packet-flow + overhead_ratio), 682-emvg
+  (build/test timing). 682-x8df: OTel DECLINED for v0.6 (enclave egress ban +
+  no-python + CRDT-fit). 682-43mi (distillation) + 682-yiz7 (greedier
+  batching, evidence-gated) remain.
+- LOOP HARDENED: 667-se87 (forge pids 512->4096, root-caused via BigPickle +
+  coredump forensics), 651-2x5s (mo-full self-attest — marker now unfakeable
+  in every lane), 668-2xeh (plan-only push lane), 604-vmcg forensics.
+- Filed for fixing: 663-gwp4 (agy login friction), 664/665/671/673/674/678/683
+  (tray launch verb, CDI staleness, install-VERSION collision, phantom
+  vm-exec instrument, vault entrypoint, gate-mutation class, build-refresh
+  footguns).
+FLEET: windows drove stranded 21->0 (expire-claims automation); macOS shipped
+606-vaua (freshness truth), 626-r7kq, 657 Apple-Silicon wave. Stranded ZERO
+most of the night. Every cycle attested MO-FULL (self-verified).
+
+Direction at horizon: p0s 654-7ur4 (last leg gated on blocked macOS 349) and
+606-bvnp T4 sshd (security-critical, needs a budgeted desktop-lane slot) are
+the top remaining v0.5 work — deferred deliberately, not neglected.
+
+## Cycle 2026-08-11T12:29Z→12:45Z (linux_mutable — loop iter 17: OTel evaluation — DECLINED for v0.6, clears the phantom dependency)
+
+### Drained
+- 682-x8df DONE (research, 3a3c30cb): OpenTelemetry evaluation decision record
+  (plan/issues/opentelemetry-evaluation-2026-08-11.md). RECOMMENDATION: OTel
+  DECLINED for v0.6. Grounded rationale: (1) its one strength is live-collector
+  export = exactly the arbitrary enclave egress the squid allowlist forbids;
+  (2) file/stdout exporters are experimental and wrap a heavier OTLP envelope
+  around one-line facts we already store; (3) the only mature SDK is Python =
+  tlatoani_hard_no_python; every other SDK drags a language runtime into the
+  forge image to replace a printf; (4) OTel temporality/cumulative aggregation
+  FIGHTS the per-host-append + coordinator-distill CRDT fold. The homegrown
+  JSONL append-then-distill (682-m8ek/epud/emvg) is the better fit. A valuable
+  NEGATIVE result: 682-43mi (distillation) and the milestone now carry NO
+  phantom OTel dependency. If ever revisited: timing/span channel only,
+  file/stdout only, gated on 3 currently-false triggers (external consumer,
+  sanctioned egress, stable non-python file exporter).
+
+### Telemetry milestone (682) status
+v0.5 quick-wins: 4/4 DONE (ym68/m8ek/epud/emvg). v0.6: 682-x8df DONE
+(OTel declined), 682-43mi READY (CRDT distillation/bucketing — proceeds on
+homegrown model). 682-yiz7 (greedier batching): evidence-gated on flow
+overhead_ratio, accruing.
+
+### Integration
+Merged osx-next — macOS posted its OVERNIGHT CLOSE-OUT (809f226e: 13
+closures, 3 fleet-wide fixes, 657 wave filed). macOS winding down its /loop.
+Stranded: 184 (old, advisory). Count stable 244/399 (682-x8df is v0.6).
+~1.5h to 07:00 PDT horizon.
+
+## Cycle 2026-08-11T11:23Z→11:40Z (linux_mutable — loop iter 16: v0.5 TELEMETRY SET COMPLETE — build/test timing lands)
+
+### Drained — telemetry milestone v0.5 quick-wins now 4/4 DONE
+- 682-emvg DONE (host agent, 7b2dce56): build/test/litmus duration telemetry.
+  scripts/timing-log.sh (portable ms clock + best-effort emit) + cycle-metrics
+  --emit-timing + a `timing:` handoff line (rolling averages, slowest step).
+  Instrumented build.sh --check (EXIT-trap captures the REAL exit, never
+  alters it), local-ci phases, run-litmus suites — pure side-channel.
+  litmus build-test-timing-telemetry-shape 5/5, suite 12/12.
+
+### THE TELEMETRY DIRECTIVE (operator 2026-08-11) IS DELIVERED for v0.5
+Every handoff now carries four honest, populated signals — dogfooded live
+this cycle from real session activity:
+  mcp: servers=2 per_server=forge-plan=2;project-info=26 legacy_untagged=143
+  expert_accuracy: pass=19 total=19 rate=100%
+  flow: cycles=1 overhead_ratio=2
+  timing: litmus_ms_avg=8988 slowest=litmus-suite:9308
+The mcp: line captured the coordinator's OWN 26 project-info MCP calls this
+session (the host-MCP wiring from earlier is being used); timing: already
+fingered the litmus suite (~9s) as the slow step — the first real bottleneck
+signal. This is "measure before optimize" fully operational.
+
+### Remaining 682 rungs (v0.6 + evidence-gated)
+682-43mi (CRDT distillation/bucketing, v0.6), 682-x8df (OTel research, v0.6),
+682-yiz7 (greedier batching — evidence-gated on flow overhead_ratio, now
+collecting). All four v0.5 children done; milestone tier shifts to v0.6.
+
+### Integration / housekeeping
+No sibling deltas (osx-next tracks HEAD). Stranded: 184 (old, advisory).
+Count 245/399 -> 244/399. Recurring status='done'-not-in-schema advisory
+still noisy every gate — candidate to reconcile the terminal-vocabulary enum.
+
+### Metrics (verbatim)
+mcp: servers=2 per_server=forge-plan=2;project-info=26 legacy_untagged=143 source=/tmp/forge-expert-usage.jsonl
+expert_accuracy: pass=19 total=19 rate=100% source=groundtruth-rung1
+flow: cycles=1 avg_completed_per_cycle=1 avg_commits_per_cycle=2 overhead_ratio=2 source=/tmp/tillandsias-cycle-flow.jsonl
+timing: steps=2 build_check_ms_avg=- litmus_ms_avg=8988 slowest=litmus-suite:9308 source=/tmp/tillandsias-timing.jsonl
+plan: 244 open / 399 v0.5
+
+## Cycle 2026-08-11T10:19Z→10:35Z (linux_mutable — loop iter 15: telemetry rung 3 — per-cycle packet-flow + overhead_ratio for the batching decision)
+
+### Drained
+- 682-epud DONE (host agent, 83786019): cycle-metrics.sh --emit-flow appends
+  a per-cycle JSONL {ts,host,batch_epic,batch_seed,batch_size,budget,claimed,
+  completed,filed,commits,plan_open,plan_total}; a new `flow:` handoff line
+  computes the rolling overhead_ratio = commits per completed packet — the
+  EXACT number 682-yiz7 (greedier batching) needs. Wired into the
+  meta-orchestration Finalization; litmus cycle-flow-telemetry-shape 5/5,
+  suite 11/11. Dogfooded this cycle: flow: cycles=1 avg_completed=1
+  avg_commits=2 overhead_ratio=2.
+  DECISION CRITERION now measurable: a FALLING overhead_ratio as budget rises
+  = greedier batches amortize the fixed per-cycle cost. 682-yiz7 is now
+  evidence-unblocked (needs several cycles of flow data at varying budgets).
+
+### Telemetry milestone (682) status after 3 rungs
+DONE: 682-ym68 (surface mcp-usage+accuracy), 682-m8ek (all real MCP servers
+log per-server), 682-epud (packet-flow + overhead_ratio). REMAINING: 682-emvg
+(build/test timing, v0.5), 682-43mi (CRDT distillation/bucketing, v0.6),
+682-x8df (OTel research, v0.6). Greedier-batching 682-yiz7: evidence-gated,
+now unblocked.
+
+### Integration
+Merged osx-next (620-duta macOS tray import-surface pin — zero-dependency
+portable promise now measurable). Stranded: 184 still (advisory, old).
+Count 246/399 -> 245/399.
+
+### Noted
+Recurring advisory (not new): build --check emits "schema drift: status
+'done' not in schema statuses" for completed packets — the terminal-status
+vocabulary split (already tracked, e.g. 649/650). The status: LWW channel
+legitimately uses 'done'; the packet schema enum should include it. Candidate
+to reconcile so the advisory stops being noise every cycle.
+
+### Metrics (verbatim)
+experts: calls=142 answered=90 unsupported=6 degraded=40 errors=6 answer_rate=93%
+expert_accuracy: pass=19 total=19 rate=100% source=groundtruth-rung1
+flow: cycles=1 avg_completed_per_cycle=1 avg_commits_per_cycle=2 overhead_ratio=2 source=/tmp/tillandsias-cycle-flow.jsonl
+plan: 245 open / 399 v0.5
+
+## Cycle 2026-08-11T09:11Z→09:30Z (linux_mutable — loop iter 14: telemetry rung 2 — all real MCP servers now emit per-server usage)
+
+### Drained
+- 682-m8ek DONE (host agent, 9ba1a69): shared writer mcp-usage-log.sh
+  (mcp_log_usage <server> <tool> <outcome> [latency] ...) wired into all
+  THREE real tools/call dispatchers (forge-plan, project-info, git-tools) —
+  best-effort/fail-soft so logging never fails a call. cycle-metrics `mcp:`
+  now reports REAL per-server counts (servers=3
+  per_server=forge-plan=2;git-tools=2;project-info=1). New litmus
+  mcp-usage-telemetry-shape 5/5 + 2 cycle-metrics steps, all executed.
+  HONEST premise-correction: the "six servers" reduce to three real MCP
+  dispatchers — dependency-resolver.sh (plain scanner) and agent-profile.sh
+  (sourced env script) are NOT registered MCP servers, and host-browser.sh is
+  a tray-side socat proxy (logged there). The telemetry milestone's usage
+  half (682-m8ek + 682-ym68) is now real for every server that exists.
+
+### Integration
+Merged osx-next (626-r7kq CLOSED: macOS Unknown-login exhaustiveness, taken
+over from an expired Windows lease). Stranded: 184 re-stranded
+(secure-channel-maturity-ladder, old, advisory — not chased). Count
+248/399 -> 246/399.
+
+### Noted
+- Pre-existing (NOT from this change): litmus:forge-plan-expert-build-shape
+  step 10 fails on THIS host because target/release/tillandsias-plan exists,
+  so the "no binary present" case finds the cargo fallback — HEAD's
+  unmodified forge-plan.sh fails it identically. Host-specific test
+  assumption, worth a host_kind gate (candidate child).
+- Telemetry milestone remaining v0.5/v0.6 rungs: 682-emvg (build/test
+  timing), 682-epud (packets-consumed), 682-43mi (distillation/bucketing,
+  v0.6), 682-x8df (OTel research, v0.6). Plus greedier-batching 682-yiz7 is
+  now unblocked once 682-epud lands the packet-flow evidence.
+
+### Metrics (verbatim)
+experts: calls=142 answered=90 unsupported=6 degraded=40 errors=6 answer_rate=93% source=/tmp/forge-expert-usage.jsonl
+mcp: (per-server counts live via 682-m8ek once new-format records accrue; legacy log still yields the byte-identical fallback line)
+expert_accuracy: pass=19 total=19 rate=100% source=groundtruth-rung1
+plan: 246 open / 399 v0.5
+
+## Cycle 2026-08-11T08:07Z→08:20Z (linux_mutable — loop iter 13: telemetry quick-win 682-ym68; handoff now surfaces MCP-usage + expert-accuracy)
+
+### Drained
+- 682-ym68 DONE (host agent, 6412e1e6): cycle-metrics.sh now emits two new
+  handoff lines, and the meta-orchestration SKILL + methodology
+  (agent-observability.yaml) REQUIRE them; litmus-pinned 10/10 under
+  methodology-accountability. First live readings (dogfooded below): expert
+  accuracy 19/19 = 100% (the 394e ground-truth fix from cycle 10 is holding),
+  and MCP usage honestly names the gap (only the plan expert is instrumented;
+  the other servers await 682-m8ek). This is "measure before optimize" made
+  real — the operator's telemetry directive's first concrete rung.
+
+### Hygiene / integration
+- Merged origin/linux-next (macOS 606-vaua: canonical freshness threshold
+  from methodology.yaml + BSD-date portability + self-test — coverage math is
+  now HONEST, 1.0% (10/1047), was falsely 0% due to the macOS date bug) and
+  windows (684 cycle9). Compacted 39 ledger fragments (7ba2b82f). Stranded
+  ZERO. Count 249/397 -> 248/399.
+
+### Noted (small findings, not blocking)
+- expert_accuracy metric surfaced the SAME attention:experts-degraded-40 as
+  cycle 10 — still the groundtruth negative-control cases (deliberate
+  refuses) counting as "degraded"; answer_rate 93% healthy; NOT a regression.
+  Worth a future 682-child: cycle-metrics should classify negative-control
+  refuses separately from artifact-degraded so the verdict is honest.
+- 6 `no_such_tool` errors in /tmp/forge-expert-usage.jsonl: an agent called a
+  tool name the forge-plan server does not expose — a small MCP discoverability
+  mismatch, visible now BECAUSE of the new telemetry (the point). Candidate
+  682-child if it recurs.
+- VERSION/stack skew from the mid-session reinstall (binary 811.1 vs mixed
+  running stack) remains; needs a WHOLE desktop-lane refresh (683-2n4k),
+  deferred — running stack is fine for plan/telemetry work.
+
+### Metrics (verbatim — now WITH the new lines)
+experts: calls=142 answered=90 unsupported=6 degraded=40 errors=6 answer_rate=93% tools=expert_capability,methodology_ask,methodology_path,no_such_tool,plan_answer,plan_check,plan_next,plan_ready,plan_status source=/tmp/forge-expert-usage.jsonl
+mcp: servers=9 plan-expert-calls=142 other-servers=uninstrumented-see-682-m8ek source=/tmp/forge-expert-usage.jsonl
+expert_accuracy: pass=19 total=19 rate=100% source=groundtruth-rung1
+verdict: attention:experts-degraded-40-calls-could-not-run
+
+## Cycle 2026-08-11T06:54Z→07:20Z (linux_mutable — loop iter 12: OPERATOR telemetry directive; host-session MCP wired; 606-3e2u verified)
+
+### Operator directive (The Tlatoāni, 2026-08-11) — telemetry + greedier batching + use-the-MCP-experts
+Investigated current state, answered live, and captured durably:
+- BATCHING: packets ARE grouped in stories (release_target milestones = epics,
+  171 carry one) and consumed in batches (select-work-batch: ONE cohesive
+  epic, budget packets; budget=3 non-forge / 1 forge per order 264). Greedier
+  = larger budget WITHIN an epic (preserving the anti-scatter design), not
+  more epics. Filed 682-yiz7, evidence-gated on packet-flow telemetry.
+- EXPERT/MCP TELEMETRY: PARTIALLY built — the plan expert already logs CRDT
+  append-JSONL {ts,tool,outcome,confidence,citations} (forge-plan.sh:216 ->
+  /tmp/forge-expert-usage.jsonl), surfaced every handoff as the `experts:`
+  line. GAPS: the other 5 MCP servers log NOTHING; no build/test timing; no
+  packets-consumed metric; per-host ephemeral, no cross-host distillation.
+- HOST-SESSION MCP: there was NO .mcp.json — host Claude sessions fell back to
+  the raw CLI all night. FIXED THIS CYCLE: installed the plan binary to the
+  canonical ~/.local/bin/tillandsias-plan and shipped a repo .mcp.json
+  registering forge-plan + project-info; both verified host-side (initialize
+  + tools/list + a real plan_ready call). Takes effect NEXT session start.
+- Filed the 682 TELEMETRY MILESTONE (682-u3si, v0.6, multi_cycle) with
+  children: all-MCP usage logging (682-m8ek), build/test timing (682-emvg),
+  packets-consumed (682-epud), CRDT distillation+bucketing during multihost
+  (682-43mi), surface-MCP-usage+expert-accuracy-in-handoff (682-ym68, v0.5
+  quick win), OpenTelemetry research (682-x8df, v0.6). Plus greedier-batching
+  (682-yiz7) and portable host-MCP registration (682-z5h8).
+
+### Drained / verified
+- 606-3e2u (host agent, bd4ebc47, verify pass): source cleanup CONFIRMED
+  complete (no mock JS, no x86 ELF in source, flake clean, live Rust bridge
+  is sole survivor), cargo test -p tillandsias-browser-mcp 103/103 GREEN.
+  BLOCKED evidence: this host's NIX DAEMON is DOWN (socket present, connection
+  refused; nix-daemon.service/.socket inactive; passwordless sudo refused) —
+  same condition as the packet's 2026-08-06 event, so the x86_64 forge-image
+  build + size numbers couldn't run; aarch64 half needs an arm host. Packet
+  stays ready (build-evidence half open). The nix-daemon-down is a standing
+  host blocker for any nix-build work here — recorded on 606-3e2u.
+- Freshness: methodology/event/016-secret-lifecycle-litmus-architecture
+  stamped (unstamped-set coverage) — its recommended 3-layer secret litmus
+  split is realized (credential-channel/podman-secrets/default-vault-cli).
+
+### Coordination
+Merged osx-next (macOS BACK TO WORK after the pull — 245 audit 7-agent
+fact-check slice, repaired 606-r42f/421 stranded completions) and
+windows-next (599 criterion 1, 641-e2qa CLOSED). Stranded ZERO fleet-wide.
+Count 245/391 -> 249/397 (six 682 packets + siblings). Note: ~7h runway
+remains to 07:00 PDT.
+
+## Cycle 2026-08-11T05:52Z→06:05Z (linux_mutable — loop iter 11: 604-vmcg forensics; macOS no-work divergence surfaced; stranded now ZERO)
+
+### Investigated / drained
+- 604-vmcg PROGRESS (coordinator, self, forensics): examined the 2026-08-10
+  12:47 opencode SIGSEGV dump (PID 129170, round-1 crash under pids=512).
+  gdb/coredumpctl on the 7.4G core: thread-1 stack is `#0 abort
+  (libc.so.6)` — a CONTROLLED abort (Bun/JSC on a fatal condition), not wild
+  corruption; 13+ live LWPs. CONSISTENT WITH the 667-se87 pids-exhaustion
+  theory (abort under resource pressure), NOT proof — per-thread stacks
+  clipped, stripped Bun exe, so the exact failing syscall isn't recoverable
+  from this dump. Decisive step stays the cold-cache in-forge build under
+  4096 with pids.peak sampling. Packet stays ready. Core removed after.
+- OPERATOR Qs answered live: (1) windows IS still pushing — last push
+  974ba1bd (641-e2qa closure) ~22 min before this cycle. (2) macOS "no
+  eligible work" is a DIVERGENCE, not truth: the coordinator's merged ledger
+  has 8 role=macos ready v0.5 packets (635-kagg p1 unblocks blocked 349,
+  657-s6g8 metal, 606-r42f, 421, 155, 598-M5 operator-gated, 663 pair
+  parked). Filed 681-er9z: macOS host must capture its OWN selector output
+  so linux can root-cause (stale local osx-next most likely — it's been idle
+  ~2h20m since its 20:37 local commit; or a selector under-report). A false
+  "no work" idles a host holding a p1 that unblocks a p0-path.
+
+### Coordination
+Merged windows-next (641-e2qa CLOSED: 21 stranded -> 0 unexplained, the
+expire-claims automation + detector + recorded long-runner reason).
+STRANDED IS NOW ZERO fleet-wide (first time tonight) — the 672-bz7u
+automation is holding. osx-next carries only my own merged commits (macОС
+idle). Count 245/390 -> 245/391. Note: ~8h of loop runway remain (07:00
+LOCAL/PDT = 14:00 UTC), earlier "nearing horizon" was a miscalc.
+
+### Metrics note
+verdict last cycle attention:experts-degraded was groundtruth negative-control
+noise (documented). No new expert runs this cycle.
+
+## Cycle 2026-08-11T04:45Z→05:15Z (linux_mutable — loop iter 10: expert ground truth caught RED and fixed; 156 audit reduced to children)
+
+### Drained / fixed
+- EXPERT GROUND TRUTH was RED at HEAD (found by the cycle-10 freshness audit
+  running the harness at quick tier, 18/19): the
+  plan-active-release-experts-milestone case pinned 394e status=in_progress,
+  but 394e went in_progress -> ready via the 672-bz7u expire-claims
+  automation. NOT an expert regression — the expert correctly read the live
+  ledger; the frozen ground truth pinned a MUTABLE field the case's OWN 394a
+  comment warns against (this is the 3rd firing: 394d twice, now 394e).
+  De-pinned 394e (db8888f5); harness back to 19/19. Filed 680-zphp: audit +
+  GUARD the whole class so a mutable-status pin can't silently reintroduce a
+  false red on this 4-verifier ratification gate. This is the standing
+  freshness class doing exactly its job — a quick-tier component nobody had
+  run since 08-07 was silently red.
+- 156 linux-native-stream-audit (host agent, AUDIT half, 9e4ae49b): read-only
+  audit reduced the vague 6h packet to 2 child packets — 679-rp9m (login
+  Vault poll, tray/mod.rs:3676-3688, a 2-min for-loop) and 679-vdi6 (shutdown
+  AtomicBool+250ms sleep x3). KEY FINDING: the Linux tray's three named
+  surfaces (VM status, login, cloud) are ALREADY event-driven — unlike the
+  Windows/macOS host trays' 30s poll pipelines. SC matrix 9 verified / 3
+  violated / 2 partial / 4 n/a. Zero mpsc::unbounded anywhere. 156 stays
+  ready (4-verifier gate). Findings doc committed.
+
+### Coordination
+Merged osx-next (663-69kp paired datum: success-in-45s then immediate hang;
+663-acdw parked after 6 attempts — macOS boot-hang is proving stubborn) and
+windows-next (653-zzkb CLOSED: proxy-poisoning reduced to one neutralizer +
+converted call sites + litmus control, live 200 from windows guest). Count
+243 -> 245/390 (tenth refresh; 668-9z9h). Stranded: 1 stable.
+
+### Metrics note
+cycle-metrics verdict=attention:experts-degraded-40-calls: EXPECTED and not a
+regression — this cycle executed the groundtruth harness whose NEGATIVE-
+CONTROL cases deliberately refuse (refuses-unknown-packet, unrouted-question,
+ambiguous-question) and count as degraded; plus the stale-source/capability
+probes from 531. answer_rate=93% is healthy. The metric cannot distinguish
+"correctly refused a negative control" from "degraded artifact" — worth
+noting but not alarming. Verbatim:
+experts: calls=136 answered=84 unsupported=6 degraded=40 errors=6 answer_rate=93% tools=expert_capability,methodology_ask,methodology_path,no_such_tool,plan_answer,plan_check,plan_ready
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=708 ready=270
+repo: commits_this_cycle=6 worktree=clean
+verdict: attention:experts-degraded-40-calls-could-not-run
+
+## Cycle 2026-08-11T03:33Z→04:10Z (linux_mutable — loop iter 9: forge experts now report honest stale-source state; cross-host pattern captured)
+
+### Drained
+- 531 criterion 2 DONE (host agent, 51f80106): ensure_forge_experts now
+  probes the freshly-built binary's `capabilities` surface for the `answer`
+  subcommand BEFORE claiming ready, and reports `degraded(stale-source)`
+  when absent (a pre-569 binary whose `capabilities` errors reads stale too
+  — fail-safe). Closes the exact 2026-07-30 honesty gap: a pre-expert
+  binary reporting truthful-but-useless `ready` while every plan_answer
+  returned unsupported. New litmus forge-experts-stale-source-honesty
+  (3 steps) EXECUTES 12/12. Criterion 1 (release/branch DECISION: ship
+  experts to main OR forge builds from expert branch) stays open by design
+  — packet remains ready. Its finding: forge-plan.sh's generic advice says
+  "rebuild" for stale-source when the real fix is relaunch-from-expert-branch
+  (clean future arm, noted).
+- Freshness audit (turned inward): the freshness-next unstamped draw offered
+  a curated postgresql CORPUS cheatsheet (frontmatter last_verified, not a
+  code component). Filed 678-pgzf: freshness-inventory conflates code
+  components (code-stamped) with last_verified corpus in one denominator, so
+  coverage is structurally pinned below 100% and two incomparable
+  populations share a metric. Split them.
+
+### Filed
+678-pgzf (freshness population conflation, p3). 678-er2c (p2, CONSOLIDATING
+PARENT): gate/litmus/install operations mutate tracked files unsafely —
+671-jvcg (install auto-bumps VERSION, push-forbidden off-main) + 675-dkif
+(gate-stamp 2-forks/file 20-min hang) + 677-33be (litmus mutates VERSION
+without kill-safety, killed run poisons tree). Three instances in 24h across
+hosts = a class: automation mutating tracked files without atomicity/restore.
+Wants an inventory + one kill-safe write discipline enforced by a guard.
+
+### Coordination
+Merged windows-next (677-33be litmus VERSION-mutation + 653-zzkb proxy
+call-site conversion). No osx delta. Count 241 -> 243/387 (ninth refresh;
+668-9z9h). Stranded: 1 stable (672-bz7u auto-expiry holding it down).
+Compaction not eligible. E2E: skip:live-runtime-present.
+
+### Metrics (verbatim)
+experts: calls=10 answered=10 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=705 ready=268 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=4 worktree=clean traces=unknown
+verdict: ok:nothing-flagged
+
+## Cycle 2026-08-11T02:22Z→02:55Z (linux_mutable — loop iter 8: MO-FULL self-attest hardens the loop's own proof; freshness coverage advanced)
+
+### Drained
+- 651-2x5s DONE (host agent, 1436077c): mo-full-attest.sh gains a `self`
+  mode the cycle runs on ITSELF before emitting — derives the marker from
+  live git (rev-parse + branch + ls-remote convergence), fails loud on
+  unpushed/main/detached/non-convergence, prints ONLY the verified line.
+  Skill Finalization step 9 rewired so EVERY full-mode lane self-checks,
+  not just the litmus lane (closes the 614-2gqx gap 651 identified). 7th
+  fixture scenario `fabricated-sha` reproduces the exact 2026-08-10 breach
+  (well-formed 40-hex, local==remote, right branch, matches nothing on the
+  remote) and asserts rejection. THIS host now dogfoods it — the self mode
+  correctly refused this cycle's pre-push unpushed state during the agent's
+  own verification. Marker below emitted THROUGH mo-full-attest.sh self.
+- Freshness: methodology/event/017-podman-runtime-blocker.yaml stamped —
+  advanced coverage into the UNSTAMPED set (the windows-0809 freshness-next
+  draw, first time the queue reached beyond the 8 stamped files). The
+  2026-05-07 rootless-podman newuidmap blocker is RESOLVED on this host
+  (podman unshare ok, 3 enclave containers up all night, env-isolation
+  PASS); already distilled into the podman health probe; record stands.
+
+### Coordination
+Merged osx-next (663-69kp datum #4; 598-kibt only operator-gated M5 left).
+No windows delta. Count 242 -> 241/385 (eighth refresh; 668-9z9h still the
+standing treadmill). Stranded down to 1 (Windows' 672-bz7u expire-claims
+subcommand is auto-returning the old ones — the automation landed and
+works). E2E: skip:live-runtime-present.
+
+### Noted, not acted (finding to relay)
+images/default/skills/meta-orchestration/SKILL.md is an untracked, drifted
+DERIVED copy of the canonical skills/meta-orchestration/SKILL.md — build-
+staged artifact, left untouched by 651. Whoever owns image staging should
+confirm it re-syncs from skills/ at build time; otherwise the forge ships a
+stale skill. (Candidate packet if it recurs.)
+
+### Metrics (verbatim)
+experts: calls=8 answered=8 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=702 ready=265 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=3 worktree=clean traces=unknown
+verdict: ok:nothing-flagged
+
+## Cycle 2026-08-11T01:47Z→02:15Z (linux_mutable — loop iter 7: expert index enrichment done; second self-served in-forge drain; sizing lesson validated both ways)
+
+### Drained
+- 669-egjn DONE (host agent, f46652d1, +575/-2): the generic project index
+  now answers commands/layout/actions CITED with real marker-file spans
+  (package.json scripts / Cargo.toml / Makefile targets, tree-walk layout,
+  type-derived actions) via a new `project-info.sh index` subcommand;
+  README:1-5 citation over-range CLAMPED to real line count (3-line README
+  cites 1-3, verifies exact). 9 new litmus steps EXECUTE; 669-qcsb siblings
+  unregressed (11 PASS total). engine manifest v3->v4. This is the packet the
+  in-forge session couldn't finish last cycle — completed on a host agent.
+  Sizing lesson now validated BOTH ways: feature-scale -> host, surgical ->
+  forge.
+- 676-jf87 DONE — BigPickle in-forge, self-served (c7f9a27b): run-litmus-test.sh
+  now hints the owning spec when handed a litmus:-prefixed TEST name (the
+  mistake the coordinator itself made twice tonight); litmus-pinned under
+  spec-traceability. Second clean self-served in-forge drain of the night.
+- Freshness: freshness-inventory.sh REFRESHED (grammar re-validated live
+  across 6 iterations; the windows-0809 unstamped-draw fix confirmed working).
+
+### Deliberately NOT drained (discipline)
+- 654-7ur4 (p0, egress chokepoint): 3/4 mirror sites + criterion 4 already
+  done in prior cycles; the ONLY remaining leg is run_provider_login, which
+  the packet author explicitly and repeatedly deferred until macOS 349
+  clears (349 still `blocked` on 635-kagg). Respected the guard — the
+  interactive login path is exactly what the operator used tonight; not
+  touched. Left for the cycle after 349 clears.
+- 630-6hyc (selector urgency term): changes the selector every host uses —
+  coordination-sensitive design decision, not a solo mechanical drain.
+  Released without claiming.
+
+### Filed
+676-jf87 (drained same cycle).
+
+### Coordination
+Merged osx-next (663-69kp boot-hang signature: rapid SEQUENTIAL boots
+trigger it, loop adopts one-boot-per-iteration) and windows-next
+(675-dkif: gate-stamp computed 2 forks/file, a SILENT 20-minute pre-push
+hang on Windows — third pipe/fork-masked-gate class tonight, now fixed with
+byte-identical stamp values; 648-dvzd coordinator ask-queue CLOSED, all
+three packets terminal incl 606-9wqd done). Count 244/383 -> 242/385
+(seventh refresh; 668-9z9h). Stranded: 3 stable. E2E:
+skip:live-runtime-present.
+
+### Metrics (verbatim)
+experts: calls=8 answered=8 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=702 ready=266 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=9 worktree=clean traces=unknown
+verdict: ok:nothing-flagged
+
+## Cycle 2026-08-11T00:42Z→01:20Z (linux_mutable — loop iter 6: 606-bvnp wiring complete across all four lanes; in-forge sizing lesson)
+
+### Drained
+- 606-bvnp PROGRESS (delegated, a6477d80): mirror identity provisioning now
+  wired at ALL FOUR mirror-create lanes (forge-launch create branch, status
+  check tolerate-but-loud, opencode CLI + web hard-fail), with a
+  source-window test pinning per-lane presence, ordering before the mint,
+  and exactly-once (protects the reuse branch from ever touching Vault).
+  325 headless tests green. Residual is now cleanly T3+ (sshd wiring,
+  client side, negative matrix §4a — note 673-y7gy: the M2 template's
+  instrument is phantom).
+- 669-egjn: NOT drained — BigPickle's in-forge session (fresh .2 image)
+  ended SILENTLY ~4.5min in: no error, no verdict, no writes, nothing to
+  recover. Delegation-sizing lesson recorded: in-forge free-model sessions
+  fit ONE surgical named fix (669-h987 succeeded), not feature-scale work
+  (enrichment+clamp+litmus). Lease released; packet re-routes to a host
+  agent next cycle. The silent-end mode itself is a known-shape now: end
+  monitor + unchanged remote head = re-route.
+- Freshness: litmus-environment-isolation.yaml structurally REFRESHED;
+  behavioral run deferred with an explicit stamp note — e2e/post-build tier
+  and the host has been skip:live-runtime-present all night (operator's
+  enclave). Next e2e window should execute it and upgrade the stamp.
+
+### Coordination
+Merged osx-next (657-3mq5 COMPLETED: 2.6x ollama decode on the VZ guest)
+and windows-next (672-bz7u expire-claims subcommand — automates the
+stranded-claim chore; their commit also records the third pipe-masked-gate
+incident across hosts tonight, same 637-df4z class as my head -8 near-miss).
+Count refreshed 245/382 -> 244/383 (sixth; 668-9z9h). Stranded: 3 stable.
+Compaction not eligible (8 fragments). E2E: skip:live-runtime-present.
+
+### Metrics (verbatim)
+experts: calls=6 answered=6 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=700 ready=268 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=7 worktree=clean traces=unknown
+verdict: ok:nothing-flagged
+
+## Cycle 2026-08-10T23:27Z→2026-08-11T00:20Z (linux_mutable — loop iter 5: 606-bvnp vault substrate landed; BigPickle's first self-served packet drain; gate fast lane)
+
+### Drained (three-way parallel)
+- 606-bvnp PROGRESS (delegated, 1141a72c, +1068/-2, 324 tests): the Vault
+  substrate of the SSH-CA ladder — T1 (both ssh engines + ed25519 CAs,
+  idempotent), T2/D13 (opaque 20-char base32hex mirror-id, mint-or-read at
+  secret/mirror-identity/<project> with cas=0 create-only so concurrent
+  first-provisions converge; exact per-project client/host roles + policies
+  MINTED via sys/policies/acl; runtime reject of any sign/* body — the guard
+  caught its own prose comment during development, which is the guard
+  working). Wired into the mirror CREATE branch. Remaining: 3 other
+  mirror-create sites, sshd wiring T4+, client side, negative matrix §4a.
+  Packet stays ready.
+- 668-2xeh DONE (delegated, 3cf2097e): plan-only pre-push fast lane —
+  fragments-only diffs validate (yq on pushed blobs + plan check +
+  status-loss + injection checks) without the build stamp; fail-closed on
+  any non-fragment path, fragment modification, ref deletion, or missing
+  validators; 6-step litmus EXECUTING under methodology-accountability.
+  Second of tonight's three in-forge loss channels closed.
+- 669-h987 DONE — BY BIGPICKLE IN-FORGE, fully self-served (079ec819 +
+  93fdb39b): plan-lane routing now keyed on the mounted project's own
+  plan/index.yaml, not tool reachability; proving litmus executed; gate run
+  in-forge green under the 4096 ceiling; pushed through the transparent
+  lane. First complete in-forge packet drain of the night — the delegation
+  channel the operator asked for is fully operational.
+- Freshness: litmus-vault-recreate-mutex.yaml REFRESHED (PASS x2 quick
+  tier). The tier's one FAIL exposed 673-y7gy: THREE bound litmus tests
+  invoke `cargo run --example vm-exec` — an instrument with no trace in
+  tree or git history; among them the vault-policy-403 test the amended
+  SSH-CA design cites as its M2 template. Phantom coverage, 660-ryhn class.
+
+### Filed
+673-y7gy (phantom vm-exec instrument, p2), 674-84bx (vault entrypoint
+provisions first-boot only — additions never reach existing volumes, p3,
+from the vault-rungs findings).
+
+### Coordination
+Merged osx-next (657-3mq5 slice 2: Q4_0 quant guidance) and windows-next
+(672 expire-claims shaping). Ledger compacted (25 fragments). Count
+refreshed 244/379 -> 245/382 (fifth refresh; 668-9z9h). E2E:
+skip:live-runtime-present. Stranded: 3 (184, 394e, 463 — need budgeted
+attention, not loop slices).
+
+### Metrics (verbatim)
+experts: calls=6 answered=6 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=699 ready=267 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=11 worktree=dirty traces=unknown
+verdict: attention:worktree-dirty (expected: this handoff commit)
+
+## Cycle 2026-08-10T22:22Z→23:10Z (linux_mutable — loop iter 4: pids fix VERIFIED in-forge by BigPickle's own push; 669-qcsb done; 3 unstranded)
+
+### Drained
+- 667-se87 criterion 3 VERIFIED: BigPickle ran ./build.sh --check in-forge
+  under pids.max=4096 — green, zero cores, and it PUSHED its own verified-by
+  fragment through the transparent lane (8374da13, first self-served
+  in-forge push of the night; its green gate stamp made the push
+  legitimate). HONEST NUANCE recorded same-cycle: pids.peak read 199, BELOW
+  the old 512 ceiling, so the exhaustion mechanism for the original crash is
+  unproven (warm-cache confound possible). Packet stays ready, scoped to:
+  read the 94.1M coredump (604-vmcg) or cold-cache repro with peak sampling.
+- 669-qcsb DONE (delegated, 1aa1f71c): litmus:project-engine-capability-
+  verdict-grammar (12 steps) + litmus:project-answer-synthesis-refusal-typed
+  (9 steps), bound under forge-environment-discoverability, PROVEN EXECUTING
+  10/10 (660-ryhn lesson). The 619-pfsj surfaces now fail loud. Finding
+  promoted onto 669-egjn: generic lane cites README:1-5 unconditionally —
+  short READMEs make verify-answer refuse truthful exact answers.
+- Stranded triage: 568/448/437 evidence-checked and returned to ready
+  (in_progress 7 -> 3 remaining: 184, 394e, 463 — older, need budgeted
+  attention). Windows' nudge (670-gpwe) answered.
+- Freshness: scripts/run-litmus-test.sh REFRESHED (self-suite 7/7 + heavy
+  same-day live exercise).
+
+### Coordination
+Merged osx-next (657-3mq5 slice 1: 190 tok/s decode, 3.65x baseline on VZ
+guest — the Apple Silicon experts wave is moving) and windows-next (456
+dispositioned completed). Count refreshed 246 -> 244/379 (fourth manual
+refresh tonight; 668-9z9h keeps collecting evidence). Compaction not
+eligible (19 fragments). E2E: skip:live-runtime-present.
+
+### Metrics (verbatim)
+experts: calls=6 answered=6 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=695 ready=265 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=9 worktree=dirty traces=unknown
+verdict: attention:worktree-dirty (expected: this handoff commit)
+
+## Cycle 2026-08-10T21:12Z→21:50Z (linux_mutable — loop iter 3: forge pids ceiling root-caused + FIXED, v0.4.260810.2 installed)
+
+### Drained
+- 667-se87 PROGRESS (root-caused + fixed, verification pending): BigPickle's
+  in-forge diagnosis was RIGHT — forge-class containers ran under
+  --pids-limit=512 (build_stack_common_args + build_opencode_forge_args);
+  workspace cargo builds exceed it and clone() EAGAIN presents as the
+  recorded rustc panics (and plausibly the 604-vmcg PID-1 SEGV). Both sites
+  raised to 4096 with rationale; scoped limits elsewhere untouched; 312+
+  tests green; v0.4.260810.2 built + installed. REMAINING: in-forge
+  ./build.sh --check green under the new ceiling (needs a forge launched
+  from the NEW binary — the running tray predates it; coordinator lanes use
+  ~/.local/bin directly and are already on it).
+  Process note, owned: the coordinator nearly filed a false correction of
+  BigPickle ("--pids-limit never passed") because the confirming grep was
+  piped through head -8 and the live site ranked ninth — the 637-df4z
+  truncation class, second instance tonight, caught pre-filing.
+- Freshness + BigPickle round 3 recap: diagnose-forge session ran 7min
+  clean, wrote 4 proposals (P1 pids/concurrency, P2 resource watchdog,
+  P3 fragment survival, P4 plan-only gate lane), ALL LOST with the
+  container — third loss tonight; P3 promoted to packet 670-8f6z
+  (stage un-pushed work on the persistent tool-cache volume), P4 already
+  filed as 668-2xeh, P1 partially landed via 667-se87 fix.
+
+### Coordination
+No sibling deltas this hour (both merged last cycle). Stranded: 7 stable.
+Compaction not eligible. E2E: skip:live-runtime-present. Count refreshed
+245/378 -> 246/379 (the 668-9z9h treadmill, third manual refresh tonight —
+that packet is earning its priority).
+
+### Metrics (verbatim)
+experts: calls=4 answered=4 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=694 ready=262 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=1 worktree=dirty traces=unknown
+verdict: attention:worktree-dirty (expected: this handoff commit)
+
+## Cycle 2026-08-10T20:38Z→21:05Z (linux_mutable — loop iter 2: 619-pfsj DONE, siblings merged, BigPickle diagnose in flight)
+
+Second hourly /loop iteration (operator directive, until 07:00 local).
+
+### Drained
+- 619-pfsj DONE (delegated, commit 5e53bc72): C2 typed no-inference synthesis
+  refusals (reuses lib-inference-state probe; deterministic-first both lanes;
+  endpoint never blamed when ready) + C3 engine-vs-image skew honesty
+  (image-baked project-info.sh manifest vs checkout, four verdicts incl. the
+  order-531 skew class; "IMAGE REBUILD REQUIRED" advice). verify-answer clean
+  on Tillandsias + both 619-3y75 fixtures; 124/124 crate tests; instant
+  litmus 195/195. Follow-ups filed: 669-egjn (thin deterministic subset),
+  669-h987 (plan-lane routing latent misroute), 669-qcsb (grammar litmus
+  ownerless — order-531 lesson needs a pin, not goodwill).
+- Freshness: scripts/tls-test-server.c REFRESHED (clean compile, CA-trust
+  litmus 2/2 live).
+
+### Coordination
+Merged origin/osx-next (9bdda996: macOS filed 663-acdw login-wedge +
+663-69kp boot-hang blockers tonight) and origin/windows-next (ea9d7f28:
+667-kfyn WSL I/O offload, 664-frz0 host-freeze forensics — tray exonerated).
+Both siblings actively looping. Stranded sweep: in_progress=7 stranded=7
+(stable). Compaction not eligible (12 fragments). E2E:
+skip:live-runtime-present (operator's enclave up all night, correct).
+
+### BigPickle lane (rounds recap for the fleet)
+Round 1 (validation, WITH build) crashed at 9min: rustc jobserver+codegen
+panics, yq SIGABRT, opencode PID-1 SIGSEGV — 94.1M coredump preserved,
+third 604-vmcg sighting, 667-se87 filed (resource-ceiling hypothesis).
+Round 2 (build-free) 19min clean, zero cores — control data recorded on
+604-vmcg. Round-2 verdict: NOT FULLY GREEN, one genuine discrepancy
+(668-9z9h loop-status count treadmill — reproduced again THIS cycle by
+sibling merges + new packets, count refreshed 237/368 -> 245/378); its 6
+litmus FAILs all in-forge-environmental, want host_kind gating (661-emqi
+mechanism). Its un-pushable commit exposed 668-2xeh (plan-only gate lane);
+fragments recovered from journald. Round 3 (diagnose-forge, build-free,
+proposals-only) launched in a visible window ~20:47Z, still running at
+handoff — recover proposals from journald at teardown if un-pushed.
+
+## Cycle 2026-08-10T19:10Z→20:05Z (linux_mutable — operator /loop launch: 659-8faj DONE, 606-bvnp design amended, tray-hosted BigPickle live)
+
+Operator directive (The Tlatoāni, live): hourly /loop meta-orchestration until
+2026-08-11T07:00 local, drain v0.5 + experts, delegate to in-forge agents,
+run forge agents from a running tray with VISIBLE terminals. macOS/Windows
+siblings run the same loop tonight.
+
+Batch (seed host-20260810, pick 1/3): epic forge-local-experts-milestone,
+urgent 606-bvnp. Triage: eligible=132 grouped=50 ungrouped=82 epics=8 — the
+ungrouped count keeps degrading selection toward flat priority order.
+
+### Drained
+- 659-8faj DONE (delegated implementation, 3 commits bb334952/2b9e4444/84985b7d):
+  per-project mirror DNS identity via single derivation fn; 7 client URL
+  sites; negative two-project fixture green (getent: one A record each,
+  shared aliases NXDOMAIN); litmus:git-mirror-dns-identity bound AND executed
+  (17/17 suite). Closes 606-bvnp exit criterion 3. Follow-ups filed:
+  666-qbjd (rolling-upgrade skew, p2), 666-cmr7 (transitional residue),
+  666-jww5 (latent container_profile mechanism).
+- 606-bvnp PROGRESS (design half, commit 3cf00e1a): SSH-CA draft amended —
+  opaque mirror-id scheme (D13: CSPRNG base32hex, Vault kv persistence),
+  exact per-project client/host signer roles, sign/* wildcard eliminated
+  from the draft, new §4a negative two-project matrix (M0-M7) gating T11.
+  Doc remains UNSIGNED; Q1/Q2 stay operator-gated (Q2 re-raised by operator
+  2026-08-10 — maps to the "per-agent vs shared mirror" question; mirror
+  layer itself settled by order 443: shared per project).
+- Freshness audit: scripts/test-support/podman-mock.sh REFRESHED — the
+  2026-08-03 Windows audit's open ask (behavioral litmus on Linux substrate)
+  executed: podman-orchestration instant 4/4 PASS.
+
+### Filed
+663-gwp4 (agy login friction, from operator live report — all three provider
+logins re-confirmed attended); 664-7qzz (tray has NO IPC launch verb);
+664-yw8r (terminal list not overridable); 665-zddn (NVIDIA driver update
+strands inference container — reproduced, root-caused: stale user CDI spec
+610.43.03 vs driver 610.57.04, remediated live, relaunch green).
+
+### Fleet / runtime
+Tray STARTED on macuahuitl (control.sock live). BigPickle validation forge
+launched in a visible ptyxis window per operator directive (instance
+bigpickle-validate; container name truncates the slug + appends a hash —
+watch scripts must not grep the full slug). Enclave: vault healthy, proxy,
+router, per-project mirror, inference (post-CDI-fix). One forge only:
+order 494 (concurrent second launch can bounce shared stack) still open p1.
+windows-next merged (96ec518d); osx-next had nothing new. E2E local-build:
+skip:live-runtime-present (operator's live enclave; correct refusal).
+Stranded sweep: in_progress=7 stranded=7 (down from 21 on 08-09), no
+threshold events. Ledger compacted (138 fragments) + loop-status folded
+(55); loop-status-verify now verdict=ok (stale v0.5 count fixed 213/298 →
+233/363; malformed macos '# Cycle' fragment healed at ## level).
+MCP-first note: forge-plan/project-info MCP servers not registered in this
+host harness session (fallback reason: unavailable; packet 568 tracks
+registration) — CLI + cited spans used instead.
+
+### Metrics (verbatim)
+experts: calls=2 answered=2 unsupported=0 degraded=0 errors=0 answer_rate=100% tools=plan_check source=/tmp/forge-expert-usage.jsonl
+experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)
+plan: packets=677 ready=247 plan_bin=/home/tlatoani/claudia/tillandsias/target/release/tillandsias-plan
+repo: commits_this_cycle=12 worktree=clean traces=unknown
+verdict: ok:nothing-flagged
+
 ## Cycle — linux_mutable coordinator loop ENDS (2026-08-10T14:15Z)
 
 The overnight 30-minute loop is finished (operator window: until 07:00 local /
