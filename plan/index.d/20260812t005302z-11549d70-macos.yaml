@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: vault-partial-init-guard-inverts-inside-the-guest
+    field: status
+    value: implemented
+    ts: "2026-08-12T00:53:02Z"
+    host: macos
+
+events:
+  - packet_id: vault-partial-init-guard-inverts-inside-the-guest
+    event:
+      type: completed
+      ts: "2026-08-12T00:53:02Z"
+      host: macos
+      summary: >
+        status 'implemented' with evidence_refs: a56cbbd1 + cargo test -p tillandsias-headless --bin tillandsias vault_bootstrap::tests = 41 passed / 0 failed, incl. in_vm_init_persists_both_credential_fallbacks and its negative control absent_share_writes_no_share_file_so_partial_init_stays_detectable; falsifiability verified by disabling the share write (positive test FAILS with its intended diagnostic) and restoring it (passes). NOT 'completed': exit criteria 2 and 3 require proving a secret written in one VM session is readable in the next via a litmus that writes, stops the VM, boots and reads back — that cross-restart proof has NOT been run, and the guest binary in the current VM image predates this fix. Next host to claim: rebuild/stage the guest binary, re-run --github-login, stop the VM, boot, and read secret/data/github/token.
