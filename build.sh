@@ -1034,6 +1034,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment status-loss check passed"
 
+    # Order 634-39ik (Tlatoāni-approved bar raise 2026-08-11). Refuse any NEWLY
+    # ADDED litmus step that pins a literal source expression without a negative
+    # control. Diff-scoped by construction — it can only flag steps added on
+    # this branch, never the existing corpus (624-cf9f backlog), so raising the
+    # bar accepts standing debt rather than redding it (the operator's
+    # CRDT/Erlang posture: keep the line running, file improvement packets).
+    _step "Checking for newly-added expression-pinned litmus steps (634-39ik)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-expression-pinning-added.sh" 2>&1; then
+        _error "a newly-added litmus step pins a literal source expression without a negative control (634-39ik)"
+        exit 1
+    fi
+    _info "Expression-pinning enforcement passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

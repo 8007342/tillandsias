@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: expression-pinning-enforcement-escalation
+    field: status
+    value: verified
+    ts: "2026-08-12T01:57:10Z"
+    host: host
+
+events:
+  - packet_id: expression-pinning-enforcement-escalation
+    event:
+      type: completed
+      ts: "2026-08-12T01:57:10Z"
+      host: host
+      summary: >
+        status 'verified' with evidence_refs: IMPLEMENTED + as-wired VERIFIED. scripts/check-litmus-expression-pinning-added.sh refuses newly-added litmus steps that pin a literal source expression without a negative control, diff-scoped by construction (git diff vs origin/linux-next + untracked new files; the 643-step corpus is structurally unreachable). Precise detection: a pin is a literal grep reading a source FILE directly (pipe-aware — './build.sh | grep -F output' is NOT flagged, avoiding the exact false-red class the operator hates). Wired into build.sh --check (before the gate stamp); dogfooded by litmus:litmus-expression-pinning-enforcement-shape bound to ci-release, 4/4 green as-wired via run-litmus-test.sh (negative control refuses, both positive controls admit, diff-scoped run clean); ci-release suite 11/11; full ./build.sh --check green with 'Expression-pinning enforcement passed'. Operator CRDT/Erlang posture honored: diff-scoped so the bar-raise accepts standing debt (624-cf9f) rather than redding it.
