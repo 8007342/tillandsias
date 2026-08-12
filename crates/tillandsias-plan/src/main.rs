@@ -2417,6 +2417,8 @@ fn main() {
             let mut ts: Option<String> = None;
             let mut agent = "unknown".to_string();
             let mut host = "linux".to_string();
+            let mut flag_type: Option<String> = None;
+            let mut flag_summary: Option<String> = None;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -2432,14 +2434,46 @@ fn main() {
                         i += 1;
                         host = args.get(i).cloned().unwrap_or(host);
                     }
+                    // Accept --type/--summary as explicit flags. Before this
+                    // (690-2kwd fallout, 2026-08-12), passing them was silently
+                    // swallowed as POSITIONAL garbage: `--type progress` stored
+                    // type="--type", summary="progress", and the malformed event
+                    // passed every gate (698-7n6q). Now the flag form works.
+                    "--type" => {
+                        i += 1;
+                        flag_type = args.get(i).cloned();
+                    }
+                    "--summary" => {
+                        i += 1;
+                        flag_summary = args.get(i).cloned();
+                    }
+                    // Any OTHER --flag is rejected loudly rather than corrupting
+                    // the event by masquerading as a positional value.
+                    other if other.starts_with("--") => {
+                        eprintln!(
+                            "error: unknown flag '{other}' for append-event \
+                             (usage: <ref> <type> <summary> --ts <ISO> \
+                             [--agent A] [--host H]; --type/--summary also accepted)"
+                        );
+                        std::process::exit(2);
+                    }
                     other => positional.push(other.to_string()),
                 }
                 i += 1;
             }
-            if positional.len() < 3 {
+            // type/summary may come from flags or positionals; ref is always
+            // positional[0]. Missing any of the three -> usage (diverges).
+            if positional.is_empty() {
                 usage();
             }
-            let (reference, etype, summary) = (&positional[0], &positional[1], &positional[2]);
+            let reference = positional[0].clone();
+            let etype = flag_type
+                .or_else(|| positional.get(1).cloned())
+                .unwrap_or_else(|| usage());
+            let summary = flag_summary
+                .or_else(|| positional.get(2).cloned())
+                .unwrap_or_else(|| usage());
+            let (reference, etype, summary) = (&reference, &etype, &summary);
             let Some(ts) = ts else {
                 eprintln!(
                     "error: --ts <ISO8601> is required (the tool does not invent timestamps)"

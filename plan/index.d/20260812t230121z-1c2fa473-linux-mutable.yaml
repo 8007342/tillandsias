@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: uncommit-router-sidecar-build-artifact
+    event:
+      type: progress
+      ts: "2026-08-12T23:01:21Z"
+      agent_id: linux-mutable-session-20260812
+      host: linux_mutable
+      summary: >
+        Record-repair note: this packet earlier two progress events were malformed by the append-event flag-swallow footgun (fixed in 711-digd) — they stored type "--type"/summary "progress" and lost their text. The real evidence stands: committed ELF removed (git rm --cached, gitignore active), staged fresh by build.sh/build-image.sh before every compile (proven by ./build.sh --check green with the blob absent), VERSION-forced recompile, and published as a version-matched cosign-signed release asset via flake.nix + release.yml. Full forensics in plan/issues/committed-elf-router-sidecar-forensics-2026-08-12.md.
