@@ -1034,6 +1034,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment status-loss check passed"
 
+    # Order 698-7n6q. The sibling of the check above: that one catches a
+    # fragment whose declared status the fold DISCARDS; this one catches a
+    # fragment the fold cannot READ AT ALL. `tillandsias-plan check` warns about
+    # the latter and exits 0, so until now an unparseable fragment could be
+    # committed, gated green, and pushed — carrying packets that exist in git
+    # and in no answer. Packet 697-s3by reached origin in exactly that state on
+    # 2026-08-12. Diff-scoped like 634-39ik's enforcement, so a fragment
+    # inherited from a sibling only warns and can never red-gate this host.
+    _step "Checking that fragments added by this change parse..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
+        _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host (plan/index.d/README.md)"
+        exit 1
+    fi
+    _info "Added-fragment parse check passed"
+
     # Order 634-39ik (Tlatoāni-approved bar raise 2026-08-11). Refuse any NEWLY
     # ADDED litmus step that pins a literal source expression without a negative
     # control. Diff-scoped by construction — it can only flag steps added on
