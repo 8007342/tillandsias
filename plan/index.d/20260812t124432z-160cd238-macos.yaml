@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-console-log-growth-and-serial-routing
+    field: status
+    value: implemented
+    ts: "2026-08-12T12:44:32Z"
+    host: macos
+
+events:
+  - packet_id: guest-console-log-growth-and-serial-routing
+    event:
+      type: progress
+      ts: "2026-08-12T12:44:32Z"
+      host: macos
+      summary: >
+        status 'implemented' (not terminal) with evidence_refs: Criterion 1 met: console.log now has a STATED, ENFORCED retention policy at the point where the file is opened — at most TWO generations (console.log and console.log.prev), each bounded by CONSOLE_LOG_MAX_BYTES = 4 MiB, so total on-disk is bounded by twice that. Rotation rather than in-place truncation, deliberately: a boot problem is usually diagnosed from the boot BEFORE the one that failed to come up, and truncating would discard exactly that. Cap chosen against MEASURED growth on this host — 43,178 bytes / 62 boot banners, then 54,107 bytes / 78 banners about 22 hours later, i.e. ~680 bytes per VM start and strictly monotonic — so 4 MiB holds on the order of six thousand boots before anything is displaced. Best-effort by construction: it runs on the VM start path and every error is swallowed, because a logging-hygiene failure must never stop a VM booting; worst case is the previous unbounded behaviour. TESTS: oversized_console_log_is_rotated_to_a_previous_generation asserts the oversized file is moved aside AND the previous generation is PRESERVED rather than deleted; the NEGATIVE CONTROL console_log_under_the_cap_is_left_alone asserts an under-cap log is untouched and byte-identical, so a rotator that fired unconditionally — which would satisfy the first test while destroying history on every boot — cannot pass; absent_console_log_rotates_without_error covers first boot. 60 vm-layer tests green, gate green. NOT completed: criterion 2 is untouched and is a DECISION, not code. The tray never enables serial_to_log, so in tray mode the guest serial stream goes to the tray process stderr for the life of the VM rather than to console.log. That is a UX choice with an operator-visible consequence, and changing it unasked at 05:45 local would be the wrong call; the recommendation is to route tray-mode serial to the rotated log now that the log is bounded, but it should be decided rather than assumed.
