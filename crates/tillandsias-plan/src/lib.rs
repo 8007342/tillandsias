@@ -785,21 +785,45 @@ impl Ledger {
                     _ => Vec::new(),
                 };
                 for r in refs {
-                    if self.reference_resolves(&r) {
+                    if !self.reference_resolves(&r) {
+                        if !is_id_shaped(&r) {
+                            report
+                                .warnings
+                                .push(format!("{id}: {field} carries a prose annotation '{r}'"));
+                        } else if live {
+                            report
+                                .violations
+                                .push(format!("{id}: {field} -> unresolved reference '{r}'"));
+                        } else {
+                            report.warnings.push(format!(
+                                "{id} (retired): {field} -> unresolved reference '{r}'"
+                            ));
+                        }
                         continue;
                     }
-                    if !is_id_shaped(&r) {
-                        report
-                            .warnings
-                            .push(format!("{id}: {field} carries a prose annotation '{r}'"));
-                    } else if live {
-                        report
-                            .violations
-                            .push(format!("{id}: {field} -> unresolved reference '{r}'"));
-                    } else {
-                        report.warnings.push(format!(
-                            "{id} (retired): {field} -> unresolved reference '{r}'"
-                        ));
+                    if field == "blocks" {
+                        let target_packet = self.resolve(&r);
+                        let target_id = target_packet
+                            .map(|tp| self.id_of(tp))
+                            .unwrap_or_else(|| r.clone());
+                        let has_reciprocal = target_packet.is_some_and(|tp| {
+                            str_list(tp, "depends_on").iter().any(|dep| {
+                                dep == &id
+                                    || self.resolve(dep).map(|dp| self.id_of(dp))
+                                        == Some(id.clone())
+                            })
+                        });
+                        if !has_reciprocal {
+                            if live {
+                                report.violations.push(format!(
+                                    "{id}: blocks '{target_id}' without reciprocal depends_on"
+                                ));
+                            } else {
+                                report.warnings.push(format!(
+                                    "{id} (retired): blocks '{target_id}' without reciprocal depends_on"
+                                ));
+                            }
+                        }
                     }
                 }
             }
@@ -999,6 +1023,7 @@ impl Schema {
                 "depends_on".into(),
                 "release_target".into(),
                 "split_into".into(),
+                "blocks".into(),
             ],
         }
     }
@@ -1972,6 +1997,84 @@ steps:
         assert!(
             violations.iter().any(|s| s.contains("does-not-exist")),
             "a dangling live reference must be a violation: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn blocks_only_asymmetrical_edge_fails_integrity_and_reciprocal_passes() {
+        // ORDER 609-az85: `blocks: [B]` requires packet B to exist and declare
+        // reciprocal `depends_on: [A]`. A blocks-only edge without reciprocal
+        // depends_on is a hard violation on live packets.
+        let broken = "steps:
+  - packet_id: blocker-packet
+    order: 100
+    status: ready
+    blocks: [target-packet]
+  - packet_id: target-packet
+    order: 101
+    status: ready
+    depends_on: []
+";
+        let ledger = Ledger::parse(broken, Default::default()).expect("ledger parses");
+        let report = ledger.check_integrity(&Schema::minimal().reference_fields);
+        assert!(
+            !report.violations.is_empty(),
+            "asymmetric blocks edge must fail integrity"
+        );
+        let violation = &report.violations[0];
+        assert!(
+            violation.contains("blocker-packet")
+                && violation.contains("target-packet")
+                && violation.contains("reciprocal depends_on"),
+            "violation must name both packet IDs and missing reciprocal depends_on: {violation}"
+        );
+
+        // Reciprocal edge passes cleanly and drives blocked_by
+        let fixed = "steps:
+  - packet_id: blocker-packet
+    order: 100
+    status: ready
+    blocks: [target-packet]
+  - packet_id: target-packet
+    order: 101
+    status: ready
+    depends_on: [blocker-packet]
+";
+        let fixed_ledger = Ledger::parse(fixed, Default::default()).expect("ledger parses");
+        let fixed_report = fixed_ledger.check_integrity(&Schema::minimal().reference_fields);
+        assert!(
+            fixed_report.violations.is_empty(),
+            "reciprocal edge must pass integrity: {:?}",
+            fixed_report.violations
+        );
+        let blocked = fixed_ledger.blocked_by("blocker-packet");
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(fixed_ledger.id_of(blocked[0]), "target-packet");
+
+        // Retired packet with asymmetric blocks emits warning, not violation
+        let retired = "steps:
+  - packet_id: retired-blocker
+    order: 102
+    status: completed
+    blocks: [target-packet]
+  - packet_id: target-packet
+    order: 101
+    status: ready
+    depends_on: []
+";
+        let retired_ledger = Ledger::parse(retired, Default::default()).expect("ledger parses");
+        let retired_report = retired_ledger.check_integrity(&Schema::minimal().reference_fields);
+        assert!(
+            retired_report.violations.is_empty(),
+            "retired packet asymmetric blocks must not be a hard violation"
+        );
+        assert!(
+            retired_report
+                .warnings
+                .iter()
+                .any(|w| w.contains("retired-blocker") && w.contains("target-packet")),
+            "retired packet asymmetric blocks must be reported as a warning: {:?}",
+            retired_report.warnings
         );
     }
 }

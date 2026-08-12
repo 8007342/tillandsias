@@ -30602,8 +30602,6 @@ plan_index:
       kind: implementation
       deliverable: images/default Codex entrypoint/config overlay + launch fixture
       depends_on: []
-      blocks:
-        - codex-mcp-expert-validation
       pickup_role: linux
       capability_tags:
         - forge

@@ -40,3 +40,4 @@ reference_fields:
   - depends_on
   - release_target
   - split_into
+  - blocks
