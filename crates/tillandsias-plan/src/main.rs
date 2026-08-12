@@ -1239,6 +1239,26 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
     })
 }
 
+/// Event type and summary prefix for a `set-field --evidence` write (696-6byc).
+///
+/// The type must follow the STATUS being written. It was hardcoded to
+/// `completed`, harmless while every status worth attaching evidence to was
+/// terminal — until the 650-dq6u ladder added the non-terminal `implemented`
+/// rung. From then on an honest non-terminal write emitted a fragment claiming
+/// completion in the event stream while the status channel said otherwise, and
+/// `check-fragment-status-loss.sh` refused it AFTER the write and AFTER a
+/// commit. It cost two cycles on this host inside one hour.
+fn evidence_event_shape(status: &str) -> (&'static str, String) {
+    if tillandsias_plan::is_terminal_status(status) {
+        ("completed", format!("status '{status}' with evidence_refs"))
+    } else {
+        (
+            "progress",
+            format!("status '{status}' (not terminal) with evidence_refs"),
+        )
+    }
+}
+
 fn main() {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut index = PathBuf::from("plan/index.yaml");
@@ -2285,12 +2305,21 @@ fn main() {
                     ),
                 ));
             } else if let Some(refs) = &evidence {
+                // 696-6byc: the event TYPE must follow the status being written.
+                // This was hardcoded to `completed`, which was harmless while
+                // every status worth attaching evidence to was terminal. The
+                // 650-dq6u ladder added the non-terminal `implemented` rung, and
+                // from then on an honest `--evidence "..."` on a non-terminal
+                // rung emitted a fragment claiming completion in the event
+                // stream while the status channel said otherwise —
+                // check-fragment-status-loss.sh (correctly) refused it, AFTER
+                // the write and AFTER a commit, and its remedy text describes
+                // the other violation class. It cost two cycles on this host in
+                // one hour before being fixed here.
+                let (event_type, prefix) = evidence_event_shape(&value);
                 event_blocks.push((
-                    "completed".to_string(),
-                    format!(
-                        "status '{value}' with evidence_refs: {}",
-                        refs.replace('\n', " ")
-                    ),
+                    event_type.to_string(),
+                    format!("{prefix}: {}", refs.replace('\n', " ")),
                 ));
             }
             if !reason.is_empty() {
@@ -2531,6 +2560,43 @@ mod tests {
     use super::*;
     use answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
     use std::collections::BTreeMap;
+
+    /// 696-6byc. A non-terminal ladder rung written with `--evidence` must NOT
+    /// emit a terminal event: doing so makes the fragment claim completion in
+    /// the event stream while its status channel says otherwise, which
+    /// check-fragment-status-loss.sh refuses — after the write, after a commit.
+    #[test]
+    fn evidence_event_type_follows_the_status_being_written() {
+        let (ty, prefix) = evidence_event_shape("implemented");
+        assert_eq!(
+            ty, "progress",
+            "the non-terminal `implemented` rung must not emit a terminal event"
+        );
+        assert!(
+            prefix.contains("not terminal"),
+            "the summary must not read as a completion claim; got: {prefix}"
+        );
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik). A fix that simply stopped emitting
+    /// `completed` for everything would satisfy the test above while destroying
+    /// the signal that real closures depend on. Every genuinely terminal status
+    /// must still produce a terminal event.
+    #[test]
+    fn terminal_statuses_still_emit_a_completion_event() {
+        for status in ["completed", "verified", "done", "obsoleted"] {
+            let (ty, prefix) = evidence_event_shape(status);
+            assert_eq!(
+                ty, "completed",
+                "terminal status {status:?} must still emit a completion event — \
+                 otherwise closures stop being recorded at all"
+            );
+            assert!(
+                !prefix.contains("not terminal"),
+                "terminal status {status:?} must not be labelled non-terminal"
+            );
+        }
+    }
 
     /// ORDER 569. The manifest is read by THREE parties — this binary, the forge
     /// wrapper, and lib-common.sh — and two of them are shell. A token carrying a

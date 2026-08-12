@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: setfield-evidence-emits-completed-event-for-any-status
+    field: status
+    value: implemented
+    ts: "2026-08-12T02:40:19Z"
+    host: macos
+
+events:
+  - packet_id: setfield-evidence-emits-completed-event-for-any-status
+    event:
+      type: progress
+      ts: "2026-08-12T02:40:19Z"
+      host: macos
+      summary: >
+        status 'implemented' (not terminal) with evidence_refs: evidence_event_shape() now derives the event type from the status via the canonical is_terminal_status predicate (lib.rs:190), which already existed and was simply never consulted by the write path. Dogfooded immediately: the very next set-field on a non-terminal rung emitted type: progress and check-fragment-status-loss.sh passed on the FIRST try, where the same command had failed twice within the previous hour. Tests: evidence_event_type_follows_the_status_being_written, plus the NEGATIVE CONTROL terminal_statuses_still_emit_a_completion_event covering completed/verified/done/obsoleted — so a fix that just stopped emitting completions everywhere cannot pass (bar-raise 634-39ik). 11/11 plan tests green. NOT completed: exit criteria 2 and 4 remain — the summary-prefix wording is fixed but check-fragment-status-loss.sh's remedy text still describes only the first violation class, which is what misdirects the author when the second class fires.
