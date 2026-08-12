@@ -143,13 +143,12 @@ cd "$ROOT" || exit 1
 # refused with `missing-tool`, so the same bad invocation produced different
 # diagnoses on different hosts and the litmus's bad-budget control passed only
 # where jq happened to be installed.
-#
-# DEFAULT BUDGET. Order 707-3x9d (2026-08-12):
+# DEFAULT BUDGET. Order 707-3x9d & Order 682-yiz7 (2026-08-12):
 # - Litmus-launched forge runs (TILLANDSIAS_LITMUS_STEP) take at most ONE packet
 #   to strictly respect the 600s unattended step budget (order 264).
 # - Autonomous / pairing forge cycles scale to an adaptive budget (default 4,
 #   or TILLANDSIAS_CYCLE_BUDGET) to maximize the work-to-orchestration ratio.
-# - Non-forge hosts keep default 6.
+# - Non-forge hosts scale default 6 -> 10 per 682-yiz7 evidence-backed tuning.
 if [ -z "$BUDGET" ]; then
     if [ -n "${TILLANDSIAS_CYCLE_BUDGET:-}" ]; then
         BUDGET="$TILLANDSIAS_CYCLE_BUDGET"
@@ -160,7 +159,7 @@ if [ -z "$BUDGET" ]; then
             BUDGET=4
         fi
     else
-        BUDGET=6
+        BUDGET=10
     fi
 fi
 case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac

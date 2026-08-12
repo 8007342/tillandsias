@@ -35465,6 +35465,12 @@ plan_index:
       notes: |
         Deliberately routed to the Tlatoani rather than resolved in-loop. Choosing a coverage target is a scope decision, and methodology/convergence.yaml -> bar_raise_governance forbids the loop from setting its own bar: an autonomously chosen target would make the convergence point undefined, which is exactly what the rule prevents. The loop's job was to make the queue reachable and report the rate honestly; both are done.
       events:
+        - type: decision
+          ts: "2026-08-12T18:36:07Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            OPERATOR RULING (The Tlatoani, 2026-08-12): TARGET = defined subset (executable/source + scripts + litmus + specs + methodology; EXCLUDE generated, vendored, event-log/ledger/loop-status). RATE = batch the re-stamp of content-hash-unchanged components + one careful audit per cycle for changed/never-audited. Recorded in methodology.yaml component_freshness.coverage_target + audit_rate. Richer bucketed model (criticality buckets: close-eye critical path vs batched quick-look bulk; untracked-candidate telemetry; size/kind heuristics) filed as follow-on 706-iabh for v0.6. DECISION COMPLETE; the remaining verifiable_closure is mechanical implementation (freshness advisory reports coverage against the defined subset + a litmus asserting reported target == methodology value) — re-shaped from tlatoani to linux.
         - ts: "2026-08-09T21:45:00Z"
           event: filed
           summary: |
@@ -39171,6 +39177,12 @@ plan_index:
         - MCP answers match the CLI (fragment fold included); the 651-style mismatch is fixed with a litmus
         - CLAUDE.md/methodology direct host sessions to the MCP experts
       events:
+        - type: progress
+          ts: "2026-08-12T18:28:58Z"
+          agent_id: "forge-opencode-20260812t182800z"
+          host: forge
+          summary: >
+            IN-FORGE verify of the deferred 682-z5h8 $PWD-resolver check PASSES against groundtruth. Both MCP experts served the LIVE mounted checkout from a fresh launch-built index: forge-plan plan_answer and project-info project_answer both returned citation_root=/home/forge/src/tillandsias, source_commit=55633745dbe07aebdb23ff7443a2f3e00a5f518a (= live HEAD 55633745), indexed_at=2026-08-12T18:27:39Z (launch-time, NOT the 2026-07-30 stale-clone signature), confidence=exact, citations resolving 682-z5h8 with status=ready. project-info independently answered project_type=git,nix,rust,rust-workspace and project_structure from the live checkout (distinct server, own $PWD-first resolver at images/default/config-overlay/mcp/project-info.sh:368-373). CLI parity re-confirmed: 'tillandsias-plan status 682-z5h8' == MCP output. 6/6 groundtruth checks pass; no filing needed. This closes the deferred in-forge verification left open 2026-08-11 (the bp-mcp-verify version-skew relaunch failure).
         - ts: "2026-08-11T07:15:00Z"
           event: filed
           summary: |
@@ -39719,6 +39731,12 @@ plan_index:
         - a fixture reproduces the race (forge started against a not-yet-resolvable mirror alias) and proves the forge now converges instead of fatal-exiting
         - verified live: a fresh stack launch clones successfully on first try across N consecutive create/destroy cycles (ephemeral-contract stress), zero DOA windows
       events:
+        - type: progress
+          ts: "2026-08-12T18:37:14Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            LIVE SUCCESS 2026-08-12: after the operator ran tillandsias --init --force (fresh consistent-alias image), a BigPickle delegate launch CLONED ON FIRST TRY with ZERO DOA — the forge came up healthy (git+inference+forge containers Up), the reachability probe did not fire, and the OpenCode agent ran and read plan/index.yaml live (directly observed in journald). This is the first live demonstration of criterion 4 (fresh stack clones on first try, zero DOA windows). One clean launch; criterion 4 asks for SEVERAL create/destroy cycles before full verification, so status stays implemented pending a couple more confirmations. The root cause (stale-image alias mismatch, 683-g7p6) is resolved by a from-current-source image.
         - type: filed
           ts: "2026-08-11T23:00:00Z"
           agent_id: linux-mutable-session-20260811
