@@ -1258,11 +1258,16 @@ distributed_work:
       the seed and the whole considered frontier are printed with every batch.
       An unexplained selection is unauditable.
     budgets:
-      forge: 1
-      default: 3
+      forge_litmus: 1
+      forge_autonomous: 4
+      default: 6
       note: >
-        The forge budget of ONE packet per cycle predates this rule (order 264,
-        2026-07-10) and is not relaxed by it.
+        ORDER 707-3x9d (2026-08-12): Forge autonomous / pairing sessions scale to
+        an adaptive budget of 4 (configurable 3-6) to maximize the
+        work-to-orchestration ratio, amortizing fixed meta-orchestration costs
+        over cohesive epic batches. The strict budget of ONE packet per cycle is
+        retained specifically for unattended litmus step runs
+        (TILLANDSIAS_LITMUS_STEP) where a 600s launch timeout is enforced.
     ungrouped_is_not_an_epic: >
       UNGROUPED scores highest whenever coverage is poor, purely on size.
       Letting it win would hand back the scattered batch this rule exists to
@@ -1333,25 +1338,21 @@ distributed_work:
           under the item's events list, update status, release the lease, and switch to a ready fallback task.
 
     forge_cycle_budget:
-      decided_by: "The Tlatoāni, 2026-07-10 (plan order 264)"
+      decided_by: "The Tlatoāni (order 264, updated order 707-3x9d 2026-08-12)"
       rule: >
-        Agents running INSIDE a forge container (TILLANDSIAS_HOST_KIND=forge)
-        drain AT MOST ONE plan packet per cycle. Before implementing, estimate
-        whether the packet's full implement+verify+commit+push fits the launch
-        envelope (litmus-launched forge cycles run inside
-        litmus:opencode-prompt-e2e-shape STEP 3's 600s budget). If it does not
-        fit, do NOT start implementation: SPLIT the packet into smaller ready
-        child packets (split_into pattern), record the shaping events, commit
-        and push. The shaping commit is that cycle's completed work — a split
-        that lowers residual ambiguity is a valid reduction step.
+        Agents running inside a forge container (TILLANDSIAS_HOST_KIND=forge)
+        distinguish between unattended litmus runs and autonomous/pairing cycles:
+        1. Litmus Runs (TILLANDSIAS_LITMUS_STEP): Drain AT MOST ONE plan packet per
+           cycle to safely fit within litmus:opencode-prompt-e2e-shape STEP 3's 600s
+           hard timeout.
+        2. Autonomous / Pairing Cycles: Take an ADAPTIVE BATCH BUDGET (default 4,
+           configurable up to 6) drawn from a single cohesive epic (release_target).
+           Agents maximize throughput by dispatching targeted subagents with local
+           expert self-verification (tillandsias-plan answer/query/check), emitting
+           isolated LWW CRDT fragments in plan/index.d/, and executing a single
+           consolidated pre-push gate (./build.sh --check) across the batch.
       supersedes: >
-        The 2026-06 greedy-drain exception ("claim, implement, and complete as
-        many ready forge tasks as possible in a single session"). Greedy forge
-        cycles made duration unbounded, so a litmus step timeout was
-        indistinguishable from a hung forge (order 264 collision: one in-forge
-        cycle implemented the whole of order 263 and timed out the gate while
-        perfectly healthy). Host (non-forge) cycles keep the ordinary
-        one-coherent-commit budget rule.
+        The static 1-packet-per-cycle limitation across all forge sessions.
       interim_note: >
         Reliance on step timeouts is interim. Order 265 (forge
         heartbeat/liveness signals — we own the launch and the container

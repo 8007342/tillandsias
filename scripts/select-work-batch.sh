@@ -144,26 +144,21 @@ cd "$ROOT" || exit 1
 # diagnoses on different hosts and the litmus's bad-budget control passed only
 # where jq happened to be installed.
 #
-# DEFAULT BUDGET. Forge cycles take at most ONE packet — decided by The Tlatoani
-# 2026-07-10 (order 264) because a litmus-launched forge lives inside a 600s
-# step budget. That rule predates this script and is not relaxed by it.
-# Operator directive 2026-08-10: "group larger, greedier chunks of work for
-# those orchestration cycles". Non-forge default raised 3 -> 6.
-#
-# The number only became safe once the epics carried enough coherent work to
-# fill it. At budget 3 with two-thirds of the ledger ungrouped, a bigger budget
-# would just have pulled in more of the same epic's tail or nothing at all.
-# After grouping the stream family under socket-audit-master and filing
-# architecture-audit-epic, budget 6 measured as: sibling batches of 5 =
-# one p0 plus the FULL four-packet audit epic. That is a greedy chunk that is
-# still one theme, which is the only kind worth making greedy.
-#
-# Forge stays at ONE (order 264, The Tlatoani 2026-07-10): a litmus-launched
-# forge lives inside a 600s step budget, and that constraint is unchanged by
-# how the rest of the fleet is tuned.
+# DEFAULT BUDGET. Order 707-3x9d (2026-08-12):
+# - Litmus-launched forge runs (TILLANDSIAS_LITMUS_STEP) take at most ONE packet
+#   to strictly respect the 600s unattended step budget (order 264).
+# - Autonomous / pairing forge cycles scale to an adaptive budget (default 4,
+#   or TILLANDSIAS_CYCLE_BUDGET) to maximize the work-to-orchestration ratio.
+# - Non-forge hosts keep default 6.
 if [ -z "$BUDGET" ]; then
-    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
-        BUDGET=1
+    if [ -n "${TILLANDSIAS_CYCLE_BUDGET:-}" ]; then
+        BUDGET="$TILLANDSIAS_CYCLE_BUDGET"
+    elif [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+        if [ -n "${TILLANDSIAS_LITMUS_STEP:-}" ]; then
+            BUDGET=1
+        else
+            BUDGET=4
+        fi
     else
         BUDGET=6
     fi

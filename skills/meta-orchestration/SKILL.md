@@ -596,8 +596,9 @@ scripts/select-work-batch.sh <linux|macos|windows|any>
 ```
 
 Run this once, at the top of the drain, and take the batch it prints. It selects
-ONE epic (`release_target`) and at most `budget` packets from it, so a cycle
-drains a coherent slice instead of five unrelated subsystems — the scatter that
+ONE epic (`release_target`) and at most `budget` packets from it (default 4 for
+autonomous/pairing forge cycles, 6 for non-forge hosts, 1 for unattended litmus runs;
+order 707-3x9d), so a cycle drains a coherent slice instead of five unrelated subsystems — the scatter that
 made small packets cost more in orientation than in work.
 
 It is minimax-ranked (largest residual first, per `convergence.yaml` →
