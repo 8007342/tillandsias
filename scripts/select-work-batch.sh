@@ -343,14 +343,34 @@ raw="$(printf '%s' "$raw" | jq -c --argjson done "$terminal_ids" \
 allraw="$("$PLAN" query --status ready "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
 depcounts="$(printf '%s' "$allraw" | jq -r '.[] | .depends_on[]?' 2>/dev/null | sort | uniq -c | awk '{print $2"\t"$1}')"
 
-# Flatten to: priority_rank \t epic \t order \t packet_id \t priority
+# Flatten to: rank \t epic \t order \t packet_id \t urgency_display \t release
+#
+# Order 630-6hyc. `.priority // "p3"` USED to coerce a missing priority to p3,
+# so the urgency term (3 - rank) was a constant 0 for the ~82% of ready packets
+# that carry no priority — an ABSENT value wearing a plausible one. The fix has
+# three tiers, and the last is the point of the packet:
+#   * EXPLICIT priority (p0-p3, ranks 0-3) dominates — the operator said so.
+#   * else DERIVE urgency from `kind` (202 populated vs 38 with priority; ranks
+#     4-6): correctness/safety kinds are more urgent than forward-progress
+#     kinds, which are more urgent than research/docs.
+#   * else NEITHER is present: rank 99 = UNSCORED. It is EXCLUDED from the
+#     urgency term (never scored as a plausible 0) and COUNTED so the triage
+#     line reports it — a missing signal is made visible, not silently defaulted.
 rows="$(printf '%s' "$raw" | jq -r '
   .[]
-  | [ (.priority // "p3"), (.release_target // "UNGROUPED"), (.order|tostring), .packet_id, (.desired_release // "?") ]
+  | [ (.priority // ""), (.release_target // "UNGROUPED"), (.order|tostring), .packet_id, (.desired_release // "?"), (.kind // "") ]
   | @tsv' 2>/dev/null \
   | awk -F'\t' '{
-        rank = ($1=="p0"?0:($1=="p1"?1:($1=="p2"?2:3)));
-        print rank "\t" $2 "\t" $3 "\t" $4 "\t" $1 "\t" $5;
+        prio = $1; kind = $6;
+        if (prio=="p0")      { rank=0; disp="p0" }
+        else if (prio=="p1") { rank=1; disp="p1" }
+        else if (prio=="p2") { rank=2; disp="p2" }
+        else if (prio=="p3") { rank=3; disp="p3" }
+        else if (kind=="security"||kind=="bug"||kind=="fix") { rank=4; disp="kind:" kind }
+        else if (kind=="feat"||kind=="enhancement"||kind=="infra"||kind=="ux"||kind=="optimization"||kind=="perf"||kind=="dx") { rank=5; disp="kind:" kind }
+        else if (kind=="research"||kind=="exploration"||kind=="docs"||kind=="discussion"||kind=="decision"||kind=="chore") { rank=6; disp="kind:" kind }
+        else { rank=99; disp="unscored" }
+        print rank "\t" $2 "\t" $3 "\t" $4 "\t" disp "\t" $5;
     }')"
 
 if [ -z "$rows" ]; then
@@ -396,14 +416,27 @@ scored="$({ printf '%s\n' "$depcounts"; printf '==ROWS==\n'; printf '%s\n' "$row
       {
           e = $2; rank = $1 + 0; pid = $4;
           ord = $3; gsub(/[^0-9].*$/, "", ord); ord = ord + 0;
-          if (!(e in best) || rank < best[e]) best[e] = rank;
+          # rank 99 = UNSCORED (630-6hyc): excluded from the urgency term so an
+          # unknown urgency never scores as a plausible 0; counted instead.
+          if (rank < 99) {
+              if (!(e in best) || rank < best[e]) best[e] = rank;
+              scored[e]++;
+          } else {
+              unscored[e]++;
+          }
           if (!(e in oldest) || ord < oldest[e]) oldest[e] = ord;
           block[e] += (pid in dep) ? dep[pid] : 0;
           cnt[e]++;
+          seen[e] = 1;
       }
       END {
-          for (e in best) {
-              urgency  = 3 - best[e];
+          # urgency by best (most urgent) tier: explicit priority p0-p3 (ranks
+          # 0-3) dominates every kind-derived tier (ranks 4-6). An epic with NO
+          # scored packet contributes 0 urgency but is reported via unscored[].
+          u[0]=3.0; u[1]=2.0; u[2]=1.0; u[3]=0.5;
+          u[4]=0.4; u[5]=0.25; u[6]=0.1;
+          for (e in seen) {
+              urgency  = (e in best) ? u[best[e]] : 0;
               blocking = block[e] > 10 ? 10 : block[e];
               neglect  = maxo > 0 ? (10.0 * (maxo - oldest[e]) / maxo) : 0;
               score    = (2.0 * urgency) + (1.5 * blocking) + neglect;
@@ -531,8 +564,13 @@ printf '%s\n' "$batch" | while IFS=$'\t' read -r rank epic order pid prio rel; d
     [ -n "$pid" ] || continue
     printf 'packet\t%s\t%s\t%s\n' "$order" "$pid" "$prio"
 done
-printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s\n' \
-    "$eligible" "$grouped" "$ungrouped" "$epics"
+# urgency_unscored (630-6hyc): ready packets with NEITHER an explicit priority
+# NOR a kind that maps to an urgency tier — rank 99. Reported so a missing
+# urgency signal is VISIBLE and gets fixed (backfill priority/kind), never
+# absorbed as a silent zero the way the old `// "p3"` default hid it.
+urgency_unscored="$(printf '%s\n' "$rows" | awk -F'\t' '$1==99' | grep -c .)"
+printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s\n' \
+    "$eligible" "$grouped" "$ungrouped" "$epics" "$urgency_unscored"
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do

@@ -1,0 +1,55 @@
+# @trace spec:ci-release
+name: litmus:selector-urgency-not-inert-shape
+spec: ci-release
+phase: pre-build
+description: The batch selector's urgency term is a live signal (distinguishes a p0 epic from a research epic) and an unscoreable packet is reported, never silently defaulted
+severity: high
+size: instant
+
+# Order 630-6hyc. The urgency term was a constant 0 for every packet without a
+# priority (`.priority // "p3"`), so it ranked nothing — the defect was an
+# ABSENT value wearing a plausible one. This pins the generalizable property the
+# packet's last exit criterion demands: a scoring term must distinguish inputs
+# (not be inert) AND a missing signal must be VISIBLE. Fixture-driven via
+# TILLANDSIAS_PLAN_BIN so it never depends on the live ledger's contents.
+#
+# The steps grep the selector's OUTPUT (behavior), never its source text, and
+# this test carries negative controls — so it is compliant with the
+# expression-pinning enforcement (634-39ik) it runs beside.
+# The frontier line is: frontier<TAB>score<TAB>epic<TAB>... so score is $2, epic $3.
+
+preconditions:
+  - a built tillandsias-plan binary is reachable at target/release/tillandsias-plan
+
+critical_path:
+  - step: "NOT INERT: distinction from KIND ALONE (bug epic outranks research epic, neither has priority)"
+    # THE regression guard. Both epics lack an explicit priority, so the OLD
+    # `.priority // \"p3\"` code would default both to p3 and score them EQUAL
+    # (inert). The fix derives urgency from kind, so bug must outrank research.
+    command: "F=$(mktemp -d); cp plan/schema.yaml \"$F/\"; printf 'plan_index:\\n  version: v1\\n  default_status_values: [ready, completed, done, obsoleted]\\npackets:\\n  - packet_id: hot-a\\n    order: 8001\\n    status: ready\\n    desired_release: v0.5\\n    release_target: epic-hot\\n    pickup_role: linux\\n    kind: bug\\n  - packet_id: cold-b\\n    order: 8002\\n    status: ready\\n    desired_release: v0.5\\n    release_target: epic-cold\\n    pickup_role: linux\\n    kind: research\\n' > \"$F/index.yaml\"; printf '#!/bin/sh\\nexec %s/target/release/tillandsias-plan --index %s/index.yaml \"$@\"\\n' \"$PWD\" \"$F\" > \"$F/plan\"; chmod +x \"$F/plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$F/plan\" scripts/select-work-batch.sh linux 2>/dev/null); rm -rf \"$F\"; hot=$(printf '%s\\n' \"$out\" | awk -F'\\t' '$1==\"frontier\" && $3==\"epic-hot\"{print $2}' | head -1); cold=$(printf '%s\\n' \"$out\" | awk -F'\\t' '$1==\"frontier\" && $3==\"epic-cold\"{print $2}' | head -1); awk -v h=\"$hot\" -v c=\"$cold\" 'BEGIN{ if (h!=\"\" && c!=\"\" && h+0 > c+0) print \"ok: kind-derived urgency distinguishes (\"h\" > \"c\")\"; else { print \"FAIL: urgency inert or missing (\"h\" vs \"c\")\"; exit 1 } }'"
+    timeout_ms: 30000
+    expected_behavior: "ok: kind-derived urgency distinguishes"
+
+  - step: "VISIBLE: a packet with neither priority nor a mapped kind is reported as urgency_unscored, not scored 0"
+    command: "F=$(mktemp -d); cp plan/schema.yaml \"$F/\"; printf 'plan_index:\\n  version: v1\\n  default_status_values: [ready, completed, done, obsoleted]\\npackets:\\n  - packet_id: known-a\\n    order: 8001\\n    status: ready\\n    desired_release: v0.5\\n    release_target: epic-x\\n    pickup_role: linux\\n    priority: p1\\n  - packet_id: unscored-c\\n    order: 8002\\n    status: ready\\n    desired_release: v0.5\\n    release_target: epic-x\\n    pickup_role: linux\\n    kind: mystery-unmapped-kind\\n' > \"$F/index.yaml\"; printf '#!/bin/sh\\nexec %s/target/release/tillandsias-plan --index %s/index.yaml \"$@\"\\n' \"$PWD\" \"$F\" > \"$F/plan\"; chmod +x \"$F/plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$F/plan\" scripts/select-work-batch.sh linux 2>/dev/null | grep '^triage:'); rm -rf \"$F\"; echo \"$out\" | grep -q 'urgency_unscored=1' && echo 'ok: unscored packet reported' || { echo \"FAIL: unscored not reported: $out\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: unscored packet reported"
+
+  - step: "NEGATIVE CONTROL: two epics whose only packets share the SAME urgency get equal urgency contribution"
+    # Proves the term responds to its INPUT, not to epic identity. Compares the
+    # urgency COMPONENT (score - 1.5*blocking - neglect)/2, not total score —
+    # total score also carries the neglect/age term, which differs by order.
+    command: "F=$(mktemp -d); cp plan/schema.yaml \"$F/\"; printf 'plan_index:\\n  version: v1\\n  default_status_values: [ready, completed, done, obsoleted]\\npackets:\\n  - packet_id: a1\\n    order: 8001\\n    status: ready\\n    desired_release: v0.5\\n    release_target: epic-a\\n    pickup_role: linux\\n    priority: p2\\n  - packet_id: b1\\n    order: 8002\\n    status: ready\\n    desired_release: v0.5\\n    release_target: epic-b\\n    pickup_role: linux\\n    priority: p2\\n' > \"$F/index.yaml\"; printf '#!/bin/sh\\nexec %s/target/release/tillandsias-plan --index %s/index.yaml \"$@\"\\n' \"$PWD\" \"$F\" > \"$F/plan\"; chmod +x \"$F/plan\"; out=$(TILLANDSIAS_PLAN_BIN=\"$F/plan\" scripts/select-work-batch.sh linux 2>/dev/null); rm -rf \"$F\"; ua=$(printf '%s\\n' \"$out\" | awk -F'\\t' '$1==\"frontier\" && $3==\"epic-a\"{bl=$5; ng=$6; sub(\"blocking=\",\"\",bl); sub(\"neglect=\",\"\",ng); printf \"%.3f\", ($2 - 1.5*bl - ng)/2.0}'); ub=$(printf '%s\\n' \"$out\" | awk -F'\\t' '$1==\"frontier\" && $3==\"epic-b\"{bl=$5; ng=$6; sub(\"blocking=\",\"\",bl); sub(\"neglect=\",\"\",ng); printf \"%.3f\", ($2 - 1.5*bl - ng)/2.0}'); [ -n \"$ua\" ] && [ \"$ua\" = \"$ub\" ] && echo \"ok: equal urgency component ($ua)\" || { echo \"FAIL: same-priority epics got different urgency ($ua vs $ub)\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: equal urgency component"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "selector urgency: distinguishes priority/kind tiers, reports unscored packets, responds to input not identity"
+  log_fields:
+    spec: "ci-release"
+    test: "selector-urgency-not-inert-shape"
+
+rollback:
+  on_failure: "restore scripts/select-work-batch.sh urgency scoring from git history"
