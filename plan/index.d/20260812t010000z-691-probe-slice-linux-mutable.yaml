@@ -1,0 +1,32 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: linux-mutable-20260812t010000z
+events:
+  - packet_id: forge-clone-fails-git-alias-unresolvable-at-start
+    event:
+      type: progress
+      ts: "2026-08-12T01:00:00Z"
+      agent_id: linux-mutable-night-20260811
+      host: linux_mutable
+      summary: >
+        IMPLEMENTED the reachability-probe slice (criteria 1-2) in
+        images/default/lib-common.sh: probe_mirror_reachable() runs a bounded
+        `git ls-remote` classifier BEFORE the clone loop and, on a confirmed
+        unresolvable alias (the operator's DOA class: 'unable to look up
+        <host>'), fails FAST and LOUD with the real remedy — rebuild stale
+        forge/git images so the injected TILLANDSIAS_GIT_SERVICE matches the
+        mirror's --network-alias (659-8faj / 683-g7p6) — instead of the old
+        misleading 'not finished initialising' after the full retry budget.
+        CONSERVATIVE: it fast-fails ONLY the unrecoverable name fault; every
+        other outcome (resolvable-not-serving, serving-but-no-refs, or an
+        inconclusive timeout) returns 0 and defers to the existing
+        seed-tolerant clone loop, so slow-seeding mirrors are not regressed.
+        Verified in isolation (function extracted, trust-bootstrap bypassed):
+        bogus alias -> return 1 + 'ALIAS UNRESOLVABLE' message; git ls-remote's
+        real error text confirmed to match the classifier. bash -n clean.
+        REMAINING (packet stays ready): criterion 3 (a committed fixture/litmus
+        reproducing the race — the isolated awk-extract test here is the seed
+        for it) and criterion 4 (live create/destroy zero-DOA verification),
+        both of which need a FRESH forge image carrying this change, which an
+        agent cannot build headless (683-g7p6/2n4k). The DOA itself still only
+        clears once a consistent-alias image runs; this slice makes the failure
+        fast and self-explaining in the meantime. Committed to lib-common.sh.

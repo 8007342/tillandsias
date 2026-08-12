@@ -486,6 +486,66 @@ git_mirror_host() {
     printf '%s' "${TILLANDSIAS_GIT_SERVICE:-git-${TILLANDSIAS_PROJECT}}"
 }
 
+# Probe the git mirror for reachability BEFORE the clone loop, distinguishing
+# the two failure classes the old one-shot fatal conflated (order 691-ssw9):
+#
+#   - the mirror ALIAS is not DNS-resolvable ("unable to look up <host>") —
+#     a startup-order / alias-migration fault (a forge asking for a name the
+#     mirror no longer registers, e.g. the retired shared `tillandsias-git`
+#     vs the per-project `git-<project>` of order 659-8faj), NOT a seed delay;
+#   - the alias resolves but the daemon is not yet SERVING (connection refused
+#     / no refs) — the mirror is still coming up or seeding.
+#
+# Uses `git ls-remote` only (git is always present — it does the clone), so it
+# needs no getent/nslookup that a minimal forge image may lack.
+#
+# CONSERVATIVE BY DESIGN: it fast-fails ONLY on the `alias-unresolvable` class —
+# a name fault (the operator's DOA: a forge asking for a DNS alias no mirror
+# registers) that will NEVER self-heal, so burning the full seed-retry budget on
+# it is pure latency and a misleading "still initialising" verdict. For every
+# OTHER outcome — resolvable-but-not-serving, serving-but-no-refs (genuinely
+# seeding), or a probe that simply times out without ever seeing the name fault —
+# it returns 0 and defers to the existing seed-tolerant clone retry loop, so the
+# generous seed window is preserved and a slow-seeding mirror is NOT regressed.
+# Returns 0 to proceed; returns 1 ONLY for a confirmed unresolvable alias.
+probe_mirror_reachable() {
+    local host="$1" project="$2"
+    local timeout_s="${TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S:-20}"
+    local url="git://${host}/${project}"
+    local start now elapsed=0 lsout lsrc last_class="unknown"
+    start="$(date +%s 2>/dev/null || echo 0)"
+    while :; do
+        lsout="$(git ls-remote "$url" 2>&1)"; lsrc=$?
+        if [[ $lsrc -eq 0 && -n "$lsout" ]]; then
+            return 0                       # resolvable AND serving refs
+        fi
+        if echo "$lsout" | grep -qi "unable to look up\|Name or service not known\|Could not resolve"; then
+            last_class="alias-unresolvable"
+        elif [[ $lsrc -eq 0 ]]; then
+            last_class="serving-but-no-refs"   # up, still seeding
+        else
+            last_class="resolvable-not-serving"
+        fi
+        now="$(date +%s 2>/dev/null || echo 0)"
+        elapsed=$(( now - start ))
+        [[ $elapsed -ge $timeout_s ]] && break
+        sleep 2
+    done
+    # Only the unresolvable-alias class is a confirmed unrecoverable fault; every
+    # other timeout defers to the seed-tolerant clone loop rather than fail here.
+    if [[ "$last_class" == "alias-unresolvable" ]]; then
+        echo "[forge] mirror reachability probe: ALIAS UNRESOLVABLE after ${elapsed}s for ${url}." >&2
+        echo "[forge]   The forge asked for '${host}' but no mirror registers that DNS alias on the enclave —" >&2
+        echo "[forge]   a name/startup fault, NOT a seed delay. Likely a stale forge image from before the" >&2
+        echo "[forge]   per-project alias migration (order 659-8faj), or an image built from bundled assets that" >&2
+        echo "[forge]   lag the launcher (order 683-g7p6). Rebuild the forge/git images from current source so the" >&2
+        echo "[forge]   injected TILLANDSIAS_GIT_SERVICE matches the mirror's --network-alias." >&2
+        return 1
+    fi
+    trace_lifecycle "git-mirror" "reachability probe inconclusive after ${elapsed}s (last class: ${last_class}); deferring to the seed-tolerant clone loop"
+    return 0
+}
+
 rewrite_origin_for_enclave_push() {
     # Only act when host-mount mode is active. Other transports (filesystem
     # /Windows-WSL, git daemon /Linux-podman) handle their own remote setup
@@ -763,6 +823,15 @@ _clone_project_from_mirror_impl() {
     # Network transport (Linux/podman).
     if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
         trace_lifecycle "git-mirror" "cloning from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}"
+        # Order 691-ssw9: classify reachability BEFORE cloning so a name/alias
+        # fault fails loud with the right remedy instead of masquerading as a
+        # generic "not ready" after the retry budget burns down. A resolvable,
+        # serving mirror returns immediately; an unresolvable alias is named as
+        # such (the operator's DOA class) rather than blamed on seeding.
+        if ! probe_mirror_reachable "$(git_mirror_host)" "${TILLANDSIAS_PROJECT}"; then
+            echo "[forge] FATAL: git mirror $(git_mirror_host) is not reachable for clone (see the classified reason above)." >&2
+            exit 1
+        fi
         # Retry budget: the launcher-side wait_for_git_mirror_ready gate
         # (order 452 slice 2) blocks the launch until the mirror advertises a
         # resolvable HEAD, so this loop is the fail-loud BACKSTOP, not the
