@@ -27,6 +27,10 @@ tracing = { workspace = true }
 # Machine-readable `--diagnose --json` output for installed-tray support tooling.
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+# Timestamp for the guest-wiring reconcile record (order 620-duta). Pure Rust,
+# already in the workspace graph — it adds no OS import to the tray binary,
+# which is the surface this packet's litmus pins.
+chrono = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # The real provisioning fetch path only compiles on Windows, so the download

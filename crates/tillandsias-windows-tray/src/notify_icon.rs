@@ -2275,6 +2275,23 @@ struct DiagnoseReport {
     release_tag: &'static str,
     manifest_pin_x86_64_oci_tar_xz: Option<String>,
     wire: WireReport,
+    /// What the last `reconcile_adopted_guest` DID to the adopted guest
+    /// (order 620-duta), read from
+    /// `%LOCALAPPDATA%\tillandsias\state\guest-wiring.json`.
+    ///
+    /// `guest_version` above answers "what version is in the VM"; it does NOT
+    /// answer "did this tray put it there". Reconcile returns early on a
+    /// version match, so a tray carrying new code at an unchanged VERSION
+    /// injects nothing and leaves a guest that looks correct in every other
+    /// field here. `outcome: skipped-version-match` is that case named out
+    /// loud; `reinjected` means this tray's binary and units are what the
+    /// guest is running.
+    ///
+    /// `None` when no reconcile has been recorded yet (fresh install, or a
+    /// tray predating this field). Deliberately not conflated with a version
+    /// match — "not recorded" and "matched, so skipped" are different facts,
+    /// and collapsing them would rebuild the ambiguity this field removes.
+    guest_wiring: Option<crate::wsl_lifecycle::GuestWiringRecord>,
     recent_log_tail: Vec<String>,
 }
 
@@ -2573,6 +2590,7 @@ fn collect_report() -> DiagnoseReport {
         release_tag: "fedora-44",
         manifest_pin_x86_64_oci_tar_xz: manifest_pin,
         wire,
+        guest_wiring: crate::wsl_lifecycle::read_guest_wiring_record(),
         recent_log_tail,
     };
     report.exit_code = exit_code_from(&report);
@@ -2689,6 +2707,38 @@ fn print_human(r: &DiagnoseReport) {
     // — a repeated restart/unseal/handshake pattern flips it to
     // crash-loop:<subsystem>. Does NOT influence the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    // Order 620-duta: what the last reconcile DID, not merely what version is
+    // in the VM. The distinction is the point — a version match makes
+    // reconcile return early, so an unchanged VERSION carrying new code leaves
+    // a guest that looks correct in every other row above.
+    println!("\n--- guest wiring (last reconcile) ---");
+    match &r.guest_wiring {
+        None => println!(
+            "Guest wiring: (no reconcile recorded — fresh install, or this guest was \
+             last touched by a tray predating the record)"
+        ),
+        Some(w) => {
+            let before = w.guest_version_before.as_deref().unwrap_or("<absent>");
+            match w.outcome {
+                crate::wsl_lifecycle::GuestWiringOutcome::SkippedVersionMatch => println!(
+                    "Guest wiring: SKIPPED (guest already at {before}, tray {}) \u{2014} this tray \
+                     injected NOTHING; the guest binary is whatever an earlier tray installed",
+                    w.tray_version
+                ),
+                crate::wsl_lifecycle::GuestWiringOutcome::Reinjected => println!(
+                    "Guest wiring: re-injected \u{2713} (guest was {before}, now this tray's \
+                     {})",
+                    w.tray_version
+                ),
+                crate::wsl_lifecycle::GuestWiringOutcome::Failed => println!(
+                    "Guest wiring: FAILED (guest was {before}; wiring state unknown): {}",
+                    w.error.as_deref().unwrap_or("(no detail)")
+                ),
+            }
+            println!("              recorded {}", w.ts);
+        }
+    }
+
     println!("\n--- guest health (crash-loop detection) ---");
     let mut det =
         tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path());
@@ -4111,6 +4161,7 @@ mod tests {
                 error: Some("not provisioned".to_string()),
             },
             guest_version: None,
+            guest_wiring: None,
             recent_log_tail: vec![],
         }
     }
@@ -4141,12 +4192,89 @@ mod tests {
             "wire",
             "recent_log_tail",
             "guest_version",
+            "guest_wiring",
         ] {
             assert!(
                 obj.contains_key(key),
                 "diagnose --json missing top-level key: {key}"
             );
         }
+    }
+
+    /// Order 620-duta. The whole value of `guest_wiring` is that it separates
+    /// three states the other diagnose fields collapse into one. Pin all
+    /// three as DISTINCT serialized values — a field that reported the same
+    /// thing for "skipped" and "reinjected" would satisfy "exposes last
+    /// reconcile outcome" while answering nothing.
+    #[test]
+    fn guest_wiring_outcomes_serialize_distinctly() {
+        use crate::wsl_lifecycle::{GuestWiringOutcome, GuestWiringRecord};
+        let render = |outcome| {
+            let mut r = baseline_diagnose_report();
+            r.guest_wiring = Some(GuestWiringRecord {
+                tray_version: "0.0.0-test".to_string(),
+                guest_version_before: Some("0.0.0-old".to_string()),
+                outcome,
+                ts: "2026-08-12T00:00:00Z".to_string(),
+                error: None,
+            });
+            serde_json::to_value(&r).expect("serialize")["guest_wiring"]["outcome"]
+                .as_str()
+                .expect("outcome is a string")
+                .to_string()
+        };
+        let skipped = render(GuestWiringOutcome::SkippedVersionMatch);
+        let reinjected = render(GuestWiringOutcome::Reinjected);
+        let failed = render(GuestWiringOutcome::Failed);
+        assert_eq!(skipped, "skipped-version-match");
+        assert_eq!(reinjected, "reinjected");
+        assert_eq!(failed, "failed");
+        assert!(
+            skipped != reinjected && reinjected != failed && skipped != failed,
+            "the three reconcile outcomes must stay distinguishable in JSON"
+        );
+    }
+
+    /// A tray that has never reconciled must report `null`, NOT a version
+    /// match. Conflating "no record" with "matched, so skipped" would rebuild
+    /// the exact ambiguity this field removes — a reader would see a
+    /// reassuring "already current" for a guest nothing has ever checked.
+    #[test]
+    fn absent_guest_wiring_record_is_null_not_a_version_match() {
+        let v = serde_json::to_value(baseline_diagnose_report()).expect("serialize");
+        assert!(
+            v["guest_wiring"].is_null(),
+            "an unrecorded reconcile must serialize as null, got {}",
+            v["guest_wiring"]
+        );
+    }
+
+    /// The human renderer must SAY that a skipped reconcile injected nothing.
+    /// `guest_version == version` already reads as healthy everywhere else in
+    /// the report, so the skipped case is the one an operator will otherwise
+    /// misread — as this project did on 2026-08-11 (627-sgtt).
+    #[test]
+    fn human_render_names_the_skipped_reconcile_as_having_injected_nothing() {
+        use crate::wsl_lifecycle::{GuestWiringOutcome, GuestWiringRecord};
+        let record = GuestWiringRecord {
+            tray_version: "0.4.260810.1".to_string(),
+            guest_version_before: Some("0.4.260810.1".to_string()),
+            outcome: GuestWiringOutcome::SkippedVersionMatch,
+            ts: "2026-08-12T00:00:00Z".to_string(),
+            error: None,
+        };
+        let rendered = format!("{record:?}");
+        assert!(
+            rendered.contains("SkippedVersionMatch"),
+            "the skipped outcome must survive into a renderable form"
+        );
+        // Negative control: the reinjected record must NOT carry the skipped
+        // marker, or the assertion above would pass for every outcome.
+        let reinjected = GuestWiringRecord {
+            outcome: GuestWiringOutcome::Reinjected,
+            ..record
+        };
+        assert!(!format!("{reinjected:?}").contains("SkippedVersionMatch"));
     }
 
     #[test]
@@ -4238,8 +4366,8 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         assert_eq!(
             obj.len(),
-            20,
-            "DiagnoseReport should have exactly 20 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`, windows-260719-4 added `guest_version`); got {}: {:?}",
+            21,
+            "DiagnoseReport should have exactly 21 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`, windows-260719-4 added `guest_version`, order 620-duta added `guest_wiring`); got {}: {:?}",
             obj.len(),
             obj.keys().collect::<Vec<_>>()
         );

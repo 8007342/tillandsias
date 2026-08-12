@@ -32687,6 +32687,12 @@ plan_index:
         - litmus pins the installed tray's dependency/import surface
         - inventory distilled to specs; deliverable becomes a tombstone pointer
       events:
+        - type: progress
+          ts: "2026-08-12T00:40:12Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            Criterion 1 DONE and as-wired verified: --diagnose --json now exposes guest_wiring {tray_version, guest_version_before, outcome, ts, error} with outcome in {skipped-version-match, reinjected, failed}, persisted to %LOCALAPPDATA%\tillandsias\state\guest-wiring.json because --diagnose runs as its own process and never reconciles — an in-memory record would be empty in exactly the invocation that reports it. reconcile_adopted_guest records on EVERY exit including the early return, and its injection half was split into inject_stale_guest_wiring so all the ? paths land on one recorded result rather than each remembering to record. Cheatsheet (schema authority) updated with the field and a section on reading it. Tests: 83 passed 0 failed, including a pin that the three outcomes serialize DISTINCTLY (a field reporting the same value for skipped and reinjected would satisfy the criterion and answer nothing) and a pin that an absent record is null rather than a version match. AS-WIRED on this host, and it settled an open question immediately: the installed tray reports outcome=skipped-version-match, guest_version_before=0.4.260810.1 — empirical confirmation that this host's guest binary was NOT injected by any recent tray rebuild, which is what cycle 3 had inferred from the stale staged asset.
         - type: filed
           ts: 2026-08-09T00:25:00Z
           agent_id: windows-esmeralda-claude-fable-20260808t235000z
@@ -33642,6 +33648,12 @@ plan_index:
         - project-lane click opens a working agent shell (blocked on tray rebuild)
         - workspace tests green incl. interactive_lane_keeps_the_terminal_foreground_process_group
       events:
+        - type: note
+          ts: "2026-08-12T00:40:12Z"
+          agent_id: "windows-claude-opus5-20260811t215500z"
+          host: windows
+          summary: >
+            The 620-duta guest_wiring field now answers this packet's open deployment question empirically rather than by inference. The installed tray on this host reports outcome=skipped-version-match with guest_version_before=0.4.260810.1: reconcile returned early on the version match and injected nothing, so the guest binary running here was NOT placed by any tray rebuilt this session. This CONFIRMS the 2026-08-11T23:xx correction rather than adding new doubt — and it does not touch criteria 1 and 2, which were field-verified on peke, a different host with a different guest. What remains for this packet is unchanged: a live project-lane click on a guest whose wiring is known to be this tray's.
         - type: note
           ts: "2026-08-11T22:44:41Z"
           agent_id: "windows-claude-opus5-20260811t215500z"
