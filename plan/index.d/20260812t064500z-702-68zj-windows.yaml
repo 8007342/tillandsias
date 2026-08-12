@@ -1,0 +1,62 @@
+packets:
+  - packet_id: checkers-report-verdicts-they-could-not-compute
+    order: 702-68zj
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    title: "Two checkers answer the question when they could not run: the stranded sweep prints a false all-clear on an unusable plan binary, and the closure gate prints a false violation on a stale one"
+    kind: fix
+    deliverable: plan/issues/checkers-report-verdicts-they-could-not-compute-2026-08-12.md
+    depends_on: []
+    pickup_role: any
+    owner_host: any
+    capability_tags:
+      - tooling
+      - fail-loud
+      - plan
+    estimated_hours: 2
+    outcome: >
+      Both checkers emit a distinct third verdict when their dependency is
+      missing or unusable, following the skip-verdict convention order 447 and
+      620-duta already use, so "could not look" is never rendered as "looked and
+      found nothing" or as "found violations".
+    next_action: >
+      Probe the plan binary by RUNNING it rather than testing an executable bit
+      that lies on a shared Windows/WSL checkout; emit summary:unavailable:<reason>
+      from the stranded sweep and skip:stale-plan-binary from the closure gate.
+    exit_criteria:
+      - "with jq absent or the plan binary unusable, check-stranded-in-progress.sh emits an unavailable verdict and NOT an all-zero summary"
+      - "NEGATIVE CONTROL: with both dependencies present and a genuinely stranded packet in the ledger, the sweep still reports that packet — a fix that emitted unavailable unconditionally would satisfy the criterion above while disabling the sweep entirely"
+      - "check-fragment-closure-evidence-added.sh run against a deliberately stale plan binary emits skip:stale-plan-binary and exits 0, while a current binary plus a real evidence-free closure fragment still fails"
+    events:
+      - type: filed
+        ts: "2026-08-12T06:45:00Z"
+        agent_id: "windows-claude-opus5-20260811t215500z"
+        host: windows
+        summary: >
+          Two instances of one class, found a cycle apart while using the
+          checkers for their actual purpose.
+          FALSE ALL-CLEAR, live on this host: check-stranded-in-progress.sh
+          printed "in_progress=0 stranded=0" while the ledger held 184
+          in_progress and expire-claims listed it as an expiry candidate; the
+          same script reported stranded=1 one cycle earlier with the ledger
+          unchanged. Cause: the binary probe takes the first match of
+          ./target/release/tillandsias-plan, and a WSL build on this shared
+          checkout leaves a Linux ELF at that exact path beside the usable
+          .exe. query fails with Exec format error, stderr is discarded, and
+          empty rows are counted as zero stranded packets. The two explicit
+          early exits (no jq, no binary) print the same all-zero line. This is
+          the worse instance: the sweep exists to catch work invisible in both
+          directions, and reporting zero because it could not look makes that
+          work invisible in a third way while printing the line an operator
+          reads as "checked, nothing there".
+          FALSE ALARM, cycle 9: check-fragment-closure-evidence-added.sh
+          printed violation:closure-without-evidence:3 and failed the gate when
+          no fragment in the change recorded any closure. The plan binary was
+          stale and lacked the subcommand; the binary said exactly that on
+          stderr ("the ARTIFACT is stale relative to the checkout: rebuild it")
+          and the wrapper substituted a wrong diagnosis for a correct one that
+          had already been written.
+          The project already applies the right convention elsewhere —
+          verify:skip-stale-staging (447) and skip:no-tray-binary (620-duta).
+          These two scripts do not.
