@@ -1,0 +1,38 @@
+events:
+  - packet_id: litmus-pin-claims-unverified
+    event:
+      type: progress
+      ts: "2026-08-13T20:30:00Z"
+      agent_id: "linux-mutable-20260813t2017z"
+      host: linux_mutable
+      summary: >
+        All three exit criteria met. NEW scripts/check-litmus-pin-claims.sh
+        resolves every `litmus:<name>` token appearing in scripts/ against the
+        `name:` set in openspec/litmus-tests/ and against the bindings in
+        openspec/litmus-bindings.yaml, emitting one of three verdicts —
+        ok:litmus-pin-claims:<n> checked, violation:litmus-pin-unresolvable:<n>
+        (no test declares the name), violation:litmus-pin-unbound:<n> (the test
+        exists but no spec binds it, so it executes in no suite). Wired into
+        ./build.sh --check. Live tree: 33 claims checked, all resolve and are
+        bound.
+        One subtlety worth recording: run-litmus-test.sh wraps a test name
+        mid-token across two comment lines, which a naive scan reports as a
+        claim on a nonexistent test. A match that ends at end-of-line on a
+        hyphen is wrapped prose — a real claim never does — so those are skipped
+        and counted on a note to stderr. Inventing a violation out of a wrapped
+        comment would have made this checker precisely the false signal it
+        exists to remove, and it caught the checker's OWN header prose first.
+      
+  - packet_id: litmus-pin-claims-unverified
+    event:
+      type: verified-by
+      ts: "2026-08-13T20:30:30Z"
+      agent_id: "linux-mutable-20260813t2017z"
+      host: linux_mutable
+      summary: >
+        verifiable_closure executed as litmus:added-fragment-parse-gate-shape
+        step 6: one hermetic tree, three fixtures (a name no test declares, a
+        test no spec binds, a correct claim), asserting three DISTINCT verdicts
+        in sequence — a single fixture would be satisfied by a checker that
+        refuses everything. Step 7 asserts the live tree is clean. Suite 8/8
+        PASS in ci-release.

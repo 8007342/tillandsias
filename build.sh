@@ -1172,6 +1172,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Skills single-source check passed"
 
+    # Order 721-77yu. A script that says "Pinned by litmus:<name>" is making a
+    # verification claim, and until this gate existed nothing checked it: the
+    # fragment-parse gate carried such a line for weeks against a test that had
+    # never been written. Both empty shapes fail here — a name no test declares,
+    # and a test no spec binds (execution is binding-driven, so an unbound test
+    # runs in no suite and is as inert as a missing one).
+    _step "Checking litmus pin claims resolve and execute (721-77yu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
+        _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus pin-claim check passed"
+
     # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
     # compiles src/stubs/ and goes green without ever parsing the edited file,
     # which produced two unverified changes on 2026-08-13 alone. Refusing here

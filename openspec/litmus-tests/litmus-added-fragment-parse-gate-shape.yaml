@@ -59,6 +59,22 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: load failure named honestly"
 
+  - step: "PIN CLAIMS: an unresolvable, an unbound, and a good claim get three distinct verdicts (721-77yu)"
+    # This test exists because the gate it pins carried a "Pinned by litmus:"
+    # line for weeks against a test nobody had written. The checker that closes
+    # that hole gets the same treatment it enforces: three fixtures in one
+    # hermetic tree — a name no test declares, a test no spec binds, and a
+    # correct claim — asserting three DIFFERENT verdicts. One fixture would be
+    # satisfied by a checker that refuses everything.
+    command: "d=$(mktemp -d); mkdir -p \"$d/scripts\" \"$d/probe\" \"$d/openspec/litmus-tests\"; cp scripts/check-litmus-pin-claims.sh \"$d/scripts/\"; printf 'name: litmus:real-and-bound\\n' > \"$d/openspec/litmus-tests/a.yaml\"; printf 'name: litmus:real-but-unbound\\n' > \"$d/openspec/litmus-tests/b.yaml\"; printf -- '- spec_id: s\\n  litmus_tests:\\n  - litmus:real-and-bound\\n' > \"$d/openspec/litmus-bindings.yaml\"; r=''; for n in does-not-exist real-but-unbound real-and-bound; do printf '#!/bin/sh\\n# Pinned by litmus:%s\\n' \"$n\" > \"$d/probe/fake.sh\"; r=\"$r$( cd \"$d\" && TILLANDSIAS_PIN_SCAN_DIR=probe bash scripts/check-litmus-pin-claims.sh 2>/dev/null )|\"; done; rm -rf \"$d\"; [ \"$r\" = 'violation:litmus-pin-unresolvable:1|violation:litmus-pin-unbound:1|ok:litmus-pin-claims:1 checked|' ] && echo 'ok: pin claims get three distinct verdicts'"
+    timeout_ms: 30000
+    expected_behavior: "ok: pin claims get three distinct verdicts"
+
+  - step: "POSITIVE CONTROL: every pin claim in this tree resolves to a bound test"
+    command: "scripts/check-litmus-pin-claims.sh 2>/dev/null | grep -qE '^ok:litmus-pin-claims:[0-9]+ checked$' && echo 'ok: live pin claims all executable'"
+    timeout_ms: 30000
+    expected_behavior: "ok: live pin claims all executable"
+
   - step: "POSITIVE CONTROL: the real ledger loads and its vocabularies agree"
     command: "scripts/check-plan-schema-divergence.sh | grep -qE '^ok:status-vocab-in-sync$' && echo 'ok: live ledger loads and agrees'"
     timeout_ms: 30000
