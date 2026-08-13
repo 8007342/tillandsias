@@ -1,0 +1,80 @@
+packets:
+  - packet_id: accidental-version-bump-on-linux-next-blocks-platform-pushes
+    order: 702-eusw
+    status: ready
+    desired_release: v0.5
+    priority: p0
+    title: "Accidental VERSION bump on linux-next blocks every platform-branch push fleet-wide"
+    kind: defect
+    deliverable: "VERSION + scripts/hooks/pre-push-version-guard.sh (or a release PR)"
+    pickup_role: any
+    capability_tags:
+      - release
+      - multi-host
+      - guards
+      - coordination
+    estimated_hours: 1
+    context: |
+      Observed live on macOS 2026-08-13T00:50Z: a fully gated, tested osx-next
+      push was refused by the pre-push VERSION guard.
+
+        Pre-push guard: VERSION modified on non-main branch 'osx-next'
+          Current VERSION: 0.4.260812.1
+          Main VERSION:    0.4.260810.1
+
+      The osx-next commits do NOT touch VERSION. The change was INHERITED from
+      the mandated `origin/linux-next` merge.
+
+      FLEET STATE at the time:
+        origin/main        0.4.260810.1
+        origin/linux-next  0.4.260812.1   <- divergent
+        origin/osx-next    0.4.260810.1
+        open PRs           none
+
+      ORIGIN OF THE BUMP: commit dd8fd63f, "fix(security): replace forgeable
+      environ peer attribution on mcp.sock with per-lane listeners (order 505)"
+      (Generated-By: tool=antigravity). That commit is a security fix; it also
+      carries `VERSION 0.4.260810.1 -> 0.4.260812.1` plus matching crate
+      version bumps in Cargo.toml/Cargo.lock. A build-number bump was swept
+      into an unrelated commit — the same `git add -A` hazard the guard exists
+      to catch, one branch upstream.
+
+      WHY THIS BLOCKS EVERYONE, not just one host. CLAUDE.md and methodology
+      `pull_merge_cadence.pre_push_gate` REQUIRE merging `origin/linux-next`
+      into a platform branch before EVERY push. The guard allows exactly two
+      VERSION states off main: sync-forward (VERSION == main's) and a
+      `release/version-bump-*` branch. An inherited divergent bump on
+      linux-next is neither. So the mandated merge deterministically imports a
+      state the mandated gate refuses: **osx-next and windows-next cannot push
+      at all** until main carries 0.4.260812.1 or linux-next stops carrying it.
+      The guard is not wrong — an ordinary work branch quietly carrying a
+      VERSION different from main's is precisely what it was written for. The
+      defect is upstream of it.
+
+      Note the escape hatches are both bad: `--push --no-verify` also skips the
+      local `./build.sh --check` gate, which the guard's own text calls out as
+      the thing that replaced push CI; and reverting VERSION on each platform
+      branch individually desyncs VERSION from the crate versions dd8fd63f
+      bumped alongside it, and is re-imported by the next mandated merge.
+
+      The repo's own established flow is the fix: PR #94 landed
+      0.4.260810.1 on main from a `release/version-bump-0.4.260810.1` branch.
+      A bump reaches main through a release PR, not through linux-next.
+    outcome: |
+      Platform branches can push again, and a build-number bump can no longer
+      reach an integration branch as a side effect of an unrelated commit.
+    exit_criteria:
+      - "main carries the current VERSION (release PR from a `release/version-bump-*` branch, per the PR #94 precedent), OR linux-next is returned to main's VERSION — decided by the operator, since which one is correct is a release decision."
+      - "Verified by an actual push: a gated osx-next push succeeds WITHOUT --no-verify. A green guard run on a tree that was never refused is not evidence."
+      - "A guard or check refuses a commit that changes VERSION together with unrelated files, so a build-number bump cannot be swept in by `git add -A`. Negative control: a genuine release-bump commit touching VERSION plus Cargo.toml/Cargo.lock alone must still pass."
+      - "The interaction is written down where the merge cadence is specified (methodology `pull_merge_cadence`): a divergent VERSION on the integration branch blocks every downstream platform branch, so a bump belongs on main first."
+    events:
+      - type: filed
+        ts: "2026-08-13T00:54:48Z"
+        host: macos
+        summary: |
+          Filed from a live push refusal on osx-next whose own commits do not
+          touch VERSION. The mandated linux-next merge imports a divergent
+          VERSION that the mandated pre-push gate refuses, so the two rules are
+          in direct conflict until main catches up. Root commit dd8fd63f swept
+          a build-number bump into an unrelated security fix.
