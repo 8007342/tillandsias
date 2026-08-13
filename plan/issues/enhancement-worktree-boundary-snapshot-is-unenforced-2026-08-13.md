@@ -62,6 +62,40 @@ Option 1 is the one that matches how this project fixes things, but it changes
 the terminal attestation contract, which is 614-2gqx's territory and deserves an
 explicit decision rather than a passing edit at 06:30.
 
+## Decision, 2026-08-13 (windows host, cycle 18) — shape 1 adopted
+
+Recorded here because exit criterion 3 asks for the decision, not the edit, and
+because it changes order 614-2gqx's terminal-attestation contract.
+
+**The marker now depends on a verified boundary.** `scripts/mo-full-attest.sh
+self` refuses to print unless a startup boundary was verified *at the HEAD being
+attested*. Shape 2 (a typed verdict) is implemented too, but it was never
+sufficient on its own: it improves the message an agent reads when it happens to
+run `verify`, and cycle 16's failure was not running it at all.
+
+Why shape 1 over accepting the risk:
+
+* It fails in the direction the system already handles. No marker is the loud
+  failure every outer launcher treats as failure; there is no new failure mode.
+* It needed no caller changes, which was the obstacle when this was filed. The
+  guard writes two cycle-scoped stamps into `$GIT_DIR` (`boundary-state`,
+  `boundary-verified`), so a later step can ask "was a boundary recorded and
+  verified for THIS cycle?" without being told where the state dir lives.
+* Binding to the HEAD, not to mere existence, is what makes it real. A stamp
+  from an earlier cycle, or from before this cycle's last commit, fails —
+  `snapshot` also clears any prior verification, so a stale stamp cannot be
+  inherited.
+
+Fleet consequence, stated plainly: a full-mode cycle on any host that skips the
+snapshot stops being able to emit a marker. That is the intent — such a cycle
+has not met its exit contract — but it will surface as `MO-FULL: FAIL no
+verified startup boundary` on hosts whose habit was to skip, and the fix there
+is to snapshot, never to bypass the check.
+
+Scope held deliberately: `check` (the log validator) is unchanged. It validates
+a marker produced elsewhere, and boundary state is a property of the producing
+host's cycle. Enforcing it in both places would be one rule with two owners.
+
 ## Not fixed here
 
 37 minutes remained in the loop's window when this was written. Starting a

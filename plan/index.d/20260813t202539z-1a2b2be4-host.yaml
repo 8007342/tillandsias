@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: worktree-boundary-snapshot-is-unenforced
+    field: status
+    value: done
+    ts: "2026-08-13T20:25:39Z"
+    host: host
+
+events:
+  - packet_id: worktree-boundary-snapshot-is-unenforced
+    event:
+      type: completed
+      ts: "2026-08-13T20:25:39Z"
+      host: host
+      summary: >
+        status 'done' with evidence_refs: scripts/test-worktree-boundary-guard.sh: PASS 6/6 (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, stamp-cleared); scripts/mo-full-attest.sh fixture: PASS 10/10 incl. self-no-boundary + negative control self-verified-boundary; wired into litmus:opencode-prompt-e2e-shape
+  - packet_id: worktree-boundary-snapshot-is-unenforced
+    event:
+      type: note
+      ts: "2026-08-13T20:25:39Z"
+      host: host
+      summary: >
+        Both shapes landed; criterion 3 decided (shape 1) and recorded

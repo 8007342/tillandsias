@@ -91,6 +91,12 @@ enforces before it accepts exit zero:
 - `BRANCH` must match the host's current branch.
 - The claimed `REMOTE_SHA` must actually converge on
   `git ls-remote origin refs/heads/<BRANCH>` within the bounded relay window.
+- A startup boundary must have been snapshotted at Start Of Cycle and verified
+  at Finalization, at the HEAD being attested (order 717-3bvv). The guard writes
+  cycle-scoped stamps into `$GIT_DIR`; `self` reads them. Skipping the snapshot
+  therefore costs you the marker — which is the point: cycle 16 on windows
+  skipped it, `verify` answered with a missing-directory message about the
+  PREVIOUS cycle's already-removed temp path, and a valid marker printed anyway.
 - `MO-SMOKE:` grammar and the shared full-cycle rate limit are unchanged; a
   smoke run never emits `MO-FULL:`.
 
