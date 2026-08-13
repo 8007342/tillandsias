@@ -1,0 +1,57 @@
+# @trace spec:methodology-accountability
+name: litmus:delegate-outcome-disposition-not-silent-shape
+spec: methodology-accountability
+phase: pre-build
+description: The delegate-outcome channel reports all three dispositions on stdout and exits 0 — most importantly died-without-outcome is flagged LOUDLY, never emitted silently, and an empty ledger-glob never hangs on stdin
+severity: high
+size: instant
+
+# Order 690-2kwd. scripts/delegate-outcome.sh is the host-readable disposition
+# channel for in-forge delegates: a delegate that dies silently must be
+# detectable within one cycle. A review caught two ways the detector itself
+# failed silently: (1) grep finding NO evidence token (the died-without-outcome
+# case) aborted reconcile under `set -euo pipefail` before it could print — the
+# silent-death detector dying silently; (2) an empty ledger-glob made `grep -r`
+# read STDIN and hang. Both fixed in find_token (empty-glob guard, real-file-only
+# expansion, no-match non-fatal). This litmus pins all three dispositions plus
+# the two failure modes so neither can regress.
+
+preconditions:
+  - scripts/delegate-outcome.sh is present and executable
+
+critical_path:
+  - step: "DIED (the case that was SILENT): no token + not alive -> died-without-outcome, exit 0, non-empty output"
+    command: "S=$(mktemp -d); L=$(mktemp -d); echo none > \"$L/x.yaml\"; TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh register --id D --order o-1 --alive-cmd false --ledger-glob \"$L/*.yaml\" >/dev/null; out=$(TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh reconcile --id D); rc=$?; rm -rf \"$S\" \"$L\"; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -q '^outcome:died-without-outcome D o-1$' && echo 'ok: died-without-outcome flagged loudly' || { echo \"FAIL rc=$rc out=[$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: died-without-outcome flagged loudly"
+
+  - step: "FINISHED: a delegate-outcome token in the ledger -> finished-with-evidence with its disposition"
+    command: "S=$(mktemp -d); L=$(mktemp -d); TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh register --id F --order o-1 --alive-cmd false --ledger-glob \"$L/*.yaml\" >/dev/null; TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh token F done > \"$L/ev.yaml\"; out=$(TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh reconcile --id F); rm -rf \"$S\" \"$L\"; printf '%s' \"$out\" | grep -qE '^outcome:finished-with-evidence F o-1 done$' && echo 'ok: finished-with-evidence' || { echo \"FAIL [$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: finished-with-evidence"
+
+  - step: "RUNNING: no token but the liveness probe passes -> still-running"
+    command: "S=$(mktemp -d); L=$(mktemp -d); TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh register --id R --order o-1 --alive-cmd true --ledger-glob \"$L/none-*.yaml\" >/dev/null; out=$(TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh reconcile --id R); rm -rf \"$S\" \"$L\"; printf '%s' \"$out\" | grep -q '^outcome:still-running R o-1$' && echo 'ok: still-running' || { echo \"FAIL [$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: still-running"
+
+  - step: "EMPTY-GLOB (the blast hazard): an empty ledger-glob must NOT read stdin/hang; reports died, exit != 124"
+    command: "S=$(mktemp -d); TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh register --id E --order o-1 --alive-cmd false --ledger-glob '' >/dev/null; out=$(TILLANDSIAS_DELEGATE_STATE=\"$S\" timeout 5 scripts/delegate-outcome.sh reconcile --id E </dev/null); rc=$?; rm -rf \"$S\"; [ \"$rc\" != 124 ] && printf '%s' \"$out\" | grep -q '^outcome:died-without-outcome E o-1$' && echo 'ok: empty glob did not hang' || { echo \"FAIL rc=$rc (124=timeout) out=[$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: empty glob did not hang"
+
+  - step: "SWEEP: a died delegate is auto-filed (dry-run emits would-file), so a silent death is captured within one cycle"
+    command: "S=$(mktemp -d); L=$(mktemp -d); echo none > \"$L/x.yaml\"; TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh register --id SW --order o-1 --alive-cmd false --ledger-glob \"$L/*.yaml\" >/dev/null; out=$(TILLANDSIAS_DELEGATE_STATE=\"$S\" scripts/delegate-outcome.sh sweep --dry-run); rm -rf \"$S\" \"$L\"; printf '%s' \"$out\" | grep -q '^would-file:died-without-outcome SW o-1$' && echo 'ok: silent death would be auto-filed' || { echo \"FAIL [$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: silent death would be auto-filed"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "delegate-outcome: three dispositions reported, died-without-outcome never silent, empty glob never hangs"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "delegate-outcome-disposition-not-silent-shape"
+
+rollback:
+  on_failure: "restore scripts/delegate-outcome.sh find_token (empty-glob guard + real-file-only expansion + no-match non-fatal) from git history"

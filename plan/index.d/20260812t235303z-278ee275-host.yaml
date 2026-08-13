@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: uncommit-router-sidecar-build-artifact
+    field: status
+    value: verified
+    ts: "2026-08-12T23:53:03Z"
+    host: host
+
+events:
+  - packet_id: uncommit-router-sidecar-build-artifact
+    event:
+      type: completed
+      ts: "2026-08-12T23:53:03Z"
+      host: host
+      summary: >
+        status 'verified' with evidence_refs: scripts/build-image.sh router built tillandsias-router:v0.4.260812.1 with the committed ELF untracked; build-sidecar.sh staged it fresh and the Containerfile COPY succeeded (podman build fails on a missing COPY source, so green == binary staged-not-committed). All three exit criteria met as-wired.

@@ -1,0 +1,42 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+packets:
+
+  - packet_id: append-event-rejects-unknown-flags
+    order: 711-digd
+    status: verified
+    desired_release: v0.5
+    priority: p2
+    title: "append-event silently swallowed unknown --flags as positionals, writing malformed events that passed every gate"
+    kind: fix
+    deliverable: append-event accepts --type/--summary flags and rejects any unrecognized --flag loudly; pinned by a litmus
+    depends_on: []
+    pickup_role: linux
+    capability_tags: [plan-cli, ledger-integrity, robustness, litmus]
+    context: >
+      Discovered 2026-08-12 while closing 690-2kwd: append-event takes POSITIONAL
+      <type> <summary>, but the natural-looking --type/--summary FLAGS were
+      swallowed as positionals -> stored type="--type", summary="progress",
+      agent_id "unknown" -> a malformed event that tillandsias-plan check passed
+      green (reproduces 698-7n6q malformed-fragment-passes-every-gate). Two real
+      malformed events landed on 690 and 698 this way before being caught and
+      reverted. Fixed in crates/tillandsias-plan/src/main.rs: --type/--summary are
+      now accepted as flags AND any other --flag is rejected with a non-zero exit,
+      so the corruption class cannot recur silently. Follow-up worth considering:
+      audit sibling subcommands (set-field, etc.) for the same swallow pattern,
+      and let 698/699 land the fail-loud-on-malformed gate so a malformed event is
+      also caught at check time, not only at the input boundary.
+    exit_criteria:
+      - "append-event accepts --type/--summary flags (flag form parses) and the positional form still works"
+      - "an unrecognized --flag is rejected with a non-zero exit naming the flag, never swallowed as a positional"
+      - "a litmus pins all three (executed green as-wired)"
+    events:
+      - type: filed
+        ts: "2026-08-12T23:00:03Z"
+        agent_id: linux-mutable-session-20260812
+        host: linux_mutable
+        summary: "Filed + fixed same cycle; append-event flag-swallow footgun that produced malformed events on 690/698."
+      - type: verified
+        ts: "2026-08-12T23:00:03Z"
+        agent_id: linux-mutable-session-20260812
+        host: linux_mutable
+        summary: "litmus:append-event-rejects-unknown-flags-shape green as-wired (flag form parses, positional form parses, unknown flag rejected with non-zero exit)."

@@ -39700,6 +39700,12 @@ plan_index:
         - a delegate that dies silently is detectable as such within one cycle and filed automatically, never mistaken for a clean finish
         - the host loop's own live verification is isolated from delegate-driven forge teardown, or the protocol schedules host live-checks against a host-owned stack the delegate does not recycle
       events:
+        - type: progress
+          ts: "2026-08-12T22:57:25Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            CLOSED via ladder to verified. Three criteria met: host-readable three-way disposition (scripts/delegate-outcome.sh register/reconcile: durable host-owned registry + host-greppable ledger token delegate-outcome:ID:disposition); silent death auto-filed within one cycle by sweep; host-live-check isolation (reconcile reads fetched ledger + cheap local liveness probe, never the delegate recycled forge stack). Wired into methodology/in-forge-delegation.yaml (disposition_channel + cycle_protocol). Pinned by litmus:delegate-outcome-disposition-not-silent-shape, 13/13 green.
         - type: filed
           ts: "2026-08-11T22:55:00Z"
           agent_id: linux-mutable-session-20260811
@@ -40624,6 +40630,12 @@ plan_index:
         - a NEGATIVE CONTROL asserts a well-formed added fragment passes, so the check cannot degrade into refusing all fragment additions
         - the failure message names the file AND the parse error location, so the author can fix it without re-deriving the parse
       events:
+        - type: progress
+          ts: "2026-08-12T22:57:25Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            LIVE INSTANCE 2026-08-12: append-event with flag-style args (--type/--summary) silently produced malformed events (type: "--type", summary: "progress", agent_id unknown) into base index.yaml on 690 and 698, and tillandsias-plan check returned green with them present. Root cause: append-event takes POSITIONAL type+summary and does not reject unknown --flags, so they are swallowed as positionals. Reverted the malformed copies; filing an append-event hardening packet. Reproduces malformed-fragment-passes-every-gate exactly.
         - type: filed
           ts: "2026-08-12T02:32:43Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260812t023243z

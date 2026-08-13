@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: in-forge-delegate-disposition-unobservable
+    field: status
+    value: verified
+    ts: "2026-08-12T22:54:05Z"
+    host: host
+
+events:
+  - packet_id: in-forge-delegate-disposition-unobservable
+    event:
+      type: completed
+      ts: "2026-08-12T22:54:05Z"
+      host: host
+      summary: >
+        status 'verified' with evidence_refs: litmus:delegate-outcome-disposition-not-silent-shape executes green as-wired (scripts/run-litmus-test.sh methodology-accountability --phase pre-build --size instant => 13/13 PASS), pinning all three dispositions + the not-silent and empty-glob-no-hang properties. Channel wired into methodology/in-forge-delegation.yaml disposition_channel + cycle_protocol. scripts/delegate-outcome.sh committed prior cycle.

@@ -43,6 +43,38 @@ in_forge_delegation:
       whatever their harness is configured to by default. The harnesses are
       logged in on the host and in the host's tillandsias vault.
 
+  disposition_channel:
+    # Order 690-2kwd. A stage-0 delegate runs in an ephemeral forge and can
+    # vanish with no trace; the host loop must still read its terminal
+    # disposition at cycle end. scripts/delegate-outcome.sh is that channel.
+    tool: scripts/delegate-outcome.sh
+    how_it_works: >
+      Two halves. (1) A DURABLE HOST-OWNED registry (under
+      $TILLANDSIAS_DELEGATE_STATE, default ~/.local/state/tillandsias/
+      delegate-runs) that survives forge teardown and the per-cycle boundary
+      tmp sweep: `delegate-outcome.sh register --id <id> --order <assigned>`
+      at launch. (2) A HOST-GREPPABLE ledger TOKEN the delegate writes as its
+      mandatory exit evidence: an event on its assigned order whose summary
+      contains `delegate-outcome:<id>:<disposition>` (the exact string
+      `delegate-outcome.sh token <id> <disposition>` prints). Because the token
+      rides the ledger, it reaches the host by ordinary `git fetch` — the host
+      NEVER live-queries the delegate's churning forge stack to learn the
+      outcome (this is the criterion-3 isolation: host live-checks run against
+      the host-owned stack; delegate reconcile reads the fetched ledger + a
+      cheap local liveness probe, never the delegate's recycled containers).
+    dispositions: >
+      `delegate-outcome.sh reconcile --id <id>` prints exactly one of:
+      `outcome:finished-with-evidence <id> <order> <disp>` (token present),
+      `outcome:still-running <id> <order>` (no token, liveness probe passes),
+      `outcome:died-without-outcome <id> <order>` (no token, not alive). It
+      ALWAYS exits 0 and always prints — a missing token is the whole point of
+      the died path and must never be silent (pinned by
+      litmus:delegate-outcome-disposition-not-silent-shape).
+    surgical_prompt_requirement: >
+      The delegate's one-directive prompt MUST instruct it to end by emitting
+      its `delegate-outcome:<id>:<disposition>` token as a ledger event on its
+      assigned packet. One packet in, one host-readable token out.
+
   cycle_protocol:
     # The two-flow (stage 0) loop the operator authorized 2026-08-11.
     # HOST flow = this host's meta-orchestration loop. DELEGATE flow = one
@@ -50,9 +82,9 @@ in_forge_delegation:
     # and its containers; the delegate owns exactly its one directive.
     steps:
       - "CYCLE START: if a fresh tray build was staged by the previous cycle, the relaunch this cycle picks it up — never launch a delegate on a stack whose binary and containers disagree (version-skew killed a forge launch in ~2s on 2026-08-11; a refresh must be WHOLE)."
-      - "DELEGATE CHECK: if the previous delegate is still running, let it run and SKIP starting a new one this cycle. If it finished, harvest its ledger evidence, terminate the running instances, and stage rebuild+relaunch. If none is running, launch one with a surgical prompt."
+      - "DELEGATE CHECK: reconcile the previous delegate via `scripts/delegate-outcome.sh reconcile --id <id>` (see disposition_channel). still-running -> let it run, SKIP launching. finished-with-evidence -> harvest the token's ledger evidence, terminate instances, stage rebuild+relaunch. died-without-outcome -> it is auto-filed by the cycle-end sweep, terminate any residue, relaunch. If none is running, launch one with a surgical prompt AND `delegate-outcome.sh register --id <id> --order <assigned>` it first."
       - "HOST WORK: run the host's own meta-orchestration cycle in parallel with the delegate."
-      - "CYCLE END: stage the fresh build for the next cycle: TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --install (skip flag mandatory on non-main branches until 671-jvcg lands, so the tree stays byte-clean), so the next relaunch re-bundles CURRENT source — never rely on `--init` alone, it rebuilds from the binary's BUNDLED asset snapshot (683-g7p6)."
+      - "CYCLE END: run `scripts/delegate-outcome.sh sweep` — it reconciles every registered delegate and AUTO-FILES a died-without-outcome as a ledger fragment within this one cycle, so a silent death is never mistaken for a clean finish. Then stage the fresh build for the next cycle: TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --install (skip flag mandatory on non-main branches until 671-jvcg lands, so the tree stays byte-clean), so the next relaunch re-bundles CURRENT source — never rely on `--init` alone, it rebuilds from the binary's BUNDLED asset snapshot (683-g7p6)."
     concurrency: >
       Stage 0: at most TWO orchestration flows on this host — the host loop
       plus ONE in-forge delegate. Raising this is a stage lift under
