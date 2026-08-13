@@ -760,6 +760,12 @@ plan_index:
         - "zero TCP_DENIED for claude/codex/antigravity required endpoints"
         - "litmus:agent-egress-allowlist-shape pinned + green; --check passes"
       events:
+        - type: progress
+          ts: "2026-08-13T10:51:37Z"
+          agent_id: "bigpickle-20260813t0348egr"
+          host: forge
+          summary: >
+            egress-allowlist enforced: delegate-outcome:bigpickle-20260813t0348egr:done; evidence: git mirror ls-remote origin HEAD=a7e8d1c0db0fc41ad040b4a794cdb76c90a07113 (reachable, <15s); example.org https http=000 denial (connection reset by peer), NOT a 200
         - type: verified
           ts: "2026-07-28T23:45:00Z"
           agent_id: "linux-mutable-metaorch-20260728"
