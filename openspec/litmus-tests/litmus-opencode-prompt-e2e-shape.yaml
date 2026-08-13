@@ -31,6 +31,7 @@ preconditions:
   - forge image is built and available locally
   - git remote origin is reachable and credential channel is active
   - scripts/mo-full-attest.sh and scripts/test-mo-full-attest.sh exist
+  - scripts/meta-orchestration-worktree-guard.sh and scripts/test-worktree-boundary-guard.sh exist
 
 critical_path:
   # Hermetic fixture (order 614-2gqx): reproduce the early-normal-provider-
@@ -39,7 +40,19 @@ critical_path:
   - step: "run full-mode terminal attestation fixture"
     command: "scripts/test-mo-full-attest.sh"
     timeout_ms: 60000
-    expected_behavior: "PASS: mo-full-attest fixture 7/7"
+    # Not pinned to a scenario COUNT: the self-mode boundary scenarios (order
+    # 717-3bvv) are only attestable from a non-main branch, so the count is a
+    # property of the checkout, not of the gate. The fixture names what it
+    # skipped in the same line.
+    expected_behavior: "PASS: mo-full-attest fixture"
+
+  # Startup-boundary guard (order 717-3bvv): a cycle that never snapshotted must
+  # be named as such, and a cycle that did must still verify clean. Hermetic —
+  # builds a throwaway git repo under TMPDIR.
+  - step: "run startup-boundary guard fixture"
+    command: "scripts/test-worktree-boundary-guard.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: worktree-boundary-guard fixture"
 
   - step: "record pre-smoke HEAD for delta comparison"
     command: "git rev-parse HEAD > /tmp/opencode-e2e-head-before && echo \"ok: recorded $(cat /tmp/opencode-e2e-head-before)\""

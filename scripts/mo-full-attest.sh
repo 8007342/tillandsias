@@ -197,6 +197,30 @@ self_attest() {
         return 1
     fi
 
+    # A verified startup boundary is a PRECONDITION of the marker (order
+    # 717-3bvv, extending 614-2gqx). Decision recorded in
+    # plan/issues/enhancement-worktree-boundary-snapshot-is-unenforced-2026-08-13.md:
+    # candidate shape 1 was adopted. The marker already attests that HEAD is
+    # durably on the remote; it now also attests that the cycle recorded a
+    # startup boundary and verified the worktree against it. Without this the
+    # guard was a convention — cycle 16 on windows skipped the snapshot, and a
+    # valid marker printed anyway.
+    #
+    # It fails in the loud direction: no marker, which every outer launcher
+    # already treats as failure. A cycle that skipped the snapshot has not met
+    # its exit contract, and that is the fact being reported.
+    local stamp verified_head
+    stamp="${MO_FULL_BOUNDARY_STAMP:-$(git rev-parse --git-dir 2>/dev/null)/boundary-verified}"
+    verified_head="$(cat "$stamp" 2>/dev/null | tr -d '[:space:]')"
+    if [ -z "$verified_head" ]; then
+        echo "MO-FULL: FAIL no verified startup boundary for this cycle — run the guard's snapshot at Start Of Cycle and verify at Finalization; do NOT emit a marker"
+        return 1
+    fi
+    if [ "$verified_head" != "$local_sha" ]; then
+        echo "MO-FULL: FAIL startup boundary was verified at $verified_head but HEAD is now $local_sha — re-run the guard's verify after the cycle's last commit; do NOT emit a marker"
+        return 1
+    fi
+
     if actual="$(converge_remote "$branch" "$local_sha" "$timeout_s")"; then
         printf 'MO-FULL: %s %s %s %s\n' "$disp" "$local_sha" "$branch" "$local_sha"
         return 0
@@ -270,12 +294,61 @@ fixture() {
     printf '%s\n' "MO-FULL: COMPLETE $sha_fab $branch $sha_fab" > "$work/log-fabricated"
     run_case "fabricated-sha" "$work/log-fabricated" 2 "never reached" "printf '${sha_real}'"
 
+    # 8-10. self-mode boundary precondition (order 717-3bvv). `self` derives
+    #    from the LIVE repo, so these need the real branch to be attestable;
+    #    on a `main` checkout self refuses for a different, correct reason and
+    #    the scenarios would prove nothing.
+    local self_cases=0 live_branch live_head
+    live_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    live_head="$(git rev-parse HEAD 2>/dev/null || true)"
+    if [ -n "$live_head" ] && [ -n "$live_branch" ] && [ "$live_branch" != "main" ] && [ "$live_branch" != "HEAD" ]; then
+        self_cases=3
+        run_self_case() {
+            # run_self_case <name> <stamp-file> <expect-exit> <verdict-substring>
+            local sname="$1" sstamp="$2" src_want="$3" swant="$4" src=0
+            MO_FULL_BOUNDARY_STAMP="$sstamp" \
+            MO_FULL_REMOTE_PROBE="printf '${live_head}'" \
+                "$0" self 2 >"$work/self-out" 2>&1 || src=$?
+            if [ "$src" -ne "$src_want" ]; then
+                failures+=("$sname: exit=$src expected=$src_want (out: $(tail -1 "$work/self-out"))")
+            elif ! grep -Fq "$swant" "$work/self-out"; then
+                failures+=("$sname: expected '$swant', got: $(tail -1 "$work/self-out")")
+            fi
+        }
+
+        # 8. the cycle-16 shape: everything committed and pushed, but no
+        #    boundary was ever recorded. Must refuse to print a marker.
+        run_self_case "self-no-boundary" "$work/absent-stamp" 1 \
+            "no verified startup boundary"
+
+        # 9. a boundary verified BEFORE the cycle's last commit — the stamp
+        #    exists, so a mere existence test would pass it, and the worktree it
+        #    attests is not the one being pushed.
+        printf '%s\n' "$sha_a" >"$work/stale-stamp"
+        run_self_case "self-stale-boundary" "$work/stale-stamp" 1 \
+            "startup boundary was verified at"
+
+        # 10. NEGATIVE CONTROL: a cycle that DID snapshot and verify at the head
+        #     it is attesting still gets its marker. Without this, the new
+        #     precondition could degrade into refusing every cycle and read as
+        #     "working".
+        printf '%s\n' "$live_head" >"$work/good-stamp"
+        run_self_case "self-verified-boundary" "$work/good-stamp" 0 \
+            "MO-FULL: COMPLETE $live_head $live_branch $live_head"
+    fi
+
     if [ "${#failures[@]}" -gt 0 ]; then
         printf 'FAIL: %s\n' "${failures[@]}" >&2
         echo "MO-FULL: FAIL fixture $((${#failures[@]})) scenario(s) did not match expected verdicts"
         return 1
     fi
-    echo "PASS: mo-full-attest fixture 7/7 scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha)"
+    if [ "$self_cases" -eq 0 ]; then
+        # Say what was NOT run. A fixture that silently covers less on some
+        # checkouts reports the same "green" as one that covered everything.
+        echo "PASS: mo-full-attest fixture 7/7 check scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
+        return 0
+    fi
+    echo "PASS: mo-full-attest fixture 10/10 scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary)"
     return 0
 }
 
