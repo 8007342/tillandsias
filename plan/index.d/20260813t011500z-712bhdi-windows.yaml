@@ -1,0 +1,57 @@
+packets:
+  - packet_id: on-demand-image-freshness-podman-evidence
+    order: 712-bhdi
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    title: "Podman-hosted closure for 702-griq: decisive freshness verdict + measured no-rebuild launch"
+    kind: defect
+    deliverable: "scripts/check-running-image-freshness.sh, scripts/test-running-image-freshness.sh"
+    pickup_role: linux
+    capability_tags:
+      - images
+      - podman
+      - staleness
+      - forge
+    estimated_hours: 3
+    depends_on:
+      - on-demand-image-ensure-ignores-source-digest
+    context: |
+      Split out of 702-griq (order 702-griq, split recorded on both packets,
+      2026-08-13, windows host). The Rust half of 702-griq is implemented and
+      unit-verified: `ensure_image_exists` now computes the same content
+      identity `run_init` computes and routes it through
+      `decide_image_build`, so a source change without a VERSION bump rebuilds.
+      Hand-falsification recorded (reinstating the version-tag skip fails the
+      new tests; the negative control still passes).
+
+      Two of that packet's five exit criteria need a PODMAN-CAPABLE host and
+      cannot be evidenced on Windows, where no podman runtime is present. They
+      are carried here rather than closed on assertion — a criterion marked met
+      without its evidence is exactly the false-success class 702-griq was
+      filed against.
+
+      On the freshness gate: shell cannot recompute the Rust source digest, so
+      today it correctly DEFERS (`indeterminate`) whenever an image carries only
+      a source-digest label. Making the verdict decisive therefore means giving
+      shell a way to ASK the authoritative computer, not teaching it to guess —
+      e.g. a machine-line identity subcommand on the built binary, with
+      `indeterminate` retained as the honest fallback when no binary is
+      available to answer. Do not replace deferral with a heuristic.
+    outcome: |
+      The freshness gate returns a decisive stale/current verdict wherever the
+      source digest is knowable, and the common unchanged-tree case is measured
+      to skip the rebuild on the on-demand path.
+    exit_criteria:
+      - "scripts/check-running-image-freshness.sh no longer returns `indeterminate` for a VERSION-tagged image whose source digest is knowable; it returns a decisive stale/current verdict. Where the digest is NOT knowable (no built binary to ask), `indeterminate` is retained and that fallback is pinned by a case."
+      - "scripts/test-running-image-freshness.sh gains a case pinning the decisive verdict; its existing negative control (a genuinely stale 64-hex-tagged image must FAIL the gate) is retained and still passes."
+      - "Rebuild cost is not regressed for the common case: evidence must include a measured back-to-back `tillandsias` lane launch on a podman host showing the second run performs no image build (decision `skip`, reason `digest_present`), with the emitted image.build.decision events quoted."
+      - "Counter-case measured on the same host: touch a file in the forge build context, relaunch, and show the on-demand path decides `build` with reason `label_mismatch` — the live proof of the 702-griq defect being closed end to end."
+    events:
+      - type: filed
+        ts: "2026-08-13T01:15:00Z"
+        host: windows
+        summary: |
+          Split from 702-griq. Windows has no podman runtime, so the two
+          podman-dependent criteria are carried here with their evidence
+          requirements intact rather than asserted without measurement.

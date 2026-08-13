@@ -1872,6 +1872,58 @@ fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), Stri
     InitBuildState::save_containerfile_mtime(image_name, mtime)
 }
 
+/// Images whose build context references another image by tag. The dependency
+/// must be resolved (and content-checked) before the dependent's identity can
+/// be computed, because its source digest participates in that identity.
+fn image_dependency(image_name: &str) -> Option<&'static str> {
+    match image_name {
+        "forge" => Some("forge-base"),
+        "chromium-framework" => Some("chromium-core"),
+        _ => None,
+    }
+}
+
+/// Order 702-griq: compute the SAME content identity `--init` computes, for the
+/// on-demand path. Recurses one level so a dependent image (forge,
+/// chromium-framework) hashes its base's source digest exactly as
+/// `image_build_inputs` does under `run_init` — otherwise the two paths would
+/// derive different digests for identical content and each would rebuild what
+/// the other just built.
+fn ensure_image_identity(
+    root: &Path,
+    image_name: &str,
+    version: &str,
+) -> Result<(ImageBuildIdentity, BTreeMap<String, String>), String> {
+    let mut identities = HashMap::<String, ImageBuildIdentity>::new();
+    if let Some(dependency) = image_dependency(image_name) {
+        let (dependency_identity, _) = ensure_image_identity(root, dependency, version)?;
+        identities.insert(dependency.to_string(), dependency_identity);
+    }
+    let (build_args, dependency_digests) = image_build_inputs(image_name, &identities)?;
+    let identity = runtime_assets::image_identity(
+        root,
+        image_name,
+        version,
+        build_args.clone(),
+        dependency_digests,
+    )?;
+    Ok((identity, build_args))
+}
+
+/// Order 702-griq: the freshness decision for the on-demand lane-launch path.
+///
+/// This is `decide_image_build` and nothing else, by design — the whole defect
+/// was that this path had its OWN rule (does the VERSION tag exist?) while
+/// `--init` asked the content-identity question. VERSION changes only move
+/// aliases; content identity comes from the exact context digest and the
+/// `io.tillandsias.image.source-digest` OCI label. One rule, one place.
+fn ensure_image_decision(
+    identity: &ImageBuildIdentity,
+    observation: &ImageBuildObservation,
+) -> ImageBuildDecision {
+    decide_image_build(identity.clone(), observation)
+}
+
 pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
@@ -1894,7 +1946,6 @@ pub(crate) fn ensure_image_exists(
         std::time::Duration::from_secs(900),
         debug,
     )?;
-    let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
 
@@ -1904,86 +1955,65 @@ pub(crate) fn ensure_image_exists(
         .unwrap_or("latest")
         .trim_start_matches('v');
 
-    if image_name == "chromium-framework" {
-        let core_tag = versioned_image_tag("chromium-core", version);
-        if !rt.block_on(async {
-            client.image_exists(&core_tag).await
-                && client.image_uses_managed_layer_policy(&core_tag).await
-        }) {
-            ensure_image_exists(root, "chromium-core", &core_tag, debug).map_err(|e| {
-                format!(
-                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
-                     Please ensure the base image is built by running: tillandsias --init",
-                    core_tag, e
-                )
-            })?;
+    // Resolve the base image first. Its own content check runs inside this same
+    // function, so a stale base is rebuilt rather than accepted on tag presence.
+    if let Some(dependency) = image_dependency(image_name) {
+        let dependency_tag = versioned_image_tag(dependency, version);
+        ensure_image_exists(root, dependency, &dependency_tag, debug).map_err(|e| {
+            format!(
+                "Required base image '{}' is absent or stale and failed to build on demand: {}.\n\
+                 Please ensure the base image is built by running: tillandsias --init",
+                dependency_tag, e
+            )
+        })?;
+    }
+
+    // Order 702-griq: decide on CONTENT, not on the VERSION tag existing. The
+    // layer policy is hashed into the identity, so a policy change is a digest
+    // change — the old explicit managed-layer-policy tag probe is subsumed
+    // rather than dropped.
+    let (identity, build_args) = ensure_image_identity(root, image_name, version)?;
+    let (observation, _) = rt.block_on(observe_image_build(&client, &identity, false));
+    let decision = ensure_image_decision(&identity, &observation);
+
+    match decision.action {
+        ImageBuildAction::Skip => {}
+        ImageBuildAction::Retag => {
+            if debug {
+                eprintln!("[tillandsias] retagging {image_name} aliases ({image_tag})");
+            }
+            rt.block_on(apply_image_aliases(&client, &identity))?;
         }
-    } else if image_name == "forge" {
-        let base_tag = versioned_image_tag("forge-base", version);
-        if !rt.block_on(async {
-            client.image_exists(&base_tag).await
-                && client.image_uses_managed_layer_policy(&base_tag).await
-        }) {
-            ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
-                format!(
-                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
-                     Please ensure the base image is built by running: tillandsias --init",
-                    base_tag, e
-                )
-            })?;
+        ImageBuildAction::Build | ImageBuildAction::ForceRebuild => {
+            eprintln!(
+                "[tillandsias] building image {image_name} ({image_tag}, {}); this may take several minutes",
+                image_build_reason_label(decision.reason)
+            );
+            build_image_with_logging(root, image_name, &identity, &build_args, &None, debug)
+                .map_err(|e| format_on_demand_image_build_error(image_tag, &e))?;
+            rt.block_on(apply_image_aliases(&client, &identity))?;
+            if debug {
+                eprintln!(
+                    "[tillandsias] built image {image_name}: {}",
+                    identity.canonical_tag
+                );
+            }
         }
     }
 
-    let mut build_args = if image_name == "chromium-framework" {
-        vec![
-            "--build-arg".to_string(),
-            format!(
-                "CHROMIUM_CORE_IMAGE={}",
-                versioned_image_tag("chromium-core", version)
-            ),
-        ]
-    } else if image_name == "forge" {
-        vec![
-            "--build-arg".to_string(),
-            format!("BASE_IMAGE={}", versioned_image_tag("forge-base", version)),
-        ]
-    } else {
-        Vec::new()
-    };
-    build_args.push("--dns".to_string());
-    build_args.push("8.8.8.8".to_string());
+    // Callers may request a tag that is not this version's canonical alias
+    // (explicit per-project or per-service tags). Point it at the fresh content.
+    if image_tag != identity.version_alias {
+        rt.block_on(client.image_tag(&identity.canonical_tag, image_tag))
+            .map_err(|e| {
+                format!(
+                    "Failed to tag {} as {image_tag}: {e}",
+                    identity.canonical_tag
+                )
+            })?;
+    }
 
-    rt.block_on(async move {
-        if client.image_exists(image_tag).await
-            && client.image_uses_managed_layer_policy(image_tag).await
-        {
-            return Ok(());
-        }
-
-        eprintln!(
-            "[tillandsias] building missing image {image_name} ({image_tag}); this may take several minutes"
-        );
-
-        client
-            .build_image(
-                containerfile
-                    .to_str()
-                    .ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?,
-                image_tag,
-                context_dir
-                    .to_str()
-                    .ok_or_else(|| "Context path contains invalid UTF-8".to_string())?,
-                &build_args,
-            )
-            .await
-            .map_err(|e| format_on_demand_image_build_error(image_tag, &e.to_string()))?;
-
-        if debug {
-            eprintln!("[tillandsias] built image {image_name}: {image_tag}");
-        }
-
-        Ok(())
-    })
+    Ok(())
 }
 
 fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
@@ -19323,26 +19353,113 @@ esac
     fn on_demand_image_build_announces_slow_work_before_buffered_build() {
         let source = source_window(
             include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
-            "fn ensure_image_exists(",
+            "pub(crate) fn ensure_image_exists(",
         );
         let announce = source
-            .find("[tillandsias] building missing image")
-            .expect("missing-image build must announce slow work");
+            .find("[tillandsias] building image")
+            .expect("on-demand build must announce slow work");
         let build = source
-            .find(".build_image(")
+            .find("build_image_with_logging(")
             .expect("image build call must remain present");
         assert!(announce < build, "announcement must precede buffered build");
     }
 
+    /// Order 702-griq. The version-tag-only skip served a two-day-stale forge
+    /// image to every lane, so its ABSENCE from the on-demand path is the
+    /// property under test: reinstating `image_exists(image_tag)` as the skip
+    /// condition must fail here.
     #[test]
-    fn on_demand_image_build_rejects_an_existing_tag_without_the_layer_policy() {
+    fn on_demand_image_build_decides_on_content_identity_not_the_version_tag() {
         let source = source_window(
             include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
-            "fn ensure_image_exists(",
+            "pub(crate) fn ensure_image_exists(",
         );
-        assert!(source.contains("image_uses_managed_layer_policy(image_tag)"));
-        assert!(source.contains("image_uses_managed_layer_policy(&core_tag)"));
-        assert!(source.contains("image_uses_managed_layer_policy(&base_tag)"));
+        assert!(
+            !source.contains("client.image_exists(image_tag)"),
+            "version-tag presence must not gate the on-demand build"
+        );
+        assert!(
+            !source.contains("image_uses_managed_layer_policy"),
+            "layer policy is hashed into the source digest; the tag probe is subsumed"
+        );
+        assert!(source.contains("ensure_image_identity(root, image_name, version)"));
+        assert!(source.contains("ensure_image_decision(&identity, &observation)"));
+    }
+
+    fn fixture_image_identity(source_digest: &str) -> ImageBuildIdentity {
+        ImageBuildIdentity {
+            source_digest: source_digest.to_string(),
+            canonical_tag: format!("localhost/tillandsias-forge:{source_digest}"),
+            version_alias: "localhost/tillandsias-forge:v0.4.260810.1".to_string(),
+            latest_alias: "localhost/tillandsias-forge:latest".to_string(),
+            labels: BTreeMap::new(),
+        }
+    }
+
+    /// Order 702-griq, the load-bearing case: content moved, VERSION did not.
+    #[test]
+    fn on_demand_ensure_rebuilds_when_the_image_source_digest_differs() {
+        let identity = fixture_image_identity("sha256:current");
+        let decision = ensure_image_decision(
+            &identity,
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some("sha256:stale".to_string()),
+                version_alias_matches: true,
+                latest_alias_matches: true,
+                force: false,
+            },
+        );
+        assert_eq!(decision.action, ImageBuildAction::Build);
+        assert_eq!(decision.reason, ImageBuildReason::LabelMismatch);
+    }
+
+    /// Negative control: without this, the test above could pass by rebuilding
+    /// unconditionally, which would regress every launch into a full rebuild.
+    #[test]
+    fn on_demand_ensure_skips_when_the_image_source_digest_matches() {
+        let identity = fixture_image_identity("sha256:current");
+        let decision = ensure_image_decision(
+            &identity,
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some("sha256:current".to_string()),
+                version_alias_matches: true,
+                latest_alias_matches: true,
+                force: false,
+            },
+        );
+        assert_eq!(decision.action, ImageBuildAction::Skip);
+        assert_eq!(decision.reason, ImageBuildReason::DigestPresent);
+    }
+
+    /// The on-demand path must hash a dependent image's base exactly the way
+    /// `run_init` does, or the two paths derive different digests for identical
+    /// content and each rebuilds what the other just built.
+    #[test]
+    fn on_demand_dependency_mapping_matches_the_init_path() {
+        assert_eq!(image_dependency("forge"), Some("forge-base"));
+        assert_eq!(
+            image_dependency("chromium-framework"),
+            Some("chromium-core")
+        );
+        assert_eq!(image_dependency("git"), None);
+
+        let mut identities = HashMap::new();
+        identities.insert(
+            "forge-base".to_string(),
+            fixture_image_identity("sha256:base"),
+        );
+        let (build_args, dependency_digests) =
+            image_build_inputs("forge", &identities).expect("forge inputs");
+        assert_eq!(
+            build_args.get("BASE_IMAGE").map(String::as_str),
+            Some("localhost/tillandsias-forge:sha256:base")
+        );
+        assert_eq!(
+            dependency_digests.get("forge-base").map(String::as_str),
+            Some("sha256:base")
+        );
     }
 
     #[test]

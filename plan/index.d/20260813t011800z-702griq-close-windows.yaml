@@ -1,0 +1,59 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by hand (windows host): `tillandsias-plan append-event` / `set-field`
+# resolve the order token but then refuse with "packet_id ... not found" for a
+# packet that lives in a FRAGMENT rather than the compacted base, so the same
+# status+events shape those subcommands emit is written directly here.
+status:
+  - packet_id: on-demand-image-ensure-ignores-source-digest
+    field: status
+    value: done
+    ts: "2026-08-13T01:18:00Z"
+    host: windows
+
+events:
+  - packet_id: on-demand-image-ensure-ignores-source-digest
+    event:
+      type: progress
+      ts: "2026-08-13T01:16:00Z"
+      host: windows
+      summary: >
+        Rust fix implemented. ensure_image_exists now computes the SAME content
+        identity run_init computes (new ensure_image_identity, recursing one
+        level so forge hashes forge-base exactly as image_build_inputs does)
+        and decides through decide_image_build via ensure_image_decision. The
+        version-tag-only skip is gone from the lane-launch path, and the
+        managed-layer-policy tag probe with it — layer policy is hashed into
+        the source digest, so a policy change is a digest change. Build and
+        Retag apply the canonical aliases (as --init does), and a caller
+        requesting a non-canonical tag has that tag repointed at the fresh
+        content. Evidence: cargo test -p tillandsias-headless --bin tillandsias
+        on_demand = 6/6 pass, including Build on a differing
+        SOURCE_DIGEST_LABEL (LabelMismatch) and its Skip negative control
+        (DigestPresent).
+  - packet_id: on-demand-image-ensure-ignores-source-digest
+    event:
+      type: verified
+      ts: "2026-08-13T01:17:00Z"
+      host: windows
+      summary: >
+        Hand-falsification recorded, criterion 3. Reinstating the pre-702 rule
+        (version-alias presence => Skip, plus a client.image_exists(image_tag)
+        probe) makes the suite report 4 passed / 2 failed:
+        on_demand_ensure_rebuilds_when_the_image_source_digest_differs and
+        on_demand_image_build_decides_on_content_identity_not_the_version_tag
+        both FAIL, while the Skip negative control still passes — so the tests
+        are not vacuous and cannot pass by rebuilding unconditionally. The
+        probe was reverted and the suite is green again at HEAD.
+  - packet_id: on-demand-image-ensure-ignores-source-digest
+    event:
+      type: progress
+      ts: "2026-08-13T01:17:30Z"
+      host: windows
+      summary: >
+        split_into 712-bhdi. Exit criteria 4 (decisive
+        check-running-image-freshness.sh verdict) and 5 (measured back-to-back
+        launch showing no rebuild) require a podman-capable host; this Windows
+        host has no podman runtime. They are carried to 712-bhdi with their
+        evidence requirements intact, plus a live counter-case, rather than
+        closed on assertion — asserting an unmeasured criterion is the exact
+        false-success class this packet was filed against.
