@@ -90,6 +90,16 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "main"
 
+  # The grep above pins the guard's TEXT; this pins its BEHAVIOUR in both
+  # directions (order 643-64bx, 2026-08-13). A platform branch must be able to
+  # push after the merge from origin/linux-next the pre-push gate requires, and
+  # must still be refused when it invents a VERSION of its own — the release is
+  # the linux host's to move. Case 2 of the fixture is that negative control.
+  - step: "Req: the VERSION guard allows integration catch-up and still refuses a divergent bump"
+    command: "bash scripts/test-pre-push-version-guard.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: pre-push VERSION guard (4/4)"
+
   - step: "Req: build.sh never unconditionally instructs committing VERSION"
     # Order 643-64bx, partial reduction (windows host 2026-08-10). build.sh bumps
     # VERSION on every build-producing dispatch and used to say, unconditionally,

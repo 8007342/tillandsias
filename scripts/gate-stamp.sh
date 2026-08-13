@@ -85,6 +85,30 @@ compute() {
             kinds+=(symlink) paths+=("$path")
         elif [[ -f "$absolute" ]]; then
             kinds+=(file) paths+=("$path")
+        elif [[ ! -e "$absolute" ]]; then
+            # DELETED tracked entry (order 695-nvnd). `ls-files --cached` reads the
+            # INDEX, so a file deleted from the worktree is still listed here and
+            # used to hit the refusal below — on a tree where every gate check had
+            # just passed. `tillandsias-plan compact` deletes the fragments it
+            # folded, which IS compaction, so every compacting cycle paid the
+            # slowest step in the cycle twice: once green-but-unstamped, once
+            # green-and-stamped.
+            #
+            # The entry is DROPPED from the hashed list, not recorded as deleted.
+            # That is what keeps the stamp commit-invariant, which is the property
+            # the whole design rests on ("staging is invisible, committing is
+            # invisible, editing is not"): committing a deletion removes the path
+            # from the index, so a `deleted` frame would vanish at commit time and
+            # go stale at exactly the moment the hook checks it. Dropping it makes
+            # the two enumerations agree.
+            #
+            # This does not weaken the stamp. The deleted path's frame — its name
+            # AND its content digest — disappears from the hash, so a deletion
+            # still changes the stamp exactly as an edit does; it cannot ride an
+            # older stamp to the trunk. And it stays distinct from an unreadable
+            # file: an unreadable file EXISTS, so it falls through to the refusal
+            # below. Absent is not the same as unmeasured.
+            continue
         else
             echo "gate-stamp: unsupported worktree entry: $path" >&2
             return 1
