@@ -37,6 +37,8 @@
 #   stale:windows-sources-unverified:<n>:<f>   n changed since the stamp, first is f
 #   stale:windows-sources-never-verified:<n>   no stamp on this host yet
 #   skip:no-windows-only-sources               nothing to check (crate moved?)
+#   refused:stamp-needs-evidence:<why>         `stamp` called without a transcript
+#   refused:undeclared-failure:<test>          a red test nobody has declared
 #
 # Exit 0 always: this is a report, not a refusal. Branch on the verdict, and
 # never on the exit code, which is the mistake that would let it be ignored.
@@ -44,7 +46,19 @@
 # SUBCOMMANDS
 #   check   (default) print the verdict
 #   stamp   record the current contents as verified — call ONLY after a native
-#           `cargo test -p tillandsias-windows-tray` has actually passed
+#           `cargo test -p tillandsias-windows-tray` has actually run, with every
+#           failure accounted for in skills/../KNOWN-RED (see below)
+#
+# KNOWN-RED, and why it exists rather than a blanket "suite must be green":
+# `embedded_guest_headless_matches_workspace_version` fails on any tree whose
+# build counter has moved without the committed guest asset being rebuilt — a
+# standing condition on this host, filed as
+# plan/issues/research-windows-tray-embedded-guest-binary-staleness-2026-08-13.md.
+# Refusing to ever stamp because of it would leave this report reading `stale`
+# permanently, which is the decay this check's own fixture (case 5) exists to
+# prevent: a report that is always red is one nobody reads. So a failure is
+# tolerated ONLY when it is named in scripts/windows-only-known-red.txt, which
+# is a list someone has to edit deliberately.
 
 set -uo pipefail
 
@@ -91,6 +105,34 @@ current="$(printf '%s\n' "${SOURCES[@]}" | digest_of)"
 
 case "${1:-check}" in
     stamp)
+        # The stamp is a CLAIM, so it is checked rather than trusted. Feed it the
+        # test transcript: any FAILED test not declared known-red refuses the
+        # stamp. Without this the subcommand is an honour system, and an honour
+        # system is what this whole report was built to replace.
+        case "${2:-}" in
+            --from) transcript="$(cat "${3:-/dev/null}" 2>/dev/null)" ;;
+            *)
+                echo "refused:stamp-needs-evidence:pass --from <cargo-test-output>; a stamp with no transcript is an assertion, not a verification"
+                exit 1
+                ;;
+        esac
+        if ! printf '%s' "$transcript" | grep -qE '^test .* \.\.\. (ok|FAILED|ignored)'; then
+            echo "refused:stamp-needs-evidence:the transcript contains no test results"
+            exit 1
+        fi
+        known_red="$ROOT/scripts/windows-only-known-red.txt"
+        undeclared=""
+        failures="$(printf '%s' "$transcript" | grep -E '^test .* \.\.\. FAILED' | awk '{print $2}' | sed 's/.*:://')"
+        for name in $failures; do
+            if [ -f "$known_red" ] && grep -qxF "$name" "$known_red"; then
+                continue
+            fi
+            [ -z "$undeclared" ] && undeclared="$name"
+        done
+        if [ -n "$undeclared" ]; then
+            echo "refused:undeclared-failure:$undeclared"
+            exit 1
+        fi
         printf '%s\n' "$current" > "$STAMP_FILE"
         # Per-file records too, so `check` can NAME the file that moved rather
         # than reporting the aggregate and picking whichever source sorts first
