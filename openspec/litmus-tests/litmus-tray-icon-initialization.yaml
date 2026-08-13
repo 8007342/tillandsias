@@ -15,8 +15,12 @@ critical_path:
     command: "cargo test -p tillandsias-core tray_state_new_starts_with_pup_icon -- --exact"
     timeout_ms: 180000
 
-  - step: "verify the renamed tray icon variants are present"
-    command: "grep -F 'TrayIconState::Mature' crates/tillandsias-core/src/state.rs && grep -F 'TrayIconState::Dried' crates/tillandsias-core/src/state.rs && ! rg -n 'TrayIconState::Base|TrayIconState::Decay' crates/tillandsias-core/src crates/tillandsias-headless/src/tray/mod.rs"
+  # The `! grep ...Base|Decay` clause is this step's NEGATIVE CONTROL: it fails
+  # if either removed variant reappears in source, so the step distinguishes a
+  # real vocabulary regression from mere text drift (634-39ik expression-pinning).
+  # Uses portable grep, not rg, so it runs on rg-less hosts too (715-k5vs).
+  - step: "verify the renamed tray icon variants are present (negative control: removed Base/Decay variants absent)"
+    command: "grep -F 'TrayIconState::Mature' crates/tillandsias-core/src/state.rs && grep -F 'TrayIconState::Dried' crates/tillandsias-core/src/state.rs && ! grep -rnIE 'TrayIconState::Base|TrayIconState::Decay' crates/tillandsias-core/src crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 5000
 
 observability:
