@@ -721,10 +721,53 @@ impl WslLifecycle {
         progress.report_phase(ProvisionPhase::Connecting);
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
-        // Hold a keepalive across the connect loop so the VM doesn't idle out mid-wait.
-        let _keepalive = self.spawn_keepalive(false).ok();
+        // Hold a keepalive across the connect loop so the VM doesn't idle out
+        // mid-wait — and DROP it before any recovery below, or the keepalive is
+        // the thing keeping the wedged VM alive.
+        let connect = {
+            let _keepalive = self.spawn_keepalive(false).ok();
+            self.connect_with_backoff(CW_PORT).await
+        };
 
-        self.connect_with_backoff(CW_PORT).await
+        if let Err(error) = &connect {
+            // Order 664-frz0. A FRESH start whose wire never came up leaves a
+            // utility VM that has never been reachable and has no value alive.
+            // On 2026-08-10 one sat wedged for ~15 minutes while the host
+            // progressively froze around it (forensics:
+            // plan/issues/host-freeze-during-vm-start-forensics-2026-08-10.md —
+            // the freeze was a Hyper-V/WSL2 platform hang, not ours, but our
+            // unreachable VM was the context and we left it running).
+            //
+            // The bounded recovery already exists and is already used by the
+            // exec-probe path; this is one more caller, not new machinery.
+            //
+            // Exactly once, and only here: this is the fresh-provision tail, so
+            // by construction the wire has never been healthy in this run. A
+            // handshake that fails AFTER a previously-healthy wire belongs to
+            // the keepalive supervisor, which is separately bounded — see
+            // `keepalive_supervisor_gives_up_after_cap_with_backoff`. Recovering
+            // there would fight the supervisor for the same VM.
+            tracing::error!(
+                %error,
+                "control wire never came up on a fresh VM start — running one \
+                 bounded WSL shutdown recovery so the wedged VM does not linger"
+            );
+            match WslRuntime::perform_wsl_shutdown_recovery().await {
+                Ok(()) => tracing::info!(
+                    "bounded WSL shutdown recovery completed after a wedged fresh start"
+                ),
+                // The recovery failing does not change the provisioning verdict:
+                // the original handshake error is what the operator needs, and
+                // replacing it with a recovery error would hide the actual
+                // failure behind its cleanup.
+                Err(recovery_error) => tracing::warn!(
+                    %recovery_error,
+                    "bounded WSL shutdown recovery failed after a wedged fresh start"
+                ),
+            }
+        }
+
+        connect
     }
 
     /// Marker written at the end of a COMPLETE provision (import + packages +
@@ -1967,6 +2010,109 @@ mod tests {
 
         let damage = DistroExecProbeResult::DistroFailure("exit code 1".into());
         assert_eq!(damage.class(), DistroExecProbeClass::DistroFailure);
+    }
+
+    /// Order 664-frz0. A fresh VM start whose wire never came up must not leave
+    /// the utility VM running.
+    ///
+    /// Source-shape, for the same reason as the 648-772y pin below: the defect
+    /// is a MISSING CALL on a specific path, and no behavioural test of
+    /// `perform_wsl_shutdown_recovery` — which already works and is already
+    /// used elsewhere — can observe that a path fails to call it.
+    #[test]
+    fn a_wedged_fresh_start_runs_one_bounded_shutdown_recovery() {
+        // Read the PRODUCT half only. `include_str!` of this file also contains
+        // this test, which names the recovery call three times — the first
+        // version of this test scanned itself and counted them. A window that
+        // can accidentally include the test module is not a window at all.
+        let source = include_str!("wsl_lifecycle.rs");
+        let product = source
+            .split(
+                "
+#[cfg(test)]",
+            )
+            .next()
+            .expect("the product half precedes the test module");
+        // The fresh-provision tail: everything after the LAST
+        // write_import_complete_marker in the product half, which is where a
+        // never-reachable VM is left behind.
+        let fresh_tail = product
+            .rsplit("self.write_import_complete_marker().await;")
+            .next()
+            .expect("the fresh-provision tail must exist");
+        // …and stop at the end of the provisioning function. Without this the
+        // window runs on into `registered_distro_disposition`, which has its own
+        // (pre-existing, correct) call to the same recovery — and the
+        // exactly-once assertion would count that one too.
+        let fresh_tail = fresh_tail
+            .split(
+                "
+    /// ",
+            )
+            .next()
+            .expect("the function is followed by the next item's docs");
+        assert!(
+            fresh_tail.contains("WslRuntime::perform_wsl_shutdown_recovery().await"),
+            "a wedged fresh start must run the bounded recovery"
+        );
+        assert_eq!(
+            fresh_tail
+                .matches("WslRuntime::perform_wsl_shutdown_recovery().await")
+                .count(),
+            1,
+            "exactly once — a retry loop here would fight the platform hang, not clear it"
+        );
+        // The keepalive must be released before the recovery, or the thing
+        // holding the wedged VM alive is us.
+        let keepalive = fresh_tail
+            .find("let _keepalive = self.spawn_keepalive(false).ok();")
+            .expect("the connect loop still holds a keepalive");
+        let recovery = fresh_tail
+            .find("WslRuntime::perform_wsl_shutdown_recovery().await")
+            .expect("recovery is present");
+        let scope_end = fresh_tail[keepalive..recovery]
+            .find("\n        };")
+            .expect("the keepalive must live in a scope that closes before recovery");
+        assert!(
+            keepalive + scope_end < recovery,
+            "the keepalive scope must close before the shutdown recovery runs"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the criterion the packet states second: recovery is
+    /// for a wire that NEVER came up. A handshake failing after a previously
+    /// healthy wire belongs to the keepalive supervisor, which is separately
+    /// bounded, and recovering there would leave two mechanisms fighting over
+    /// one VM. The supervisor lives inside `spawn_keepalive`'s respawn loop.
+    #[test]
+    fn the_keepalive_supervisor_does_not_also_shut_the_vm_down() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let source = source
+            .split(
+                "
+#[cfg(test)]",
+            )
+            .next()
+            .expect("the product half precedes the test module");
+        let supervisor = source
+            .split("pub fn spawn_keepalive(&self, debug: bool)")
+            .nth(1)
+            .expect("spawn_keepalive must exist");
+        let supervisor = supervisor
+            .split(
+                "
+    pub ",
+            )
+            .next()
+            .unwrap_or(supervisor);
+        assert!(
+            supervisor.contains("keepalive gave up after repeated rapid failures"),
+            "this window must actually contain the supervisor's give-up path"
+        );
+        assert!(
+            !supervisor.contains("perform_wsl_shutdown_recovery"),
+            "the supervisor must not also trigger shutdown recovery"
+        );
     }
 
     /// Order 648-772y. The recovery decision, isolated so it can be tested

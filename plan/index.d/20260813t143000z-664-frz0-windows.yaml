@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: wedged-vm-start-should-trigger-bounded-shutdown-recovery
+    field: status
+    value: implemented
+    ts: "2026-08-13T14:30:00Z"
+    host: windows
+
+events:
+  - packet_id: wedged-vm-start-should-trigger-bounded-shutdown-recovery
+    event:
+      type: progress
+      ts: "2026-08-13T14:28:00Z"
+      host: windows
+      summary: >
+        Both criteria implemented in the fresh-provision tail of
+        `provision_via_recipe`. On handshake-budget exhaustion there, the
+        existing bounded `WslRuntime::perform_wsl_shutdown_recovery()` runs
+        exactly once and its outcome is logged either way. No new machinery —
+        this is a second caller of the recovery the exec-probe path already
+        uses, which is why the packet is small.
+        Two details that are the actual content. First, the keepalive now lives
+        in a scope that CLOSES before the recovery: it is held across the
+        connect loop so the VM does not idle out mid-wait, and if it were still
+        held during shutdown the thing keeping the wedged VM alive would be us.
+        Second, a failed recovery does not change the returned error. The
+        operator needs the handshake failure; replacing it with a cleanup
+        failure would hide the actual fault behind its own tidying.
+        Criterion 2 is satisfied by placement rather than by a condition: this
+        is the fresh-provision tail, so by construction the wire has never been
+        healthy in this run. A handshake failing after a previously-healthy wire
+        belongs to the keepalive supervisor, which is separately bounded, and
+        recovering there would leave two mechanisms fighting over one VM.
+  - packet_id: wedged-vm-start-should-trigger-bounded-shutdown-recovery
+    event:
+      type: note
+      ts: "2026-08-13T14:29:00Z"
+      host: windows
+      summary: >
+        VERIFICATION GAP, stated plainly rather than papered over. Smart App
+        Control began blocking this host's native cargo mid-cycle (`os error
+        4551`, every attempt from ~03:10 local), so the two added tests could
+        NOT be run. The WSL builder distro cannot substitute: `wsl_lifecycle.rs`
+        is `#[cfg(target_os = "windows")]` and `main.rs` swaps in `src/stubs/`,
+        so a Linux cargo compiles the stub and reports success without parsing
+        the changed file — a green that proves nothing. A cross-check against
+        `x86_64-pc-windows-msvc` from WSL failed in `cc-rs` (no `lib.exe`) and
+        then in `ring`'s build script.
+        What WAS verified, and how: the two tests are pure string logic over
+        this file, so their assertions were mirrored outside cargo and all six
+        hold — the recovery is present in the fresh tail, appears EXACTLY once
+        there, the keepalive scope closes before it, and the keepalive
+        supervisor does not also recover. The mirror was itself falsified:
+        removing the call empties the window it scans.
+        The mirror also caught a defect in the TESTS as first written. Their
+        window was `split(marker).last()`, which ran past the function into
+        `registered_distro_disposition` — whose own pre-existing recovery call
+        the exactly-once assertion would have counted — and, before that, into
+        the test module, where the test's own source names the call three times.
+        A window that can include the code under test is not a window. Both are
+        now bounded to the product half and to the function.
+        UNPROVEN and named: that the crate still COMPILES on Windows. The change
+        is an `if let Err(&e) { … }` block plus two `#[test]` fns, and the same
+        shape compiled natively earlier tonight (order 648-772y, 85 passed), so
+        the risk is low — but low is not verified. The next cycle on a host with
+        a working native toolchain should run
+        `cargo test -p tillandsias-windows-tray` before this packet moves to
+        completed. Filed the underlying condition as
+        plan/issues/research-windows-sac-blocks-native-verification-2026-08-13.md:
+        when SAC is active this host has NO way to compile-check Windows-only
+        code, and the failure is silent in the direction that matters.
