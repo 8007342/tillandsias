@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: litmus-mutates-tracked-version-without-kill-safety
+    field: status
+    value: done
+    ts: "2026-08-13T09:20:00Z"
+    host: windows
+
+events:
+  - packet_id: litmus-mutates-tracked-version-without-kill-safety
+    event:
+      type: progress
+      ts: "2026-08-13T09:18:00Z"
+      host: windows
+      summary: >
+        Criterion 1 met with the trap option, in two layers, because the
+        packet's "or" hides an asymmetry worth naming. The test mutates the
+        tracked VERSION because the behaviour under test IS build-image.sh
+        reacting to that file changing, so copying the tree would test a
+        different thing.
+        Layer 1: the trap now covers EXIT INT TERM HUP and re-raises the
+        original exit code. It was EXIT only, and bash does not run an EXIT trap
+        when the default SIGTERM disposition kills the shell — so the single
+        exit path that actually occurred on 2026-08-11 was the one not covered.
+        Layer 2, and this is the load-bearing one: a stale-sentinel check at
+        START restores a leftover `0.0.0-test-retag` from GIT before doing
+        anything else. From git, not from the backup copy, because a killed
+        run's tmpdir is already gone.
+        MEASURED WHILE TESTING, and it changes which layer matters: bash defers
+        a signal trap until the current FOREGROUND command returns. A run parked
+        inside a long `build-image.sh` call does not restore when SIGTERM
+        arrives — only when that call finishes, if it ever does — so a runner
+        that follows SIGTERM with SIGKILL skips the trap entirely. That is
+        exactly the 2026-08-11 shape. The trap is therefore best-effort and the
+        next-run repair is the real protection; the fixture is written to say so
+        rather than to imply the trap is sufficient.
+  - packet_id: litmus-mutates-tracked-version-without-kill-safety
+    event:
+      type: verified
+      ts: "2026-08-13T09:19:00Z"
+      host: windows
+      summary: >
+        scripts/test-litmus-tracked-file-kill-safety.sh, 4/4, wired into
+        litmus:image-build-convergence-shape (the suite that runs the offending
+        test). Case 0 greps the SHIPPED script for both layers, so the fixture
+        cannot stay green while the real trap reverts to EXIT-only — cases 1 and
+        2 prove the pattern on a miniature that sources the real guard, and
+        without case 0 they would be proving it about themselves. Case 1:
+        SIGTERM restores. Case 2: a SIGKILLed run leaves the sentinel and the
+        NEXT run repairs it, back to the exact original content. Case 3 is
+        criterion 2's sweep.
+        Hand-falsification recorded: reverting the shipped trap to `trap cleanup
+        EXIT` makes case 0 fail with "the shipped trap must cover INT/TERM/HUP".
+        Criterion 2 (the sweep): no other offender found. scripts/ has no other
+        redirect into a tracked VERSION/Cargo.toml/Cargo.lock, and the VERSION
+        writes in openspec/litmus-tests/*.yaml are all inside `cd "$T"` throwaway
+        git repos under mktemp, which is the correct pattern. The sweep is now a
+        test case rather than a one-time grep, so a NEW unguarded mutator fails
+        the suite instead of waiting to be noticed after it poisons a checkout.
+      evidence_refs:
+        - "scripts/test-litmus-tracked-file-kill-safety.sh"
+        - "openspec/litmus-tests/litmus-image-build-convergence-shape.yaml"

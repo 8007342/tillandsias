@@ -17,6 +17,36 @@ if [[ ! -f "$CONTAINERFILE" ]]; then
     exit 1
 fi
 
+# This test mutates TRACKED files (VERSION and a Containerfile) because the
+# behaviour under test is how build-image.sh reacts to them changing. A test
+# that does that owns their restoration under EVERY exit, not just the clean one
+# (order 677-33be).
+#
+# Live damage 2026-08-11: a pre-build litmus sweep was killed after exceeding 15
+# minutes on a Windows host, leaving VERSION containing `0.0.0-test-retag`. The
+# poisoned file then failed release-preflight monotonicity inside the pre-push
+# hook and blocked EVERY push on that host with `blocked:version-not-monotonic`
+# until a human connected the two events. The trap was `EXIT` only, and bash
+# does not run an EXIT trap when the default SIGTERM disposition kills the
+# shell — so the one exit path that actually occurred was the one not covered.
+#
+# Two layers, because neither is sufficient alone:
+#   1. the trap now covers INT/TERM/HUP as well as EXIT, which handles every
+#      signal that CAN be caught;
+#   2. SIGKILL cannot be caught, so a STALE-SENTINEL check at start repairs a
+#      previous run's damage before doing anything else. It restores from git
+#      rather than from the backup copy, because a killed run's tmpdir is gone.
+VERSION_TEST_SENTINEL="0.0.0-test-retag"
+
+if [[ -f "$ROOT/VERSION" ]] && grep -qxF "$VERSION_TEST_SENTINEL" "$ROOT/VERSION"; then
+    echo "notice: VERSION holds this test's sentinel from a killed run; restoring from git" >&2
+    if ! git -C "$ROOT" checkout -- VERSION 2>/dev/null; then
+        echo "FAIL: VERSION is poisoned with $VERSION_TEST_SENTINEL and git could not restore it" >&2
+        echo "      restore it by hand before pushing; see order 677-33be" >&2
+        exit 1
+    fi
+fi
+
 tmp="$(mktemp -d)"
 original_version="$tmp/VERSION.orig"
 original_containerfile="$tmp/Containerfile.orig"
@@ -24,11 +54,14 @@ cp "$ROOT/VERSION" "$original_version"
 cp "$CONTAINERFILE" "$original_containerfile"
 
 cleanup() {
+    local rc=$?
     cp "$original_containerfile" "$CONTAINERFILE"
     cp "$original_version" "$ROOT/VERSION"
     rm -rf "$tmp"
+    trap - EXIT INT TERM HUP
+    exit "$rc"
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM HUP
 
 export HOME="$tmp/home"
 export LITMUS_PODMAN_MODE=fake

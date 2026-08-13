@@ -17,6 +17,18 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: image build convergence sequence"
 
+  # Order 677-33be. This suite's own convergence test mutates the TRACKED
+  # VERSION file, and on 2026-08-11 a killed run left `0.0.0-test-retag` in it,
+  # which then blocked every push on that host via release-preflight
+  # monotonicity. A test that mutates tracked files owns their restoration under
+  # every exit — including the SIGKILL it cannot catch, which the next run
+  # repairs. The fixture carries a shipped-file case so the trap cannot quietly
+  # revert to EXIT-only, and a sweep case so a NEW unguarded mutator fails here.
+  - step: "a killed convergence run cannot leave the tracked VERSION poisoned"
+    command: "bash scripts/test-litmus-tracked-file-kill-safety.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: litmus tracked-file kill safety (4/4)"
+
   - step: "top-level wrappers do not invoke Toolbox or placeholder branches"
     command: "! grep -RInE 'toolbox|ImageBuilder trait not yet integrated' build-*.sh crates/tillandsias-core/src/bin/build-image.rs && echo 'ok: no placeholder wrapper path'"
     timeout_ms: 3000
