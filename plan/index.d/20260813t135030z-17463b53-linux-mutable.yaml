@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: spec-answer-refuses-in-fresh-forge-embedding-endpoint-absent
+    event:
+      type: progress
+      ts: "2026-08-13T13:50:30Z"
+      agent_id: linux-mutable-session-20260812
+      host: linux_mutable
+      summary: >
+        CODE-EVIDENCE clarification of the remaining scope. spec_answer already emits SPECIFIC, discoverable unsupported reasons — crates/tillandsias-plan/src/spec.rs:402 returns Envelope::unsupported("unsupported: no cheatsheet chunks available in corpus"), :353 "no retrieved chunk was actually used", :466 "no cheatsheet section matches query". So the fresh-forge refusal the delegate hit NAMES its cause (a reason string, not a bare unsupported) — 712 exit-criterion-1 discoverability branch is largely ALREADY satisfied at the answer level. Refined diagnosis: the true gap is that the fresh forge has NO cheatsheet chunks loaded/indexed (line 402 fires), i.e. the cheatsheet corpus is not provisioned in-forge, even though 707-tiqw is groundtruth-green on the dev host. Note the cheatsheet RAG path (answer_cheatsheet_query, spec.rs:378) is network-free (order 547) — the "embedding endpoint absent" framing in the original filing conflates it with the fat-spec/semantic path; the observed refusal is corpus-not-loaded, not endpoint-down. Remaining 712 work therefore = EITHER provision the cheatsheet corpus into a fresh forge so spec_answer answers with a citation, OR consciously accept the already-discoverable refusal + advertise it via expert_capability. Not a code change this cycle (near close-out); scope clarified with file:line evidence.
