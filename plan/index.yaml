@@ -31807,6 +31807,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-13T08:53:00Z"
+          agent_id: "bigpickle-20260813t0148sec"
+          host: forge
+          summary: >
+            CRITERION-5 VALIDATION delegate-outcome:bigpickle-20260813t0148sec:done -- verified from inside THIS forge at HEAD c7ae2666 that no forge contains a private key, Vault token, SecretID, or upstream credential. Evidence: printenv shows NO token/secret/vault/key NAMED variables (only no_proxy lists the tillandsias-vault HOSTNAME for proxy bypass, and the invocation prompt env var contains the audit keywords as literal words); full-filesystem find for id_ed25519/id_rsa/*.pem/*.key/vault-token/.gh-credentials returns ZERO files; ~/.ssh is empty (root-owned, 40 bytes, 2 links); no ~/.config/gh, no ~/.netrc, no ~/.git-credentials, no .git/.gh-credentials, no docker/aws/gcloud auth stores; /run/secrets empty; SSH_AUTH_SOCK unset (no agent socket present at all -- a strict subset of the allowed surface); origin remote is git://git-tillandsias (transparent mirror, no upstream credential); public CA bundle present (/etc/ssl/certs/ca-certificates.crt -> tls-ca-bundle.pem). Negative invariant HOLDS; outcome done.
+        - type: progress
           ts: "2026-08-10T19:30:00Z"
           agent_id: linux-mutable-20260810t193000z
           host: linux_mutable
