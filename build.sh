@@ -1154,6 +1154,28 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Podman sync-budget check passed"
 
+    # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
+    # compiles src/stubs/ and goes green without ever parsing the edited file,
+    # which produced two unverified changes on 2026-08-13 alone. Refusing here
+    # would strand finished work on a host whose native toolchain is blocked —
+    # which the exit contract forbids more strongly than it forbids an
+    # unverified commit — so the cycle is TOLD, and carries the verdict into its
+    # handoff. Promotion to a refusal is an operator decision, and the moment
+    # for it is when dev binaries are signed and SAC stops being a coin flip.
+    _step "Reporting Windows-only source verification state (716-f5kc)..."
+    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:windows-sources-check-failed")"
+    case "$_windows_only_verdict" in
+        ok:* | skip:*)
+            _info "Windows-only sources: $_windows_only_verdict"
+            ;;
+        *)
+            _warn "Windows-only sources: $_windows_only_verdict"
+            _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
+            _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
+            _warn "    scripts/check-windows-only-sources-verified.sh stamp"
+            ;;
+    esac
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

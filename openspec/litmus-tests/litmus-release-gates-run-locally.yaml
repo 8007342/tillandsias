@@ -99,6 +99,22 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: stamp detects tree change"
 
+  # Order 716-f5kc. A Linux build of the Windows tray compiles src/stubs/ and
+  # goes green without parsing the edited file — two changes shipped unverified
+  # on 2026-08-13 that way. The gate cannot fix that (the toolchain is the
+  # constraint), so it must at least SAY it. The fixture proves the report can
+  # go stale on a windows-only edit, stays quiet on a portable one, and names
+  # the file rather than picking a culprit.
+  - step: "the gate reports whether Windows-only sources were actually compiled"
+    command: "bash scripts/test-windows-only-sources-verified.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: windows-only source verification report (6/6)"
+
+  - step: "build.sh --check carries that report rather than staying silent"
+    command: "grep -F 'check-windows-only-sources-verified.sh' build.sh && grep -F 'this gate did NOT read them' build.sh && echo 'ok: the gate reports the stub substitution'"
+    timeout_ms: 5000
+    expected_behavior: "ok: the gate reports the stub substitution"
+
   # A cycle that compacts the ledger deletes the fragments it folded, and the
   # stamp refused any tree containing a deletion — so the slowest step in the
   # cycle ran twice whenever GC was due (order 695-nvnd). The fixture carries

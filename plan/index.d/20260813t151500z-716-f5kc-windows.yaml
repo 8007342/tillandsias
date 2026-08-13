@@ -1,0 +1,86 @@
+packets:
+  - packet_id: windows-only-sources-verified-report
+    order: 716-f5kc
+    status: implemented
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    title: "A Linux build of the Windows tray compiles stubs and goes green without reading the edited file — say so"
+    kind: fix
+    deliverable: "scripts/check-windows-only-sources-verified.sh + build.sh report"
+    pickup_role: any
+    capability_tags:
+      - windows
+      - fail-loud
+      - gate
+      - diagnosability
+    estimated_hours: 2
+    context: |
+      Reduced from plan/issues/research-windows-sac-blocks-native-verification-2026-08-13.md,
+      filed one cycle earlier, and implementing that note's third candidate —
+      the one that matches this project's habits, because it converts a silent
+      substitution into a falsifiable statement rather than trying to remove the
+      constraint.
+
+      `crates/tillandsias-windows-tray/src/main.rs` substitutes `src/stubs/*.rs`
+      under `#[cfg(not(target_os = "windows"))]`. That is correct and deliberate.
+      Its side effect is that `cargo check`/`cargo test -p tillandsias-windows-tray`
+      on a Linux host — which is what the WSL builder distro this host uses for
+      every other crate does — compiles the STUB and reports success WITHOUT
+      PARSING the file the agent just edited.
+
+      It happened twice in one session. On order 648-772y a deliberate second
+      look caught it and the work was re-verified natively. On order 664-frz0 it
+      could not be caught: Smart App Control blocked the native toolchain
+      (`os error 4551`) for the rest of the night, so the change shipped
+      unverified — recorded honestly on that packet, but shipped.
+
+      This does not fix the constraint. It makes the silence audible.
+    outcome: |
+      A cycle can no longer edit a Windows-only source, watch a Linux gate go
+      green, and be unaware that nothing read the change.
+    exit_criteria:
+      - "`./build.sh --check` reports whether the Windows-only sources match a native-verification stamp, naming the first file that does not."
+      - "A NEGATIVE CONTROL asserts a PORTABLE-source edit does NOT go stale, so the report cannot decay into noise-on-every-change and then be ignored."
+      - "The Windows-only set is DERIVED from main.rs rather than listed, so a new Windows-only module joins the check without anyone remembering to add it."
+      - "The report is not a refusal: a host whose toolchain is blocked must still be able to push finished work, per the exit contract."
+    events:
+      - type: filed
+        ts: "2026-08-13T15:15:00Z"
+        host: windows
+        summary: |
+          Filed and implemented in the same cycle, which is the reduction-engine
+          loop working as written: the finding was captured last cycle, reduced
+          to the smallest packet with a verifiable constraint, and drained by a
+          host that could do it — this one, precisely because its native
+          toolchain was blocked and shell work was what remained possible.
+      - type: verified
+        ts: "2026-08-13T15:16:00Z"
+        host: windows
+        summary: |
+          scripts/test-windows-only-sources-verified.sh, 6/6, wired into
+          litmus:release-gates-run-locally.
+          Criterion 1: case 4 edits a Windows-only source and asserts the verdict
+          goes `stale:windows-sources-unverified:<n>:<file>` naming that file.
+          Criterion 2, the load-bearing control: case 5 edits a PORTABLE source
+          under the same crate and asserts the verdict stays `ok:`. A report that
+          fires on every change is noise within a day and ignored by the second.
+          Criterion 3: case 2 pins that `hvsocket` — Windows-only with NO stub
+          declaration — is counted. The first implementation derived the set from
+          the `#[path = "stubs/…"]` lines and silently missed it, which would
+          have left a Windows-only module permanently unwatched by the very check
+          built to watch them.
+          Criterion 4: the gate emits a warning, never a refusal, and the
+          reasoning is recorded at the call site — refusing would strand finished
+          work on a host that cannot verify, which the exit contract forbids more
+          strongly than it forbids an unverified commit. Promotion to a refusal
+          is an operator decision whose natural moment is signed dev binaries.
+          Two defects were found in this check by its own fixture before it
+          landed. It reported the aggregate digest and then named whichever
+          source sorted first as the culprit — a confident wrong answer, which is
+          exactly the failure the check exists to prevent; it now stamps per-file
+          records and names the file that actually moved. And it initially missed
+          `hvsocket` as above.
+          Live verdict on this host right now:
+          `stale:windows-sources-never-verified:4` — true, and previously
+          invisible.
