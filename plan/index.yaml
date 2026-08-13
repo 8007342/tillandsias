@@ -16899,6 +16899,13 @@ plan_index:
         - "a real crate-touching commit appends a fire record and replaces ~/.local/bin/tillandsias-plan from the effective CARGO_TARGET_DIR"
         - "the same in-forge session observes the expert answer surface change, and the evidence is recorded on this child and the milestone burndown"
 
+      events:
+        - type: progress
+          ts: "2026-08-13T02:50:52Z"
+          agent_id: "bigpickle-20260813t0248"
+          host: forge
+          summary: >
+            delegate-outcome:bigpickle-20260813t0248:blocked evidence: hook present yes (effective core.hooksPath post-commit exists as pre-v3 order-396 form, NOT gated on TILLANDSIAS_HOST_EXPERTS; literal .git/hooks/post-commit absent), TILLANDSIAS_HOST_EXPERTS set no
     - packet_id: forge-expert-fresh-launch-source-gap
       order: 531
       desired_release: v0.5
