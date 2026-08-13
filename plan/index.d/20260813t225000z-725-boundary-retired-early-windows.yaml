@@ -1,0 +1,66 @@
+packets:
+  - packet_id: boundary-retired-early-breaks-an-extended-cycle
+    order: 725-bu54
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "Finalization retires the startup boundary at the first exit, so a cycle extended past that point can no longer attest"
+    deliverable: "the guard's lifecycle, or Finalization's ordering in the skill"
+    pickup_role: any
+    capability_tags: [meta-orchestration, guards, exit-contract, fail-loud]
+    estimated_hours: 2
+    context: |
+      FOUND BY THE GUARD I ADDED TWO CYCLES AGO, firing on me. That is the good
+      outcome and the reason this is p2 rather than p1 — nothing was lost, the
+      failure was loud, and it refused at exactly the right moment.
+
+      WHAT HAPPENED. This cycle snapshotted its boundary, re-anchored after the
+      linux-next merge, did its work, and ran Finalization: verify passed clean
+      at ac01c3df, the marker was emitted, and the guard's state directory was
+      removed — all exactly as the skill's step 7 says. Then the operator asked
+      a follow-up, the cycle continued, and more work was committed and pushed
+      (75d1e179). At the second Finalization the guard answered
+
+        blocked:boundary-state-missing:/tmp/mo-boundary.IDrKun
+
+      and mo-full-attest.sh refused:
+
+        MO-FULL: FAIL startup boundary was verified at ac01c3df but HEAD is now
+        75d1e179 — re-run the guard's verify after the cycle's last commit
+
+      Both verdicts are correct and both are useful. The head-binding in
+      717-3bvv is what caught it; a mere existence test would have accepted the
+      stale stamp and attested a state nobody checked.
+
+      THE ACTUAL DEFECT is a lifecycle assumption, not a bug in either script:
+      Finalization treats its first completion as THE end of the cycle and
+      destroys the boundary there. A recurring loop driven by an operator
+      conversation does not have one exit — the cycle is extended whenever the
+      operator asks for more, which is normal and desirable, not an abuse.
+
+      The two obvious shapes both have a real cost, which is why this wants a
+      decision rather than a patch:
+        * Keep the boundary until the process exits (retire it later, or never,
+          and let the next snapshot supersede it). Cheap, but a long-lived
+          state directory outlives the cycle it describes.
+        * Let Finalization RE-verify by re-snapshotting when the tree is clean
+          and the previous verification is stale. Convenient, and dangerously
+          close to snapshotting at the end and calling it a startup boundary —
+          which is precisely the guarantee 717-3bvv exists to provide.
+    outcome: |
+      A cycle that continues past a completed Finalization can still attest,
+      without weakening what the startup boundary proves.
+    exit_criteria:
+      - "A cycle that completes Finalization and then does MORE committed work can produce a valid marker, and the boundary it attests is still a START-of-cycle one."
+      - "NEGATIVE CONTROL: a cycle that never snapshotted still cannot attest — whatever the fix, blocked:no-snapshot-taken must survive it."
+      - "The chosen shape is recorded with its cost, since both candidates trade against the guarantee 717-3bvv added."
+    events:
+      - type: filed
+        ts: "2026-08-13T22:50:00Z"
+        host: windows
+        summary: |
+          Filed by the host it fired on, in the cycle it fired in. The guard
+          worked; the lifecycle around it did not anticipate an operator
+          extending a cycle past its first Finalization.
