@@ -57,7 +57,7 @@ critical_path:
 
   # ── (b) two hosts write status CONCURRENTLY ─────────────────────────────
   - step: "BEHAVIOURAL: two hosts append cycle status to SEPARATE files (the write that used to conflict no longer shares a path)"
-    command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); printf '%s\\n' '## Cycle 2026-08-03T01:10Z (linux_mutable — fixture host A)' '' '- host-A narrative' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T01:10:00Z --host linux_mutable --suffix aa11; printf '%s\\n' '## Cycle 2026-08-03T01:11Z (windows_mutable — fixture host B)' '' '- host-B narrative' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T01:11:00Z --host windows_mutable --suffix bb22; n=$(ls \"$W/plan/loop_status.d\"/*.md | wc -l); grep -q 'host-A narrative' \"$W/plan/loop_status.d\"/*.md && grep -q 'host-B narrative' \"$W/plan/loop_status.d\"/*.md && test $n = 2 && echo 'ok: two-hosts-two-files'"
+    command: "set -e; W=$(cat /tmp/.litmus-nqw5-w1); printf '%s\\n' '## Cycle 2026-08-03T01:10Z (linux_mutable — fixture host A)' '' '- host-A narrative' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T01:10:00Z --backfill --host linux_mutable --suffix aa11; printf '%s\\n' '## Cycle 2026-08-03T01:11Z (windows_mutable — fixture host B)' '' '- host-B narrative' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T01:11:00Z --backfill --host windows_mutable --suffix bb22; n=$(ls \"$W/plan/loop_status.d\"/*.md | wc -l); grep -q 'host-A narrative' \"$W/plan/loop_status.d\"/*.md && grep -q 'host-B narrative' \"$W/plan/loop_status.d\"/*.md && test $n = 2 && echo 'ok: two-hosts-two-files'"
     timeout_ms: 300000
     expected_behavior: "ok: two-hosts-two-files"
 
@@ -79,7 +79,7 @@ critical_path:
 
   # ── (d) the operator-owned Direction section cannot be clobbered ─────────
   - step: "NEGATIVE CONTROL: loop-status-append REFUSES an agent fragment naming the Direction section"
-    command: "W=$(mktemp -d); mkdir -p \"$W/plan\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Direction — what are we all doing today' '' '**base theme**' > \"$W/plan/loop_status.md\"; out=$(printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T02:00:00Z --host h9 --suffix zz99 2>&1); rc=$?; n=$(ls \"$W/plan/loop_status.d\"/*.md 2>/dev/null | wc -l); cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'non-cycle heading' && test $n = 0 && echo 'ok: append-refuses-direction'"
+    command: "W=$(mktemp -d); mkdir -p \"$W/plan\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Direction — what are we all doing today' '' '**base theme**' > \"$W/plan/loop_status.md\"; out=$(printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' | cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-append --ts 2026-08-03T02:00:00Z --backfill --host h9 --suffix zz99 2>&1); rc=$?; n=$(ls \"$W/plan/loop_status.d\"/*.md 2>/dev/null | wc -l); cd /; rm -rf \"$W\"; test $rc -ne 0 && printf '%s' \"$out\" | grep -q 'non-cycle heading' && test $n = 0 && echo 'ok: append-refuses-direction'"
     timeout_ms: 300000
     expected_behavior: "ok: append-refuses-direction"
 
@@ -92,6 +92,16 @@ critical_path:
     command: "set -e; W=$(mktemp -d); mkdir -p \"$W/plan/loop_status.d\"; printf '%s\\n' '# Multi-Host Coordination Loop Status' '' '## Cycle 2026-08-02T00:00Z (fixture — base entry)' '' '- base body' > \"$W/plan/loop_status.md\"; printf '%s\\n' '# Loop-status fragments (`plan/loop_status.d/`)' '' 'Documentation, not a fragment.' > \"$W/plan/loop_status.d/README.md\"; printf '%s\\n' '## Cycle 2026-08-03T01:00Z (h — fine)' '' '- ok' > \"$W/plan/loop_status.d/20260803t010000z-ok-h.md\"; printf '%s\\n' '## Direction — what are we all doing today' '' 'clobber' > \"$W/plan/loop_status.d/20260803t020000z-bad-h.md\"; R=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status-fragments 2>&1); V=$(cargo run --quiet --release -p tillandsias-plan -- --index \"$W/plan/loop_status.md\" loop-status 2>&1); ! printf '%s' \"$R\" | grep -q 'README.md'; printf '%s' \"$R\" | grep -q -- '-bad-h.md'; printf '%s' \"$R\" | grep -q 'malformed=1'; printf '%s' \"$V\" | grep -q 'base body'; ! printf '%s' \"$V\" | grep -q 'clobber'; cd /; rm -rf \"$W\"; echo 'ok: store-readme-not-a-fragment-real-malformed-still-surfaces'"
     timeout_ms: 300000
     expected_behavior: "ok: store-readme-not-a-fragment-real-malformed-still-surfaces"
+
+  # ── ORDER 719-kgr5: the stamp that NAMES the fragment must be measured ────
+  # Fragments fold in name order and the name carries this timestamp, so an
+  # invented value reorders the folded view itself. The fixture steps above pass
+  # a fixed historical --ts for determinism and now say so with --backfill,
+  # which is exactly the case that flag exists for.
+  - step: "PIN (ORDER 719-kgr5): ledger writers refuse a timestamp that disagrees with the host clock, and still accept a measured one"
+    command: "bash scripts/test-ledger-ts-guard.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: ledger-ts-guard fixture"
 
   # ── (e) the per-section CRDT choice is pinned behaviourally + by unit tests
   - step: "PIN: the loop_status CRDT unit tests (commutativity, idempotency, G-Set survival, gate refusals) are green"

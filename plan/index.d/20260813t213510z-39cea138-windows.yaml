@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: hand-authored-ledger-timestamps-drift
+    event:
+      type: verified
+      ts: "2026-08-13T21:35:10Z"
+      agent_id: unknown
+      host: windows
+      summary: >
+        Closed by the host that caused it, with a timestamp read from the clock — the fragment this write produced is named 20260813t213455z against a real 21:35Z, which is the fix demonstrating itself.  WHAT LANDED, against the four exit criteria:    * A shared resolve_ts() now guards every ledger writer — append-event, set-field (both arms), loop-status-append. A guard on one surface would have been a detour, not a constraint.   * --ts is OPTIONAL everywhere and defaults to the host clock. append-event previously REQUIRED it, on the reasoning that "the tool does not invent timestamps" — but the caller then invented them instead, for eleven consecutive cycles. Reading the clock is not inventing a timestamp; it is the only way to measure one.   * Skew limit 900s, and a refusal names BOTH values. The symptom was misdiagnosed once already as "your clock is 7 hours ahead of UTC" (it was correct to the second), so a refusal naming one number would invite the same wrong reading.   * --backfill is the escape hatch, and it reaches BACKWARD only. A flag that also waived future timestamps would hand the original defect a one-word bypass; scenario 6 pins that.  EVIDENCE: scripts/test-ledger-ts-guard.sh 9/9 green, hermetic against a throwaway ledger under TMPDIR. Scenario 1 is the breach shape (+8.6h). Scenarios 3 and 4 are the negative controls that keep the guard from degrading into refusing all explicit timestamps. Unit test answer::iso8601_parsing_round_trips_and_refuses_what_it_does_not_understand passes in the WSL distro, anchored to the real drift numbers from the report.  Two fixture litmus tests passed a fixed historical --ts for determinism and now say so with --backfill, which is exactly the case that flag exists for. Litmus baseline measured BEFORE and AFTER by stashing: 16/21 both times, same five failures, so this change introduced none of them. Those five are pre-existing on this host and one of them (append-event-rejects-unknown-flags, "bash: line 1: : command not found") is the 721-nyev binary-probe bug filed earlier today.  NOT DONE, deliberately: the already-published drifted fragments are left alone. They are append-only and immutable by design, several are merged into linux-next, and rewriting history to hide a measurement error would be the worse defect.

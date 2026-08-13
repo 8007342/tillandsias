@@ -413,6 +413,83 @@ fn emit(text: &str) {
     }
 }
 
+/// How far a hand-supplied `--ts` may sit from the host clock, in seconds.
+/// Fifteen minutes: generous enough for a slow cycle that read the clock at its
+/// start and writes at its end, tight enough to catch a fabricated hour.
+const TS_SKEW_LIMIT_SECS: i64 = 900;
+
+fn now_epoch() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Resolve the `--ts` for a ledger write (order 719-kgr5).
+///
+/// THE DEFECT THIS CLOSES. Every writer took `--ts` on trust, which made
+/// ordering a property of agent discipline rather than of the tool. Across the
+/// 2026-08-13 windows overnight run the values were hand-authored — incremented
+/// by roughly an hour per cycle from an early guess — and drifted to +8.6h
+/// against the real commit times, while the sibling linux host, reading its
+/// clock, stayed within 17 seconds. The ledger is an append-only CRDT whose
+/// fragments fold in NAME order, whose claim expiry is decided from event
+/// timestamps, and whose rolling metrics window over them, so a host writing
+/// hours ahead sorts its work after later work and can make a stale claim
+/// outlive its TTL. It also cost a sibling a night diagnosing a clock fault
+/// that did not exist: the machine clock was correct to the second.
+///
+/// Three properties, in the order they matter:
+///
+///   * ABSENT `--ts` now means the host clock, so the correct thing is the easy
+///     thing. The old interface made inventing a value exactly as convenient as
+///     reading one, and `append-event` went further and REQUIRED the flag —
+///     "the tool does not invent timestamps" — which read as rigour but simply
+///     moved the invention to the caller.
+///   * A supplied value must agree with the clock within the skew limit, and a
+///     refusal names BOTH values, because the symptom ("your clock is 7 hours
+///     ahead") was misdiagnosed once already.
+///   * `--backfill` is the escape hatch for recording something that genuinely
+///     happened earlier. Explicit, typed by a person, never implicit silence.
+fn resolve_ts(supplied: Option<String>, backfill: bool, subcommand: &str) -> String {
+    let now = now_epoch();
+    let Some(ts) = supplied else {
+        return answer::epoch_to_iso8601(now);
+    };
+    let Some(given) = answer::iso8601_to_epoch(&ts) else {
+        eprintln!(
+            "error: --ts '{ts}' is not a ledger timestamp (want YYYY-MM-DDTHH:MM:SSZ, UTC) — {subcommand} refused the write"
+        );
+        std::process::exit(2);
+    };
+    let skew = given - now;
+    if backfill {
+        // A backfill may only reach BACKWARD. "Recording something that
+        // happened earlier" is the whole justification, and a flag that also
+        // waived future timestamps would hand the original defect a one-word
+        // bypass.
+        if skew > TS_SKEW_LIMIT_SECS {
+            eprintln!(
+                "error: --backfill records something that already happened, but --ts {ts} is {skew}s AHEAD of this host's clock ({}) — {subcommand} refused the write",
+                answer::epoch_to_iso8601(now)
+            );
+            std::process::exit(2);
+        }
+        return ts;
+    }
+    if skew.abs() > TS_SKEW_LIMIT_SECS {
+        eprintln!(
+            "error: --ts {ts} disagrees with this host's clock {} by {}s (limit {TS_SKEW_LIMIT_SECS}s) — \
+             omit --ts to use the clock, or pass --backfill if the event genuinely happened earlier; \
+             {subcommand} refused the write",
+            answer::epoch_to_iso8601(now),
+            skew.abs()
+        );
+        std::process::exit(2);
+    }
+    ts
+}
+
 fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
     let id = ledger.id_of(p);
     let order = p
@@ -1276,12 +1353,20 @@ fn run_loop_status(args: &[String], base: &Path) {
                 eprintln!("error: read stdin: {e}");
                 std::process::exit(1);
             }
-            let mut ts = loop_status::utc_compact_now();
-            if let Some(i) = args.iter().position(|a| a == "--ts")
-                && let Some(v) = args.get(i + 1)
-            {
-                ts = loop_status::iso_to_compact(v);
-            }
+            // 719-kgr5: the fragment NAME carries this stamp and fragments fold
+            // in name order, so an invented value here reorders the folded
+            // status view itself. Validate before compacting.
+            let supplied_ts = args
+                .iter()
+                .position(|a| a == "--ts")
+                .and_then(|i| args.get(i + 1))
+                .cloned();
+            let backfill = args.iter().any(|a| a == "--backfill");
+            let ts = loop_status::iso_to_compact(&resolve_ts(
+                supplied_ts,
+                backfill,
+                "loop-status-append",
+            ));
             let host = args
                 .iter()
                 .position(|a| a == "--host")
@@ -2626,6 +2711,7 @@ fn main() {
             let mut host = "linux".to_string();
             let mut flag_type: Option<String> = None;
             let mut flag_summary: Option<String> = None;
+            let mut backfill = false;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -2654,6 +2740,9 @@ fn main() {
                         i += 1;
                         flag_summary = args.get(i).cloned();
                     }
+                    // 719-kgr5 escape hatch: recording an event that genuinely
+                    // happened earlier. Takes no value.
+                    "--backfill" => backfill = true,
                     // Any OTHER --flag is rejected loudly rather than corrupting
                     // the event by masquerading as a positional value.
                     other if other.starts_with("--") => {
@@ -2681,12 +2770,12 @@ fn main() {
                 .or_else(|| positional.get(2).cloned())
                 .unwrap_or_else(|| usage());
             let (reference, etype, summary) = (&reference, &etype, &summary);
-            let Some(ts) = ts else {
-                eprintln!(
-                    "error: --ts <ISO8601> is required (the tool does not invent timestamps)"
-                );
-                std::process::exit(2);
-            };
+            // 719-kgr5. This used to REQUIRE --ts, on the reasoning that "the
+            // tool does not invent timestamps" — but the caller then invented
+            // them instead, for eleven consecutive cycles, drifting to +8.6h.
+            // Reading the clock is not inventing a timestamp; it is the only
+            // way to measure one. The flag stays available and is now CHECKED.
+            let ts = resolve_ts(ts, backfill, "append-event");
             let Some(target) = ledger.resolve(reference).map(|p| ledger.id_of(p)) else {
                 eprintln!("error: {}", unresolved_reason(&ledger, reference));
                 std::process::exit(1);
@@ -2882,13 +2971,11 @@ fn main() {
                 };
                 // Same defaults the field-changing path below uses, so a note
                 // written here is indistinguishable from one written there.
-                let ts = flagged("--ts").unwrap_or_else(|| {
-                    let secs = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as i64)
-                        .unwrap_or(0);
-                    answer::epoch_to_iso8601(secs)
-                });
+                let ts = resolve_ts(
+                    flagged("--ts"),
+                    args.iter().any(|a| a == "--backfill"),
+                    "set-field",
+                );
                 let host = flagged("--host").unwrap_or_else(|| {
                     std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
                 });
@@ -2982,13 +3069,11 @@ fn main() {
                 }
             }
 
-            let ts = flagged("--ts").unwrap_or_else(|| {
-                let secs = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-                answer::epoch_to_iso8601(secs)
-            });
+            let ts = resolve_ts(
+                flagged("--ts"),
+                args.iter().any(|a| a == "--backfill"),
+                "set-field",
+            );
             let host = flagged("--host").unwrap_or_else(|| {
                 std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
             });
