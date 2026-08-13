@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+status:
+  - packet_id: platform-litmus-expression-pinning-repair
+    field: status
+    value: implemented
+    ts: "2026-08-13T13:30:00Z"
+    host: windows
+
+events:
+  - packet_id: platform-litmus-expression-pinning-repair
+    event:
+      type: progress
+      ts: "2026-08-13T13:28:00Z"
+      host: windows
+      summary: >
+        Windows column, top candidate repaired:
+        `litmus:windows-tray-diagnose-cli-surface`, the highest single test in
+        the 622-rmit scan.
+        Seven of its steps ran `grep -F 'fn <test_name>' notify_icon.rs` under
+        the heading "unit tests attached". That passes when the NAME is present
+        — including when the body has been emptied, when the test is
+        `#[ignore]`d, and when it FAILS. It was pinning the existence of a
+        string, and calling it coverage.
+        They are replaced by one step that RUNS those seventeen tests and judges
+        each by its own result line, per the packet's repair pattern (execute
+        the thing, assert its output, under a falsifiable grammar).
+        The platform wrinkle is why this needed a script rather than a one-line
+        `cargo test` in the YAML, and it is worth recording because it bit this
+        host earlier today on 648-772y: `notify_icon.rs` and its siblings are
+        `#[cfg(target_os = "windows")]`, and `main.rs` substitutes `src/stubs/`
+        on Linux — so a Linux cargo compiles the STUB, reports success, and
+        proves nothing about the file the step claims to pin. A green like that
+        is worse than the grep it replaced. The check therefore establishes
+        whether a Windows toolchain is reachable and emits a typed
+        `skip:diagnose-surface-unverifiable:<reason>` when it is not. Every
+        verdict shares the noun `diagnose-surface`, so one expected_behavior
+        substring accepts a real pass and an honest skip while still rejecting a
+        violation.
+        Before/after (criterion 3): this test went from 12 candidate steps to 5;
+        the corpus-wide count went 664 -> 657 against the 2026-08-09 baseline in
+        plan/evidence/. The repaired test passes: run-litmus-test.sh
+        windows-native-tray = 9/9, 100%.
+  - packet_id: platform-litmus-expression-pinning-repair
+    event:
+      type: verified
+      ts: "2026-08-13T13:29:00Z"
+      host: windows
+      summary: >
+        Criterion 2, and the check found a defect in ITSELF on the way there.
+        Its first version reported `violation:missing-test:<name>` when cargo had
+        not run a single test — Smart App Control on this host intermittently
+        blocks freshly built unsigned binaries ("An Application Control policy
+        has blocked this file. (os error 4551)"), and every pinned test then
+        looks absent for the same reason. Naming a specific test as deleted when
+        the truth is "nothing ran" is exactly the misdirection this packet exists
+        to remove, so it now asks whether the runner ran BEFORE interpreting
+        what it printed, and blocked/empty runs get their own verdicts. The
+        first version also reported the LAST missing name rather than the first,
+        which made the accusation arbitrary.
+        `scripts/test-windows-tray-diagnose-surface.sh`, 6/6, proves every
+        verdict in the grammar reachable through a recorded-transcript seam:
+        case 2 a renamed/deleted pinned test (what the greps protected), case 3
+        a pinned test that RUNS AND FAILS (which no grep could ever see), case 4
+        the blocked toolchain, case 5 a run with no results, case 6 that skips
+        exit 0 and violations exit non-zero — so a lane without a Windows
+        toolchain is neither failed nor told it passed.
+        The transcript for the healthy case is generated FROM the check's own
+        pinned-test list, so the fixture cannot drift away from what the check
+        demands.
+        SCOPE LIMIT respected: this is repair of an existing guard only. No
+        enforcement against NEW expression-pinned guards was added — that is a
+        bar-raise and stays Tlatoani-gated.
+        Status `implemented`, not done: the macOS column
+        (litmus:accel-envelope-reaches-the-forge, 6 steps) is untouched and is
+        that host's to repair, exactly as the packet's request says.

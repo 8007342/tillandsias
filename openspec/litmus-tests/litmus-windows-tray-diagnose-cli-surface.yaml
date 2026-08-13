@@ -37,40 +37,24 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "JSON schema-pin unit tests attached (superset + exact-count)"
-    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_top_level_keys_exact_count' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_json_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "grep succeeds"
-    timeout_ms: 3000
+  # Order 624-cf9f. Seven steps here used to `grep -F 'fn <name>'` for the unit
+  # tests that pin this surface. That passes when the NAME is present — with an
+  # emptied body, an #[ignore], or a red result. Running them is simpler and
+  # strictly stronger, and the check says `skip:` out loud when no Windows
+  # toolchain is reachable rather than passing on a technicality (the sources it
+  # covers are #[cfg(target_os = "windows")], so a Linux cargo compiles a stub
+  # and proves nothing). Fixture: scripts/test-windows-tray-diagnose-surface.sh,
+  # 6/6, including a renamed test, a FAILING test — which no grep could see —
+  # and a blocked toolchain.
+  - step: "the pinned diagnose/status/log unit tests RUN and pass (not merely exist)"
+    command: "bash scripts/check-windows-tray-diagnose-surface.sh"
+    expected_behavior: "diagnose-surface"
+    timeout_ms: 180000
 
-  - step: "exit-code contract tests attached (incl. summary_line classifiers for both --diagnose and --status-once)"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_exit_codes' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn summary_line_classifies_exit_code' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_summary_line_classifies_exit_code' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "grep succeeds"
-    timeout_ms: 3000
-
-  - step: "--help / --version surface tests attached"
-    command: "grep -F 'fn version_line_uses_workspace_version_and_commit' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn help_text_documents_all_cli_modes' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "grep succeeds"
-    timeout_ms: 3000
-
-  - step: "--logs tail-selector test attached"
-    command: "grep -F 'fn select_log_tail_handles_all_cases' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "grep succeeds"
-    timeout_ms: 3000
-
-  - step: "tray tooltip composer test attached"
-    command: "grep -F 'fn compose_tooltip_includes_version_and_status' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn compose_tooltip' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "grep succeeds"
-    timeout_ms: 3000
-
-  - step: "tray.log rotation boundary test attached"
-    command: "grep -F 'fn should_rotate_log_at_threshold_boundary' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn maybe_rotate_log' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'TRAY_LOG_MAX_BYTES' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "grep succeeds"
-    timeout_ms: 3000
-
-  - step: "wsl --version + cmd /c ver sniffers + first-line helper test attached"
-    command: "grep -F 'fn first_line_handles_all_cases' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn sniff_wsl_version' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn sniff_windows_version' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "grep succeeds"
-    timeout_ms: 3000
+  - step: "the surface check itself fails when the surface is broken"
+    command: "bash scripts/test-windows-tray-diagnose-surface.sh"
+    expected_behavior: "PASS: windows tray diagnose surface check (6/6)"
+    timeout_ms: 60000
 
   - step: "end-to-end cli_integration tests attached (7 of 7 stateless CLI modes + cross-surface version consistency)"
     command: "grep -F 'fn version_line_has_workspace_version_and_commit' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn help_text_includes_all_documented_surfaces' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_json_has_all_17_top_level_keys' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_human_includes_pinned_section_labels' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn status_once_json_has_all_7_keys_and_exit_code_matches' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_no_flags_reads_live_log_and_exits_0' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_bak_when_missing_exits_1_with_pointer_to_live_file' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn cross_surface_version_consistency' crates/tillandsias-windows-tray/tests/cli_integration.rs"
