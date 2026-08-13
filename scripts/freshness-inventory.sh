@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# freshness: auditor=linux-mutable-20260813t2117z date=2026-08-13 verdict=updated scope=order 720-bmm9 — denominator widened to the rest of the ruled subset (crates/**/*.rs and openspec/specs: 868 -> 1250 components) and a denominator_delta field added, so a scope change that lowers the percentage is never read as decay; litmus now pins both directions (ruled-in trees present, generated trees absent)
 # freshness: auditor=linux-mutable-20260813t1908z date=2026-08-13 verdict=updated scope=order 640-iujb closure — coverage is now reported against the operator-ruled DEFINED SUBSET rather than an implicit 100%: generated trees (images/default/cheatsheets/, 219 components) leave the denominator, and freshness-target: reports the scope READ FROM methodology.yaml with litmus:freshness-inventory-shape asserting the two agree
 # freshness: auditor=linux-macuahuitl-fable5-20260811t0200z date=2026-08-11 verdict=refreshed scope=behavioral re-validation: emitted the coverage report + freshness-stale/freshness-next grammar live this cycle (6 loop iterations consumed it to pick audit targets), litmus:freshness-inventory-shape PASS; the windows-20260809 freshness-next: unstamped-draw fix is live and working — the queue advanced through podman-mock/tls-test-server/run-litmus-test rather than re-offering the same 8
 # freshness: auditor=windows-claude-20260809t212955z date=2026-08-09 verdict=updated scope=coverage stuck at 0% for 9+ days because the advisory could only rank STAMPED files, so the audit queue re-offered the same 8 and the 1013 unstamped were unreachable; added freshness-next: to draw the next target from the unstamped set
@@ -27,7 +28,7 @@
 #   freshness-unstamped: <relpath>
 #   freshness-stale: <relpath> <age_days> <verdict> <date>
 #   freshness-next: <relpath> <source=unstamped|stale> seed=<seed>
-#   freshness-target: scope=<scope> excluded=<n> source=methodology.yaml
+#   freshness-target: scope=<scope> excluded=<n> denominator_delta=<+n|-n|unknown> source=methodology.yaml
 #
 # WHY freshness-target EXISTS (order 640-iujb, operator ruling 2026-08-12)
 # -----------------------------------------------------------------------
@@ -139,7 +140,16 @@ INVENTORY_PATHS=(
     "images/default"
     "cheatsheets"
     "openspec/litmus-tests"
+    "openspec/specs"
     "methodology"
+)
+
+# Rust sources are in the ruled subset too (order 720-bmm9): methodology.yaml
+# component_freshness.coverage_target names "executable/source code" first.
+# They are enumerated separately from INVENTORY_PATHS because that loop looks
+# for yaml/yml/md, not code. target/ is a build output, never a component.
+SOURCE_PATHS=(
+    "crates"
 )
 
 # Paths EXCLUDED from the denominator per methodology.yaml
@@ -175,6 +185,10 @@ done < <(
     for d in "${INVENTORY_PATHS[@]:1}"; do
         [ -d "$d" ] || continue
         find "$d" -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.md' \) 2>/dev/null
+    done
+    for d in "${SOURCE_PATHS[@]}"; do
+        [ -d "$d" ] || continue
+        find "$d" -type f -name '*.rs' -not -path '*/target/*' 2>/dev/null
     done
 )
 fi
@@ -295,6 +309,13 @@ else
     pct="0.0"
 fi
 delta="unknown"
+# The DENOMINATOR moves too, and when it does the coverage percentage falls
+# without a single stamp being lost — which reads as regression and is not one
+# (order 720-bmm9: widening to source + specs added 377 components and dropped
+# coverage 1.3% -> 1.0%). Track and report it separately so a scope change is
+# never mistaken for decay. Third cache field; a two-field cache from an older
+# run yields denominator_delta=unknown rather than a fabricated zero.
+den_delta="unknown"
 CACHE="target/freshness-inventory.last"
 if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ]; then
     if [ -f "$CACHE" ]; then
@@ -303,8 +324,13 @@ if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ]; then
             ''|*[!0-9]*) : ;;
             *) d=$((stamped - last_stamped)); [ "$d" -ge 0 ] && delta="+$d" || delta="$d" ;;
         esac
+        last_total="$(cut -d' ' -f3 "$CACHE" 2>/dev/null)"
+        case "$last_total" in
+            ''|*[!0-9]*) : ;;
+            *) d=$((total - last_total)); [ "$d" -ge 0 ] && den_delta="+$d" || den_delta="$d" ;;
+        esac
     fi
-    mkdir -p target 2>/dev/null && printf '%s %s\n' "$stamped" "$today" > "$CACHE" 2>/dev/null || true
+    mkdir -p target 2>/dev/null && printf '%s %s %s\n' "$stamped" "$today" "$total" > "$CACHE" 2>/dev/null || true
 fi
 
 # The coverage target lives in methodology.yaml, never here (order 640-iujb).
@@ -323,7 +349,7 @@ fi
 
 echo "freshness-inventory: $total components, $stamped stamped, $unstamped unstamped"
 echo "freshness-coverage: ${pct}% (${stamped}/${total} delta=${delta})"
-echo "freshness-target: scope=${COVERAGE_SCOPE} excluded=${excluded} source=methodology.yaml"
+echo "freshness-target: scope=${COVERAGE_SCOPE} excluded=${excluded} denominator_delta=${den_delta} source=methodology.yaml"
 for line in "${STAMP_LINES[@]:-}"; do
     [ -z "$line" ] && continue
     IFS='|' read -r rel verdict fdate auditor <<< "$line"

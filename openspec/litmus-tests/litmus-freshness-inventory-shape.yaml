@@ -43,6 +43,26 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: generated components excluded from denominator"
 
+  - step: "DENOMINATOR: the ruled-in trees are actually enumerated (order 720-bmm9)"
+    # methodology.yaml names "executable/source code ... and specs
+    # (openspec/specs)" as in-scope, and for months the inventory enumerated
+    # neither — so coverage was reported against a denominator narrower than the
+    # ruled subset while looking authoritative. The exclusion guard above stops
+    # the denominator growing wrong; this stops it silently shrinking. Both
+    # trees must contribute components.
+    command: "out=$(scripts/freshness-inventory.sh); rs=$(printf '%s' \"$out\" | grep -cE '^freshness-(unstamped|stamp): crates/'); sp=$(printf '%s' \"$out\" | grep -cE '^freshness-(unstamped|stamp): openspec/specs/'); [ \"$rs\" -gt 0 ] && [ \"$sp\" -gt 0 ] && echo 'ok: source and spec trees in the denominator'"
+    timeout_ms: 60000
+    expected_behavior: "ok: source and spec trees in the denominator"
+
+  - step: "SCOPE CHANGE IS NOT DECAY: a denominator move is reported separately (order 720-bmm9)"
+    # Widening the subset dropped coverage from 1.3% to 1.0% without losing a
+    # single stamp. Without a denominator delta that reads as regression, and
+    # the honest reading — the target got bigger — is unavailable to anyone
+    # looking at the report alone.
+    command: "scripts/freshness-inventory.sh | grep -qE '^freshness-target: scope=[^ ]+ excluded=[0-9]+ denominator_delta=(unknown|[+-][0-9]+) source=methodology.yaml$' && echo 'ok: denominator delta reported'"
+    timeout_ms: 60000
+    expected_behavior: "ok: denominator delta reported"
+
   - step: "Req: local CI ranks stale audit candidates by numeric age"
     command: "sample=$(printf '%s\\n' 'freshness-stale: z.sh 3 days' 'freshness-stale: a.sh 20 days'); first=$(printf '%s\\n' \"$sample\" | sort -t' ' -k3,3nr | head -1); grep -Fq \"sort -t' ' -k3,3nr\" scripts/local-ci.sh && [ \"$first\" = 'freshness-stale: a.sh 20 days' ] && echo 'ok: advisory ranks by age'"
     timeout_ms: 3000
