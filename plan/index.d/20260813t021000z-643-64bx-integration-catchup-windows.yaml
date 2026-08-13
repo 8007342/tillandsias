@@ -1,0 +1,43 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: build-bumps-version-then-the-hook-forbids-pushing-it
+    event:
+      type: progress
+      ts: "2026-08-13T02:10:00Z"
+      host: windows
+      summary: >
+        PARTIAL, and narrower than it looks. Operator ruling 2026-08-13, on the
+        live block recorded above: "you don't own the release, the linux host
+        does." That settles the windows half of this packet without touching
+        criterion 1. Two changes follow from it.
+        (1) windows-next stops carrying a VERSION of its own: the local
+        0.4.260812.2 counter bump is restored to origin/linux-next's
+        0.4.260812.1. The increment is not discarded as a decision, it is
+        relocated to the host that owns it.
+        (2) scripts/hooks/pre-push-version-guard.sh gains a THIRD sync-forward
+        case, integration-branch catch-up. The topology is three tiers and the
+        exception set only knew two: platform branches must merge
+        origin/linux-next before every push (methodology
+        pull_merge_cadence.pre_push_gate), linux-next legitimately runs ahead of
+        main between releases, so the required merge handed the platform branch
+        a VERSION that was neither main's nor its own and the guard refused it —
+        a mandatory step producing a permanently unpushable branch. Equality
+        with the integration branch is a catch-up for the same reason equality
+        with main is: the branch ACCEPTS a value decided elsewhere. The
+        exception permits equality ONLY, so a platform branch inventing a
+        VERSION ahead of both stays refused.
+        This is a narrowing, not a relaxation, and the packet's "do not relax
+        the guard" note is respected: the class the guard was written for — an
+        ordinary work branch quietly carrying its own VERSION — is still
+        refused, and is now refused by a TEST rather than by inspection.
+        Evidence: new scripts/test-pre-push-version-guard.sh, 4/4 pass, built on
+        a throwaway repo with the real three-tier topology (branch names with a
+        slash are legal refs, so origin/main and origin/linux-next resolve with
+        no remote). Case 2 is the load-bearing negative control: a bump ahead of
+        both main and linux-next must be REFUSED, so the new exception cannot
+        pass by accepting everything. Hand-falsification recorded: blanking
+        integration_version makes case 1 FAIL and the other three still pass.
+        STILL OPEN, unchanged: criterion 1 (move the local build counter off
+        tracked files) and criterion 3 (./build.sh --install then a normal push
+        with no bypass and no manual revert). Those are release-path decisions
+        owned by the linux host, and this cycle deliberately did not make them.
