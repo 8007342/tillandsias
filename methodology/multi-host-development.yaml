@@ -105,6 +105,59 @@ multi_host_development:
         green exit (merge-only, --no-ff); never rebased or force-pushed once
         relayed. Cherry-pick allowed only with -x AND simultaneous lane
         retirement. Enforcement and the coordinator sweep are packet-gated.
+    publish_freely_policy:
+      provenance: >
+        operator-directed 2026-08-13 (The Tlatoani), after a macOS cycle held
+        three gated, fully-tested commits LOCAL-ONLY rather than push them,
+        because the pre-push VERSION guard refused osx-next over a divergence
+        inherited from linux-next (702-eusw). The operator's correction:
+        "git is itself with its branching mechanism safe to push random crap
+        ... fear not of pushing experimental code if you're unsure. Use
+        branches if you must."
+      rule: >
+        DO NOT withhold work from the remote because you are unsure of it.
+        Unpushed work is the only work that can be LOST — a local-only commit
+        survives exactly as long as one disk and one worktree, and the exit
+        contract's "no local-only commits" says so for this reason. Pushing
+        experimental, partial, or uncertain work to a NON-INTEGRATION branch
+        is always safe and always preferred over holding it. If you are
+        unsure whether work belongs on an integration branch, that is an
+        argument for a branch, NOT an argument for silence.
+      layered_clocks: >
+        The rationale is that this repo runs a DIFFERENT logical clock at each
+        abstraction layer, and they are deliberately not synchronized. A lane
+        branch advances on its own; an integration branch advances when a lane
+        lands; main advances only when a release PR merges. Work being ahead
+        of, behind, or divergent from another layer is the NORMAL state of a
+        multi-host system, not an error to be prevented by refusing to
+        publish. Only the layer that ships is required to be globally
+        consistent.
+      what_protection_actually_means: >
+        main is the protected layer, and it is protected by things that
+        actually verify: PR-only with enforce_admins (order 476), a fully
+        compiling tree, and a passing test suite. A branch push cannot reach
+        main without passing them. Therefore a branch push cannot break a
+        release, and treating branch pushes as risky misreads where the
+        protection lives. Conversely, no amount of local caution substitutes
+        for those gates — withholding a push protects nothing.
+      guard_refusal_procedure: >
+        When a pre-push guard refuses an INTEGRATION branch for a condition
+        you did not create and do not own (the 702-eusw shape: a divergent
+        VERSION inherited from the mandated linux-next merge), do all three:
+        (1) push the tree to a conforming non-integration branch so it is
+        durable and reviewable; (2) file the blocker as a packet AND get that
+        packet to the remote — a p0 filed only in a local commit is invisible
+        to the host that owns the fix, which is the failure mode that makes
+        this worth writing down; (3) leave the owning host's decision to the
+        owning host. Do NOT --no-verify an integration branch to route around
+        another host's release state, and do NOT sit on the work.
+      naming: >
+        Use the lane grammar (agent/<host>/<base>/<yyyymmdd>-<slug>) or
+        salvage/<host>/<yyyymmdd>-<slug>. Those two prefixes are the ONLY
+        non-integration namespaces the creation_regex admits and the only ones
+        the coordinator sweep enumerates, so an out-of-grammar name is a stray
+        that nothing will ever reap. "Push freely" is a licence about
+        FREQUENCY and CONFIDENCE, not about namespace.
     ledger_rule: >
       Lane branches are code-only for shared ledger state: plan/index.yaml,
       plan.yaml, plan/loop_status.md, and methodology/** ride integration
