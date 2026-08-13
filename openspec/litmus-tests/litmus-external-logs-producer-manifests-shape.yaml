@@ -59,4 +59,4 @@ rollback:
     external-logs-layer. Restore the @trace line, canonical role, files[]
     schema fields, text|jsonl format restriction, and COPY into
     /etc/tillandsias/external-logs.yaml for each producer image.
-  command: "rg -n 'external-logs.yaml|role:|format:|COPY external-logs.yaml' images/{git,proxy,inference,router,vault}"
+  command: "grep -rnIE 'external-logs.yaml|role:|format:|COPY external-logs.yaml' images/{git,proxy,inference,router,vault}"

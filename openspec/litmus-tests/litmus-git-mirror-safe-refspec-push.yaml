@@ -45,4 +45,4 @@ observability:
 
 rollback:
   on_failure: "inspect images/git/relay-refs.sh and images/git/entrypoint.sh for unsafe mirror/all pushes or missing stdin refspec handling"
-  command: "rg -n -- '--mirror|--all|set --|ref deletion' images/git openspec/specs/git-mirror-service/spec.md"
+  command: "grep -rnIE -- '--mirror|--all|set --|ref deletion' images/git openspec/specs/git-mirror-service/spec.md"

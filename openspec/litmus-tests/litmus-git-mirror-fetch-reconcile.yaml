@@ -27,4 +27,4 @@ observability:
 
 rollback:
   on_failure: "inspect images/git/relay-refs.sh for missing quarantine escape or missing non-forced fetch"
-  command: "rg -n -- 'GIT_QUARANTINE_PATH' images/git/relay-refs.sh"
+  command: "grep -rnIE -- 'GIT_QUARANTINE_PATH' images/git/relay-refs.sh"
