@@ -761,6 +761,12 @@ plan_index:
         - "litmus:agent-egress-allowlist-shape pinned + green; --check passes"
       events:
         - type: progress
+          ts: "2026-08-13T10:52:23Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            In-forge evidence (delegate bigpickle-20260813t0348egr, HEAD a7e8d1c0): the CURRENT forge egress allowlist is enforced live — the allowlisted git mirror is reachable and an arbitrary non-allowlisted external host (example.org) is blocked (http=000, connection reset by the proxy). NOT advanced: 130 remains pending on its research dep and its own deliverable (apply the allowlist delta to images/proxy/allowlist.txt+squid.conf, add entrypoint-forge-antigravity.sh, pin litmus:agent-egress-allowlist-shape) is unimplemented — this is a positive current-state data point, not the impl.
+        - type: progress
           ts: "2026-08-13T10:51:37Z"
           agent_id: "bigpickle-20260813t0348egr"
           host: forge
@@ -39756,6 +39762,12 @@ plan_index:
         - the host loop's own live verification is isolated from delegate-driven forge teardown, or the protocol schedules host live-checks against a host-owned stack the delegate does not recycle
       events:
         - type: progress
+          ts: "2026-08-13T10:52:23Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Sixth live delegate (bigpickle-20260813t0348egr) finished DONE: verified the forge network-egress allowlist is ENFORCED in-forge (mirror reachable, arbitrary external example.org blocked http=000 connection-reset). finished-with-evidence:done via the 690 channel; seventh clean zero-DOA create+destroy.
+        - type: progress
           ts: "2026-08-13T08:53:53Z"
           agent_id: "linux-mutable-session-20260812"
           host: linux_mutable
@@ -39822,6 +39834,12 @@ plan_index:
         - a fixture reproduces the race (forge started against a not-yet-resolvable mirror alias) and proves the forge now converges instead of fatal-exiting
         - verified live: a fresh stack launch clones successfully on first try across N consecutive create/destroy cycles (ephemeral-contract stress), zero DOA windows
       events:
+        - type: progress
+          ts: "2026-08-13T10:52:23Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Seventh clean zero-DOA cycle toward 691-ssw9 criterion 4: delegate bigpickle-20260813t0348egr cloned live HEAD a7e8d1c0 (no DOA), ran the egress validation, pushed its token (a7e8d1c0..e3f3b7ff, converged), tore down its lane clean.
         - type: progress
           ts: "2026-08-13T08:53:53Z"
           agent_id: "linux-mutable-session-20260812"
