@@ -526,8 +526,43 @@ jobs:
           ls -la target-guest
           test -s target-guest/tillandsias-headless-x86_64-unknown-linux-musl
 
+      # ── Authenticode signing identity (orders 722-w7a2 / 724-rpna) ────────
+      # Gated on the repo variable rather than unconditional, so the Windows
+      # release lane keeps working before the Azure identity exists. Once
+      # TILLANDSIAS_SIGNING_ACCOUNT is set, every release signs; until then
+      # every release says out loud that it is unsigned (the build script
+      # prints it, and 722-f86z's gate check is what makes the absence fatal).
+      #
+      # These three values are NOT secrets — an account name, a profile name
+      # and a regional URI — so they are repo VARIABLES. The credential is the
+      # thing that must never be long-lived, and it comes from federated OIDC
+      # below (id-token: write is already granted on this job).
+      - name: Azure login (federated OIDC — no stored signing credential)
+        if: vars.TILLANDSIAS_SIGNING_ACCOUNT != ''
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302 # v2
+        with:
+          client-id: ${{ vars.TILLANDSIAS_SIGNING_CLIENT_ID }}
+          tenant-id: ${{ vars.TILLANDSIAS_SIGNING_TENANT_ID }}
+          subscription-id: ${{ vars.TILLANDSIAS_SIGNING_SUBSCRIPTION_ID }}
+
+      - name: Install Artifact Signing Client Tools
+        if: vars.TILLANDSIAS_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          # The documented MSI install. Preferred over winget on a runner
+          # because it is a pinned URL and a silent install, not a package
+          # manager resolving "latest" mid-release.
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri "https://download.microsoft.com/download/70ad2c3b-761f-4aa9-a9de-e7405aa2b4c1/ArtifactSigningClientTools.msi" -OutFile .\ArtifactSigningClientTools.msi
+          Start-Process msiexec.exe -Wait -ArgumentList '/I ArtifactSigningClientTools.msi /quiet'
+          Remove-Item .\ArtifactSigningClientTools.msi
+
       - name: Build + package the Windows tray (windows-owned build script)
         shell: pwsh
+        env:
+          TILLANDSIAS_SIGNING_ENDPOINT: ${{ vars.TILLANDSIAS_SIGNING_ENDPOINT }}
+          TILLANDSIAS_SIGNING_ACCOUNT: ${{ vars.TILLANDSIAS_SIGNING_ACCOUNT }}
+          TILLANDSIAS_SIGNING_PROFILE: ${{ vars.TILLANDSIAS_SIGNING_PROFILE }}
         run: |
           # The windows-owned build script now builds AND packages under -Release
           # (tray-convergence-coordination.md ask, done windows-next): produces
@@ -535,7 +570,19 @@ jobs:
           # install-windows.ps1) + a distinct SHA256SUMS-windows. This replaces
           # the prior inline packaging stopgap; the signing step below consumes
           # those exact paths.
-          scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
+          #
+          # -Sign signs the STAGED exe before the zip and the checksums are
+          # made, which is the whole reason signing lives inside this script
+          # rather than as a later workflow step: signing after hashing would
+          # publish checksums for a file nobody downloads. Same seam the dev
+          # lane uses, so a developer can reproduce what CI produced.
+          $sign = "${{ vars.TILLANDSIAS_SIGNING_ACCOUNT }}" -ne ''
+          if ($sign) {
+            scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}" -Sign
+          } else {
+            Write-Host "::warning::TILLANDSIAS_SIGNING_ACCOUNT is unset — publishing UNSIGNED Windows artifacts (plan packet 722-w7a2)"
+            scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
+          }
           Get-ChildItem release-artifacts
 
       - name: Stage version-stable portable aliases
