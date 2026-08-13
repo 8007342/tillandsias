@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
@@ -780,7 +780,10 @@ const VAULT_EXEC_ADDR: &str = "https://127.0.0.1:8200";
 /// read after the move from the HTTP Vault client to `podman exec`.
 ///
 /// @trace spec:tillandsias-vault, plan/issues/vault-exec-env-regression-2026-06-27.md
-fn vault_exec_command(root_token: &str, vault_args: &[&str]) -> std::process::Command {
+fn vault_exec_command(
+    root_token: &str,
+    vault_args: &[&str],
+) -> tillandsias_podman::SyncPodmanCommand {
     let mut cmd = podman_cmd_sync();
     // Token in the podman process env → forwarded by name-only `-e VAULT_TOKEN`,
     // so it stays out of argv.
@@ -845,7 +848,7 @@ pub(crate) fn is_github_key_present() -> bool {
     )
     .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())
-    .status()
+    .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
     .map(|s| s.success())
     .unwrap_or(false)
 }
@@ -873,7 +876,7 @@ pub(crate) fn vault_kv_get_via_exec(
     let root_token = read_and_handover_root_token(debug)?;
     let field_arg = format!("-field={field}");
     let output = vault_exec_command(&root_token, &["kv", "get", &field_arg, secret_path])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("podman exec {VAULT_CONTAINER_NAME} vault kv get: {e}"))?;
     if output.status.success() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -919,7 +922,7 @@ pub(crate) fn opencode_auth_content_available(debug: bool) -> Result<bool, Strin
     // never enters launcher memory. The scoped forge reads it later.
     command.stdout(Stdio::null());
     let output = command
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|error| format!("OpenCode Vault auth availability command failed: {error}"))?;
     if output.status.success() {
         return Ok(true);
@@ -1112,7 +1115,7 @@ pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
         ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .status()
+        .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map(|s| s.success())
         .unwrap_or(false)
 }
@@ -1292,7 +1295,7 @@ pub async fn mint_approle_auto_auth_for_container(
                 .args(["secret", "rm", &secret_name])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
-                .status();
+                .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
             return Err("AppRole auto-auth revocation registry is poisoned".into());
         }
     }
@@ -1322,7 +1325,7 @@ impl Drop for AppRoleSecretLease {
             .args(["secret", "rm", &self.secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
     }
 }
 
@@ -1404,7 +1407,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
             .args(["secret", "rm", &secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
     }
 
     for (secret_name, registration) in auto_auth_entries {
@@ -1423,7 +1426,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
             .args(["secret", "rm", &secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
     }
 }
 
@@ -1723,7 +1726,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
             "[tillandsias-vault] creating podman secret {VAULT_UNSEAL_SECRET} (32 bytes from HKDF)"
         );
     }
-    let mut child = podman_cmd_sync()
+    let out = podman_cmd_sync()
         .args([
             "secret",
             "create",
@@ -1732,20 +1735,10 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
             VAULT_UNSEAL_SECRET,
             "-",
         ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("spawn podman secret create: {e}"))?;
-    child
-        .stdin
-        .as_mut()
-        .ok_or("no stdin")?
-        .write_all(key)
-        .map_err(|e| format!("write key bytes: {e}"))?;
-    drop(child.stdin.take());
-    let out = child
-        .wait_with_output()
+        .output_bounded_with_stdin(
+            key,
+            tillandsias_podman::OperationKind::Secret.default_budget(),
+        )
         .map_err(|e| format!("wait podman secret create: {e}"))?;
     if !out.status.success() {
         return Err(format!(
@@ -1768,7 +1761,7 @@ fn unseal_secret_exists() -> bool {
         .args(["secret", "inspect", VAULT_UNSEAL_SECRET])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()
+        .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget())
         .map(|s| s.success())
         .unwrap_or(false)
 }
@@ -1790,7 +1783,7 @@ fn read_unseal_secret_bytes() -> Option<Vec<u8>> {
             "{{.SecretData}}",
             VAULT_UNSEAL_SECRET,
         ])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Secret.default_budget())
         .ok()?;
     if !out.status.success() {
         return None;
@@ -1817,22 +1810,12 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
             token.len()
         );
     }
-    let mut child = podman_cmd_sync()
+    let out = podman_cmd_sync()
         .args(["secret", "create", "--replace", "--driver=file", name, "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("spawn podman secret create: {e}"))?;
-    child
-        .stdin
-        .as_mut()
-        .ok_or("no stdin")?
-        .write_all(token.as_bytes())
-        .map_err(|e| format!("write token bytes: {e}"))?;
-    drop(child.stdin.take());
-    let out = child
-        .wait_with_output()
+        .output_bounded_with_stdin(
+            token.as_bytes(),
+            tillandsias_podman::OperationKind::Secret.default_budget(),
+        )
         .map_err(|e| format!("wait podman secret create: {e}"))?;
     if !out.status.success() {
         return Err(format!(
@@ -1858,22 +1841,12 @@ fn create_file_podman_secret(
             path.display()
         );
     }
-    let mut child = podman_cmd_sync()
+    let out = podman_cmd_sync()
         .args(["secret", "create", "--replace", "--driver=file", name, "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("spawn podman secret create {name}: {e}"))?;
-    child
-        .stdin
-        .as_mut()
-        .ok_or("no stdin")?
-        .write_all(&contents)
-        .map_err(|e| format!("write podman secret {name}: {e}"))?;
-    drop(child.stdin.take());
-    let out = child
-        .wait_with_output()
+        .output_bounded_with_stdin(
+            &contents,
+            tillandsias_podman::OperationKind::Secret.default_budget(),
+        )
         .map_err(|e| format!("wait podman secret create {name}: {e}"))?;
     if !out.status.success() {
         return Err(format!(
@@ -2031,7 +2004,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
 
     // Only wipe the data volume in the partial-init scenario: the volume
     // exists but the host keychain has no Shamir unseal share, meaning a
@@ -2167,7 +2140,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         .args(&run_args)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .status()
+        .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("spawn podman run: {e}"))?;
     if !status.success() {
         return Err(format!("podman run vault failed: {}", status));
@@ -2189,7 +2162,7 @@ fn dump_vault_failure_diagnostics() {
             "--format",
             "{{.Names}} status={{.Status}} exit={{.ExitCode}}",
         ])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
     if let Ok(out) = ps {
         let s = String::from_utf8_lossy(&out.stdout);
         let s = s.trim();
@@ -2199,7 +2172,7 @@ fn dump_vault_failure_diagnostics() {
     }
     let logs = podman_cmd_sync()
         .args(["logs", "--tail", "40", VAULT_CONTAINER_NAME])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Logs.default_budget());
     if let Ok(out) = logs {
         let combined = format!(
             "{}{}",
@@ -2312,7 +2285,7 @@ const UNSEAL_LOG_ALREADY: &str = "vault already unsealed";
 fn vault_container_logs_tail() -> String {
     match podman_cmd_sync()
         .args(["logs", "--tail", "80", VAULT_CONTAINER_NAME])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Logs.default_budget())
     {
         Ok(out) => format!(
             "{}{}",
@@ -2565,7 +2538,7 @@ fn update_etc_hosts_vault(debug: bool) {
             "--format",
             "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}",
         ])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
     {
         Ok(o) => o,
         Err(e) => {
@@ -2623,7 +2596,7 @@ fn read_handover_file(name: &str) -> Option<String> {
             "cat",
             &format!("/run/vault-handover/{name}"),
         ])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .ok()?;
     if !out.status.success() {
         return None;
@@ -3191,7 +3164,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                  done; \
                  rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key",
             ])
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Container.default_budget());
 
         if debug {
             eprintln!(
@@ -3281,7 +3254,7 @@ fn read_and_handover_root_token(_debug: bool) -> Result<String, String> {
 pub(crate) fn container_running(name: &str) -> bool {
     let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget());
     match out {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim() == "true",
         _ => false,

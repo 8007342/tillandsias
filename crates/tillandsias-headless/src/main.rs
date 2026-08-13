@@ -1088,6 +1088,68 @@ fn find_checkout_root() -> Result<PathBuf, String> {
     find_developer_checkout_root()
 }
 
+/// Podman equivalents of `run_command`/`run_command_silent`/`command_output`
+/// (order 714-4r6w).
+///
+/// The generic helpers still take a raw `Command`, because they also run
+/// systemctl and friends. Podman calls go through these instead, so the
+/// deadline is applied once, here, rather than remembered at every call site.
+fn run_podman_command(
+    mut command: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", command.as_std());
+    }
+    let status = command
+        .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("Failed to run command: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Command exited with status {status}"))
+    }
+}
+
+fn run_podman_command_silent(
+    mut command: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", command.as_std());
+    }
+    let output = command
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("Failed to run command: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            Err(format!("Command exited with status {}", output.status))
+        } else {
+            Err(stderr)
+        }
+    }
+}
+
+fn podman_command_output(
+    mut command: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<String, String> {
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", command.as_std());
+    }
+    let output = command
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("Failed to run command: {e}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 fn run_command(mut command: Command, debug: bool) -> Result<(), String> {
     if debug {
         eprintln!("[tillandsias] running: {:?}", command);
@@ -2045,7 +2107,7 @@ impl OverlayHeal for RealSystemReset {
     fn podman_system_reset_force(&self) -> Result<(), String> {
         let status = podman_command()
             .args(["system", "reset", "--force"])
-            .status()
+            .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
             .map_err(|e| format!("Failed to spawn podman system reset: {e}"))?;
         if status.success() {
             Ok(())
@@ -2129,7 +2191,7 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
             subnet.as_str(),
             ENCLAVE_NET,
         ]);
-        run_command(command, debug)?;
+        run_podman_command(command, debug)?;
     }
 
     ensure_enclave_host_dns(debug)
@@ -2221,7 +2283,7 @@ fn systemd_resolved_active() -> bool {
 fn enclave_gateway_from_podman_network(debug: bool) -> Result<String, String> {
     let mut command = podman_command();
     command.args(["network", "inspect", ENCLAVE_NET]);
-    let inspect = command_output(command, debug)?;
+    let inspect = podman_command_output(command, debug)?;
     parse_enclave_gateway(&inspect)
 }
 
@@ -2283,7 +2345,7 @@ fn ensure_egress_network(debug: bool) -> Result<(), String> {
 
     let mut command = podman_command();
     command.args(["network", "create", "--driver", "bridge", EGRESS_NET]);
-    run_command(command, debug)
+    run_podman_command(command, debug)
 }
 
 fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
@@ -2662,7 +2724,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
     // --name tillandsias-proxy` does not fail with "name already in use".
     let _ = podman_cmd_sync()
         .args(["rm", "--ignore", "tillandsias-proxy"])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
     ensure_enclave_network(debug)?;
@@ -3861,7 +3923,7 @@ async fn caddy_reload_routes(debug: bool) -> Result<(), String> {
     ]);
 
     for attempt in 1..=10 {
-        match cmd.output() {
+        match cmd.output_bounded(tillandsias_podman::OperationKind::Container.default_budget()) {
             Ok(output) if output.status.success() => {
                 if debug {
                     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -6450,8 +6512,12 @@ pub(crate) fn build_image_with_logging(
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
 
+    // Image builds stream their output to a log file and are governed by the
+    // caller's own progress handling, so this one owns its child's lifetime
+    // deliberately (order 714-4r6w). Counted by
+    // scripts/check-podman-sync-budgets.sh so the exception cannot spread.
     let mut child = command
-        .spawn()
+        .spawn_caller_owned_lifetime()
         .map_err(|e| format!("Failed to spawn build process: {e}"))?;
 
     let stdout = child.stdout.take();
@@ -6810,7 +6876,7 @@ fn reset_guest_wipe_paths(cache_dir: &Path) -> Vec<PathBuf> {
 fn podman_name_list(args: &[&str], debug: bool) -> Vec<String> {
     let mut command = podman_command();
     command.args(args);
-    match command.output() {
+    match command.output_bounded(tillandsias_podman::OperationKind::Container.default_budget()) {
         Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
             .lines()
             .map(|l| l.trim().to_string())
@@ -6863,7 +6929,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["rm", "-f", "-t", "10", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove container {name}: {e}");
         }
     }
@@ -6875,7 +6941,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["volume", "rm", "-f", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove volume {name}: {e}");
         }
     }
@@ -6888,7 +6954,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["secret", "rm", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove secret {name}: {e}");
         }
     }
@@ -6900,7 +6966,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["network", "rm", "-f", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove network {name}: {e}");
         }
     }
@@ -7169,7 +7235,7 @@ fn podman_runtime_health_probe(debug: bool, probe_image: &str) -> Result<(), Str
     };
 
     let first_output = probe()
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("Failed to run Podman runtime probe: {e}"))?;
     if first_output.status.success() {
         return Ok(());
@@ -7187,7 +7253,7 @@ fn podman_runtime_health_probe(debug: bool, probe_image: &str) -> Result<(), Str
     let mut migrate = podman_command();
     migrate.args(["system", "migrate"]);
     let migrate_output = migrate
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("Failed to run Podman system migrate: {e}"))?;
     if debug && !migrate_output.status.success() {
         eprintln!(
@@ -7197,7 +7263,7 @@ fn podman_runtime_health_probe(debug: bool, probe_image: &str) -> Result<(), Str
     }
 
     let second_output = probe()
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("Failed to rerun Podman runtime probe: {e}"))?;
     if second_output.status.success() {
         return Ok(());
@@ -7238,20 +7304,7 @@ fn podman_runtime_blocker(stderr: &str) -> bool {
     .any(|needle| stderr.contains(needle))
 }
 
-fn command_output(mut command: Command, debug: bool) -> Result<String, String> {
-    if debug {
-        eprintln!("[tillandsias] running: {:?}", command);
-    }
-    let output = command
-        .output()
-        .map_err(|e| format!("Failed to run command: {e}"))?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-fn podman_command() -> Command {
+fn podman_command() -> tillandsias_podman::SyncPodmanCommand {
     podman_cmd_sync()
 }
 
@@ -7674,7 +7727,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "-c",
             "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
         ]);
-        run_command_silent(run, debug)?;
+        run_podman_command_silent(run, debug)?;
     }
 
     #[cfg(not(feature = "vault"))]
@@ -7721,7 +7774,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         &config.token_script,
         config.input_mode,
     ));
-    run_command(login, debug)?;
+    run_podman_command(login, debug)?;
 
     if matches!(config.provider, ProviderId::GitHub) {
         match config.input_mode {
@@ -7741,7 +7794,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--hostname",
             "github.com",
         ]);
-        run_command_silent(auth_status, debug).map_err(|e| {
+        run_podman_command_silent(auth_status, debug).map_err(|e| {
             format!(
                 "containerized {provider_name} authentication verification failed after login: {e}"
             )
@@ -7768,7 +7821,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             );
             let mut vault_write = podman_command();
             vault_write.args(["exec", &container, "/bin/sh", "-c", &vault_write_cmd]);
-            run_command_silent(vault_write, debug)
+            run_podman_command_silent(vault_write, debug)
                 .map_err(|e| format!("in-container vault write failed: {e}"))?;
         }
 
@@ -7781,7 +7834,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &format!("-field={}", config.provider.secret_field()),
             config.provider.vault_path(),
         ]);
-        run_command_silent(vault_verify, debug)
+        run_podman_command_silent(vault_verify, debug)
             .map_err(|e| format!("in-container vault write verification failed: {e}"))?;
 
         info!(
@@ -7805,7 +7858,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     if matches!(config.provider, ProviderId::GitHub) {
         let mut username_cmd = podman_command();
         username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-        username = command_output(username_cmd, debug).ok();
+        username = podman_command_output(username_cmd, debug).ok();
     }
 
     drop(cleanup);
@@ -8619,7 +8672,7 @@ impl Drop for LoginContainerCleanup {
     fn drop(&mut self) {
         let mut command = podman_command();
         command.args(["rm", "-f", &self.name]);
-        let _ = run_command_silent(command, self.debug);
+        let _ = run_podman_command_silent(command, self.debug);
     }
 }
 
@@ -9568,7 +9621,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         } else {
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
-                .output();
+                .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
             client
                 .run_container_observed(
                     "opencode-proxy",
@@ -10519,7 +10572,7 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
         let mut cmd = podman_command();
         cmd.args(["inspect", "--format=.State.Running", container_name]);
         let output = cmd
-            .output()
+            .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
             .map_err(|e| format!("Failed to inspect browser container: {e}"))?;
 
         if !output.status.success() {
@@ -10545,7 +10598,7 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
     // Clean up the container
     let mut cleanup = podman_command();
     cleanup.args(["rm", "-f", container_name]);
-    let _ = run_command_silent(cleanup, debug);
+    let _ = run_podman_command_silent(cleanup, debug);
 
     if debug {
         eprintln!("[tillandsias] cleaned up browser container: {container_name}");
@@ -10669,7 +10722,7 @@ pub(crate) fn run_opencode_web_mode(
         } else {
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
-                .output();
+                .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
             client
                 .run_container_observed(
                     "opencode-web-proxy",
@@ -16659,7 +16712,7 @@ mod tests {
         let podman = |args: &[&str]| {
             let out = podman_cmd_sync()
                 .args(args)
-                .output()
+                .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
                 .expect("mock podman invokes");
             assert!(out.status.success(), "mock podman {args:?} must succeed");
         };

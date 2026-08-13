@@ -776,8 +776,246 @@ pub fn podman_cmd() -> tokio::process::Command {
     cmd
 }
 
-/// Same as [`podman_cmd`] but returns a `std::process::Command` for synchronous use.
-pub fn podman_cmd_sync() -> std::process::Command {
+/// A synchronous podman command that CANNOT be run without a deadline
+/// (order 714-4r6w).
+///
+/// Order 690-7adz bounded the async transport seam and declared the surface
+/// fixed, because that seam is the only place async podman calls go. It was not
+/// the only seam: `podman_cmd_sync` handed out a bare `std::process::Command`
+/// to 34 call sites, and `std` has no timeout on `output()` at all — so the
+/// synchronous half of the product kept waiting forever, including the vault
+/// container-state and log probes that run on the vault FAILURE path, where a
+/// wedged substrate is most likely and an operator is most stuck.
+///
+/// The fix is structural rather than a rule to remember. This wrapper exposes
+/// the builder methods and `output_bounded`/`status_bounded`, and does NOT
+/// expose `output`, `status`, or `spawn`. A call site that forgets the deadline
+/// does not compile, which is a stronger guarantee than a grep can offer — and
+/// the grep in `scripts/check-podman-sync-budgets.sh` exists to catch the way
+/// around it (constructing `std::process::Command::new("podman")` directly).
+pub struct SyncPodmanCommand {
+    inner: std::process::Command,
+}
+
+impl SyncPodmanCommand {
+    pub fn arg<S: AsRef<std::ffi::OsStr>>(&mut self, arg: S) -> &mut Self {
+        self.inner.arg(arg);
+        self
+    }
+
+    pub fn args<I, S>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<std::ffi::OsStr>,
+    {
+        self.inner.args(args);
+        self
+    }
+
+    pub fn env<K: AsRef<std::ffi::OsStr>, V: AsRef<std::ffi::OsStr>>(
+        &mut self,
+        key: K,
+        value: V,
+    ) -> &mut Self {
+        self.inner.env(key, value);
+        self
+    }
+
+    pub fn stdin<S: Into<std::process::Stdio>>(&mut self, cfg: S) -> &mut Self {
+        self.inner.stdin(cfg);
+        self
+    }
+
+    pub fn stdout<S: Into<std::process::Stdio>>(&mut self, cfg: S) -> &mut Self {
+        self.inner.stdout(cfg);
+        self
+    }
+
+    pub fn stderr<S: Into<std::process::Stdio>>(&mut self, cfg: S) -> &mut Self {
+        self.inner.stderr(cfg);
+        self
+    }
+
+    /// Borrow the underlying command for logging and argument inspection only.
+    pub fn as_std(&self) -> &std::process::Command {
+        &self.inner
+    }
+
+    /// Read-only argv/env inspection, used by the tests that assert a secret
+    /// never reaches argv. Read-only by construction: these cannot run anything.
+    pub fn get_args(&self) -> std::process::CommandArgs<'_> {
+        self.inner.get_args()
+    }
+
+    pub fn get_envs(&self) -> std::process::CommandEnvs<'_> {
+        self.inner.get_envs()
+    }
+
+    /// Spawn a child the CALLER will own and wait on itself.
+    ///
+    /// Named for what it costs. Every other method here bounds its own wait;
+    /// this one hands that duty to the caller, so it belongs only where the
+    /// process is genuinely long-lived and something else already governs its
+    /// lifetime. `scripts/check-podman-sync-budgets.sh` counts the call sites so
+    /// the number cannot quietly grow back.
+    pub fn spawn_caller_owned_lifetime(&mut self) -> std::io::Result<std::process::Child> {
+        self.inner.spawn()
+    }
+
+    /// Run to completion, or kill it when the budget expires.
+    ///
+    /// stdout and stderr are drained on separate threads. That is not
+    /// incidental: a child that fills a pipe buffer while nobody reads it blocks
+    /// forever, so a naive "poll `try_wait` and kill on expiry" would introduce
+    /// a second hang while fixing the first.
+    pub fn output_bounded(
+        &mut self,
+        budget: std::time::Duration,
+    ) -> std::io::Result<std::process::Output> {
+        self.inner.stdout(std::process::Stdio::piped());
+        self.inner.stderr(std::process::Stdio::piped());
+        let child = self.inner.spawn()?;
+        let redacted = self.redacted_args();
+        Self::wait_bounded(child, budget, &redacted)
+    }
+
+    /// Bounded run that feeds `input` on stdin first, for the `podman secret
+    /// create … -` shape. Those call sites used to spawn, write, and then
+    /// `wait_with_output()` forever; folding the pattern into one bounded method
+    /// is what lets the wrapper withhold `spawn` entirely.
+    pub fn output_bounded_with_stdin(
+        &mut self,
+        input: &[u8],
+        budget: std::time::Duration,
+    ) -> std::io::Result<std::process::Output> {
+        use std::io::Write;
+
+        self.inner.stdin(std::process::Stdio::piped());
+        self.inner.stdout(std::process::Stdio::piped());
+        self.inner.stderr(std::process::Stdio::piped());
+        let mut child = self.inner.spawn()?;
+        {
+            let mut stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| std::io::Error::other("podman stdin pipe unavailable"))?;
+            stdin.write_all(input)?;
+            // Dropping closes the pipe; without this the child waits on EOF and
+            // the budget below would be measuring our own bug.
+        }
+        Self::wait_bounded(child, budget, &self.redacted_args())
+    }
+
+    fn redacted_args(&self) -> Vec<String> {
+        crate::backend::redact_argv(
+            &self
+                .inner
+                .get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    fn wait_bounded(
+        mut child: std::process::Child,
+        budget: std::time::Duration,
+        redacted_args: &[String],
+    ) -> std::io::Result<std::process::Output> {
+        use std::io::Read;
+
+        let mut stdout_pipe = child.stdout.take();
+        let mut stderr_pipe = child.stderr.take();
+        let stdout_reader = std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(pipe) = stdout_pipe.as_mut() {
+                let _ = pipe.read_to_end(&mut buf);
+            }
+            buf
+        });
+        let stderr_reader = std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            if let Some(pipe) = stderr_pipe.as_mut() {
+                let _ = pipe.read_to_end(&mut buf);
+            }
+            buf
+        });
+
+        let started = std::time::Instant::now();
+        let status = loop {
+            match child.try_wait()? {
+                Some(status) => break status,
+                None => {
+                    if started.elapsed() >= budget {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        // Do NOT join the reader threads here. Killing the child
+                        // does not close a pipe a GRANDCHILD still holds — a
+                        // `sh -c` wrapper dies while the `sleep` it spawned keeps
+                        // the write end open — so the readers may never see EOF.
+                        // Joining them would trade the hang this method exists to
+                        // prevent for an identical one two frames up the stack;
+                        // the first version of this code did exactly that and
+                        // hung its own test. They are abandoned instead: each
+                        // owns nothing but a pipe read, and the caller — which is
+                        // the thing that must not block — returns now.
+                        let message = format!(
+                            "podman sync operation exceeded its {}s budget and was killed: podman {}",
+                            budget.as_secs(),
+                            redacted_args.join(" ")
+                        );
+                        log_podman_failure("sync", "timeout", &message);
+                        return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            }
+        };
+
+        Ok(std::process::Output {
+            status,
+            stdout: stdout_reader.join().unwrap_or_default(),
+            stderr: stderr_reader.join().unwrap_or_default(),
+        })
+    }
+
+    /// Bounded equivalent of `Command::status()` — output is inherited rather
+    /// than captured, for the call sites that stream straight to the terminal.
+    pub fn status_bounded(
+        &mut self,
+        budget: std::time::Duration,
+    ) -> std::io::Result<std::process::ExitStatus> {
+        let mut child = self.inner.spawn()?;
+        let started = std::time::Instant::now();
+        loop {
+            match child.try_wait()? {
+                Some(status) => return Ok(status),
+                None => {
+                    if started.elapsed() >= budget {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let message = format!(
+                            "podman sync operation exceeded its {}s budget and was killed",
+                            budget.as_secs()
+                        );
+                        log_podman_failure("sync", "timeout", &message);
+                        return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, message));
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+            }
+        }
+    }
+}
+
+/// Same as [`podman_cmd`] but for synchronous use. Returns a
+/// [`SyncPodmanCommand`], which has no unbounded run method (order 714-4r6w).
+pub fn podman_cmd_sync() -> SyncPodmanCommand {
+    SyncPodmanCommand {
+        inner: podman_cmd_sync_std(),
+    }
+}
+
+fn podman_cmd_sync_std() -> std::process::Command {
     let mut cmd = std::process::Command::new(find_podman_path());
     env_remove_if_present(&mut cmd, "LD_LIBRARY_PATH");
     env_remove_if_present(&mut cmd, "LD_PRELOAD");
@@ -825,6 +1063,119 @@ pub fn podman_cmd_sync() -> std::process::Command {
 mod tests {
     use super::*;
     use std::sync::{Mutex, OnceLock};
+
+    /// Order 714-4r6w, criterion 4: a stalled SYNCHRONOUS stand-in must fail
+    /// bounded and named, the same guarantee order 690-7adz gave the async seam.
+    #[cfg(unix)]
+    #[test]
+    fn a_stalled_sync_podman_fails_within_its_budget() {
+        let (_guard, dir) = stub_podman(
+            "#!/bin/sh
+sleep 600
+",
+        );
+        let started = std::time::Instant::now();
+        let err = podman_cmd_sync()
+            .args(["wait", "--condition=healthy", "vault"])
+            .output_bounded(std::time::Duration::from_millis(300))
+            .expect_err("a stalled podman must not report success");
+        let elapsed = started.elapsed();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert!(
+            elapsed < std::time::Duration::from_secs(30),
+            "stalled sync call took {elapsed:?}"
+        );
+        assert_eq!(err.kind(), std::io::ErrorKind::TimedOut);
+        let message = err.to_string();
+        assert!(message.contains("budget"), "names the budget: {message}");
+        assert!(
+            message.contains("wait --condition=healthy vault"),
+            "names the command: {message}"
+        );
+    }
+
+    /// Negative control: the same transport and budget must still SUCCEED for a
+    /// prompt command, so the test above cannot pass by always failing.
+    #[cfg(unix)]
+    #[test]
+    fn a_prompt_sync_podman_still_succeeds() {
+        let (_guard, dir) = stub_podman(
+            "#!/bin/sh
+echo ok
+",
+        );
+        let out = podman_cmd_sync()
+            .args(["ps"])
+            .output_bounded(std::time::Duration::from_secs(30));
+        let _ = std::fs::remove_dir_all(&dir);
+        let out = out.expect("a prompt podman must succeed");
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "ok");
+    }
+
+    /// A child that writes more than a pipe buffer must not deadlock: the
+    /// bounded wait drains stdout on its own thread precisely so that fixing the
+    /// hang did not introduce a different one.
+    #[cfg(unix)]
+    #[test]
+    fn a_chatty_sync_podman_does_not_deadlock_on_a_full_pipe() {
+        let (_guard, dir) = stub_podman(
+            "#!/bin/sh
+i=0
+while [ $i -lt 2000 ]; do echo 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'; i=$((i+1)); done
+",
+        );
+        let out = podman_cmd_sync()
+            .args(["logs"])
+            .output_bounded(std::time::Duration::from_secs(30));
+        let _ = std::fs::remove_dir_all(&dir);
+        let out = out.expect("a chatty podman must complete");
+        assert!(
+            out.stdout.len() > 64 * 1024,
+            "expected a pipe-filling volume"
+        );
+    }
+
+    /// Install a fake `podman` for the duration of one test.
+    ///
+    /// Holds `env_lock` for the caller's whole test. `TILLANDSIAS_PODMAN_BIN` is
+    /// PROCESS-global while cargo runs tests in parallel threads, so without the
+    /// lock two stub-installing tests overwrite each other's binary and delete
+    /// each other's directory — which is exactly how the first version of these
+    /// tests failed: one passed alone, two hung together.
+    #[cfg(unix)]
+    fn stub_podman(
+        script: &str,
+    ) -> (
+        (std::sync::MutexGuard<'static, ()>, impl Drop),
+        std::path::PathBuf,
+    ) {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+
+        let lock = env_lock();
+
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
+            }
+        }
+
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-sync-stub-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(&dir).expect("stub dir");
+        let stub = dir.join("podman");
+        let mut f = std::fs::File::create(&stub).expect("stub file");
+        f.write_all(script.as_bytes()).expect("write stub");
+        drop(f);
+        std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+        unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
+        ((lock, Restore), dir)
+    }
 
     fn args_of(cmd: &std::process::Command) -> Vec<String> {
         cmd.get_args()
