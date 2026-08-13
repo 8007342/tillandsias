@@ -19,8 +19,8 @@
     a FRESH certificate per request, valid ~3 days, and lets it die. Nobody
     holds or renews one, which is the security property: a stolen certificate is
     worthless by the weekend. The timestamp countersignature is what decouples
-    the SIGNATURE's lifetime from the CERTIFICATE's — validation asks "was the
-    cert valid at time T", not "is it valid now" — so a timestamped binary stays
+    the SIGNATURE's lifetime from the CERTIFICATE's -- validation asks "was the
+    cert valid at time T", not "is it valid now" -- so a timestamped binary stays
     trusted for years and an untimestamped one dies in 72 hours.
 
     It dies RETROACTIVELY, for copies already on users' disks, because
@@ -58,7 +58,7 @@ function Fail($message) {
 if (-not (Test-Path -LiteralPath $Path)) { Fail "no-such-file:$Path" }
 $Path = (Resolve-Path -LiteralPath $Path).Path
 
-# ── verification ────────────────────────────────────────────────────────────
+# -- verification ------------------------------------------------------------
 # Deliberately a separate function called by BOTH modes. Signing that does not
 # verify its own result is the failure shape this repo keeps repairing: a step
 # that exits zero having done nothing. `signtool sign` can succeed against a
@@ -71,7 +71,7 @@ function Assert-SignedAndTimestamped($file) {
     # The load-bearing assertion. TimeStamperCertificate is $null on a
     # signed-but-untimestamped file, which is the 72-hour time bomb.
     if ($null -eq $sig.TimeStamperCertificate) {
-        Fail "signature-not-timestamped:$file (valid now, untrusted in ~3 days when the signing certificate expires — re-sign with /tr)"
+        Fail "signature-not-timestamped:$file (valid now, untrusted in ~3 days when the signing certificate expires -- re-sign with /tr)"
     }
     $subject = $sig.SignerCertificate.Subject
     $expires = $sig.TimeStamperCertificate.NotAfter.ToString('yyyy-MM-dd')
@@ -83,8 +83,8 @@ if ($VerifyOnly) {
     exit 0
 }
 
-# ── resolve the signing identity ────────────────────────────────────────────
-# These are NOT secrets — an account name, a profile name and a regional URI —
+# -- resolve the signing identity --------------------------------------------
+# These are NOT secrets -- an account name, a profile name and a regional URI --
 # so they live in plain environment variables and repo variables rather than
 # the secret store. The credential is what must never be long-lived, and that
 # comes from DefaultAzureCredential, not from here.
@@ -110,9 +110,9 @@ if (-not $MetadataPath) {
     $MetadataPath = $generatedMetadata
 }
 
-# ── resolve signtool ────────────────────────────────────────────────────────
+# -- resolve signtool --------------------------------------------------------
 # The doc pins a FLOOR (Windows SDK >= 10.0.2261.755) and explicitly excludes
-# the 20348 SDK, so "whatever signtool is on PATH" is not good enough — an
+# the 20348 SDK, so "whatever signtool is on PATH" is not good enough -- an
 # older one fails in a way that reads as a signing problem rather than a
 # toolchain problem. Prefer the newest x64 signtool the SDK ships.
 $signtool = $env:TILLANDSIAS_SIGNTOOL
@@ -121,7 +121,11 @@ if (-not $signtool) {
         "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\signtool.exe",
         "${env:ProgramFiles}\Windows Kits\10\bin\*\x64\signtool.exe"
     ) | ForEach-Object { Get-ChildItem -Path $_ -ErrorAction SilentlyContinue } |
-        Sort-Object { $_.VersionInfo.FileVersion } -Descending
+        Sort-Object { try { [version]$_.VersionInfo.ProductVersion } catch { [version]'0.0' } } -Descending
+    # Sort on ProductVersion, NOT FileVersion: every signtool.exe reports
+    # FileVersion "4.00 (WinBuild.160101.0800)", so sorting by it is a no-op
+    # that silently picks whichever SDK the filesystem happened to list first.
+    # ProductVersion carries the real 10.0.26100.7705-style number.
     if ($candidates) { $signtool = $candidates[0].FullName }
 }
 if (-not $signtool -or -not (Test-Path -LiteralPath $signtool)) {
@@ -130,7 +134,15 @@ if (-not $signtool -or -not (Test-Path -LiteralPath $signtool)) {
 
 $dlib = $env:TILLANDSIAS_SIGNING_DLIB
 if (-not $dlib) {
+    # PER-USER FIRST, because that is where the MSI actually puts it. The
+    # winget/MSI package installs to %LOCALAPPDATA%, not Program Files —
+    # confirmed by querying the installer database for the product's component
+    # paths rather than by guessing, after both Program Files guesses missed.
+    # That is also why this resolver exists instead of a single constant: the
+    # location is a fact about the machine, not about the documentation.
     $dlibCandidates = @(
+        "$env:LOCALAPPDATA\Microsoft\MicrosoftArtifactSigningClientTools\Azure.CodeSigning.Dlib.dll",
+        "$env:LOCALAPPDATA\Microsoft\MicrosoftArtifactSigningClientTools\x64\Azure.CodeSigning.Dlib.dll",
         "${env:ProgramFiles}\Microsoft\Azure Artifact Signing Client Tools\bin\x64\Azure.CodeSigning.Dlib.dll",
         "${env:ProgramFiles(x86)}\Microsoft\Azure Artifact Signing Client Tools\bin\x64\Azure.CodeSigning.Dlib.dll"
     ) | Where-Object { Test-Path -LiteralPath $_ }
@@ -140,7 +152,7 @@ if (-not $dlib -or -not (Test-Path -LiteralPath $dlib)) {
     Fail "dlib-absent (winget install -e --id Microsoft.Azure.ArtifactSigningClientTools; set TILLANDSIAS_SIGNING_DLIB to override)"
 }
 
-# ── sign ────────────────────────────────────────────────────────────────────
+# -- sign --------------------------------------------------------------------
 # /tr is not optional here; see the three-day note above.
 try {
     & $signtool sign /v /debug /fd SHA256 `
@@ -152,5 +164,5 @@ try {
     if ($generatedMetadata) { Remove-Item -Force -ErrorAction SilentlyContinue $generatedMetadata }
 }
 
-# Never trust the exit code alone — confirm the artifact.
+# Never trust the exit code alone -- confirm the artifact.
 Assert-SignedAndTimestamped $Path

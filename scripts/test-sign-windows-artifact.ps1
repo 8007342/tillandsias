@@ -41,7 +41,7 @@ try {
     $unsigned = Join-Path $work 'unsigned.exe'
     Copy-Item "$env:SystemRoot\System32\where.exe" $unsigned
     # Append raw bytes so the PE cannot validate. Use a FileStream, NOT
-    # `Add-Content -Encoding Byte` — PowerShell 7 removed that encoding and the
+    # `Add-Content -Encoding Byte` -- PowerShell 7 removed that encoding and the
     # cmdlet throws, which under this fixture's ErrorActionPreference is a
     # WARNING, not a stop. The first run of this fixture did exactly that: the
     # tamper silently did nothing, scenario 1 still passed (a copied
@@ -82,7 +82,7 @@ try {
     #     REAL signed-and-timestamped binary must be ACCEPTED. Every other case
     #     here asserts a refusal, and a verifier that refuses unconditionally
     #     would satisfy all of them while being useless. A Windows system
-    #     binary in place (not copied — catalog signatures do not travel) is a
+    #     binary in place (not copied -- catalog signatures do not travel) is a
     #     genuine signed+timestamped PE, which is exactly the shape the release
     #     artifact will have.
     $systemSigned = "$env:SystemRoot\System32\where.exe"
@@ -101,12 +101,12 @@ try {
 
     # 4. STRUCTURAL: the build script signs BEFORE it zips and hashes. This is
     #    a source-order assertion rather than a behavioural one because the
-    #    behavioural version needs a real identity — but the ordering is the
+    #    behavioural version needs a real identity -- but the ordering is the
     #    invariant that silently breaks checksums if a later edit moves it, and
     #    an out-of-order signing step would not fail any other test.
     #     STRIP COMMENTS FIRST. The first version of this scenario matched
     #     against the raw file and found "Compress-Archive" inside the very
-    #     comment explaining why signing must precede it — so it compared a
+    #     comment explaining why signing must precede it -- so it compared a
     #     code position against a prose position and reported the ordering
     #     backwards. A source-order test that reads documentation as code is
     #     worse than no test; it fails on correct code and would pass on
@@ -121,6 +121,39 @@ try {
     } elseif (-not ($signAt -lt $zipAt -and $signAt -lt $hashAt)) {
         $failures += "sign-before-package: signing at $signAt must precede Compress-Archive ($zipAt) and the checksum ($hashAt)"
     }
+    # 5. THE ONE THAT WOULD HAVE CAUGHT THE REAL BREAKAGE. Every scenario above
+    #    ran green under PowerShell 7 while the signer did not PARSE under
+    #    Windows PowerShell 5.1 -- which is the shell the operator actually
+    #    invoked it from, and the shell every Windows host has by default.
+    #
+    #    ROOT CAUSE: these .ps1 files are BOM-less, and 5.1 reads a BOM-less
+    #    script using the system ANSI code page, not UTF-8. A UTF-8 em dash
+    #    (E2 80 94) or box-drawing rule (E2 94 80) therefore decodes to three
+    #    CP1252 characters, one of which is 0x94 -- a curly quote, which
+    #    PowerShell treats as a STRING DELIMITER. Inside a comment that is
+    #    harmless, which is why the repo's pre-existing em dashes never bit.
+    #    Inside a double-quoted string it opens a quote that never closes, and
+    #    the parser reports a missing brace hundreds of lines away.
+    #
+    #    So the rule is ASCII-ONLY in these scripts, and it is enforced by
+    #    PARSING them with 5.1 rather than by grepping for characters -- a
+    #    grep would pin today's symptom, while the parse pins what actually
+    #    has to be true.
+    $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    if (Test-Path -LiteralPath $ps51) {
+        foreach ($target in @($signer, (Join-Path $PSScriptRoot 'build-windows-tray.ps1'), $PSCommandPath)) {
+            # -Command with the parser API: parse only, never execute. Running
+            # a build script to find out whether it parses would be its own
+            # kind of defect.
+            $probe = "`$e = `$null; [void][System.Management.Automation.Language.Parser]::ParseFile('$target', [ref]`$null, [ref]`$e); if (`$e.Count) { `$e[0].Message; exit 1 } else { exit 0 }"
+            $out = & $ps51 -NoProfile -NonInteractive -Command $probe 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                $failures += "parses-under-powershell-5.1: $(Split-Path $target -Leaf): $out"
+            }
+        }
+    } else {
+        Write-Host "  NOTE: Windows PowerShell 5.1 not present; parse scenario SKIPPED (it is the scenario that matters most on a Windows host)" -ForegroundColor Yellow
+    }
 } finally {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $work
 }
@@ -130,9 +163,9 @@ if ($failures.Count -gt 0) {
     Write-Host "sign-windows-artifact: FAIL $($failures.Count) scenario(s)" -ForegroundColor Red
     exit 1
 }
-Write-Host "PASS: sign-windows-artifact fixture 5/5 scenarios green (unsigned-rejected, unconfigured-refused, signed-accepted, missing-file-named, sign-before-package)" -ForegroundColor Green
+Write-Host "PASS: sign-windows-artifact fixture 6/6 scenarios green (unsigned-rejected, unconfigured-refused, signed-accepted, missing-file-named, sign-before-package, parses-under-powershell-5.1)" -ForegroundColor Green
 # EXIT EXPLICITLY. Without this the script falls off the end carrying
-# $LASTEXITCODE from the last scenario — which is a DELIBERATE non-zero, since
+# $LASTEXITCODE from the last scenario -- which is a DELIBERATE non-zero, since
 # most scenarios assert a refusal. The fixture then prints PASS and exits 1,
 # and every caller that branches on the exit code reads green as red. Found by
 # running it, not by reading it.

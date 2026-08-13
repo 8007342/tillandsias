@@ -51,7 +51,7 @@
     on artifacts nobody ships. A build without -Sign says plainly that it is
     unsigned; a build WITH -Sign that cannot sign fails rather than degrading.
 
-    Locally: `az login` first — DefaultAzureCredential resolves
+    Locally: `az login` first -- DefaultAzureCredential resolves
     AzureCliCredential. In CI: federated OIDC, same code path.
 
 .EXAMPLE
@@ -116,7 +116,7 @@ foreach ($guestArch in $guestArches) {
     }
     if ((Test-Path $stagedGuest) -and ((Get-Item $stagedGuest).Length -gt 0)) {
         # Order 689-gipe: a staged binary that predates the checkout is the
-        # dangerous case, and it used to be copied silently — the hash compare
+        # dangerous case, and it used to be copied silently -- the hash compare
         # below only asks "did the asset change", never "is it CURRENT". A
         # tray built that way embeds a guest older than its own source and
         # injects it into fresh provisions, which is the registered-distro
@@ -127,7 +127,7 @@ foreach ($guestArch in $guestArches) {
         #
         # Stale staging is HOST STATE, not a code defect (order 447: any
         # --install VERSION bump leaves target-guest/ behind), so the response
-        # matches that script's posture — refuse the STALE COPY, not the
+        # matches that script's posture -- refuse the STALE COPY, not the
         # build. The asset falls back to the zero-byte placeholder, which is
         # the sanctioned absent-asset path: a fresh guest fetches the
         # published release instead of being handed a skewed binary.
@@ -242,9 +242,9 @@ foreach ($scriptName in $bundledScripts) {
     }
 }
 
-# ── Authenticode (orders 722-qvqb / 724-rpna) ───────────────────────────────
+# -- Authenticode (orders 722-qvqb / 724-rpna) -------------------------------
 # POSITION IS LOAD-BEARING. Signing mutates the exe, so it must happen on the
-# STAGED file — before Compress-Archive below and before the Get-FileHash that
+# STAGED file -- before Compress-Archive below and before the Get-FileHash that
 # writes SHA256SUMS-windows. Sign after either and every published checksum
 # describes a file nobody can download, which reaches users as a checksum
 # mismatch on a correctly signed binary: indistinguishable, from the outside,
