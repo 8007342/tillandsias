@@ -1,0 +1,89 @@
+packets:
+  - packet_id: freshness-inventory-subset-source-and-specs
+    order: 720-bmm9
+    release_target: architecture-audit-epic
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: enhancement
+    title: 'FRESHNESS denominator is narrower than the ruled subset: source code and openspec/specs are not enumerated'
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - freshness
+      - methodology
+      - convergence
+    context: |
+      methodology.yaml component_freshness.coverage_target names the in-scope
+      subset as "executable/source code, scripts, litmus tests, specs
+      (openspec/specs), and methodology docs". scripts/freshness-inventory.sh
+      currently enumerates scripts/, images/default/, cheatsheets/,
+      openspec/litmus-tests/, and methodology/ — so source code (206 .rs files
+      under crates/) and openspec/specs/ are absent from the denominator.
+      Closing 640-iujb narrowed the denominator correctly (generated trees out);
+      this packet widens it correctly (ruled-in components in). It was
+      deliberately NOT bundled into that closure: adding ~200+ components to the
+      denominator moves the reported coverage number, and doing that silently
+      inside a packet about honest reporting would be the exact failure mode the
+      ruling was about.
+    exit_criteria:
+      - inventory enumerates openspec/specs and the crate source tree per the methodology subset
+      - the coverage delta from the widening is reported once, explicitly, rather than appearing as an unexplained drop
+      - litmus:freshness-inventory-shape asserts a ruled-in tree is present in the denominator, so a future narrowing fails loud
+    verifiable_closure: |
+      scripts/freshness-inventory.sh counts at least one component from
+      openspec/specs and one from crates/, and a litmus step fails if either
+      tree disappears from the inventory.
+
+events:
+  - packet_id: freshness-inventory-subset-source-and-specs
+    event:
+      type: filed
+      ts: "2026-08-13T19:25:00Z"
+      agent_id: "linux-mutable-20260813t1908z"
+      host: linux_mutable
+      summary: >
+        Filed while closing 640-iujb, from the same reading of the operator
+        ruling that closure implemented.
+
+  - packet_id: freshness-coverage-rate-decision
+    event:
+      type: progress
+      ts: "2026-08-13T19:25:00Z"
+      agent_id: "linux-mutable-20260813t1908z"
+      host: linux_mutable
+      summary: >
+        MECHANICAL CLOSURE of the operator ruling. The decision half was already
+        recorded (methodology.yaml component_freshness.coverage_target +
+        audit_rate, 2026-08-12); what remained was the verifiable_closure —
+        "the freshness advisory reports coverage against the defined subset, and
+        a litmus asserts the reported target matches the methodology value".
+        Both now hold. scripts/freshness-inventory.sh emits a new pinned line
+        `freshness-target: scope=<scope> excluded=<n> source=methodology.yaml`,
+        where <scope> is READ from methodology.yaml
+        component_freshness.coverage_target.scope rather than restated in the
+        script (and reports scope=unknown, never an invented value, if the key
+        is unreadable). Generated trees leave the denominator via a declared
+        EXCLUDED_PREFIXES list: today that is images/default/cheatsheets/, which
+        scripts/stage-image-cheatsheets.sh regenerates as a straight copy of
+        cheatsheets/ — auditing the copy asks a question already answered by
+        auditing the source. Measured effect: 1087 components -> 868 (219
+        excluded), coverage 1.1% -> 1.3%, stamped 12 -> 11 (the twelfth stamp
+        was on the derived copy). litmus:freshness-inventory-shape grew two
+        steps — TARGET TRUTH (asserts reported scope == methodology scope, not
+        merely that both exist) and DENOMINATOR (asserts the exclusion count is
+        non-zero and no generated cheatsheet copy appears as an unstamped
+        component). Suite is 10/10 PASS. Residual filed as 720-bmm9.
+
+  - packet_id: freshness-coverage-rate-decision
+    event:
+      type: verified-by
+      ts: "2026-08-13T19:25:30Z"
+      agent_id: "linux-mutable-20260813t1908z"
+      host: linux_mutable
+      summary: >
+        verifiable_closure satisfied: `scripts/freshness-inventory.sh` prints
+        `freshness-target: scope=defined-subset excluded=219
+        source=methodology.yaml`; litmus:freshness-inventory-shape steps 3 and 4
+        PASS and fail loud if the report and methodology.yaml ever disagree or
+        the exclusion is lost.

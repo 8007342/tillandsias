@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: compaction-launders-unquoted-timestamps
+    field: status
+    value: completed
+    ts: "2026-08-13T19:22:57Z"
+    host: linux-mutable
+
+events:
+  - packet_id: compaction-launders-unquoted-timestamps
+    event:
+      type: completed
+      ts: "2026-08-13T19:22:57Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: litmus:added-fragment-parse-gate-shape 6/6 PASS (scripts/run-litmus-test.sh ci-release --phase pre-build --size instant); gates: check-added-fragments-parse.sh emits violation:added-fragment-bare-timestamp, check-plan-schema-divergence.sh emits blocked:index-load-failed distinctly from status-vocab-diverges
+  - packet_id: compaction-launders-unquoted-timestamps
+    event:
+      type: note
+      ts: "2026-08-13T19:22:57Z"
+      host: linux-mutable
+      summary: >
+        720-24u6 all three exit criteria met with negative controls

@@ -24,6 +24,25 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: header grammar pinned"
 
+  - step: "TARGET TRUTH: the reported coverage target matches methodology.yaml (order 640-iujb)"
+    # The operator ruled the coverage target is a DEFINED SUBSET, recorded in
+    # methodology.yaml component_freshness.coverage_target.scope. If the report
+    # and the methodology can disagree, the advisory is measuring against a
+    # target nobody approved — which is the divergent implicit-100% failure the
+    # ruling replaced. Assert they are the SAME value, not merely both present.
+    command: "want=$(awk '/^    coverage_target:/{b=1;next} b&&/^    [a-z_]+:/{exit} b&&$1==\"scope:\"{print $2;exit}' methodology.yaml); got=$(scripts/freshness-inventory.sh | grep -oE '^freshness-target: scope=[^ ]+' | cut -d= -f2); [ -n \"$want\" ] && [ \"$want\" != 'unknown' ] && [ \"$want\" = \"$got\" ] && echo \"ok: reported target matches methodology ($got)\""
+    timeout_ms: 60000
+    expected_behavior: "ok: reported target matches methodology (defined-subset)"
+
+  - step: "DENOMINATOR: generated trees are excluded from coverage (order 640-iujb)"
+    # images/default/cheatsheets/ is regenerated from cheatsheets/ by
+    # scripts/stage-image-cheatsheets.sh. Auditing the copy asks a question
+    # already answered by auditing the source, and it inflated the denominator
+    # by ~233 components. If this count returns to zero, the exclusion was lost.
+    command: "out=$(scripts/freshness-inventory.sh); n=$(printf '%s' \"$out\" | grep -oE '^freshness-target: .*excluded=[0-9]+' | grep -oE '[0-9]+$'); printf '%s' \"$out\" | grep -q '^freshness-unstamped: images/default/cheatsheets/' && { echo 'FAIL: generated cheatsheet copy still counted'; exit 1; }; [ \"${n:-0}\" -gt 0 ] && echo 'ok: generated components excluded from denominator'"
+    timeout_ms: 60000
+    expected_behavior: "ok: generated components excluded from denominator"
+
   - step: "Req: local CI ranks stale audit candidates by numeric age"
     command: "sample=$(printf '%s\\n' 'freshness-stale: z.sh 3 days' 'freshness-stale: a.sh 20 days'); first=$(printf '%s\\n' \"$sample\" | sort -t' ' -k3,3nr | head -1); grep -Fq \"sort -t' ' -k3,3nr\" scripts/local-ci.sh && [ \"$first\" = 'freshness-stale: a.sh 20 days' ] && echo 'ok: advisory ranks by age'"
     timeout_ms: 3000

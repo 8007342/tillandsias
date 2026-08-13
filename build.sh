@@ -1123,7 +1123,12 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # it as a real --check gate.
     _step "Checking plan/schema status-vocab divergence (440)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
-        _error "plan/index.yaml and plan/schema.yaml status vocabularies diverge (440)"
+        # Do NOT restate the cause here: the script emits one of three verdicts
+        # (diverges / index-load-failed / unreadable) and this wrapper used to
+        # assert "vocabularies diverge" for all of them, which sent a reader to
+        # diff two identical lists while the real fault was an unloadable index
+        # (order 720-24u6). The verdict line above is the cause.
+        _error "plan/schema status-vocab gate refused (440) — see the verdict line above"
         exit 1
     fi
     _info "Plan/schema status-vocab check passed"
