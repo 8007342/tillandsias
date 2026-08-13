@@ -31819,6 +31819,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-13T11:50:46Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            REMAINING-WORK MAP (scope clarification, no closure). The DESIGN gate is already PASSED: ssh-ca-forge-mirror-push-design-2026-07-31.md is SIGNED (2026-08-11) with exactly this packet next_action — opaque per-project mirror identity (D13), exact per-project client+host roles/policies with NO sign/* wildcard (D12: ssh-client-signer/sign/<mirror-id>), exact certificate principals (D3: til:forge-push:<mirror-id>), and the negative two-project matrix (§4a). Criterion-by-criterion: [crit 1 A-signs-through-B 403 + cert rejected] design-complete (D3 principal + D12 exact role), IMPL+fixture needed; [crit 2 exact roles no sign/*] design-complete (D12), IMPL = create the exact Vault roles/policies; [crit 3 opaque unique hostnames + fixed paths] design-complete (D13 + 659-8faj opaque mirror-id), IMPL = wire per-project mirror DNS; [crit 4 per-lane certs clone/fetch/push + audit fields] design-complete (D5/D6 sidecar + ExposeAuthInfo audit), IMPL = the sidecar + audit log; [crit 5 no forge secrets] VERIFIED LIVE in-forge (delegate 2026-08-13, prior cycle). So 606-bvnp remaining = the Vault-roles + mirror-DNS + sidecar/sshd IMPLEMENTATION and the §4a negative-matrix LITMUS against a throwaway Vault (design V1-V7 methodology) — NOT design. This is the ~6h focused-session work; blocks authenticated-forge-write-transport-impl and 451.
+        - type: progress
           ts: "2026-08-13T08:53:53Z"
           agent_id: "linux-mutable-session-20260812"
           host: linux_mutable
