@@ -9,7 +9,7 @@ backend: fake
 
 preconditions:
   - cargo is available in PATH
-  - rg is available in PATH
+  - grep is available in PATH (portable; formerly ripgrep, 702-eusw sibling portability fix)
 
 critical_path:
   - step: "verify --init, --force, and --debug CLI flag registration"
@@ -25,7 +25,7 @@ critical_path:
     timeout_ms: 5000
 
   - step: "verify run_init uses PodmanClient for build orchestration"
-    command: "rg 'fn run_init\\(debug: bool, force: bool\\)' -A 50 crates/tillandsias-headless/src/main.rs | rg 'PodmanClient::new\\(\\)'"
+    command: "grep -E 'fn run_init\\(debug: bool, force: bool\\)' -A 50 crates/tillandsias-headless/src/main.rs | grep -E 'PodmanClient::new\\(\\)'"
     timeout_ms: 5000
 
 observability:
