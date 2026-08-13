@@ -1,0 +1,57 @@
+packets:
+  - packet_id: compaction-launders-unquoted-timestamps
+    order: 720-24u6
+    release_target: architecture-audit-epic
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: fix
+    title: 'Compaction folds bare-scalar timestamps into the base and the 440 gate reports it as a vocabulary divergence'
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - plan-ledger
+      - compaction
+      - gates
+      - fail-loud
+    context: |
+      Full write-up: plan/issues/compaction-folds-unquoted-timestamps-past-the-fragment-gate-2026-08-13.md
+
+      `tillandsias-plan compact` (commit 61125b0e, 192 fragments) folded 231
+      event timestamps written as bare scalars (`ts: 2026-08-12T15:31:54Z`) into
+      plan/index.yaml verbatim — correct behaviour for a byte-preserving fold.
+      Ruby's Psych resolves a bare ISO-8601 scalar to Time, a disallowed class
+      under safe_load, so the ./build.sh --check status-vocab step could no
+      longer load the index. It reported `plan/index.yaml and plan/schema.yaml
+      status vocabularies diverge (440)` — the wrong cause; the vocabularies
+      were identical and the file simply would not parse.
+
+      Every fragment passed its own gates: yq and serde_yaml accept a bare
+      timestamp, so added-fragments-parse saw nothing. The mismatch is only
+      observable at fold time, and compaction has run on the real ledger three
+      times total.
+    exit_criteria:
+      - fragment-writing subcommands (set-field, append-event, loop-status-append) emit quoted ts values
+      - the added-fragment parse gate rejects a bare ISO-8601 scalar, so the failure lands on the fragment rather than on a later fold
+      - the 440 status-vocab check distinguishes "index failed to load" from "vocabularies diverge" and names which
+    verifiable_closure: |
+      A fixture fragment carrying `ts: 2026-01-01T00:00:00Z` fails the
+      added-fragment parse gate while the quoted form passes; a fixture index
+      that Ruby cannot load produces a load-failure verdict from the 440 check,
+      never a divergence verdict.
+    notes: |
+      The base was repaired in the same cycle that found this (231 scalars
+      quoted, gate green again). That repair is not the fix — nothing prevents
+      the next fold from re-introducing it.
+
+events:
+  - packet_id: compaction-launders-unquoted-timestamps
+    event:
+      type: filed
+      ts: "2026-08-13T19:45:00Z"
+      agent_id: "linux-mutable-20260813t1908z"
+      host: linux_mutable
+      summary: >
+        Found by running ./build.sh --check immediately after compacting 192
+        fragments; the gate's own verdict named the wrong cause, which is
+        itself one of the three exit criteria.

@@ -1,0 +1,62 @@
+events:
+  - packet_id: worktree-boundary-snapshot-is-unenforced
+    event:
+      type: verified
+      ts: "2026-08-13T20:30:00Z"
+      host: windows
+      summary: |
+        Both candidate shapes landed, because shape 2 alone would not have
+        caught cycle 16: a better message only helps an agent that runs
+        `verify`, and the failure was not running the snapshot at all.
+
+          * `verify` with no snapshot ever taken now answers the typed
+            `blocked:no-snapshot-taken` (exit 3), distinguished from
+            `blocked:boundary-state-missing:<dir>` when a snapshot WAS taken
+            this cycle but verify was pointed elsewhere.
+          * `snapshot` records `$GIT_DIR/boundary-state` and clears any prior
+            `$GIT_DIR/boundary-verified`; a successful `verify` writes the HEAD
+            it observed. Cycle-scoped, per-checkout, never committed.
+          * `mo-full-attest.sh self` refuses to print a marker unless a boundary
+            was verified AT THE HEAD BEING ATTESTED. Binding to the head, not to
+            the stamp's existence, is what makes it real.
+
+        EVIDENCE — scripts/test-worktree-boundary-guard.sh, 6/6 green on
+        windows-next, hermetic in a throwaway git repo under TMPDIR:
+
+          PASS: worktree-boundary-guard fixture 6/6 scenarios green
+          (no-snapshot-taken, boundary-state-missing, clean-verify,
+           verified-stamp, dirty-exit, stamp-cleared)
+
+        Scenario 1 reproduces the breach literally, verifying against
+        "$work/meta-orchestration-boundary.Wxg6hS" — the previous cycle's
+        already-removed temp path from the original report — and asserts
+        blocked:no-snapshot-taken instead of the errno message.
+
+        scripts/mo-full-attest.sh fixture extended 7 -> 10 and green:
+
+          PASS: mo-full-attest fixture 10/10 scenarios green (…,
+          self-no-boundary, self-stale-boundary, self-verified-boundary)
+
+        self-no-boundary is the cycle-16 shape: committed, pushed, converging
+        remote, no boundary — marker refused. NEGATIVE CONTROLS in both fixtures
+        (clean-verify, self-verified-boundary) assert the new verdicts cannot
+        degrade into refusing every cycle: a cycle that DID snapshot still
+        verifies clean and still gets its marker. Both fixtures are wired into
+        litmus:opencode-prompt-e2e-shape's critical path.
+  - packet_id: worktree-boundary-snapshot-is-unenforced
+    event:
+      type: completed
+      ts: "2026-08-13T20:35:00Z"
+      host: windows
+      summary: |
+        Criterion 3 (whether the terminal attestation should depend on this)
+        answered YES, shape 1, recorded with its reasoning and its fleet
+        consequence in
+        plan/issues/enhancement-worktree-boundary-snapshot-is-unenforced-2026-08-13.md.
+        `check` was deliberately left alone — it validates a marker produced
+        elsewhere, and boundary state is a property of the producing host's
+        cycle.
+
+        Closed by the host that filed it, on the cycle after — and the cycle
+        that closed it had itself skipped the snapshot once more before the fix
+        landed, which is the argument for shape 1 in one line.

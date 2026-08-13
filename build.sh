@@ -1115,6 +1115,98 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Groundtruth status-pin guard passed"
 
+    # Order 440 / 599-4wzr: the status vocabulary in plan/index.yaml
+    # (default_status_values) and plan/schema.yaml (statuses) must not diverge —
+    # a silent divergence would let the 650-dq6u ladder and the schema disagree.
+    # This guard shipped (order 440) but was ORPHANED (invoked by nothing) until
+    # the guard-activation audit (599-4wzr) surfaced it; wiring it here activates
+    # it as a real --check gate.
+    _step "Checking plan/schema status-vocab divergence (440)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
+        # Do NOT restate the cause here: the script emits one of three verdicts
+        # (diverges / index-load-failed / unreadable) and this wrapper used to
+        # assert "vocabularies diverge" for all of them, which sent a reader to
+        # diff two identical lists while the real fault was an unloadable index
+        # (order 720-24u6). The verdict line above is the cause.
+        _error "plan/schema status-vocab gate refused (440) — see the verdict line above"
+        exit 1
+    fi
+    _info "Plan/schema status-vocab check passed"
+
+    # Order 702-eusw criterion 3: a build-number VERSION bump must never be swept
+    # into an unrelated commit. dd8fd63f bundled a VERSION bump into a security
+    # fix via `git add -A`; the mandated linux-next merge then imported a
+    # divergent VERSION the mandated pre-push gate refused, blocking the whole
+    # fleet. This guard refuses any NON-MERGE outgoing commit that changes VERSION
+    # alongside non-companion files (a merge inheriting VERSION is exempt — that
+    # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
+    # (VERSION + Cargo files only) still passes.
+    _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-version-bump-isolation.sh" 2>&1; then
+        _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
+        exit 1
+    fi
+    _info "VERSION-bump isolation check passed"
+
+    # Order 714-4r6w. `SyncPodmanCommand` makes an unbounded synchronous podman
+    # call a COMPILE error, which is the real guarantee; this guards the two ways
+    # around the type — building a podman std::process::Command directly, and
+    # growing the caller-owned-spawn escape hatch past its reviewed count.
+    _step "Checking the synchronous podman surface stays bounded (714-4r6w)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-podman-sync-budgets.sh" 2>&1; then
+        _error "a synchronous podman call can wait forever — route it through podman_cmd_sync()'s bounded methods (714-4r6w)"
+        exit 1
+    fi
+    _info "Podman sync-budget check passed"
+
+    # Order 631-wpkd. Canonical skills/ is the single source of truth and every
+    # runtime reaches a skill by symlink. The layout section CLAIMED that while
+    # thirteen skills lived only under .claude/skills/ — including a macOS build
+    # skill invisible to every non-Claude harness. What a host can do must not
+    # depend on which harness launched it, and prose could not notice it had
+    # stopped being true.
+    _step "Checking skills have exactly one source of truth (631-wpkd)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-skills-single-source.sh" 2>&1; then
+        _error "a skill has drifted out of canonical skills/ — declare it in skills/HARNESS-SCOPED.txt or link it (631-wpkd)"
+        exit 1
+    fi
+    _info "Skills single-source check passed"
+
+    # Order 721-77yu. A script that says "Pinned by litmus:<name>" is making a
+    # verification claim, and until this gate existed nothing checked it: the
+    # fragment-parse gate carried such a line for weeks against a test that had
+    # never been written. Both empty shapes fail here — a name no test declares,
+    # and a test no spec binds (execution is binding-driven, so an unbound test
+    # runs in no suite and is as inert as a missing one).
+    _step "Checking litmus pin claims resolve and execute (721-77yu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
+        _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus pin-claim check passed"
+
+    # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
+    # compiles src/stubs/ and goes green without ever parsing the edited file,
+    # which produced two unverified changes on 2026-08-13 alone. Refusing here
+    # would strand finished work on a host whose native toolchain is blocked —
+    # which the exit contract forbids more strongly than it forbids an
+    # unverified commit — so the cycle is TOLD, and carries the verdict into its
+    # handoff. Promotion to a refusal is an operator decision, and the moment
+    # for it is when dev binaries are signed and SAC stops being a coin flip.
+    _step "Reporting Windows-only source verification state (716-f5kc)..."
+    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:windows-sources-check-failed")"
+    case "$_windows_only_verdict" in
+        ok:* | skip:*)
+            _info "Windows-only sources: $_windows_only_verdict"
+            ;;
+        *)
+            _warn "Windows-only sources: $_windows_only_verdict"
+            _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
+            _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
+            _warn "    scripts/check-windows-only-sources-verified.sh stamp"
+            ;;
+    esac
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

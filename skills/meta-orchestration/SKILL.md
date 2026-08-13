@@ -91,6 +91,12 @@ enforces before it accepts exit zero:
 - `BRANCH` must match the host's current branch.
 - The claimed `REMOTE_SHA` must actually converge on
   `git ls-remote origin refs/heads/<BRANCH>` within the bounded relay window.
+- A startup boundary must have been snapshotted at Start Of Cycle and verified
+  at Finalization, at the HEAD being attested (order 717-3bvv). The guard writes
+  cycle-scoped stamps into `$GIT_DIR`; `self` reads them. Skipping the snapshot
+  therefore costs you the marker — which is the point: cycle 16 on windows
+  skipped it, `verify` answered with a missing-directory message about the
+  PREVIOUS cycle's already-removed temp path, and a valid marker printed anyway.
 - `MO-SMOKE:` grammar and the shared full-cycle rate limit are unchanged; a
   smoke run never emits `MO-FULL:`.
 
@@ -197,7 +203,64 @@ Canonical branches:
 
 All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `linux-next` their canonical home. However, agents working on platform branches (`windows-next`, `osx-next`) MUST commit and push all edits (including plan updates) directly to their active platform branch. The Linux coordinator will merge these branches back into `linux-next` during the `/multihost-orchestration` pass.
 
+## Start Of Day / Post-Restart Gate (run FIRST, once per day; methodology `development_environment_lifecycle`)
+
+Every host restarts with the prompt "Use the ./skills/meta-orchestration skill",
+so THIS gate is how a restart or a new day gets its maintenance and verification.
+It is idempotent and cheap when already done today — gate it on a
+`.last-daily-maintenance` marker under the cache dir; skip the body if the marker
+is from today. On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
+
+1. **Post-restart verification** (only when the stack looks freshly booted — MCP
+   experts just rebuilt, images/binary possibly toolchain-bumped): run the durable
+   checklist `plan/issues/fleet-restart-post-restart-checklist-2026-08-13.md`
+   (order 718-nuvm). Do NOT trust `plan_answer`/`project_answer` until the MCP
+   experts serve `source_commit == git rev-parse HEAD`; verify clock/NTP sync
+   (a skewed clock breaks SSH-CA cert TTLs + freshness stamps); rebuild forge
+   images at the installed VERSION before launching any forge (version-skew DOA);
+   reinstall per-checkout git hooks; ensure the router sidecar is staged as a
+   build artifact (710-w9kc).
+2. **Daily maintenance** (methodology `development_environment_lifecycle.start_of_day_maintenance`):
+   build-cache GC per `build_cache_hygiene` (cargo clean + nix gc when bloated/
+   stale), `nix store gc`/`podman image prune` of superseded versioned images,
+   reap defunct delegate handles (`delegate-outcome.sh sweep`), and verify the
+   dev-environment expert containers are up + fresh (`dev_environment_experts` —
+   the same ephemeral RAG experts + commit-hook RAG retraining the forge runs).
+3. Stamp the `.last-daily-maintenance` marker. Ephemeral forges skip this whole
+   gate (they discard their substrate on teardown).
+
+Then favor the expert system for the cycle's work-pull/triage/debug/research
+(methodology `expert_first_work`): ask the experts first; on a gap, fall back
+with a loud warning naming the gap, never silently.
+
 ## Start Of Cycle
+
+0. **Rebuild the instrument before using it** (operator directive 2026-08-13):
+
+   ```bash
+   scripts/cycle-preflight.sh   # -> ok:cycle-preflight:<plan>:<inference>
+   ```
+
+   The project believes in idempotency and ephemerality — everything should be
+   safe to destroy and relaunch at any moment, Erlang style — so a cycle never
+   inherits a component from the previous one and hopes it is current. This
+   rebuilds `tillandsias-plan` (the binary every expert call, the batch
+   selector, every ledger write and every closure check goes through) and
+   re-establishes the dev inference endpoint. Both are idempotent; the common
+   path costs a no-op `cargo build` and one HTTP round trip, measured at ~2.8s.
+
+   It rebuilds the INSTRUMENT, not the product: `./build.sh --check` already
+   compiles what it validates, and rebuilding everything on a schedule is a
+   heavier decision than this step is making.
+
+   A `blocked:preflight:*` verdict means do not start the cycle — selecting work
+   with an unverified instrument is the one failure the loop cannot reason its
+   way out of, because the tool it would reason WITH is the stale thing. That is
+   not hypothetical: a selector change on 2026-08-13 added a subcommand every
+   host's binary predated, and this checkout went on refusing until someone
+   rebuilt by hand. Inference is a REPORT inside that verdict, never a gate —
+   the deterministic expert tiers work without it, and a host with no network is
+   degraded, not broken.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the

@@ -582,18 +582,46 @@ impl WslLifecycle {
                     // order-282 class) and stale units/modules (pre-312 guests
                     // lack the vsock_loopback modules-load the socat bridge
                     // needs). Reconcile before spending the connect budget.
-                    if let Err(e) = self.reconcile_adopted_guest(&progress).await {
-                        tracing::warn!(
-                            error = %e,
-                            "adopted-guest reconciliation failed; connecting \
-                             with existing guest wiring"
-                        );
-                    }
+                    let wiring = match self.reconcile_adopted_guest(&progress).await {
+                        Ok(outcome) => outcome,
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                "adopted-guest reconciliation failed; connecting \
+                                 with existing guest wiring"
+                            );
+                            GuestWiringOutcome::Failed
+                        }
+                    };
                     progress.report_phase(ProvisionPhase::Connecting);
                     const CW_PORT: u32 =
                         tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-                    let _keepalive = self.spawn_keepalive(false).ok();
-                    return self.connect_with_backoff(CW_PORT).await;
+                    let connect = {
+                        let _keepalive = self.spawn_keepalive(false).ok();
+                        self.connect_with_backoff(CW_PORT).await
+                    };
+                    match connect {
+                        Ok(()) => return Ok(()),
+                        Err(e) if Self::handshake_failure_warrants_reprovision(wiring) => {
+                            // Order 648-772y. Exhausting the budget WAS the
+                            // defect: the fix for a guest whose wiring this run
+                            // just rewrote is known, and nothing tried it.
+                            tracing::error!(
+                                error = %e,
+                                ?wiring,
+                                "control wire unreachable after this run rewrote the \
+                                 guest wiring — discarding the guest and reprovisioning"
+                            );
+                            progress.report_message(
+                                "\u{267B}\u{FE0F} Guest unreachable after a version-skew rewrite \u{2014} reprovisioning from scratch\u{2026}",
+                            );
+                            self.unregister_distro().await?;
+                            let _ =
+                                tokio::fs::remove_file(&Self::import_complete_marker_path()).await;
+                            // Fall through to the full download + import path.
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
                 RegisteredDistroDisposition::ReprovisionDamaged => {
                     let marker = Self::import_complete_marker_path();
@@ -693,10 +721,53 @@ impl WslLifecycle {
         progress.report_phase(ProvisionPhase::Connecting);
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
-        // Hold a keepalive across the connect loop so the VM doesn't idle out mid-wait.
-        let _keepalive = self.spawn_keepalive(false).ok();
+        // Hold a keepalive across the connect loop so the VM doesn't idle out
+        // mid-wait — and DROP it before any recovery below, or the keepalive is
+        // the thing keeping the wedged VM alive.
+        let connect = {
+            let _keepalive = self.spawn_keepalive(false).ok();
+            self.connect_with_backoff(CW_PORT).await
+        };
 
-        self.connect_with_backoff(CW_PORT).await
+        if let Err(error) = &connect {
+            // Order 664-frz0. A FRESH start whose wire never came up leaves a
+            // utility VM that has never been reachable and has no value alive.
+            // On 2026-08-10 one sat wedged for ~15 minutes while the host
+            // progressively froze around it (forensics:
+            // plan/issues/host-freeze-during-vm-start-forensics-2026-08-10.md —
+            // the freeze was a Hyper-V/WSL2 platform hang, not ours, but our
+            // unreachable VM was the context and we left it running).
+            //
+            // The bounded recovery already exists and is already used by the
+            // exec-probe path; this is one more caller, not new machinery.
+            //
+            // Exactly once, and only here: this is the fresh-provision tail, so
+            // by construction the wire has never been healthy in this run. A
+            // handshake that fails AFTER a previously-healthy wire belongs to
+            // the keepalive supervisor, which is separately bounded — see
+            // `keepalive_supervisor_gives_up_after_cap_with_backoff`. Recovering
+            // there would fight the supervisor for the same VM.
+            tracing::error!(
+                %error,
+                "control wire never came up on a fresh VM start — running one \
+                 bounded WSL shutdown recovery so the wedged VM does not linger"
+            );
+            match WslRuntime::perform_wsl_shutdown_recovery().await {
+                Ok(()) => tracing::info!(
+                    "bounded WSL shutdown recovery completed after a wedged fresh start"
+                ),
+                // The recovery failing does not change the provisioning verdict:
+                // the original handshake error is what the operator needs, and
+                // replacing it with a recovery error would hide the actual
+                // failure behind its cleanup.
+                Err(recovery_error) => tracing::warn!(
+                    %recovery_error,
+                    "bounded WSL shutdown recovery failed after a wedged fresh start"
+                ),
+            }
+        }
+
+        connect
     }
 
     /// Marker written at the end of a COMPLETE provision (import + packages +
@@ -753,7 +824,7 @@ impl WslLifecycle {
     async fn reconcile_adopted_guest(
         &self,
         progress: &Arc<dyn ProvisionProgress>,
-    ) -> Result<(), String> {
+    ) -> Result<GuestWiringOutcome, String> {
         let workspace = env!("WORKSPACE_VERSION");
         let guest = self.adopted_guest_headless_version().await;
         // Order 620-duta: record what this reconcile concluded, on EVERY exit
@@ -771,20 +842,63 @@ impl WslLifecycle {
         };
         if guest.as_deref() == Some(workspace) {
             record(GuestWiringOutcome::SkippedVersionMatch, None);
-            return Ok(());
+            return Ok(GuestWiringOutcome::SkippedVersionMatch);
         }
         tracing::info!(
             guest_version = guest.as_deref().unwrap_or("<absent>"),
             tray_version = %workspace,
             "adopted guest wiring is stale — re-injecting bootstrap logic"
         );
-        progress.report_message("\u{1F504} Updating Tillandsias guest components…");
+        // Order 648-772y criterion 2: the skew and the rewrite go to the
+        // OPERATOR, not only to the log. The 648-jv69 incident was diagnosed
+        // afterwards from a preserved diagnostics bundle; the person watching
+        // the tray at the time saw a generic "updating components" and then a
+        // three-minute stall. Naming both versions is what lets "I just rolled
+        // back to stable" connect to what they are seeing.
+        progress.report_message(&format!(
+            "\u{1F504} Guest wiring is {} (guest {}, this build {}) \u{2014} re-injecting\u{2026}",
+            if guest.is_some() {
+                "version-skewed"
+            } else {
+                "absent"
+            },
+            guest.as_deref().unwrap_or("<absent>"),
+            workspace
+        ));
         let injected = self.inject_stale_guest_wiring(progress).await;
         match &injected {
             Ok(()) => record(GuestWiringOutcome::Reinjected, None),
             Err(e) => record(GuestWiringOutcome::Failed, Some(e.clone())),
         }
-        injected
+        injected.map(|()| GuestWiringOutcome::Reinjected)
+    }
+
+    /// Order 648-772y. Does a failed control-wire handshake justify discarding
+    /// the guest and re-provisioning?
+    ///
+    /// Only when THIS run rewrote the guest's wiring. That is the 648-jv69
+    /// shape: a 0.4.260809.2 tray adopted a guest provisioned by 0.4.260810.1,
+    /// correctly judged the wiring skewed, re-injected OLDER bootstrap logic,
+    /// and the next tray's handshake then never completed — ten 30s timeouts
+    /// and a hard failure, with nothing trying the one thing that fixes it.
+    /// Rewriting the wiring and then failing to reach the guest is strong
+    /// evidence that the rewrite is what broke it.
+    ///
+    /// `SkippedVersionMatch` deliberately does NOT qualify. A handshake failing
+    /// against wiring this run did not touch is failing for some other reason,
+    /// and discarding the guest on that evidence is a guess with a re-download
+    /// attached. The recovery is one-shot by construction: it lives on the
+    /// adopted path and falls through to a fresh provision, which cannot
+    /// re-enter it.
+    fn handshake_failure_warrants_reprovision(wiring: GuestWiringOutcome) -> bool {
+        match wiring {
+            // The rewrite landed, or landed partially and failed — either way
+            // the wiring is this run's doing and is the prime suspect.
+            GuestWiringOutcome::Reinjected | GuestWiringOutcome::Failed => true,
+            // Untouched wiring: something else is wrong; do not destroy a guest
+            // to find out.
+            GuestWiringOutcome::SkippedVersionMatch => false,
+        }
     }
 
     /// The injection half of [`Self::reconcile_adopted_guest`], split out so
@@ -1896,6 +2010,194 @@ mod tests {
 
         let damage = DistroExecProbeResult::DistroFailure("exit code 1".into());
         assert_eq!(damage.class(), DistroExecProbeClass::DistroFailure);
+    }
+
+    /// Order 664-frz0. A fresh VM start whose wire never came up must not leave
+    /// the utility VM running.
+    ///
+    /// Source-shape, for the same reason as the 648-772y pin below: the defect
+    /// is a MISSING CALL on a specific path, and no behavioural test of
+    /// `perform_wsl_shutdown_recovery` — which already works and is already
+    /// used elsewhere — can observe that a path fails to call it.
+    #[test]
+    fn a_wedged_fresh_start_runs_one_bounded_shutdown_recovery() {
+        // Read the PRODUCT half only. `include_str!` of this file also contains
+        // this test, which names the recovery call three times — the first
+        // version of this test scanned itself and counted them. A window that
+        // can accidentally include the test module is not a window at all.
+        let source = include_str!("wsl_lifecycle.rs");
+        let product = source
+            .split(
+                "
+#[cfg(test)]",
+            )
+            .next()
+            .expect("the product half precedes the test module");
+        // The fresh-provision tail: everything after the LAST
+        // write_import_complete_marker in the product half, which is where a
+        // never-reachable VM is left behind.
+        let fresh_tail = product
+            .rsplit("self.write_import_complete_marker().await;")
+            .next()
+            .expect("the fresh-provision tail must exist");
+        // …and stop at the end of the provisioning function. Without this the
+        // window runs on into `registered_distro_disposition`, which has its own
+        // (pre-existing, correct) call to the same recovery — and the
+        // exactly-once assertion would count that one too.
+        let fresh_tail = fresh_tail
+            .split(
+                "
+    /// ",
+            )
+            .next()
+            .expect("the function is followed by the next item's docs");
+        assert!(
+            fresh_tail.contains("WslRuntime::perform_wsl_shutdown_recovery().await"),
+            "a wedged fresh start must run the bounded recovery"
+        );
+        assert_eq!(
+            fresh_tail
+                .matches("WslRuntime::perform_wsl_shutdown_recovery().await")
+                .count(),
+            1,
+            "exactly once — a retry loop here would fight the platform hang, not clear it"
+        );
+        // The keepalive must be released before the recovery, or the thing
+        // holding the wedged VM alive is us.
+        let keepalive = fresh_tail
+            .find("let _keepalive = self.spawn_keepalive(false).ok();")
+            .expect("the connect loop still holds a keepalive");
+        let recovery = fresh_tail
+            .find("WslRuntime::perform_wsl_shutdown_recovery().await")
+            .expect("recovery is present");
+        let scope_end = fresh_tail[keepalive..recovery]
+            .find("\n        };")
+            .expect("the keepalive must live in a scope that closes before recovery");
+        assert!(
+            keepalive + scope_end < recovery,
+            "the keepalive scope must close before the shutdown recovery runs"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the criterion the packet states second: recovery is
+    /// for a wire that NEVER came up. A handshake failing after a previously
+    /// healthy wire belongs to the keepalive supervisor, which is separately
+    /// bounded, and recovering there would leave two mechanisms fighting over
+    /// one VM. The supervisor lives inside `spawn_keepalive`'s respawn loop.
+    #[test]
+    fn the_keepalive_supervisor_does_not_also_shut_the_vm_down() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let source = source
+            .split(
+                "
+#[cfg(test)]",
+            )
+            .next()
+            .expect("the product half precedes the test module");
+        let supervisor = source
+            .split("pub fn spawn_keepalive(&self, debug: bool)")
+            .nth(1)
+            .expect("spawn_keepalive must exist");
+        let supervisor = supervisor
+            .split(
+                "
+    pub ",
+            )
+            .next()
+            .unwrap_or(supervisor);
+        assert!(
+            supervisor.contains("keepalive gave up after repeated rapid failures"),
+            "this window must actually contain the supervisor's give-up path"
+        );
+        assert!(
+            !supervisor.contains("perform_wsl_shutdown_recovery"),
+            "the supervisor must not also trigger shutdown recovery"
+        );
+    }
+
+    /// Order 648-772y. The recovery decision, isolated so it can be tested
+    /// without a WSL host: the live closure needs an actual downgrade-then-
+    /// upgrade cycle, and this is the part that can be pinned everywhere.
+    #[test]
+    fn only_a_wiring_rewrite_authorizes_discarding_the_guest() {
+        // The 648-jv69 shape: this run rewrote the wiring, then could not talk
+        // to the guest. Terminate + reprovision is the known fix and nothing
+        // was trying it — the budget just ran out.
+        assert!(WslLifecycle::handshake_failure_warrants_reprovision(
+            GuestWiringOutcome::Reinjected
+        ));
+        // A partial rewrite is at least as suspect as a complete one.
+        assert!(WslLifecycle::handshake_failure_warrants_reprovision(
+            GuestWiringOutcome::Failed
+        ));
+        // NEGATIVE CONTROL, and the reason this is a function rather than an
+        // `if err`: wiring this run did not touch is failing for some OTHER
+        // reason. Reprovisioning there would destroy a healthy guest and
+        // re-download a rootfs to chase a fault that has nothing to do with
+        // version skew — a destructive guess dressed as a fix.
+        assert!(!WslLifecycle::handshake_failure_warrants_reprovision(
+            GuestWiringOutcome::SkippedVersionMatch
+        ));
+    }
+
+    /// The decision above only matters if the adopted path actually consults
+    /// it. Before 648-772y that path ended in `return self.connect_with_backoff(...)`,
+    /// so a failure was terminal by construction — no call site to notice was
+    /// missing. This pins that the recovery is wired in, and that the guest is
+    /// discarded (unregister + marker removal) rather than merely retried.
+    #[test]
+    fn adopted_path_recovers_instead_of_exhausting_the_connect_budget() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let adopted = source
+            .split("RegisteredDistroDisposition::UseRegistered =>")
+            .nth(1)
+            .expect("adopted-guest arm must exist")
+            .split("RegisteredDistroDisposition::ReprovisionDamaged")
+            .next()
+            .expect("adopted arm is bounded by the damaged arm");
+        assert!(
+            !adopted.contains("return self.connect_with_backoff"),
+            "a failed handshake on the adopted path must not be terminal"
+        );
+        assert!(
+            adopted.contains("handshake_failure_warrants_reprovision(wiring)"),
+            "the adopted path must consult the recovery decision"
+        );
+        assert!(
+            adopted.contains("self.unregister_distro().await?"),
+            "recovery must discard the guest, not just retry the handshake"
+        );
+        assert!(
+            adopted.contains("import_complete_marker_path"),
+            "recovery must clear the marker so the fresh provision is not skipped"
+        );
+    }
+
+    /// Criterion 2. The 648-jv69 incident was diagnosed after the fact from a
+    /// preserved diagnostics bundle; the operator watching at the time saw a
+    /// generic message and a stall. Both versions must reach them.
+    #[test]
+    fn version_skew_is_reported_to_the_operator_with_both_versions() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let reconcile = source
+            .split("async fn reconcile_adopted_guest")
+            .nth(1)
+            .expect("reconcile must exist")
+            .split("async fn inject_stale_guest_wiring")
+            .next()
+            .expect("reconcile is bounded by the injection half");
+        assert!(
+            reconcile.contains("report_message(&format!("),
+            "the operator message must carry the versions, not a fixed string"
+        );
+        assert!(
+            reconcile.contains("guest {}, this build {}"),
+            "both the guest and tray versions must be named to the operator"
+        );
+        assert!(
+            reconcile.contains("tray_version = %workspace"),
+            "the structured log line stays — the bundle is still the record"
+        );
     }
 
     #[test]

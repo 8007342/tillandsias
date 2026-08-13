@@ -770,6 +770,30 @@ where
                 session_id: sid,
                 exit,
             } if sid == session_id => return Ok(ExecOutput { exit, stdout }),
+            // Order 689-xpq7. The two sibling drivers in this file have had this
+            // arm since 2026-07-14, when the order-128 conformance harness
+            // caught the guest's only diagnostic being dropped. The fix landed
+            // on two drivers of three and the regression pin covered one, so
+            // this one regressed the same way and nothing noticed.
+            //
+            // What the swallow costs is diagnosability, not liveness: the idle
+            // timeout still fires, so the operator waits ~300s and is then told
+            // "connection stale" — which is a lie about the failure. The guest
+            // said why. This arm is what lets it be heard.
+            //
+            // The pending expect is named because a rejected exec fails while
+            // waiting for a prompt that will never come, and "waiting for X"
+            // plus the guest's own words is the difference between a report and
+            // a riddle.
+            ControlMessage::Error { message, .. } => {
+                return Err(match current.as_ref() {
+                    Some(expect) => format!(
+                        "vsock_exec: guest error while waiting for {}: {message}",
+                        expect.label
+                    ),
+                    None => format!("vsock_exec: guest error: {message}"),
+                });
+            }
             _ => {}
         }
     }
@@ -1010,6 +1034,211 @@ mod tests {
     /// error immediately instead of ignoring the frame and idling until the
     /// 300s timeout — the hang that made every trait-level `exec` against a
     /// rejected argv look like a dead wire.
+    /// Order 689-xpq7. The shared half of the regression pin.
+    ///
+    /// The single-driver pin below (2026-07-14) is why this defect was found at
+    /// all — and why it survived: the fix landed on two drivers of three, and a
+    /// pin covering one driver cannot notice the third regressing. So the guest
+    /// half is lifted out here and every driver runs against it. Adding a fourth
+    /// driver without the Error arm now fails this suite instead of being
+    /// discovered by an operator waiting 300 seconds for the wrong message.
+    ///
+    /// `reject_after_open` answers PtyOpen with a terminal Error, which is the
+    /// live shape: every Error emission site in the guest today fires BEFORE a
+    /// PTY session exists, i.e. on early rejection such as an exec-allowlist
+    /// refusal.
+    async fn reject_after_open<S>(guest: &mut S)
+    where
+        S: AsyncRead + AsyncWrite + Unpin,
+    {
+        let hello = read_envelope(guest).await.unwrap();
+        assert!(matches!(hello.body, ControlMessage::Hello { .. }));
+        write_envelope(
+            guest,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::HelloAck {
+                    wire_version: WIRE_VERSION,
+                    server_caps: vec![],
+                    build_version: None,
+                },
+            },
+        )
+        .await
+        .unwrap();
+
+        let open = read_envelope(guest).await.unwrap();
+        assert!(matches!(open.body, ControlMessage::PtyOpen { .. }));
+        write_envelope(
+            guest,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 2,
+                body: ControlMessage::Error {
+                    seq_in_reply_to: Some(open.seq),
+                    code: tillandsias_control_wire::ErrorCode::Internal,
+                    message: "PtyOpen rejected: exec allowlist violation".to_string(),
+                },
+            },
+        )
+        .await
+        .unwrap();
+    }
+
+    fn assert_surfaced_guest_error(err: &str) {
+        assert!(
+            err.contains("guest error") && err.contains("allowlist"),
+            "the guest's own message must reach the operator, got: {err}"
+        );
+        assert!(
+            !err.contains("connection stale"),
+            "a swallowed Error is reported as a stale wire — the misdiagnosis this fixes: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn every_driver_surfaces_a_guest_error_envelope() {
+        // Driver 1: the buffered one, which has had the arm since 2026-07-14.
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let guest_task = tokio::spawn(async move { reject_after_open(&mut guest).await });
+        let err = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            exec_over_stream_with_input(client, &["/bin/false"], b""),
+        )
+        .await
+        .expect("buffered driver must resolve well before the idle timeout")
+        .expect_err("buffered driver must surface the guest Error");
+        assert_surfaced_guest_error(&err);
+        guest_task.await.unwrap();
+
+        // Driver 2: the streaming one, which always had the arm.
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let guest_task = tokio::spawn(async move { reject_after_open(&mut guest).await });
+        let err = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            exec_over_stream_with_input_streaming_timeout(
+                client,
+                &["/bin/false"],
+                b"",
+                &mut |_: &[u8]| {},
+                std::time::Duration::from_secs(30),
+            ),
+        )
+        .await
+        .expect("streaming driver must resolve well before the idle timeout")
+        .expect_err("streaming driver must surface the guest Error");
+        assert_surfaced_guest_error(&err);
+        guest_task.await.unwrap();
+
+        // Driver 3: the expect driver — the one that was silently dropping it.
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let guest_task = tokio::spawn(async move { reject_after_open(&mut guest).await });
+        let err = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            exec_over_stream_expect_dynamic(
+                client,
+                &["/bin/false"],
+                vec![DynamicExpect {
+                    needle: b"password:".to_vec(),
+                    response: Box::new(|| Ok(b"secret\n".to_vec())),
+                    label: "password prompt".to_string(),
+                }],
+                |_| {},
+            ),
+        )
+        .await
+        .expect("expect driver must resolve well before the idle timeout")
+        .expect_err("expect driver must surface the guest Error");
+        assert_surfaced_guest_error(&err);
+        // A rejected exec dies waiting for a prompt that will never come, so the
+        // report names what it was waiting for. Without this the operator learns
+        // that something failed but not where in the exchange.
+        assert!(
+            err.contains("password prompt"),
+            "the pending expect must be named: {err}"
+        );
+        guest_task.await.unwrap();
+    }
+
+    /// NEGATIVE CONTROL for the new arm: a normal PtyClose still returns Ok with
+    /// the guest's output and exit. Without this, the Error arm could be made to
+    /// pass by failing every exec.
+    #[tokio::test]
+    async fn expect_driver_normal_close_is_unaffected_by_the_error_arm() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let guest_task = tokio::spawn(async move {
+            let hello = read_envelope(&mut guest).await.unwrap();
+            assert!(matches!(hello.body, ControlMessage::Hello { .. }));
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let open = read_envelope(&mut guest).await.unwrap();
+            let session_id = match open.body {
+                ControlMessage::PtyOpen { session_id, .. } => session_id,
+                other => panic!("expected PtyOpen, got {}", other.kind()),
+            };
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 2,
+                    body: ControlMessage::PtyData {
+                        session_id,
+                        direction: PtyDirection::ToHost,
+                        bytes: b"all good\n".to_vec(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 3,
+                    body: ControlMessage::PtyClose {
+                        session_id,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let out = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            exec_over_stream_expect_dynamic(client, &["/bin/true"], vec![], |_| {}),
+        )
+        .await
+        .expect("normal close must resolve promptly")
+        .expect("a normal PtyClose must still succeed");
+        assert_eq!(
+            out.exit,
+            PtyExit {
+                code: 0,
+                signal: None
+            }
+        );
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "all good\n");
+        guest_task.await.unwrap();
+    }
+
     #[tokio::test]
     async fn exec_with_input_surfaces_guest_error_instead_of_hanging() {
         let (client, mut guest) = tokio::io::duplex(8192);

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-pin-claims-unverified
+    field: status
+    value: completed
+    ts: "2026-08-13T20:19:31Z"
+    host: linux-mutable
+
+events:
+  - packet_id: litmus-pin-claims-unverified
+    event:
+      type: completed
+      ts: "2026-08-13T20:19:31Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: litmus:added-fragment-parse-gate-shape 8/8 PASS (scripts/run-litmus-test.sh ci-release --phase pre-build --size instant), steps 6-7 are the three-verdict control and the live-tree check; scripts/check-litmus-pin-claims.sh wired into ./build.sh --check, reports ok:litmus-pin-claims:33 checked
+  - packet_id: litmus-pin-claims-unverified
+    event:
+      type: note
+      ts: "2026-08-13T20:19:31Z"
+      host: linux-mutable
+      summary: >
+        721-77yu closed

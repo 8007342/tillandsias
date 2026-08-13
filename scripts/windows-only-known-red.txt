@@ -1,0 +1,8 @@
+# Tests allowed to be red when stamping Windows-only sources (order 716-f5kc).
+# Each entry needs a filed issue; an unexplained name here is how a stamp stops
+# meaning anything.
+#
+# Fails whenever the build counter moves without the committed guest asset being
+# rebuilt. Filed:
+# plan/issues/research-windows-tray-embedded-guest-binary-staleness-2026-08-13.md
+embedded_guest_headless_matches_workspace_version

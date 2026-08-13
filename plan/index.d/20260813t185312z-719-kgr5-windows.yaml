@@ -1,0 +1,75 @@
+packets:
+  - packet_id: hand-authored-ledger-timestamps-drift
+    order: 719-kgr5
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "Ledger timestamps are accepted as given, so a host that invents them instead of reading its clock corrupts the ordering silently"
+    deliverable: "tillandsias-plan loop-status-append / append-event --ts validation"
+    pickup_role: any
+    capability_tags:
+      - plan
+      - fail-loud
+      - multi-host
+      - telemetry
+    estimated_hours: 2
+    context: |
+      MEASURED, and the offending host filed this against itself.
+
+      Across the 2026-08-13 windows overnight run, fragment names and `--ts`
+      values were HAND-AUTHORED — incremented by roughly an hour per cycle from
+      an early value — instead of read from the clock. Compare claimed against
+      the real commit time of the same file:
+
+        windows        claims 12:05:00Z   committed 09:01:16Z   (+3h)
+        windows        claims 20:05:00Z   committed 12:30:59Z   (+7.6h)
+        windows        claims 22:05:00Z   committed 13:28:29Z   (+8.6h)
+        linux-mutable  claims 11:51:13Z   committed 11:51:27Z   (+14s)
+        linux-mutable  claims 12:50:28Z   committed 12:50:45Z   (+17s)
+
+      Linux reads its clock; windows invented values, and the error GREW through
+      the night. The linux host noticed and reported it as "your clock is 7
+      hours ahead of UTC" — a reasonable reading of the symptom, and wrong about
+      the cause. The machine clock is correct: system UTC 18:51:40 against
+      cloudflare's Date header 18:51:39, in PDT (UTC-7). Nothing was wrong with
+      the host; the writes were fabricated.
+
+      WHY IT MATTERS BEYOND TIDINESS. The ledger is a multi-host append-only
+      CRDT whose fragments fold in name order, `expire-claims` decides staleness
+      from event timestamps, and `cycle-metrics` reports rolling windows over
+      them. A host writing timestamps hours ahead makes its own claims look
+      fresher than they are, sorts its fragments after work that really came
+      later, and can make a genuinely stale claim outlive its TTL. It also
+      wastes a sibling's time: linux spent effort diagnosing a clock fault that
+      did not exist.
+
+      THE SHAPE IS FAMILIAR. This is the same defect class the same host spent
+      the night removing from other code — a value nobody measured, presented as
+      measured (see 716-f5kc's unverified stamp, 632-retq's counterfeit drained
+      ledger, 622-rmit's expression pins). The tooling accepts `--ts` on trust,
+      which makes correctness a property of agent discipline. Discipline is what
+      failed here, for eleven consecutive cycles, without one thing noticing.
+    outcome: |
+      A timestamp that disagrees with the writing host's clock is refused at the
+      point of writing, so ordering cannot be corrupted by an agent that
+      guesses.
+    exit_criteria:
+      - "`loop-status-append` and `append-event` refuse a `--ts` that differs from the host clock by more than a bounded skew (suggest 15 minutes, generous enough for a slow cycle and tight enough to catch a fabricated hour), with a typed refusal naming both values."
+      - "`--ts` becomes OPTIONAL and defaults to the host clock, so the correct thing is also the easy thing — the current interface makes inventing a value exactly as convenient as reading one."
+      - "A NEGATIVE CONTROL asserts a legitimate in-skew timestamp is still accepted, so the guard cannot degrade into refusing all explicit timestamps."
+      - "An escape hatch exists for genuine backfill (recording an event that really happened earlier), and it is explicit rather than implicit — a flag someone has to type, not silence."
+    notes: |
+      Do NOT rewrite the already-published fragments. They are append-only and
+      immutable by design, several are already merged into linux-next, and
+      rewriting history to hide a measurement error would be a worse defect than
+      the error. The correction is this packet plus the note on the affected
+      cycles.
+    events:
+      - type: filed
+        ts: "2026-08-13T18:53:12Z"
+        host: windows
+        summary: |
+          Filed by the host that did it, with a timestamp read from `date -u`
+          rather than invented — which is the entire fix, expressed once.

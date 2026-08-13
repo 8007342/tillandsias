@@ -151,12 +151,30 @@ impl PodmanClient {
         Self { backend }
     }
 
+    /// Run one podman command under the operation class's DECLARED budget
+    /// (order 690-7adz). There is no unbounded variant; a caller that needs
+    /// longer than its class allows says so, in one line, at the call site.
     pub async fn execute(
         &self,
         operation: OperationKind,
         argv: &[String],
     ) -> Result<crate::CommandOutput, CommandFailure> {
-        self.backend.execute(operation, argv).await
+        self.backend
+            .execute(operation, argv, operation.default_budget())
+            .await
+    }
+
+    /// Run one podman command under an EXPLICIT budget, for the callers whose
+    /// work legitimately outlasts its class — a first-boot image build on a slow
+    /// link, a scenario replay. Passing a budget is a claim about that call
+    /// site, which is why it is written there rather than inherited.
+    pub async fn execute_with_budget(
+        &self,
+        operation: OperationKind,
+        argv: &[String],
+        budget: std::time::Duration,
+    ) -> Result<crate::CommandOutput, CommandFailure> {
+        self.backend.execute(operation, argv, budget).await
     }
 
     /// Check if podman is available in PATH.
@@ -1534,8 +1552,8 @@ impl Default for PodmanClient {
 pub fn network_exists_sync(name: &str) -> bool {
     let mut cmd = crate::podman_cmd_sync();
     cmd.args(["network", "exists", name]);
-    crate::log_podman_invocation("network-exists", &cmd);
-    let out = cmd.output();
+    crate::log_podman_invocation("network-exists", cmd.as_std());
+    let out = cmd.output_bounded(OperationKind::Network.default_budget());
     if let Ok(ref o) = out
         && !o.status.success()
     {
@@ -1555,8 +1573,8 @@ pub fn network_exists_sync(name: &str) -> bool {
 pub fn podman_available_sync() -> bool {
     let mut cmd = crate::podman_cmd_sync();
     cmd.arg("--version");
-    crate::log_podman_invocation("available", &cmd);
-    let out = cmd.output();
+    crate::log_podman_invocation("available", cmd.as_std());
+    let out = cmd.output_bounded(OperationKind::Availability.default_budget());
     if let Ok(ref o) = out
         && !o.status.success()
     {
@@ -1576,26 +1594,33 @@ pub fn podman_available_sync() -> bool {
 pub fn image_exists_sync(image: &str) -> bool {
     let mut cmd = crate::podman_cmd_sync();
     cmd.args(["image", "exists", image]);
-    crate::log_podman_invocation("image-exists", &cmd);
+    crate::log_podman_invocation("image-exists", cmd.as_std());
     // Non-existence is the common case; do not log a failure line for it.
-    cmd.output().is_ok_and(|o| o.status.success())
+    cmd.output_bounded(OperationKind::Image.default_budget())
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Check whether a container exists locally (sync).
 pub fn container_exists_sync(name: &str) -> bool {
     let mut cmd = crate::podman_cmd_sync();
     cmd.args(["inspect", name]);
-    crate::log_podman_invocation("container-exists", &cmd);
+    crate::log_podman_invocation("container-exists", cmd.as_std());
     // Non-existence is the common case; do not log a failure line for it.
-    cmd.output().is_ok_and(|o| o.status.success())
+    cmd.output_bounded(OperationKind::Inspect.default_budget())
+        .is_ok_and(|o| o.status.success())
 }
 
 /// Stop a container gracefully (sync).
 pub fn stop_container_sync(name: &str, timeout_secs: u32) -> Result<(), PodmanError> {
     let mut cmd = crate::podman_cmd_sync();
     cmd.args(["stop", "-t", &timeout_secs.to_string(), name]);
-    crate::log_podman_invocation("stop", &cmd);
-    let output = cmd.output().map_err(|e| {
+    crate::log_podman_invocation("stop", cmd.as_std());
+    // `podman stop -t N` already asks the container to exit within N seconds;
+    // the budget bounds podman ITSELF, so it must clear that grace period or it
+    // would kill a stop that was working. N + the Container class budget.
+    let stop_budget = OperationKind::Container.default_budget()
+        + std::time::Duration::from_secs(timeout_secs as u64);
+    let output = cmd.output_bounded(stop_budget).map_err(|e| {
         crate::log_podman_failure("stop", "spawn-error", &e.to_string());
         PodmanError::CommandFailed(format!("stop: {e}"))
     })?;

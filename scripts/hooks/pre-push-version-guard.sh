@@ -116,8 +116,28 @@ main_version="$(git show origin/main:VERSION 2>/dev/null || git show main:VERSIO
 #
 # What stays refused is the case the guard was written for: an ordinary work
 # branch quietly carrying a VERSION different from main's.
+#   3. INTEGRATION-BRANCH CATCH-UP (order 643-64bx, 2026-08-13). The topology is
+#      three tiers, not two: platform branches (windows-next/osx-next) merge
+#      origin/linux-next, and methodology `pull_merge_cadence.pre_push_gate`
+#      REQUIRES that merge before every non-linux-next push. Between releases
+#      linux-next legitimately runs ahead of main — the very case documented
+#      above — so a platform branch inherits a VERSION that is neither main's
+#      nor its own decision, and the guard refused it. The required merge could
+#      therefore make a branch permanently unpushable, which is how this fired
+#      on windows-next on 2026-08-13.
+#      Equality with the integration branch is a catch-up for exactly the reason
+#      equality with main is: the branch is ACCEPTING a value decided elsewhere,
+#      not proposing one. Operator ruling the same day: a platform host does not
+#      own the release; the linux host does. So this exception permits only
+#      EQUALITY — a platform branch carrying a VERSION of its own, ahead of both
+#      main and linux-next, stays refused, because that is a release decision
+#      taken by a host that does not own it.
 version_sync_forward=false
 if [[ -n "$main_version" && "$current_version" == "$main_version" ]]; then
+    version_sync_forward=true
+fi
+integration_version="$(git show origin/linux-next:VERSION 2>/dev/null || git show linux-next:VERSION 2>/dev/null)" || integration_version=""
+if [[ -n "$integration_version" && "$current_version" == "$integration_version" ]]; then
     version_sync_forward=true
 fi
 version_bump_branch=false

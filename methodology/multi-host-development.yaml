@@ -348,6 +348,20 @@ multi_host_development:
         THAT into your branch, validate (packets/code survived, tests green),
         then push. First applied 2026-07-02 (windows merge validation of
         6feac841).
+      version_divergence_hazard: >
+        A divergent VERSION on the integration branch (linux-next) blocks EVERY
+        downstream platform-branch push, because the mandated linux-next merge
+        (above) imports that VERSION and the pre-push VERSION guard then refuses
+        the platform push (702-eusw, 2026-08-13: dd8fd63f swept a build-number
+        bump into an unrelated security fix; osx-next and windows-next could not
+        push at all). RULE: a VERSION bump belongs on MAIN first (a
+        release/version-bump-* PR, per PR #94/#95), never as a side effect of a
+        work commit on linux-next. Two guards enforce this: the pre-push VERSION
+        guard treats a platform VERSION == origin/linux-next as a legitimate
+        integration-branch CATCH-UP (643-64bx), and
+        scripts/check-version-bump-isolation.sh (wired into ./build.sh --check,
+        702-eusw criterion 3) refuses any non-merge commit that changes VERSION
+        alongside non-companion files, so a bump cannot be swept in by git add -A.
 
   plan_ledger:
     canonical_files:

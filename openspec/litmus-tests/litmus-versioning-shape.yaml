@@ -90,6 +90,33 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "main"
 
+  # The grep above pins the guard's TEXT; this pins its BEHAVIOUR in both
+  # directions (order 643-64bx, 2026-08-13). A platform branch must be able to
+  # push after the merge from origin/linux-next the pre-push gate requires, and
+  # must still be refused when it invents a VERSION of its own — the release is
+  # the linux host's to move. Case 2 of the fixture is that negative control.
+  - step: "Req: the VERSION guard allows integration catch-up and still refuses a divergent bump"
+    command: "bash scripts/test-pre-push-version-guard.sh"
+    timeout_ms: 120000
+    expected_behavior: "PASS: pre-push VERSION guard (4/4)"
+
+  # The fixture above decides the guard's POLICY on small ranges. This one pins
+  # that the guard still reaches a verdict at all on a LARGE one (order
+  # 702-pwhc, measured on macOS 2026-08-13). The decision used to be
+  # `git diff --name-only | grep -qx VERSION` under `set -o pipefail`: grep
+  # exits on first match, git dies of SIGPIPE and reports 141, pipefail promotes
+  # that to the pipeline status, and the `if` read FALSE *because* the match was
+  # found. The guard failed OPEN as a function of DIFF SIZE — a 64-file range
+  # was refused correctly while a 445-file range sailed through with the same
+  # VERSION divergence in it. Large cross-branch merges are the only way a
+  # foreign VERSION arrives, so it stopped working exactly where it matters.
+  # Kept as a SEPARATE fixture because the policy fixture's ranges are small
+  # enough to pass against the broken guard, which is how this survived.
+  - step: "Req: the VERSION guard reaches a verdict on a large diff (no SIGPIPE fail-open)"
+    command: "bash scripts/test-pre-push-version-guard-sigpipe.sh"
+    timeout_ms: 180000
+    expected_behavior: "PASS: pre-push-version-guard 4/4"
+
   - step: "Req: build.sh never unconditionally instructs committing VERSION"
     # Order 643-64bx, partial reduction (windows host 2026-08-10). build.sh bumps
     # VERSION on every build-producing dispatch and used to say, unconditionally,

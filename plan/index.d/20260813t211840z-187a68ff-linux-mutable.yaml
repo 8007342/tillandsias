@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: freshness-inventory-subset-source-and-specs
+    field: status
+    value: completed
+    ts: "2026-08-13T21:18:40Z"
+    host: linux-mutable
+
+events:
+  - packet_id: freshness-inventory-subset-source-and-specs
+    event:
+      type: completed
+      ts: "2026-08-13T21:18:40Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: litmus:freshness-inventory-shape 12/12 PASS (scripts/run-litmus-test.sh spec-traceability --phase pre-build --size instant); steps 5-6 assert both ruled-in trees are enumerated and the denominator_delta grammar; report reads: freshness-inventory: 1250 components / freshness-target: scope=defined-subset excluded=219 denominator_delta=+0
+  - packet_id: freshness-inventory-subset-source-and-specs
+    event:
+      type: note
+      ts: "2026-08-13T21:18:40Z"
+      host: linux-mutable
+      summary: >
+        720-bmm9 closed

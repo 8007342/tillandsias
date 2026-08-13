@@ -190,17 +190,18 @@ PLAN="$(resolve_plan_binary)" || {
     exit 1
 }
 
-# jq is load-bearing for every projection below. Absence is an environment
-# fault, never a statement about the ledger — refuse with its own token.
+# ORDER 632-retq (rung 2). The jq preflight that stood here is gone WITH the jq
+# calls it guarded. Every projection below now comes from `tillandsias-plan
+# select-rows` / `blocking-counts`, which do the filtering and ranking inside the
+# binary that already owns the folded ledger.
 #
-# TILLANDSIAS_JQ exists so the litmus can exercise the absent-jq path without
-# emptying PATH (which kills the shebang before the script ever runs). It names
-# the binary only; the script never invokes it by that variable, so it cannot be
-# used to smuggle in a different projector.
-command -v "${TILLANDSIAS_JQ:-jq}" >/dev/null 2>&1 || {
-    echo "refused:missing-tool:jq is not on PATH (required to project tillandsias-plan --json); this is NOT a drained ledger"
-    exit 1
-}
+# The preflight was correct for its time: it made an absent jq a loud
+# `refused:missing-tool` instead of a counterfeit "drained ledger". But it left
+# the host still unable to select work, and satisfying the dependency per host
+# repeats the yq/ruby exposure recorded 2026-08-03. Removing the dependency
+# deletes the class. TILLANDSIAS_JQ is still read by the litmus to prove the
+# selector no longer cares.
+
 
 # ${arr[@]+"${arr[@]}"} guards the expansions below: under set -u, bash < 4.4
 # (stock macOS ships 3.2) treats "${arr[@]}" on an empty array as an unbound
@@ -268,109 +269,57 @@ fi
 # stderr is captured rather than discarded so the refusal can quote the real
 # reason instead of guessing at it.
 query_err="$(mktemp)"
-raw="$("$PLAN" query --status ready --claimable-by "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>"$query_err")"
+rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
+    "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 2>"$query_err")"
 query_rc=$?
 if [ "$query_rc" -ne 0 ]; then
     reason="$(tr -d '\r' < "$query_err" | grep -m1 . || true)"
     rm -f "$query_err"
-    # Match `unknown query` loosely: the wording is version-dependent — an older
-    # binary here says "unknown query flag: --claimable-by" while a newer one says
-    # "unknown query constraint: --claimable-by". Pinning either exact phrase
-    # would make the diagnosis silently degrade to the generic branch on half the
-    # binaries in the fleet, which is the failure this whole guard is about.
+    # Match loosely: the wording is version-dependent, and pinning an exact
+    # phrase would silently degrade the diagnosis to the generic branch on half
+    # the binaries in the fleet — the failure this guard is about.
     case "$reason" in
-        *"unknown query"*)
-            echo "refused:stale-plan-binary:${PLAN} does not support a constraint this script requires (${reason}); rebuild with cargo build --release -p tillandsias-plan"
+        *"unknown query"* | *"unknown"*"select-rows"* | *"usage:"*)
+            echo "refused:stale-plan-binary:${PLAN} does not support select-rows, which this script requires (${reason}); rebuild with cargo build --release -p tillandsias-plan"
             ;;
         *)
-            echo "refused:query-failed:${PLAN} query exited ${query_rc}: ${reason:-<no stderr>}"
+            echo "refused:query-failed:${PLAN} select-rows exited ${query_rc}: ${reason:-<no stderr>}"
             ;;
     esac
     exit 1
 fi
 rm -f "$query_err"
-[ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
 
-# ── Intersect with `next <role>`'s eligible set (660-z774) ──────────────────
-# The header of this script credits `tillandsias-plan next <role>` with being
-# "release-aware, role-compatible, dependency-clear, unleased, priority-ranked"
-# and says this script only adds "what should ONE cycle take?" on top. That was
-# the design. It was not the implementation: the pool above comes from `query`,
-# which filters status, role and release and applies NEITHER dependency-clearing
-# NOR lease-checking. The layer meant to add cohesion ON TOP of claimability had
-# quietly REPLACED claimability with a weaker test.
+# select-rows already applied: status ready, role claimability, release,
+# dependency-clearance (unresolvable ids count as BLOCKING, matching the
+# resolver) and lease exclusion. The three separate refusals that used to
+# distinguish those filters collapse into one, because the projection no longer
+# reports which of them emptied the pool — and inventing a distinction there
+# would be guessing.
 #
-# The Windows host found it by trying to do the work (660-z774): its batch
-# offered packet 248 together with 245, 246 and 247 — the three unstarted
-# packets 248 depends on. `next windows` never listed 248 at all. The lease half
-# is worse and quieter: `query` cannot see leases, so a batch could hand this
-# host a packet another host is actively working, routing around the very
-# mechanism (claim-ledger-node.sh) that exists to prevent duplicated effort.
+# But EMPTY-BECAUSE-DRAINED and EMPTY-BECAUSE-BROKEN must stay distinguishable,
+# and output volume cannot tell them apart: a binary that exits 0 and prints
+# nothing looks exactly like a drained ledger. That is the counterfeit-completion
+# defect this whole packet exists to remove, and the first draft of this rewrite
+# reintroduced it — caught by this file's own negative control, which fed the
+# selector a stand-in binary and got `refused:no-eligible-work`.
 #
-# On Linux the effect was diluted — with 100+ role-matching packets a blocked
-# pick reads as an odd choice, not a defect — which is why it survived here.
-# Intersecting with `next <role>` directly is not available: it is capped at five
-# results ON PURPOSE ("plan_next is capped at five on purpose"), so it answers
-# "what should I start now", not "what is the eligible set". The dependency test
-# is therefore recomputed here from the folded ledger, using the same rule the
-# resolver uses — a dependency is satisfied only when its packet is terminal.
-#
-# Unknown/unresolvable dependency ids count as BLOCKING, matching the resolver's
-# conservatism: an id that resolves to nothing is an unanswered question, not an
-# absent constraint.
-terminal_ids="$("$PLAN" query --limit 900 --json 2>/dev/null \
-    | jq -r '[.[] | select(.status=="done" or .status=="completed" or .status=="obsoleted") | .packet_id]' 2>/dev/null)"
-if [ -z "$terminal_ids" ] || [ "$terminal_ids" = "null" ]; then
-    # Fail loud. Silently keeping the unfiltered pool would restore exactly the
-    # defect this block exists to fix, and would do it invisibly.
-    echo "refused:eligibility-unavailable:cannot read terminal-status set from ${PLAN}; refusing to score a pool whose dependency state is unknown"
+# So ask a different question instead of inferring from volume: does this binary
+# DECLARE the subcommand? `capabilities` is the compile-time capability set
+# (order 569), so a binary too old to project rows says so about itself.
+if [ -z "$rows" ]; then
+    if ! "$PLAN" capabilities 2>/dev/null | grep -qx "select-rows"; then
+        echo "refused:stale-plan-binary:${PLAN} does not declare select-rows; rebuild with cargo build --release -p tillandsias-plan"
+        exit 1
+    fi
+    echo "refused:no-eligible-work:no ready packet for role ${ROLE} is claimable, dependency-clear, and unleased"
     exit 1
 fi
-raw="$(printf '%s' "$raw" | jq -c --argjson done "$terminal_ids" \
-    '[.[] | select([(.depends_on // [])[] | select((. as $d | $done | index($d)) | not)] | length == 0)]' 2>/dev/null)"
-[ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:no ready packet for role ${ROLE} is both claimable and dependency-clear"; exit 1; }
-
-# ORDER 706-ddw6. `query`'s JSON projection carries native `.lease` state.
-# Filter out any packet that currently holds an active, unexpired claim lease so
-# this cycle does not attempt work another host is already driving.
-raw="$(printf '%s' "$raw" | jq -c '[.[] | select(.lease == null or .lease.is_active != true)]' 2>/dev/null)"
-[ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:no ready packet for role ${ROLE} is claimable, dependency-clear, and unleased"; exit 1; }
 
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
 # packet can be the thing a macos packet is waiting on, and that downstream
 # weight is exactly the "residual it is holding up" minimax asks us to maximise.
-allraw="$("$PLAN" query --status ready "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
-depcounts="$(printf '%s' "$allraw" | jq -r '.[] | .depends_on[]?' 2>/dev/null | sort | uniq -c | awk '{print $2"\t"$1}')"
-
-# Flatten to: rank \t epic \t order \t packet_id \t urgency_display \t release
-#
-# Order 630-6hyc. `.priority // "p3"` USED to coerce a missing priority to p3,
-# so the urgency term (3 - rank) was a constant 0 for the ~82% of ready packets
-# that carry no priority — an ABSENT value wearing a plausible one. The fix has
-# three tiers, and the last is the point of the packet:
-#   * EXPLICIT priority (p0-p3, ranks 0-3) dominates — the operator said so.
-#   * else DERIVE urgency from `kind` (202 populated vs 38 with priority; ranks
-#     4-6): correctness/safety kinds are more urgent than forward-progress
-#     kinds, which are more urgent than research/docs.
-#   * else NEITHER is present: rank 99 = UNSCORED. It is EXCLUDED from the
-#     urgency term (never scored as a plausible 0) and COUNTED so the triage
-#     line reports it — a missing signal is made visible, not silently defaulted.
-rows="$(printf '%s' "$raw" | jq -r '
-  .[]
-  | [ (.priority // ""), (.release_target // "UNGROUPED"), (.order|tostring), .packet_id, (.desired_release // "?"), (.kind // "") ]
-  | @tsv' 2>/dev/null \
-  | awk -F'\t' '{
-        prio = $1; kind = $6;
-        if (prio=="p0")      { rank=0; disp="p0" }
-        else if (prio=="p1") { rank=1; disp="p1" }
-        else if (prio=="p2") { rank=2; disp="p2" }
-        else if (prio=="p3") { rank=3; disp="p3" }
-        else if (kind=="security"||kind=="bug"||kind=="fix") { rank=4; disp="kind:" kind }
-        else if (kind=="feat"||kind=="enhancement"||kind=="infra"||kind=="ux"||kind=="optimization"||kind=="perf"||kind=="dx") { rank=5; disp="kind:" kind }
-        else if (kind=="research"||kind=="exploration"||kind=="docs"||kind=="discussion"||kind=="decision"||kind=="chore") { rank=6; disp="kind:" kind }
-        else { rank=99; disp="unscored" }
-        print rank "\t" $2 "\t" $3 "\t" $4 "\t" disp "\t" $5;
-    }')"
+depcounts="$("$PLAN" blocking-counts "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 2>/dev/null)"
 
 if [ -z "$rows" ]; then
     # Distinguish "the query returned an empty array" (a real terminal state)

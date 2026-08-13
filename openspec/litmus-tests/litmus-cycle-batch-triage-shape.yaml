@@ -115,13 +115,30 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: bad budget refused"
 
-  - step: "NEGATIVE CONTROL: a missing jq refuses as missing-tool, NOT as no-eligible-work"
-    # Order 631-* (Windows host 2026-08-09). jq is absent on Windows, so the
-    # selector reported an environment fault as a drained ledger and a greedy
-    # loop idled on a host with 7 claimable packets for its own role. The
-    # assertion is deliberately two-sided: the right token must appear AND the
-    # wrong one must not, because only the second half catches the regression.
-    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: missing jq reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -q '^refused:missing-tool:' && echo 'ok: environment fault refused on its own token'"
+  - step: "the selector no longer needs jq at all"
+    # Order 632-retq. This step used to assert the OPPOSITE — that an absent jq
+    # produced `refused:missing-tool` rather than a counterfeit
+    # `refused:no-eligible-work`. That was the right guard while every
+    # projection was a jq call: on 2026-08-09 a Windows host with 7 claimable
+    # packets for its own role was told the ledger was drained.
+    #
+    # The projection now comes from `tillandsias-plan select-rows`, so the
+    # dependency is gone rather than guarded, and the assertion inverts: with
+    # TILLANDSIAS_JQ naming a binary that does not exist, the selector must
+    # EMIT A BATCH. Keeping the old assertion would pin a refusal the script can
+    # no longer produce, which is how a passing test starts describing a program
+    # that no longer exists.
+    command: "out=$(TILLANDSIAS_JQ=jq-absent-for-litmus scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:missing-tool' && { echo 'FAIL: the selector still depends on jq'; exit 1; }; printf '%s' \"$out\" | grep -q '^batch: ' && echo 'ok: batch emitted without jq'"
+    timeout_ms: 15000
+    expected_behavior: "ok: batch emitted without jq"
+
+  - step: "NEGATIVE CONTROL: an environment fault is still refused on its own token"
+    # The class the jq guard protected outlives its dependency: an environment
+    # fault must never be reported as a drained ledger. With jq gone, the live
+    # instance of that class is a plan binary too old to answer — which is not
+    # hypothetical, since this very change added a subcommand every host's
+    # binary predates until it rebuilds.
+    command: "out=$(TILLANDSIAS_PLAN_BIN=/bin/true scripts/select-work-batch.sh linux 2>&1); printf '%s' \"$out\" | grep -q '^refused:no-eligible-work' && { echo 'FAIL: a stale binary reported as a drained ledger'; exit 1; }; printf '%s' \"$out\" | grep -qE '^refused:(stale-plan-binary|query-failed|no-plan-binary)' && echo 'ok: environment fault refused on its own token'"
     timeout_ms: 15000
     expected_behavior: "ok: environment fault refused on its own token"
 

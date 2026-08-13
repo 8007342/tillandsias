@@ -8,11 +8,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::env;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
 
 /// Hard ceiling on a single containerized `gh` invocation. Cold container
@@ -235,62 +233,14 @@ impl RemoteVaultLease {
     }
 }
 
-/// Run a `Command` to completion but abort if it outruns `timeout`.
-///
-/// stdout/stderr are drained on dedicated threads so a large `gh api` response
-/// (≈100 repos of JSON can exceed the OS pipe buffer) can't deadlock the wait
-/// loop. On timeout the child is killed and reaped so we never leak a hung
-/// `podman run`.
-fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Result<Output, String> {
-    command.stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = command
-        .spawn()
-        .map_err(|err| format!("failed to spawn containerized gh: {err}"))?;
-
-    let mut stdout_pipe = child.stdout.take();
-    let mut stderr_pipe = child.stderr.take();
-    let out_handle = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(pipe) = stdout_pipe.as_mut() {
-            let _ = pipe.read_to_end(&mut buf);
-        }
-        buf
-    });
-    let err_handle = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        if let Some(pipe) = stderr_pipe.as_mut() {
-            let _ = pipe.read_to_end(&mut buf);
-        }
-        buf
-    });
-
-    let deadline = Instant::now() + timeout;
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                let stdout = out_handle.join().unwrap_or_default();
-                let stderr = err_handle.join().unwrap_or_default();
-                return Ok(Output {
-                    status,
-                    stdout,
-                    stderr,
-                });
-            }
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!(
-                        "containerized gh timed out after {}s (killed)",
-                        timeout.as_secs()
-                    ));
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(err) => return Err(format!("failed to wait on containerized gh: {err}")),
-        }
-    }
-}
+// The hand-rolled `run_command_with_timeout` that lived here was deleted by
+// order 714-4r6w: `SyncPodmanCommand::output_bounded` now provides the same
+// thing for every podman call rather than for these two. Its design was the
+// right one and was kept — drain stdout/stderr on dedicated threads so a large
+// response cannot deadlock the wait loop, kill and reap on expiry, and do NOT
+// join the readers on the timeout path. That last detail was independently
+// rediscovered when the shared implementation hung its own test on a stub whose
+// grandchild still held the pipe.
 
 fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result<String, String> {
     let image = git_image_tag();
@@ -362,7 +312,11 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     command.args(["--entrypoint", "/bin/sh", &image, "-ceu", script, "gh"]);
     command.args(extra_args);
 
-    let output = run_command_with_timeout(command, GH_INVOCATION_TIMEOUT)?;
+    // Order 714-4r6w: the wrapper now owns the bounded wait, so this call site
+    // keeps its explicit budget but stops hand-rolling the enforcement.
+    let output = command
+        .output_bounded(GH_INVOCATION_TIMEOUT)
+        .map_err(|e| format!("run_git_image_shell: {e}"))?;
 
     if debug {
         debug_log_podman_result("run_git_image_shell", &output.status, &output.stderr);
@@ -703,7 +657,9 @@ exec gh repo clone "$1" "$2"
     // Bounded like every other containerized gh call — a wedged clone must
     // never hang the launch path forever. Clones move real data, so the
     // budget is larger than GH_INVOCATION_TIMEOUT.
-    let output = run_command_with_timeout(command, CLONE_INVOCATION_TIMEOUT)?;
+    let output = command
+        .output_bounded(CLONE_INVOCATION_TIMEOUT)
+        .map_err(|e| format!("clone_project_from_github: {e}"))?;
 
     if debug {
         debug_log_podman_result("clone_project_from_github", &output.status, &output.stderr);

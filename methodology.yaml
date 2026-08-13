@@ -440,3 +440,71 @@ on_demand_experts:
       the cost (a fuller next-build) is paid during the idle gap. Ephemeral
       forges are EXEMPT — their target/ dies with the container. Implemented +
       litmus-pinned by the ledger packet build-cache-sweep-on-durable-hosts.
+
+  development_environment_lifecycle:
+    authority: "The Tlatoāni, 2026-08-13 (fleet-restart directive)"
+    primary_methodology: >
+      Our PRIMARY development methodology is Fedora Silverblue (immutable OS) with
+      toolbox/distrobox containers for the mutable dev toolchain. This host is
+      linux-MUTABLE (a variant), but scripts and tooling MUST favor the
+      Silverblue+toolbox path: idempotent scripts, ephemeral toolboxes, nothing
+      that assumes a mutable base OS. build.sh already re-execs into the
+      tillandsias-builder toolbox on Silverblue; keep that discipline.
+    two_lifetimes: >
+      Distinguish the LONG-LIVED bare-metal DEVELOPMENT ENVIRONMENT (a durable
+      checkout on a dev machine / coordinator) from the EPHEMERAL in-forge
+      container (discarded whole on teardown). The forge needs no GC — it dies.
+      The DEVELOPMENT ENVIRONMENT accumulates cruft and MUST run its own periodic
+      garbage collection and maintenance. See on_demand_experts doc_lifecycle for
+      the three zones (HARD FORGE / EPHEMERAL FORGE / PROJECT).
+    start_of_day_maintenance:
+      when: >
+        Run once per local day (and on the first cycle after a restart), gated by
+        a `.last-daily-maintenance` marker under the cache dir so it is idempotent
+        and not repeated every cycle. Bare-metal durable hosts only; forges exempt.
+      steps:
+        - "Build-cache GC per build_cache_hygiene (cargo clean + nix gc when bloated/stale)."
+        - "nix store gc / nix-collect-garbage on Silverblue+toolbox hosts; podman image prune of superseded versioned images."
+        - "Reap defunct delegate/opencode handles; delegate-outcome.sh sweep any stale registered delegate."
+        - "Verify the dev-environment expert containers are up + fresh (see dev_environment_experts)."
+    post_restart_verification: >
+      After a fleet restart (system upgrades + stack restart + MCP rebuild), a
+      resuming host MUST run the durable checklist BEFORE trusting its tools or
+      launching a forge: plan/issues/fleet-restart-post-restart-checklist-2026-08-13.md
+      (order 718-nuvm). Highest-signal: (1) MCP experts serve source_commit==HEAD
+      (stale-expert trap); (2) clock/NTP synced (a skewed clock breaks SSH-CA 30m
+      cert TTLs + freshness stamps); (3) forge images rebuilt at the installed
+      VERSION (avoid the ~2s version-skew DOA); (4) per-checkout git hooks
+      reinstalled; (5) router sidecar staged as a build artifact (710-w9kc).
+      Because every host restarts with the prompt "Use the ./skills/meta-orchestration
+      skill", the skill's Start-Of-Day / Post-Restart gate runs this — the
+      checklist must stay discoverable from there.
+    dev_environment_experts:
+      authority: "The Tlatoāni, 2026-08-13"
+      rule: >
+        Bare-metal DEVELOPMENT ENVIRONMENTS must run the SAME idempotent,
+        ephemeral expert systems the forge runs — RAG+semantic experts in
+        containers (never on the sacred host base) — WITH the same checkout hooks
+        that RETRAIN the RAG on commits hitting the relevant bits (the forge's
+        unconditional order-396 post-commit hook; on dev hosts the env-gated v4
+        hook, TILLANDSIAS_HOST_EXPERTS=1, order 685-yidq). This mirrors in-forge
+        discipline: commits are the Lamport clock for the RAG cache
+        (philosophy.yaml convergence_via_velocity). The expert containers are
+        ephemeral (rebuildable from the checkout) and idempotent to start.
+
+  expert_first_work:
+    authority: "The Tlatoāni, 2026-08-13 (fleet-restart directive)"
+    rule: >
+      FAVOR THE EXPERT SYSTEM when pulling work, triaging, debugging, and
+      researching — ask the experts first (extends bootstrap.mcp_first_read_path
+      from reads to the whole work loop). Each expert answer is cited + quotable
+      (a verifiable litmus), which is exactly the small fast RAG iteration
+      convergence_via_velocity wants.
+    warned_fallback_ratchet: >
+      Where the expert system has a GAP, fall back to whatever the loop does today
+      (grep, direct file reads, ad-hoc analysis) BUT emit a WARNING naming the gap
+      and, where cheap, file/annotate the packet that would close it. As the
+      expert systems improve and a gap closes, REMOVE its fallback — first
+      degrading the fallback to a loud warning, then deleting it. The direction is
+      one-way: fallbacks are temporary scaffolding retired with warnings as the
+      experts mature, never a permanent parallel path.

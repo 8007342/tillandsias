@@ -63,6 +63,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "answer",
     "blocked-by",
     "blocked-closure",
+    "blocking-counts",
     "burndown",
     "capabilities",
     "check",
@@ -85,6 +86,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "parked-blocks",
     "query",
     "ready",
+    "select-rows",
     "spec-envelope",
     "spec-index",
     "spec-retrieve",
@@ -160,6 +162,21 @@ const USAGE: &str = concat!(
     "                                     criteria holders are never offered as claims. Natural\n",
     "                                     aliases via `answer`: \"what's next?\" and\n",
     "                                     \"what v0.5 work can I do on linux?\".\n",
+    "           blocking-counts [--release V] [--limit N]\n",
+    "                                     ORDER 632-retq. `<packet_id>\\t<count>` — how many READY\n",
+    "                                     packets each id blocks, counted over EVERY ready packet\n",
+    "                                     rather than one role's, because a packet in another column\n",
+    "                                     is frequently the thing this one waits on.\n",
+    "           select-rows [--claimable-by R] [--release V] [--limit N]\n",
+    "                                     ORDER 632-retq. The batch selector's projection, as TSV:\n",
+    "                                     rank, release_target, order, packet_id, urgency, release.\n",
+    "                                     Already filtered to ready + claimable + release +\n",
+    "                                     dependency-clear + unleased, so the caller needs no jq.\n",
+    "                                     scripts/select-work-batch.sh needed NINETEEN jq calls to\n",
+    "                                     build this, which is why it could not run on a host without\n",
+    "                                     jq; satisfying that dependency per host repeats the yq/ruby\n",
+    "                                     exposure, so the projection moves to the binary that already\n",
+    "                                     owns the ledger.\n",
     "           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json]\n",
     "                                     ORDER 582-26mm. THE generic filtered reader over the\n",
     "                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only\n",
@@ -396,6 +413,83 @@ fn emit(text: &str) {
     }
 }
 
+/// How far a hand-supplied `--ts` may sit from the host clock, in seconds.
+/// Fifteen minutes: generous enough for a slow cycle that read the clock at its
+/// start and writes at its end, tight enough to catch a fabricated hour.
+const TS_SKEW_LIMIT_SECS: i64 = 900;
+
+fn now_epoch() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Resolve the `--ts` for a ledger write (order 719-kgr5).
+///
+/// THE DEFECT THIS CLOSES. Every writer took `--ts` on trust, which made
+/// ordering a property of agent discipline rather than of the tool. Across the
+/// 2026-08-13 windows overnight run the values were hand-authored — incremented
+/// by roughly an hour per cycle from an early guess — and drifted to +8.6h
+/// against the real commit times, while the sibling linux host, reading its
+/// clock, stayed within 17 seconds. The ledger is an append-only CRDT whose
+/// fragments fold in NAME order, whose claim expiry is decided from event
+/// timestamps, and whose rolling metrics window over them, so a host writing
+/// hours ahead sorts its work after later work and can make a stale claim
+/// outlive its TTL. It also cost a sibling a night diagnosing a clock fault
+/// that did not exist: the machine clock was correct to the second.
+///
+/// Three properties, in the order they matter:
+///
+///   * ABSENT `--ts` now means the host clock, so the correct thing is the easy
+///     thing. The old interface made inventing a value exactly as convenient as
+///     reading one, and `append-event` went further and REQUIRED the flag —
+///     "the tool does not invent timestamps" — which read as rigour but simply
+///     moved the invention to the caller.
+///   * A supplied value must agree with the clock within the skew limit, and a
+///     refusal names BOTH values, because the symptom ("your clock is 7 hours
+///     ahead") was misdiagnosed once already.
+///   * `--backfill` is the escape hatch for recording something that genuinely
+///     happened earlier. Explicit, typed by a person, never implicit silence.
+fn resolve_ts(supplied: Option<String>, backfill: bool, subcommand: &str) -> String {
+    let now = now_epoch();
+    let Some(ts) = supplied else {
+        return answer::epoch_to_iso8601(now);
+    };
+    let Some(given) = answer::iso8601_to_epoch(&ts) else {
+        eprintln!(
+            "error: --ts '{ts}' is not a ledger timestamp (want YYYY-MM-DDTHH:MM:SSZ, UTC) — {subcommand} refused the write"
+        );
+        std::process::exit(2);
+    };
+    let skew = given - now;
+    if backfill {
+        // A backfill may only reach BACKWARD. "Recording something that
+        // happened earlier" is the whole justification, and a flag that also
+        // waived future timestamps would hand the original defect a one-word
+        // bypass.
+        if skew > TS_SKEW_LIMIT_SECS {
+            eprintln!(
+                "error: --backfill records something that already happened, but --ts {ts} is {skew}s AHEAD of this host's clock ({}) — {subcommand} refused the write",
+                answer::epoch_to_iso8601(now)
+            );
+            std::process::exit(2);
+        }
+        return ts;
+    }
+    if skew.abs() > TS_SKEW_LIMIT_SECS {
+        eprintln!(
+            "error: --ts {ts} disagrees with this host's clock {} by {}s (limit {TS_SKEW_LIMIT_SECS}s) — \
+             omit --ts to use the clock, or pass --backfill if the event genuinely happened earlier; \
+             {subcommand} refused the write",
+            answer::epoch_to_iso8601(now),
+            skew.abs()
+        );
+        std::process::exit(2);
+    }
+    ts
+}
+
 fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
     let id = ledger.id_of(p);
     let order = p
@@ -588,6 +682,49 @@ fn inspect_lease(packet_id: &str) -> Option<PacketLease> {
         expires_epoch,
         is_active,
     })
+}
+
+/// Order 632-retq. The urgency rank + display a batch selector needs, derived
+/// once, HERE, instead of in an awk block that only a host with jq ever reaches.
+///
+/// Three tiers, and the last is the point (order 630-6hyc): an EXPLICIT
+/// priority dominates because the operator said so; otherwise urgency is
+/// DERIVED from `kind`, since 202 ready packets carry a kind and only 38 carry
+/// a priority; otherwise the packet is UNSCORED — rank 99, excluded from the
+/// urgency term rather than coerced to a plausible p3, which is the shape that
+/// made the term a constant 0 for ~82% of the pool without anyone noticing.
+pub fn urgency_rank_and_display(priority: Option<&str>, kind: Option<&str>) -> (u32, String) {
+    match priority.unwrap_or("") {
+        "p0" => return (0, "p0".to_string()),
+        "p1" => return (1, "p1".to_string()),
+        "p2" => return (2, "p2".to_string()),
+        "p3" => return (3, "p3".to_string()),
+        _ => {}
+    }
+    let kind = kind.unwrap_or("");
+    let rank = match kind {
+        "security" | "bug" | "fix" => 4,
+        "feat" | "enhancement" | "infra" | "ux" | "optimization" | "perf" | "dx" => 5,
+        "research" | "exploration" | "docs" | "discussion" | "decision" | "chore" => 6,
+        _ => 99,
+    };
+    if rank == 99 {
+        (99, "unscored".to_string())
+    } else {
+        (rank, format!("kind:{kind}"))
+    }
+}
+
+/// Order 632-retq. Is every dependency of `packet` terminal?
+///
+/// An id that resolves to nothing counts as BLOCKING, matching the resolver's
+/// conservatism: an unresolvable dependency is an unanswered question, not an
+/// absent constraint.
+pub fn dependencies_are_clear(
+    deps: &[String],
+    terminal: &std::collections::BTreeSet<String>,
+) -> bool {
+    deps.iter().all(|d| terminal.contains(d))
 }
 
 fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
@@ -1216,12 +1353,20 @@ fn run_loop_status(args: &[String], base: &Path) {
                 eprintln!("error: read stdin: {e}");
                 std::process::exit(1);
             }
-            let mut ts = loop_status::utc_compact_now();
-            if let Some(i) = args.iter().position(|a| a == "--ts")
-                && let Some(v) = args.get(i + 1)
-            {
-                ts = loop_status::iso_to_compact(v);
-            }
+            // 719-kgr5: the fragment NAME carries this stamp and fragments fold
+            // in name order, so an invented value here reorders the folded
+            // status view itself. Validate before compacting.
+            let supplied_ts = args
+                .iter()
+                .position(|a| a == "--ts")
+                .and_then(|i| args.get(i + 1))
+                .cloned();
+            let backfill = args.iter().any(|a| a == "--backfill");
+            let ts = loop_status::iso_to_compact(&resolve_ts(
+                supplied_ts,
+                backfill,
+                "loop-status-append",
+            ));
             let host = args
                 .iter()
                 .position(|a| a == "--host")
@@ -2245,6 +2390,153 @@ fn main() {
                 emit(&line(&ledger, p));
             }
         }
+        "blocking-counts" => {
+            // ORDER 632-retq (rung 2). How many READY packets each id blocks.
+            //
+            // Deliberately NOT folded into `select-rows`: that one answers "what
+            // may I pick", filtered to dependency-clear and unleased, while this
+            // one must count edges from EVERY ready packet — including the ones
+            // select-rows excludes. A linux packet is frequently the thing a
+            // windows packet is waiting on, and that downstream weight is
+            // exactly the residual minimax asks us to maximise. Folding them
+            // would silently score the graph against a filtered subset.
+            let options = match parse_query_options(&args[1..]) {
+                Ok(options) => options,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let mut counts: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for p in query_packets(
+                &ledger,
+                Some("ready"),
+                None,
+                None,
+                options.release.as_deref(),
+                &[],
+                options.limit,
+            ) {
+                if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
+                    for d in deps {
+                        let key = match d {
+                            serde_yaml::Value::String(s) => s.clone(),
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            _ => continue,
+                        };
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                }
+            }
+            for (id, n) in counts {
+                emit(&format!("{id}	{n}"));
+            }
+        }
+        "select-rows" => {
+            // ORDER 632-retq. Emit the batch selector's projection directly.
+            //
+            // scripts/select-work-batch.sh built this with nineteen jq calls, so
+            // the selector — the thing that decides what a cycle WORKS ON —
+            // could not run on a host without jq. Order 632-retq made that fail
+            // loud rather than counterfeit a drained ledger, which was right and
+            // still left the host unable to select work. Satisfying the
+            // dependency per host repeats the yq/ruby exposure recorded on
+            // 2026-08-03; emitting the projection from the binary that already
+            // owns the ledger deletes the class.
+            //
+            // Output: rank \t release_target \t order \t packet_id \t urgency \t release
+            // Already filtered to ready + role + release + dependency-clear +
+            // unleased, so the caller needs no further projection.
+            let options = match parse_query_options(&args[1..]) {
+                Ok(options) => options,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                }
+            };
+            if let Some(release) = options.release.as_deref() {
+                let releases = known_releases(&ledger);
+                if !releases.iter().any(|known| known == release) {
+                    eprintln!(
+                        "error: unknown release constraint '{release}' (known desired_release values: {})",
+                        releases.join(",")
+                    );
+                    std::process::exit(2);
+                }
+            }
+
+            // The terminal set is computed over the WHOLE ledger, not the
+            // role-filtered pool: a linux packet is frequently the thing a
+            // windows packet waits on.
+            let mut terminal: std::collections::BTreeSet<String> =
+                std::collections::BTreeSet::new();
+            for p in query_packets(&ledger, None, None, None, None, &[], usize::MAX) {
+                let status = p
+                    .get("status")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("");
+                if matches!(status, "done" | "completed" | "obsoleted") {
+                    terminal.insert(ledger.id_of(p).to_string());
+                }
+            }
+
+            let matched = query_packets(
+                &ledger,
+                Some("ready"),
+                options.role.as_deref(),
+                options.claimable_by.as_deref(),
+                options.release.as_deref(),
+                &options.tags,
+                options.limit,
+            );
+
+            for p in matched {
+                let id = ledger.id_of(p).to_string();
+                let deps: Vec<String> = p
+                    .get("depends_on")
+                    .and_then(serde_yaml::Value::as_sequence)
+                    .map(|s| {
+                        s.iter()
+                            .filter_map(|v| match v {
+                                serde_yaml::Value::String(s) => Some(s.clone()),
+                                serde_yaml::Value::Number(n) => Some(n.to_string()),
+                                _ => None,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !dependencies_are_clear(&deps, &terminal) {
+                    continue;
+                }
+                if inspect_lease(&id).map(|l| l.is_active).unwrap_or(false) {
+                    continue;
+                }
+                let (rank, display) = urgency_rank_and_display(
+                    p.get("priority").and_then(serde_yaml::Value::as_str),
+                    p.get("kind").and_then(serde_yaml::Value::as_str),
+                );
+                let epic = p
+                    .get("release_target")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("UNGROUPED");
+                let order = p
+                    .get("order")
+                    .map(|v| match v {
+                        serde_yaml::Value::Number(n) => n.to_string(),
+                        serde_yaml::Value::String(s) => s.clone(),
+                        _ => "?".into(),
+                    })
+                    .unwrap_or_else(|| "?".into());
+                let release = p
+                    .get("desired_release")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("?");
+                emit(&format!(
+                    "{rank}\t{epic}\t{order}\t{id}\t{display}\t{release}"
+                ));
+            }
+        }
         "query" => {
             // ORDER 582-26mm. The generic filtered reader over the FOLDED
             // ledger — the single correct way to enumerate packets by
@@ -2419,6 +2711,7 @@ fn main() {
             let mut host = "linux".to_string();
             let mut flag_type: Option<String> = None;
             let mut flag_summary: Option<String> = None;
+            let mut backfill = false;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -2447,6 +2740,9 @@ fn main() {
                         i += 1;
                         flag_summary = args.get(i).cloned();
                     }
+                    // 719-kgr5 escape hatch: recording an event that genuinely
+                    // happened earlier. Takes no value.
+                    "--backfill" => backfill = true,
                     // Any OTHER --flag is rejected loudly rather than corrupting
                     // the event by masquerading as a positional value.
                     other if other.starts_with("--") => {
@@ -2474,12 +2770,12 @@ fn main() {
                 .or_else(|| positional.get(2).cloned())
                 .unwrap_or_else(|| usage());
             let (reference, etype, summary) = (&reference, &etype, &summary);
-            let Some(ts) = ts else {
-                eprintln!(
-                    "error: --ts <ISO8601> is required (the tool does not invent timestamps)"
-                );
-                std::process::exit(2);
-            };
+            // 719-kgr5. This used to REQUIRE --ts, on the reasoning that "the
+            // tool does not invent timestamps" — but the caller then invented
+            // them instead, for eleven consecutive cycles, drifting to +8.6h.
+            // Reading the clock is not inventing a timestamp; it is the only
+            // way to measure one. The flag stays available and is now CHECKED.
+            let ts = resolve_ts(ts, backfill, "append-event");
             let Some(target) = ledger.resolve(reference).map(|p| ledger.id_of(p)) else {
                 eprintln!("error: {}", unresolved_reason(&ledger, reference));
                 std::process::exit(1);
@@ -2675,13 +2971,11 @@ fn main() {
                 };
                 // Same defaults the field-changing path below uses, so a note
                 // written here is indistinguishable from one written there.
-                let ts = flagged("--ts").unwrap_or_else(|| {
-                    let secs = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs() as i64)
-                        .unwrap_or(0);
-                    answer::epoch_to_iso8601(secs)
-                });
+                let ts = resolve_ts(
+                    flagged("--ts"),
+                    args.iter().any(|a| a == "--backfill"),
+                    "set-field",
+                );
                 let host = flagged("--host").unwrap_or_else(|| {
                     std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
                 });
@@ -2775,13 +3069,11 @@ fn main() {
                 }
             }
 
-            let ts = flagged("--ts").unwrap_or_else(|| {
-                let secs = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-                answer::epoch_to_iso8601(secs)
-            });
+            let ts = resolve_ts(
+                flagged("--ts"),
+                args.iter().any(|a| a == "--backfill"),
+                "set-field",
+            );
             let host = flagged("--host").unwrap_or_else(|| {
                 std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
             });
@@ -3436,6 +3728,80 @@ mod tests {
     /// case-insensitive substring, capability_tags all-must-match, then a
     /// limit. Release is the order-606 additive constraint; the others retain
     /// the semantics project-info's yq/jq pipeline used.
+    /// Order 632-retq. The urgency tiers the batch selector scores on, moved
+    /// out of an awk block that only a host with jq ever reached.
+    #[test]
+    fn urgency_ranks_explicit_priority_then_kind_then_unscored() {
+        // Tier 1: the operator said so.
+        assert_eq!(urgency_rank_and_display(Some("p0"), None), (0, "p0".into()));
+        assert_eq!(
+            urgency_rank_and_display(Some("p2"), Some("bug")),
+            (2, "p2".into()),
+            "an explicit priority must dominate a kind that would rank differently"
+        );
+        // Tier 2: derived from kind, correctness before forward-progress
+        // before research.
+        assert_eq!(
+            urgency_rank_and_display(None, Some("security")),
+            (4, "kind:security".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("enhancement")),
+            (5, "kind:enhancement".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("docs")),
+            (6, "kind:docs".into())
+        );
+        // Tier 3, and the point of order 630-6hyc: NEITHER signal present is
+        // reported as unscored, never coerced to a plausible p3. The coercion
+        // made the urgency term a constant 0 for ~82% of the pool, and looked
+        // exactly like a genuine p3 while doing it.
+        assert_eq!(
+            urgency_rank_and_display(None, None),
+            (99, "unscored".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("some-new-kind")),
+            (99, "unscored".into()),
+            "an unrecognised kind is unscored, not silently ranked"
+        );
+        assert_ne!(
+            urgency_rank_and_display(None, None).0,
+            urgency_rank_and_display(Some("p3"), None).0,
+            "unscored must be distinguishable from p3 — conflating them IS the defect"
+        );
+    }
+
+    /// An unresolvable dependency counts as BLOCKING, matching the resolver's
+    /// conservatism: an id that resolves to nothing is an unanswered question,
+    /// not an absent constraint.
+    #[test]
+    fn dependency_clearance_treats_unknown_ids_as_blocking() {
+        let mut terminal = std::collections::BTreeSet::new();
+        terminal.insert("done-thing".to_string());
+        assert!(dependencies_are_clear(&[], &terminal), "no deps is clear");
+        assert!(dependencies_are_clear(
+            &["done-thing".to_string()],
+            &terminal
+        ));
+        assert!(
+            !dependencies_are_clear(&["open-thing".to_string()], &terminal),
+            "an open dependency blocks"
+        );
+        assert!(
+            !dependencies_are_clear(&["typo-or-retired".to_string()], &terminal),
+            "an id that resolves to nothing blocks — it is a question, not an absence"
+        );
+        assert!(
+            !dependencies_are_clear(
+                &["done-thing".to_string(), "open-thing".to_string()],
+                &terminal
+            ),
+            "one blocking dependency blocks the packet"
+        );
+    }
+
     #[test]
     fn query_packets_reproduces_plan_query_filter_semantics() {
         let led = Ledger::parse(

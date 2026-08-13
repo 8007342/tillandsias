@@ -1,0 +1,94 @@
+# freshness: auditor=linux-mutable-20260813t1917z date=2026-08-13 verdict=updated scope=created — scripts/check-added-fragments-parse.sh claimed "Pinned by litmus:added-fragment-parse-gate-shape" since order 698-7n6q and no such test existed; this file makes the claim true and adds the 720-24u6 bare-timestamp and 440 load-failure controls
+name: litmus:added-fragment-parse-gate-shape
+spec: ci-release
+description: >
+  Pin the ledger-fragment admission gates that stand between a host writing a
+  fragment and the fleet being able to read it. Two failure shapes are covered,
+  each with a negative control run against a hermetic throwaway repo so the test
+  proves the gate REFUSES, not merely that it passes on a clean tree:
+
+  (1) order 698-7n6q — a fragment the fold cannot parse reaches origin carrying
+  packets that exist in git and in no answer;
+  (2) order 720-24u6 — a fragment with an UNQUOTED ISO-8601 timestamp parses
+  everywhere it is checked, then compaction folds that text verbatim into
+  plan/index.yaml, where Ruby's safe_load rejects the bare scalar as a Time
+  instance and the 440 status-vocab gate can no longer load the base at all.
+
+  Also pins the 440 gate's third verdict: an unloadable index must report
+  index-load-failed, never status-vocab-diverges. That distinction is the whole
+  point — on 2026-08-13 it reported a divergence between two identical lists and
+  sent the reader to diff them.
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/check-added-fragments-parse.sh
+  - workspace contains scripts/check-plan-schema-divergence.sh
+
+critical_path:
+  - step: "Req: both admission gates exist and are executable"
+    command: "test -x scripts/check-added-fragments-parse.sh && test -x scripts/check-plan-schema-divergence.sh && echo 'ok: gates present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: gates present"
+
+  - step: "Req: the fragment gate emits its pinned verdict grammar on this tree"
+    command: "scripts/check-added-fragments-parse.sh | grep -qE '^(ok:added-fragments-parse:[0-9]+ checked|violation:added-fragment-(unparseable|bare-timestamp):[0-9]+)$' && echo 'ok: fragment gate grammar pinned'"
+    timeout_ms: 30000
+    expected_behavior: "ok: fragment gate grammar pinned"
+
+  - step: "NEGATIVE CONTROL: an unquoted timestamp in an added fragment is REFUSED (720-24u6)"
+    # Hermetic: a throwaway git repo containing only the gate and one fragment.
+    # `ts: 2026-08-12T15:31:54Z` is valid YAML to yq and serde_yaml, which is
+    # exactly why it survived every check and only detonated at the fold.
+    command: "d=$(mktemp -d); mkdir -p \"$d/scripts\" \"$d/plan/index.d\"; cp scripts/check-added-fragments-parse.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f linux-next && printf 'events:\\n  - packet_id: p\\n    event:\\n      type: note\\n      ts: 2026-08-12T15:31:54Z\\n      summary: bare\\n' > plan/index.d/bad.yaml && out=$(TILLANDSIAS_FRAGMENT_PARSE_BASE=linux-next bash scripts/check-added-fragments-parse.sh 2>/dev/null); rc=$?; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -qE '^violation:added-fragment-bare-timestamp:[0-9]+$' && echo 'ok: bare timestamp refused' ); rm -rf \"$d\""
+    timeout_ms: 30000
+    expected_behavior: "ok: bare timestamp refused"
+
+  - step: "POSITIVE CONTROL: the same fragment with the timestamp QUOTED passes"
+    # Without this the negative control above could be satisfied by a gate that
+    # refuses every fragment.
+    command: "d=$(mktemp -d); mkdir -p \"$d/scripts\" \"$d/plan/index.d\"; cp scripts/check-added-fragments-parse.sh \"$d/scripts/\"; ( cd \"$d\" && git init -q . && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m base && git branch -q -f linux-next && printf 'events:\\n  - packet_id: p\\n    event:\\n      type: note\\n      ts: \"2026-08-12T15:31:54Z\"\\n      summary: quoted\\n' > plan/index.d/good.yaml && out=$(TILLANDSIAS_FRAGMENT_PARSE_BASE=linux-next bash scripts/check-added-fragments-parse.sh 2>/dev/null); rc=$?; [ \"$rc\" -eq 0 ] && printf '%s' \"$out\" | grep -qE '^ok:added-fragments-parse:[0-9]+ checked$' && echo 'ok: quoted timestamp accepted' ); rm -rf \"$d\""
+    timeout_ms: 30000
+    expected_behavior: "ok: quoted timestamp accepted"
+
+  - step: "NEGATIVE CONTROL: an unloadable index reports index-load-failed, NOT a vocabulary divergence (720-24u6)"
+    # The two lists in this fixture are identical, so a gate that blamed
+    # divergence would be naming a fault that provably is not there.
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan\"; printf 'plan_index:\\n  default_status_values: [ready]\\nevents:\\n  - ts: 2026-08-12T15:31:54Z\\n' > \"$d/plan/index.yaml\"; printf 'statuses: [ready]\\n' > \"$d/plan/schema.yaml\"; out=$( cd \"$d\" && bash \"$OLDPWD/scripts/check-plan-schema-divergence.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^blocked:index-load-failed: ' && ! printf '%s' \"$out\" | grep -q 'status-vocab-diverges' && echo 'ok: load failure named honestly'"
+    timeout_ms: 15000
+    expected_behavior: "ok: load failure named honestly"
+
+  - step: "PIN CLAIMS: an unresolvable, an unbound, and a good claim get three distinct verdicts (721-77yu)"
+    # This test exists because the gate it pins carried a "Pinned by litmus:"
+    # line for weeks against a test nobody had written. The checker that closes
+    # that hole gets the same treatment it enforces: three fixtures in one
+    # hermetic tree — a name no test declares, a test no spec binds, and a
+    # correct claim — asserting three DIFFERENT verdicts. One fixture would be
+    # satisfied by a checker that refuses everything.
+    command: "d=$(mktemp -d); mkdir -p \"$d/scripts\" \"$d/probe\" \"$d/openspec/litmus-tests\"; cp scripts/check-litmus-pin-claims.sh \"$d/scripts/\"; printf 'name: litmus:real-and-bound\\n' > \"$d/openspec/litmus-tests/a.yaml\"; printf 'name: litmus:real-but-unbound\\n' > \"$d/openspec/litmus-tests/b.yaml\"; printf -- '- spec_id: s\\n  litmus_tests:\\n  - litmus:real-and-bound\\n' > \"$d/openspec/litmus-bindings.yaml\"; r=''; for n in does-not-exist real-but-unbound real-and-bound; do printf '#!/bin/sh\\n# Pinned by litmus:%s\\n' \"$n\" > \"$d/probe/fake.sh\"; r=\"$r$( cd \"$d\" && TILLANDSIAS_PIN_SCAN_DIR=probe bash scripts/check-litmus-pin-claims.sh 2>/dev/null )|\"; done; rm -rf \"$d\"; [ \"$r\" = 'violation:litmus-pin-unresolvable:1|violation:litmus-pin-unbound:1|ok:litmus-pin-claims:1 checked|' ] && echo 'ok: pin claims get three distinct verdicts'"
+    timeout_ms: 30000
+    expected_behavior: "ok: pin claims get three distinct verdicts"
+
+  - step: "POSITIVE CONTROL: every pin claim in this tree resolves to a bound test"
+    command: "scripts/check-litmus-pin-claims.sh 2>/dev/null | grep -qE '^ok:litmus-pin-claims:[0-9]+ checked$' && echo 'ok: live pin claims all executable'"
+    timeout_ms: 30000
+    expected_behavior: "ok: live pin claims all executable"
+
+  - step: "POSITIVE CONTROL: the real ledger loads and its vocabularies agree"
+    command: "scripts/check-plan-schema-divergence.sh | grep -qE '^ok:status-vocab-in-sync$' && echo 'ok: live ledger loads and agrees'"
+    timeout_ms: 30000
+    expected_behavior: "ok: live ledger loads and agrees"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "fragment admission gates refuse unparseable and bare-timestamp fragments; 440 names load failure distinctly"
+  log_fields:
+    spec: "ci-release"
+    test: "litmus-added-fragment-parse-gate-shape"
+    artifact: "scripts/check-added-fragments-parse.sh + scripts/check-plan-schema-divergence.sh"
+
+rollback:
+  on_failure: "run scripts/check-added-fragments-parse.sh and scripts/check-plan-schema-divergence.sh directly and compare their verdict lines against the pinned grammar"
+  command: "scripts/check-added-fragments-parse.sh; scripts/check-plan-schema-divergence.sh"

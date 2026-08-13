@@ -1088,6 +1088,68 @@ fn find_checkout_root() -> Result<PathBuf, String> {
     find_developer_checkout_root()
 }
 
+/// Podman equivalents of `run_command`/`run_command_silent`/`command_output`
+/// (order 714-4r6w).
+///
+/// The generic helpers still take a raw `Command`, because they also run
+/// systemctl and friends. Podman calls go through these instead, so the
+/// deadline is applied once, here, rather than remembered at every call site.
+fn run_podman_command(
+    mut command: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", command.as_std());
+    }
+    let status = command
+        .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("Failed to run command: {e}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("Command exited with status {status}"))
+    }
+}
+
+fn run_podman_command_silent(
+    mut command: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<(), String> {
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", command.as_std());
+    }
+    let output = command
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("Failed to run command: {e}"))?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            Err(format!("Command exited with status {}", output.status))
+        } else {
+            Err(stderr)
+        }
+    }
+}
+
+fn podman_command_output(
+    mut command: tillandsias_podman::SyncPodmanCommand,
+    debug: bool,
+) -> Result<String, String> {
+    if debug {
+        eprintln!("[tillandsias] running: {:?}", command.as_std());
+    }
+    let output = command
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+        .map_err(|e| format!("Failed to run command: {e}"))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+    }
+}
+
 fn run_command(mut command: Command, debug: bool) -> Result<(), String> {
     if debug {
         eprintln!("[tillandsias] running: {:?}", command);
@@ -1872,6 +1934,58 @@ fn capture_containerfile_mtime(root: &Path, image_name: &str) -> Result<(), Stri
     InitBuildState::save_containerfile_mtime(image_name, mtime)
 }
 
+/// Images whose build context references another image by tag. The dependency
+/// must be resolved (and content-checked) before the dependent's identity can
+/// be computed, because its source digest participates in that identity.
+fn image_dependency(image_name: &str) -> Option<&'static str> {
+    match image_name {
+        "forge" => Some("forge-base"),
+        "chromium-framework" => Some("chromium-core"),
+        _ => None,
+    }
+}
+
+/// Order 702-griq: compute the SAME content identity `--init` computes, for the
+/// on-demand path. Recurses one level so a dependent image (forge,
+/// chromium-framework) hashes its base's source digest exactly as
+/// `image_build_inputs` does under `run_init` — otherwise the two paths would
+/// derive different digests for identical content and each would rebuild what
+/// the other just built.
+fn ensure_image_identity(
+    root: &Path,
+    image_name: &str,
+    version: &str,
+) -> Result<(ImageBuildIdentity, BTreeMap<String, String>), String> {
+    let mut identities = HashMap::<String, ImageBuildIdentity>::new();
+    if let Some(dependency) = image_dependency(image_name) {
+        let (dependency_identity, _) = ensure_image_identity(root, dependency, version)?;
+        identities.insert(dependency.to_string(), dependency_identity);
+    }
+    let (build_args, dependency_digests) = image_build_inputs(image_name, &identities)?;
+    let identity = runtime_assets::image_identity(
+        root,
+        image_name,
+        version,
+        build_args.clone(),
+        dependency_digests,
+    )?;
+    Ok((identity, build_args))
+}
+
+/// Order 702-griq: the freshness decision for the on-demand lane-launch path.
+///
+/// This is `decide_image_build` and nothing else, by design — the whole defect
+/// was that this path had its OWN rule (does the VERSION tag exist?) while
+/// `--init` asked the content-identity question. VERSION changes only move
+/// aliases; content identity comes from the exact context digest and the
+/// `io.tillandsias.image.source-digest` OCI label. One rule, one place.
+fn ensure_image_decision(
+    identity: &ImageBuildIdentity,
+    observation: &ImageBuildObservation,
+) -> ImageBuildDecision {
+    decide_image_build(identity.clone(), observation)
+}
+
 pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
@@ -1903,136 +2017,65 @@ pub(crate) fn ensure_image_exists(
         .unwrap_or("latest")
         .trim_start_matches('v');
 
-    // Dependency images first. The recursion is now UNCONDITIONAL (it used to
-    // be gated on `image_exists(base_tag)`): the callee makes the same
-    // content-addressed decision this function does, so an unchanged base
-    // costs one `podman image exists` and returns Skip. Gating on tag presence
-    // here would reintroduce, for the base, exactly the staleness this
-    // function now refuses — a current `forge` layered onto a stale
-    // `forge-base` is still a stale forge. Nested distinct locks in one
-    // direction only (order 232 R4), unchanged.
-    for dependency in image_dependencies(image_name) {
+    // Resolve the base image first. Its own content check runs inside this same
+    // function, so a stale base is rebuilt rather than accepted on tag presence.
+    if let Some(dependency) = image_dependency(image_name) {
         let dependency_tag = versioned_image_tag(dependency, version);
         ensure_image_exists(root, dependency, &dependency_tag, debug).map_err(|e| {
             format!(
-                "Required base image '{}' is absent and failed to build on demand: {}.\n\
+                "Required base image '{}' is absent or stale and failed to build on demand: {}.\n\
                  Please ensure the base image is built by running: tillandsias --init",
                 dependency_tag, e
             )
         })?;
     }
 
-    // 702-griq: decide on CONTENT, not on tag presence.
-    //
-    // This path used to return early on
-    // `image_exists(image_tag) && image_uses_managed_layer_policy(image_tag)`.
-    // Neither test says anything about what is INSIDE the image: `image_tag`
-    // is `versioned_image_tag(...)`, which carries no content component, and
-    // the layer-policy label is compared against a constant. So once an image
-    // existed under the current VERSION it was reused forever, no matter how
-    // far the sources had moved.
-    //
-    // That is not hypothetical. VERSION was last bumped 2026-08-09; order
-    // 659-8faj renamed the git mirror's DNS alias on 2026-08-10, i.e. AFTER
-    // that bump. Every macOS forge lane then cloned `git://tillandsias-git/...`
-    // — a name no mirror registers any more — from a `lib-common.sh` baked
-    // into an image the tag said was current. NXDOMAIN on every attempt,
-    // twelve retries, reported to the operator as "the mirror is unreachable
-    // or has not finished initialising".
-    //
-    // `run_init` has always decided this correctly, via the source-digest
-    // label and `decide_image_build`. There were simply TWO freshness rules
-    // for the same images: a content-addressed one on `--init`, and this
-    // tag-only one on the path every lane launch actually takes. Now there is
-    // one.
-    //
-    // ADOPTION COST, stated because users feel it: an image built by the OLD
-    // on-demand path carries no source-digest label and no canonical tag, so
-    // its provenance is unknowable and the first launch after this change
-    // rebuilds it once. That is the correct reading of "unknown provenance" —
-    // this defect is precisely what silently trusting such an image costs —
-    // but the reason is named in the log line below so a one-off rebuild is
-    // explained rather than mysterious.
-    let (identity, build_args) = resolve_image_identity(root, image_name, version)?;
-    let (observation, _observed_image_id) =
-        rt.block_on(observe_image_build(&client, &identity, false));
-    let decision = decide_image_build(identity.clone(), &observation);
+    // Order 702-griq: decide on CONTENT, not on the VERSION tag existing. The
+    // layer policy is hashed into the identity, so a policy change is a digest
+    // change — the old explicit managed-layer-policy tag probe is subsumed
+    // rather than dropped.
+    let (identity, build_args) = ensure_image_identity(root, image_name, version)?;
+    let (observation, _) = rt.block_on(observe_image_build(&client, &identity, false));
+    let decision = ensure_image_decision(&identity, &observation);
 
     match decision.action {
-        ImageBuildAction::Skip => {
-            if debug {
-                eprintln!(
-                    "[tillandsias] image {image_name} is current ({})",
-                    identity.source_digest
-                );
-            }
-            Ok(())
-        }
+        ImageBuildAction::Skip => {}
         ImageBuildAction::Retag => {
-            // Content is present under the canonical tag; only the mutable
-            // aliases point elsewhere. Retag instead of rebuilding.
             if debug {
-                eprintln!("[tillandsias] retagging image {image_name} ({image_tag})");
+                eprintln!("[tillandsias] retagging {image_name} aliases ({image_tag})");
             }
-            rt.block_on(apply_image_aliases(&client, &identity))
+            rt.block_on(apply_image_aliases(&client, &identity))?;
         }
         ImageBuildAction::Build | ImageBuildAction::ForceRebuild => {
             eprintln!(
-                "[tillandsias] building image {image_name} ({image_tag}): {}; \
-                 this may take several minutes",
+                "[tillandsias] building image {image_name} ({image_tag}, {}); this may take several minutes",
                 image_build_reason_label(decision.reason)
             );
             build_image_with_logging(root, image_name, &identity, &build_args, &None, debug)
                 .map_err(|e| format_on_demand_image_build_error(image_tag, &e))?;
-            rt.block_on(apply_image_aliases(&client, &identity))
-                .map_err(|e| format_on_demand_image_build_error(image_tag, &e))?;
+            rt.block_on(apply_image_aliases(&client, &identity))?;
             if debug {
                 eprintln!(
-                    "[tillandsias] built image {image_name}: {image_tag} ({})",
-                    identity.source_digest
+                    "[tillandsias] built image {image_name}: {}",
+                    identity.canonical_tag
                 );
             }
-            Ok(())
         }
     }
-}
 
-/// Images `image_name` is layered on, which must be current before its own
-/// identity can be derived (their source digests feed that identity).
-fn image_dependencies(image_name: &str) -> &'static [&'static str] {
-    match image_name {
-        "forge" => &["forge-base"],
-        "chromium-framework" => &["chromium-core"],
-        _ => &[],
+    // Callers may request a tag that is not this version's canonical alias
+    // (explicit per-project or per-service tags). Point it at the fresh content.
+    if image_tag != identity.version_alias {
+        rt.block_on(client.image_tag(&identity.canonical_tag, image_tag))
+            .map_err(|e| {
+                format!(
+                    "Failed to tag {} as {image_tag}: {e}",
+                    identity.canonical_tag
+                )
+            })?;
     }
-}
 
-/// Content identity of `image_name` plus the build args that identity was
-/// computed over, resolving dependency identities recursively.
-///
-/// `image_build_inputs` REQUIRES a dependency's identity to be in the map
-/// (it errors rather than guessing), because a dependency's source digest is
-/// an input to this image's digest — that is what makes a stale base
-/// propagate into a distinct identity for everything layered on it.
-fn resolve_image_identity(
-    root: &Path,
-    image_name: &str,
-    version: &str,
-) -> Result<(ImageBuildIdentity, BTreeMap<String, String>), String> {
-    let mut identities = HashMap::<String, ImageBuildIdentity>::new();
-    for dependency in image_dependencies(image_name) {
-        let (dependency_identity, _) = resolve_image_identity(root, dependency, version)?;
-        identities.insert((*dependency).to_string(), dependency_identity);
-    }
-    let (build_args, dependency_digests) = image_build_inputs(image_name, &identities)?;
-    let identity = runtime_assets::image_identity(
-        root,
-        image_name,
-        version,
-        build_args.clone(),
-        dependency_digests,
-    )?;
-    Ok((identity, build_args))
+    Ok(())
 }
 
 fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
@@ -2064,7 +2107,7 @@ impl OverlayHeal for RealSystemReset {
     fn podman_system_reset_force(&self) -> Result<(), String> {
         let status = podman_command()
             .args(["system", "reset", "--force"])
-            .status()
+            .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
             .map_err(|e| format!("Failed to spawn podman system reset: {e}"))?;
         if status.success() {
             Ok(())
@@ -2148,7 +2191,7 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
             subnet.as_str(),
             ENCLAVE_NET,
         ]);
-        run_command(command, debug)?;
+        run_podman_command(command, debug)?;
     }
 
     ensure_enclave_host_dns(debug)
@@ -2240,7 +2283,7 @@ fn systemd_resolved_active() -> bool {
 fn enclave_gateway_from_podman_network(debug: bool) -> Result<String, String> {
     let mut command = podman_command();
     command.args(["network", "inspect", ENCLAVE_NET]);
-    let inspect = command_output(command, debug)?;
+    let inspect = podman_command_output(command, debug)?;
     parse_enclave_gateway(&inspect)
 }
 
@@ -2302,7 +2345,7 @@ fn ensure_egress_network(debug: bool) -> Result<(), String> {
 
     let mut command = podman_command();
     command.args(["network", "create", "--driver", "bridge", EGRESS_NET]);
-    run_command(command, debug)
+    run_podman_command(command, debug)
 }
 
 fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
@@ -2681,7 +2724,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
     // --name tillandsias-proxy` does not fail with "name already in use".
     let _ = podman_cmd_sync()
         .args(["rm", "--ignore", "tillandsias-proxy"])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
     ensure_enclave_network(debug)?;
@@ -3880,7 +3923,7 @@ async fn caddy_reload_routes(debug: bool) -> Result<(), String> {
     ]);
 
     for attempt in 1..=10 {
-        match cmd.output() {
+        match cmd.output_bounded(tillandsias_podman::OperationKind::Container.default_budget()) {
             Ok(output) if output.status.success() => {
                 if debug {
                     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -6469,8 +6512,12 @@ pub(crate) fn build_image_with_logging(
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
 
+    // Image builds stream their output to a log file and are governed by the
+    // caller's own progress handling, so this one owns its child's lifetime
+    // deliberately (order 714-4r6w). Counted by
+    // scripts/check-podman-sync-budgets.sh so the exception cannot spread.
     let mut child = command
-        .spawn()
+        .spawn_caller_owned_lifetime()
         .map_err(|e| format!("Failed to spawn build process: {e}"))?;
 
     let stdout = child.stdout.take();
@@ -6829,7 +6876,7 @@ fn reset_guest_wipe_paths(cache_dir: &Path) -> Vec<PathBuf> {
 fn podman_name_list(args: &[&str], debug: bool) -> Vec<String> {
     let mut command = podman_command();
     command.args(args);
-    match command.output() {
+    match command.output_bounded(tillandsias_podman::OperationKind::Container.default_budget()) {
         Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout)
             .lines()
             .map(|l| l.trim().to_string())
@@ -6882,7 +6929,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["rm", "-f", "-t", "10", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove container {name}: {e}");
         }
     }
@@ -6894,7 +6941,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["volume", "rm", "-f", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove volume {name}: {e}");
         }
     }
@@ -6907,7 +6954,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["secret", "rm", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove secret {name}: {e}");
         }
     }
@@ -6919,7 +6966,7 @@ fn run_reset_guest(debug: bool) -> Result<(), String> {
     )) {
         let mut command = podman_command();
         command.args(["network", "rm", "-f", &name]);
-        if let Err(e) = run_command(command, debug) {
+        if let Err(e) = run_podman_command(command, debug) {
             eprintln!("[tillandsias] reset-guest: could not remove network {name}: {e}");
         }
     }
@@ -7188,7 +7235,7 @@ fn podman_runtime_health_probe(debug: bool, probe_image: &str) -> Result<(), Str
     };
 
     let first_output = probe()
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("Failed to run Podman runtime probe: {e}"))?;
     if first_output.status.success() {
         return Ok(());
@@ -7206,7 +7253,7 @@ fn podman_runtime_health_probe(debug: bool, probe_image: &str) -> Result<(), Str
     let mut migrate = podman_command();
     migrate.args(["system", "migrate"]);
     let migrate_output = migrate
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("Failed to run Podman system migrate: {e}"))?;
     if debug && !migrate_output.status.success() {
         eprintln!(
@@ -7216,7 +7263,7 @@ fn podman_runtime_health_probe(debug: bool, probe_image: &str) -> Result<(), Str
     }
 
     let second_output = probe()
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("Failed to rerun Podman runtime probe: {e}"))?;
     if second_output.status.success() {
         return Ok(());
@@ -7257,20 +7304,7 @@ fn podman_runtime_blocker(stderr: &str) -> bool {
     .any(|needle| stderr.contains(needle))
 }
 
-fn command_output(mut command: Command, debug: bool) -> Result<String, String> {
-    if debug {
-        eprintln!("[tillandsias] running: {:?}", command);
-    }
-    let output = command
-        .output()
-        .map_err(|e| format!("Failed to run command: {e}"))?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-fn podman_command() -> Command {
+fn podman_command() -> tillandsias_podman::SyncPodmanCommand {
     podman_cmd_sync()
 }
 
@@ -7693,7 +7727,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "-c",
             "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
         ]);
-        run_command_silent(run, debug)?;
+        run_podman_command_silent(run, debug)?;
     }
 
     #[cfg(not(feature = "vault"))]
@@ -7740,7 +7774,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
         &config.token_script,
         config.input_mode,
     ));
-    run_command(login, debug)?;
+    run_podman_command(login, debug)?;
 
     if matches!(config.provider, ProviderId::GitHub) {
         match config.input_mode {
@@ -7760,7 +7794,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             "--hostname",
             "github.com",
         ]);
-        run_command_silent(auth_status, debug).map_err(|e| {
+        run_podman_command_silent(auth_status, debug).map_err(|e| {
             format!(
                 "containerized {provider_name} authentication verification failed after login: {e}"
             )
@@ -7787,7 +7821,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             );
             let mut vault_write = podman_command();
             vault_write.args(["exec", &container, "/bin/sh", "-c", &vault_write_cmd]);
-            run_command_silent(vault_write, debug)
+            run_podman_command_silent(vault_write, debug)
                 .map_err(|e| format!("in-container vault write failed: {e}"))?;
         }
 
@@ -7800,7 +7834,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
             &format!("-field={}", config.provider.secret_field()),
             config.provider.vault_path(),
         ]);
-        run_command_silent(vault_verify, debug)
+        run_podman_command_silent(vault_verify, debug)
             .map_err(|e| format!("in-container vault write verification failed: {e}"))?;
 
         info!(
@@ -7824,7 +7858,7 @@ fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), S
     if matches!(config.provider, ProviderId::GitHub) {
         let mut username_cmd = podman_command();
         username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-        username = command_output(username_cmd, debug).ok();
+        username = podman_command_output(username_cmd, debug).ok();
     }
 
     drop(cleanup);
@@ -8638,7 +8672,7 @@ impl Drop for LoginContainerCleanup {
     fn drop(&mut self) {
         let mut command = podman_command();
         command.args(["rm", "-f", &self.name]);
-        let _ = run_command_silent(command, self.debug);
+        let _ = run_podman_command_silent(command, self.debug);
     }
 }
 
@@ -9587,7 +9621,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         } else {
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
-                .output();
+                .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
             client
                 .run_container_observed(
                     "opencode-proxy",
@@ -10538,7 +10572,7 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
         let mut cmd = podman_command();
         cmd.args(["inspect", "--format=.State.Running", container_name]);
         let output = cmd
-            .output()
+            .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
             .map_err(|e| format!("Failed to inspect browser container: {e}"))?;
 
         if !output.status.success() {
@@ -10564,7 +10598,7 @@ async fn monitor_and_cleanup_browser(container_name: &str, debug: bool) -> Resul
     // Clean up the container
     let mut cleanup = podman_command();
     cleanup.args(["rm", "-f", container_name]);
-    let _ = run_command_silent(cleanup, debug);
+    let _ = run_podman_command_silent(cleanup, debug);
 
     if debug {
         eprintln!("[tillandsias] cleaned up browser container: {container_name}");
@@ -10688,7 +10722,7 @@ pub(crate) fn run_opencode_web_mode(
         } else {
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
-                .output();
+                .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
             client
                 .run_container_observed(
                     "opencode-web-proxy",
@@ -13695,6 +13729,86 @@ mod tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// Order 620-ca7g. EVERY site that starts the inference container must sit
+    /// behind the kill switch — and this is a source-shape test on purpose,
+    /// because the failure mode is an ADDED site, not a changed one.
+    ///
+    /// The switch exists for a measured reason: on the Intel N100 field host the
+    /// ~2.1GB ollama self-install plus a resident `ollama serve` are
+    /// unaffordable, and nothing consumes local inference yet. A fifth lane that
+    /// starts the container without the guard would silently restore that cost
+    /// on exactly the hosts the switch was built for, and no unit test of
+    /// `inference_disable_flag` could notice — the four existing gates would all
+    /// still pass.
+    ///
+    /// Verified by construction rather than by eye: the 2026-08-09 cross-host
+    /// note confirmed the same property by reading the code, which is a fact
+    /// about that day rather than a property of the tree.
+    #[test]
+    fn every_inference_start_site_is_behind_the_kill_switch() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let mut sites = 0;
+        let mut ungated = Vec::new();
+        for (idx, _) in source.match_indices("\"tillandsias-inference\",") {
+            // Only the container-START calls; the readiness probe and
+            // container_running() checks name the container too.
+            let window_start = idx.saturating_sub(400);
+            let preceding = &source[window_start..idx];
+            if !preceding.contains("run_container_observed(") {
+                continue;
+            }
+            sites += 1;
+            // The guard is an `if local_inference_disabled() { ... } else {` a
+            // little further up, wrapping the start call.
+            let guard_window = &source[idx.saturating_sub(1500)..idx];
+            if !guard_window.contains("local_inference_disabled()") {
+                let line = source[..idx].matches('\n').count() + 1;
+                ungated.push(line);
+            }
+        }
+        assert!(
+            sites >= 3,
+            "expected several inference start sites, found {sites} — has the \
+             container name or the start helper been renamed?"
+        );
+        assert!(
+            ungated.is_empty(),
+            "inference start site(s) not behind TILLANDSIAS_NO_LOCAL_INFERENCE at line(s) {ungated:?}"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the scan above: the same scan must FIND an ungated
+    /// site when one exists. Without this, a rename of `run_container_observed`
+    /// or of the container would make the test vacuously green — it would scan
+    /// nothing and pass, which is the failure mode a source-shape test is most
+    /// prone to.
+    #[test]
+    fn the_kill_switch_scan_can_actually_fail() {
+        let fixture = r#"
+            client
+                .run_container_observed(
+                    "some-lane-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(&certs_dir, &inference_image, true),
+                )
+                .await?;
+        "#;
+        let mut sites = 0;
+        let mut ungated = 0;
+        for (idx, _) in fixture.match_indices("\"tillandsias-inference\",") {
+            let preceding = &fixture[idx.saturating_sub(400)..idx];
+            if !preceding.contains("run_container_observed(") {
+                continue;
+            }
+            sites += 1;
+            if !fixture[idx.saturating_sub(1500)..idx].contains("local_inference_disabled()") {
+                ungated += 1;
+            }
+        }
+        assert_eq!(sites, 1, "the fixture must present one start site");
+        assert_eq!(ungated, 1, "an unguarded site must be detected as ungated");
+    }
+
     #[test]
     fn inference_disable_flag_truth_table() {
         // Unset / explicit zero / whitespace-only leave inference enabled.
@@ -16678,7 +16792,7 @@ mod tests {
         let podman = |args: &[&str]| {
             let out = podman_cmd_sync()
                 .args(args)
-                .output()
+                .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
                 .expect("mock podman invokes");
             assert!(out.status.success(), "mock podman {args:?} must succeed");
         };
@@ -19370,44 +19484,252 @@ esac
 
     #[test]
     fn on_demand_image_build_announces_slow_work_before_buffered_build() {
-        // 702-griq: same requirement, new symbols. The announcement text now
-        // also names the DECISION REASON, and the build goes through
-        // build_image_with_logging (the content-addressed path `--init` uses)
-        // rather than client.build_image, which stamped no source-digest label.
         let source = source_window(
             include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
-            "fn ensure_image_exists(",
+            "pub(crate) fn ensure_image_exists(",
         );
         let announce = source
             .find("[tillandsias] building image")
-            .expect("a slow image build must announce itself");
+            .expect("on-demand build must announce slow work");
         let build = source
             .find("build_image_with_logging(")
             .expect("image build call must remain present");
         assert!(announce < build, "announcement must precede buffered build");
     }
 
-    /// 702-griq: rewritten from a source pin to a behavioural assertion.
+    /// Order 702-griq. The version-tag-only skip served a two-day-stale forge
+    /// image to every lane, so its ABSENCE from the on-demand path is the
+    /// property under test: reinstating `image_exists(image_tag)` as the skip
+    /// condition must fail here.
+    #[test]
+    fn on_demand_image_build_decides_on_content_identity_not_the_version_tag() {
+        let source = source_window(
+            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
+            "pub(crate) fn ensure_image_exists(",
+        );
+        assert!(
+            !source.contains("client.image_exists(image_tag)"),
+            "version-tag presence must not gate the on-demand build"
+        );
+        assert!(
+            !source.contains("image_uses_managed_layer_policy"),
+            "layer policy is hashed into the source digest; the tag probe is subsumed"
+        );
+        assert!(source.contains("ensure_image_identity(root, image_name, version)"));
+        assert!(source.contains("ensure_image_decision(&identity, &observation)"));
+    }
+
+    fn fixture_image_identity(source_digest: &str) -> ImageBuildIdentity {
+        ImageBuildIdentity {
+            source_digest: source_digest.to_string(),
+            canonical_tag: format!("localhost/tillandsias-forge:{source_digest}"),
+            version_alias: "localhost/tillandsias-forge:v0.4.260810.1".to_string(),
+            latest_alias: "localhost/tillandsias-forge:latest".to_string(),
+            labels: BTreeMap::new(),
+        }
+    }
+
+    /// Order 702-griq, the load-bearing case: content moved, VERSION did not.
+    #[test]
+    fn on_demand_ensure_rebuilds_when_the_image_source_digest_differs() {
+        let identity = fixture_image_identity("sha256:current");
+        let decision = ensure_image_decision(
+            &identity,
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some("sha256:stale".to_string()),
+                version_alias_matches: true,
+                latest_alias_matches: true,
+                force: false,
+            },
+        );
+        assert_eq!(decision.action, ImageBuildAction::Build);
+        assert_eq!(decision.reason, ImageBuildReason::LabelMismatch);
+    }
+
+    /// Negative control: without this, the test above could pass by rebuilding
+    /// unconditionally, which would regress every launch into a full rebuild.
+    #[test]
+    fn on_demand_ensure_skips_when_the_image_source_digest_matches() {
+        let identity = fixture_image_identity("sha256:current");
+        let decision = ensure_image_decision(
+            &identity,
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some("sha256:current".to_string()),
+                version_alias_matches: true,
+                latest_alias_matches: true,
+                force: false,
+            },
+        );
+        assert_eq!(decision.action, ImageBuildAction::Skip);
+        assert_eq!(decision.reason, ImageBuildReason::DigestPresent);
+    }
+
+    /// The on-demand path must hash a dependent image's base exactly the way
+    /// `run_init` does, or the two paths derive different digests for identical
+    /// content and each rebuilds what the other just built.
+    #[test]
+    fn on_demand_dependency_mapping_matches_the_init_path() {
+        assert_eq!(image_dependency("forge"), Some("forge-base"));
+        assert_eq!(
+            image_dependency("chromium-framework"),
+            Some("chromium-core")
+        );
+        assert_eq!(image_dependency("git"), None);
+
+        let mut identities = HashMap::new();
+        identities.insert(
+            "forge-base".to_string(),
+            fixture_image_identity("sha256:base"),
+        );
+        let (build_args, dependency_digests) =
+            image_build_inputs("forge", &identities).expect("forge inputs");
+        assert_eq!(
+            build_args.get("BASE_IMAGE").map(String::as_str),
+            Some("localhost/tillandsias-forge:sha256:base")
+        );
+        assert_eq!(
+            dependency_digests.get("forge-base").map(String::as_str),
+            Some("sha256:base")
+        );
+    }
+
+    /// Build a minimal runtime asset root with a `forge` layered on a
+    /// `forge-base`, mirroring the real `images/default` layout.
+    fn synthetic_image_root() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let default_dir = tmp.path().join("images/default");
+        std::fs::create_dir_all(&default_dir).expect("create images/default");
+        std::fs::write(default_dir.join("Containerfile.base"), "FROM scratch\n")
+            .expect("write Containerfile.base");
+        std::fs::write(
+            default_dir.join("Containerfile"),
+            "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nCOPY lib-common.sh /usr/local/lib/\n",
+        )
+        .expect("write Containerfile");
+        std::fs::write(
+            default_dir.join("lib-common.sh"),
+            "git clone \"git://git-${TILLANDSIAS_PROJECT}/${TILLANDSIAS_PROJECT}\"\n",
+        )
+        .expect("write lib-common.sh");
+        let root = tmp.path().to_path_buf();
+        (tmp, root)
+    }
+
+    /// 702-griq: image identity must move when the build context moves.
     ///
-    /// The original asserted the literal presence of
-    /// `image_uses_managed_layer_policy(image_tag)`, i.e. it pinned the
-    /// IMPLEMENTATION that turned out to be the defect: an image was accepted
+    /// This is the incident in miniature. Order 659-8faj edited
+    /// `images/default/lib-common.sh` (the git-mirror DNS alias) with no
+    /// VERSION bump. If identity does not move with that edit,
+    /// `decide_image_build` sees a matching digest and skips — which is
+    /// exactly how macOS forge lanes kept cloning a retired hostname.
+    #[test]
+    fn image_identity_moves_when_context_content_moves() {
+        let (_tmp, root) = synthetic_image_root();
+        let version = "0.4.260810.1";
+        let lib_common = root.join("images/default/lib-common.sh");
+
+        let (before, _) = ensure_image_identity(&root, "forge", version).expect("identity before");
+
+        // NEGATIVE CONTROL, load-bearing: recomputing over an UNCHANGED tree
+        // must be byte-identical. Without it this test would also pass for a
+        // digest that changed at random — and "rebuild unconditionally" is not
+        // the fix; it would re-pay a multi-minute forge build on every launch.
+        let (unchanged, _) =
+            ensure_image_identity(&root, "forge", version).expect("identity unchanged");
+        assert_eq!(
+            before.source_digest, unchanged.source_digest,
+            "identity must be stable for an unchanged context"
+        );
+
+        // The 659-8faj edit: one file in the context changes.
+        std::fs::write(
+            &lib_common,
+            "git clone \"git://tillandsias-git/${TILLANDSIAS_PROJECT}\"\n",
+        )
+        .expect("rewrite lib-common.sh");
+        let (after, _) = ensure_image_identity(&root, "forge", version).expect("identity after");
+        assert_ne!(
+            before.source_digest, after.source_digest,
+            "a changed context file MUST produce a different image identity"
+        );
+
+        // And the version alias is IDENTICAL across that change. This is the
+        // defect stated as an assertion: the tag the old skip test consulted
+        // cannot tell these two images apart.
+        assert_eq!(
+            before.version_alias, after.version_alias,
+            "version alias is identical across a content change; only the \
+             source digest separates them"
+        );
+    }
+
+    /// 702-griq: the forge must reference its base BY CONTENT, not by a
+    /// mutable tag — the same lesson one layer down.
+    ///
+    /// `BASE_IMAGE` is what the forge's Containerfile is layered on, and it is
+    /// hashed into the forge's identity. If it carried the VERSION alias, a
+    /// changed base would leave the forge's identity untouched (the alias
+    /// string is constant across content) and the forge would be skipped onto
+    /// a stale base — 702-griq exactly, one level down. It must carry the
+    /// base's canonical, digest-derived tag.
+    ///
+    /// Deliberately NOT asserted here: "changing forge-base changes the forge
+    /// digest". That is true but VACUOUS as a test — `forge` and `forge-base`
+    /// share the `images/default` context directory, so editing
+    /// `Containerfile.base` also edits the forge's own context. Hand-checked
+    /// 2026-08-12: an assertion of that shape still passed with BOTH
+    /// propagation channels (dependency_digests AND the BASE_IMAGE build arg)
+    /// severed, so it detected nothing it claimed to.
+    #[test]
+    fn forge_identity_references_its_base_by_content_not_by_alias() {
+        let (_tmp, root) = synthetic_image_root();
+        let version = "0.4.260810.1";
+
+        let (base, _) =
+            ensure_image_identity(&root, "forge-base", version).expect("base identity");
+        let (_forge, forge_build_args) =
+            ensure_image_identity(&root, "forge", version).expect("forge identity");
+
+        let base_image = forge_build_args
+            .get("BASE_IMAGE")
+            .expect("forge build args must pin BASE_IMAGE");
+        assert_eq!(
+            base_image, &base.canonical_tag,
+            "BASE_IMAGE must be the base's content-addressed canonical tag"
+        );
+        assert_ne!(
+            base_image, &base.version_alias,
+            "BASE_IMAGE must NOT be the version alias: it is constant across \
+             content and would skip the forge onto a stale base"
+        );
+    }
+
+    /// 702-griq: the provenance requirement, asserted behaviourally rather than
+    /// as a source pin.
+    ///
+    /// The test this replaces asserted the literal presence of
+    /// `image_uses_managed_layer_policy(image_tag)` — it pinned the
+    /// IMPLEMENTATION that turned out to BE the defect: an image was accepted
     /// on tag presence plus a label compared against a constant, neither of
     /// which says anything about its contents.
     ///
-    /// The REQUIREMENT behind it — never accept an image whose provenance we
-    /// cannot establish — survives, and is now strictly stronger: an image
-    /// with no source-digest label is rebuilt, and so is one whose label
-    /// disagrees with the current sources.
+    /// The requirement behind it — never accept an image whose provenance we
+    /// cannot establish — survives here, and is strictly stronger: an image
+    /// carrying no source-digest label is rebuilt, and so is one whose label
+    /// disagrees with the current sources. It runs against a real identity
+    /// computed from a synthetic context, so it also covers the identity
+    /// derivation the source pin above cannot reach.
     #[test]
     fn on_demand_image_build_rejects_an_image_of_unknown_provenance() {
         let (_tmp, root) = synthetic_image_root();
         let (identity, _) =
-            resolve_image_identity(&root, "forge-base", "0.4.260810.1").expect("identity");
+            ensure_image_identity(&root, "forge-base", "0.4.260810.1").expect("identity");
 
-        // The managed layer policy is still part of identity — it is hashed
-        // into the digest and stamped as a label — so the original test's
-        // concern is carried, not dropped.
+        // The managed layer policy is still part of identity — hashed into the
+        // digest and stamped as a label — so the replaced test's concern is
+        // carried forward, not dropped.
         assert!(
             identity
                 .labels
@@ -19424,19 +19746,19 @@ esac
             force: false,
         };
         assert_eq!(
-            decide_image_build(identity.clone(), &unlabelled).action,
+            ensure_image_decision(&identity, &unlabelled).action,
             ImageBuildAction::Build,
             "an image with no source-digest label must be rebuilt"
         );
 
-        // Tag present, label DISAGREES: the 702-griq case — sources moved
-        // under a tag that did not.
+        // Tag present, label DISAGREES: the 702-griq case — sources moved under
+        // a tag that did not.
         let stale = ImageBuildObservation {
             canonical_source_digest: Some("sha256:0000000000000000".to_string()),
             ..unlabelled.clone()
         };
         assert_eq!(
-            decide_image_build(identity.clone(), &stale).action,
+            ensure_image_decision(&identity, &stale).action,
             ImageBuildAction::Build,
             "an image whose source digest disagrees with the sources must be rebuilt"
         );
@@ -19449,7 +19771,7 @@ esac
             ..unlabelled.clone()
         };
         assert_eq!(
-            decide_image_build(identity, &current).action,
+            ensure_image_decision(&identity, &current).action,
             ImageBuildAction::Skip,
             "an image matching the current sources must NOT be rebuilt"
         );
@@ -19811,140 +20133,6 @@ esac
         assert!(
             !loaded_state.was_successful("inference"),
             "inference should NOT be marked successful after reload"
-        );
-    }
-
-    /// Build a minimal runtime asset root with a `forge` layered on a
-    /// `forge-base`, mirroring the real `images/default` layout.
-    fn synthetic_image_root() -> (tempfile::TempDir, PathBuf) {
-        let tmp = tempfile::tempdir().expect("tempdir");
-        let default_dir = tmp.path().join("images/default");
-        std::fs::create_dir_all(&default_dir).expect("create images/default");
-        std::fs::write(default_dir.join("Containerfile.base"), "FROM scratch\n")
-            .expect("write Containerfile.base");
-        std::fs::write(
-            default_dir.join("Containerfile"),
-            "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nCOPY lib-common.sh /usr/local/lib/\n",
-        )
-        .expect("write Containerfile");
-        std::fs::write(
-            default_dir.join("lib-common.sh"),
-            "git clone \"git://git-${TILLANDSIAS_PROJECT}/${TILLANDSIAS_PROJECT}\"\n",
-        )
-        .expect("write lib-common.sh");
-        let root = tmp.path().to_path_buf();
-        (tmp, root)
-    }
-
-    /// 702-griq: image identity must move when the build context moves.
-    ///
-    /// This is the incident in miniature. Order 659-8faj edited
-    /// `images/default/lib-common.sh` (the git-mirror DNS alias) with no
-    /// VERSION bump. If identity does not move with that edit,
-    /// `decide_image_build` sees a matching digest and skips — which is
-    /// exactly how macOS forge lanes kept cloning a retired hostname.
-    #[test]
-    fn image_identity_moves_when_context_content_moves() {
-        let (_tmp, root) = synthetic_image_root();
-        let version = "0.4.260810.1";
-        let lib_common = root.join("images/default/lib-common.sh");
-
-        let (before, _) = resolve_image_identity(&root, "forge", version).expect("identity before");
-
-        // NEGATIVE CONTROL, load-bearing: recomputing over an UNCHANGED tree
-        // must be byte-identical. Without it this test would also pass for a
-        // digest that changed at random — and "rebuild unconditionally" is not
-        // the fix; it would re-pay a multi-minute forge build on every launch.
-        let (unchanged, _) =
-            resolve_image_identity(&root, "forge", version).expect("identity unchanged");
-        assert_eq!(
-            before.source_digest, unchanged.source_digest,
-            "identity must be stable for an unchanged context"
-        );
-
-        // The 659-8faj edit: one file in the context changes.
-        std::fs::write(
-            &lib_common,
-            "git clone \"git://tillandsias-git/${TILLANDSIAS_PROJECT}\"\n",
-        )
-        .expect("rewrite lib-common.sh");
-        let (after, _) = resolve_image_identity(&root, "forge", version).expect("identity after");
-        assert_ne!(
-            before.source_digest, after.source_digest,
-            "a changed context file MUST produce a different image identity"
-        );
-
-        // And the version alias is IDENTICAL across that change. This is the
-        // defect stated as an assertion: the tag the old skip test consulted
-        // cannot tell these two images apart.
-        assert_eq!(
-            before.version_alias, after.version_alias,
-            "version alias is identical across a content change; only the \
-             source digest separates them"
-        );
-    }
-
-    /// 702-griq: the forge must reference its base BY CONTENT, not by a
-    /// mutable tag — the same lesson one layer down.
-    ///
-    /// `BASE_IMAGE` is what the forge's Containerfile is layered on, and it is
-    /// hashed into the forge's identity. If it carried the VERSION alias, a
-    /// changed base would leave the forge's identity untouched (the alias
-    /// string is constant across content) and the forge would be skipped onto
-    /// a stale base — 702-griq exactly, one level down. It must carry the
-    /// base's canonical, digest-derived tag.
-    ///
-    /// Deliberately NOT asserted here: "changing forge-base changes the forge
-    /// digest". That is true but VACUOUS as a test — `forge` and `forge-base`
-    /// share the `images/default` context directory, so editing
-    /// `Containerfile.base` also edits the forge's own context. Hand-checked
-    /// 2026-08-12: an assertion of that shape still passed with BOTH
-    /// propagation channels (dependency_digests AND the BASE_IMAGE build arg)
-    /// severed, so it detected nothing it claimed to.
-    #[test]
-    fn forge_identity_references_its_base_by_content_not_by_alias() {
-        let (_tmp, root) = synthetic_image_root();
-        let version = "0.4.260810.1";
-
-        let (base, _) =
-            resolve_image_identity(&root, "forge-base", version).expect("base identity");
-        let (_forge, forge_build_args) =
-            resolve_image_identity(&root, "forge", version).expect("forge identity");
-
-        let base_image = forge_build_args
-            .get("BASE_IMAGE")
-            .expect("forge build args must pin BASE_IMAGE");
-        assert_eq!(
-            base_image, &base.canonical_tag,
-            "BASE_IMAGE must be the base's content-addressed canonical tag"
-        );
-        assert_ne!(
-            base_image, &base.version_alias,
-            "BASE_IMAGE must NOT be the version alias: it is constant across \
-             content and would skip the forge onto a stale base"
-        );
-    }
-
-    /// 702-griq: pin that the on-demand path asks the CONTENT question.
-    ///
-    /// The behavioural tests above cover identity; this pins that
-    /// `ensure_image_exists` actually consults it, which is the half that was
-    /// missing. Reverting the fix restores the tag-presence early return and
-    /// fails this test.
-    #[test]
-    fn ensure_image_exists_decides_on_content_not_tag_presence() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let window = source_window(source, "pub(crate) fn ensure_image_exists(");
-
-        assert!(
-            window.contains("decide_image_build("),
-            "ensure_image_exists must make the content-addressed build decision"
-        );
-        assert!(
-            !window.contains("client.image_uses_managed_layer_policy(image_tag).await"),
-            "returning early on version-tag presence + a constant layer-policy \
-             label is the 702-griq defect: neither test says anything about \
-             what is inside the image"
         );
     }
 
