@@ -39707,6 +39707,12 @@ plan_index:
         - the host loop's own live verification is isolated from delegate-driven forge teardown, or the protocol schedules host live-checks against a host-owned stack the delegate does not recycle
       events:
         - type: progress
+          ts: "2026-08-13T00:57:33Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            FIRST LIVE END-TO-END PROOF of the outcome channel: delegate bigpickle-20260813t0048 was registered at launch, ran a surgical validation on the whole 0812 stack, wrote its token delegate-outcome:bigpickle-20260813t0048:done as a ledger event on 682-z5h8, committed d92cc061 and pushed to linux-next; the host fetched and scripts/delegate-outcome.sh reconcile returned finished-with-evidence. Zero-DOA create AND clean lane teardown (destroy). The channel that 690 built is proven with a real delegate, not just the litmus.
+        - type: progress
           ts: "2026-08-12T22:57:25Z"
           agent_id: "linux-mutable-session-20260812"
           host: linux_mutable
@@ -39743,6 +39749,12 @@ plan_index:
         - a fixture reproduces the race (forge started against a not-yet-resolvable mirror alias) and proves the forge now converges instead of fatal-exiting
         - verified live: a fresh stack launch clones successfully on first try across N consecutive create/destroy cycles (ephemeral-contract stress), zero DOA windows
       events:
+        - type: progress
+          ts: "2026-08-13T00:54:49Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Another clean zero-DOA create (691-ssw9 criterion 4): stage-0 opencode delegate bigpickle-20260813t0048 launched on the whole 0812 stack (all 8 images rebuilt current) cloned the LIVE checkout at HEAD c4099cfb — matching the host HEAD exactly, no clone retries, no git-alias-unresolvable fatal. The delegate then ran its surgical validation via the meta-orchestration skill without drift (Targeted-verify mode, no drain), handling a transient forge-plan building(13s) gracefully until ready. First live end-to-end exercise of the 690-2kwd outcome channel: registered + reconciled still-running.
         - type: progress
           ts: "2026-08-12T18:37:14Z"
           agent_id: "linux-mutable-session-20260812"
