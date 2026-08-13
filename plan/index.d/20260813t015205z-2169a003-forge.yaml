@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: cheatsheet-domain-cited-answers
+    event:
+      type: progress
+      ts: "2026-08-13T01:52:05Z"
+      agent_id: bigpickle-20260813t0148
+      host: forge
+      summary: >
+        delegate-outcome:bigpickle-20260813t0148:blocked evidence: target=cheatsheets/data/postgresql-indexing-basics.md confidence=unsupported (spec_answer typed refusal: spec RAG index + embedding endpoint absent in this launch, orders 549/552; packet itself verified green via groundtruth harness)
