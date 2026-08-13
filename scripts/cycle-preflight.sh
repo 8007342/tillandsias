@@ -67,7 +67,17 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
 
     # Prove the freshly built binary answers, rather than assuming a successful
     # compile means a working instrument.
-    if ! ./target/release/tillandsias-plan capabilities >/dev/null 2>&1; then
+    #
+    # Resolve through the SHARED probe, never a hardcoded path. On a shared
+    # Windows/WSL checkout a WSL build leaves a Linux ELF at exactly
+    # ./target/release/tillandsias-plan beside the runnable .exe, so the
+    # hardcoded path this check first shipped with refused
+    # `capabilities-refused` on a host whose instrument was freshly built and
+    # perfectly healthy — blocking the cycle for a filename. That is the same
+    # bug 704-zcgi centralised the probe to stop recurring, and the fourth site
+    # to reintroduce it.
+    . "$ROOT/scripts/plan-binary-probe.sh"
+    if ! plan_bin="$(resolve_plan_binary)"; then
         echo "blocked:preflight:plan:capabilities-refused"
         exit 1
     fi
