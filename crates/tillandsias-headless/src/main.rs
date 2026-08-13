@@ -13729,6 +13729,86 @@ mod tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
+    /// Order 620-ca7g. EVERY site that starts the inference container must sit
+    /// behind the kill switch — and this is a source-shape test on purpose,
+    /// because the failure mode is an ADDED site, not a changed one.
+    ///
+    /// The switch exists for a measured reason: on the Intel N100 field host the
+    /// ~2.1GB ollama self-install plus a resident `ollama serve` are
+    /// unaffordable, and nothing consumes local inference yet. A fifth lane that
+    /// starts the container without the guard would silently restore that cost
+    /// on exactly the hosts the switch was built for, and no unit test of
+    /// `inference_disable_flag` could notice — the four existing gates would all
+    /// still pass.
+    ///
+    /// Verified by construction rather than by eye: the 2026-08-09 cross-host
+    /// note confirmed the same property by reading the code, which is a fact
+    /// about that day rather than a property of the tree.
+    #[test]
+    fn every_inference_start_site_is_behind_the_kill_switch() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let mut sites = 0;
+        let mut ungated = Vec::new();
+        for (idx, _) in source.match_indices("\"tillandsias-inference\",") {
+            // Only the container-START calls; the readiness probe and
+            // container_running() checks name the container too.
+            let window_start = idx.saturating_sub(400);
+            let preceding = &source[window_start..idx];
+            if !preceding.contains("run_container_observed(") {
+                continue;
+            }
+            sites += 1;
+            // The guard is an `if local_inference_disabled() { ... } else {` a
+            // little further up, wrapping the start call.
+            let guard_window = &source[idx.saturating_sub(1500)..idx];
+            if !guard_window.contains("local_inference_disabled()") {
+                let line = source[..idx].matches('\n').count() + 1;
+                ungated.push(line);
+            }
+        }
+        assert!(
+            sites >= 3,
+            "expected several inference start sites, found {sites} — has the \
+             container name or the start helper been renamed?"
+        );
+        assert!(
+            ungated.is_empty(),
+            "inference start site(s) not behind TILLANDSIAS_NO_LOCAL_INFERENCE at line(s) {ungated:?}"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the scan above: the same scan must FIND an ungated
+    /// site when one exists. Without this, a rename of `run_container_observed`
+    /// or of the container would make the test vacuously green — it would scan
+    /// nothing and pass, which is the failure mode a source-shape test is most
+    /// prone to.
+    #[test]
+    fn the_kill_switch_scan_can_actually_fail() {
+        let fixture = r#"
+            client
+                .run_container_observed(
+                    "some-lane-inference",
+                    "tillandsias-inference",
+                    &build_inference_run_args(&certs_dir, &inference_image, true),
+                )
+                .await?;
+        "#;
+        let mut sites = 0;
+        let mut ungated = 0;
+        for (idx, _) in fixture.match_indices("\"tillandsias-inference\",") {
+            let preceding = &fixture[idx.saturating_sub(400)..idx];
+            if !preceding.contains("run_container_observed(") {
+                continue;
+            }
+            sites += 1;
+            if !fixture[idx.saturating_sub(1500)..idx].contains("local_inference_disabled()") {
+                ungated += 1;
+            }
+        }
+        assert_eq!(sites, 1, "the fixture must present one start site");
+        assert_eq!(ungated, 1, "an unguarded site must be detected as ungated");
+    }
+
     #[test]
     fn inference_disable_flag_truth_table() {
         // Unset / explicit zero / whitespace-only leave inference enabled.
