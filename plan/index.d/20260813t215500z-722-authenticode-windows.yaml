@@ -1,0 +1,144 @@
+packets:
+  - packet_id: windows-authenticode-signing
+    order: 722-ksnk
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: milestone
+    title: "Authenticode-sign the Windows release artifacts so they stop tripping SmartScreen"
+    pickup_role: windows
+    capability_tags: [windows, release, signing, trust]
+    context: |
+      OPERATOR DIRECTIVE 2026-08-13: the Microsoft Partner Center account was
+      approved. The Store question was scoped down deliberately — Authenticode
+      first, Store listing later — because Authenticode is a prerequisite for
+      BOTH Store paths and is the only half that helps the lane users actually
+      install from today.
+
+      WHAT EXISTS NOW, measured against the workflow rather than assumed. The
+      `windows-release` job builds a portable
+      `tillandsias-tray-<ver>-windows-x64.zip` (tray exe + install-windows.ps1),
+      republishes it as `tillandsias-windows-x64.zip`, extracts a bare
+      `tillandsias-tray.exe`, and signs those artifacts with COSIGN BUNDLES.
+
+      Cosign is the wrong instrument for this surface and it is worth being
+      precise about why, because the artifacts look signed. A `.cosign.bundle`
+      is a Sigstore attestation verified by `cosign verify-blob`; Windows,
+      SmartScreen and the Store have no idea what it is. It proves provenance to
+      someone who already has cosign and already knows to check. It does nothing
+      for the user double-clicking the exe, which is every Windows user. There
+      is no signtool, no .pfx, no certificate anywhere in
+      scripts/build-windows-tray.ps1 or .github/workflows/release.yml, and zero
+      mentions of Authenticode or SmartScreen across plan/ or docs/.
+
+      Cosign STAYS. The two prove different things to different audiences and
+      the mistake would be to treat this as a replacement.
+
+      IDENTITY: Azure Trusted Signing (rebranded Azure Artifact Signing), ~$9.99/mo
+      for 5,000 signatures, no hardware token, available to US/CA/EU/UK
+      businesses and self-employed individuals — the earlier three-years-trading
+      requirement was dropped. Chosen over a traditional OV/EV cert on cost and
+      on not having a token to hold in CI.
+    outcome: |
+      A user who downloads the Windows tray from GitHub sees a signed publisher
+      instead of a SmartScreen warning, and the Store submission — whichever
+      path is later chosen — is not blocked on the signing identity.
+    exit_criteria:
+      - "Every rung below is closed, or explicitly retired with its reason."
+      - "Cosign bundles are still published; nothing about the Linux/macOS verification contract changed."
+    events:
+      - type: filed
+        ts: "2026-08-13T21:55:00Z"
+        host: windows
+        summary: |
+          Filed from the operator directive, scoped to Authenticode after the
+          Store-path options were laid out and the smallest slice was chosen.
+
+  - packet_id: windows-signing-identity-provisioned
+    order: 722-w7a2
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: windows-authenticode-signing
+    kind: decision
+    title: "Provision the Trusted Signing identity and reach it from CI without a token"
+    deliverable: "an Azure Trusted Signing account + certificate profile, and the federated credentials the release workflow uses"
+    pickup_role: operator
+    capability_tags: [windows, signing, ci, secrets]
+    estimated_hours: 2
+    context: |
+      OPERATOR-OWNED, and blocking the rungs below. This rung buys and names an
+      identity; no agent can do it, because it is tied to the legal entity the
+      certificate will attest.
+
+      The CI half is the part with a design choice: GitHub Actions should reach
+      Trusted Signing through federated OIDC credentials rather than a stored
+      secret, so there is no long-lived signing credential in the repo's secret
+      store. That is the same reasoning that made cosign KEYLESS here.
+    exit_criteria:
+      - "A Trusted Signing account and certificate profile exist, and the account's published name is recorded (it is what users will see, so it is a decision, not a detail)."
+      - "The release workflow can authenticate to it with no long-lived secret, or the reason a stored secret was unavoidable is recorded."
+      - "The recurring cost and its renewal owner are written down — an expired signing identity fails a release, loudly and at the worst moment."
+
+  - packet_id: windows-tray-authenticode-in-packaging
+    order: 722-qvqb
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: windows-authenticode-signing
+    depends_on: [windows-signing-identity-provisioned]
+    kind: feat
+    title: "Sign the tray exe BEFORE it is zipped and hashed"
+    deliverable: "scripts/build-windows-tray.ps1 signing step + workflow wiring"
+    pickup_role: windows
+    capability_tags: [windows, release, signing, build]
+    estimated_hours: 3
+    context: |
+      ORDERING IS THE WHOLE PACKET, and it is easy to get wrong in a way that
+      passes locally. scripts/build-windows-tray.ps1 stages the payload (~:214),
+      then `Compress-Archive` (:235), then takes `Get-FileHash` of the ZIP (:240)
+      to write SHA256SUMS-windows. The workflow then re-hashes the republished
+      zip and the extracted bare exe.
+
+      Signing mutates the exe. So it must happen on the STAGED exe, before
+      Compress-Archive — otherwise every checksum in SHA256SUMS-windows
+      describes a file nobody will ever download, and the failure surfaces to
+      users as a checksum mismatch on a correctly signed binary, which reads as
+      a supply-chain attack rather than as a build-order bug.
+
+      The bare `tillandsias-tray.exe` the workflow extracts from the zip
+      inherits the signature automatically, which is the argument for signing
+      the staged file rather than signing each published artifact separately.
+    exit_criteria:
+      - "The tray exe inside the published zip, and the bare extracted exe, both carry a valid Authenticode signature."
+      - "SHA256SUMS-windows matches the SIGNED artifacts — verified by running the existing `sha256sum -c SHA256SUMS-windows` step against a real release build, not by inspection."
+      - "The cosign bundle step is unchanged and still publishes bundles for the same artifacts."
+      - "A local build with no signing credentials still succeeds and says clearly that it produced an UNSIGNED artifact — a developer build must not require the release identity, and must not silently look like a release build."
+
+  - packet_id: windows-authenticode-verified-at-the-gate
+    order: 722-f86z
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: windows-authenticode-signing
+    depends_on: [windows-tray-authenticode-in-packaging]
+    kind: feat
+    title: "A check that the published exe is actually signed, with a negative control"
+    deliverable: "an executable check emitting a typed verdict, wired into the release path"
+    pickup_role: windows
+    capability_tags: [windows, signing, fail-loud, verification]
+    estimated_hours: 2
+    context: |
+      This project's recurring failure is not the missing feature, it is the
+      feature that reports success without having run — 716-f5kc's unverified
+      stamp, 632-retq's counterfeit drained ledger, 651-2x5s's fabricated SHA.
+      A signing step that silently no-ops when a credential is absent is exactly
+      that shape, and it would ship unsigned binaries under a green release.
+
+      So the signature is a fact to be VERIFIED after the fact, from the
+      published artifact, not a step that is assumed to have worked because it
+      exited zero.
+    exit_criteria:
+      - "An executable check verifies the Authenticode signature and its chain on the published exe, printing one typed line in the project's `^(ok:|blocked:)` grammar."
+      - "NEGATIVE CONTROL: the check FAILS on an unsigned exe and on a tampered signed exe — demonstrate both, so it is proven able to fail."
+      - "It runs on the release path, and a release cannot report success while publishing an unsigned Windows artifact."
