@@ -39714,6 +39714,12 @@ plan_index:
         - the host loop's own live verification is isolated from delegate-driven forge teardown, or the protocol schedules host live-checks against a host-owned stack the delegate does not recycle
       events:
         - type: progress
+          ts: "2026-08-13T02:53:04Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Third live delegate (bigpickle-20260813t0248, target 594-gqeu, read-only) finished BLOCKED with a precise finding (filed as a new packet): the forge runs the pre-v3 post-commit hook via core.hooksPath and TILLANDSIAS_HOST_EXPERTS is unset, so the commit-triggered expert refresh does not fire in-forge. Channel reported finished-with-evidence:blocked; clean zero-DOA create+destroy. Three delegates, three clean captures (1 done, 2 blocked-with-findings).
+        - type: progress
           ts: "2026-08-13T01:54:48Z"
           agent_id: "linux-mutable-session-20260812"
           host: linux_mutable
@@ -39762,6 +39768,12 @@ plan_index:
         - a fixture reproduces the race (forge started against a not-yet-resolvable mirror alias) and proves the forge now converges instead of fatal-exiting
         - verified live: a fresh stack launch clones successfully on first try across N consecutive create/destroy cycles (ephemeral-contract stress), zero DOA windows
       events:
+        - type: progress
+          ts: "2026-08-13T02:53:04Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Fourth clean zero-DOA cycle toward 691-ssw9 criterion 4: delegate bigpickle-20260813t0248 cloned live HEAD 66ae4ad9 (no DOA), ran read-only, pushed its token via the git-mirror relay (66ae4ad9..d658914b, relay-verified), tore down its lane clean.
         - type: progress
           ts: "2026-08-13T01:54:48Z"
           agent_id: "linux-mutable-session-20260812"
