@@ -199,6 +199,33 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `lin
 
 ## Start Of Cycle
 
+0. **Rebuild the instrument before using it** (operator directive 2026-08-13):
+
+   ```bash
+   scripts/cycle-preflight.sh   # -> ok:cycle-preflight:<plan>:<inference>
+   ```
+
+   The project believes in idempotency and ephemerality — everything should be
+   safe to destroy and relaunch at any moment, Erlang style — so a cycle never
+   inherits a component from the previous one and hopes it is current. This
+   rebuilds `tillandsias-plan` (the binary every expert call, the batch
+   selector, every ledger write and every closure check goes through) and
+   re-establishes the dev inference endpoint. Both are idempotent; the common
+   path costs a no-op `cargo build` and one HTTP round trip, measured at ~2.8s.
+
+   It rebuilds the INSTRUMENT, not the product: `./build.sh --check` already
+   compiles what it validates, and rebuilding everything on a schedule is a
+   heavier decision than this step is making.
+
+   A `blocked:preflight:*` verdict means do not start the cycle — selecting work
+   with an unverified instrument is the one failure the loop cannot reason its
+   way out of, because the tool it would reason WITH is the stale thing. That is
+   not hypothetical: a selector change on 2026-08-13 added a subcommand every
+   host's binary predated, and this checkout went on refusing until someone
+   rebuilt by hand. Inference is a REPORT inside that verdict, never a gate —
+   the deterministic expert tiers work without it, and a host with no network is
+   degraded, not broken.
+
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the
    Committable Branch Guard below before any committable work.
