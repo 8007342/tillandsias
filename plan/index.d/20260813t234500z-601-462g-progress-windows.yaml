@@ -1,0 +1,112 @@
+events:
+  - packet_id: release-runbook-drift-audit
+    event:
+      type: progress
+      ts: "2026-08-13T23:45:00Z"
+      host: windows
+      summary: |
+        FIRST INSTANCE FOUND AND FIXED, in this packet's own release runbook,
+        with the enumeration split out as 727-kmks.
+
+        THE INSTANCE, merge-to-main-and-release step 7, was a bare command
+        substitution feeding `gh run watch`. When step 6's dispatch did not
+        start a run - wrong ref, a workflow_dispatch that silently no-oped, a
+        tag that never reached the remote - `gh run list` prints nothing and
+        exits 0. The substitution succeeded with an EMPTY run id and the
+        runbook waited on a run that did not exist. Absent and healthy shared
+        an exit code, which is exactly the class this packet was filed to hunt.
+
+        Two details make it the pattern to hunt with:
+        the SAME FILE already warned about a sibling four steps earlier
+        ("the trap: gh pr checks --watch does NOT fail when there are no
+        checks"), so knowing the class did not prevent the instance - which is
+        the argument for a checker over a caution; and the absence has a SECOND
+        shape, since --jq on an empty array prints the literal null, so a bare
+        emptiness test would have handed `gh run watch null` a plausible-looking
+        argument.
+
+        It matters more now than when it was filed: push CI was removed
+        (599-w5jd) so this workflow IS the release, and its Windows half now
+        carries Authenticode signing (722/724). A release nobody watches is a
+        release nobody confirms was signed.
+
+        SHIPPED: scripts/resolve-release-run.sh, typed grammar
+        ok:release-run:<id> / blocked:release-run:{no-run-for-tag,gh-failed,
+        no-tag-given}, separating "gh failed" from "gh had nothing to say"
+        because collapsing them is a smaller copy of the same bug. The runbook
+        step consumes it and exits on a blocked verdict.
+
+        VERIFIED: scripts/test-resolve-release-run.sh 6/6, hermetic against a
+        stub gh injected via GH - no network, no auth. Both absence shapes
+        assert a refusal; a POSITIVE control asserts a real id still resolves so
+        the resolver cannot degrade into refusing every release; trailing
+        newline tolerance is pinned because a false refusal there would block
+        every release.
+
+        REMAINING: 87 candidate sites across nine runbooks, counted per skill
+        and triaged by blast radius in 727-kmks.
+
+packets:
+  - packet_id: append-event-base-writer-mangles-multiline-summaries
+    order: 728-n456
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "append-event's BASE path emits multi-line summaries at the wrong indentation, and refuses on a pre-existing depends_on violation"
+    deliverable: "crates/tillandsias-plan edit path + tests"
+    pickup_role: any
+    capability_tags: [plan, crdt, tooling, fail-loud]
+    estimated_hours: 3
+    context: |
+      TWO DISTINCT DEFECTS, isolated by bisecting the summary shape against a
+      throwaway copy of the ledger. Both live in the BASE edit path only -
+      fragment-only packets take the 699-usxc fragment path and are unaffected,
+      which is why they went unnoticed: most packets filed lately are fragments.
+
+      DEFECT 1 - multi-line summaries are emitted without re-indenting their
+      continuation lines, so the candidate base does not parse. Measured with
+      four probes against the same packet:
+
+        "plain line only"                      -> writes shape OK
+        "has a colon: right here"              -> writes shape OK
+        "indented code:\n  run_id=$(...)"      -> parse: could not find expected ':'
+        "star bullet\n  * one\n  * two"        -> parse: did not find expected alpha
+
+      So any summary carrying an indented block - a code sample, a bullet list,
+      anything a real progress note contains - breaks the write. The refusal is
+      correct and the ledger was never corrupted (the validator rejected the
+      candidate before writing, which is the guard working), but the writer
+      should produce a valid block scalar in the first place rather than lean on
+      the validator to catch it.
+
+      DEFECT 2 - the first two probes still refused, with a DIFFERENT verdict:
+
+        REFUSED: this edit would break the ledger:
+          violation: agent-login-flows-impl: depends_on
+
+      That is unrelated to the summary and unrelated to the packet being
+      annotated. `tillandsias-plan check` reports the live ledger as
+      "ok: 819 packets, ids unique, live references sound", so the WRITE
+      validator is stricter than the READ check and currently blocks base
+      appends over a dangling depends_on nobody has had to look at. Two
+      validators disagreeing about whether the ledger is sound is its own
+      finding: one of them is wrong, and until that is settled a host hitting
+      the refusal cannot tell whether it broke something.
+    outcome: |
+      A base-packet progress note containing ordinary formatted prose writes
+      successfully, and the read and write validators agree about whether the
+      ledger is sound.
+    exit_criteria:
+      - "A multi-line summary containing an indented code block and a bullet list writes to a BASE packet and the result parses; a test pins both shapes."
+      - "The read check and the write validator agree: either agent-login-flows-impl's depends_on is repaired, or the write validator stops treating it as blocking, with the reason recorded."
+      - "NEGATIVE CONTROL: a genuinely ledger-breaking edit is still refused before it is written - the validator's refusal is the property that saved the ledger here and must not be relaxed to fix the indentation bug."
+    events:
+      - type: filed
+        ts: "2026-08-13T23:45:00Z"
+        host: windows
+        summary: |
+          Found while recording a routine progress note on 601-462g: the note
+          contained a code sample and a bullet list, which is what a real note
+          looks like. Worked around by writing the event as a fragment.

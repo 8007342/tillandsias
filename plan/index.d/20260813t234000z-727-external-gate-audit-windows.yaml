@@ -1,0 +1,81 @@
+packets:
+  - packet_id: external-gate-audit-remaining-skills
+    order: 727-kmks
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: architecture-audit-epic
+    depends_on: [release-runbook-drift-audit]
+    kind: audit
+    title: "Finish the absent-reads-as-healthy audit across the remaining nine runbooks, measured rather than eyeballed"
+    deliverable: "a per-skill classification + a rewrite or an explicit advisory marking for each dangerous site"
+    pickup_role: any
+    capability_tags: [skills, audit, fail-loud, drift]
+    estimated_hours: 6
+    context: |
+      SCOPE, MEASURED so the next host does not re-derive it. Sites in
+      skills/*/SKILL.md matching an external-command gate
+      (`command -v`, `which`, a two-word `gh` subcommand, `podman`, `wsl.exe`):
+
+        merge-to-main-and-release      24   <- one instance FIXED under 601-462g
+        meta-orchestration             21
+        smoke-curl-install-and-test-e2e 14
+        build-install-and-smoke-test-e2e 11
+        advance-work-from-plan          8
+        build-macos-tray                3
+        probe-macos-tray-on-windows     3
+        build-windows-tray              1
+        diagnose-forge                  1
+        forge-quick-intro               1
+                                      ---
+                                       87
+
+      A count is not a finding — most of these are fine, and the grep is a
+      candidate list, not a verdict. It is recorded because "enumerate every
+      step" is 601-462g's own first exit criterion and the enumeration is the
+      part that keeps getting deferred for being large.
+
+      WHAT THE FIRST INSTANCE LOOKED LIKE, as the pattern to hunt with. In
+      merge-to-main-and-release step 7:
+
+        run_id=$(gh run list --workflow=release.yml --branch="$tag" \
+                   --limit 1 --json databaseId --jq '.[0].databaseId')
+        gh run watch "$run_id"
+
+      `gh run list` with no matching run prints nothing and exits 0, so the
+      substitution succeeded with an empty id and the runbook waited on a run
+      that did not exist. Two things make it representative: the same FILE
+      already warned about a sibling trap four steps earlier (`gh pr checks
+      --watch` does not fail when there are no checks), so knowing the class did
+      not prevent the instance; and the absence had a SECOND shape, `--jq` on an
+      empty array printing the literal `null`, which a bare emptiness test would
+      have passed straight through.
+
+      TRIAGE ORDER by blast radius, not by count: meta-orchestration runs
+      unattended every cycle on every host, and the two e2e runbooks are what
+      decide whether a release is good. build-* and probe-* are attended and can
+      wait.
+    outcome: |
+      Every runbook step that gates on an external command either asserts a
+      positive fact or is explicitly marked advisory, and the distinction is
+      pinned by a check rather than described in prose.
+    exit_criteria:
+      - "Each of the nine remaining runbooks has been walked, and every external-command gate in it is classified: SAFE (absent and healthy already differ), REWRITTEN (now asserts a positive fact), or ADVISORY (explicitly marked, with the reason it is allowed to be silent)."
+      - "Every REWRITTEN site has an executable check, hermetic where the external system can be stubbed — the pattern scripts/test-resolve-release-run.sh establishes."
+      - "NEGATIVE CONTROL per rewritten site: the check must be observed FAILING on the absent case, not merely passing on the healthy one."
+      - "The classification is committed as data, not prose, so a later cycle can diff it rather than re-read every runbook."
+    notes: |
+      Do NOT convert this into a grep-based gate over the skills. 601-462g's own
+      problem statement names "a freshness gate that greps its own comment" as a
+      sibling defect, and a checker that pattern-matches runbook TEXT would be
+      the same mistake one level up. The audit's output is a classification and
+      a set of executable checks on the rewritten steps.
+    events:
+      - type: filed
+        ts: "2026-08-13T23:40:00Z"
+        host: windows
+        summary: |
+          Split out of 601-462g after fixing its first instance. The parent's
+          criterion 1 asks to enumerate every site; this carries that
+          enumeration with the count measured per skill and a triage order by
+          blast radius.

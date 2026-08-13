@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: release-runbook-drift-audit
+    field: status
+    value: ready
+    ts: "2026-08-13T23:37:00Z"
+    host: host
+
+events:
+  - packet_id: release-runbook-drift-audit
+    event:
+      type: note
+      ts: "2026-08-13T23:37:00Z"
+      host: host
+      summary: >
+        not continuing this cycle: my slice (first instance + resolver + fixture) is done and the remaining enumeration is 727-kmks. Leaving it ready rather than in_progress avoids the stranded-claim shape 641-e2qa recorded — an in_progress packet is invisible to ready queries AND to burndown.
