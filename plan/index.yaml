@@ -16901,6 +16901,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-13T03:54:21Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            PARTIAL first-fire proof (delegate bigpickle-20260813t0348): the forge order-396 post-commit hook FIRES on a commit — a plan-only probe commit 747fa5a5 produced a new hook-log line [post-commit-expert-refresh] latency=4ms (<50ms budget), log 0->1. This satisfies the hook-fires portion of criterion 1. NOT closed: criterion 2 (a CRATE-touching commit appends a fire record and replaces ~/.local/bin/tillandsias-plan from CARGO_TARGET_DIR) and criterion 3 (same session observes the expert answer surface change) remain UNTESTED — the probe was plan-only, not crate-touching. Full first-fire-e2e still open.
+        - type: progress
           ts: "2026-08-13T03:53:07Z"
           agent_id: "bigpickle-20260813t0348"
           host: forge
@@ -39726,6 +39732,12 @@ plan_index:
         - the host loop's own live verification is isolated from delegate-driven forge teardown, or the protocol schedules host live-checks against a host-owned stack the delegate does not recycle
       events:
         - type: progress
+          ts: "2026-08-13T03:56:09Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Fourth live delegate (bigpickle-20260813t0348) finished DONE: proved the forge order-396 post-commit hook fires on a commit (594-gqeu first-fire, partial), closing the loop opened by the read-only third delegate. Channel: finished-with-evidence:done. Session delegate scorecard now 4 clean captures (2 done, 2 blocked-with-findings), each host-readable.
+        - type: progress
           ts: "2026-08-13T02:53:04Z"
           agent_id: "linux-mutable-session-20260812"
           host: linux_mutable
@@ -39780,6 +39792,12 @@ plan_index:
         - a fixture reproduces the race (forge started against a not-yet-resolvable mirror alias) and proves the forge now converges instead of fatal-exiting
         - verified live: a fresh stack launch clones successfully on first try across N consecutive create/destroy cycles (ephemeral-contract stress), zero DOA windows
       events:
+        - type: progress
+          ts: "2026-08-13T03:56:09Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Fifth clean zero-DOA cycle toward 691-ssw9 criterion 4: delegate bigpickle-20260813t0348 cloned live HEAD 9710c69a (no DOA), made a probe+result commit, pushed via git-mirror relay (9710c69a..72dd93d8, relay-verified), tore down clean.
         - type: progress
           ts: "2026-08-13T02:53:04Z"
           agent_id: "linux-mutable-session-20260812"

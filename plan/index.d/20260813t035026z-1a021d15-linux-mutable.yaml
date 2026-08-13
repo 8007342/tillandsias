@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: forge-ships-prev3-post-commit-hook-and-no-expert-env
+    event:
+      type: progress
+      ts: "2026-08-13T03:50:26Z"
+      agent_id: linux-mutable-session-20260812
+      host: linux_mutable
+      summary: >
+        HOST CORRECTION (design context the read-only delegate lacked): the forge is DESIGNED to use the unconditional order-396 post-commit hook via core.hooksPath (images/default/lib-common.sh:387-445) — it refreshes experts and rebuilds tillandsias-plan on any plan-touching commit with NO env gate. The env-gated v3/v4 hook (install-hooks.sh, 685-yidq) and TILLANDSIAS_HOST_EXPERTS are for BARE-METAL dev + git-mirror hosts, explicitly NOT forges (install-hooks.sh:154-167 says the forge already refreshes via core.hooksPath). So env-unset + not-the-v3-hook is BY DESIGN for a forge, not a bug — this part of the finding is retracted. The genuinely-open question narrows to 594-gqeu first-fire: does the order-396 hook actually FIRE and refresh on a forge commit? The read-only delegate did not test firing. Testable next: a delegate commits its token event (which touches plan/), then checks /tmp/tillandsias-hooks.log for the post-commit-expert-refresh entry.
