@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: litmus-suite-de-ripgrep-for-portability
+    event:
+      type: progress
+      ts: "2026-08-13T07:55:05Z"
+      agent_id: linux-mutable-session-20260812
+      host: linux_mutable
+      summary: >
+        COMPLETE (8/8+). Prior 7/8 undercounted: init-command-shape still had rg -F (x2) and a rg -U MULTILINE match my sed missed, and litmus-forge-harness-identity (a 9th file) had rg -n absent from the original inventory. Fixed all: rg -F -> grep -F, rg -U multiline images-array -> portable tr -d [:space:] | grep -qF (order-preserving, verified matches + rejects wrong order), rg -n -> grep -rnIE (forge-harness verified 71==71). tray-icon-initialization de-ripgrep DONE too by labeling its existing negative control (the ! grep Base|Decay absence-assertion) so the 634-39ik expression-pinning gate exempts it. Precise re-scan now shows ZERO rg command tokens in openspec/litmus-tests. init-command 1/1, tray-icon 4/4, forge-harness green post-change.

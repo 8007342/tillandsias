@@ -58,4 +58,4 @@ rollback:
     Restore the explicit identity injection in both Rust launch builders and
     the legacy tray builder. Do not replace it with entrypoint inference: the
     experts need the selected harness before any helper fallback runs.
-  command: "rg -n 'TILLANDSIAS_AGENT|agent_identity' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/tray/mod.rs images/default/entrypoint.sh images/default/config-overlay/mcp/agent-profile.sh"
+  command: "grep -rnIE 'TILLANDSIAS_AGENT|agent_identity' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/tray/mod.rs images/default/entrypoint.sh images/default/config-overlay/mcp/agent-profile.sh"
