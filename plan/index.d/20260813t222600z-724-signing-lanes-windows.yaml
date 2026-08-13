@@ -1,0 +1,54 @@
+packets:
+  - packet_id: windows-signing-in-github-actions
+    order: 724-rpna
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: windows-authenticode-signing
+    depends_on: [windows-tray-authenticode-in-packaging]
+    kind: feat
+    title: "The release workflow signs without a stored credential, through the official action"
+    deliverable: ".github/workflows/release.yml windows-release wiring + federated OIDC setup"
+    pickup_role: any
+    capability_tags: [windows, ci, signing, secrets, release]
+    estimated_hours: 3
+    context: |
+      OPERATOR DIRECTIVE 2026-08-13: "we need a way to sign during development
+      here, and a way to sign in github actions." Two lanes, and they are
+      separated into two packets because they fail differently and are owned by
+      different hosts — but they MUST share one signing seam, or the thing CI
+      signs stops being the thing a developer can reproduce.
+
+      THE SEAM is scripts/build-windows-tray.ps1, immediately before
+      `Compress-Archive` (see 722-qvqb for why the position is load-bearing).
+      Both lanes call the same script; only the CREDENTIAL differs, which is
+      exactly what DefaultAzureCredential is for — it walks a chain and finds
+      whichever identity the environment offers.
+
+        dev lane (722-qvqb): AzureCliCredential — the developer runs `az login`
+        CI lane (this rung):  federated OIDC — no long-lived secret in the repo
+
+      USE THE OFFICIAL ACTION, azure/artifact-signing-action, rather than
+      hand-rolling signtool invocations in YAML. The Windows runner is already
+      `windows-2025`, so the toolchain prerequisites are a setup step, not a
+      blocker.
+
+      QUOTA IS A DESIGN INPUT, not a footnote: the plan bought is 5,000
+      signatures/month. That is generous for releases and easy to burn from a
+      loop that signs on every local build, which is the other half of why the
+      dev lane defaults to off.
+    outcome: |
+      A tagged release produces Authenticode-signed Windows artifacts with no
+      long-lived signing credential anywhere in the repository or its secrets.
+    exit_criteria:
+      - "The windows-release job signs through federated OIDC with no long-lived secret; if a stored secret proved unavoidable, the reason is recorded."
+      - "TIMESTAMPING IS ASSERTED, not assumed: the published artifact carries a timestamp countersignature from http://timestamp.acs.microsoft.com. Artifact Signing certificates are valid for THREE DAYS — an untimestamped artifact passes every release check and then goes untrusted for every user that week, which is the exact green-at-the-gate/broken-in-the-field shape this milestone exists to prevent."
+      - "A release built with signing UNAVAILABLE fails the job loudly. It must never publish an unsigned artifact under a green run — see 722-f86z."
+      - "The dev lane and the CI lane call the SAME signing seam; a developer can reproduce what CI produced, modulo the credential."
+    events:
+      - type: filed
+        ts: "2026-08-13T22:26:00Z"
+        host: windows
+        summary: |
+          Split out of 722-qvqb on the operator's directive that both lanes are
+          needed. The seam stays single; only the credential differs.

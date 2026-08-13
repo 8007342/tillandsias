@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: windows-signing-identity-provisioned
+    event:
+      type: note
+      ts: "2026-08-13T22:24:16Z"
+      agent_id: unknown
+      host: windows
+      summary: >
+        CONCRETE REQUIREMENTS, read from the Artifact Signing integration doc (learn.microsoft.com/azure/artifact-signing/how-to-signing-integrations) while the operator installed the client tools on this host.  The client tools are NOT the blocker and installing them proves nothing about readiness: `winget install -e --id Microsoft.Azure.ArtifactSigningClientTools` delivers only the local toolchain — SignTool, .NET 8 runtime, VC++ redist, and Azure.CodeSigning.Dlib.dll. Signing still refuses until the Azure side exists.  WHAT THIS RUNG MUST ACTUALLY PRODUCE:   * an Artifact Signing account, IDENTITY VALIDATION (the long pole; everything else is minutes), and a certificate profile;   * the Artifact Signing Certificate Profile Signer role assigned to the signing identity — without it the tools are installed and signing 403s;   * the account's REGION, recorded. metadata.json's Endpoint is region-specific (e.g. https://wus2.codesigning.azure.net) and the doc names a region/profile mismatch as the common cause of 403 Forbidden plus an internal SignerSign() failure. That is a configuration fact to write down, not to rediscover from an error message.  TOOLCHAIN PIN worth recording with it: SignTool must come from Windows SDK >= 10.0.2261.755, and the doc states the 20348 SDK is NOT supported with the dlib. A host that happens to have an older SDK on PATH fails in a way that looks like a signing problem.  CI: authentication is DefaultAzureCredential, so federated OIDC drops in as intended, and ExcludeCredentials can narrow the chain so a misconfigured runner fails fast instead of walking every credential type.
