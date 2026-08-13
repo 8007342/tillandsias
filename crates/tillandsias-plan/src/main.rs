@@ -63,6 +63,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "answer",
     "blocked-by",
     "blocked-closure",
+    "blocking-counts",
     "burndown",
     "capabilities",
     "check",
@@ -161,6 +162,11 @@ const USAGE: &str = concat!(
     "                                     criteria holders are never offered as claims. Natural\n",
     "                                     aliases via `answer`: \"what's next?\" and\n",
     "                                     \"what v0.5 work can I do on linux?\".\n",
+    "           blocking-counts [--release V] [--limit N]\n",
+    "                                     ORDER 632-retq. `<packet_id>\\t<count>` — how many READY\n",
+    "                                     packets each id blocks, counted over EVERY ready packet\n",
+    "                                     rather than one role's, because a packet in another column\n",
+    "                                     is frequently the thing this one waits on.\n",
     "           select-rows [--claimable-by R] [--release V] [--limit N]\n",
     "                                     ORDER 632-retq. The batch selector's projection, as TSV:\n",
     "                                     rank, release_target, order, packet_id, urgency, release.\n",
@@ -2297,6 +2303,49 @@ fn main() {
             };
             for p in packets {
                 emit(&line(&ledger, p));
+            }
+        }
+        "blocking-counts" => {
+            // ORDER 632-retq (rung 2). How many READY packets each id blocks.
+            //
+            // Deliberately NOT folded into `select-rows`: that one answers "what
+            // may I pick", filtered to dependency-clear and unleased, while this
+            // one must count edges from EVERY ready packet — including the ones
+            // select-rows excludes. A linux packet is frequently the thing a
+            // windows packet is waiting on, and that downstream weight is
+            // exactly the residual minimax asks us to maximise. Folding them
+            // would silently score the graph against a filtered subset.
+            let options = match parse_query_options(&args[1..]) {
+                Ok(options) => options,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let mut counts: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for p in query_packets(
+                &ledger,
+                Some("ready"),
+                None,
+                None,
+                options.release.as_deref(),
+                &[],
+                options.limit,
+            ) {
+                if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
+                    for d in deps {
+                        let key = match d {
+                            serde_yaml::Value::String(s) => s.clone(),
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            _ => continue,
+                        };
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                }
+            }
+            for (id, n) in counts {
+                emit(&format!("{id}	{n}"));
             }
         }
         "select-rows" => {
