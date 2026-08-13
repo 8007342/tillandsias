@@ -16901,6 +16901,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-13T03:52:11Z"
+          agent_id: "bigpickle-20260813t0348"
+          host: forge
+          summary: >
+            first-fire-probe-commit
+        - type: progress
           ts: "2026-08-13T02:50:52Z"
           agent_id: "bigpickle-20260813t0248"
           host: forge
