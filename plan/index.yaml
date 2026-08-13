@@ -39178,6 +39178,12 @@ plan_index:
         - CLAUDE.md/methodology direct host sessions to the MCP experts
       events:
         - type: progress
+          ts: "2026-08-13T00:54:48Z"
+          agent_id: "bigpickle-20260813t0048"
+          host: forge
+          summary: >
+            delegate-outcome:bigpickle-20260813t0048:done evidence: forge-plan source_commit=c4099cfb5f4ce2cb1c441453d03e053099a4998f project-info source_commit=c4099cfb5f4ce2cb1c441453d03e053099a4998f
+        - type: progress
           ts: "2026-08-12T18:28:58Z"
           agent_id: "forge-opencode-20260812t182800z"
           host: forge
