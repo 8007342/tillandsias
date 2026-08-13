@@ -2481,6 +2481,42 @@ fn main() {
                 }
             }
 
+            // ORDER 726-cjb8. A packet that has been SPLIT is a criteria holder,
+            // not work — its slices are the claimable things. It stays `ready`
+            // so it can hold the criteria until the children close, and until
+            // this filter existed the selector kept offering the parent as the
+            // urgent pick forever. 606-bvnp was split into four ready children
+            // and was immediately re-offered as `urgent=` on the very next
+            // cycle, outranking its own slices because it is older and p0. Two
+            // other split parents sit `ready` in the ledger with the same
+            // latent behaviour.
+            //
+            // The parent is skipped only while a child is still OPEN. Once
+            // every named slice is terminal the parent becomes visible again,
+            // which is exactly when someone should look at it — to close it.
+            //
+            // split_into entries are prose ("722-hthz — name (slice a: ...)"),
+            // so child identity is tested by substring against the ids and
+            // order tokens of packets that are NOT terminal. A prose entry that
+            // names nothing open cannot hold the parent back.
+            let open_tokens: Vec<String> =
+                query_packets(&ledger, None, None, None, None, &[], usize::MAX)
+                    .into_iter()
+                    .filter(|p| !terminal.contains(&ledger.id_of(p).to_string()))
+                    .flat_map(|p| {
+                        let mut toks = vec![ledger.id_of(p).to_string()];
+                        if let Some(o) = p.get("order") {
+                            match o {
+                                serde_yaml::Value::Number(n) => toks.push(n.to_string()),
+                                serde_yaml::Value::String(s) => toks.push(s.clone()),
+                                _ => {}
+                            }
+                        }
+                        toks
+                    })
+                    .filter(|t| !t.is_empty())
+                    .collect();
+
             let matched = query_packets(
                 &ledger,
                 Some("ready"),
@@ -2511,6 +2547,20 @@ fn main() {
                 }
                 if inspect_lease(&id).map(|l| l.is_active).unwrap_or(false) {
                     continue;
+                }
+                // Split parent with at least one open slice — see above.
+                if let Some(entries) = p.get("split_into").and_then(serde_yaml::Value::as_sequence)
+                {
+                    let has_open_child = entries.iter().any(|e| {
+                        e.as_str().is_some_and(|s| {
+                            open_tokens
+                                .iter()
+                                .any(|t| t != &id && s.contains(t.as_str()))
+                        })
+                    });
+                    if has_open_child {
+                        continue;
+                    }
                 }
                 let (rank, display) = urgency_rank_and_display(
                     p.get("priority").and_then(serde_yaml::Value::as_str),

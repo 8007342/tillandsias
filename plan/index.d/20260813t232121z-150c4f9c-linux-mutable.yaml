@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: split-parent-reoffered-as-work
+    field: status
+    value: completed
+    ts: "2026-08-13T23:21:21Z"
+    host: linux-mutable
+
+events:
+  - packet_id: split-parent-reoffered-as-work
+    event:
+      type: completed
+      ts: "2026-08-13T23:21:21Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: litmus:cycle-batch-triage-shape step 21 PASS (21/21 steps; ci-release suite 15/15, scripts/run-litmus-test.sh ci-release --phase pre-build --size instant): one fixture ledger flipped in place proves the parent is suppressed while a slice is open and offered once every slice closes. Live: batch urgent pick moved from git-mirror-cross-project-service-identity to its slice 722-ecne.
+  - packet_id: split-parent-reoffered-as-work
+    event:
+      type: note
+      ts: "2026-08-13T23:21:21Z"
+      host: linux-mutable
+      summary: >
+        726-cjb8 closed
