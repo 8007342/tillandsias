@@ -602,6 +602,7 @@ specs:
   - litmus:plan-only-push-lane-shape
   - litmus:delegate-outcome-disposition-not-silent-shape
   - litmus:append-event-rejects-unknown-flags-shape
+  - litmus:version-bump-isolation-shape
   coverage_ratio: 100
   last_verified: '2026-08-03'
 - spec_id: meta-orchestration
