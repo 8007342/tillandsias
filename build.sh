@@ -1128,6 +1128,21 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Plan/schema status-vocab check passed"
 
+    # Order 702-eusw criterion 3: a build-number VERSION bump must never be swept
+    # into an unrelated commit. dd8fd63f bundled a VERSION bump into a security
+    # fix via `git add -A`; the mandated linux-next merge then imported a
+    # divergent VERSION the mandated pre-push gate refused, blocking the whole
+    # fleet. This guard refuses any NON-MERGE outgoing commit that changes VERSION
+    # alongside non-companion files (a merge inheriting VERSION is exempt — that
+    # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
+    # (VERSION + Cargo files only) still passes.
+    _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-version-bump-isolation.sh" 2>&1; then
+        _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
+        exit 1
+    fi
+    _info "VERSION-bump isolation check passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

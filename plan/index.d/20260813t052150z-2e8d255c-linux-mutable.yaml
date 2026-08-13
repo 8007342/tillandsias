@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: accidental-version-bump-on-linux-next-blocks-platform-pushes
+    event:
+      type: progress
+      ts: "2026-08-13T05:21:50Z"
+      agent_id: linux-mutable-session-20260812
+      host: linux_mutable
+      summary: >
+        UNBLOCKED two ways (now both on linux-next). (1) LINUX/operator-approved: main caught up to 0.4.260812.1 via release/version-bump-0.4.260812.1 (PR #95, merged 9d2ec03a) — main == linux-next, so platform branches are sync-forward. (2) WINDOWS/durable (order 643-64bx, merged from windows-next): pre-push-version-guard.sh now treats a platform-branch VERSION == origin/linux-next as a legitimate integration-branch CATCH-UP (accepting a value decided elsewhere), while a branch inventing its own ahead-of-both version stays refused; ships with scripts/test-pre-push-version-guard.sh. Criterion 2 LIVE-VERIFIED on Windows: windows-next pushed bad35b49 successfully WITHOUT --no-verify at VERSION 0.4.260812.1. macOS (osx-next) is now unblocked by BOTH mechanisms and can confirm on its next push. REMAINING: criterion 3 (a guard refusing a commit that changes VERSION together with UNRELATED files, so a build-number bump cannot be swept into an unrelated commit again — the dd8fd63f root cause) is still open.
