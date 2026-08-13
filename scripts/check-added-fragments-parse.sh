@@ -30,9 +30,21 @@
 # You break it, your push fails. You inherit it, you are merely warned — the
 # existing `tillandsias-plan check` warning still reports it.
 #
+# BARE TIMESTAMPS ARE ALSO REFUSED (order 720-24u6, 2026-08-13). A fragment
+# written as `ts: 2026-08-12T15:31:54Z` — no quotes — parses fine under yq and
+# serde_yaml, so this gate passed it, and `tillandsias-plan compact` then folded
+# that text verbatim into plan/index.yaml (the fold is byte-preserving by
+# design). Ruby's safe_load resolves a bare ISO-8601 scalar to Time, a
+# disallowed class, so the base became unloadable for the 440 status-vocab gate
+# — 231 scalars at once, from fragments that had each passed every check.
+#
+# The failure surfaces at the FOLD, arbitrarily far from the host that wrote it,
+# which is precisely the shape this file exists to prevent. `tillandsias-plan`
+# already quotes every ts it writes; this catches the hand-authored fragments.
+#
 # Grammar (one line on stdout, nothing else):
-#   ^(ok:added-fragments-parse:[0-9]+ checked|violation:added-fragment-unparseable:[0-9]+)$
-# Exit 0 when every added/modified fragment parses.
+#   ^(ok:added-fragments-parse:[0-9]+ checked|violation:added-fragment-unparseable:[0-9]+|violation:added-fragment-bare-timestamp:[0-9]+)$
+# Exit 0 when every added/modified fragment parses AND quotes its timestamps.
 #
 # Pinned by litmus:added-fragment-parse-gate-shape.
 
@@ -81,10 +93,24 @@ candidates="$(
 
 checked=0
 violations=0
+bare_ts=0
 while IFS= read -r f; do
     [ -n "$f" ] || continue
     [ -f "$f" ] || continue   # deleted (e.g. folded by compaction) — nothing to parse
     checked=$((checked + 1))
+    # An unquoted ISO-8601 timestamp: parses here, breaks the base after a fold.
+    if bare="$(grep -nE '^[[:space:]]*ts:[[:space:]]+[0-9]{4}-[0-9]{2}-[0-9]{2}' "$f" \
+                 | grep -vE '^[0-9]+:[[:space:]]*ts:[[:space:]]+["'"'"']' || true)" \
+       && [ -n "$bare" ]; then
+        bare_ts=$((bare_ts + 1))
+        {
+            echo "REFUSED: $f writes an UNQUOTED timestamp — it parses here, but compaction folds it"
+            echo "         verbatim into plan/index.yaml, where Ruby reads a bare ISO-8601 scalar as"
+            echo "         Time (a disallowed class) and the 440 status-vocab gate can no longer load"
+            echo "         the base. Quote the value: ts: \"2026-08-12T15:31:54Z\"."
+            printf '   %s\n' "$(printf '%s' "$bare" | head -3)"
+        } >&2
+    fi
     if ! err="$($_validator "$f" 2>&1 >/dev/null)"; then
         violations=$((violations + 1))
         {
@@ -98,6 +124,10 @@ EOF
 
 if [ "$violations" -gt 0 ]; then
     echo "violation:added-fragment-unparseable:$violations"
+    exit 1
+fi
+if [ "$bare_ts" -gt 0 ]; then
+    echo "violation:added-fragment-bare-timestamp:$bare_ts"
     exit 1
 fi
 echo "ok:added-fragments-parse:$checked checked"
