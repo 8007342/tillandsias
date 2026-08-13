@@ -1115,6 +1115,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Groundtruth status-pin guard passed"
 
+    # Order 440 / 599-4wzr: the status vocabulary in plan/index.yaml
+    # (default_status_values) and plan/schema.yaml (statuses) must not diverge —
+    # a silent divergence would let the 650-dq6u ladder and the schema disagree.
+    # This guard shipped (order 440) but was ORPHANED (invoked by nothing) until
+    # the guard-activation audit (599-4wzr) surfaced it; wiring it here activates
+    # it as a real --check gate.
+    _step "Checking plan/schema status-vocab divergence (440)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
+        _error "plan/index.yaml and plan/schema.yaml status vocabularies diverge (440)"
+        exit 1
+    fi
+    _info "Plan/schema status-vocab check passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

@@ -994,6 +994,36 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
+    # Guard activation audit (order 599-4wzr) — a guard nobody can prove is
+    # running is not a guard. Fails loud if any check-*.sh has no invoker.
+    # ============================================================================
+    log_section "Guard Activation Audit (599-4wzr)"
+    if [[ -f "scripts/audit-guard-activation.sh" ]]; then
+        if bash scripts/audit-guard-activation.sh 2>&1 | tee /tmp/guard-activation.log; then
+            log_pass "Every shipped guard is invoked by an activation surface"
+            archive_check_log "guard-activation" "pass" /tmp/guard-activation.log
+        else
+            log_fail_tracked "guard-activation" "Orphaned guard(s) found — shipped but never invoked (see /tmp/guard-activation.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/guard-activation.log >&2
+            archive_check_log "guard-activation" "fail" /tmp/guard-activation.log
+        fi
+    else
+        log_fail_missing_guard "guard-activation" "scripts/audit-guard-activation.sh"
+        archive_check_log "guard-activation" "skipped"
+    fi
+
+    # Markdown distillation policy (order 599-4wzr activation): was orphaned.
+    log_section "Markdown Distillation Policy"
+    if [[ -f "scripts/check-markdown-distillation.sh" ]]; then
+        bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log
+        log_pass "Markdown distillation policy checked (advisory)"
+        archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
+    else
+        log_fail_missing_guard "markdown-distillation" "scripts/check-markdown-distillation.sh"
+        archive_check_log "markdown-distillation" "skipped"
+    fi
+
+    # ============================================================================
     # CHECK 7: Cheatsheet tier validation
     # ============================================================================
 

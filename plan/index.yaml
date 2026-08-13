@@ -16899,6 +16899,31 @@ plan_index:
         - "a real crate-touching commit appends a fire record and replaces ~/.local/bin/tillandsias-plan from the effective CARGO_TARGET_DIR"
         - "the same in-forge session observes the expert answer surface change, and the evidence is recorded on this child and the milestone burndown"
 
+      events:
+        - type: progress
+          ts: "2026-08-13T03:54:21Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            PARTIAL first-fire proof (delegate bigpickle-20260813t0348): the forge order-396 post-commit hook FIRES on a commit — a plan-only probe commit 747fa5a5 produced a new hook-log line [post-commit-expert-refresh] latency=4ms (<50ms budget), log 0->1. This satisfies the hook-fires portion of criterion 1. NOT closed: criterion 2 (a CRATE-touching commit appends a fire record and replaces ~/.local/bin/tillandsias-plan from CARGO_TARGET_DIR) and criterion 3 (same session observes the expert answer surface change) remain UNTESTED — the probe was plan-only, not crate-touching. Full first-fire-e2e still open.
+        - type: progress
+          ts: "2026-08-13T03:53:07Z"
+          agent_id: "bigpickle-20260813t0348"
+          host: forge
+          summary: >
+            delegate-outcome:bigpickle-20260813t0348:done | evidence: new post-commit-expert-refresh latency line appeared after probe commit 747fa5a5, quoted here -> [post-commit-expert-refresh] latency=4ms budget_commit=<50ms budget_total=<50ms (hook log baseline 0 lines -> 1 line)
+        - type: progress
+          ts: "2026-08-13T03:52:11Z"
+          agent_id: "bigpickle-20260813t0348"
+          host: forge
+          summary: >
+            first-fire-probe-commit
+        - type: progress
+          ts: "2026-08-13T02:50:52Z"
+          agent_id: "bigpickle-20260813t0248"
+          host: forge
+          summary: >
+            delegate-outcome:bigpickle-20260813t0248:blocked evidence: hook present yes (effective core.hooksPath post-commit exists as pre-v3 order-396 form, NOT gated on TILLANDSIAS_HOST_EXPERTS; literal .git/hooks/post-commit absent), TILLANDSIAS_HOST_EXPERTS set no
     - packet_id: forge-expert-fresh-launch-source-gap
       order: 531
       desired_release: v0.5
@@ -30737,6 +30762,12 @@ plan_index:
         - release-gates-moved-to-local-hardware
       events:
         - type: progress
+          ts: "2026-08-13T04:55:16Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            LINUX slice implemented. Built scripts/audit-guard-activation.sh (criterion 2: the executable activation test — a guard nobody can prove is running is not a guard). It enumerates all 28 check-*.sh guards and proves each is invoked by an activation surface (build.sh / local-ci / litmus / install-hooks / methodology / skills). Surfaced 2 genuine ORPHANS shipped-but-never-invoked: check-plan-schema-divergence.sh (order 440, status-vocab sync) and check-markdown-distillation.sh. Resolved both: schema-divergence wired into build.sh --check as a real gate (passes: ok:status-vocab-in-sync), markdown-distillation wired into local-ci (advisory); the auditor itself wired into local-ci so guard-orphaning fails loud going forward. Result: 28/28 active, orphan=0. Criterion 1 done for Linux; criterion 3 (Windows + macOS report their .git/hooks state and run the auditor) PENDS the sibling cycles.
+        - type: progress
           ts: "2026-08-03T20:25:10Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260803
           host: macos
@@ -39178,6 +39209,12 @@ plan_index:
         - CLAUDE.md/methodology direct host sessions to the MCP experts
       events:
         - type: progress
+          ts: "2026-08-13T00:54:48Z"
+          agent_id: "bigpickle-20260813t0048"
+          host: forge
+          summary: >
+            delegate-outcome:bigpickle-20260813t0048:done evidence: forge-plan source_commit=c4099cfb5f4ce2cb1c441453d03e053099a4998f project-info source_commit=c4099cfb5f4ce2cb1c441453d03e053099a4998f
+        - type: progress
           ts: "2026-08-12T18:28:58Z"
           agent_id: "forge-opencode-20260812t182800z"
           host: forge
@@ -39701,6 +39738,30 @@ plan_index:
         - the host loop's own live verification is isolated from delegate-driven forge teardown, or the protocol schedules host live-checks against a host-owned stack the delegate does not recycle
       events:
         - type: progress
+          ts: "2026-08-13T03:56:09Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Fourth live delegate (bigpickle-20260813t0348) finished DONE: proved the forge order-396 post-commit hook fires on a commit (594-gqeu first-fire, partial), closing the loop opened by the read-only third delegate. Channel: finished-with-evidence:done. Session delegate scorecard now 4 clean captures (2 done, 2 blocked-with-findings), each host-readable.
+        - type: progress
+          ts: "2026-08-13T02:53:04Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Third live delegate (bigpickle-20260813t0248, target 594-gqeu, read-only) finished BLOCKED with a precise finding (filed as a new packet): the forge runs the pre-v3 post-commit hook via core.hooksPath and TILLANDSIAS_HOST_EXPERTS is unset, so the commit-triggered expert refresh does not fire in-forge. Channel reported finished-with-evidence:blocked; clean zero-DOA create+destroy. Three delegates, three clean captures (1 done, 2 blocked-with-findings).
+        - type: progress
+          ts: "2026-08-13T01:54:48Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Second live delegate (bigpickle-20260813t0148, target 707-tiqw) finished with a BLOCKED disposition — the channel correctly reports finished-with-evidence:blocked, distinct from died-without-outcome. The delegate found the live spec_answer refuses (confidence=unsupported) in a fresh forge because the RAG embedding endpoint is absent (filed 712-r5x8), rather than hallucinating. Proves the channel captures a substantive negative outcome with evidence, not just a happy-path done. Clean zero-DOA create+destroy.
+        - type: progress
+          ts: "2026-08-13T00:57:33Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            FIRST LIVE END-TO-END PROOF of the outcome channel: delegate bigpickle-20260813t0048 was registered at launch, ran a surgical validation on the whole 0812 stack, wrote its token delegate-outcome:bigpickle-20260813t0048:done as a ledger event on 682-z5h8, committed d92cc061 and pushed to linux-next; the host fetched and scripts/delegate-outcome.sh reconcile returned finished-with-evidence. Zero-DOA create AND clean lane teardown (destroy). The channel that 690 built is proven with a real delegate, not just the litmus.
+        - type: progress
           ts: "2026-08-12T22:57:25Z"
           agent_id: "linux-mutable-session-20260812"
           host: linux_mutable
@@ -39737,6 +39798,30 @@ plan_index:
         - a fixture reproduces the race (forge started against a not-yet-resolvable mirror alias) and proves the forge now converges instead of fatal-exiting
         - verified live: a fresh stack launch clones successfully on first try across N consecutive create/destroy cycles (ephemeral-contract stress), zero DOA windows
       events:
+        - type: progress
+          ts: "2026-08-13T03:56:09Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Fifth clean zero-DOA cycle toward 691-ssw9 criterion 4: delegate bigpickle-20260813t0348 cloned live HEAD 9710c69a (no DOA), made a probe+result commit, pushed via git-mirror relay (9710c69a..72dd93d8, relay-verified), tore down clean.
+        - type: progress
+          ts: "2026-08-13T02:53:04Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Fourth clean zero-DOA cycle toward 691-ssw9 criterion 4: delegate bigpickle-20260813t0248 cloned live HEAD 66ae4ad9 (no DOA), ran read-only, pushed its token via the git-mirror relay (66ae4ad9..d658914b, relay-verified), tore down its lane clean.
+        - type: progress
+          ts: "2026-08-13T01:54:48Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Third clean zero-DOA cycle toward 691-ssw9 criterion 4: delegate bigpickle-20260813t0148 cloned the live checkout at HEAD 42886549 (no DOA), ran its surgical directive, pushed its token via the git-mirror relay (42886549..f0addd7e, relay-verified upstream-durable), and tore down its lane clean. Authenticated forge->mirror->upstream push chain observed working.
+        - type: progress
+          ts: "2026-08-13T00:54:49Z"
+          agent_id: "linux-mutable-session-20260812"
+          host: linux_mutable
+          summary: >
+            Another clean zero-DOA create (691-ssw9 criterion 4): stage-0 opencode delegate bigpickle-20260813t0048 launched on the whole 0812 stack (all 8 images rebuilt current) cloned the LIVE checkout at HEAD c4099cfb — matching the host HEAD exactly, no clone retries, no git-alias-unresolvable fatal. The delegate then ran its surgical validation via the meta-orchestration skill without drift (Targeted-verify mode, no drain), handling a transient forge-plan building(13s) gracefully until ready. First live end-to-end exercise of the 690-2kwd outcome channel: registered + reconciled still-running.
         - type: progress
           ts: "2026-08-12T18:37:14Z"
           agent_id: "linux-mutable-session-20260812"
