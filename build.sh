@@ -1143,6 +1143,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "VERSION-bump isolation check passed"
 
+    # Order 714-4r6w. `SyncPodmanCommand` makes an unbounded synchronous podman
+    # call a COMPILE error, which is the real guarantee; this guards the two ways
+    # around the type — building a podman std::process::Command directly, and
+    # growing the caller-owned-spawn escape hatch past its reviewed count.
+    _step "Checking the synchronous podman surface stays bounded (714-4r6w)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-podman-sync-budgets.sh" 2>&1; then
+        _error "a synchronous podman call can wait forever — route it through podman_cmd_sync()'s bounded methods (714-4r6w)"
+        exit 1
+    fi
+    _info "Podman sync-budget check passed"
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while

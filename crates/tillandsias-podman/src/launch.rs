@@ -231,8 +231,8 @@ pub fn query_occupied_ports() -> Vec<(u16, u16)> {
         "--format",
         "{{.Ports}}",
     ]);
-    crate::log_podman_invocation("ports-query", &cmd);
-    let output = cmd.output();
+    crate::log_podman_invocation("ports-query", cmd.as_std());
+    let output = cmd.output_bounded(crate::OperationKind::Container.default_budget());
 
     match output {
         Ok(out) if out.status.success() => {
