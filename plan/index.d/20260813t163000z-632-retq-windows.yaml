@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: selector-drop-host-tool-dependency
+    event:
+      type: progress
+      ts: "2026-08-13T16:30:00Z"
+      host: windows
+      summary: >
+        RUNG 1 of 2 landed, and the split is deliberate: the deliverable is the
+        script that decides what every cycle WORKS ON, so a half-applied rewrite
+        at 04:00 would break work selection for the whole fleet. Rung 1 is purely
+        ADDITIVE — the selector is untouched and still runs its jq path.
+        `tillandsias-plan select-rows` now emits the selector's entire
+        projection as TSV (rank, release_target, order, packet_id, urgency,
+        release), already filtered to ready + claimable-by + release +
+        dependency-clear + unleased. That is what the nineteen jq calls in
+        scripts/select-work-batch.sh were computing, moved into the binary that
+        already owns the folded ledger — which deletes the dependency class
+        rather than satisfying it per host, per the packet's rationale.
+        Two behaviours were carried across deliberately rather than
+        reimplemented loosely. Unresolvable dependency ids count as BLOCKING,
+        matching the resolver's conservatism (an id that resolves to nothing is
+        an unanswered question, not an absent constraint). And the urgency tiers
+        keep order 630-6hyc's third tier intact: a packet with NEITHER priority
+        nor a recognised kind is reported `unscored` at rank 99, never coerced to
+        a plausible p3 — the coercion that made the urgency term a constant 0 for
+        ~82% of the pool while looking like it worked.
+      evidence_refs:
+        - "crates/tillandsias-plan/src/main.rs"
+  - packet_id: selector-drop-host-tool-dependency
+    event:
+      type: verified
+      ts: "2026-08-13T16:32:00Z"
+      host: windows
+      summary: >
+        PARITY MEASURED, not assumed: on this host's live ledger,
+        `tillandsias-plan select-rows --status ready --claimable-by windows
+        --release v0.5 --limit 400` yields 45 rows and the existing jq pipeline
+        reports `eligible=45` for the same role. Same pool, same filters, no jq.
+        The rank distribution is also plausible rather than degenerate (13 p1,
+        8 p2, 14 unscored, the rest kind-derived), which is the check that would
+        have caught the 630-6hyc constant-0 defect had it existed here.
+        Unit tests: `urgency_ranks_explicit_priority_then_kind_then_unscored`
+        pins all three tiers INCLUDING that unscored must be distinguishable
+        from p3 — conflating them is the defect, so the test asserts the ranks
+        differ rather than only checking each in isolation. It also pins that an
+        explicit priority dominates a kind that would rank differently, and that
+        an unrecognised kind is unscored rather than silently ranked.
+        `dependency_clearance_treats_unknown_ids_as_blocking` pins the
+        conservative direction, with a typo/retired id as its own case.
+        cargo test -p tillandsias-plan = 129 + 15 passed, 0 failed.
+        The crate's own guard earned its keep here: adding the dispatch arm made
+        `every_dispatch_arm_is_documented_in_usage` fail with "a subcommand
+        nobody can discover might as well not exist" until the usage text was
+        written. That is the repo refusing an undiscoverable feature, and it
+        caught mine.
+        RUNG 2, not started: switch scripts/select-work-batch.sh to
+        `select-rows`, delete the nineteen jq calls, and verify the packet's
+        stated closure — `litmus:cycle-batch-triage-shape` green with
+        TILLANDSIAS_JQ pointing at an absent binary AND a batch line emitted on
+        a host with no jq on PATH. Rung 1 is what makes that a mechanical
+        substitution with a measured parity baseline instead of a rewrite.

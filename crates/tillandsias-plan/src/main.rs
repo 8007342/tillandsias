@@ -85,6 +85,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "parked-blocks",
     "query",
     "ready",
+    "select-rows",
     "spec-envelope",
     "spec-index",
     "spec-retrieve",
@@ -160,6 +161,16 @@ const USAGE: &str = concat!(
     "                                     criteria holders are never offered as claims. Natural\n",
     "                                     aliases via `answer`: \"what's next?\" and\n",
     "                                     \"what v0.5 work can I do on linux?\".\n",
+    "           select-rows [--claimable-by R] [--release V] [--limit N]\n",
+    "                                     ORDER 632-retq. The batch selector's projection, as TSV:\n",
+    "                                     rank, release_target, order, packet_id, urgency, release.\n",
+    "                                     Already filtered to ready + claimable + release +\n",
+    "                                     dependency-clear + unleased, so the caller needs no jq.\n",
+    "                                     scripts/select-work-batch.sh needed NINETEEN jq calls to\n",
+    "                                     build this, which is why it could not run on a host without\n",
+    "                                     jq; satisfying that dependency per host repeats the yq/ruby\n",
+    "                                     exposure, so the projection moves to the binary that already\n",
+    "                                     owns the ledger.\n",
     "           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json]\n",
     "                                     ORDER 582-26mm. THE generic filtered reader over the\n",
     "                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only\n",
@@ -588,6 +599,49 @@ fn inspect_lease(packet_id: &str) -> Option<PacketLease> {
         expires_epoch,
         is_active,
     })
+}
+
+/// Order 632-retq. The urgency rank + display a batch selector needs, derived
+/// once, HERE, instead of in an awk block that only a host with jq ever reaches.
+///
+/// Three tiers, and the last is the point (order 630-6hyc): an EXPLICIT
+/// priority dominates because the operator said so; otherwise urgency is
+/// DERIVED from `kind`, since 202 ready packets carry a kind and only 38 carry
+/// a priority; otherwise the packet is UNSCORED — rank 99, excluded from the
+/// urgency term rather than coerced to a plausible p3, which is the shape that
+/// made the term a constant 0 for ~82% of the pool without anyone noticing.
+pub fn urgency_rank_and_display(priority: Option<&str>, kind: Option<&str>) -> (u32, String) {
+    match priority.unwrap_or("") {
+        "p0" => return (0, "p0".to_string()),
+        "p1" => return (1, "p1".to_string()),
+        "p2" => return (2, "p2".to_string()),
+        "p3" => return (3, "p3".to_string()),
+        _ => {}
+    }
+    let kind = kind.unwrap_or("");
+    let rank = match kind {
+        "security" | "bug" | "fix" => 4,
+        "feat" | "enhancement" | "infra" | "ux" | "optimization" | "perf" | "dx" => 5,
+        "research" | "exploration" | "docs" | "discussion" | "decision" | "chore" => 6,
+        _ => 99,
+    };
+    if rank == 99 {
+        (99, "unscored".to_string())
+    } else {
+        (rank, format!("kind:{kind}"))
+    }
+}
+
+/// Order 632-retq. Is every dependency of `packet` terminal?
+///
+/// An id that resolves to nothing counts as BLOCKING, matching the resolver's
+/// conservatism: an unresolvable dependency is an unanswered question, not an
+/// absent constraint.
+pub fn dependencies_are_clear(
+    deps: &[String],
+    terminal: &std::collections::BTreeSet<String>,
+) -> bool {
+    deps.iter().all(|d| terminal.contains(d))
 }
 
 fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
@@ -2245,6 +2299,110 @@ fn main() {
                 emit(&line(&ledger, p));
             }
         }
+        "select-rows" => {
+            // ORDER 632-retq. Emit the batch selector's projection directly.
+            //
+            // scripts/select-work-batch.sh built this with nineteen jq calls, so
+            // the selector — the thing that decides what a cycle WORKS ON —
+            // could not run on a host without jq. Order 632-retq made that fail
+            // loud rather than counterfeit a drained ledger, which was right and
+            // still left the host unable to select work. Satisfying the
+            // dependency per host repeats the yq/ruby exposure recorded on
+            // 2026-08-03; emitting the projection from the binary that already
+            // owns the ledger deletes the class.
+            //
+            // Output: rank \t release_target \t order \t packet_id \t urgency \t release
+            // Already filtered to ready + role + release + dependency-clear +
+            // unleased, so the caller needs no further projection.
+            let options = match parse_query_options(&args[1..]) {
+                Ok(options) => options,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                }
+            };
+            if let Some(release) = options.release.as_deref() {
+                let releases = known_releases(&ledger);
+                if !releases.iter().any(|known| known == release) {
+                    eprintln!(
+                        "error: unknown release constraint '{release}' (known desired_release values: {})",
+                        releases.join(",")
+                    );
+                    std::process::exit(2);
+                }
+            }
+
+            // The terminal set is computed over the WHOLE ledger, not the
+            // role-filtered pool: a linux packet is frequently the thing a
+            // windows packet waits on.
+            let mut terminal: std::collections::BTreeSet<String> =
+                std::collections::BTreeSet::new();
+            for p in query_packets(&ledger, None, None, None, None, &[], usize::MAX) {
+                let status = p
+                    .get("status")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("");
+                if matches!(status, "done" | "completed" | "obsoleted") {
+                    terminal.insert(ledger.id_of(p).to_string());
+                }
+            }
+
+            let matched = query_packets(
+                &ledger,
+                Some("ready"),
+                options.role.as_deref(),
+                options.claimable_by.as_deref(),
+                options.release.as_deref(),
+                &options.tags,
+                options.limit,
+            );
+
+            for p in matched {
+                let id = ledger.id_of(p).to_string();
+                let deps: Vec<String> = p
+                    .get("depends_on")
+                    .and_then(serde_yaml::Value::as_sequence)
+                    .map(|s| {
+                        s.iter()
+                            .filter_map(|v| match v {
+                                serde_yaml::Value::String(s) => Some(s.clone()),
+                                serde_yaml::Value::Number(n) => Some(n.to_string()),
+                                _ => None,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !dependencies_are_clear(&deps, &terminal) {
+                    continue;
+                }
+                if inspect_lease(&id).map(|l| l.is_active).unwrap_or(false) {
+                    continue;
+                }
+                let (rank, display) = urgency_rank_and_display(
+                    p.get("priority").and_then(serde_yaml::Value::as_str),
+                    p.get("kind").and_then(serde_yaml::Value::as_str),
+                );
+                let epic = p
+                    .get("release_target")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("UNGROUPED");
+                let order = p
+                    .get("order")
+                    .map(|v| match v {
+                        serde_yaml::Value::Number(n) => n.to_string(),
+                        serde_yaml::Value::String(s) => s.clone(),
+                        _ => "?".into(),
+                    })
+                    .unwrap_or_else(|| "?".into());
+                let release = p
+                    .get("desired_release")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("?");
+                emit(&format!(
+                    "{rank}\t{epic}\t{order}\t{id}\t{display}\t{release}"
+                ));
+            }
+        }
         "query" => {
             // ORDER 582-26mm. The generic filtered reader over the FOLDED
             // ledger — the single correct way to enumerate packets by
@@ -3436,6 +3594,80 @@ mod tests {
     /// case-insensitive substring, capability_tags all-must-match, then a
     /// limit. Release is the order-606 additive constraint; the others retain
     /// the semantics project-info's yq/jq pipeline used.
+    /// Order 632-retq. The urgency tiers the batch selector scores on, moved
+    /// out of an awk block that only a host with jq ever reached.
+    #[test]
+    fn urgency_ranks_explicit_priority_then_kind_then_unscored() {
+        // Tier 1: the operator said so.
+        assert_eq!(urgency_rank_and_display(Some("p0"), None), (0, "p0".into()));
+        assert_eq!(
+            urgency_rank_and_display(Some("p2"), Some("bug")),
+            (2, "p2".into()),
+            "an explicit priority must dominate a kind that would rank differently"
+        );
+        // Tier 2: derived from kind, correctness before forward-progress
+        // before research.
+        assert_eq!(
+            urgency_rank_and_display(None, Some("security")),
+            (4, "kind:security".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("enhancement")),
+            (5, "kind:enhancement".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("docs")),
+            (6, "kind:docs".into())
+        );
+        // Tier 3, and the point of order 630-6hyc: NEITHER signal present is
+        // reported as unscored, never coerced to a plausible p3. The coercion
+        // made the urgency term a constant 0 for ~82% of the pool, and looked
+        // exactly like a genuine p3 while doing it.
+        assert_eq!(
+            urgency_rank_and_display(None, None),
+            (99, "unscored".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("some-new-kind")),
+            (99, "unscored".into()),
+            "an unrecognised kind is unscored, not silently ranked"
+        );
+        assert_ne!(
+            urgency_rank_and_display(None, None).0,
+            urgency_rank_and_display(Some("p3"), None).0,
+            "unscored must be distinguishable from p3 — conflating them IS the defect"
+        );
+    }
+
+    /// An unresolvable dependency counts as BLOCKING, matching the resolver's
+    /// conservatism: an id that resolves to nothing is an unanswered question,
+    /// not an absent constraint.
+    #[test]
+    fn dependency_clearance_treats_unknown_ids_as_blocking() {
+        let mut terminal = std::collections::BTreeSet::new();
+        terminal.insert("done-thing".to_string());
+        assert!(dependencies_are_clear(&[], &terminal), "no deps is clear");
+        assert!(dependencies_are_clear(
+            &["done-thing".to_string()],
+            &terminal
+        ));
+        assert!(
+            !dependencies_are_clear(&["open-thing".to_string()], &terminal),
+            "an open dependency blocks"
+        );
+        assert!(
+            !dependencies_are_clear(&["typo-or-retired".to_string()], &terminal),
+            "an id that resolves to nothing blocks — it is a question, not an absence"
+        );
+        assert!(
+            !dependencies_are_clear(
+                &["done-thing".to_string(), "open-thing".to_string()],
+                &terminal
+            ),
+            "one blocking dependency blocks the packet"
+        );
+    }
+
     #[test]
     fn query_packets_reproduces_plan_query_filter_semantics() {
         let led = Ledger::parse(
