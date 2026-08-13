@@ -1894,7 +1894,6 @@ pub(crate) fn ensure_image_exists(
         std::time::Duration::from_secs(900),
         debug,
     )?;
-    let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
 
@@ -1904,86 +1903,136 @@ pub(crate) fn ensure_image_exists(
         .unwrap_or("latest")
         .trim_start_matches('v');
 
-    if image_name == "chromium-framework" {
-        let core_tag = versioned_image_tag("chromium-core", version);
-        if !rt.block_on(async {
-            client.image_exists(&core_tag).await
-                && client.image_uses_managed_layer_policy(&core_tag).await
-        }) {
-            ensure_image_exists(root, "chromium-core", &core_tag, debug).map_err(|e| {
-                format!(
-                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
-                     Please ensure the base image is built by running: tillandsias --init",
-                    core_tag, e
-                )
-            })?;
-        }
-    } else if image_name == "forge" {
-        let base_tag = versioned_image_tag("forge-base", version);
-        if !rt.block_on(async {
-            client.image_exists(&base_tag).await
-                && client.image_uses_managed_layer_policy(&base_tag).await
-        }) {
-            ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
-                format!(
-                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
-                     Please ensure the base image is built by running: tillandsias --init",
-                    base_tag, e
-                )
-            })?;
-        }
+    // Dependency images first. The recursion is now UNCONDITIONAL (it used to
+    // be gated on `image_exists(base_tag)`): the callee makes the same
+    // content-addressed decision this function does, so an unchanged base
+    // costs one `podman image exists` and returns Skip. Gating on tag presence
+    // here would reintroduce, for the base, exactly the staleness this
+    // function now refuses — a current `forge` layered onto a stale
+    // `forge-base` is still a stale forge. Nested distinct locks in one
+    // direction only (order 232 R4), unchanged.
+    for dependency in image_dependencies(image_name) {
+        let dependency_tag = versioned_image_tag(dependency, version);
+        ensure_image_exists(root, dependency, &dependency_tag, debug).map_err(|e| {
+            format!(
+                "Required base image '{}' is absent and failed to build on demand: {}.\n\
+                 Please ensure the base image is built by running: tillandsias --init",
+                dependency_tag, e
+            )
+        })?;
     }
 
-    let mut build_args = if image_name == "chromium-framework" {
-        vec![
-            "--build-arg".to_string(),
-            format!(
-                "CHROMIUM_CORE_IMAGE={}",
-                versioned_image_tag("chromium-core", version)
-            ),
-        ]
-    } else if image_name == "forge" {
-        vec![
-            "--build-arg".to_string(),
-            format!("BASE_IMAGE={}", versioned_image_tag("forge-base", version)),
-        ]
-    } else {
-        Vec::new()
-    };
-    build_args.push("--dns".to_string());
-    build_args.push("8.8.8.8".to_string());
+    // 702-griq: decide on CONTENT, not on tag presence.
+    //
+    // This path used to return early on
+    // `image_exists(image_tag) && image_uses_managed_layer_policy(image_tag)`.
+    // Neither test says anything about what is INSIDE the image: `image_tag`
+    // is `versioned_image_tag(...)`, which carries no content component, and
+    // the layer-policy label is compared against a constant. So once an image
+    // existed under the current VERSION it was reused forever, no matter how
+    // far the sources had moved.
+    //
+    // That is not hypothetical. VERSION was last bumped 2026-08-09; order
+    // 659-8faj renamed the git mirror's DNS alias on 2026-08-10, i.e. AFTER
+    // that bump. Every macOS forge lane then cloned `git://tillandsias-git/...`
+    // — a name no mirror registers any more — from a `lib-common.sh` baked
+    // into an image the tag said was current. NXDOMAIN on every attempt,
+    // twelve retries, reported to the operator as "the mirror is unreachable
+    // or has not finished initialising".
+    //
+    // `run_init` has always decided this correctly, via the source-digest
+    // label and `decide_image_build`. There were simply TWO freshness rules
+    // for the same images: a content-addressed one on `--init`, and this
+    // tag-only one on the path every lane launch actually takes. Now there is
+    // one.
+    //
+    // ADOPTION COST, stated because users feel it: an image built by the OLD
+    // on-demand path carries no source-digest label and no canonical tag, so
+    // its provenance is unknowable and the first launch after this change
+    // rebuilds it once. That is the correct reading of "unknown provenance" —
+    // this defect is precisely what silently trusting such an image costs —
+    // but the reason is named in the log line below so a one-off rebuild is
+    // explained rather than mysterious.
+    let (identity, build_args) = resolve_image_identity(root, image_name, version)?;
+    let (observation, _observed_image_id) =
+        rt.block_on(observe_image_build(&client, &identity, false));
+    let decision = decide_image_build(identity.clone(), &observation);
 
-    rt.block_on(async move {
-        if client.image_exists(image_tag).await
-            && client.image_uses_managed_layer_policy(image_tag).await
-        {
-            return Ok(());
+    match decision.action {
+        ImageBuildAction::Skip => {
+            if debug {
+                eprintln!(
+                    "[tillandsias] image {image_name} is current ({})",
+                    identity.source_digest
+                );
+            }
+            Ok(())
         }
-
-        eprintln!(
-            "[tillandsias] building missing image {image_name} ({image_tag}); this may take several minutes"
-        );
-
-        client
-            .build_image(
-                containerfile
-                    .to_str()
-                    .ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?,
-                image_tag,
-                context_dir
-                    .to_str()
-                    .ok_or_else(|| "Context path contains invalid UTF-8".to_string())?,
-                &build_args,
-            )
-            .await
-            .map_err(|e| format_on_demand_image_build_error(image_tag, &e.to_string()))?;
-
-        if debug {
-            eprintln!("[tillandsias] built image {image_name}: {image_tag}");
+        ImageBuildAction::Retag => {
+            // Content is present under the canonical tag; only the mutable
+            // aliases point elsewhere. Retag instead of rebuilding.
+            if debug {
+                eprintln!("[tillandsias] retagging image {image_name} ({image_tag})");
+            }
+            rt.block_on(apply_image_aliases(&client, &identity))
         }
+        ImageBuildAction::Build | ImageBuildAction::ForceRebuild => {
+            eprintln!(
+                "[tillandsias] building image {image_name} ({image_tag}): {}; \
+                 this may take several minutes",
+                image_build_reason_label(decision.reason)
+            );
+            build_image_with_logging(root, image_name, &identity, &build_args, &None, debug)
+                .map_err(|e| format_on_demand_image_build_error(image_tag, &e))?;
+            rt.block_on(apply_image_aliases(&client, &identity))
+                .map_err(|e| format_on_demand_image_build_error(image_tag, &e))?;
+            if debug {
+                eprintln!(
+                    "[tillandsias] built image {image_name}: {image_tag} ({})",
+                    identity.source_digest
+                );
+            }
+            Ok(())
+        }
+    }
+}
 
-        Ok(())
-    })
+/// Images `image_name` is layered on, which must be current before its own
+/// identity can be derived (their source digests feed that identity).
+fn image_dependencies(image_name: &str) -> &'static [&'static str] {
+    match image_name {
+        "forge" => &["forge-base"],
+        "chromium-framework" => &["chromium-core"],
+        _ => &[],
+    }
+}
+
+/// Content identity of `image_name` plus the build args that identity was
+/// computed over, resolving dependency identities recursively.
+///
+/// `image_build_inputs` REQUIRES a dependency's identity to be in the map
+/// (it errors rather than guessing), because a dependency's source digest is
+/// an input to this image's digest — that is what makes a stale base
+/// propagate into a distinct identity for everything layered on it.
+fn resolve_image_identity(
+    root: &Path,
+    image_name: &str,
+    version: &str,
+) -> Result<(ImageBuildIdentity, BTreeMap<String, String>), String> {
+    let mut identities = HashMap::<String, ImageBuildIdentity>::new();
+    for dependency in image_dependencies(image_name) {
+        let (dependency_identity, _) = resolve_image_identity(root, dependency, version)?;
+        identities.insert((*dependency).to_string(), dependency_identity);
+    }
+    let (build_args, dependency_digests) = image_build_inputs(image_name, &identities)?;
+    let identity = runtime_assets::image_identity(
+        root,
+        image_name,
+        version,
+        build_args.clone(),
+        dependency_digests,
+    )?;
+    Ok((identity, build_args))
 }
 
 fn format_on_demand_image_build_error(image_tag: &str, error: &str) -> String {
@@ -19321,28 +19370,89 @@ esac
 
     #[test]
     fn on_demand_image_build_announces_slow_work_before_buffered_build() {
+        // 702-griq: same requirement, new symbols. The announcement text now
+        // also names the DECISION REASON, and the build goes through
+        // build_image_with_logging (the content-addressed path `--init` uses)
+        // rather than client.build_image, which stamped no source-digest label.
         let source = source_window(
             include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
             "fn ensure_image_exists(",
         );
         let announce = source
-            .find("[tillandsias] building missing image")
-            .expect("missing-image build must announce slow work");
+            .find("[tillandsias] building image")
+            .expect("a slow image build must announce itself");
         let build = source
-            .find(".build_image(")
+            .find("build_image_with_logging(")
             .expect("image build call must remain present");
         assert!(announce < build, "announcement must precede buffered build");
     }
 
+    /// 702-griq: rewritten from a source pin to a behavioural assertion.
+    ///
+    /// The original asserted the literal presence of
+    /// `image_uses_managed_layer_policy(image_tag)`, i.e. it pinned the
+    /// IMPLEMENTATION that turned out to be the defect: an image was accepted
+    /// on tag presence plus a label compared against a constant, neither of
+    /// which says anything about its contents.
+    ///
+    /// The REQUIREMENT behind it — never accept an image whose provenance we
+    /// cannot establish — survives, and is now strictly stronger: an image
+    /// with no source-digest label is rebuilt, and so is one whose label
+    /// disagrees with the current sources.
     #[test]
-    fn on_demand_image_build_rejects_an_existing_tag_without_the_layer_policy() {
-        let source = source_window(
-            include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs")),
-            "fn ensure_image_exists(",
+    fn on_demand_image_build_rejects_an_image_of_unknown_provenance() {
+        let (_tmp, root) = synthetic_image_root();
+        let (identity, _) =
+            resolve_image_identity(&root, "forge-base", "0.4.260810.1").expect("identity");
+
+        // The managed layer policy is still part of identity — it is hashed
+        // into the digest and stamped as a label — so the original test's
+        // concern is carried, not dropped.
+        assert!(
+            identity
+                .labels
+                .contains_key(tillandsias_core::image_builder::IMAGE_LAYER_POLICY_LABEL),
+            "identity must still stamp the managed layer policy"
         );
-        assert!(source.contains("image_uses_managed_layer_policy(image_tag)"));
-        assert!(source.contains("image_uses_managed_layer_policy(&core_tag)"));
-        assert!(source.contains("image_uses_managed_layer_policy(&base_tag)"));
+
+        // Tag present, but NO source-digest label: unknown provenance.
+        let unlabelled = ImageBuildObservation {
+            canonical_tag_exists: true,
+            canonical_source_digest: None,
+            version_alias_matches: true,
+            latest_alias_matches: true,
+            force: false,
+        };
+        assert_eq!(
+            decide_image_build(identity.clone(), &unlabelled).action,
+            ImageBuildAction::Build,
+            "an image with no source-digest label must be rebuilt"
+        );
+
+        // Tag present, label DISAGREES: the 702-griq case — sources moved
+        // under a tag that did not.
+        let stale = ImageBuildObservation {
+            canonical_source_digest: Some("sha256:0000000000000000".to_string()),
+            ..unlabelled.clone()
+        };
+        assert_eq!(
+            decide_image_build(identity.clone(), &stale).action,
+            ImageBuildAction::Build,
+            "an image whose source digest disagrees with the sources must be rebuilt"
+        );
+
+        // NEGATIVE CONTROL: a matching digest must SKIP. Without this the
+        // assertions above would also hold for "always rebuild", which would
+        // re-pay a multi-minute forge build on every single launch.
+        let current = ImageBuildObservation {
+            canonical_source_digest: Some(identity.source_digest.clone()),
+            ..unlabelled.clone()
+        };
+        assert_eq!(
+            decide_image_build(identity, &current).action,
+            ImageBuildAction::Skip,
+            "an image matching the current sources must NOT be rebuilt"
+        );
     }
 
     #[test]
@@ -19701,6 +19811,140 @@ esac
         assert!(
             !loaded_state.was_successful("inference"),
             "inference should NOT be marked successful after reload"
+        );
+    }
+
+    /// Build a minimal runtime asset root with a `forge` layered on a
+    /// `forge-base`, mirroring the real `images/default` layout.
+    fn synthetic_image_root() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let default_dir = tmp.path().join("images/default");
+        std::fs::create_dir_all(&default_dir).expect("create images/default");
+        std::fs::write(default_dir.join("Containerfile.base"), "FROM scratch\n")
+            .expect("write Containerfile.base");
+        std::fs::write(
+            default_dir.join("Containerfile"),
+            "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nCOPY lib-common.sh /usr/local/lib/\n",
+        )
+        .expect("write Containerfile");
+        std::fs::write(
+            default_dir.join("lib-common.sh"),
+            "git clone \"git://git-${TILLANDSIAS_PROJECT}/${TILLANDSIAS_PROJECT}\"\n",
+        )
+        .expect("write lib-common.sh");
+        let root = tmp.path().to_path_buf();
+        (tmp, root)
+    }
+
+    /// 702-griq: image identity must move when the build context moves.
+    ///
+    /// This is the incident in miniature. Order 659-8faj edited
+    /// `images/default/lib-common.sh` (the git-mirror DNS alias) with no
+    /// VERSION bump. If identity does not move with that edit,
+    /// `decide_image_build` sees a matching digest and skips — which is
+    /// exactly how macOS forge lanes kept cloning a retired hostname.
+    #[test]
+    fn image_identity_moves_when_context_content_moves() {
+        let (_tmp, root) = synthetic_image_root();
+        let version = "0.4.260810.1";
+        let lib_common = root.join("images/default/lib-common.sh");
+
+        let (before, _) = resolve_image_identity(&root, "forge", version).expect("identity before");
+
+        // NEGATIVE CONTROL, load-bearing: recomputing over an UNCHANGED tree
+        // must be byte-identical. Without it this test would also pass for a
+        // digest that changed at random — and "rebuild unconditionally" is not
+        // the fix; it would re-pay a multi-minute forge build on every launch.
+        let (unchanged, _) =
+            resolve_image_identity(&root, "forge", version).expect("identity unchanged");
+        assert_eq!(
+            before.source_digest, unchanged.source_digest,
+            "identity must be stable for an unchanged context"
+        );
+
+        // The 659-8faj edit: one file in the context changes.
+        std::fs::write(
+            &lib_common,
+            "git clone \"git://tillandsias-git/${TILLANDSIAS_PROJECT}\"\n",
+        )
+        .expect("rewrite lib-common.sh");
+        let (after, _) = resolve_image_identity(&root, "forge", version).expect("identity after");
+        assert_ne!(
+            before.source_digest, after.source_digest,
+            "a changed context file MUST produce a different image identity"
+        );
+
+        // And the version alias is IDENTICAL across that change. This is the
+        // defect stated as an assertion: the tag the old skip test consulted
+        // cannot tell these two images apart.
+        assert_eq!(
+            before.version_alias, after.version_alias,
+            "version alias is identical across a content change; only the \
+             source digest separates them"
+        );
+    }
+
+    /// 702-griq: the forge must reference its base BY CONTENT, not by a
+    /// mutable tag — the same lesson one layer down.
+    ///
+    /// `BASE_IMAGE` is what the forge's Containerfile is layered on, and it is
+    /// hashed into the forge's identity. If it carried the VERSION alias, a
+    /// changed base would leave the forge's identity untouched (the alias
+    /// string is constant across content) and the forge would be skipped onto
+    /// a stale base — 702-griq exactly, one level down. It must carry the
+    /// base's canonical, digest-derived tag.
+    ///
+    /// Deliberately NOT asserted here: "changing forge-base changes the forge
+    /// digest". That is true but VACUOUS as a test — `forge` and `forge-base`
+    /// share the `images/default` context directory, so editing
+    /// `Containerfile.base` also edits the forge's own context. Hand-checked
+    /// 2026-08-12: an assertion of that shape still passed with BOTH
+    /// propagation channels (dependency_digests AND the BASE_IMAGE build arg)
+    /// severed, so it detected nothing it claimed to.
+    #[test]
+    fn forge_identity_references_its_base_by_content_not_by_alias() {
+        let (_tmp, root) = synthetic_image_root();
+        let version = "0.4.260810.1";
+
+        let (base, _) =
+            resolve_image_identity(&root, "forge-base", version).expect("base identity");
+        let (_forge, forge_build_args) =
+            resolve_image_identity(&root, "forge", version).expect("forge identity");
+
+        let base_image = forge_build_args
+            .get("BASE_IMAGE")
+            .expect("forge build args must pin BASE_IMAGE");
+        assert_eq!(
+            base_image, &base.canonical_tag,
+            "BASE_IMAGE must be the base's content-addressed canonical tag"
+        );
+        assert_ne!(
+            base_image, &base.version_alias,
+            "BASE_IMAGE must NOT be the version alias: it is constant across \
+             content and would skip the forge onto a stale base"
+        );
+    }
+
+    /// 702-griq: pin that the on-demand path asks the CONTENT question.
+    ///
+    /// The behavioural tests above cover identity; this pins that
+    /// `ensure_image_exists` actually consults it, which is the half that was
+    /// missing. Reverting the fix restores the tag-presence early return and
+    /// fails this test.
+    #[test]
+    fn ensure_image_exists_decides_on_content_not_tag_presence() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "pub(crate) fn ensure_image_exists(");
+
+        assert!(
+            window.contains("decide_image_build("),
+            "ensure_image_exists must make the content-addressed build decision"
+        );
+        assert!(
+            !window.contains("client.image_uses_managed_layer_policy(image_tag).await"),
+            "returning early on version-tag presence + a constant layer-policy \
+             label is the 702-griq defect: neither test says anything about \
+             what is inside the image"
         );
     }
 

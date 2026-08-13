@@ -80,13 +80,26 @@ fi
 
 if [[ "$USE_TARGET" == true ]]; then
     # @trace spec:cross-platform
-    # Windows host (Git Bash / MSYS) has no `cc` in PATH, so the default
-    # linker probe for the musl target fails with "linker `cc` not found".
-    # Pin rust-lld + link-self-contained=yes so the cross-link to ELF musl
-    # works without an external toolchain. Linux/macOS hosts skip this and
-    # keep using the system cc resolution they have always used.
+    # Hosts whose system `cc` cannot drive an ELF link need rust-lld pinned.
+    #
+    # Windows (Git Bash / MSYS) has no `cc` in PATH at all, so the linker probe
+    # fails with "linker `cc` not found".
+    #
+    # macOS (702-griq, measured 2026-08-12) has a `cc`, which is why it was
+    # originally grouped with Linux here — but it is Apple clang driving ld64,
+    # which cannot emit ELF and rejects the GNU linker flags rustc passes:
+    #   ld: unknown options: --as-needed -Bstatic -Bdynamic --eh-frame-hdr
+    #       -z --gc-sections --strip-all
+    #   clang: error: linker command failed with exit code 1
+    # Since 710-w9kc made this sidecar a REQUIRED build asset
+    # (tillandsias-headless/build.rs include_bytes!s it), that link failure
+    # means `cargo build` for the whole workspace fails on macOS — not just
+    # this crate. Having a `cc` is not the same as having one that can link
+    # for the target.
+    #
+    # Linux keeps the system cc resolution it has always used.
     case "${OSTYPE:-}" in
-        msys*|cygwin*|win32*)
+        msys*|cygwin*|win32*|darwin*)
             export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER="rust-lld"
             export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C link-self-contained=yes"
             ;;
