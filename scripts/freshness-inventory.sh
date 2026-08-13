@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# freshness: auditor=linux-mutable-20260813t1908z date=2026-08-13 verdict=updated scope=order 640-iujb closure — coverage is now reported against the operator-ruled DEFINED SUBSET rather than an implicit 100%: generated trees (images/default/cheatsheets/, 219 components) leave the denominator, and freshness-target: reports the scope READ FROM methodology.yaml with litmus:freshness-inventory-shape asserting the two agree
 # freshness: auditor=linux-macuahuitl-fable5-20260811t0200z date=2026-08-11 verdict=refreshed scope=behavioral re-validation: emitted the coverage report + freshness-stale/freshness-next grammar live this cycle (6 loop iterations consumed it to pick audit targets), litmus:freshness-inventory-shape PASS; the windows-20260809 freshness-next: unstamped-draw fix is live and working — the queue advanced through podman-mock/tls-test-server/run-litmus-test rather than re-offering the same 8
 # freshness: auditor=windows-claude-20260809t212955z date=2026-08-09 verdict=updated scope=coverage stuck at 0% for 9+ days because the advisory could only rank STAMPED files, so the audit queue re-offered the same 8 and the 1013 unstamped were unreachable; added freshness-next: to draw the next target from the unstamped set
 # =============================================================================
@@ -26,6 +27,23 @@
 #   freshness-unstamped: <relpath>
 #   freshness-stale: <relpath> <age_days> <verdict> <date>
 #   freshness-next: <relpath> <source=unstamped|stale> seed=<seed>
+#   freshness-target: scope=<scope> excluded=<n> source=methodology.yaml
+#
+# WHY freshness-target EXISTS (order 640-iujb, operator ruling 2026-08-12)
+# -----------------------------------------------------------------------
+# Coverage used to be reported against an implicit 100% of every file the
+# inventory could find — ~1013 components, growing +52 in nine days. That target
+# was divergent (the denominator outran the audit rate) and mostly meaningless
+# (asking "is this still sound and complete?" of a GENERATED copy is busywork:
+# the answer is a property of its source, not of the copy).
+#
+# The Tlatoani ruled the target is a DEFINED SUBSET — components that ENCODE
+# DESIGN INTENT: source/executables, scripts, litmus tests, specs, methodology
+# docs. Generated files, vendored trees, and append-only event logs are OUT of
+# the denominator. methodology.yaml component_freshness.coverage_target is the
+# single source of truth for that scope; this script READS it rather than
+# restating it, and litmus:freshness-inventory-shape asserts the reported value
+# matches the methodology value — so the two cannot drift apart silently.
 #
 # WHY freshness-next EXISTS (order 636-*, windows host 2026-08-09)
 # ---------------------------------------------------------------
@@ -124,6 +142,19 @@ INVENTORY_PATHS=(
     "methodology"
 )
 
+# Paths EXCLUDED from the denominator per methodology.yaml
+# component_freshness.coverage_target: generated trees, vendored/third-party
+# trees, and append-only event logs. Each entry is a path PREFIX, relative to
+# REPO_ROOT, with the reason it is out of scope.
+#
+# images/default/cheatsheets/ is not authored — scripts/stage-image-cheatsheets.sh
+# regenerates it as a straight copy of cheatsheets/ for the forge build context.
+# Auditing the copy asks a question already answered by auditing the source, and
+# it was inflating the denominator by ~233 components.
+EXCLUDED_PREFIXES=(
+    "images/default/cheatsheets/:generated"
+)
+
 # Collect candidate files: shell scripts everywhere, plus yaml/md under the
 # named dirs (cheatsheets, litmus tests, methodology docs).
 # while-read instead of mapfile: macOS ships bash 3.2 (no mapfile), and the
@@ -146,6 +177,27 @@ done < <(
         find "$d" -type f \( -name '*.yaml' -o -name '*.yml' -o -name '*.md' \) 2>/dev/null
     done
 )
+fi
+
+# Drop out-of-scope components from the denominator (see EXCLUDED_PREFIXES).
+# Fixture mode inventories exactly the fixture dir, so it never excludes.
+excluded=0
+if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
+    _kept=()
+    for _c in "${CANDIDATES[@]}"; do
+        _rel="${_c#./}"
+        _drop=0
+        for _entry in "${EXCLUDED_PREFIXES[@]}"; do
+            _prefix="${_entry%%:*}"
+            case "$_rel" in "$_prefix"*) _drop=1; break ;; esac
+        done
+        if [ "$_drop" -eq 1 ]; then
+            excluded=$((excluded + 1))
+        else
+            _kept+=("$_c")
+        fi
+    done
+    CANDIDATES=(${_kept[@]+"${_kept[@]}"})
 fi
 
 total=0
@@ -255,8 +307,23 @@ if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ]; then
     mkdir -p target 2>/dev/null && printf '%s %s\n' "$stamped" "$today" > "$CACHE" 2>/dev/null || true
 fi
 
+# The coverage target lives in methodology.yaml, never here (order 640-iujb).
+# Read the `scope:` key of component_freshness.coverage_target; if the key is
+# absent or unreadable, report scope=unknown rather than inventing a target —
+# an invented target would make an unmeasured thing look measured.
+COVERAGE_SCOPE="unknown"
+if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ -f methodology.yaml ]; then
+    COVERAGE_SCOPE="$(awk '
+        /^    coverage_target:/ { in_block = 1; next }
+        in_block && /^    [a-z_]+:/ { exit }
+        in_block && $1 == "scope:" { print $2; exit }
+    ' methodology.yaml 2>/dev/null)"
+    [ -n "$COVERAGE_SCOPE" ] || COVERAGE_SCOPE="unknown"
+fi
+
 echo "freshness-inventory: $total components, $stamped stamped, $unstamped unstamped"
 echo "freshness-coverage: ${pct}% (${stamped}/${total} delta=${delta})"
+echo "freshness-target: scope=${COVERAGE_SCOPE} excluded=${excluded} source=methodology.yaml"
 for line in "${STAMP_LINES[@]:-}"; do
     [ -z "$line" ] && continue
     IFS='|' read -r rel verdict fdate auditor <<< "$line"
