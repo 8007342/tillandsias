@@ -151,12 +151,30 @@ impl PodmanClient {
         Self { backend }
     }
 
+    /// Run one podman command under the operation class's DECLARED budget
+    /// (order 690-7adz). There is no unbounded variant; a caller that needs
+    /// longer than its class allows says so, in one line, at the call site.
     pub async fn execute(
         &self,
         operation: OperationKind,
         argv: &[String],
     ) -> Result<crate::CommandOutput, CommandFailure> {
-        self.backend.execute(operation, argv).await
+        self.backend
+            .execute(operation, argv, operation.default_budget())
+            .await
+    }
+
+    /// Run one podman command under an EXPLICIT budget, for the callers whose
+    /// work legitimately outlasts its class — a first-boot image build on a slow
+    /// link, a scenario replay. Passing a budget is a claim about that call
+    /// site, which is why it is written there rather than inherited.
+    pub async fn execute_with_budget(
+        &self,
+        operation: OperationKind,
+        argv: &[String],
+        budget: std::time::Duration,
+    ) -> Result<crate::CommandOutput, CommandFailure> {
+        self.backend.execute(operation, argv, budget).await
     }
 
     /// Check if podman is available in PATH.
