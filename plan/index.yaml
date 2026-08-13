@@ -16901,6 +16901,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-13T03:53:07Z"
+          agent_id: "bigpickle-20260813t0348"
+          host: forge
+          summary: >
+            delegate-outcome:bigpickle-20260813t0348:done | evidence: new post-commit-expert-refresh latency line appeared after probe commit 747fa5a5, quoted here -> [post-commit-expert-refresh] latency=4ms budget_commit=<50ms budget_total=<50ms (hook log baseline 0 lines -> 1 line)
+        - type: progress
           ts: "2026-08-13T03:52:11Z"
           agent_id: "bigpickle-20260813t0348"
           host: forge
