@@ -19687,8 +19687,7 @@ esac
         let (_tmp, root) = synthetic_image_root();
         let version = "0.4.260810.1";
 
-        let (base, _) =
-            ensure_image_identity(&root, "forge-base", version).expect("base identity");
+        let (base, _) = ensure_image_identity(&root, "forge-base", version).expect("base identity");
         let (_forge, forge_build_args) =
             ensure_image_identity(&root, "forge", version).expect("forge identity");
 

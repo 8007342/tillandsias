@@ -32,6 +32,23 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: merge exempt"
 
+  # The three steps above interrogate the guard's VERDICT via an explicit
+  # --commit. This one pins its DEFAULT SCOPE, which is a separate property and
+  # was the half that broke (order 723-b9cn, measured on osx-next 2026-08-13).
+  # The default range was `@{upstream}..HEAD`; because a platform branch must
+  # merge origin/linux-next before every push while its own remote head lags,
+  # that swept in 89 commits the integration branch had already published, two
+  # of which it flagged. This host could not fix commits it did not author, so
+  # the MANDATED merge produced a permanently unpushable branch — the 643-64bx
+  # failure shape one layer up. Case 2 of the fixture is the load-bearing
+  # negative control: "scope to unpublished commits" is trivially satisfied by
+  # "check nothing", and only a locally-authored sweep still being refused
+  # separates the narrowing from a repeal.
+  - step: "Req: the default range policies only commits this push publishes first"
+    command: "bash scripts/test-version-bump-isolation-scope.sh"
+    timeout_ms: 60000
+    expected_behavior: "PASS: version-bump-isolation scope 5/5"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"
