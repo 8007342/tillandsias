@@ -144,13 +144,37 @@ multi_host_development:
         When a pre-push guard refuses an INTEGRATION branch for a condition
         you did not create and do not own (the 702-eusw shape: a divergent
         VERSION inherited from the mandated linux-next merge), do all three:
-        (1) push the tree to a conforming non-integration branch so it is
-        durable and reviewable; (2) file the blocker as a packet AND get that
-        packet to the remote — a p0 filed only in a local commit is invisible
-        to the host that owns the fix, which is the failure mode that makes
-        this worth writing down; (3) leave the owning host's decision to the
-        owning host. Do NOT --no-verify an integration branch to route around
-        another host's release state, and do NOT sit on the work.
+        (1) publish the tree somewhere durable and reviewable under the lane
+        grammar; (2) file the blocker as a packet AND get that packet to the
+        remote — a p0 filed only in a local commit is invisible to the host
+        that owns the fix, and that was the actual error this policy was
+        written from; (3) leave the owning host's decision to the owning host.
+        Do NOT --no-verify an integration branch to route around another
+        host's release state, and do NOT sit on the work.
+      no_branch_exemption_from_the_version_guard: >
+        CORRECTION, recorded because the wrong version of this was nearly
+        written here as fact (702-pwhc, 2026-08-13). There is NO agent/* or
+        salvage/* exemption from the pre-push VERSION guard. An observation
+        that the same tree was refused as osx-next and then accepted as
+        agent/... minutes later was NOT an exemption — the guard was failing
+        open on the larger range through a SIGPIPE/pipefail bug, now fixed.
+        With the guard correct, a tree carrying a VERSION divergent from
+        main's is refused for EVERY branch except main and
+        release/version-bump-*. Two consequences worth knowing before you
+        plan around it: the FIRST publication of such a tree is the hard one,
+        because a new remote ref is ranged against its merge-base with main
+        and therefore includes the foreign bump; once the branch exists,
+        subsequent pushes are ranged against the remote tip, so ordinary
+        follow-up commits that do not touch VERSION push cleanly. This makes
+        an inherited-divergence blocker MORE urgent for the owning host to
+        clear, not less — it is not routable around.
+      convenient_explanations: >
+        The general lesson from 702-pwhc, which cost one wrong conclusion:
+        when a rule appears to apply inconsistently, the hypothesis "there
+        must be an exemption I did not know about" is the comfortable one and
+        should be the LAST one tested. Prefer "the check is broken" and go
+        read it. A guard that passes when it should fail looks exactly like a
+        guard that does not apply to you.
       naming: >
         Use the lane grammar (agent/<host>/<base>/<yyyymmdd>-<slug>) or
         salvage/<host>/<yyyymmdd>-<slug>. Those two prefixes are the ONLY

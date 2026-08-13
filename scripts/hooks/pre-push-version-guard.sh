@@ -69,11 +69,31 @@ if [[ -z "$ranges" ]]; then
     upstream="$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null)" || upstream=""
     [[ -n "$upstream" ]] && ranges="$upstream..HEAD"
 fi
+# NEVER pipe a potentially large `git diff` into `grep -q` while `pipefail`
+# is set (702-pwhc, measured 2026-08-13). `grep -q` exits the instant it
+# matches; git is then killed by SIGPIPE and reports 141; `pipefail` promotes
+# that to the PIPELINE's status, so the `if` reads FALSE precisely BECAUSE the
+# match was found early. The guard then fails OPEN.
+#
+# It is a diff-SIZE race, not a policy: measured on this repo, range
+# origin/osx-next..HEAD (64 files) -> rc=0, guard correctly refuses; range
+# 1496e89f..HEAD (445 files) -> rc=141, guard silently allows. So the guard
+# stopped working exactly where it matters most — the large, cross-branch
+# merges that are the only way a foreign VERSION arrives in the first place.
+# It let this host push a divergent VERSION to a new branch while refusing the
+# identical content to osx-next minutes earlier.
+#
+# Fixed by removing the pipe from the decision entirely: capture the file list,
+# then match it with shell pattern matching. No subprocess can be signalled,
+# so the verdict cannot depend on how much git had written when grep returned.
 for r in $ranges; do
-    if git diff --name-only "$r" 2>/dev/null | grep -qx "VERSION"; then
-        version_touched=true
-        break
-    fi
+    range_files="$(git diff --name-only "$r" 2>/dev/null)" || range_files=""
+    case $'\n'"$range_files"$'\n' in
+        *$'\n'VERSION$'\n'*)
+            version_touched=true
+            break
+            ;;
+    esac
 done
 
 current_version="$(cat "$VERSION_FILE" 2>/dev/null)" || exit 0
