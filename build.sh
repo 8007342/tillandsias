@@ -1154,6 +1154,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Podman sync-budget check passed"
 
+    # Order 631-wpkd. Canonical skills/ is the single source of truth and every
+    # runtime reaches a skill by symlink. The layout section CLAIMED that while
+    # thirteen skills lived only under .claude/skills/ — including a macOS build
+    # skill invisible to every non-Claude harness. What a host can do must not
+    # depend on which harness launched it, and prose could not notice it had
+    # stopped being true.
+    _step "Checking skills have exactly one source of truth (631-wpkd)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-skills-single-source.sh" 2>&1; then
+        _error "a skill has drifted out of canonical skills/ — declare it in skills/HARNESS-SCOPED.txt or link it (631-wpkd)"
+        exit 1
+    fi
+    _info "Skills single-source check passed"
+
     # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
     # compiles src/stubs/ and goes green without ever parsing the edited file,
     # which produced two unverified changes on 2026-08-13 alone. Refusing here

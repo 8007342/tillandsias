@@ -1,0 +1,33 @@
+# Skills that deliberately do NOT live in canonical skills/ (order 631-wpkd).
+#
+# The layout rule is that every runtime reaches skills through a symlink into
+# canonical `skills/`, so there is exactly one source of truth. A real directory
+# under <runtime>/skills/ is therefore a second source of truth — and on
+# 2026-08-09 an audit found thirteen of them, including a macOS BUILD skill that
+# only Claude-harness agents could see. What a host can do must not depend on
+# which harness launched it.
+#
+# Harness-specific IS a legitimate choice. Undocumented divergence is not. This
+# file is the difference: an entry here is a declared exception with a reason;
+# anything else is a defect, and scripts/check-skills-single-source.sh fails on
+# it.
+#
+# Format: one glob per line, `#` comments ignored. Globs, not names, because the
+# openspec set is generated and its membership changes with the CLI version.
+
+# ---------------------------------------------------------------------------
+# openspec-* — GENERATED, not authored.
+#
+# These are emitted by the installed `openspec` CLI into each harness directory
+# at launch, alongside the matching .opencode/commands/opsx-*.md. They are
+# regenerated from the CLI, so moving them into canonical skills/ and
+# symlinking back would put a generated artifact under source control as if it
+# were authored, and the next launch would recreate the originals anyway —
+# scripts/check-opsx-generated-dirt.sh exists precisely because that
+# regeneration dirties the checkout.
+#
+# 631-wpkd's own note says not to bulk-move them without checking whether they
+# are harness-coupled by design. They are: they shadow the `opsx:*` slash
+# commands, which are a harness concept, and the CLI decides which harnesses to
+# emit them for (today: claude, opencode, codex, github — .gemini gets none).
+openspec-*
