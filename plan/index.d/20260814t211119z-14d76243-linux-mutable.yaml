@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: v04-release-promotion-linux-owned
+    field: depends_on
+    value: ["v04-release-gate-windows-e2e-evidence","v04-release-gate-macos-e2e-evidence","sidecar-staging-never-reached-nix"]
+    ts: "2026-08-14T21:11:19Z"
+    host: linux-mutable
+
+events:
+  - packet_id: v04-release-promotion-linux-owned
+    event:
+      type: note
+      ts: "2026-08-14T21:11:19Z"
+      host: linux-mutable
+      summary: >
+        736-mcy3 is a release blocker; reciprocal edge for the blocks: declaration

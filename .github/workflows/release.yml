@@ -117,6 +117,18 @@ jobs:
           # VERSION) and is what makes the shipped bytes and the separately
           # published, cosign-signed asset the SAME binary rather than two
           # independent builds that merely share a name.
+          # CORRECTION (order 723-sazx, 2026-08-14): the comment above described
+          # this staging as what makes the three builds below work. It never
+          # could. `nix build .#…` resolves the flake against the GIT TREE, and
+          # .gitignore:79 ignores the sidecar — so an untracked file installed
+          # into the working tree does not reach craneSrc, and build.rs panics
+          # exactly as it would without this step. The real fix is a preBuild in
+          # flake.nix making the sidecar derivation a dependency edge; see
+          # `stageRouterSidecar` there and litmus:sidecar-is-a-build-graph-input.
+          #
+          # The install is KEPT because the image build later in this workflow
+          # reads the working tree, not the flake source. It is no longer what
+          # the binaries depend on.
           nix build -L .#tillandsias-router-sidecar-x86_64-musl --out-link result-sidecar
           install -Dm0755 result-sidecar/bin/tillandsias-router-sidecar \
             images/router/tillandsias-router-sidecar
