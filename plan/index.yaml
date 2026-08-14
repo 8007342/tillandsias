@@ -44737,6 +44737,38 @@ plan_index:
         - 'NEGATIVE CONTROL: a process that is merely SLOW and produces no output for longer than the heartbeat interval must NOT report blocked — that is precisely the legitimate case order 332 protects, and a probe that calls it blocked would resurrect the refuted progress deadline by another route.'
         - 'Non-Linux builds compile: the probe returns unknown rather than failing to build, since the crate is built on every host.'
 
+      events:
+        - type: verified
+          ts: "2026-08-14T01:28:58Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE, and the mechanism is NOT the one this packet assumed. The packet said to build on the tcgetpgrp precedent and read /proc/<pid>/wchan, matching n_tty_read. I built exactly that first, and the positive test refuted it on the first run.
+
+            MEASURED on 6.18.33.2-microsoft-standard-WSL2: a `cat` blocked on a real PTY reports
+
+              wchan = wait_woken
+
+            not n_tty_read. The symbol in the packet came from documentation, not from this kernel. Worse, wait_woken is the GENERIC wait helper — socket reads sleep there too — so matching it would have reported a process waiting on the network as waiting for terminal input. A probe that produces confident false wedge reports is worse than no probe, and rung 3 would have acted on them.
+
+            THE MECHANISM THAT WORKS is /proc/<pid>/syscall, which is exact rather than indicative:
+
+              syscall: 0 0x0 0x70d19807c000 0x40000 ...
+              fd0 -> /dev/pts/3
+
+            Syscall number plus arguments. Blocked in read(2) on a descriptor that resolves to a pts is not an inference about what a process might be doing — it is the thing itself. A sleeper is in clock_nanosleep; a socket read is read() on a socket fd; neither is confusable.
+
+            ONE BUG CAUGHT BY WRITING IT DOWN: libc::SYS_read is 0 on x86-64 but 63 on aarch64, and this guest runs on both. A hardcoded 0 would have made the probe silently useless on ARM — in the NotBlocked direction, where nothing would ever report it.
+
+            AGAINST THE EXIT CRITERIA:
+              * three-valued verdict, with Unknown first-class rather than an error path — /proc/<pid>/syscall needs CONFIG_HAVE_ARCH_TRACEHOOK and can be denied by ptrace scope, so "cannot tell" is a real answer a host will give;
+              * real processes: a cat on a genuine openpty reports BlockedOnInput; a sleeper and an exited process never do;
+              * NEGATIVE CONTROL for the order-332 invariant: the sleeper case is the legitimate slow command, and the pipe/socket/file cases assert that blocked-on-something-else is NOT blocked-on-input;
+              * non-Linux builds compile and answer Unknown, so the crate still builds on every host.
+
+            WHAT THE POSITIVE TEST WAS WORTH: without it, this module would have shipped with a symbol list that never matches anything on this kernel. Every other test — the classification table, the sleeper, the exited process — passed against the broken version, because they all assert that something is NOT blocked. A probe hard-wired to return NotBlocked would have satisfied the entire suite.
+
+            LIMITATION recorded rather than hidden: probe_process_group reads the group LEADER. A leader that has delegated the terminal to a child reads as NotBlocked, which degrades to today's behaviour rather than to a false wedge report. Scanning every process every 30s to catch it costs more than the case is worth; rung 3 should revisit if it proves common.
     - packet_id: pty-heartbeat-v2-carries-blocked-state
       order: 723-2yb3
       status: ready
@@ -44779,6 +44811,16 @@ plan_index:
         - All four version combinations are tested, including BOTH mixed ones. A version-skewed pair must degrade to v1 behaviour, never wedge and never error.
         - 'The two order-332 pins still pass untouched: streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline and streaming_exec_times_out_when_slow_guest_sends_no_frames.'
 
+      events:
+        - type: note
+          ts: "2026-08-14T01:29:15Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            Rung 1 (723-54zj) is done and it changed this rung's input. Two things to carry forward:
+
+              * the verdict source is pty_input_probe::probe_pty_input_state, reading /proc/<pid>/syscall — NOT wchan. The wchan approach in the original split was refuted by measurement: a real PTY read reports wait_woken on this kernel, which is the generic wait helper and cannot discriminate a terminal read from a socket read.
+              * Unknown is a real answer this host will give, not a theoretical one, because /proc/<pid>/syscall needs CONFIG_HAVE_ARCH_TRACEHOOK and can be denied by ptrace scope. A v2 heartbeat must be able to say "I cannot tell" on the wire, and a v2 host must treat that exactly as v1.
     - packet_id: exec-client-distinguishes-waiting-from-working
       order: 723-g4bk
       status: ready
