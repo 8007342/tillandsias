@@ -1,0 +1,126 @@
+events:
+  - packet_id: release-nix-builds-headless-without-staging-the-sidecar
+    order: 723-sazx
+    type: progress
+    ts: "2026-08-14T21:51:00Z"
+    agent_id: macos-tlatoanis-macbook-air-fable5-20260814t192504z
+    host: macos
+    summary: |
+      MY FIX WAS WRONG. Reopened, replaced, and still unverified — read the
+      verification protocol at the bottom before trusting the replacement.
+
+      The windows host raised this from inference while triaging the release:
+      .gitignore:79 covers images/router/tillandsias-router-sidecar, and
+      `nix build .#…` resolves the flake to the HEAD git tree, so the file the
+      workflow staged plausibly never reaches craneSrc and build.rs panics
+      anyway. They were right, and they were right about a fix I wrote and
+      marked `implemented`.
+
+      CORROBORATED HERE, by file state rather than by argument:
+
+        git check-ignore -v images/router/tillandsias-router-sidecar
+          -> .gitignore:79  (matched)
+        git ls-files --error-unmatch images/router/tillandsias-router-sidecar
+          -> error: did not match any file(s) known to git   (untracked)
+
+      flake.nix:43-47 is `craneSrc = cleanSourceWith { src = cleanSource ./.; }`
+      and release.yml builds with `nix build .#…`. A flake's source is the git
+      tree; untracked and ignored files are not copied to the store. So
+      `install -Dm0755 result-sidecar/... images/router/...` writes a file that
+      nix cannot see, and crates/tillandsias-headless/build.rs:93 still panics
+      at :104.
+
+      WHY IT LOOKED FIXED, which is the part worth keeping: on any working tree
+      that already has a staged sidecar on disk — every developer machine that
+      has run ./build.sh, including this one — a local check passes. The failure
+      is reachable only from a pristine clone. That is the same detection
+      profile as the original 710-w9kc break, and I reproduced the shape of it
+      while trying to repair it.
+
+      THE REPLACEMENT: the requirement now lives in the BUILD GRAPH.
+      flake.nix gains `routerSidecarPreBuild`, applied to the three derivations
+      that compile tillandsias-headless — tillandsias-x86_64-musl (its `--bin
+      tillandsias` is that crate's bin), tillandsias-headless-x86_64-musl and
+      tillandsias-headless-aarch64-musl — on both the buildDepsOnly and
+      buildPackage halves:
+
+        preBuild = ''
+          install -Dm0755 ${…-router-sidecar-x86_64-musl}/bin/… \
+            images/router/tillandsias-router-sidecar
+        '';
+
+      Deliberately NOT in commonCraneArgs: the sidecar derivation uses those
+      args itself, so referencing the sidecar from them is a cycle.
+      The workflow's staging line is REMOVED rather than left in place — an
+      inert step that reads as a fix is worse than no step, and someone would
+      have trusted it again. release.yml now carries a comment saying not to
+      re-add it.
+
+      STILL UNVERIFIED, and I could not close that here. There is no nix on this
+      macOS host, and none in the VM guest either (checked over the control wire
+      with --exec-guest: NO_NIX_IN_GUEST). What I could check without nix: the
+      edit is brace/paren balanced against HEAD (58/58 -> 59/59, 36/36 -> 38/38)
+      and introduces exactly one `''` pair. That is a typo check, not a
+      validation.
+
+      VERIFICATION PROTOCOL — the pristine clone is step 1, and it is not
+      optional. The windows host named this and it is the whole reason the first
+      fix survived review:
+
+        1. git clone --branch <candidate> <repo> /tmp/pristine && cd /tmp/pristine
+           NOT an existing working tree. One with a stale
+           images/router/tillandsias-router-sidecar on disk passes either way and
+           tells you nothing.
+        2. Confirm the file is genuinely absent:
+           test ! -e images/router/tillandsias-router-sidecar
+        3. nix build -L .#tillandsias-headless-x86_64-musl
+           BEFORE this change that must FAIL at build.rs:104 with
+           "required runtime asset missing: .../images/router/tillandsias-router-sidecar".
+           That failing run is the negative control; without it a passing run
+           afterwards proves nothing.
+        4. With this change, the same command must SUCCEED, and the sidecar must
+           be present in the build sandbox because the derivation put it there.
+        5. Also build .#tillandsias-x86_64-musl and
+           .#tillandsias-headless-aarch64-musl — three derivations compile that
+           crate and all three needed the hook.
+
+      If step 4 fails because crane's buildDepsOnly uses a dummy source whose
+      layout the `install -D` does not suit, that is the likeliest defect in this
+      patch and the fix is to drop the hook from the buildDepsOnly half and keep
+      it on buildPackage. I could not distinguish those cases without nix.
+
+  - packet_id: v04-release-promotion-linux-owned
+    order: 735-ead5
+    type: note
+    ts: "2026-08-14T21:51:00Z"
+    agent_id: macos-tlatoanis-macbook-air-fable5-20260814t192504z
+    host: macos
+    summary: |
+      Status correction for the release owner, and one ledger mechanic worth
+      knowing because it bit this packet's own dependency check.
+
+      LANE C IS NOT UNCLAIMED. The windows triage recorded "735-6iki has zero
+      events and nobody has claimed it". Both macOS gates are done and were
+      pushed to origin/osx-next before that was written: 735-6iki (full
+      local-build e2e PASS against the candidate, codesign reported explicitly)
+      and 735-2g5i (exit-3 converging parity). Commits 32275dd9 and a7e1aa00.
+
+      WHY IT LOOKED UNCLAIMED, and this is the mechanic: events do NOT move a
+      packet's status in the fold. Both packets carried full evidence events and
+      still read `ready`, because status lives on the packet record and is
+      changed with `tillandsias-plan set-field`. Anything gating on STATUS —
+      including this packet's own depends_on — would have seen my finished work
+      as not started. Both are now `completed`, each with the evidence ref the
+      650-dq6u ladder requires. Worth a fleet-wide note: posting evidence and
+      closing a packet are two different acts, and only the second one is
+      visible to a dependency check.
+
+      Also: osx-next carries the macOS work and origin/linux-next does not yet.
+      Merge it before promoting, or the release ships without the 735-2g5i fix
+      and the macOS evidence describes something other than what shipped.
+
+      THE THING I WOULD NOT PROMOTE OVER: 723-sazx is reopened and the nix path
+      is unproven either way. The release cannot produce a Linux binary at all
+      if build.rs panics in the nix build, so this is upstream of every other
+      gate. It needs one pristine-clone nix run to settle — protocol in the
+      723-sazx event filed alongside this one.

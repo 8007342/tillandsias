@@ -101,25 +101,32 @@ jobs:
           # All binaries from identical source produce identical content →
           # identical hash → matching PSK. See release_root_secret().
 
-          # THE SIDECAR IS BUILT FIRST AND STAGED INTO THE SOURCE TREE (723-sazx).
+          # THE SIDECAR IS NOT STAGED HERE, DELIBERATELY (order 723-sazx).
           #
-          # order 710-w9kc un-committed images/router/tillandsias-router-sidecar
-          # and made it a build artifact — correct, and the reason this step used
-          # to read "the router sidecar + runtime assets are git-tracked, so nix
-          # embeds them from the checked-out tree". That sentence stopped being
-          # true the moment the blob was removed, and nothing here noticed:
-          # crates/tillandsias-headless/build.rs:93 still lists the file among
-          # its REQUIRED runtime assets and panics at build.rs:104 without it,
-          # so the two headless builds below would fail on a clean CI checkout.
-          # It has never been exercised — the last release predates the removal.
+          # order 710-w9kc un-committed images/router/tillandsias-router-sidecar,
+          # which is why this step used to claim "the router sidecar + runtime
+          # assets are git-tracked, so nix embeds them from the checked-out
+          # tree". That stopped being true the moment the blob was removed, and
+          # crates/tillandsias-headless/build.rs:93 still REQUIRES the file.
           #
-          # Staging it here keeps the artifact version-matched (same tree, same
-          # VERSION) and is what makes the shipped bytes and the separately
-          # published, cosign-signed asset the SAME binary rather than two
-          # independent builds that merely share a name.
+          # The first repair added `install -Dm0755 result-sidecar/...
+          # images/router/...` right here. It does not work, and it fails
+          # quietly: .gitignore:79 covers exactly that path, and `nix build .#…`
+          # resolves the flake to the GIT TREE, so an untracked, ignored file is
+          # never copied to the store and never reaches craneSrc. build.rs would
+          # panic anyway — while a developer's working tree with a stale sidecar
+          # on disk passed, which is the worst possible detection profile.
+          #
+          # The requirement now lives in the build graph instead: flake.nix gives
+          # the three derivations that compile tillandsias-headless a preBuild
+          # that installs the sidecar derivation's output. Do not re-add a
+          # staging step here — if it ever appears to be needed again, the
+          # derivation is what is wrong.
+          #
+          # The explicit build below is only to get an out-link for the published
+          # cosign-signed asset; the headless builds no longer depend on the
+          # ORDER of these lines, because they pull the sidecar themselves.
           nix build -L .#tillandsias-router-sidecar-x86_64-musl --out-link result-sidecar
-          install -Dm0755 result-sidecar/bin/tillandsias-router-sidecar \
-            images/router/tillandsias-router-sidecar
 
           nix build -L .#tillandsias-x86_64-musl              --out-link result-host
           nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
