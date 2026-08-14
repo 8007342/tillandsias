@@ -12256,6 +12256,10 @@ pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> 
 
 #[cfg(all(feature = "listen-vsock", unix))]
 mod pty_handler;
+/// Order 723-54zj. Declared unconditionally: the classification half is pure
+/// and must be testable on every host, including the Windows one it was
+/// written on, and the probe itself already answers Unknown off Linux.
+pub mod pty_input_probe;
 #[cfg(feature = "listen-vsock")]
 mod vsock_server;
 
