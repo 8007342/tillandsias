@@ -33,9 +33,13 @@ critical_path:
     expected_behavior: "ok: real corpus clean"
 
   - step: "the expert groundtruth harness itself grades green (the de-pin did not break it)"
-    command: "./target/release/tillandsias-plan grade 2>/dev/null | grep -qE 'pass=19 fail=0' && echo 'ok: harness 19/19'"
+    # Assert fail=0 and total==pass, NOT a hard-coded case count. The count was
+    # pinned at 19; the query set grew to 20 and this step went red while the
+    # harness was perfectly green (2026-08-14). A pin on the SIZE of the corpus
+    # punishes adding coverage, which is the opposite of what this test wants.
+    command: "g=$(./target/release/tillandsias-plan grade 2>/dev/null); t=$(printf '%s' \"$g\" | grep -o 'total=[0-9]*' | head -1 | cut -d= -f2); p=$(printf '%s' \"$g\" | grep -o 'pass=[0-9]*' | head -1 | cut -d= -f2); f=$(printf '%s' \"$g\" | grep -o 'fail=[0-9]*' | head -1 | cut -d= -f2); [ -n \"$t\" ] && [ \"$t\" -gt 0 ] && [ \"$f\" = 0 ] && [ \"$p\" = \"$t\" ] && echo 'ok: harness all cases pass'"
     timeout_ms: 30000
-    expected_behavior: "ok: harness 19/19"
+    expected_behavior: "ok: harness all cases pass"
 
 observability:
   traces:
