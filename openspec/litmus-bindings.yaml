@@ -161,6 +161,7 @@ specs:
   - litmus:added-fragment-parse-gate-shape
   - litmus:release-runbook-external-preconditions-shape
   - litmus:script-exec-bit-shape
+  - litmus:sidecar-is-a-build-graph-input
   - litmus:selector-urgency-not-inert-shape
   coverage_ratio: 75
   last_verified: '2026-08-12'

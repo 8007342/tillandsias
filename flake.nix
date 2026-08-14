@@ -61,6 +61,33 @@
           doCheck = false; # release builds don't run tests (./build.sh does)
         };
 
+        # ORDER 723-sazx. The sidecar must be a BUILD-GRAPH INPUT, not a file
+        # someone remembered to stage.
+        #
+        # crates/tillandsias-headless/build.rs:93 lists
+        # images/router/tillandsias-router-sidecar among its REQUIRED runtime
+        # assets and panics at :116 without it. Order 710-w9kc un-committed that
+        # blob — correctly — and `.gitignore:79` now ignores it. But `nix build
+        # .#...` resolves this flake against the GIT TREE, so an ignored,
+        # untracked file is not copied into `craneSrc` at all.
+        #
+        # That makes the release workflow's staging step ineffective by
+        # construction: release.yml builds the sidecar, `install`s it into the
+        # working tree, and then runs three flake builds that cannot see it.
+        # The staging fixed the `./build.sh` and `build-image.sh` paths, which
+        # compile from the working tree, and could never have fixed the nix
+        # path. Nothing measured it because the last release predates the blob's
+        # removal, so the nix lane has not been exercised since.
+        #
+        # Making it a `preBuild` closes the class rather than the instance: the
+        # sidecar derivation becomes a dependency edge, so it is impossible to
+        # build these binaries without it, on any host, in any lane.
+        stageRouterSidecar = ''
+          install -Dm0755 \
+            ${tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar \
+            images/router/tillandsias-router-sidecar
+        '';
+
         tillandsias-x86_64-musl =
           let
             cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
@@ -74,6 +101,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "--bin tillandsias --features tray";
+            preBuild = stageRouterSidecar;
           });
 
         tillandsias-headless-x86_64-musl =
@@ -89,6 +117,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+            preBuild = stageRouterSidecar;
           });
 
         tillandsias-headless-aarch64-musl =
@@ -111,6 +140,7 @@
             version = "0.0.0";
             CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+            preBuild = stageRouterSidecar;
             # aarch64-musl cross toolchain (ring's build.rs + linker).
             depsBuildBuild = [ crossPkgs.stdenv.cc ];
             CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
