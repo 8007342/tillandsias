@@ -31364,6 +31364,65 @@ plan_index:
           host: forge
           summary: |
             Group under architecture-audit-epic (order 625-jd5f)
+        - type: progress
+          ts: "2026-08-13T23:36:42Z"
+          host: host
+          summary: |
+            status 'in_progress' (not terminal) with evidence_refs: scripts/resolve-release-run.sh + test-resolve-release-run.sh 6/6 green; runbook step 7 rewritten
+        - type: note
+          ts: "2026-08-13T23:36:42Z"
+          host: host
+          summary: |
+            first instance fixed; enumeration split to 727-kmks
+        - type: note
+          ts: "2026-08-13T23:37:00Z"
+          host: host
+          summary: |
+            not continuing this cycle: my slice (first instance + resolver + fixture) is done and the remaining enumeration is 727-kmks. Leaving it ready rather than in_progress avoids the stranded-claim shape 641-e2qa recorded — an in_progress packet is invisible to ready queries AND to burndown.
+        - type: progress
+          ts: "2026-08-13T23:45:00Z"
+          host: windows
+          summary: |
+            FIRST INSTANCE FOUND AND FIXED, in this packet's own release runbook,
+            with the enumeration split out as 727-kmks.
+        
+            THE INSTANCE, merge-to-main-and-release step 7, was a bare command
+            substitution feeding `gh run watch`. When step 6's dispatch did not
+            start a run - wrong ref, a workflow_dispatch that silently no-oped, a
+            tag that never reached the remote - `gh run list` prints nothing and
+            exits 0. The substitution succeeded with an EMPTY run id and the
+            runbook waited on a run that did not exist. Absent and healthy shared
+            an exit code, which is exactly the class this packet was filed to hunt.
+        
+            Two details make it the pattern to hunt with:
+            the SAME FILE already warned about a sibling four steps earlier
+            ("the trap: gh pr checks --watch does NOT fail when there are no
+            checks"), so knowing the class did not prevent the instance - which is
+            the argument for a checker over a caution; and the absence has a SECOND
+            shape, since --jq on an empty array prints the literal null, so a bare
+            emptiness test would have handed `gh run watch null` a plausible-looking
+            argument.
+        
+            It matters more now than when it was filed: push CI was removed
+            (599-w5jd) so this workflow IS the release, and its Windows half now
+            carries Authenticode signing (722/724). A release nobody watches is a
+            release nobody confirms was signed.
+        
+            SHIPPED: scripts/resolve-release-run.sh, typed grammar
+            ok:release-run:<id> / blocked:release-run:{no-run-for-tag,gh-failed,
+            no-tag-given}, separating "gh failed" from "gh had nothing to say"
+            because collapsing them is a smaller copy of the same bug. The runbook
+            step consumes it and exits on a blocked verdict.
+        
+            VERIFIED: scripts/test-resolve-release-run.sh 6/6, hermetic against a
+            stub gh injected via GH - no network, no auth. Both absence shapes
+            assert a refusal; a POSITIVE control asserts a real id still resolves so
+            the resolver cannot degrade into refusing every release; trailing
+            newline tolerance is pinned because a false refusal there would block
+            every release.
+        
+            REMAINING: 87 candidate sites across nine runbooks, counted per skill
+            and triaged by blast radius in 727-kmks.
     - packet_id: version-guard-deadlocked-the-release
       order: 602-tfzg
       status: completed
@@ -32314,6 +32373,11 @@ plan_index:
           summary: |
             CLOSED via children. Order 606-46x9 was split 2026-08-09T06:30Z at a verification boundary into 626-bnn5 (loop-status-readme-exclusion- from-fragment-parse, closed 06:35Z) and 626-zmhz (folded-loop-status- renderer-and-count-gate, closed 09:22Z). Both children are verified done at HEAD, so this parent is closed with them as the replacement. Exit-criterion mapping: (1) exactly one ACTIVE RELEASE declaration and no contradictory prose — PROVEN by loop-status-verify (headings=1 actives=1 verdict=ok) which caught the stale v0.4 — ACTIVE label; (2) v0.5 counts match the folded ledger every cycle — PROVEN by the count gate re-deriving (216 open / 298 total tagged) and failing the stale 87/94; (3) loop_status.d/README.md excluded from parsing without suppressing malformed real fragments — PROVEN by 626-bnn5 (malformed=0 on the real store, genuine bad fragment still surfaces); (4) a fixture adding a packet fragment changes the rendered count and makes stale output fail — PROVEN by a_packet_fragment_changes_the_rendered_release_count and the three ORDER 626-zmhz litmus pins.
     - packet_id: git-mirror-cross-project-service-identity
+      split_into:
+        - '722-hthz — mirror-identity-vault-roles-exact (slice a: exact Vault signer roles/policies, no sign/*)'
+        - '722-ft6g — mirror-identity-per-project-dns (slice b: opaque per-project mirror DNS + provisioning sites)'
+        - '722-ecne — mirror-identity-lane-sidecar-and-sshd (slice c: per-lane sidecar, sshd principals, audit fields)'
+        - '722-uern — mirror-identity-negative-matrix-litmus (slice d: §4a M0-M7 executable gate)'
       release_target: forge-local-experts-milestone
       order: 606-bvnp
       status: ready
@@ -32397,6 +32461,17 @@ plan_index:
           host: forge
           summary: |
             Group under forge-local-experts-milestone (order 625-jd5f)
+        - type: note
+          ts: "2026-08-13T22:18:26Z"
+          host: linux-mutable
+          summary: |
+            606-bvnp split into four ready children; parent remains the criteria holder
+        - type: progress
+          ts: "2026-08-13T22:30:00Z"
+          agent_id: linux-mutable-20260813t2217z
+          host: linux_mutable
+          summary: |
+            SPLIT (shaping, no implementation). This p0 has been ready and unclaimed for days as a single ~6h security implementation that no hourly cycle can start, let alone finish — and it blocks authenticated-forge-write-transport-impl and order 451. Splitting it is the reduction step available: the design is SIGNED and already enumerates the rungs, so the shaping is a transcription of D1/D9/D12/D13, T3-T13 and §4a rather than a new decision. Children: 722-hthz exact Vault signer roles and policies with no sign/* (criterion 2, makes M2 testable); 722-ft6g the opaque per-project mirror DNS swap plus provisioning at the three non-forge-launch mirror-create sites (criterion 3, the one swap point 659-8faj left deliberately unswapped); 722-ecne the per-lane sidecar, sshd principals and audit fields (criterion 4, rungs T3-T13); 722-uern the §4a M0-M7 negative matrix as bound executable fixtures (criterion 1, the gate before 451 flips a lane). The first three are independent and can run concurrently on separate hosts; only the matrix depends on all of them. Two constraints carried into the children rather than left in prose: M6 stays BLOCKED on T9 because /vault/audit is a container-layer directory that dies on recreate, and M0 is mandatory because a broken stack passes every negative test. Criterion 5 (no forge secrets) was verified live in-forge on 2026-08-13 and is now a survival condition on 722-ecne rather than an open item. Parent stays open as the criteria holder until the four children close.
     - packet_id: git-mirror-egress-network-spec-drift
       order: 606-9wqd
       status: done
@@ -36210,7 +36285,7 @@ plan_index:
     - packet_id: freshness-coverage-rate-decision
       release_target: architecture-audit-epic
       order: 640-iujb
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       title: 'FRESHNESS coverage is open but not convergent: 1013 unstamped at one audit per cycle is ~1013 cycles'
@@ -36263,6 +36338,28 @@ plan_index:
           host: host
           summary: |
             Operator decision made 2026-08-12 and recorded in methodology; the remaining work (freshness-inventory reports against the defined subset + a litmus) is agent-implementable linux work, not a tlatoani decision.
+        - type: completed
+          ts: "2026-08-13T19:13:10Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:freshness-inventory-shape 10/10 PASS (scripts/run-litmus-test.sh spec-traceability --phase pre-build --size instant), steps 3-4 assert reported scope == methodology.yaml scope and generated-tree exclusion; report reads: freshness-target: scope=defined-subset excluded=219 source=methodology.yaml
+        - type: note
+          ts: "2026-08-13T19:13:10Z"
+          host: linux-mutable
+          summary: |
+            640-iujb verifiable_closure satisfied
+        - type: progress
+          ts: "2026-08-13T19:25:00Z"
+          agent_id: linux-mutable-20260813t1908z
+          host: linux_mutable
+          summary: |
+            MECHANICAL CLOSURE of the operator ruling. The decision half was already recorded (methodology.yaml component_freshness.coverage_target + audit_rate, 2026-08-12); what remained was the verifiable_closure — "the freshness advisory reports coverage against the defined subset, and a litmus asserts the reported target matches the methodology value". Both now hold. scripts/freshness-inventory.sh emits a new pinned line `freshness-target: scope=<scope> excluded=<n> source=methodology.yaml`, where <scope> is READ from methodology.yaml component_freshness.coverage_target.scope rather than restated in the script (and reports scope=unknown, never an invented value, if the key is unreadable). Generated trees leave the denominator via a declared EXCLUDED_PREFIXES list: today that is images/default/cheatsheets/, which scripts/stage-image-cheatsheets.sh regenerates as a straight copy of cheatsheets/ — auditing the copy asks a question already answered by auditing the source. Measured effect: 1087 components -> 868 (219 excluded), coverage 1.1% -> 1.3%, stamped 12 -> 11 (the twelfth stamp was on the derived copy). litmus:freshness-inventory-shape grew two steps — TARGET TRUTH (asserts reported scope == methodology scope, not merely that both exist) and DENOMINATOR (asserts the exclusion count is non-zero and no generated cheatsheet copy appears as an unstamped component). Suite is 10/10 PASS. Residual filed as 720-bmm9.
+        - type: verified-by
+          ts: "2026-08-13T19:25:30Z"
+          agent_id: linux-mutable-20260813t1908z
+          host: linux_mutable
+          summary: |
+            verifiable_closure satisfied: `scripts/freshness-inventory.sh` prints `freshness-target: scope=defined-subset excluded=219 source=methodology.yaml`; litmus:freshness-inventory-shape steps 3 and 4 PASS and fail loud if the report and methodology.yaml ever disagree or the exclusion is lost.
     - packet_id: stranded-in-progress-packets-are-invisible-both-ways
       order: 641-e2qa
       status: completed
@@ -43610,7 +43707,7 @@ plan_index:
 
     - packet_id: worktree-boundary-snapshot-is-unenforced
       order: 717-3bvv
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p2
       release_target: fail-loud-diagnosis-milestone
@@ -43670,3 +43767,1527 @@ plan_index:
             recurring loop window. Deliberately not fixed here: 37 minutes remained,
             and starting a change to the attestation contract with that budget
             would have produced exactly the half-landed guard this packet is about.
+        - type: completed
+          ts: "2026-08-13T20:25:39Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: scripts/test-worktree-boundary-guard.sh: PASS 6/6 (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, stamp-cleared); scripts/mo-full-attest.sh fixture: PASS 10/10 incl. self-no-boundary + negative control self-verified-boundary; wired into litmus:opencode-prompt-e2e-shape
+        - type: note
+          ts: "2026-08-13T20:25:39Z"
+          host: host
+          summary: |
+            Both shapes landed; criterion 3 decided (shape 1) and recorded
+        - type: verified
+          ts: "2026-08-13T20:30:00Z"
+          host: windows
+          summary: |
+            Both candidate shapes landed, because shape 2 alone would not have
+            caught cycle 16: a better message only helps an agent that runs
+            `verify`, and the failure was not running the snapshot at all.
+        
+              * `verify` with no snapshot ever taken now answers the typed
+                `blocked:no-snapshot-taken` (exit 3), distinguished from
+                `blocked:boundary-state-missing:<dir>` when a snapshot WAS taken
+                this cycle but verify was pointed elsewhere.
+              * `snapshot` records `$GIT_DIR/boundary-state` and clears any prior
+                `$GIT_DIR/boundary-verified`; a successful `verify` writes the HEAD
+                it observed. Cycle-scoped, per-checkout, never committed.
+              * `mo-full-attest.sh self` refuses to print a marker unless a boundary
+                was verified AT THE HEAD BEING ATTESTED. Binding to the head, not to
+                the stamp's existence, is what makes it real.
+        
+            EVIDENCE — scripts/test-worktree-boundary-guard.sh, 6/6 green on
+            windows-next, hermetic in a throwaway git repo under TMPDIR:
+        
+              PASS: worktree-boundary-guard fixture 6/6 scenarios green
+              (no-snapshot-taken, boundary-state-missing, clean-verify,
+               verified-stamp, dirty-exit, stamp-cleared)
+        
+            Scenario 1 reproduces the breach literally, verifying against
+            "$work/meta-orchestration-boundary.Wxg6hS" — the previous cycle's
+            already-removed temp path from the original report — and asserts
+            blocked:no-snapshot-taken instead of the errno message.
+        
+            scripts/mo-full-attest.sh fixture extended 7 -> 10 and green:
+        
+              PASS: mo-full-attest fixture 10/10 scenarios green (…,
+              self-no-boundary, self-stale-boundary, self-verified-boundary)
+        
+            self-no-boundary is the cycle-16 shape: committed, pushed, converging
+            remote, no boundary — marker refused. NEGATIVE CONTROLS in both fixtures
+            (clean-verify, self-verified-boundary) assert the new verdicts cannot
+            degrade into refusing every cycle: a cycle that DID snapshot still
+            verifies clean and still gets its marker. Both fixtures are wired into
+            litmus:opencode-prompt-e2e-shape's critical path.
+        - type: completed
+          ts: "2026-08-13T20:35:00Z"
+          host: windows
+          summary: |
+            Criterion 3 (whether the terminal attestation should depend on this)
+            answered YES, shape 1, recorded with its reasoning and its fleet
+            consequence in
+            plan/issues/enhancement-worktree-boundary-snapshot-is-unenforced-2026-08-13.md.
+            `check` was deliberately left alone — it validates a marker produced
+            elsewhere, and boundary state is a property of the producing host's
+            cycle.
+        
+            Closed by the host that filed it, on the cycle after — and the cycle
+            that closed it had itself skipped the snapshot once more before the fix
+            landed, which is the argument for shape 1 in one line.
+    - packet_id: hand-authored-ledger-timestamps-drift
+      order: 719-kgr5
+      status: done
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: Ledger timestamps are accepted as given, so a host that invents them instead of reading its clock corrupts the ordering silently
+      deliverable: tillandsias-plan loop-status-append / append-event --ts validation
+      pickup_role: any
+      capability_tags:
+        - plan
+        - fail-loud
+        - multi-host
+        - telemetry
+      estimated_hours: 2
+      context: |
+        MEASURED, and the offending host filed this against itself.
+        
+        Across the 2026-08-13 windows overnight run, fragment names and `--ts`
+        values were HAND-AUTHORED — incremented by roughly an hour per cycle from
+        an early value — instead of read from the clock. Compare claimed against
+        the real commit time of the same file:
+        
+          windows        claims 12:05:00Z   committed 09:01:16Z   (+3h)
+          windows        claims 20:05:00Z   committed 12:30:59Z   (+7.6h)
+          windows        claims 22:05:00Z   committed 13:28:29Z   (+8.6h)
+          linux-mutable  claims 11:51:13Z   committed 11:51:27Z   (+14s)
+          linux-mutable  claims 12:50:28Z   committed 12:50:45Z   (+17s)
+        
+        Linux reads its clock; windows invented values, and the error GREW through
+        the night. The linux host noticed and reported it as "your clock is 7
+        hours ahead of UTC" — a reasonable reading of the symptom, and wrong about
+        the cause. The machine clock is correct: system UTC 18:51:40 against
+        cloudflare's Date header 18:51:39, in PDT (UTC-7). Nothing was wrong with
+        the host; the writes were fabricated.
+        
+        WHY IT MATTERS BEYOND TIDINESS. The ledger is a multi-host append-only
+        CRDT whose fragments fold in name order, `expire-claims` decides staleness
+        from event timestamps, and `cycle-metrics` reports rolling windows over
+        them. A host writing timestamps hours ahead makes its own claims look
+        fresher than they are, sorts its fragments after work that really came
+        later, and can make a genuinely stale claim outlive its TTL. It also
+        wastes a sibling's time: linux spent effort diagnosing a clock fault that
+        did not exist.
+        
+        THE SHAPE IS FAMILIAR. This is the same defect class the same host spent
+        the night removing from other code — a value nobody measured, presented as
+        measured (see 716-f5kc's unverified stamp, 632-retq's counterfeit drained
+        ledger, 622-rmit's expression pins). The tooling accepts `--ts` on trust,
+        which makes correctness a property of agent discipline. Discipline is what
+        failed here, for eleven consecutive cycles, without one thing noticing.
+      outcome: |
+        A timestamp that disagrees with the writing host's clock is refused at the
+        point of writing, so ordering cannot be corrupted by an agent that
+        guesses.
+      exit_criteria:
+        - '`loop-status-append` and `append-event` refuse a `--ts` that differs from the host clock by more than a bounded skew (suggest 15 minutes, generous enough for a slow cycle and tight enough to catch a fabricated hour), with a typed refusal naming both values.'
+        - '`--ts` becomes OPTIONAL and defaults to the host clock, so the correct thing is also the easy thing — the current interface makes inventing a value exactly as convenient as reading one.'
+        - A NEGATIVE CONTROL asserts a legitimate in-skew timestamp is still accepted, so the guard cannot degrade into refusing all explicit timestamps.
+        - An escape hatch exists for genuine backfill (recording an event that really happened earlier), and it is explicit rather than implicit — a flag someone has to type, not silence.
+      notes: |
+        Do NOT rewrite the already-published fragments. They are append-only and
+        immutable by design, several are already merged into linux-next, and
+        rewriting history to hide a measurement error would be a worse defect than
+        the error. The correction is this packet plus the note on the affected
+        cycles.
+      events:
+        - type: filed
+          ts: "2026-08-13T18:53:12Z"
+          host: windows
+          summary: |
+            Filed by the host that did it, with a timestamp read from `date -u`
+            rather than invented — which is the entire fix, expressed once.
+        - type: completed
+          ts: "2026-08-13T21:34:55Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: scripts/test-ledger-ts-guard.sh PASS 9/9 (future-drift, past-drift, in-skew, absent-ts, backfill, backfill-future, malformed, set-field, loop-status-append); cargo test -p tillandsias-plan --lib iso8601 1 passed in WSL; litmus baseline unchanged 16/21 before and after
+        - type: note
+          ts: "2026-08-13T21:34:55Z"
+          host: host
+          summary: |
+            skew guard + clock default + backfill hatch landed
+        - type: verified
+          ts: "2026-08-13T21:35:10Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            Closed by the host that caused it, with a timestamp read from the clock — the fragment this write produced is named 20260813t213455z against a real 21:35Z, which is the fix demonstrating itself.  WHAT LANDED, against the four exit criteria:    * A shared resolve_ts() now guards every ledger writer — append-event, set-field (both arms), loop-status-append. A guard on one surface would have been a detour, not a constraint.   * --ts is OPTIONAL everywhere and defaults to the host clock. append-event previously REQUIRED it, on the reasoning that "the tool does not invent timestamps" — but the caller then invented them instead, for eleven consecutive cycles. Reading the clock is not inventing a timestamp; it is the only way to measure one.   * Skew limit 900s, and a refusal names BOTH values. The symptom was misdiagnosed once already as "your clock is 7 hours ahead of UTC" (it was correct to the second), so a refusal naming one number would invite the same wrong reading.   * --backfill is the escape hatch, and it reaches BACKWARD only. A flag that also waived future timestamps would hand the original defect a one-word bypass; scenario 6 pins that.  EVIDENCE: scripts/test-ledger-ts-guard.sh 9/9 green, hermetic against a throwaway ledger under TMPDIR. Scenario 1 is the breach shape (+8.6h). Scenarios 3 and 4 are the negative controls that keep the guard from degrading into refusing all explicit timestamps. Unit test answer::iso8601_parsing_round_trips_and_refuses_what_it_does_not_understand passes in the WSL distro, anchored to the real drift numbers from the report.  Two fixture litmus tests passed a fixed historical --ts for determinism and now say so with --backfill, which is exactly the case that flag exists for. Litmus baseline measured BEFORE and AFTER by stashing: 16/21 both times, same five failures, so this change introduced none of them. Those five are pre-existing on this host and one of them (append-event-rejects-unknown-flags, "bash: line 1: : command not found") is the 721-nyev binary-probe bug filed earlier today.  NOT DONE, deliberately: the already-published drifted fragments are left alone. They are append-only and immutable by design, several are merged into linux-next, and rewriting history to hide a measurement error would be the worse defect.
+
+    - packet_id: cycle-preflight-resolves-plan-binary-by-execution
+      order: 720-fmvu
+      status: done
+      desired_release: v0.5
+      priority: p1
+      release_target: bare-metal-expert-inference-parity
+      kind: fix
+      title: cycle-preflight.sh must resolve the plan binary through the shared probe, not a hardcoded path
+      deliverable: scripts/cycle-preflight.sh sources scripts/plan-binary-probe.sh
+      pickup_role: any
+      capability_tags:
+        - windows
+        - wsl2
+        - preflight
+        - fail-loud
+      context: |
+        The preflight added yesterday (718-nkm2, commit 009fe525) verifies the
+        instrument it just rebuilt by running
+        
+            ./target/release/tillandsias-plan capabilities
+        
+        On this shared Windows/WSL checkout that path is a Linux ELF left by a WSL
+        build, sitting beside the runnable tillandsias-plan.exe. Under Git Bash it
+        is selected on existence and dies with "Exec format error", so the
+        preflight printed
+        
+            blocked:preflight:plan:capabilities-refused
+        
+        and — per its own contract, correctly — refused to let the cycle start.
+        The instrument was freshly built and perfectly healthy; the verdict was
+        about a filename.
+        
+        This is the FOURTH site to reintroduce the bug that scripts/plan-binary-probe.sh
+        was centralised (704-zcgi) to stop recurring, after check-stranded-in-progress.sh,
+        check-fragment-closure-evidence-added.sh and select-work-batch.sh. The probe's
+        own rule is the diagnosis: an executable bit or a file extension is a claim,
+        running the binary is evidence.
+        
+        Worth noting what worked: the preflight is a HARD gate and it failed loud,
+        on its first real Windows cycle, one commit after it landed. A soft
+        advisory here would have let the cycle proceed on the stale ELF and the
+        failure would have surfaced later, somewhere less legible.
+      outcome: |
+        cycle-preflight.sh sources the shared probe and takes whatever
+        resolve_plan_binary returns, so the capabilities check runs against the
+        binary this host can actually execute. Verified on windows-next:
+        ok:cycle-preflight:rebuilt:skip:not-wsl (exit 0).
+      exit_criteria:
+        - cycle-preflight.sh contains no hardcoded target/release path; it sources plan-binary-probe.sh.
+        - The preflight returns ok:cycle-preflight:* on a Windows checkout carrying both an ELF and an .exe.
+      events:
+        - type: filed
+          ts: "2026-08-13T19:15:00Z"
+          host: windows
+          summary: |
+            Found by the first windows-next full cycle after 009fe525: the
+            preflight blocked the cycle on its own hardcoded binary path.
+        - type: completed
+          ts: "2026-08-13T19:20:00Z"
+          host: windows
+          summary: |
+            Fixed by sourcing scripts/plan-binary-probe.sh. Re-ran the preflight on
+            this host: ok:cycle-preflight:rebuilt:skip:not-wsl, exit 0. The cycle
+            that filed this packet is the one it unblocked.
+
+    - packet_id: plan-binary-probe-usage-sweep-and-gate
+      order: 721-nyev
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: bare-metal-expert-inference-parity
+      kind: fix
+      title: Eight more scripts still execute the plan binary without the shared probe; convert them and gate the pattern
+      deliverable: converted call sites + an executable check that fails on a new hardcoded site
+      pickup_role: any
+      capability_tags:
+        - windows
+        - wsl2
+        - tooling
+        - fail-loud
+      estimated_hours: 3
+      context: |
+        Fixing 720-fmvu answered the immediate block but not the class. A sweep of
+        every script that EXECUTES the plan binary found eight further sites, none
+        of which mention tillandsias-plan.exe and none of which source
+        scripts/plan-binary-probe.sh:
+        
+          scripts/check-fragment-status-loss.sh          (candidate loop, no .exe)
+          scripts/check-groundtruth-mutable-status-pins.sh (candidate loop, no .exe)
+          scripts/reclaim-stranded-claims.sh             (candidate loop, no .exe)
+          scripts/cycle-metrics.sh                       (two candidate loops)
+          scripts/delegate-outcome.sh                    (direct hardcoded call)
+          scripts/drain-queue.sh                         (candidate loop)
+          scripts/hooks/pre-push-local-gate.sh           (direct, plus an [[ -x ]] test)
+          scripts/release-preflight.sh                   (direct, plus an [[ -x ]] test)
+        
+        On a shared Windows/WSL checkout every one of these selects the Linux ELF
+        at target/release/tillandsias-plan over the runnable .exe. The failure is
+        not uniform, which is why it keeps being rediscovered one site at a time:
+        the checkers degrade to "binary absent, check skipped" (a silent hole),
+        while pre-push-local-gate.sh's `[[ -x ]]` test PASSES on the ELF and then
+        runs a fragment check that cannot execute — a gate reporting on evidence it
+        never gathered.
+        
+        704-zcgi centralised the probe on the reasoning that fixing instances is
+        not enough; 720-fmvu is the fourth instance since. So the closure here has
+        to be the gate, not another round of edits.
+      exit_criteria:
+        - All eight sites resolve the binary through resolve_plan_binary; none names a target/ path it then executes.
+        - An executable check fails when a tracked script executes a hardcoded target/{release,debug}/tillandsias-plan without sourcing the probe, prints a one-line typed verdict, and is wired into the local gate.
+        - The check is red before the conversion and green after — demonstrate both, so it is proven to be able to fail.
+        - 'NEGATIVE CONTROL: plan-binary-probe.sh itself, and any script legitimately naming the path in a comment or a message, do not trip the check.'
+      events:
+        - type: filed
+          ts: "2026-08-13T19:25:00Z"
+          host: windows
+          summary: |
+            Filed from the 720-fmvu sweep. Counted by grep across scripts/: eight
+            executing sites, zero .exe mentions, zero probe sourcing.
+
+    - packet_id: freshness-inventory-subset-source-and-specs
+      order: 720-bmm9
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: enhancement
+      title: 'FRESHNESS denominator is narrower than the ruled subset: source code and openspec/specs are not enumerated'
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - freshness
+        - methodology
+        - convergence
+      context: |
+        methodology.yaml component_freshness.coverage_target names the in-scope
+        subset as "executable/source code, scripts, litmus tests, specs
+        (openspec/specs), and methodology docs". scripts/freshness-inventory.sh
+        currently enumerates scripts/, images/default/, cheatsheets/,
+        openspec/litmus-tests/, and methodology/ — so source code (206 .rs files
+        under crates/) and openspec/specs/ are absent from the denominator.
+        Closing 640-iujb narrowed the denominator correctly (generated trees out);
+        this packet widens it correctly (ruled-in components in). It was
+        deliberately NOT bundled into that closure: adding ~200+ components to the
+        denominator moves the reported coverage number, and doing that silently
+        inside a packet about honest reporting would be the exact failure mode the
+        ruling was about.
+      exit_criteria:
+        - inventory enumerates openspec/specs and the crate source tree per the methodology subset
+        - the coverage delta from the widening is reported once, explicitly, rather than appearing as an unexplained drop
+        - litmus:freshness-inventory-shape asserts a ruled-in tree is present in the denominator, so a future narrowing fails loud
+      verifiable_closure: |
+        scripts/freshness-inventory.sh counts at least one component from
+        openspec/specs and one from crates/, and a litmus step fails if either
+        tree disappears from the inventory.
+      events:
+        - type: filed
+          ts: "2026-08-13T19:25:00Z"
+          agent_id: linux-mutable-20260813t1908z
+          host: linux_mutable
+          summary: |
+            Filed while closing 640-iujb, from the same reading of the operator ruling that closure implemented.
+        - type: completed
+          ts: "2026-08-13T21:18:40Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:freshness-inventory-shape 12/12 PASS (scripts/run-litmus-test.sh spec-traceability --phase pre-build --size instant); steps 5-6 assert both ruled-in trees are enumerated and the denominator_delta grammar; report reads: freshness-inventory: 1250 components / freshness-target: scope=defined-subset excluded=219 denominator_delta=+0
+        - type: note
+          ts: "2026-08-13T21:18:40Z"
+          host: linux-mutable
+          summary: |
+            720-bmm9 closed
+        - type: progress
+          ts: "2026-08-13T21:30:00Z"
+          agent_id: linux-mutable-20260813t2117z
+          host: linux_mutable
+          summary: |
+            All three exit criteria met. The inventory now enumerates the rest of the ruled subset: openspec/specs (171 components) joins INVENTORY_PATHS, and crates/**/*.rs (206) is enumerated through a separate SOURCE_PATHS list because the yaml/yml/md loop was never going to find code. target/ is excluded by construction — a build output is not a component. Denominator 868 -> 1250. The measured effect is the reason criterion 2 exists: coverage fell from 1.3% to 1.0% without a single stamp being lost. A percentage that drops because the target got BIGGER reads as decay to anyone looking at the report alone. The report now carries denominator_delta on the freshness-target line, tracked through a third cache field, and an older two-field cache yields denominator_delta=unknown rather than a fabricated zero. Together with 640-iujb the denominator is now pinned in both directions: generated trees may not enter it, ruled-in trees may not leave it.
+        - type: verified-by
+          ts: "2026-08-13T21:30:30Z"
+          agent_id: linux-mutable-20260813t2117z
+          host: linux_mutable
+          summary: |
+            verifiable_closure executed as litmus:freshness-inventory-shape steps 5 and 6 — step 5 asserts both crates/ and openspec/specs/ contribute components (fails loud if either tree is dropped again), step 6 pins the denominator_delta field's grammar. Suite 12/12 PASS.
+
+    - packet_id: compaction-launders-unquoted-timestamps
+      order: 720-24u6
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: Compaction folds bare-scalar timestamps into the base and the 440 gate reports it as a vocabulary divergence
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - plan-ledger
+        - compaction
+        - gates
+        - fail-loud
+      context: |
+        Full write-up: plan/issues/compaction-folds-unquoted-timestamps-past-the-fragment-gate-2026-08-13.md
+        
+        `tillandsias-plan compact` (commit 61125b0e, 192 fragments) folded 231
+        event timestamps written as bare scalars (`ts: 2026-08-12T15:31:54Z`) into
+        plan/index.yaml verbatim — correct behaviour for a byte-preserving fold.
+        Ruby's Psych resolves a bare ISO-8601 scalar to Time, a disallowed class
+        under safe_load, so the ./build.sh --check status-vocab step could no
+        longer load the index. It reported `plan/index.yaml and plan/schema.yaml
+        status vocabularies diverge (440)` — the wrong cause; the vocabularies
+        were identical and the file simply would not parse.
+        
+        Every fragment passed its own gates: yq and serde_yaml accept a bare
+        timestamp, so added-fragments-parse saw nothing. The mismatch is only
+        observable at fold time, and compaction has run on the real ledger three
+        times total.
+      exit_criteria:
+        - fragment-writing subcommands (set-field, append-event, loop-status-append) emit quoted ts values
+        - the added-fragment parse gate rejects a bare ISO-8601 scalar, so the failure lands on the fragment rather than on a later fold
+        - the 440 status-vocab check distinguishes "index failed to load" from "vocabularies diverge" and names which
+      verifiable_closure: |
+        A fixture fragment carrying `ts: 2026-01-01T00:00:00Z` fails the
+        added-fragment parse gate while the quoted form passes; a fixture index
+        that Ruby cannot load produces a load-failure verdict from the 440 check,
+        never a divergence verdict.
+      notes: |
+        The base was repaired in the same cycle that found this (231 scalars
+        quoted, gate green again). That repair is not the fix — nothing prevents
+        the next fold from re-introducing it.
+      events:
+        - type: completed
+          ts: "2026-08-13T19:22:57Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:added-fragment-parse-gate-shape 6/6 PASS (scripts/run-litmus-test.sh ci-release --phase pre-build --size instant); gates: check-added-fragments-parse.sh emits violation:added-fragment-bare-timestamp, check-plan-schema-divergence.sh emits blocked:index-load-failed distinctly from status-vocab-diverges
+        - type: note
+          ts: "2026-08-13T19:22:57Z"
+          host: linux-mutable
+          summary: |
+            720-24u6 all three exit criteria met with negative controls
+        - type: filed
+          ts: "2026-08-13T19:45:00Z"
+          agent_id: linux-mutable-20260813t1908z
+          host: linux_mutable
+          summary: |
+            Found by running ./build.sh --check immediately after compacting 192 fragments; the gate's own verdict named the wrong cause, which is itself one of the three exit criteria.
+        - type: progress
+          ts: "2026-08-13T20:05:00Z"
+          agent_id: linux-mutable-20260813t1917z
+          host: linux_mutable
+          summary: |
+            All three exit criteria met. (1) Fragment-writing subcommands already emit quoted timestamps — all six `ts:` emitters in crates/tillandsias-plan/src/main.rs (set-field, append-event, loop-status-append and their callers, lines 2748/2920/3025/3066/3180/3188) write `ts: "{ts}"`. So the 231 bare scalars folded on 2026-08-13 came from HAND-AUTHORED fragments, not from the tool; the criterion was satisfied before the packet was filed and the real hole was the admission gate. (2) scripts/check-added-fragments-parse.sh now refuses an added/modified fragment carrying an unquoted ISO-8601 `ts:` scalar, verdict `violation:added-fragment-bare-timestamp:<n>`, diff-scoped like the rest of that gate so an inherited fault warns rather than turning every host's push red. (3) scripts/check-plan-schema-divergence.sh gained a third verdict, `blocked:index-load-failed: <file>: <first line of parser message>`, and build.sh no longer restates "vocabularies diverge" for every failure mode — the verdict line is now the cause. NEW litmus:added-fragment-parse-gate-shape (6/6 PASS) pins all of it with hermetic throwaway-repo NEGATIVE controls: a bare-timestamp fragment must be refused, the same fragment quoted must pass (so the refusal cannot be a gate that rejects everything), an unloadable index must report index-load-failed and must NOT report a divergence, and the live ledger must load and agree. That test did not exist despite the script claiming it as its pin since 698-7n6q; filed as 721-77yu.
+        - type: verified-by
+          ts: "2026-08-13T20:05:30Z"
+          agent_id: linux-mutable-20260813t1917z
+          host: linux_mutable
+          summary: |
+            verifiable_closure satisfied and executed: litmus:added-fragment-parse-gate-shape steps 3-6 are exactly the fixtures the closure names, 6/6 PASS in the ci-release suite (scripts/run-litmus-test.sh ci-release --phase pre-build --size instant). Both gates run inside ./build.sh --check.
+
+    - packet_id: litmus-pin-claims-unverified
+      order: 721-77yu
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: fix
+      title: A script can claim "Pinned by litmus:<name>" for a litmus test that does not exist, and nothing checks
+      pickup_role: any
+      depends_on: []
+      capability_tags:
+        - gates
+        - fail-loud
+        - traceability
+      context: |
+        scripts/check-added-fragments-parse.sh carried the header line "Pinned by
+        litmus:added-fragment-parse-gate-shape" from the day it was written (order
+        698-7n6q). No such litmus test existed. The claim read as verification and
+        supplied none — a reviewer who greps for the pin finds the sentence, not
+        the test.
+        
+        The gap was found while closing 720-24u6 and the missing test was written
+        in that same commit, so the specific instance is closed. A sweep of every
+        `litmus:<name>` token appearing in scripts/*.sh against the `name:` fields
+        in openspec/litmus-tests/ found no other live false claim — which is the
+        argument FOR a guard, not against one: the invariant currently holds by
+        accident and nothing keeps it holding.
+        
+        There is a second, weaker link in the same chain: a litmus file can exist
+        and still never run, because execution is driven by
+        openspec/litmus-bindings.yaml. The new test passed 6/6 locally while being
+        silently absent from every suite run until it was bound. An unbound litmus
+        is as inert as a missing one.
+      exit_criteria:
+        - a check resolves every `litmus:<name>` token claimed in scripts/ against the litmus-test name set and fails naming any unresolvable claim
+        - the same check verifies each resolved test is BOUND in openspec/litmus-bindings.yaml, since an unbound test never executes
+        - a fixture script claiming a nonexistent litmus name fails the check, and a fixture claiming a real bound one passes
+      verifiable_closure: |
+        A fixture script whose header claims `litmus:does-not-exist` makes the
+        check exit non-zero and name that token; a fixture claiming a real, bound
+        test passes. Wired into ./build.sh --check.
+      events:
+        - type: filed
+          ts: "2026-08-13T20:05:00Z"
+          agent_id: linux-mutable-20260813t1917z
+          host: linux_mutable
+          summary: |
+            Found while closing 720-24u6: the gate being fixed claimed a litmus pin that had never existed.
+        - type: completed
+          ts: "2026-08-13T20:19:31Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:added-fragment-parse-gate-shape 8/8 PASS (scripts/run-litmus-test.sh ci-release --phase pre-build --size instant), steps 6-7 are the three-verdict control and the live-tree check; scripts/check-litmus-pin-claims.sh wired into ./build.sh --check, reports ok:litmus-pin-claims:33 checked
+        - type: note
+          ts: "2026-08-13T20:19:31Z"
+          host: linux-mutable
+          summary: |
+            721-77yu closed
+        - type: progress
+          ts: "2026-08-13T20:30:00Z"
+          agent_id: linux-mutable-20260813t2017z
+          host: linux_mutable
+          summary: |
+            All three exit criteria met. NEW scripts/check-litmus-pin-claims.sh resolves every `litmus:<name>` token appearing in scripts/ against the `name:` set in openspec/litmus-tests/ and against the bindings in openspec/litmus-bindings.yaml, emitting one of three verdicts — ok:litmus-pin-claims:<n> checked, violation:litmus-pin-unresolvable:<n> (no test declares the name), violation:litmus-pin-unbound:<n> (the test exists but no spec binds it, so it executes in no suite). Wired into ./build.sh --check. Live tree: 33 claims checked, all resolve and are bound. One subtlety worth recording: run-litmus-test.sh wraps a test name mid-token across two comment lines, which a naive scan reports as a claim on a nonexistent test. A match that ends at end-of-line on a hyphen is wrapped prose — a real claim never does — so those are skipped and counted on a note to stderr. Inventing a violation out of a wrapped comment would have made this checker precisely the false signal it exists to remove, and it caught the checker's OWN header prose first.
+        - type: verified-by
+          ts: "2026-08-13T20:30:30Z"
+          agent_id: linux-mutable-20260813t2017z
+          host: linux_mutable
+          summary: |
+            verifiable_closure executed as litmus:added-fragment-parse-gate-shape step 6: one hermetic tree, three fixtures (a name no test declares, a test no spec binds, a correct claim), asserting three DISTINCT verdicts in sequence — a single fixture would be satisfied by a checker that refuses everything. Step 7 asserts the live tree is clean. Suite 8/8 PASS in ci-release.
+
+    - packet_id: windows-authenticode-signing
+      order: 722-ksnk
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: milestone
+      title: Authenticode-sign the Windows release artifacts so they stop tripping SmartScreen
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - release
+        - signing
+        - trust
+      context: |
+        OPERATOR DIRECTIVE 2026-08-13: the Microsoft Partner Center account was
+        approved. The Store question was scoped down deliberately — Authenticode
+        first, Store listing later — because Authenticode is a prerequisite for
+        BOTH Store paths and is the only half that helps the lane users actually
+        install from today.
+        
+        WHAT EXISTS NOW, measured against the workflow rather than assumed. The
+        `windows-release` job builds a portable
+        `tillandsias-tray-<ver>-windows-x64.zip` (tray exe + install-windows.ps1),
+        republishes it as `tillandsias-windows-x64.zip`, extracts a bare
+        `tillandsias-tray.exe`, and signs those artifacts with COSIGN BUNDLES.
+        
+        Cosign is the wrong instrument for this surface and it is worth being
+        precise about why, because the artifacts look signed. A `.cosign.bundle`
+        is a Sigstore attestation verified by `cosign verify-blob`; Windows,
+        SmartScreen and the Store have no idea what it is. It proves provenance to
+        someone who already has cosign and already knows to check. It does nothing
+        for the user double-clicking the exe, which is every Windows user. There
+        is no signtool, no .pfx, no certificate anywhere in
+        scripts/build-windows-tray.ps1 or .github/workflows/release.yml, and zero
+        mentions of Authenticode or SmartScreen across plan/ or docs/.
+        
+        Cosign STAYS. The two prove different things to different audiences and
+        the mistake would be to treat this as a replacement.
+        
+        IDENTITY: Azure Trusted Signing (rebranded Azure Artifact Signing), ~$9.99/mo
+        for 5,000 signatures, no hardware token, available to US/CA/EU/UK
+        businesses and self-employed individuals — the earlier three-years-trading
+        requirement was dropped. Chosen over a traditional OV/EV cert on cost and
+        on not having a token to hold in CI.
+      outcome: |
+        A user who downloads the Windows tray from GitHub sees a signed publisher
+        instead of a SmartScreen warning, and the Store submission — whichever
+        path is later chosen — is not blocked on the signing identity.
+      exit_criteria:
+        - Every rung below is closed, or explicitly retired with its reason.
+        - Cosign bundles are still published; nothing about the Linux/macOS verification contract changed.
+      events:
+        - type: filed
+          ts: "2026-08-13T21:55:00Z"
+          host: windows
+          summary: |
+            Filed from the operator directive, scoped to Authenticode after the
+            Store-path options were laid out and the smallest slice was chosen.
+
+    - packet_id: windows-signing-identity-provisioned
+      order: 722-w7a2
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: windows-authenticode-signing
+      kind: decision
+      title: Provision the Trusted Signing identity and reach it from CI without a token
+      deliverable: an Azure Trusted Signing account + certificate profile, and the federated credentials the release workflow uses
+      pickup_role: operator
+      capability_tags:
+        - windows
+        - signing
+        - ci
+        - secrets
+      estimated_hours: 2
+      context: |
+        OPERATOR-OWNED, and blocking the rungs below. This rung buys and names an
+        identity; no agent can do it, because it is tied to the legal entity the
+        certificate will attest.
+        
+        The CI half is the part with a design choice: GitHub Actions should reach
+        Trusted Signing through federated OIDC credentials rather than a stored
+        secret, so there is no long-lived signing credential in the repo's secret
+        store. That is the same reasoning that made cosign KEYLESS here.
+      exit_criteria:
+        - A Trusted Signing account and certificate profile exist, and the account's published name is recorded (it is what users will see, so it is a decision, not a detail).
+        - The release workflow can authenticate to it with no long-lived secret, or the reason a stored secret was unavoidable is recorded.
+        - The recurring cost and its renewal owner are written down — an expired signing identity fails a release, loudly and at the worst moment.
+      events:
+        - type: note
+          ts: "2026-08-13T22:24:16Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            CONCRETE REQUIREMENTS, read from the Artifact Signing integration doc (learn.microsoft.com/azure/artifact-signing/how-to-signing-integrations) while the operator installed the client tools on this host.  The client tools are NOT the blocker and installing them proves nothing about readiness: `winget install -e --id Microsoft.Azure.ArtifactSigningClientTools` delivers only the local toolchain — SignTool, .NET 8 runtime, VC++ redist, and Azure.CodeSigning.Dlib.dll. Signing still refuses until the Azure side exists.  WHAT THIS RUNG MUST ACTUALLY PRODUCE:   * an Artifact Signing account, IDENTITY VALIDATION (the long pole; everything else is minutes), and a certificate profile;   * the Artifact Signing Certificate Profile Signer role assigned to the signing identity — without it the tools are installed and signing 403s;   * the account's REGION, recorded. metadata.json's Endpoint is region-specific (e.g. https://wus2.codesigning.azure.net) and the doc names a region/profile mismatch as the common cause of 403 Forbidden plus an internal SignerSign() failure. That is a configuration fact to write down, not to rediscover from an error message.  TOOLCHAIN PIN worth recording with it: SignTool must come from Windows SDK >= 10.0.2261.755, and the doc states the 20348 SDK is NOT supported with the dlib. A host that happens to have an older SDK on PATH fails in a way that looks like a signing problem.  CI: authentication is DefaultAzureCredential, so federated OIDC drops in as intended, and ExcludeCredentials can narrow the chain so a misconfigured runner fails fast instead of walking every credential type.
+
+    - packet_id: windows-tray-authenticode-in-packaging
+      order: 722-qvqb
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: windows-authenticode-signing
+      depends_on:
+        - windows-signing-identity-provisioned
+      kind: feat
+      title: Sign the tray exe BEFORE it is zipped and hashed
+      deliverable: scripts/build-windows-tray.ps1 signing step + workflow wiring
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - release
+        - signing
+        - build
+      estimated_hours: 3
+      context: |
+        ORDERING IS THE WHOLE PACKET, and it is easy to get wrong in a way that
+        passes locally. scripts/build-windows-tray.ps1 stages the payload (~:214),
+        then `Compress-Archive` (:235), then takes `Get-FileHash` of the ZIP (:240)
+        to write SHA256SUMS-windows. The workflow then re-hashes the republished
+        zip and the extracted bare exe.
+        
+        Signing mutates the exe. So it must happen on the STAGED exe, before
+        Compress-Archive — otherwise every checksum in SHA256SUMS-windows
+        describes a file nobody will ever download, and the failure surfaces to
+        users as a checksum mismatch on a correctly signed binary, which reads as
+        a supply-chain attack rather than as a build-order bug.
+        
+        The bare `tillandsias-tray.exe` the workflow extracts from the zip
+        inherits the signature automatically, which is the argument for signing
+        the staged file rather than signing each published artifact separately.
+      exit_criteria:
+        - The tray exe inside the published zip, and the bare extracted exe, both carry a valid Authenticode signature.
+        - SHA256SUMS-windows matches the SIGNED artifacts — verified by running the existing `sha256sum -c SHA256SUMS-windows` step against a real release build, not by inspection.
+        - The cosign bundle step is unchanged and still publishes bundles for the same artifacts.
+        - A local build with no signing credentials still succeeds and says clearly that it produced an UNSIGNED artifact — a developer build must not require the release identity, and must not silently look like a release build.
+      events:
+        - type: note
+          ts: "2026-08-13T22:25:01Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            SCOPE SHARPENED by operator directive 2026-08-13 ("we need a way to sign during development here, and a way to sign in github actions"). This packet now owns the SEAM plus the DEV lane; the CI lane is 724-rpna. They are separated because they fail differently, but they share one seam by construction — otherwise what CI signs stops being what a developer can reproduce.  DEV LANE, concretely: DefaultAzureCredential picks up AzureCliCredential, so a developer who has run `az login` signs with no extra configuration. Two properties this packet must hold:    * DEFAULT OFF locally. The plan is 5,000 signatures/month, and a loop that signs every local build burns quota for artifacts nobody ships. Signing is opt-in for a dev build and mandatory for a release build.   * An unsigned dev build must SAY it is unsigned. This repo's recurring failure is the artifact that looks like a release and is not; a quiet unsigned build is that shape.  ADDED EXIT CRITERION, from the integration doc rather than from taste: TIMESTAMPING IS MANDATORY AND MUST BE ASSERTED. Artifact Signing certificates carry a THREE-DAY validity, so `/tr http://timestamp.acs.microsoft.com /td SHA256` is what keeps a signature valid past the week it was made. An untimestamped artifact passes every check at release time and goes untrusted for every user a few days later — green at the gate, broken in the field, and unfalsifiable from the release run itself. 722-f86z's verification check must therefore assert the timestamp countersignature, not merely the signature.
+        - type: progress
+          ts: "2026-08-13T22:45:17Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            PARTIAL — the seam and both lanes are wired; the identity (722-w7a2) is still what gates real signing.  SHIPPED:   * scripts/sign-windows-artifact.ps1 — one signing seam for both lanes. Signs via signtool + the Artifact Signing dlib with /tr http://timestamp.acs.microsoft.com, then ASSERTS the result. Both lanes call it; only the credential DefaultAzureCredential resolves differs (AzureCliCredential locally, federated OIDC in CI), which is what keeps a developer able to reproduce what CI produced.   * build-windows-tray.ps1 -Sign, placed on the STAGED exe before Compress-Archive and before the checksum. Opt-in locally (5,000 signatures/month is easy to burn on artifacts nobody ships); a build without it prints "UNSIGNED build" rather than looking like a release; a build WITH it that cannot sign throws instead of degrading.   * release.yml: azure/login federated OIDC + client-tools install, gated on vars.TILLANDSIAS_SIGNING_ACCOUNT so the lane keeps working until the identity exists, and emits a ::warning:: naming this packet when it publishes unsigned.   * Endpoint/account/profile are repo VARIABLES, not secrets — they are names and a regional URI. Only the credential must be short-lived, and that comes from OIDC.  VERIFIED, scripts/test-sign-windows-artifact.ps1, 5/5:   unsigned-rejected, unconfigured-refused, signed-accepted (POSITIVE control — a real signed+timestamped system binary must PASS, or a verifier that refuses everything would satisfy every other scenario), missing-file-named, sign-before-package.  HAND-FALSIFICATION, both directions, because a check never seen failing is indistinguishable from one that always passes:   * neutering the Status check flipped unsigned-rejected to FAIL;   * moving the signing call after Compress-Archive flipped sign-before-package to FAIL;   * restoring each returned 5/5.  THREE DEFECTS FOUND IN THIS FIXTURE BY RUNNING IT, all of the same family and worth recording because they are the family this milestone is about:   1. The tamper step used `Add-Content -Encoding Byte`, removed in PowerShell 7. It threw a warning, did nothing, and scenario 1 still passed — because a COPIED catalog-signed system binary does not carry its signature to the new path. Green for a reason the test had not tested. Now it appends bytes via FileStream and asserts the precondition.   2. sign-before-package matched the raw file, so the first "Compress-Archive" it found was the one inside the comment EXPLAINING that signing must precede it. It compared a code position against a prose position. Now it strips comment lines.   3. The fixture printed PASS and exited 1, because most scenarios assert refusals and the last $LASTEXITCODE leaked out. Any caller branching on the exit code would have read green as red. Now it exits 0 explicitly.  NOT PROVEN, and not claimed: that a real signature is produced. That needs the account from 722-w7a2. What is proven is that every path which could silently ship an unsigned artifact refuses loudly.
+        - type: progress
+          ts: "2026-08-13T23:26:01Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            TOOLCHAIN PROVISIONED AND THE SEAM VERIFIED END TO END on this host. Everything except the Azure identity (722-w7a2) is now in place, and the refusal the build now produces names exactly that.  FOUR DEFECTS FOUND BY THE OPERATOR RUNNING IT, each invisible to the way it had been tested:  1. THE BIG ONE — the signer did not PARSE under Windows PowerShell 5.1, while every fixture scenario passed under PowerShell 7. Root cause: these .ps1 files are BOM-less, and 5.1 decodes a BOM-less script with the system ANSI code page rather than UTF-8. A UTF-8 em dash (E2 80 94) or box rule (E2 94 80) becomes three CP1252 characters, one of which is 0x94 — a curly quote, which PowerShell treats as a STRING DELIMITER. Inside a comment that is harmless, which is why the repo's PRE-EXISTING em dashes never bit; inside a double-quoted string it opens a quote that never closes and the parser reports a missing brace 60 lines away. Fixed by making the three scripts ASCII-only, and pinned by a new scenario that PARSES them with 5.1 (the parser API, never executing them). The whole class was mine: I authored under pwsh 7 and never ran the shell the operator uses.  2. The dlib resolver looked in Program Files. The MSI installs PER-USER, to %LOCALAPPDATA%\Microsoft\MicrosoftArtifactSigningClientTools\. Found by querying the Windows Installer component database for the product's real paths after both guesses missed — a fact about the machine, not about the documentation.  3. The signtool resolver sorted candidates by FileVersion, which is the literal string "4.00 (WinBuild.160101.0800)" on EVERY signtool.exe. The sort was a no-op picking whatever the filesystem listed first. Now sorts on ProductVersion (10.0.26100.7705 here).  4. This host's signtool is 10.0.26100.7705, comfortably above the documented floor, so no SDK work was needed after all.  INSTALLED via winget, all three without elevation: Microsoft.DotNet.Runtime.8, Microsoft.Azure.ArtifactSigningClientTools, Microsoft.AzureCLI.  VERIFIED:   * fixture 6/6 green under BOTH pwsh 7 and Windows PowerShell 5.1;   * `sign-windows-artifact.ps1` with no identity now reaches the IDENTITY check rather than a toolchain one — proving signtool and the dlib both resolve;   * `build-windows-tray.ps1 -Release` packages and prints "UNSIGNED build";   * `build-windows-tray.ps1 -Release -Sign` with no identity THROWS and refuses to package, which is the degradation this packet exists to prevent.
+
+    - packet_id: windows-authenticode-verified-at-the-gate
+      order: 722-f86z
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: windows-authenticode-signing
+      depends_on:
+        - windows-tray-authenticode-in-packaging
+      kind: feat
+      title: A check that the published exe is actually signed, with a negative control
+      deliverable: an executable check emitting a typed verdict, wired into the release path
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - signing
+        - fail-loud
+        - verification
+      estimated_hours: 2
+      context: |
+        This project's recurring failure is not the missing feature, it is the
+        feature that reports success without having run — 716-f5kc's unverified
+        stamp, 632-retq's counterfeit drained ledger, 651-2x5s's fabricated SHA.
+        A signing step that silently no-ops when a credential is absent is exactly
+        that shape, and it would ship unsigned binaries under a green release.
+        
+        So the signature is a fact to be VERIFIED after the fact, from the
+        published artifact, not a step that is assumed to have worked because it
+        exited zero.
+      exit_criteria:
+        - An executable check verifies the Authenticode signature and its chain on the published exe, printing one typed line in the project's `^(ok:|blocked:)` grammar.
+        - 'NEGATIVE CONTROL: the check FAILS on an unsigned exe and on a tampered signed exe — demonstrate both, so it is proven able to fail.'
+        - It runs on the release path, and a release cannot report success while publishing an unsigned Windows artifact.
+      events:
+        - type: note
+          ts: "2026-08-13T22:25:08Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            Exit criteria extended (2026-08-13): the check must assert the TIMESTAMP countersignature, not only the Authenticode signature. Artifact Signing certificates are valid three days, so a signed-but-untimestamped artifact verifies green on the release run and is untrusted for users the same week — a defect no release-time check catches unless it looks for the countersignature specifically. The negative controls grow accordingly: unsigned, tampered, AND signed-without-timestamp must all fail.
+
+    - packet_id: windows-signing-in-github-actions
+      order: 724-rpna
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: windows-authenticode-signing
+      depends_on:
+        - windows-tray-authenticode-in-packaging
+      kind: feat
+      title: The release workflow signs without a stored credential, through the official action
+      deliverable: .github/workflows/release.yml windows-release wiring + federated OIDC setup
+      pickup_role: any
+      capability_tags:
+        - windows
+        - ci
+        - signing
+        - secrets
+        - release
+      estimated_hours: 3
+      context: |
+        OPERATOR DIRECTIVE 2026-08-13: "we need a way to sign during development
+        here, and a way to sign in github actions." Two lanes, and they are
+        separated into two packets because they fail differently and are owned by
+        different hosts — but they MUST share one signing seam, or the thing CI
+        signs stops being the thing a developer can reproduce.
+        
+        THE SEAM is scripts/build-windows-tray.ps1, immediately before
+        `Compress-Archive` (see 722-qvqb for why the position is load-bearing).
+        Both lanes call the same script; only the CREDENTIAL differs, which is
+        exactly what DefaultAzureCredential is for — it walks a chain and finds
+        whichever identity the environment offers.
+        
+          dev lane (722-qvqb): AzureCliCredential — the developer runs `az login`
+          CI lane (this rung):  federated OIDC — no long-lived secret in the repo
+        
+        USE THE OFFICIAL ACTION, azure/artifact-signing-action, rather than
+        hand-rolling signtool invocations in YAML. The Windows runner is already
+        `windows-2025`, so the toolchain prerequisites are a setup step, not a
+        blocker.
+        
+        QUOTA IS A DESIGN INPUT, not a footnote: the plan bought is 5,000
+        signatures/month. That is generous for releases and easy to burn from a
+        loop that signs on every local build, which is the other half of why the
+        dev lane defaults to off.
+      outcome: |
+        A tagged release produces Authenticode-signed Windows artifacts with no
+        long-lived signing credential anywhere in the repository or its secrets.
+      exit_criteria:
+        - The windows-release job signs through federated OIDC with no long-lived secret; if a stored secret proved unavoidable, the reason is recorded.
+        - 'TIMESTAMPING IS ASSERTED, not assumed: the published artifact carries a timestamp countersignature from http://timestamp.acs.microsoft.com. Artifact Signing certificates are valid for THREE DAYS — an untimestamped artifact passes every release check and then goes untrusted for every user that week, which is the exact green-at-the-gate/broken-in-the-field shape this milestone exists to prevent.'
+        - A release built with signing UNAVAILABLE fails the job loudly. It must never publish an unsigned artifact under a green run — see 722-f86z.
+        - The dev lane and the CI lane call the SAME signing seam; a developer can reproduce what CI produced, modulo the credential.
+      events:
+        - type: filed
+          ts: "2026-08-13T22:26:00Z"
+          host: windows
+          summary: |
+            Split out of 722-qvqb on the operator's directive that both lanes are
+            needed. The seam stays single; only the credential differs.
+
+    - packet_id: mirror-identity-vault-roles-exact
+      order: 722-hthz
+      release_target: forge-local-experts-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p0
+      kind: security+implementation
+      title: Mint the exact per-project Vault signer roles and policies (no sign/* wildcard) for mirror push
+      pickup_role: linux
+      depends_on: []
+      blocks:
+        - mirror-identity-negative-matrix-litmus
+      capability_tags:
+        - security
+        - vault
+        - ssh
+        - identity
+      estimated_hours: 2
+      context: |
+        Slice a of 606-bvnp. Design is SIGNED (2026-08-11):
+        plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md D1, D12, D13 and
+        section 2.3 specify exactly what to create — two mounts
+        (ssh-client-signer, ssh-host-signer), a client role named <mirror-id> and
+        a host role host-<mirror-id> with allowed_domains git-<mirror-id>, and
+        policies minted AT PROVISION naming one exact sign path each. The shared
+        roles and the sign/* policy sample were withdrawn from the design; nothing
+        static ships.
+        This slice is the authority half of the packet's criterion 2 and is what
+        makes M2 (cross-signing 403) testable at all.
+      exit_criteria:
+        - provisioning creates ssh-client-signer/sign/<mirror-id> and ssh-host-signer/sign/host-<mirror-id> per project, minted at provision time
+        - no policy anywhere grants a sign/* capability, and a grep for it in generated policy is empty
+        - a lane token for project A receives 403 on project B's sign path
+      verifiable_closure: |
+        Against a throwaway Vault (design V1-V7 methodology): A's lane-signer
+        token gets 200 on sign/<id-A> and 403 on sign/<id-B>, symmetric for B, and
+        the generated policy set contains no sign/* capability.
+
+    - packet_id: mirror-identity-per-project-dns
+      order: 722-ft6g
+      release_target: forge-local-experts-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p0
+      kind: security+implementation
+      title: Swap mirror DNS to the opaque per-project hostname and retire the shared aliases
+      pickup_role: linux
+      depends_on: []
+      blocks:
+        - mirror-identity-negative-matrix-litmus
+      capability_tags:
+        - security
+        - git-mirror
+        - dns
+        - identity
+      estimated_hours: 1
+      context: |
+        Slice b of 606-bvnp, and the one swap point 659-8faj (done) deliberately
+        left unswapped: git_mirror_service_identity still resolves the shared
+        alias. D13 mints the opaque 12-byte CSPRNG mirror-id — never derived from
+        the guessable project name — and D9 certifies exactly one hostname
+        git-<mirror-id> per project.
+        DNS opacity is defense-in-depth; the certificates are the control. This
+        slice must not be mistaken for the security boundary on its own.
+      exit_criteria:
+        - the mirror answers on git-<mirror-id> and the shared aliases resolve to nothing
+        - identity is provisioned at all three non-forge-launch mirror-create sites (status-check, opencode CLI, opencode web), not only on forge launch
+        - resolution is checked with getent ahostsv4, never a probe image's nslookup
+      verifiable_closure: |
+        §4a row M1: getent ahostsv4 git-<id-A> returns exactly one A record, same
+        for B, and tillandsias-git / git-service resolve to nothing.
+      notes: |
+        The nslookup caveat is not pedantry — the 659-8faj audit had a probe
+        image's nslookup invert a finding.
+
+    - packet_id: mirror-identity-lane-sidecar-and-sshd
+      order: 722-ecne
+      release_target: forge-local-experts-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p0
+      kind: security+implementation
+      title: Per-lane ssh-agent sidecar, sshd principals and the audit fields for mirror push
+      pickup_role: linux
+      depends_on: []
+      blocks:
+        - mirror-identity-negative-matrix-litmus
+      capability_tags:
+        - security
+        - ssh
+        - git-mirror
+        - audit
+      estimated_hours: 3
+      context: |
+        Slice c of 606-bvnp — design rungs T3-T13: sshd in the git image, host
+        cert at mirror start, sshd_config plus the receive wrapper, repo
+        hardening, the per-lane sidecar and its AppRole ssh-lane-signer-<mirror-id>
+        (D6, deliberately not minted yet), and forge wiring. D5 is the invariant
+        the whole design rests on: the forge holds no private key and receives
+        only an agent socket and public CA trust — already VERIFIED live in-forge
+        for the current state (606-bvnp criterion 5) and must survive this slice.
+      exit_criteria:
+        - a correct per-lane certificate clones, fetches and pushes its own mirror
+        - the audit record carries project, lane, principal, fingerprint, serial and refs
+        - the forge still contains no private key, Vault token, SecretID or upstream credential after wiring
+      verifiable_closure: |
+        §4a rows M0 (positive control, both lanes concurrent), M3 (A's cert
+        presented to B's sshd is denied and sshd logs the refusal) and M5 (a cert
+        whose SSH_ORIGINAL_COMMAND names B's repo path still lands in A's fixed
+        repository).
+      notes: |
+        Row M6 (audit survives container recreation) is BLOCKED on T9: /vault/audit
+        is a container-layer directory today (V12) and dies on recreate. Land the
+        audit volume or M6 cannot pass — do not report M6 green without it.
+
+    - packet_id: mirror-identity-negative-matrix-litmus
+      order: 722-uern
+      release_target: forge-local-experts-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p0
+      kind: litmus
+      title: The §4a negative two-project matrix as executable fixtures — the gate before 451 flips any lane
+      pickup_role: linux
+      depends_on:
+        - mirror-identity-vault-roles-exact
+        - mirror-identity-per-project-dns
+        - mirror-identity-lane-sidecar-and-sshd
+      capability_tags:
+        - security
+        - litmus
+        - multi-project
+      estimated_hours: 2
+      context: |
+        Slice d of 606-bvnp: §4a M0-M7 made executable. Two REAL simultaneous
+        projects in product-shaped containers — not hand-built stand-ins, for the
+        reason recorded in 659-8faj. Every row is a fixture with a pass/fail exit
+        code, and ALL rows must be green before T11 flips any lane to production
+        sshd.
+        M0 is the row that keeps the matrix honest: a broken stack passes every
+        negative test. Without a positive control this suite could be green while
+        nothing works at all.
+      exit_criteria:
+        - M0-M5 and M7 are executable fixtures with pass/fail exit codes, bound in openspec/litmus-bindings.yaml so they actually run
+        - the positive control M0 fails if either lane cannot clone/fetch/push its own mirror
+        - M6 is either green or explicitly reported blocked on T9, never silently omitted
+      verifiable_closure: |
+        One litmus suite runs the matrix against a throwaway Vault and two live
+        projects; every row reports its own verdict; the suite is bound to a spec
+        so it executes in a phase rather than only on demand.
+
+    - packet_id: pty-blocked-on-input-probe
+      order: 723-54zj
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: feat
+      title: A guest-side probe that answers whether a PTY session's foreground process is blocked reading the terminal
+      deliverable: a probe fn in tillandsias-headless with tests against real blocked/running/exited processes
+      pickup_role: any
+      capability_tags:
+        - control-wire
+        - pty
+        - guest
+        - linux
+        - fail-loud
+      estimated_hours: 3
+      context: |
+        Rung 1 of 3 splitting item (b) of 689-y2my, which two consecutive cycles
+        recorded as "does not fit one recurring-loop cycle" and neither split. A
+        packet that is deferred twice for size is asking to be reduced, not
+        attempted a third time.
+        
+        WHY ITEM (b) IS THE VALUABLE HALF, restated from 689-y2my so this rung
+        stands alone. The macOS scope correction refuted the original progress
+        deadline: a deadlock and a slow-but-healthy command are indistinguishable
+        BY TIMING ALONE — a first-run --github-login legitimately sits silent for
+        ~1290s loading a 580MB image — so no timing rule can separate them. Item
+        (a) shipped a 4h wall-clock ceiling, which buys termination and nothing
+        else. Item (b) removes the ambiguity instead of bounding it: a guest that
+        is blocked on INPUT can say so, and "working" becomes exactly
+        distinguishable from "waiting for me" rather than guessed from elapsed
+        time.
+        
+        THIS RUNG IS THE MEASUREMENT ONLY. No wire change, no host change, no
+        capability negotiation — those are rungs 2 and 3. It is separable because
+        the hard part is local and empirical: deciding what "blocked on input"
+        means on a Linux guest and proving the answer is right.
+        
+        There is precedent to build on rather than invent:
+        crates/tillandsias-headless/src/main.rs:176 `terminal_foreground_pgrp()`
+        already uses `tcgetpgrp` to ask a terminal for its foreground process
+        group. The session's PTY master fd is the natural handle, and
+        /proc/<pid>/stat + /proc/<pid>/wchan carry the state the answer needs.
+        
+        KNOWN TRAP, name it before implementing: wchan is not universally
+        readable — some kernels return an empty string or refuse it — so the probe
+        must have a third answer. "I cannot tell" is a legitimate verdict and must
+        be distinguishable from "not blocked", because rung 3 will treat the two
+        differently: unknown means fall back to today's behaviour, not-blocked
+        means the guest is working.
+      outcome: |
+        The guest can answer, for one PTY session, whether its foreground process
+        is blocked reading the terminal — or say it cannot tell — with the answer
+        proven against real processes rather than asserted.
+      exit_criteria:
+        - 'A probe takes a session''s PTY handle and returns a three-valued verdict: blocked-on-input, not-blocked, or unknown. The third value is required, not an error case.'
+        - 'Tests drive REAL processes on a Linux host: one blocked reading stdin (blocked), one busy or sleeping without reading (not-blocked), one exited (not-blocked or unknown, never blocked). Assert the verdict, not the mechanism.'
+        - 'NEGATIVE CONTROL: a process that is merely SLOW and produces no output for longer than the heartbeat interval must NOT report blocked — that is precisely the legitimate case order 332 protects, and a probe that calls it blocked would resurrect the refuted progress deadline by another route.'
+        - 'Non-Linux builds compile: the probe returns unknown rather than failing to build, since the crate is built on every host.'
+
+    - packet_id: pty-heartbeat-v2-carries-blocked-state
+      order: 723-2yb3
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      depends_on:
+        - pty-blocked-on-input-probe
+      kind: feat
+      title: 'CAP_PTY_HEARTBEAT_V2: the heartbeat carries the probe''s verdict, and a version-skewed guest keeps working'
+      deliverable: control-wire capability + envelope shape + negotiation on both ends
+      pickup_role: any
+      capability_tags:
+        - control-wire
+        - protocol
+        - versioning
+        - compatibility
+      estimated_hours: 3
+      context: |
+        Rung 2 of 3. The wire change, isolated from both the measurement (rung 1)
+        and the behaviour that consumes it (rung 3).
+        
+        Today the heartbeat is an EMPTY PtyData{ToHost} frame
+        (pty_handler.rs:638) sent every 30s on the session id. It carries no
+        information by construction — which is what made the 70-minute wedge
+        unreadable — and it is indistinguishable from ordinary output at the host,
+        because it lands in the same PtyData arm.
+        
+        COMPATIBILITY IS THE PACKET, not an afterthought. Four combinations have
+        to keep working, and the two mixed ones are the reason this is its own
+        rung: v1 host + v1 guest (unchanged), v2 + v2 (the new signal), v2 host +
+        v1 guest (empty heartbeats, degrade to today's behaviour), v1 host + v2
+        guest (a v2 frame must not confuse a host that never asked for it). The
+        existing negotiation at vsock_server.rs:45 and vsock_exec.rs already has
+        the shape to copy — CAP_PTY_HEARTBEAT_V1 is advertised and checked — so
+        this extends a working pattern rather than inventing one.
+      exit_criteria:
+        - CAP_PTY_HEARTBEAT_V2 is advertised and negotiated; a guest only emits v2 heartbeats when the host asked for them.
+        - The v2 heartbeat carries the three-valued verdict from rung 1 and remains distinguishable from real guest output at the host.
+        - All four version combinations are tested, including BOTH mixed ones. A version-skewed pair must degrade to v1 behaviour, never wedge and never error.
+        - 'The two order-332 pins still pass untouched: streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline and streaming_exec_times_out_when_slow_guest_sends_no_frames.'
+
+    - packet_id: exec-client-distinguishes-waiting-from-working
+      order: 723-g4bk
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      depends_on:
+        - pty-heartbeat-v2-carries-blocked-state
+      kind: feat
+      title: The host says 'the guest is waiting for input I am not sending' instead of leaving the operator to guess
+      deliverable: vsock_exec client behaviour + the operator-visible message
+      pickup_role: any
+      capability_tags:
+        - control-wire
+        - exec
+        - fail-loud
+        - operator-experience
+      estimated_hours: 3
+      context: |
+        Rung 3 of 3 — the payoff, and the rung that must be careful not to
+        reintroduce what 689-y2my's criterion 1 got refuted for.
+        
+        The wedge that started this was a host waiting for a prompt the guest
+        would never print, for 70 minutes, while every layer looked healthy: the
+        wire alive, the guest kernel answering ping, the vCPUs idle. Item (a)
+        bounded it at 4h. This rung makes it CORRECT: a guest blocked on input
+        with a host that has nothing pending to send is a deadlock the moment it
+        is observed, and can be reported as one immediately rather than waited out.
+        
+        THE LINE NOT TO CROSS: blocked-on-input is the ONLY new failure signal.
+        Not-blocked and unknown must both keep today's behaviour exactly — a slow
+        guest loading a 580MB image is working, and the moment this rung starts
+        treating quiet as suspicious it has resurrected the refuted progress
+        deadline wearing a new name.
+      exit_criteria:
+        - With a v2 guest reporting blocked-on-input and no pending host input, the exec fails fast and names the pending expect label, the bytes seen, and that the guest is waiting for input — distinguishable in the message from both a stale wire and a ceiling breach.
+        - 'NEGATIVE CONTROL: a guest reporting not-blocked, and a guest reporting unknown, are both treated exactly as today — a slow-but-progressing guest is never killed. This is the order-332 invariant and the refuted criterion 1; assert it explicitly.'
+        - A regression test drives a fake guest through the wedge that filed 689-y2my — heartbeating forever, blocked on a prompt the host will not answer — and asserts it is reported within the heartbeat interval rather than at the 4h ceiling.
+
+    - packet_id: boundary-retired-early-breaks-an-extended-cycle
+      order: 725-bu54
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: Finalization retires the startup boundary at the first exit, so a cycle extended past that point can no longer attest
+      deliverable: the guard's lifecycle, or Finalization's ordering in the skill
+      pickup_role: any
+      capability_tags:
+        - meta-orchestration
+        - guards
+        - exit-contract
+        - fail-loud
+      estimated_hours: 2
+      context: |
+        FOUND BY THE GUARD I ADDED TWO CYCLES AGO, firing on me. That is the good
+        outcome and the reason this is p2 rather than p1 — nothing was lost, the
+        failure was loud, and it refused at exactly the right moment.
+        
+        WHAT HAPPENED. This cycle snapshotted its boundary, re-anchored after the
+        linux-next merge, did its work, and ran Finalization: verify passed clean
+        at ac01c3df, the marker was emitted, and the guard's state directory was
+        removed — all exactly as the skill's step 7 says. Then the operator asked
+        a follow-up, the cycle continued, and more work was committed and pushed
+        (75d1e179). At the second Finalization the guard answered
+        
+          blocked:boundary-state-missing:/tmp/mo-boundary.IDrKun
+        
+        and mo-full-attest.sh refused:
+        
+          MO-FULL: FAIL startup boundary was verified at ac01c3df but HEAD is now
+          75d1e179 — re-run the guard's verify after the cycle's last commit
+        
+        Both verdicts are correct and both are useful. The head-binding in
+        717-3bvv is what caught it; a mere existence test would have accepted the
+        stale stamp and attested a state nobody checked.
+        
+        THE ACTUAL DEFECT is a lifecycle assumption, not a bug in either script:
+        Finalization treats its first completion as THE end of the cycle and
+        destroys the boundary there. A recurring loop driven by an operator
+        conversation does not have one exit — the cycle is extended whenever the
+        operator asks for more, which is normal and desirable, not an abuse.
+        
+        The two obvious shapes both have a real cost, which is why this wants a
+        decision rather than a patch:
+          * Keep the boundary until the process exits (retire it later, or never,
+            and let the next snapshot supersede it). Cheap, but a long-lived
+            state directory outlives the cycle it describes.
+          * Let Finalization RE-verify by re-snapshotting when the tree is clean
+            and the previous verification is stale. Convenient, and dangerously
+            close to snapshotting at the end and calling it a startup boundary —
+            which is precisely the guarantee 717-3bvv exists to provide.
+      outcome: |
+        A cycle that continues past a completed Finalization can still attest,
+        without weakening what the startup boundary proves.
+      exit_criteria:
+        - A cycle that completes Finalization and then does MORE committed work can produce a valid marker, and the boundary it attests is still a START-of-cycle one.
+        - 'NEGATIVE CONTROL: a cycle that never snapshotted still cannot attest — whatever the fix, blocked:no-snapshot-taken must survive it.'
+        - The chosen shape is recorded with its cost, since both candidates trade against the guarantee 717-3bvv added.
+      events:
+        - type: filed
+          ts: "2026-08-13T22:50:00Z"
+          host: windows
+          summary: |
+            Filed by the host it fired on, in the cycle it fired in. The guard
+            worked; the lifecycle around it did not anticipate an operator
+            extending a cycle past its first Finalization.
+
+    - packet_id: bare-metal-expert-inference-parity
+      order: 718-rtnh
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: milestone
+      title: Expert-system inference parity for bare-metal development hosts (Windows/WSL2 first, Linux second)
+      pickup_role: any
+      capability_tags:
+        - experts
+        - inference
+        - windows
+        - wsl2
+        - mcp
+      context: |
+        OPERATOR DIRECTIVE 2026-08-13: development hosts should use the same
+        expert system the in-forge agents use, not a deterministic YAML reader
+        wearing its name. The stated purpose is an inference layer ON TOP of the
+        deterministic ledger query, so story-shaped questions ("what's next",
+        "what's blocking story N", "give me forgotten bugs nobody is fixing")
+        return answers with the entropy a pure minimax triage cannot produce —
+        the operator's framing is that WLLN and SLLN have to play together, and a
+        deterministic ranker alone starves the tail forever.
+        
+        MEASURED FIRST, because the gap is smaller and differently shaped than it
+        looks from the outside. Three tiers exist and only the top one needs
+        inference at all:
+        
+          L0   deterministic — plan_answer/query/next/status/ready/blocked_*,
+               methodology_ask/path, grade, spec-index, spec-retrieve,
+               spec-envelope. Pure Rust, network-free. ALREADY at parity on every
+               host; a working binary is its only requirement.
+          L0.5 semantic fallback — semantic_expert.rs. Deterministic keyword and
+               heading scoring over plan/loop_status.md + plan.yaml, with an
+               OPTIONAL Ollama /api/generate call that only REWORDS the section it
+               already selected. Absent endpoint returns the raw section with the
+               same citation and the same confidence. Cosmetic.
+          L1   RAG spec expert (spec_answer) — the ONLY capability that genuinely
+               dies without inference, because it needs an embedding endpoint both
+               to embed the query and to have built vectors.jsonl at all.
+        
+        AND THE PARITY BAR IS LOWER THAN "MATCH THE FORGE", because the forge does
+        not have this either: TILLANDSIAS_EMBED_ENDPOINT and
+        TILLANDSIAS_SPEC_EXPERT_ENDPOINT are read by
+        images/default/config-overlay/mcp/forge-plan.sh and assigned NOWHERE in
+        the repo; nothing builds the RAG index; orders 549 and 552 (the wiring
+        packets) are still ready. A delegate hit exactly this on 2026-08-13 and
+        filed 712-r5x8. So this milestone is not "catch Windows up" — it is
+        "build the tier once, on the host that can iterate on it fastest, and
+        wire the forge to the same contract".
+        
+        WINDOWS ARCHITECTURE, corrected against a wrong first reading. The MCP
+        servers on this host are NOT Git-Bash processes reading a Windows binary:
+        .mcp.json launches `bash images/default/config-overlay/mcp/*.sh` and the
+        bash that answers is WSL's. Evidence: every envelope this host received
+        across 1766 expert calls carries
+        `citation_root: /mnt/c/Users/bullo/claudia/tillandsias` — a WSL path — and
+        target/release/tillandsias-plan is an ELF. So the servers already live in
+        WSL2 and the ELF is the CORRECT binary there.
+        
+        That is the whole architectural finding: on Windows the expert servers and
+        the container runtime share one substrate, so an endpoint does not have to
+        cross the Windows/WSL boundary. It has to be reachable FROM THE DISTRO.
+        This host's WSL networking mode is `nat`, so a Windows-side
+        127.0.0.1:11434 is NOT reachable from the distro, while an endpoint inside
+        it is trivially so. A bare-metal Windows ollama is therefore the WORST of
+        the available options, not the obvious one.
+      outcome: |
+        A development host answers story-shaped questions through the same
+        cited-envelope contract the forge uses, with inference adding entropy and
+        synthesis on top of the deterministic ledger rather than replacing it.
+      exit_criteria:
+        - Every rung below is closed, or explicitly retired with its reason.
+        - The same endpoint contract serves bare metal and in-forge; no host carries a private variant.
+      events:
+        - type: filed
+          ts: "2026-08-13T23:00:00Z"
+          host: windows
+          summary: |
+            Filed from operator directive plus two research passes. Milestone, not
+            implementation: the rungs below are the demonstrable steps.
+
+    - packet_id: expert-inference-endpoint-contract-for-dev-hosts
+      order: 718-ja7g
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: bare-metal-expert-inference-parity
+      kind: feat
+      title: One documented endpoint contract a dev host can satisfy, and a probe that says which tier is live
+      deliverable: env contract + a `tillandsias-plan experts-probe`-style verdict consumed by both MCP servers
+      pickup_role: any
+      capability_tags:
+        - experts
+        - inference
+        - mcp
+        - fail-loud
+      estimated_hours: 3
+      context: |
+        TILLANDSIAS_INFERENCE_ENDPOINT is READ in three places
+        (semantic_expert.rs, lib-inference-state.sh, project-info.sh) and WRITTEN
+        in none. TILLANDSIAS_EMBED_ENDPOINT and TILLANDSIAS_SPEC_EXPERT_ENDPOINT
+        are read by forge-plan.sh and written nowhere. The contract exists as
+        three orphan reads; a host cannot satisfy it because nothing states what
+        satisfying it means.
+        
+        Two live traps for whoever writes it, both found by reading the code
+        rather than by running it:
+          * semantic_expert.rs:212 parses the endpoint with `addr.parse::<SocketAddr>()`,
+            so a HOSTNAME silently yields None. `inference:11434` — the forge's own
+            alias — cannot work through this path. It needs a literal IP:port.
+          * semantic_expert.rs:182 ignores any value not starting with `http://`,
+            so an https endpoint is silently dropped.
+        Both fail closed and silently, which is the class this repo keeps
+        repairing. Fix them or document them, but do not leave them as folklore.
+      exit_criteria:
+        - A single documented contract names each variable, its shape (Ollama native vs OpenAI /v1), and which tier it unlocks.
+        - A probe reports which tiers are live as a typed one-line verdict, in the closed vocabulary lib-inference-state.sh already uses, and both MCP servers consume it instead of each re-deriving reachability.
+        - The two silent-drop traps in semantic_expert.rs are fixed or explicitly documented as constraints, with a test either way.
+        - 'NEGATIVE CONTROL: with no endpoint set, every L0 tool still answers with citations and the probe says so — degradation must stay silent-free, not answer-free.'
+
+    - packet_id: wsl2-inference-substrate-decision
+      order: 718-nkm2
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: bare-metal-expert-inference-parity
+      kind: decision
+      title: 'Where the dev-host inference endpoint lives on Windows: in-distro, published container port, or mirrored networking'
+      deliverable: a recorded decision + the smallest wiring that satisfies it
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - wsl2
+        - inference
+        - networking
+      estimated_hours: 3
+      context: |
+        The MCP servers run inside WSL2 (see the milestone). WSL here is in `nat`
+        mode. That makes the options concrete and unequal:
+        
+          A. ollama INSIDE the tillandsias-build distro — endpoint 127.0.0.1:11434
+             from the servers' own perspective. No boundary, no gateway IP, no
+             global WSL setting. Costs a second model cache in the distro.
+          B. publish the podman inference container's port
+             (`--publish 127.0.0.1:11434:11434` in build_inference_run_args,
+             main.rs:3593-3752, which today publishes nothing). Reuses the model
+             cache and the tier/GPU pinning already built. Requires the container
+             runtime and the MCP servers to share a reachable network.
+          C. mirrored WSL networking (.wslconfig networkingMode=mirrored) so
+             Windows-side localhost is reachable from the distro. Global to every
+             distro on the machine; an operator-scope change.
+          D. bare-metal Windows ollama — WORST under nat: unreachable from the
+             distro without the gateway IP, which moves across reboots.
+        
+        Do not pick by preference. Pick by which one an unattended cycle can
+        re-establish after a reboot without an operator, and record why.
+      exit_criteria:
+        - The decision is recorded with its reason and its failure mode after a host reboot.
+        - The chosen option is wired so a cold host reaches a live endpoint with no manual step, or the manual step is named in the startup context.
+        - 'Measured: an actual expert call on this host returns a synthesized-and-cited envelope, quoted in the closing event.'
+
+    - packet_id: story-shaped-eager-work-packets
+      order: 718-jqt5
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: bare-metal-expert-inference-parity
+      kind: feat
+      title: Story-shaped expert questions that generate eager work packets, with inference supplying the entropy triage cannot
+      deliverable: expert query surface + the packets it yields
+      pickup_role: any
+      capability_tags:
+        - experts
+        - plan
+        - triage
+        - entropy
+      estimated_hours: 4
+      context: |
+        OPERATOR FRAMING, recorded because it is the design rationale and not a
+        restatement of the feature: triaging strictly by points starves the tail —
+        some things never get done — while triaging everything equally makes no
+        progress. An inference layer over the deterministic query introduces the
+        noise numerical methods need for monotonic convergence, letting the weak
+        and strong laws of large numbers operate together.
+        
+        Note the selector ALREADY implements the deterministic half of this:
+        score-weighted entropy over the top-3 epics from a printed seed
+        (methodology/distributed-work.yaml cycle_batch_triage). This packet is the
+        layer above it — questions a human asks in words, answered over the same
+        cited envelopes: "what's next", "what's blocking story N", "give me a few
+        forgotten bugs nobody is fixing".
+        
+        "Forgotten" is the interesting one and the reason this is not a prompt
+        template: it is a property of the LEDGER (no events for N days, no lease
+        ever taken, low blocking weight so minimax never surfaces it) and the
+        deterministic layer can compute it exactly. Inference should phrase and
+        cluster the result, NOT decide it — otherwise the entropy stops being
+        reproducible and the batch stops being replayable from its seed.
+      exit_criteria:
+        - A deterministic `forgotten`-style projection exists (age since last event, never-leased, low blocking weight) and is unit-tested, so the selection is reproducible from a seed.
+        - Story-shaped questions route through it and return cited envelopes; an absent inference endpoint degrades to the deterministic list rather than refusing.
+        - Running it yields real packets filed as fragments, and the closing event quotes at least three that were genuinely un-surfaced by minimax.
+        - 'NEGATIVE CONTROL: the same seed yields the same set, so the added entropy is reproducible and auditable rather than nondeterministic.'
+
+    - packet_id: split-parent-reoffered-as-work
+      order: 726-cjb8
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: The selector re-offers a SPLIT parent as the urgent pick, outranking its own slices
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - plan-ledger
+        - selector
+        - convergence
+      context: |
+        A packet that has been split is a criteria holder, not work — the slices
+        are the claimable things. It stays `ready` so it can hold the criteria
+        until the children close, and nothing taught the selector that.
+        Found the cycle immediately after splitting 606-bvnp into four ready
+        children: the very next select-work-batch run offered the PARENT as
+        `urgent=git-mirror-cross-project-service-identity` again, outranking its
+        own slices because it is older and p0. The split had made the work
+        claimable and the selector kept pointing past it at the thing no cycle can
+        start. Two other split parents sit `ready` in the ledger with the same
+        latent behaviour.
+      exit_criteria:
+        - select-rows skips a ready packet whose split_into names at least one non-terminal child
+        - the parent becomes visible again once every named slice is terminal, since closing it is then the right pickup
+        - both directions are pinned by a litmus against a fixture ledger
+      verifiable_closure: |
+        One fixture ledger, flipped in place: with the child ready the selector
+        emits the child and not the parent; with the child completed it emits the
+        parent.
+      notes: |
+        Suppressing the parent unconditionally would be the opposite bug. The
+        filter is scoped to "while a slice is open" for exactly that reason.
+      events:
+        - type: completed
+          ts: "2026-08-13T23:21:21Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:cycle-batch-triage-shape step 21 PASS (21/21 steps; ci-release suite 15/15, scripts/run-litmus-test.sh ci-release --phase pre-build --size instant): one fixture ledger flipped in place proves the parent is suppressed while a slice is open and offered once every slice closes. Live: batch urgent pick moved from git-mirror-cross-project-service-identity to its slice 722-ecne.
+        - type: note
+          ts: "2026-08-13T23:21:21Z"
+          host: linux-mutable
+          summary: |
+            726-cjb8 closed
+        - type: filed
+          ts: "2026-08-13T23:30:00Z"
+          agent_id: linux-mutable-20260813t2317z
+          host: linux_mutable
+          summary: |
+            Filed and closed in one cycle: found by reading this host's own batch output one cycle after shaping 606-bvnp.
+        - type: verified-by
+          ts: "2026-08-13T23:30:30Z"
+          agent_id: linux-mutable-20260813t2317z
+          host: linux_mutable
+          summary: |
+            litmus:cycle-batch-triage-shape step 21 asserts both directions from one fixture ledger flipped in place; suite 21/21, ci-release 15/15 PASS. Live effect: the batch's urgent pick moved from the unstartable parent to 722-ecne, one of its slices, and the eligible count fell by the three split parents that were being offered.
+
+    - packet_id: external-gate-audit-remaining-skills
+      order: 727-kmks
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: architecture-audit-epic
+      depends_on:
+        - release-runbook-drift-audit
+      kind: audit
+      title: Finish the absent-reads-as-healthy audit across the remaining nine runbooks, measured rather than eyeballed
+      deliverable: a per-skill classification + a rewrite or an explicit advisory marking for each dangerous site
+      pickup_role: any
+      capability_tags:
+        - skills
+        - audit
+        - fail-loud
+        - drift
+      estimated_hours: 6
+      context: |
+        SCOPE, MEASURED so the next host does not re-derive it. Sites in
+        skills/*/SKILL.md matching an external-command gate
+        (`command -v`, `which`, a two-word `gh` subcommand, `podman`, `wsl.exe`):
+        
+          merge-to-main-and-release      24   <- one instance FIXED under 601-462g
+          meta-orchestration             21
+          smoke-curl-install-and-test-e2e 14
+          build-install-and-smoke-test-e2e 11
+          advance-work-from-plan          8
+          build-macos-tray                3
+          probe-macos-tray-on-windows     3
+          build-windows-tray              1
+          diagnose-forge                  1
+          forge-quick-intro               1
+                                        ---
+                                         87
+        
+        A count is not a finding — most of these are fine, and the grep is a
+        candidate list, not a verdict. It is recorded because "enumerate every
+        step" is 601-462g's own first exit criterion and the enumeration is the
+        part that keeps getting deferred for being large.
+        
+        WHAT THE FIRST INSTANCE LOOKED LIKE, as the pattern to hunt with. In
+        merge-to-main-and-release step 7:
+        
+          run_id=$(gh run list --workflow=release.yml --branch="$tag" \
+                     --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run watch "$run_id"
+        
+        `gh run list` with no matching run prints nothing and exits 0, so the
+        substitution succeeded with an empty id and the runbook waited on a run
+        that did not exist. Two things make it representative: the same FILE
+        already warned about a sibling trap four steps earlier (`gh pr checks
+        --watch` does not fail when there are no checks), so knowing the class did
+        not prevent the instance; and the absence had a SECOND shape, `--jq` on an
+        empty array printing the literal `null`, which a bare emptiness test would
+        have passed straight through.
+        
+        TRIAGE ORDER by blast radius, not by count: meta-orchestration runs
+        unattended every cycle on every host, and the two e2e runbooks are what
+        decide whether a release is good. build-* and probe-* are attended and can
+        wait.
+      outcome: |
+        Every runbook step that gates on an external command either asserts a
+        positive fact or is explicitly marked advisory, and the distinction is
+        pinned by a check rather than described in prose.
+      exit_criteria:
+        - 'Each of the nine remaining runbooks has been walked, and every external-command gate in it is classified: SAFE (absent and healthy already differ), REWRITTEN (now asserts a positive fact), or ADVISORY (explicitly marked, with the reason it is allowed to be silent).'
+        - Every REWRITTEN site has an executable check, hermetic where the external system can be stubbed — the pattern scripts/test-resolve-release-run.sh establishes.
+        - 'NEGATIVE CONTROL per rewritten site: the check must be observed FAILING on the absent case, not merely passing on the healthy one.'
+        - The classification is committed as data, not prose, so a later cycle can diff it rather than re-read every runbook.
+      notes: |
+        Do NOT convert this into a grep-based gate over the skills. 601-462g's own
+        problem statement names "a freshness gate that greps its own comment" as a
+        sibling defect, and a checker that pattern-matches runbook TEXT would be
+        the same mistake one level up. The audit's output is a classification and
+        a set of executable checks on the rewritten steps.
+      events:
+        - type: filed
+          ts: "2026-08-13T23:40:00Z"
+          host: windows
+          summary: |
+            Split out of 601-462g after fixing its first instance. The parent's
+            criterion 1 asks to enumerate every site; this carries that
+            enumeration with the count measured per skill and a triage order by
+            blast radius.
+
+    - packet_id: append-event-base-writer-mangles-multiline-summaries
+      order: 728-n456
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: append-event's BASE path emits multi-line summaries at the wrong indentation, and refuses on a pre-existing depends_on violation
+      deliverable: crates/tillandsias-plan edit path + tests
+      pickup_role: any
+      capability_tags:
+        - plan
+        - crdt
+        - tooling
+        - fail-loud
+      estimated_hours: 3
+      context: |
+        TWO DISTINCT DEFECTS, isolated by bisecting the summary shape against a
+        throwaway copy of the ledger. Both live in the BASE edit path only -
+        fragment-only packets take the 699-usxc fragment path and are unaffected,
+        which is why they went unnoticed: most packets filed lately are fragments.
+        
+        DEFECT 1 - multi-line summaries are emitted without re-indenting their
+        continuation lines, so the candidate base does not parse. Measured with
+        four probes against the same packet:
+        
+          "plain line only"                      -> writes shape OK
+          "has a colon: right here"              -> writes shape OK
+          "indented code:\n  run_id=$(...)"      -> parse: could not find expected ':'
+          "star bullet\n  * one\n  * two"        -> parse: did not find expected alpha
+        
+        So any summary carrying an indented block - a code sample, a bullet list,
+        anything a real progress note contains - breaks the write. The refusal is
+        correct and the ledger was never corrupted (the validator rejected the
+        candidate before writing, which is the guard working), but the writer
+        should produce a valid block scalar in the first place rather than lean on
+        the validator to catch it.
+        
+        DEFECT 2 - the first two probes still refused, with a DIFFERENT verdict:
+        
+          REFUSED: this edit would break the ledger:
+            violation: agent-login-flows-impl: depends_on
+        
+        That is unrelated to the summary and unrelated to the packet being
+        annotated. `tillandsias-plan check` reports the live ledger as
+        "ok: 819 packets, ids unique, live references sound", so the WRITE
+        validator is stricter than the READ check and currently blocks base
+        appends over a dangling depends_on nobody has had to look at. Two
+        validators disagreeing about whether the ledger is sound is its own
+        finding: one of them is wrong, and until that is settled a host hitting
+        the refusal cannot tell whether it broke something.
+      outcome: |
+        A base-packet progress note containing ordinary formatted prose writes
+        successfully, and the read and write validators agree about whether the
+        ledger is sound.
+      exit_criteria:
+        - A multi-line summary containing an indented code block and a bullet list writes to a BASE packet and the result parses; a test pins both shapes.
+        - 'The read check and the write validator agree: either agent-login-flows-impl''s depends_on is repaired, or the write validator stops treating it as blocking, with the reason recorded.'
+        - 'NEGATIVE CONTROL: a genuinely ledger-breaking edit is still refused before it is written - the validator''s refusal is the property that saved the ledger here and must not be relaxed to fix the indentation bug.'
+      events:
+        - type: filed
+          ts: "2026-08-13T23:45:00Z"
+          host: windows
+          summary: |
+            Found while recording a routine progress note on 601-462g: the note
+            contained a code sample and a bullet list, which is what a real note
+            looks like. Worked around by writing the event as a fragment.
