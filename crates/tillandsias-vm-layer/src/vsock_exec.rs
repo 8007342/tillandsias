@@ -189,16 +189,60 @@ async fn write_envelope<W: AsyncWrite + Unpin>(
             bytes.len()
         ));
     }
-    w.write_all(&(bytes.len() as u32).to_be_bytes())
-        .await
-        .map_err(|e| format!("vsock_exec: write len: {e}"))?;
-    w.write_all(&bytes)
-        .await
-        .map_err(|e| format!("vsock_exec: write body: {e}"))?;
-    w.flush()
-        .await
-        .map_err(|e| format!("vsock_exec: flush: {e}"))?;
+    // ORDER 690-eug2: bound the WRITE side too.
+    //
+    // Every bound this seam has grown was on reads — the idle deadline, the
+    // wall-clock ceiling, the setup deadlines added last cycle. A peer that
+    // accepts the connection and then stops DRAINING blocks the writer
+    // indefinitely, and no read-side deadline can observe that: the host is not
+    // waiting for data, it is waiting for buffer space. The symptom is a host
+    // parked inside a send with nothing on any timer.
+    //
+    // Reuses the idle timeout rather than inventing a knob. A write that cannot
+    // make progress for as long as a read may go silent is stuck by the same
+    // standard, and one env var is easier to reason about than two.
+    let deadline = exec_idle_timeout()?;
+    write_all_bounded(
+        w,
+        &(bytes.len() as u32).to_be_bytes(),
+        deadline,
+        "the frame length",
+    )
+    .await?;
+    write_all_bounded(w, &bytes, deadline, "the frame body").await?;
+    match tokio::time::timeout(deadline, w.flush()).await {
+        Ok(r) => r.map_err(|e| format!("vsock_exec: flush: {e}"))?,
+        Err(_) => {
+            return Err(format!(
+                "vsock_exec: the peer stopped draining — flush blocked for {}s. \
+                 The connection is open and the peer is not reading; this is back-pressure, \
+                 not a stale or refused connection (override with {EXEC_IDLE_TIMEOUT_ENV})",
+                deadline.as_secs()
+            ));
+        }
+    }
     Ok(())
+}
+
+/// `write_all` under a deadline, naming which part of the frame stalled.
+///
+/// Split out so the two writes share one message shape and the stage is not
+/// guessed from a stack trace.
+async fn write_all_bounded<W: AsyncWrite + Unpin>(
+    w: &mut W,
+    buf: &[u8],
+    deadline: std::time::Duration,
+    stage: &str,
+) -> Result<(), String> {
+    match tokio::time::timeout(deadline, w.write_all(buf)).await {
+        Ok(r) => r.map_err(|e| format!("vsock_exec: write {stage}: {e}")),
+        Err(_) => Err(format!(
+            "vsock_exec: the peer stopped draining — writing {stage} blocked for {}s. \
+             The connection is open and the peer is not reading; this is back-pressure, \
+             not a stale or refused connection (override with {EXEC_IDLE_TIMEOUT_ENV})",
+            deadline.as_secs()
+        )),
+    }
 }
 
 /// Read one length-prefixed `ControlEnvelope` frame.
@@ -1294,6 +1338,71 @@ mod tests {
         assert!(
             unknown.iter().any(|e| e.contains("could not determine")),
             "…but it must be distinguishable from 'working': {unknown:?}"
+        );
+    }
+
+    /// ORDER 690-eug2. A peer that stops DRAINING must not park the writer.
+    ///
+    /// This is the failure no read-side deadline can observe: the host is not
+    /// waiting for data, it is waiting for buffer space. The idle deadline, the
+    /// wall-clock ceiling and the setup deadlines are all reads, so a peer that
+    /// accepts the connection and then simply stops reading left the host
+    /// parked inside a send with nothing on any timer.
+    #[tokio::test]
+    async fn a_peer_that_stops_draining_does_not_park_the_writer() {
+        // A tiny duplex buffer that nobody reads: the second frame cannot fit,
+        // so write_all blocks exactly as a real stalled peer would.
+        let (mut client, guest) = tokio::io::duplex(64);
+
+        let big = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToGuest,
+                bytes: vec![b'x'; 8192],
+            },
+        };
+
+        let err = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            write_all_bounded(
+                &mut client,
+                &encode(&big).unwrap(),
+                std::time::Duration::from_millis(50),
+                "the frame body",
+            ),
+        )
+        .await
+        .expect("the bound must fire well inside the test's own timeout")
+        .expect_err("a peer that stops draining must not block forever");
+
+        assert!(
+            err.contains("stopped draining"),
+            "the failure must name back-pressure, not read as a stale connection: {err}"
+        );
+        assert!(
+            err.contains("the frame body"),
+            "it must name WHICH part of the frame stalled: {err}"
+        );
+        assert!(
+            !err.contains("connection stale"),
+            "back-pressure is not a stale connection — they have different causes \
+             and different fixes: {err}"
+        );
+        drop(guest);
+    }
+
+    /// NEGATIVE CONTROL: a peer that IS draining must not be killed by the
+    /// write bound. Every other test in this file writes frames through
+    /// write_envelope, so they collectively assert this too — but stating it
+    /// once makes the intent explicit rather than incidental.
+    #[tokio::test]
+    async fn a_draining_peer_is_not_killed_by_the_write_bound() {
+        let (out, _) = run_with_heartbeats(vec![]).await;
+        assert_eq!(
+            out.exit.code, 0,
+            "a normal exchange must complete under the write bound"
         );
     }
 

@@ -41428,6 +41428,30 @@ plan_index:
         - a test drives a peer that connects and then goes silent at each stage and asserts a bounded, stage-named failure
       events:
         - type: progress
+          ts: "2026-08-14T07:23:35Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL (3 of 5). Frame writes are now bounded. Setup reads and the rescan landed in the two previous cycles; two items remain, both named below.
+
+            WHAT LANDED. write_envelope's two write_all calls and its flush now carry a deadline. This is the failure NO read-side bound can observe: the host is not waiting for data, it is waiting for buffer space. The idle deadline, the wall-clock ceiling and last cycle's setup deadlines are all reads, so a peer that accepted the connection and then stopped DRAINING left the host parked inside a send with nothing on any timer.
+
+            The message names back-pressure explicitly and says which part of the frame stalled -- length, body, or flush. It also says this is not a stale or refused connection, because those are the two things an operator would otherwise assume, and they have different causes and different fixes.
+
+            Reuses the idle timeout rather than inventing a knob: a write that cannot make progress for as long as a read may go silent is stuck by the same standard, and one env var is easier to reason about than two.
+
+            EVIDENCE: vsock_exec 28 passed (was 26).
+              * a_peer_that_stops_draining_does_not_park_the_writer -- a 64-byte duplex nobody reads, so write_all blocks exactly as a stalled peer would.
+              * a_draining_peer_is_not_killed_by_the_write_bound -- NEGATIVE CONTROL.
+              * HAND-FALSIFIED: reverting to a bare write_all made the test's OWN 20s timeout fire (20.03s), which is the writer genuinely parking. Restoring returned 28/28.
+
+            REMAINING, unchanged and not started:
+              * streaming transcript + cap (criterion 1). Still deliberately untouched: ExecOutput.stdout is a public field callers parse, so capping changes an observable contract, and dropping from the front invalidates the search indices the rescan fix made load-bearing. It wants a recorded decision about what a caller receives on truncation.
+              * per-expect deadline -- the wall-clock ceiling bounds the CONVERSATION, not an individual needle, so "needle X never arrived in Ns" is still unsayable.
+              * criterion 3's two macOS sites (action_host.rs:2489, diagnose.rs:192). Editable blind from here, not exercisable; this seam is where an unexercised fix is worse than the gap.
+
+            So every read AND write on the vsock_exec seam now has a deadline, which is criterion 2's structural half and criterion 4 for this crate. The packet stays ready for the transcript work and the macOS sites.
+        - type: progress
           ts: "2026-08-14T06:31:06Z"
           agent_id: "unknown"
           host: windows
