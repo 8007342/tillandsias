@@ -62,16 +62,28 @@ critical_path:
     expected_behavior: "ok: macos exit-code pin present"
     timeout_ms: 3000
 
-  - step: "ASYMMETRY REPORT: whether both trays separate CONVERGING (exit 3) from degraded"
-    # The suite is named "symmetric" and the symmetry is currently BROKEN:
-    # windows separates converging (exit 3, order 647-i98k) and macOS still
-    # collapses converging into degraded (exit 2). That is a real product
-    # divergence, routed to the macOS host as 735-yq4t rather than hidden by
-    # relaxing this suite. Reported, not enforced, until macOS lands its half —
-    # enforcing it here would turn one host's pending work into every host's red
-    # gate, which the fleet cannot act on.
-    command: "w=$(grep -c 'CONVERGING\\|converging' crates/tillandsias-windows-tray/src/notify_icon.rs); m=$(grep -c 'CONVERGING\\|converging' crates/tillandsias-macos-tray/src/diagnose.rs); if [ \"$w\" -gt 0 ] && [ \"$m\" -gt 0 ]; then echo 'ok: exit-3 converging parity reached'; else echo \"ok: exit-3 parity PENDING windows=$w macos=$m (735-yq4t)\"; fi"
-    expected_behavior: "ok: exit-3"
+  - step: "both trays separate CONVERGING (exit 3) from degraded"
+    # PROMOTED FROM REPORT TO ENFORCEMENT (order 735-2g5i, 2026-08-14).
+    #
+    # This step used to only REPORT, and said so: windows separated converging
+    # (exit 3, order 647-i98k) while macOS still collapsed it into degraded, and
+    # enforcing that here "would turn one host's pending work into every host's
+    # red gate, which the fleet cannot act on". macOS has now landed its half,
+    # so that reason is spent and the suite can enforce the symmetry its name
+    # claims.
+    #
+    # It also stopped counting the WORD "converging". A word count is satisfied
+    # by a comment, so it could not tell an implementation from a mention of
+    # one. Both halves of the contract are asserted instead: the exit-3 constant
+    # each tray branches on, and the test that covers the converging case.
+    #
+    # The two trays reach the verdict from different facts — windows from the
+    # phase the guest names over the control wire, macOS from whether a live
+    # tray owns the VM singleton, because macOS has no AF_VSOCK and cannot ask
+    # the guest from a separate process. The CONTRACT is what has to match here,
+    # not the mechanism.
+    command: "W=crates/tillandsias-windows-tray/src/notify_icon.rs; M=crates/tillandsias-macos-tray/src/diagnose.rs; if grep -qE 'DIAGNOSE_EXIT_CONVERGING: i32 = 3' \"$W\" && grep -qE 'DIAGNOSE_EXIT_CONVERGING: i32 = 3' \"$M\" && grep -qE 'fn exit_code_separates_healthy_converging_and_degraded' \"$W\" && grep -qE 'fn exit_code_separates_healthy_converging_and_degraded' \"$M\"; then echo 'ok: exit-3 converging parity reached'; else echo 'FAIL: exit-3 converging parity regressed'; fi"
+    expected_behavior: "ok: exit-3 converging parity reached"
     timeout_ms: 3000
 
   - step: "windows spec declares the diagnose-exit-codes invariant"
