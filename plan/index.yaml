@@ -41401,6 +41401,32 @@ plan_index:
         - the same bound covers the tray's push-subscription handshake and the Noise handshake after the VZ connect
         - a test drives a peer that connects and then goes silent at each stage and asserts a bounded, stage-named failure
       events:
+        - type: progress
+          ts: "2026-08-14T05:25:16Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL. Criterion 2's handshake half and criterion 4's vsock_exec half are done; the rest is scoped and left open honestly.
+
+            WHAT LANDED. Every SETUP read on the exec seam now carries a deadline and names its stage. This was the gap every other bound left open: the idle deadline, the wall-clock ceiling and the heartbeat all live on the DATA path, and a connection that never establishes never reaches any of them. Five bare read_envelope calls -- three Hello handshakes, one PtyOpen reply, one in the status driver -- meant a guest that ACCEPTED the vsock connection and then never answered Hello parked the host forever, with none of tonight's machinery able to see it.
+
+            The stage is in the message because "no data from guest" is true of five different moments here and useless in all of them. "Guest accepted the connection but never completed the Hello handshake" and "...never completed the PtyOpen reply" are different faults with different causes, and the message also says the peer is reachable and silent -- distinguishing it from a refused connection, which is what an operator would otherwise assume.
+
+            EVIDENCE: vsock_exec 25 passed (was 22).
+              * a_peer_that_goes_silent_during_setup_fails_bounded_and_named -- both stages, holding the peer CONNECTED rather than dropping it, because a dropped peer is an EOF test of a path that already worked.
+              * no_setup_read_is_left_unbounded -- structural, and HAND-FALSIFIED: reverting one call site to a bare read turned it red naming that exact line; restoring returned 25/25.
+              * a_responsive_peer_is_not_killed_by_the_setup_deadline -- NEGATIVE CONTROL, since a setup deadline that fired on healthy handshakes would break every exec while satisfying the tests above.
+
+            TWO DEFECTS IN MY OWN TESTS, both caught by running them, both the same family as the work itself:
+              1. The first version set EXEC_IDLE_TIMEOUT_ENV to get a short deadline. Cargo runs tests in threads of ONE process, so that global mutation was visible to every other test that reads it -- 18 unrelated tests failed. A test that can only pass when it runs alone is not a test of this code. Rewritten to drive the helper with an explicit Duration and touch no global state.
+              2. The structural check scanned the whole file and flagged ITS OWN filter expression. That is precisely the antipattern 601-462g's problem statement names, "a freshness gate that greps its own comment". Now it scans only the production half, split at #[cfg(test)].
+
+            STILL OPEN, and none of it started:
+              * streaming transcript + cap (criterion 1) -- the expect driver still accumulates all guest output in an uncapped Vec and emits it only at PtyClose;
+              * per-expect deadline (criterion 2's other half) -- the wall-clock ceiling from 689-y2my item (a) bounds the CONVERSATION, not an individual needle, so "needle X never arrived in Ns" is still unsayable;
+              * frame WRITES still have no timeout;
+              * the O(n^2) needle rescan;
+              * criterion 3 entirely: the tray's push-subscription handshake (action_host.rs:2489) and the Noise handshake after the VZ connect (diagnose.rs:192). Both are macOS-only paths -- I can edit them blind but cannot exercise them from Windows, and this seam is exactly where an unexercised "fix" would be worse than the gap.
         - type: filed
           ts: "2026-08-11T23:45:20Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z

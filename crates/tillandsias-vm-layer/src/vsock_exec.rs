@@ -220,6 +220,35 @@ async fn read_envelope<R: AsyncRead + Unpin>(r: &mut R) -> Result<ControlEnvelop
     decode(&buf).map_err(|e| format!("vsock_exec: decode: {e}"))
 }
 
+/// Read a SETUP-stage envelope under the same deadline the data path uses, and
+/// name the stage on expiry (order 690-eug2).
+///
+/// The handshake reads were bare `read_envelope`, i.e. untimed. A guest that
+/// ACCEPTS the vsock connection and then never answers `Hello` parked the host
+/// forever — no idle deadline, no wall-clock ceiling, no heartbeat, because
+/// none of those exist until the session is established. Every bound this seam
+/// has grown was on the data path, and the connection could never reach it.
+///
+/// The stage is in the message because "no data from guest" is true of five
+/// different moments here and useless in all of them; "guest never answered
+/// Hello" and "guest never replied to PtyOpen" are different faults with
+/// different causes.
+async fn read_setup_envelope<R: AsyncRead + Unpin>(
+    r: &mut R,
+    timeout: std::time::Duration,
+    stage: &str,
+) -> Result<ControlEnvelope, String> {
+    match tokio::time::timeout(timeout, read_envelope(r)).await {
+        Ok(result) => result,
+        Err(_) => Err(format!(
+            "vsock_exec: guest accepted the connection but never completed {stage} within {}s — \
+             the peer is reachable and silent, which is neither a refused connection nor a stale \
+             session (override with {EXEC_IDLE_TIMEOUT_ENV})",
+            timeout.as_secs()
+        )),
+    }
+}
+
 async fn read_exec_envelope<R: AsyncRead + Unpin>(
     r: &mut R,
     idle_timeout: std::time::Duration,
@@ -296,7 +325,7 @@ where
         },
     )
     .await?;
-    let ack = read_envelope(&mut stream).await?;
+    let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
     match ack.body {
         ControlMessage::HelloAck { wire_version, .. } => {
             if wire_version != WIRE_VERSION {
@@ -443,7 +472,7 @@ where
         },
     )
     .await?;
-    let ack = read_envelope(&mut stream).await?;
+    let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
     match ack.body {
         ControlMessage::HelloAck { wire_version, .. } => {
             if wire_version != WIRE_VERSION {
@@ -567,7 +596,7 @@ where
         },
     )
     .await?;
-    let ack = read_envelope(&mut stream).await?;
+    let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
     match ack.body {
         ControlMessage::HelloAck { wire_version, .. } => {
             if wire_version != WIRE_VERSION {
@@ -593,7 +622,7 @@ where
         },
     )
     .await?;
-    let reply = read_envelope(&mut stream).await?;
+    let reply = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the PtyOpen reply").await?;
     match reply.body {
         ControlMessage::VmStatusReply { phase, .. } => Ok(phase),
         ControlMessage::Error { message, .. } => {
@@ -689,7 +718,10 @@ where
         },
     )
     .await?;
-    match read_envelope(&mut stream).await?.body {
+    match read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake")
+        .await?
+        .body
+    {
         ControlMessage::HelloAck { wire_version, .. } if wire_version == WIRE_VERSION => {}
         ControlMessage::HelloAck { wire_version, .. } => {
             return Err(format!(
@@ -1233,6 +1265,105 @@ mod tests {
         assert!(
             unknown.iter().any(|e| e.contains("could not determine")),
             "…but it must be distinguishable from 'working': {unknown:?}"
+        );
+    }
+
+    /// ORDER 690-eug2. A peer that ACCEPTS the connection and then goes silent
+    /// must fail, bounded and stage-named, at every setup stage.
+    ///
+    /// This is the gap every other bound on this seam left open: the idle
+    /// deadline, the wall-clock ceiling and the heartbeat all live on the DATA
+    /// path, and a connection that never establishes never reaches any of them.
+    /// The handshake reads were bare `read_envelope` — untimed — so a guest
+    /// that accepted the vsock connection and never answered `Hello` parked the
+    /// host forever.
+    #[tokio::test]
+    async fn a_peer_that_goes_silent_during_setup_fails_bounded_and_named() {
+        // Drive the helper DIRECTLY with an explicit deadline rather than
+        // setting EXEC_IDLE_TIMEOUT_ENV. The first version of this test set
+        // that variable and broke 18 unrelated tests: cargo runs them in
+        // threads of ONE process, so a global env mutation is visible to every
+        // other test that reads it. A test that can only pass when it runs
+        // alone is not a test of this code.
+        let (mut client, guest) = tokio::io::duplex(8192);
+        // Hold the guest end open and never write. Dropping it would make this
+        // an EOF test — a DIFFERENT failure that already worked. The wedge
+        // being pinned is a peer that stays CONNECTED and silent.
+        let err = read_setup_envelope(
+            &mut client,
+            std::time::Duration::from_millis(50),
+            "the Hello handshake",
+        )
+        .await
+        .expect_err("a silent peer must not park the host forever");
+        assert!(
+            err.contains("never completed the Hello handshake"),
+            "the failure must name the STAGE — 'no data from guest' is true of five \
+             different moments here and useless in all of them: {err}"
+        );
+        assert!(
+            err.contains("reachable and silent"),
+            "it must distinguish a silent peer from a refused connection: {err}"
+        );
+        drop(guest);
+
+        // The other setup stage produces its own name, so the two faults are
+        // distinguishable in an operator's log.
+        let (mut client, guest) = tokio::io::duplex(8192);
+        let err = read_setup_envelope(
+            &mut client,
+            std::time::Duration::from_millis(50),
+            "the PtyOpen reply",
+        )
+        .await
+        .expect_err("bounded at every setup stage");
+        assert!(
+            err.contains("never completed the PtyOpen reply"),
+            "the two setup stages must be distinguishable: {err}"
+        );
+        drop(guest);
+    }
+
+    /// The bound is wired into EVERY setup read, not just the one a behavioural
+    /// test happened to exercise.
+    ///
+    /// Structural because the behavioural version would need the production
+    /// 300s deadline or a global env mutation, and the latter is what broke 18
+    /// tests when this was first written. A bare `read_envelope(&mut stream)`
+    /// on the setup path is exactly the defect 690-eug2 names, so its absence
+    /// is the thing to assert.
+    #[test]
+    fn no_setup_read_is_left_unbounded() {
+        let src = include_str!("vsock_exec.rs");
+        // Scan the PRODUCTION half only. The first version scanned the whole
+        // file and flagged its own filter expression — a check that reads its
+        // own source as evidence, which is the antipattern 601-462g's problem
+        // statement names ("a freshness gate that greps its own comment").
+        let production = src
+            .split_once("#[cfg(test)]")
+            .map(|(before, _)| before)
+            .unwrap_or(src);
+        let offenders: Vec<&str> = production
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .filter(|l| l.contains("read_envelope(&mut stream).await"))
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "every setup read must go through read_setup_envelope (order 690-eug2); \
+             found bare reads: {offenders:?}"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the bound above: a peer that answers NORMALLY must
+    /// not be killed by it. A setup deadline that fired on healthy handshakes
+    /// would break every exec while satisfying the test above.
+    #[tokio::test]
+    async fn a_responsive_peer_is_not_killed_by_the_setup_deadline() {
+        let (out, _) = run_with_heartbeats(vec![]).await;
+        assert_eq!(
+            out.exit.code, 0,
+            "a normal handshake must complete under the setup deadline"
         );
     }
 
