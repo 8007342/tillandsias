@@ -3025,6 +3025,26 @@ fn build_local_projects_submenu(state: &TrayUiState) -> MenuNode {
 /// trims the *tail* — stale repos — rather than the user's active work.
 ///
 /// @trace spec:tray-ux, spec:remote-projects
+/// Label and clickability for the cloud-overflow row (order 591-33s6).
+///
+/// Pure, and separated from menu construction on purpose: the built node's
+/// children are serialized `OwnedValue`s, so a test that walked the finished
+/// menu would be asserting against a DBus encoding rather than against the
+/// decision. The decision is what the packet is about.
+fn cloud_overflow_row(total: usize, visible_count: usize) -> (String, bool) {
+    let hidden = total.saturating_sub(visible_count);
+    // Carries BOTH counts. The pre-existing test pinned the total, because
+    // that is how a user judges the scale of what is hidden; the hidden count
+    // is what they are actually missing right now. Keeping both costs a few
+    // characters and loses neither.
+    let label = format!(
+        "\u{2026} {hidden} more of {total} (raise TILLANDSIAS_MAX_CLOUD_MENU_ITEMS, now {visible_count})"
+    );
+    // NOT clickable. See the long note at the call site: clicking wrote to
+    // stderr, which a GUI user never sees, and closed the menu.
+    (label, false)
+}
+
 fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
     let total = state.cloud_projects.len();
     let cap = resolved_max_cloud_projects_in_menu();
@@ -3053,24 +3073,44 @@ fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
         )));
     }
     // Overflow leaf — only emitted when the underlying list exceeds the cap.
-    // The label includes the *total* count so the user knows how many repos
-    // are hidden. Clicking dumps the full list to stderr (see
-    // `event` dispatch on `CLOUD_OVERFLOW_ID`).
     //
-    // TODO(@tray-overflow): replace the stderr dump with a GtkWindow-based
-    // project picker once the headless binary grows GTK plumbing. The
-    // current tray module is pure StatusNotifierItem/DBusMenu over zbus —
-    // adding a window would require a new GTK application thread, GResource
-    // setup, and a theming hook, none of which exist here today. The cap +
-    // overflow item is the standard pattern for native indicator menus and
-    // resolves the user-visible clipping bug on its own.
+    // DISABLED, and that is the fix, not a regression (order 591-33s6).
+    //
+    // The comment that used to sit here claimed "the cap + overflow item is
+    // the standard pattern for native indicator menus and resolves the
+    // user-visible clipping bug on its own". It did not. Clicking dumped the
+    // full list to STDERR — which a GUI user never sees — and the menu closed,
+    // because menus close on click. From the user's side the control was a
+    // no-op that also cost them their menu, and relaunching showed the same
+    // collapsed list. The operator reported exactly that on 2026-08-02.
+    //
+    // The packet's minimum acceptable outcome is that clicking must do
+    // something visible OR the item must not be clickable, because a control
+    // that silently does nothing is worse than an absent one. A real picker
+    // needs window plumbing this module does not have (see TODO below), so the
+    // item becomes an informational, non-clickable row.
+    //
+    // PARITY, not preference: the macOS tray already treats its overflow row
+    // as inert (`MenuAction::CloudOverflow | MenuAction::Inert => {}` in
+    // action_host.rs) and the Windows tray has no such control at all. Linux
+    // was the only tray shipping a dead button, so disabling it converges the
+    // three rather than inventing a fourth behaviour.
+    //
+    // The label now carries a remedy the user can actually act on instead of a
+    // promise the control does not keep.
+    //
+    // TODO(@tray-overflow): a real project picker still wants a GtkWindow, and
+    // the current tray module is pure StatusNotifierItem/DBusMenu over zbus —
+    // a window would require a GTK application thread, GResource setup and a
+    // theming hook, none of which exist here. That work is this packet's
+    // criteria 1 and 2 and remains open.
     if total > visible_count {
-        let label = format!("\u{2026} All cloud projects ({})\u{2026}", total);
+        let (label, enabled) = cloud_overflow_row(total, visible_count);
         children.push(child(node(
             CLOUD_OVERFLOW_ID,
             props(vec![
                 ("label".to_string(), ov_str(label)),
-                ("enabled".to_string(), ov(Value::from(true))),
+                ("enabled".to_string(), ov(Value::from(enabled))),
                 ("visible".to_string(), ov(Value::from(true))),
             ]),
             Vec::new(),
@@ -3821,9 +3861,12 @@ impl DbusMenuIface {
                 // reset is CLI-only (`--reset-guest`).
             }
             CLOUD_OVERFLOW_ID => {
-                // Cloud overflow leaf — dump the full project list to stderr
-                // as the documented fallback for "no GtkWindow picker yet".
-                // See TODO(@tray-overflow) in `build_cloud_projects_submenu`.
+                // The menu no longer emits this leaf as clickable (order
+                // 591-33s6): it is a disabled, informational row. This arm is
+                // kept because a stale or non-conforming DBusMenu client can
+                // still deliver the id, and the stderr listing remains useful
+                // to someone running the tray from a terminal — but it is no
+                // longer presented to a GUI user as a control that works.
                 handle_cloud_overflow_click(&self.0.snapshot());
             }
             _ => {
@@ -4219,6 +4262,46 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// ORDER 591-33s6. The cloud overflow row must not be a clickable control
+    /// that does nothing.
+    ///
+    /// It used to be `enabled: true`, and clicking it dumped the project list
+    /// to STDERR — which a GUI user never sees — while the menu closed, because
+    /// menus close on click. The operator reported it as "clicking the show
+    /// more projects resets the tray menu and loses focus, and launching it
+    /// again still has the collapsed project count".
+    ///
+    /// The packet's minimum acceptable outcome: clicking does something
+    /// visible, OR the item is not clickable. A picker needs window plumbing
+    /// this module does not have, so it is informational — matching the macOS
+    /// tray, which already treats its overflow row as inert.
+    #[test]
+    fn cloud_overflow_row_is_informational_not_a_dead_button() {
+        let (label, enabled) = cloud_overflow_row(23, 10);
+        assert!(label.contains("23"), "the total is kept: {label}");
+
+        assert!(
+            !enabled,
+            "the overflow row must not be clickable while clicking it cannot show \
+             a GUI user anything — a control that silently does nothing is worse \
+             than an absent one"
+        );
+        assert!(
+            label.contains("13"),
+            "it must still say how many are hidden — that is the information the \
+             row exists to carry: {label}"
+        );
+        assert!(
+            label.contains("TILLANDSIAS_MAX_CLOUD_MENU_ITEMS"),
+            "and it must name a remedy the user can actually act on, rather than \
+             promising a picker that does not exist: {label}"
+        );
+        assert!(
+            !label.contains("All cloud projects"),
+            "the old label promised a full listing the click never delivered: {label}"
+        );
+    }
 
     /// Order 288: a pathological multi-KB, multi-line error chain surfaced
     /// as the status label must collapse to one bounded line so the menu
@@ -5516,15 +5599,23 @@ mod tests {
         // The overflow leaf must reference the *total* count (50), not the
         // cap. Use `labels()` to flatten the subtree and search for the
         // count.
+        // ORDER 591-33s6: the label no longer says "All cloud projects", which
+        // promised a full listing the click never delivered. It still carries
+        // the total — that assertion is the point of this test and is kept —
+        // and now also names the remedy.
         let label_list = labels(&cloud_node);
         let overflow_label = label_list
             .iter()
-            .find(|l| l.contains("All cloud projects"))
-            .expect("Overflow item with label 'All cloud projects (N)…' must be present");
+            .find(|l| l.contains("TILLANDSIAS_MAX_CLOUD_MENU_ITEMS"))
+            .expect("Overflow row must be present and name the cap env var");
         assert!(
             overflow_label.contains("50"),
             "Overflow label must include the total project count (50), got {:?}",
             overflow_label
+        );
+        assert!(
+            !overflow_label.contains("All cloud projects"),
+            "the old label promised a listing the click never delivered: {overflow_label:?}"
         );
     }
 

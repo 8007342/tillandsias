@@ -30277,6 +30277,34 @@ plan_index:
         - a multi-column or paginated design is chosen per-platform with its constraints recorded, or multi-column is rejected with a stated reason
 
       events:
+        - type: progress
+          ts: "2026-08-14T11:33:56Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL: the minimum acceptable outcome is met and the false comment corrected. The picker (criteria 1-2) remains open. The packet also stays ready because one of its stated premises is WRONG, and the correction narrows it substantially.
+
+            PREMISE CORRECTED -- the dead control is LINUX-ONLY, not "present on ALL platforms". Verified by reading all three trays:
+              * Linux (tillandsias-headless/src/tray/mod.rs) -- CLOUD_OVERFLOW_ID emitted with enabled=true, click dumps to stderr. The defect.
+              * macOS (tillandsias-macos-tray/src/action_host.rs:1650) -- `MenuAction::CloudOverflow | MenuAction::Inert => {}`, already explicitly inert. Already resolved the way this packet's minimum outcome asks for.
+              * Windows -- no cloud overflow control at all.
+            What IS cross-platform is the operator's underlying complaint, the COLLAPSED LISTING. So criterion 2's "same behaviour ships on all three" is mostly already true for the dead-button half, and the remaining cross-platform work is the picker itself.
+
+            WHAT LANDED (Linux):
+              * The overflow row is now enabled=false -- informational, not a control. The packet's minimum: clicking must do something visible OR the item must not be clickable, because a control that silently does nothing is worse than an absent one. A picker needs window plumbing this module does not have.
+              * PARITY, not preference, is the justification for choosing "not clickable" over "make it do something": macOS already made that choice. Disabling converges the three trays rather than inventing a fourth behaviour -- which matters because I cannot see a Linux GUI from this host, so an unverifiable UX invention would have been the wrong call.
+              * The label carries a remedy the user can act on instead of a promise the control does not keep: "… 13 more of 23 (raise TILLANDSIAS_MAX_CLOUD_MENU_ITEMS, now 10)". The env var already existed and was mentioned only in a stderr tip nobody sees.
+              * Criterion 3 DONE: the comment claiming "the cap + overflow item ... resolves the user-visible clipping bug on its own" is replaced with what actually happens and why the row is now disabled.
+
+            The stderr dispatch arm is KEPT, with a note: a non-conforming DBusMenu client can still deliver the id, and the listing is still useful to someone running the tray from a terminal. It is simply no longer presented to a GUI user as a control that works.
+
+            EVIDENCE: tillandsias-headless tray module 70 passed.
+              * cloud_overflow_row_is_informational_not_a_dead_button -- asserts not-clickable, the hidden count, the total, the env var, and that the old "All cloud projects" promise is gone.
+              * A PRE-EXISTING test, cloud_menu_caps_overflow_with_50_projects, pinned the old label. Updated rather than deleted, and its real assertion (the label carries the TOTAL) is kept -- which is why the new label carries both counts instead of only the hidden one.
+
+            TESTED AS A PURE FUNCTION, deliberately: the built menu's children are serialized OwnedValues, so a test walking the finished node would assert against a DBus encoding rather than against the decision. The decision is what the packet is about, so it was extracted into `cloud_overflow_row`.
+
+            REMAINING: criteria 1 and 2's picker -- multi-column or paginated, researched per platform. Untouched, and it is the 12-hour half.
         - type: note
           ts: "2026-08-12T15:32:54Z"
           host: forge
