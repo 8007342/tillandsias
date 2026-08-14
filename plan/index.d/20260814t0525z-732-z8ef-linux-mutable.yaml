@@ -1,0 +1,60 @@
+packets:
+  - packet_id: forge-validate-push-absent-reported-as-failed
+    order: 732-z8ef
+    release_target: architecture-audit-epic
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: fix
+    title: 'forge-validate reported FAIL exit:1 for a push that never ran'
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - fail-loud
+      - forge
+      - freshness
+    context: |
+      Found by the standing FRESHNESS audit, which named scripts/forge-validate.sh
+      as the next target.
+      Five of its six checks distinguish "could not run" from "ran and failed" —
+      service-health and e2e-eligibility both carry a SKIP verdict. The
+      push-route check did not. On a detached HEAD `push_cmd` stays empty, the
+      `&&` short-circuits, and the script printed `FAIL push-route-dry-run
+      exit:1` — an exit code no push produced, followed by empty failure logs
+      because nothing had run. Same absent-reads-as-something-else family as
+      601-462g and 727-kmks, inverted: there, absence read as healthy; here,
+      absence read as a failure with a fabricated exit code.
+      The fixture could not have caught it: FORGE_VALIDATE_CHECK_DIR always set
+      push_cmd to a stub path, so the empty-route state was unreachable in
+      tests. The stub is now optional, which is what makes the case testable at
+      all.
+    exit_criteria:
+      - an absent push route reports SKIP with a named reason, not FAIL with a synthesised exit code
+      - the fixture can model an absent route, not only a route that ran and failed
+      - the profile still exits non-zero when a push route exists and genuinely fails
+    verifiable_closure: |
+      scripts/test-forge-validate.sh covers all three: omitting the push stub
+      yields `SKIP push-route-dry-run skip:no-branch-to-push` and pass=4 skip=2
+      fail=0; the existing failure case still yields `FAIL push-route-dry-run
+      exit:6`.
+
+events:
+  - packet_id: forge-validate-push-absent-reported-as-failed
+    event:
+      type: filed
+      ts: "2026-08-14T05:25:00Z"
+      agent_id: "linux-mutable-20260814t0517z"
+      host: linux_mutable
+      summary: |
+        Surfaced by the standing FRESHNESS audit target for this cycle.
+
+  - packet_id: forge-validate-push-absent-reported-as-failed
+    event:
+      type: verified-by
+      ts: "2026-08-14T05:25:30Z"
+      agent_id: "linux-mutable-20260814t0517z"
+      host: linux_mutable
+      summary: |
+        scripts/test-forge-validate.sh PASS with the new absent-route case;
+        litmus:forge-validation-profile green in the default-image suite
+        (10/10 executed). The component carries an updated freshness stamp.

@@ -87,6 +87,38 @@ EOF
     exit 1
 }
 
+# ABSENT IS NOT FAILED. With no branch to push (a detached HEAD), no push is
+# attempted — and this used to print `FAIL push-route-dry-run exit:1`, naming an
+# exit code nothing produced, with empty failure logs. Omitting the push stub
+# reproduces that state: forge-validate.sh leaves push_cmd empty exactly as the
+# real detached-HEAD path does.
+no_push="$tmp/nopush"
+mkdir -p "$no_push"
+write_stub "$no_push/credential" "ok:fixture" 0
+write_stub "$no_push/workspace" "workspace fixture passed" 0
+write_stub "$no_push/headless" "headless fixture passed" 0
+write_stub "$no_push/services" "skip:not-forge-host" 0
+write_stub "$no_push/eligibility" "eligible" 0
+no_push_output="$(FORGE_VALIDATE_CHECK_DIR="$no_push" scripts/forge-validate.sh)" || {
+    echo "FAIL: an absent push route must not fail the profile" >&2
+    exit 1
+}
+expected_no_push="$(cat <<'EOF'
+PASS credential-channel ok:fixture
+SKIP push-route-dry-run skip:no-branch-to-push
+PASS workspace-check
+PASS headless-tests
+SKIP service-health skip:not-forge-host
+PASS e2e-eligibility eligible
+SUMMARY pass=4 skip=2 fail=0
+EOF
+)"
+[ "$no_push_output" = "$expected_no_push" ] || {
+    printf 'FAIL: absent-push output mismatch\nexpected:\n%s\nactual:\n%s\n' \
+        "$expected_no_push" "$no_push_output" >&2
+    exit 1
+}
+
 health_checks="$tmp/health"
 mkdir -p "$health_checks"
 write_stub "$health_checks/services" '{"services":[{"name":"proxy","status":"up"},{"name":"git-service","status":"up"},{"name":"inference","status":"up"}]}' 0
