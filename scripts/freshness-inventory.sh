@@ -195,6 +195,25 @@ fi
 
 # Drop out-of-scope components from the denominator (see EXCLUDED_PREFIXES).
 # Fixture mode inventories exactly the fixture dir, so it never excludes.
+#
+# UNTRACKED FILES ARE NOT COMPONENTS (order 730-j26z, 2026-08-14). A file git does
+# not track cannot encode design intent the audit can act on: nobody reviews it,
+# nothing ships from it as source, and re-materializing the build context
+# changes it without a commit. The standing audit queue offered
+# images/default/skills/multihost-orchestration/SKILL.md as its next target —
+# one of 13 files in a gitignored staging tree that scripts/ copies from the
+# canonical skills/, and several of whose files already DIFFER from their
+# source. Auditing a stale copy for "is this still sound?" answers a question
+# about the copier, not the component.
+#
+# This is the same class as the generated-cheatsheets exclusion (640-iujb) but
+# stated as a property rather than a path: a prefix list only catches the
+# derived trees someone remembered to name.
+_tracked=""
+if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ]; then
+    _tracked="$(git ls-files 2>/dev/null || true)"
+fi
+
 excluded=0
 if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
     _kept=()
@@ -205,6 +224,18 @@ if [ -z "${FRESHNESS_FIXTURE_DIR:-}" ] && [ "${#CANDIDATES[@]}" -gt 0 ]; then
             _prefix="${_entry%%:*}"
             case "$_rel" in "$_prefix"*) _drop=1; break ;; esac
         done
+        # Only enforce trackedness when git actually answered; a tarball
+        # checkout with no git dir must not silently empty the inventory.
+        if [ "$_drop" -eq 0 ] && [ -n "$_tracked" ]; then
+            case "
+$_tracked
+" in
+                *"
+$_rel
+"*) : ;;
+                *) _drop=1 ;;
+            esac
+        fi
         if [ "$_drop" -eq 1 ]; then
             excluded=$((excluded + 1))
         else

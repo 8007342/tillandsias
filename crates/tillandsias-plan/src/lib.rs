@@ -1352,10 +1352,58 @@ pub mod edit {
     }
 
     /// Build a well-formed 8-space-indented event list entry.
+    ///
+    /// The summary is emitted as a LITERAL block scalar with every line
+    /// indented to the block's column (order 728-n456). It used to be
+    /// interpolated raw onto a single folded line:
+    ///
+    /// ```text
+    ///           summary: >
+    ///             {summary}
+    /// ```
+    ///
+    /// which is correct only while the summary has no newline in it. A real
+    /// progress note has several — a code sample, a bullet list — and every
+    /// line after the first landed at ITS OWN indentation, usually column 0,
+    /// terminating the scalar early and producing a candidate that did not
+    /// parse. Measured: `"indented code:\n  run_id=$(...)"` produced
+    /// `parse: could not find expected ':'` and `"star bullet\n  * one"`
+    /// produced `parse: did not find expected alpha`.
+    ///
+    /// Nothing was ever corrupted, because `validate_candidate` rejects the
+    /// candidate before it is written — that guard is why this was a refusal
+    /// rather than a broken ledger. But a writer that depends on the validator
+    /// to catch its own malformed output is a writer that cannot be used, and
+    /// the base path was effectively unusable for any note worth writing.
+    ///
+    /// `|` rather than `>`: a folded scalar would join the note's lines and
+    /// silently destroy the structure the author wrote, which is a quieter
+    /// version of the same disrespect for the content.
     pub fn event_block(etype: &str, ts: &str, agent_id: &str, host: &str, summary: &str) -> String {
-        format!(
-            "        - type: {etype}\n          ts: \"{ts}\"\n          agent_id: \"{agent_id}\"\n          host: {host}\n          summary: >\n            {summary}\n"
-        )
+        let head = format!(
+            "        - type: {etype}\n          ts: \"{ts}\"\n          agent_id: \"{agent_id}\"\n          host: {host}\n"
+        );
+        // An empty summary has no valid literal-block form (a block scalar with
+        // no content followed by a dedented key is ambiguous), so use a plain
+        // empty string for it.
+        if summary.trim().is_empty() {
+            return format!("{head}          summary: \"\"\n");
+        }
+        let body: String = summary
+            .trim_end_matches('\n')
+            .lines()
+            .map(|line| {
+                if line.trim().is_empty() {
+                    // A truly empty line, not twelve spaces of trailing
+                    // whitespace: blank lines are legal inside a literal block
+                    // and paragraph breaks are part of what the author wrote.
+                    "\n".to_string()
+                } else {
+                    format!("            {line}\n")
+                }
+            })
+            .collect();
+        format!("{head}          summary: |\n{body}")
     }
 }
 
@@ -1922,6 +1970,72 @@ steps:
                 .iter()
                 .any(|p| p.get("provisional_id").is_some()),
             "organically-grown fields must be visible on raw packets"
+        );
+    }
+
+    /// Order 728-n456. A real progress note is not one line: it has a code
+    /// sample, a bullet list, paragraph breaks. The writer used to interpolate
+    /// the summary raw onto a single folded-scalar line, so every line after
+    /// the first landed at its own indentation and the candidate did not parse.
+    ///
+    /// The two shapes here are the exact ones that were measured failing:
+    /// `parse: could not find expected ':'` for the indented code, and
+    /// `parse: did not find expected alpha` for the bullets.
+    #[test]
+    fn event_block_survives_multiline_summaries_on_the_real_ledger() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let raw = std::fs::read_to_string(&path).expect("read live ledger");
+        let ledger = live_ledger();
+
+        let summaries = [
+            "indented code:\n  run_id=$(gh run list --json databaseId)\nand prose after it",
+            "star bullet\n  * one\n  * two",
+            "paragraph one\n\nparagraph two after a blank line",
+            "trailing newline is tolerated\n",
+            "a line with a colon: and a # hash and a - dash",
+        ];
+
+        for summary in summaries {
+            let block = edit::event_block(
+                "progress",
+                "2026-08-13T00:00:00Z",
+                "test-agent",
+                "windows",
+                summary,
+            );
+            let out = edit::append_event(&raw, "plan-yaml-compiled-editor", &block)
+                .expect("append to a real packet");
+            let violations = edit::validate_candidate(
+                &out,
+                ledger.archived_ids(),
+                &Schema::minimal().reference_fields,
+            );
+            assert!(
+                violations.is_empty(),
+                "multi-line summary must produce a parseable candidate.\nsummary: {summary:?}\nviolations: {violations:?}"
+            );
+
+            // NEGATIVE CONTROL on the CONTENT, not just on parseability: a
+            // block that parses but silently dropped or joined the author's
+            // lines would satisfy the assertion above while destroying the
+            // note. Assert the last line survived as its own line.
+            let last = summary.trim_end().lines().last().unwrap();
+            assert!(
+                out.contains(&format!("            {last}\n")),
+                "the summary's final line must survive at block indentation: {last:?}"
+            );
+        }
+    }
+
+    /// Order 728-n456, second half: an EMPTY summary has no valid literal-block
+    /// form, so it must take the plain-scalar path rather than emitting a
+    /// dangling `summary: |`.
+    #[test]
+    fn event_block_handles_an_empty_summary() {
+        let block = edit::event_block("note", "2026-08-13T00:00:00Z", "a", "windows", "   ");
+        assert!(
+            block.contains("summary: \"\""),
+            "an empty summary must not open a literal block: {block}"
         );
     }
 

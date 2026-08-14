@@ -1,0 +1,65 @@
+packets:
+  - packet_id: fold-emits-bare-yaml11-timestamps
+    order: 729-biik
+    release_target: architecture-audit-epic
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: fix
+    title: 'Compaction itself writes bare YAML-1.1 timestamps, so no fragment gate can catch them'
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - plan-ledger
+      - compaction
+      - fail-loud
+    context: |
+      Second occurrence of the 720-24u6 shape, from a different writer. That
+      packet taught scripts/check-added-fragments-parse.sh to refuse a
+      hand-authored fragment carrying `ts: 2026-08-12T15:31:54Z`, after 231 such
+      scalars reached the base. The very next fold added 51 more, and the gate
+      was green the whole time — correctly, because the fragments were clean.
+      The fold does not copy event text. It re-serializes event mappings through
+      serde_yaml, a YAML 1.2 writer, where a bare ISO-8601 scalar is a string
+      needing no quotes. Ruby's Psych reads YAML 1.1, where the same scalar is a
+      Time instance that safe_load refuses — so ./build.sh --check could not load
+      the base compaction had just produced.
+      The lesson worth keeping: 720-24u6 hardened the input path and the writer
+      was downstream of it. A gate on what hosts submit says nothing about what
+      the tool emits.
+    exit_criteria:
+      - the fold quotes any value with the YAML 1.1 timestamp shape, in both the scalar path and the serde-serialized mapping path
+      - a unit test asserts on the rendered TEXT, since a Value-domain assertion cannot tell the two spellings apart
+      - a real compaction of the live ledger leaves plan/index.yaml loadable by Ruby
+    verifiable_closure: |
+      cargo test -p tillandsias-plan
+      a_folded_event_timestamp_is_quoted_so_yaml11_readers_do_not_see_a_time
+      passes, and after compacting the live ledger
+      `ruby -ryaml -e "YAML.load_file('plan/index.yaml')"` succeeds with zero
+      bare `ts:` lines added.
+
+events:
+  - packet_id: fold-emits-bare-yaml11-timestamps
+    event:
+      type: filed
+      ts: "2026-08-14T00:30:00Z"
+      agent_id: "linux-mutable-20260814t0017z"
+      host: linux_mutable
+      summary: >
+        Found by running the Ruby load check immediately after this cycle's
+        compaction, which is the check 720-24u6 added to the reader side.
+
+  - packet_id: fold-emits-bare-yaml11-timestamps
+    event:
+      type: verified-by
+      ts: "2026-08-14T00:30:30Z"
+      agent_id: "linux-mutable-20260814t0017z"
+      host: linux_mutable
+      summary: >
+        Fix landed in crates/tillandsias-plan/src/fragments.rs: is_yaml11_timestamp
+        gates a quoting branch in scalar_text (inline scalars) and
+        quote_timestamp_line applied to the serde-serialized mapping block (the
+        event path that produced all 51). Re-folding the live ledger with the
+        fixed binary added 0 bare timestamps where the previous binary added 51,
+        and Ruby loads the result. Unit test asserts on rendered text; 13
+        compaction tests pass.

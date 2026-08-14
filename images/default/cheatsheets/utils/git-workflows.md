@@ -2,7 +2,7 @@
 tags: [git, workflows, branching, commits, remotes]
 languages: [bash]
 since: 2026-05-06
-last_verified: 2026-05-06
+last_verified: 2026-08-14
 sources:
   - https://git-scm.com/docs
   - https://git-scm.com/docs/gitcredentials
@@ -13,6 +13,7 @@ tier: bundled
 summary_generated_by: hand-curated
 bundled_into_image: true
 committed_for_project: false
+# freshness: auditor=linux-mutable-20260814t0117z date=2026-08-14 verdict=updated scope=standing FRESHNESS audit — content re-validated against git 2.45 and the current forge model (no host credentials, enclave mirror handles auth, identity injected from ~/.cache/tillandsias/secrets/git/.gitconfig); the gh-per-URL-helper and GCM_INTERACTIVE guidance still matches the cited upstream docs; UPDATED because the header claimed two different verification dates (last_verified 2026-05-06 vs "Last updated 2026-04-28"), which is the one thing a freshness record must not be ambiguous about
 ---
 # git Workflows
 
@@ -28,7 +29,7 @@ committed_for_project: false
 - <https://github.com/git-ecosystem/git-credential-manager/blob/main/docs/configuration.md> — Git Credential Manager (GCM) on Windows: `credential.interactive`, store backends
 - <https://cli.github.com/manual/gh_auth_setup-git> — using `gh` as Git's credential helper to bypass GCM prompts
 - <https://github.blog/changelog/> — GitHub API and feature releases
-- **Last updated:** 2026-04-28
+- **Last updated:** 2026-08-14
 
 ## Quick reference
 

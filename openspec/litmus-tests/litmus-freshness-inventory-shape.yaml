@@ -43,6 +43,17 @@ critical_path:
     timeout_ms: 60000
     expected_behavior: "ok: generated components excluded from denominator"
 
+  - step: "DENOMINATOR: untracked files are not components (order 730-j26z)"
+    # The audit queue offered images/default/skills/multihost-orchestration/SKILL.md
+    # as its next target — one of 13 files in a gitignored staging tree that a
+    # script copies from the canonical skills/, several of which already DIFFER
+    # from their source. Auditing a stale copy for "is this still sound?"
+    # answers a question about the copier. Trackedness is the property; the
+    # prefix list only catches derived trees someone remembered to name.
+    command: "out=$(scripts/freshness-inventory.sh); bad=0; while read -r f; do [ -n \"$f\" ] || continue; git ls-files --error-unmatch \"$f\" >/dev/null 2>&1 || bad=$((bad+1)); done <<< \"$(printf '%s' \"$out\" | grep -E '^freshness-(unstamped|stamp): ' | sed -E 's/^freshness-(unstamped|stamp): //; s/ .*//')\"; [ \"$bad\" -eq 0 ] && echo 'ok: every component is git-tracked'"
+    timeout_ms: 120000
+    expected_behavior: "ok: every component is git-tracked"
+
   - step: "DENOMINATOR: the ruled-in trees are actually enumerated (order 720-bmm9)"
     # methodology.yaml names "executable/source code ... and specs
     # (openspec/specs)" as in-scope, and for months the inventory enumerated

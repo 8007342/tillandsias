@@ -276,10 +276,31 @@ gh run list --workflow=release.yml --branch="${new_tag}" --limit 1
 ## 7 — Wait for the release build + surface artifacts
 
 ```bash
-run_id=$(gh run list --workflow=release.yml --branch="${new_tag}" --limit 1 --json databaseId --jq '.[0].databaseId')
+run_id="$(scripts/resolve-release-run.sh "${new_tag}")" || { echo "$run_id"; exit 1; }
+run_id="${run_id#ok:release-run:}"
 gh run watch "${run_id}"                     # blocks until green or red
 gh release view "${new_tag}" --json url,assets --jq '.url, .assets[].browserDownloadUrl'
 ```
+
+> The trap this replaces, and it is the same family as the `gh pr checks
+> --watch` note in step 5. The step used to be a bare command substitution:
+>
+> ```bash
+> run_id=$(gh run list --workflow=release.yml --branch="${new_tag}" --limit 1 --json databaseId --jq '.[0].databaseId')
+> ```
+>
+> When step 6's dispatch did not actually start a run — wrong ref, a
+> `workflow_dispatch` that silently no-oped, a tag that never reached the
+> remote — `gh run list` prints nothing and exits **0**. The substitution
+> succeeded with an EMPTY `run_id` and the runbook walked into `gh run watch ""`
+> having never noticed the thing it was waiting for did not exist. On an empty
+> result set `--jq '.[0].databaseId'` prints the literal `null`, so a bare
+> emptiness test is not enough either.
+>
+> `scripts/resolve-release-run.sh` asserts a positive fact and separates "gh
+> failed" from "gh had nothing to say" — they are different faults.
+> Pinned by `scripts/test-resolve-release-run.sh` (6/6, fake `gh`, no network).
+> Found by the 601-462g audit, in this runbook.
 
 The Linux Silverblue smoke-test artifact is the `tillandsias-linux-x86_64` musl binary. Surface its URL to the user.
 
