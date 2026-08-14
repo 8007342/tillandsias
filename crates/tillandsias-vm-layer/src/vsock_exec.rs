@@ -130,6 +130,69 @@ fn wall_clock_ceiling_error(
     )
 }
 
+/// How many bytes of guest transcript the expect driver retains (order
+/// 690-eug2). 8 MiB: far above any real prompt-driven exchange, low enough that
+/// a runaway guest cannot exhaust host memory.
+const EXEC_TRANSCRIPT_CAP_BYTES: usize = 8 * 1024 * 1024;
+const EXEC_TRANSCRIPT_CAP_ENV: &str = "TILLANDSIAS_VSOCK_EXEC_TRANSCRIPT_CAP_BYTES";
+
+/// The cap, overridable; `0` disables trimming entirely.
+fn exec_transcript_cap() -> usize {
+    std::env::var(EXEC_TRANSCRIPT_CAP_ENV)
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(EXEC_TRANSCRIPT_CAP_BYTES)
+}
+
+/// Drop transcript bytes that can no longer participate in a match, returning
+/// how many were dropped and adjusting the two cursors.
+///
+/// WHY THIS IS SAFE, and it rests on the cursor invariant the rescan fix
+/// established: no match can START before `scan_from - (needle.len()-1)`,
+/// because everything before that has already been examined for the CURRENT
+/// needle. And `search_start` only ever moves forward, so nothing before it is
+/// ever searched again. Bytes before the later of those two points are
+/// therefore dead for matching, by construction rather than by estimate.
+///
+/// The dropped bytes are the OLDEST guest output, and the caller loses them
+/// from `ExecOutput.stdout`. That is the honest trade for a bound, and it is
+/// why the elision is REPORTED through on_event rather than papered over: a
+/// silently short transcript would send someone hunting for output the guest
+/// definitely produced. Nothing is injected into `stdout` itself — a marker in
+/// the byte stream would corrupt exactly what callers parse.
+fn trim_transcript(
+    stdout: &mut Vec<u8>,
+    search_start: &mut usize,
+    scan_from: &mut usize,
+    current_needle_len: Option<usize>,
+    cap: usize,
+) -> usize {
+    if cap == 0 || stdout.len() <= cap {
+        return 0;
+    }
+    let dead_for_current = match current_needle_len {
+        // An expect is pending: keep the overlap window the scan needs.
+        Some(len) => scan_from.saturating_sub(len.saturating_sub(1)),
+        // No expect pending: matching is over, everything is dead.
+        None => stdout.len(),
+    };
+    let drop_to = (*search_start).max(dead_for_current).min(stdout.len());
+    if drop_to == 0 {
+        // Cannot trim without losing match context — a guest that floods
+        // before the first prompt. Reported by the caller rather than silently
+        // exceeding the cap.
+        return 0;
+    }
+    stdout.drain(..drop_to);
+    // SATURATING, not `-=`. drop_to is the MAX of search_start and the dead
+    // window, so it can exceed search_start whenever the cursor has moved past
+    // it — and then the search origin is simply the new start of the buffer.
+    // Writing `*search_start -= drop_to` underflowed on the first run.
+    *search_start = search_start.saturating_sub(drop_to);
+    *scan_from = scan_from.saturating_sub(drop_to);
+    drop_to
+}
+
 /// Escape hatch for the deadlock report, mirroring the ceiling's own env.
 ///
 /// Set to `0` to disable. Present because a new terminal condition on a path
@@ -804,6 +867,8 @@ where
     let mut scan_from = 0usize;
     let mut pending = expects.into_iter();
     let mut current = pending.next();
+    let transcript_cap = exec_transcript_cap();
+    let mut elided_bytes = 0usize;
     let idle_timeout = exec_idle_timeout()?;
     // 689-y2my: make the WAIT observable. The deadline deliberately stays as it
     // is — heartbeats extending it is load-bearing (order 332, 4c9da7cc: a
@@ -856,6 +921,27 @@ where
                     continue;
                 }
                 stdout.extend_from_slice(&bytes);
+                // Bound the retained transcript (order 690-eug2). Runs BEFORE
+                // matching so the cursors this adjusts are the ones the scan
+                // below reads.
+                if stdout.len() > transcript_cap {
+                    let dropped = trim_transcript(
+                        &mut stdout,
+                        &mut search_start,
+                        &mut scan_from,
+                        current.as_ref().map(|e| e.needle.len()),
+                        transcript_cap,
+                    );
+                    if dropped > 0 {
+                        elided_bytes += dropped;
+                        on_event(&format!(
+                            "transcript cap reached: elided {dropped} bytes of earlier guest output \
+                             ({elided_bytes} total). The retained transcript is the most recent \
+                             {} bytes; override with {EXEC_TRANSCRIPT_CAP_ENV} (0 disables).",
+                            stdout.len()
+                        ));
+                    }
+                }
                 // Satisfy as many sequential expects as the new output allows.
                 while current.is_some() {
                     let end = {
@@ -1341,6 +1427,97 @@ mod tests {
         );
     }
 
+    /// ORDER 690-eug2, the transcript cap. Pure unit tests over the trim, so
+    /// the invariant is checked directly rather than inferred from an exchange.
+    #[test]
+    fn trimming_keeps_exactly_what_matching_still_needs() {
+        // A pending needle: the overlap window must survive, because a match
+        // can straddle the trim point exactly as it can straddle a frame.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 10usize;
+        let mut scan_from = 90usize;
+        let dropped = trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(5), 10);
+        // dead_for_current = 90 - 4 = 86; max(search_start=10, 86) = 86.
+        assert_eq!(dropped, 86);
+        assert_eq!(buf.len(), 14, "the overlap window and the tail survive");
+        assert_eq!(buf[0], 86, "the retained bytes are the most recent ones");
+        assert_eq!(scan_from, 4, "the cursor follows the bytes it points at");
+        assert_eq!(search_start, 0);
+
+        // search_start WINS when it is later than the scan window: nothing
+        // before it is ever searched again, but the scan window must not be
+        // trimmed past it either.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 95usize;
+        let mut scan_from = 96usize;
+        let dropped = trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(50), 10);
+        assert_eq!(dropped, 95, "trim to search_start, not past it");
+        assert_eq!(search_start, 0);
+
+        // No expect pending: matching is over, so everything is dead.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 0usize;
+        let mut scan_from = 0usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, None, 10),
+            100
+        );
+
+        // NEGATIVE CONTROLS. Under the cap: never trim — the common case must
+        // be untouched, and a trim that fired early would silently shorten
+        // every transcript.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 50usize;
+        let mut scan_from = 50usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(3), 1000),
+            0
+        );
+        assert_eq!(buf.len(), 100);
+
+        // Cap 0 disables trimming entirely, even over the limit.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 50usize;
+        let mut scan_from = 50usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(3), 0),
+            0
+        );
+
+        // Nothing droppable yet (a guest flooding before the first prompt):
+        // refuse rather than lose match context. The cap is exceeded and said
+        // so, which is better than a match silently lost.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 0usize;
+        let mut scan_from = 0usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(3), 10),
+            0
+        );
+        assert_eq!(
+            buf.len(),
+            100,
+            "match context is never sacrificed to the cap"
+        );
+    }
+
+    /// NO END-TO-END TRIM TEST, deliberately, and this is the second time the
+    /// same trap has been recorded in this file.
+    ///
+    /// An end-to-end version needs a low cap, and the cap is read from an env
+    /// var. The first attempt set `TILLANDSIAS_VSOCK_EXEC_TRANSCRIPT_CAP_BYTES`
+    /// inside a `#[tokio::test]` with the comment "safe to set here: no other
+    /// test reads this variable" — which was simply false, since every
+    /// expect-driver test reads it through `exec_transcript_cap()`. Cargo runs
+    /// tests in threads of ONE process, so four unrelated tests failed. Exactly
+    /// the mistake `a_peer_that_goes_silent_during_setup_fails_bounded_and_named`
+    /// already documents, made again one cycle later.
+    ///
+    /// The arithmetic — including the case where a match straddles the trim
+    /// point — is covered by the unit test above, and the whole existing suite
+    /// exercises the driver with trimming compiled in at the real cap. Buying
+    /// one more assertion at the cost of a test that only passes when it runs
+    /// alone is a bad trade.
     /// ORDER 690-eug2. A peer that stops DRAINING must not park the writer.
     ///
     /// This is the failure no read-side deadline can observe: the host is not

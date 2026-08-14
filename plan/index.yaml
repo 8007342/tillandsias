@@ -41428,6 +41428,26 @@ plan_index:
         - a test drives a peer that connects and then goes silent at each stage and asserts a bounded, stage-named failure
       events:
         - type: progress
+          ts: "2026-08-14T08:25:05Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL (4 of 5), plus a DECISION that retires one criterion by reasoning rather than by code.
+
+            THE TRANSCRIPT CAP LANDED, after being deferred three cycles for a real reason: ExecOutput.stdout is public and callers parse it. The resolution came from the rescan fix's own invariant. No match can START before scan_from - (needle.len()-1), because everything earlier has been examined for the current needle; and search_start only moves forward, so nothing before it is searched again. Bytes before the later of those two points are dead for matching BY CONSTRUCTION, not by estimate — so they can be dropped without any risk to correctness.
+
+            Default 8 MiB, overridable, 0 disables. The elision is REPORTED through on_event and nothing is injected into stdout: a marker in the byte stream would corrupt exactly what callers parse, and a silently short transcript would send someone hunting for output the guest definitely produced. When nothing is droppable yet — a guest flooding before the first prompt — the trim REFUSES and the cap is exceeded, because match context is never sacrificed to a bound.
+
+            DECISION, criterion 2's per-expect-deadline half: SUPERSEDED, not implemented. That criterion was written before 689-y2my's criterion 1 was refuted. The refutation is that a deadlock and a slow-but-healthy command are indistinguishable BY TIMING ALONE — a first-run login legitimately sits silent for ~1290s — so a per-needle timing bound is the refuted shape at a finer grain, and a generous one would not fire on anything the wall-clock ceiling does not already catch. What the criterion actually wanted, "say that needle X never arrived", is now delivered better by two things that do not guess from elapsed time: the heartbeat waiting reports name the pending needle every 30s, and 723-g4bk fails the exec outright when the guest reports it is blocked on input. Implementing a per-expect deadline now would reintroduce exactly what three cycles of this milestone removed.
+
+            EVIDENCE: vsock_exec 29 passed. trimming_keeps_exactly_what_matching_still_needs covers the overlap-window case (a match straddling the trim point), search_start winning when it is later, no-expect-pending, and three NEGATIVE CONTROLS: under the cap never trims, cap 0 disables, and nothing-droppable refuses.
+
+            TWO DEFECTS OF MINE, both caught by running the tests:
+              1. `*search_start -= drop_to` underflowed. drop_to is the MAX of search_start and the dead window, so it can exceed search_start; the search origin then becomes the new buffer start. Saturating now, with the reason written down.
+              2. I wrote an end-to-end trim test that set the cap env var, with the comment "safe to set here: no other test reads this variable". False — every expect-driver test reads it. Four unrelated tests failed. That is the SAME mistake this file already documents one cycle earlier, made again. The end-to-end test is deliberately not replaced: buying one assertion at the cost of a test that only passes when it runs alone is a bad trade, and the note now says so where the next author will read it.
+
+            REMAINING: criterion 1's streaming half (output surfaced as it arrives, not only at PtyClose) and criterion 3's two macOS sites. Everything else on this packet is closed.
+        - type: progress
           ts: "2026-08-14T07:23:35Z"
           agent_id: "unknown"
           host: windows
