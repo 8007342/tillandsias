@@ -19599,6 +19599,187 @@ esac
         );
     }
 
+    /// Build a minimal runtime asset root with a `forge` layered on a
+    /// `forge-base`, mirroring the real `images/default` layout.
+    fn synthetic_image_root() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let default_dir = tmp.path().join("images/default");
+        std::fs::create_dir_all(&default_dir).expect("create images/default");
+        std::fs::write(default_dir.join("Containerfile.base"), "FROM scratch\n")
+            .expect("write Containerfile.base");
+        std::fs::write(
+            default_dir.join("Containerfile"),
+            "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nCOPY lib-common.sh /usr/local/lib/\n",
+        )
+        .expect("write Containerfile");
+        std::fs::write(
+            default_dir.join("lib-common.sh"),
+            "git clone \"git://git-${TILLANDSIAS_PROJECT}/${TILLANDSIAS_PROJECT}\"\n",
+        )
+        .expect("write lib-common.sh");
+        let root = tmp.path().to_path_buf();
+        (tmp, root)
+    }
+
+    /// 702-griq: image identity must move when the build context moves.
+    ///
+    /// This is the incident in miniature. Order 659-8faj edited
+    /// `images/default/lib-common.sh` (the git-mirror DNS alias) with no
+    /// VERSION bump. If identity does not move with that edit,
+    /// `decide_image_build` sees a matching digest and skips — which is
+    /// exactly how macOS forge lanes kept cloning a retired hostname.
+    #[test]
+    fn image_identity_moves_when_context_content_moves() {
+        let (_tmp, root) = synthetic_image_root();
+        let version = "0.4.260810.1";
+        let lib_common = root.join("images/default/lib-common.sh");
+
+        let (before, _) = ensure_image_identity(&root, "forge", version).expect("identity before");
+
+        // NEGATIVE CONTROL, load-bearing: recomputing over an UNCHANGED tree
+        // must be byte-identical. Without it this test would also pass for a
+        // digest that changed at random — and "rebuild unconditionally" is not
+        // the fix; it would re-pay a multi-minute forge build on every launch.
+        let (unchanged, _) =
+            ensure_image_identity(&root, "forge", version).expect("identity unchanged");
+        assert_eq!(
+            before.source_digest, unchanged.source_digest,
+            "identity must be stable for an unchanged context"
+        );
+
+        // The 659-8faj edit: one file in the context changes.
+        std::fs::write(
+            &lib_common,
+            "git clone \"git://tillandsias-git/${TILLANDSIAS_PROJECT}\"\n",
+        )
+        .expect("rewrite lib-common.sh");
+        let (after, _) = ensure_image_identity(&root, "forge", version).expect("identity after");
+        assert_ne!(
+            before.source_digest, after.source_digest,
+            "a changed context file MUST produce a different image identity"
+        );
+
+        // And the version alias is IDENTICAL across that change. This is the
+        // defect stated as an assertion: the tag the old skip test consulted
+        // cannot tell these two images apart.
+        assert_eq!(
+            before.version_alias, after.version_alias,
+            "version alias is identical across a content change; only the \
+             source digest separates them"
+        );
+    }
+
+    /// 702-griq: the forge must reference its base BY CONTENT, not by a
+    /// mutable tag — the same lesson one layer down.
+    ///
+    /// `BASE_IMAGE` is what the forge's Containerfile is layered on, and it is
+    /// hashed into the forge's identity. If it carried the VERSION alias, a
+    /// changed base would leave the forge's identity untouched (the alias
+    /// string is constant across content) and the forge would be skipped onto
+    /// a stale base — 702-griq exactly, one level down. It must carry the
+    /// base's canonical, digest-derived tag.
+    ///
+    /// Deliberately NOT asserted here: "changing forge-base changes the forge
+    /// digest". That is true but VACUOUS as a test — `forge` and `forge-base`
+    /// share the `images/default` context directory, so editing
+    /// `Containerfile.base` also edits the forge's own context. Hand-checked
+    /// 2026-08-12: an assertion of that shape still passed with BOTH
+    /// propagation channels (dependency_digests AND the BASE_IMAGE build arg)
+    /// severed, so it detected nothing it claimed to.
+    #[test]
+    fn forge_identity_references_its_base_by_content_not_by_alias() {
+        let (_tmp, root) = synthetic_image_root();
+        let version = "0.4.260810.1";
+
+        let (base, _) = ensure_image_identity(&root, "forge-base", version).expect("base identity");
+        let (_forge, forge_build_args) =
+            ensure_image_identity(&root, "forge", version).expect("forge identity");
+
+        let base_image = forge_build_args
+            .get("BASE_IMAGE")
+            .expect("forge build args must pin BASE_IMAGE");
+        assert_eq!(
+            base_image, &base.canonical_tag,
+            "BASE_IMAGE must be the base's content-addressed canonical tag"
+        );
+        assert_ne!(
+            base_image, &base.version_alias,
+            "BASE_IMAGE must NOT be the version alias: it is constant across \
+             content and would skip the forge onto a stale base"
+        );
+    }
+
+    /// 702-griq: the provenance requirement, asserted behaviourally rather than
+    /// as a source pin.
+    ///
+    /// The test this replaces asserted the literal presence of
+    /// `image_uses_managed_layer_policy(image_tag)` — it pinned the
+    /// IMPLEMENTATION that turned out to BE the defect: an image was accepted
+    /// on tag presence plus a label compared against a constant, neither of
+    /// which says anything about its contents.
+    ///
+    /// The requirement behind it — never accept an image whose provenance we
+    /// cannot establish — survives here, and is strictly stronger: an image
+    /// carrying no source-digest label is rebuilt, and so is one whose label
+    /// disagrees with the current sources. It runs against a real identity
+    /// computed from a synthetic context, so it also covers the identity
+    /// derivation the source pin above cannot reach.
+    #[test]
+    fn on_demand_image_build_rejects_an_image_of_unknown_provenance() {
+        let (_tmp, root) = synthetic_image_root();
+        let (identity, _) =
+            ensure_image_identity(&root, "forge-base", "0.4.260810.1").expect("identity");
+
+        // The managed layer policy is still part of identity — hashed into the
+        // digest and stamped as a label — so the replaced test's concern is
+        // carried forward, not dropped.
+        assert!(
+            identity
+                .labels
+                .contains_key(tillandsias_core::image_builder::IMAGE_LAYER_POLICY_LABEL),
+            "identity must still stamp the managed layer policy"
+        );
+
+        // Tag present, but NO source-digest label: unknown provenance.
+        let unlabelled = ImageBuildObservation {
+            canonical_tag_exists: true,
+            canonical_source_digest: None,
+            version_alias_matches: true,
+            latest_alias_matches: true,
+            force: false,
+        };
+        assert_eq!(
+            ensure_image_decision(&identity, &unlabelled).action,
+            ImageBuildAction::Build,
+            "an image with no source-digest label must be rebuilt"
+        );
+
+        // Tag present, label DISAGREES: the 702-griq case — sources moved under
+        // a tag that did not.
+        let stale = ImageBuildObservation {
+            canonical_source_digest: Some("sha256:0000000000000000".to_string()),
+            ..unlabelled.clone()
+        };
+        assert_eq!(
+            ensure_image_decision(&identity, &stale).action,
+            ImageBuildAction::Build,
+            "an image whose source digest disagrees with the sources must be rebuilt"
+        );
+
+        // NEGATIVE CONTROL: a matching digest must SKIP. Without this the
+        // assertions above would also hold for "always rebuild", which would
+        // re-pay a multi-minute forge build on every single launch.
+        let current = ImageBuildObservation {
+            canonical_source_digest: Some(identity.source_digest.clone()),
+            ..unlabelled.clone()
+        };
+        assert_eq!(
+            ensure_image_decision(&identity, &current).action,
+            ImageBuildAction::Skip,
+            "an image matching the current sources must NOT be rebuilt"
+        );
+    }
+
     #[test]
     fn observatorium_web_args_mount_project_read_only_under_source() {
         let args = build_observatorium_web_args(
