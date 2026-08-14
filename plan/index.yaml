@@ -41007,6 +41007,22 @@ plan_index:
         - the expect-driven variant reports which needle it was waiting for; a wedged guest is distinguishable from a dead wire in the operator-visible message
         - regression test drives a fake guest that heartbeats forever while producing no output and asserts the client gives up within the progress bound — a negative control asserts a slow-but-progressing guest is NOT killed
       events:
+        - type: verified
+          ts: "2026-08-14T04:23:39Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            ITEM (b) IS COMPLETE, so this packet's remaining scope is closed. All three rungs of the 723 split landed tonight:
+
+              723-54zj  the guest-side probe. The mechanism this packet's own filing assumed — /proc/<pid>/wchan matching n_tty_read — was REFUTED by measurement: a real PTY read reports wait_woken on 6.18.33.2-microsoft-standard-WSL2, and wait_woken is the generic wait helper shared with socket reads, so matching it would have reported a network wait as a terminal wait. Replaced with /proc/<pid>/syscall, where "blocked in read(2) on a descriptor that resolves to a pts" is the thing itself.
+              723-2yb3  CAP_PTY_HEARTBEAT_V2. A new trailing ControlMessage variant rather than a sentinel in the existing empty PtyData, because a payload in `bytes` would be printed as terminal output by a v1 host; the frame had to be one a v1 host REFUSES rather than misreads.
+              723-g4bk  the host acts on it. A guest-reported deadlock fails fast, naming the pending expect, and is distinguishable from both a stale wire and a ceiling breach.
+
+            WHAT THE PACKET ASKED FOR AND GOT, restated against its own history. Criterion 1 was refuted on 2026-08-12 for good reason: a deadlock and a slow-but-healthy command are indistinguishable BY TIMING ALONE, and the refutation stands. Nothing in these three rungs measures elapsed time. The ambiguity was removed instead by asking the guest, which is the only party that knows.
+
+            The order-332 invariant survived every rung and is asserted at each: streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline and streaming_exec_times_out_when_slow_guest_sends_no_frames are green and untouched, and the 1290s legitimate first-run login reports NotBlocked and passes through unchanged.
+
+            The 70-minute wedge that filed this packet would now fail within one 30s heartbeat with a message naming what it was waiting for and what the guest was doing.
         - type: filed
           ts: "2026-08-11T23:15:15Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260811t231515z
@@ -44881,6 +44897,34 @@ plan_index:
         - 'NEGATIVE CONTROL: a guest reporting not-blocked, and a guest reporting unknown, are both treated exactly as today — a slow-but-progressing guest is never killed. This is the order-332 invariant and the refuted criterion 1; assert it explicitly.'
         - A regression test drives a fake guest through the wedge that filed 689-y2my — heartbeating forever, blocked on a prompt the host will not answer — and asserts it is reported within the heartbeat interval rather than at the 4h ceiling.
 
+      events:
+        - type: verified
+          ts: "2026-08-14T04:23:21Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE. Rung 3 of 3, and the ladder's payoff: a wedge is now reported the moment it exists rather than waited out.
+
+            WHAT IT DOES. When a v2 heartbeat says BlockedOnInput while an expect is still pending, the exec fails with a typed DEADLOCK error naming the pending label, the bytes seen and the elapsed time.
+
+            WHY ONE HEARTBEAT IS ENOUGH, which is the load-bearing argument and not an appeal to confidence: frames are ORDERED on the stream. If the guest had printed the prompt before blocking, that PtyData arrived BEFORE this heartbeat and the match arm already fired and sent the response — so `current` would not still be pending. A pending expect co-occurring with a blocked guest therefore means the needle genuinely has not been printed. That is established by ordering, not by waiting long enough to feel sure.
+
+            THIS IS NOT THE REFUTED PROGRESS DEADLINE. It never asks whether quiet means stuck. A slow guest loading a 580MB image reports NotBlocked and is untouched; the 1290s legitimate first-run login that refuted criterion 1 of 689-y2my passes through unchanged.
+
+            DISTINGUISHABLE FROM BOTH NEIGHBOURS, which is the point of the whole ladder — these three failures were previously one undifferentiated hang:
+              * idle timeout      -> the wire went silent; a dead connection
+              * wall-clock ceiling -> time ran out while the wire was alive; a bound, not a diagnosis
+              * this              -> the GUEST TOLD US it is waiting for input
+
+            Escape hatch TILLANDSIAS_VSOCK_EXEC_DEADLOCK_REPORT=0, mirroring the ceiling's own env, because a new terminal condition on this path should be switchable off by an operator who hits a case nobody anticipated.
+
+            EVIDENCE, vsock_exec 22 passed:
+              * a_blocked_guest_is_reported_immediately_not_waited_out — feeds ONE HUNDRED blocked heartbeats and asserts the exec fails on the first: if it were still waiting for a bound it would consume all of them and hang. Asserts the message names DEADLOCK, the pending expect, and the guest's own words, and asserts it does NOT read as "wall-clock ceiling" or "connection stale".
+              * a_working_or_undeterminable_guest_is_never_reported_as_deadlocked — NEGATIVE CONTROL over 50 heartbeats each of NotBlocked and Unknown, plus a v1 guest which cannot report anything. Without it, "fail when blocked" could degrade into "fail when heartbeating" and kill the exact case order 332 protects.
+              * the_deadlock_report_can_be_disabled.
+              * BOTH order-332 pins still green and untouched.
+
+            ONE HONEST CONSEQUENCE, recorded because it changed a test I wrote an hour earlier: rung 2's version matrix asserted that a v2 BlockedOnInput heartbeat COMPLETES the exchange. It no longer does, by design. I updated that test rather than routing around it, and moved BlockedOnInput into its own cases.
     - packet_id: boundary-retired-early-breaks-an-extended-cycle
       order: 725-bu54
       status: ready
