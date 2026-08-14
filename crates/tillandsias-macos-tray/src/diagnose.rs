@@ -257,6 +257,18 @@ pub struct DiagnoseReport {
     /// bundle carries. `None` means undecidable (no bundle, or nothing staged
     /// yet) and must never be read as "fine".
     pub guest_binary_staged_matches_bundle: Option<bool>,
+    /// Order 735-2g5i. Whether a live tray process owns the VM right now,
+    /// established by probing the tray's own singleton lock.
+    ///
+    /// This is macOS's answer to the question Windows answers with
+    /// `wire.reachable`: is somebody actively working on this? macOS cannot ask
+    /// the guest directly — its vsock is per-VM-handle with no AF_VSOCK, so the
+    /// live phase is reachable ONLY from inside the tray process (see the
+    /// "Control wire status" note in `print_human`). Singleton ownership is the
+    /// strongest FACT a separate `--diagnose` process can establish, and like
+    /// the Windows probe it is an observation rather than an inference from
+    /// timing.
+    pub vm_owner_live: bool,
 }
 
 /// Entry point invoked from `main` when `--diagnose` is on argv.
@@ -307,7 +319,23 @@ fn collect_report() -> DiagnoseReport {
         guest_binary_bundle_sha256: provenance.bundle_sha256,
         guest_binary_staged_sha256: provenance.staged_sha256,
         guest_binary_staged_matches_bundle: provenance.staged_matches_bundle,
+        vm_owner_live: live_tray_owns_vm(),
     }
+}
+
+/// Is a live tray holding the VM singleton right now? (order 735-2g5i)
+///
+/// `Ok(None)` is WouldBlock — the lock is held, i.e. a running tray owns the
+/// VM. Acquiring and immediately dropping the guard is side-effect free when
+/// the lock is free, which is what makes this safe to call from a read-only
+/// report. A probe infrastructure error returns false: an unknown owner must
+/// never be reported as a live one, because that is the direction that tells
+/// automation to keep waiting.
+fn live_tray_owns_vm() -> bool {
+    matches!(
+        tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray"),
+        Ok(None)
+    )
 }
 
 fn stat_file(path: &std::path::Path) -> (bool, Option<u64>) {
@@ -401,6 +429,20 @@ fn print_human(r: &DiagnoseReport) {
     println!();
     if r.provisioned {
         println!("Status: PROVISIONED — first-launch materialization complete.");
+    } else if r.vm_owner_live {
+        // Order 735-2g5i. Distinct from the line below, and distinctly EXITED:
+        // a running tray owns the VM and the boot artifacts are not there yet,
+        // which is what provisioning-in-progress looks like from outside the
+        // tray process. Telling the operator to "launch the tray once" here
+        // would be advice to do the thing they are already doing.
+        println!(
+            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) — a running tray owns the VM \
+             and is still materializing it."
+        );
+        println!(
+            "        Not an error. Re-run --diagnose in a few moments; the tray's \
+             menubar chip shows live progress."
+        );
     } else {
         println!(
             "Status: NOT PROVISIONED — launch the tray once (or `open \
@@ -430,8 +472,45 @@ fn print_json(r: &DiagnoseReport) {
     }
 }
 
+/// Exit code for a converging VM: not ready yet, and not broken (order
+/// 735-2g5i, matching windows-tray's `DIAGNOSE_EXIT_CONVERGING` from 647-i98k).
+///
+/// THE DEFECT this closes: a converging state and a broken state shared exit 2,
+/// so any scripted post-install check that runs `--diagnose` once and branches
+/// on the code declares a still-provisioning host broken. Windows hit exactly
+/// that in the 644-a3wj curl smoke and separated the two; macOS still collapsed
+/// them, which is the asymmetry
+/// `litmus:exit-code-provisioned-zero-degraded-two-symmetric` was reporting.
+///
+/// macOS reaches the same verdict from a DIFFERENT fact, because it cannot
+/// reach the same one. Windows asks the guest and believes the phase it names.
+/// macOS has no AF_VSOCK — the live phase is readable only from inside the tray
+/// process — so a separate `--diagnose` cannot ask. What it CAN establish is
+/// whether a live tray owns the VM, and that is an observation of the same
+/// kind: somebody is working on this right now.
+pub(crate) const DIAGNOSE_EXIT_CONVERGING: i32 = 3;
+
 fn exit_code_from(r: &DiagnoseReport) -> i32 {
-    if r.provisioned { 0 } else { 2 }
+    if r.provisioned {
+        return 0;
+    }
+    // Boot artifacts absent WHILE a live tray owns the VM is the unambiguous
+    // converging case: provisioning is the first thing the tray does, so the
+    // artifacts are missing BECAUSE the work is still underway. Automation
+    // should keep waiting.
+    //
+    // No live owner stays exit 2 deliberately, mirroring the Windows reasoning
+    // for an unreachable wire: with nothing holding the VM, an incomplete image
+    // root is indistinguishable from a failed provision, and inventing a third
+    // verdict from leftover staging files would trade a false "broken" for a
+    // false "converging" — the worse error, because it tells automation to wait
+    // for something that will never arrive. Staging residue (`rootfs.qcow2`,
+    // `rootfs.img.xz.partial`, `*.part`) survives a crashed provision, so its
+    // mere presence is not evidence that anything is still running.
+    if r.vm_owner_live {
+        return DIAGNOSE_EXIT_CONVERGING;
+    }
+    2
 }
 
 /// Entry point invoked from `main` when `--provision` is on argv.
@@ -1633,7 +1712,7 @@ mod tests {
     //  here must break the build, not silently break the consumer.
     // ────────────────────────────────────────────────────────────────
 
-    use super::{DiagnoseReport, exit_code_from};
+    use super::{DIAGNOSE_EXIT_CONVERGING, DiagnoseReport, exit_code_from};
 
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
@@ -1657,6 +1736,8 @@ mod tests {
             guest_binary_bundle_sha256: Some("26f120b6b1ef".to_string()),
             guest_binary_staged_sha256: Some("26f120b6b1ef".to_string()),
             guest_binary_staged_matches_bundle: Some(true),
+            // A provisioned host at rest: nothing is mid-materialization.
+            vm_owner_live: false,
         }
     }
 
@@ -1723,17 +1804,53 @@ mod tests {
         assert_eq!(value["initrd_bytes"], serde_json::Value::Null);
     }
 
-    /// `exit_code_from` is the public contract `tray-diagnose.sh`
-    /// (and `--diagnose --json`'s own `main`) rely on for the
-    /// 0/2/1 exit contract. Pin the mapping so accidental flips
-    /// (e.g. returning the wrong code for provisioned=true) break
-    /// the build.
+    /// `exit_code_from` is the public contract `tray-diagnose.sh` (and
+    /// `--diagnose --json`'s own `main`) rely on. Pin the mapping so accidental
+    /// flips break the build.
+    ///
+    /// Order 735-2g5i renamed this from `exit_code_provisioned_zero_degraded_two`
+    /// to match windows-tray's `exit_code_separates_healthy_converging_and_degraded`,
+    /// because the two-state name had become a lie: converging is now its own
+    /// verdict. `litmus:exit-code-provisioned-zero-degraded-two-symmetric`
+    /// accepts either name on either side precisely so this rename is legal.
     #[test]
-    fn exit_code_provisioned_zero_degraded_two() {
+    fn exit_code_separates_healthy_converging_and_degraded() {
         let mut report = baseline_diagnose_report();
-        assert_eq!(exit_code_from(&report), 0);
+        assert_eq!(exit_code_from(&report), 0, "provisioned is healthy");
+
+        // NOT provisioned with a live tray owning the VM: converging, not
+        // broken. This is the case that used to collapse into 2 and made a
+        // scripted post-install check call a still-materializing host broken.
         report.provisioned = false;
-        assert_eq!(exit_code_from(&report), 2);
+        report.vm_owner_live = true;
+        assert_eq!(
+            exit_code_from(&report),
+            DIAGNOSE_EXIT_CONVERGING,
+            "a live tray owning an unmaterialized VM is converging, not broken"
+        );
+
+        // NEGATIVE CONTROL, load-bearing: with no live owner the same missing
+        // artifacts stay exit 2. Without this, "always report converging when
+        // unprovisioned" would satisfy the assertion above — and that is the
+        // worse failure, because it tells automation to keep waiting on a host
+        // where nothing is running.
+        report.vm_owner_live = false;
+        assert_eq!(
+            exit_code_from(&report),
+            2,
+            "unprovisioned with no live owner is indistinguishable from broken"
+        );
+
+        // And converging must never mask a healthy host: provisioned wins
+        // regardless of who holds the VM (the steady state — the tray is
+        // normally running).
+        report.provisioned = true;
+        report.vm_owner_live = true;
+        assert_eq!(
+            exit_code_from(&report),
+            0,
+            "provisioned is healthy even while the tray owns the VM"
+        );
     }
 
     /// Order 331 pin: the pure host→guest project-path translation.
