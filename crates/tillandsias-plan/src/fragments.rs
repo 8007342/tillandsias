@@ -921,8 +921,59 @@ fn render_item(v: &Value) -> String {
     out
 }
 
+/// Does this string have the YAML 1.1 timestamp shape (`2026-08-13` or
+/// `2026-08-13T23:36:42Z`)?
+///
+/// ORDER 729-biik. serde_yaml is a YAML **1.2** writer, where such a scalar is
+/// just a string and needs no quotes. Ruby's Psych is a YAML **1.1** reader,
+/// where the same bare scalar resolves to `Time` — a class `safe_load` refuses.
+/// So the fold could emit a base that every Rust consumer reads and the 440
+/// status-vocab gate cannot load at all. It happened twice: 231 scalars on
+/// 2026-08-13, then 51 more the next fold, AFTER order 720-24u6 taught the
+/// fragment gate to refuse hand-authored bare timestamps. That fix was correct
+/// and incomplete — the second batch came from the fold's own serializer, which
+/// re-emits event mappings rather than copying their text, so no fragment gate
+/// could ever have seen them.
+fn is_yaml11_timestamp(s: &str) -> bool {
+    let b = s.as_bytes();
+    if b.len() < 10 {
+        return false;
+    }
+    let digit = |i: usize| b[i].is_ascii_digit();
+    digit(0)
+        && digit(1)
+        && digit(2)
+        && digit(3)
+        && b[4] == b'-'
+        && digit(5)
+        && digit(6)
+        && b[7] == b'-'
+        && digit(8)
+        && digit(9)
+        && (b.len() == 10 || b[10] == b'T' || b[10] == b' ')
+}
+
+/// Quote a bare timestamp scalar on a rendered `key: value` line. Applied to
+/// serde-serialized blocks, which never pass through `scalar_text`.
+fn quote_timestamp_line(line: &str) -> String {
+    let Some((head, value)) = line.split_once(": ") else {
+        return line.to_string();
+    };
+    if is_yaml11_timestamp(value) {
+        format!("{head}: \"{value}\"")
+    } else {
+        line.to_string()
+    }
+}
+
 /// A single-line YAML rendering of `v`, or `None` when it cannot be one line.
 fn scalar_text(v: &Value) -> Option<String> {
+    // A YAML-1.1 timestamp must carry quotes into the base; see above.
+    if let Value::String(s) = v
+        && is_yaml11_timestamp(s)
+    {
+        return Some(format!("\"{s}\""));
+    }
     let s = serde_yaml::to_string(v).ok()?;
     let s = s.trim_end();
     if s.contains('\n') {
@@ -998,7 +1049,9 @@ fn render_list_item(item: &Value, indent: usize) -> String {
             // column.
             let s = serde_yaml::to_string(&vec![item.clone()]).expect("a mapping item serializes");
             let s = s.trim_end_matches('\n');
-            s.lines().map(|l| format!("{pad}{l}\n")).collect()
+            s.lines()
+                .map(|l| format!("{pad}{}\n", quote_timestamp_line(l)))
+                .collect()
         }
         Value::String(s) if s.contains('\n') => format!("{pad}- {}\n", block_scalar(s, indent + 4)),
         _ => match scalar_text(item) {
@@ -2266,6 +2319,41 @@ plan_index:
         assert_eq!(
             second.candidate, first.candidate,
             "re-folding an already-compacted base must be a no-op"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// The fold RE-SERIALIZES event mappings rather than copying their text, so
+    /// it is itself a writer of timestamps — and serde_yaml, a YAML 1.2 writer,
+    /// emits `ts: 2026-08-13T23:36:42Z` bare. Ruby's Psych reads YAML 1.1, where
+    /// that scalar is a `Time` instance and `safe_load` refuses the whole file,
+    /// so the 440 status-vocab gate could not load the base it had just folded.
+    ///
+    /// This is the SECOND occurrence. Order 720-24u6 taught the fragment gate to
+    /// refuse hand-authored bare timestamps after 231 landed; 51 more arrived on
+    /// the next fold, from a writer no fragment gate can see. Assert on the
+    /// rendered TEXT — a Value-domain assertion cannot distinguish the two
+    /// spellings, which is exactly why this went unnoticed.
+    #[test]
+    fn a_folded_event_timestamp_is_quoted_so_yaml11_readers_do_not_see_a_time() {
+        let d = scratch("tsquote");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260801t0100z-aaaa-h1.yaml"),
+            "events:\n  - packet_id: alpha\n    event:\n      type: note\n      ts: \"2026-08-13T23:36:42Z\"\n      host: h1\n      summary: folded\n",
+        )
+        .expect("fragment");
+
+        let candidate = compact_text(&index).expect("compacts").candidate;
+        assert!(
+            candidate.contains("ts: \"2026-08-13T23:36:42Z\""),
+            "the fold must quote the timestamp it re-serializes; got:\n{candidate}"
+        );
+        assert!(
+            !candidate
+                .lines()
+                .any(|l| l.trim_start().starts_with("ts: 2026-")),
+            "no bare timestamp may reach the base:\n{candidate}"
         );
         let _ = std::fs::remove_dir_all(&d);
     }
