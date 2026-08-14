@@ -36,6 +36,29 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 source "$REPO_ROOT/scripts/common.sh"
 
+# RE-ASSERT THIS SCRIPT'S DECLARED OPTIONS (order 731-pc5r).
+#
+# Line 27 says `set -uo pipefail` and deliberately omits `-e`: this suite is
+# built to run EVERY check and report all failures at the end
+# (`if cmd; then log_pass else log_fail_tracked fi`, then the "Failed checks:"
+# block). `errexit` is not merely unnecessary here, it is contrary to the
+# design — it aborts at the first red check and hides the rest.
+#
+# But `source` runs in the CURRENT shell, and scripts/with-tillandsias-builder.sh
+# does `set -euo pipefail` at its own line 27, so errexit leaked in above and
+# this script had never actually been running with the options it declares.
+#
+# What that cost, measured on macOS 2026-08-14: the suite died at the FRESHNESS
+# ADVISORY step — the one whose own comment reads "Advisory ONLY ... NEVER fails
+# the suite". Its `grep -E '^freshness-stale:'` finds nothing on a host with no
+# stale components (this one: 13/1242 stamped, all `freshness-unstamped`), grep
+# exits 1, `pipefail` promotes it through the pipeline, and leaked errexit killed
+# the run. Four lines of output, exit 1, no failure named — and every Rust check
+# below it (fmt, clippy, the entire test suite) silently never ran.
+#
+# A non-gating step was gating, and the gate it killed was the deterministic one.
+set +e
+
 # Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
@@ -794,7 +817,11 @@ if [[ -x "scripts/freshness-inventory.sh" ]]; then
     # Grammar is `freshness-stale: <path> <age-days> ...`; age is field 3.
     # Sorting field 2 ranked paths lexically and advertised the wrong audit
     # source as "top stalest" with total confidence.
-    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k3,3nr | head -5)"
+    # `|| true`: belt to the `set +e` brace above (731-pc5r). grep exits 1 when a
+    # host has no stale components at all, and under `pipefail` that is the
+    # pipeline's status — an advisory step must not hand a failure upward on the
+    # HAPPY path, whatever the caller's errexit state happens to be.
+    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k3,3nr | head -5 || true)"
     if [[ -n "$_fresh_flagged" ]]; then
         log_info "Top stalest components (audit candidates — advisory only):"
         while IFS= read -r line; do
@@ -973,6 +1000,36 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         log_fail_tracked "tray-contract" "Tray feature tests failed (see /tmp/tray-check.log)"
         [[ "$VERBOSE" == "1" ]] && cat /tmp/tray-check.log >&2
         archive_check_log "tray-contract" "fail" /tmp/tray-check.log
+    fi
+
+    # macOS tray contract — BIN target, so `--workspace --lib` above cannot see it.
+    #
+    # tillandsias-macos-tray declares only `[[bin]]` and has no src/lib.rs, and
+    # `cargo test --workspace --lib` selects LIBRARY targets only. Every test in
+    # action_host.rs was therefore skipped by the deterministic pass even when it
+    # ran on a Mac; `build.sh --check` runs no tests at all, and the macOS
+    # release job runs only build-macos-tray.sh. The single command that
+    # executed them was a hand-typed `./build.sh --test`.
+    #
+    # That matters more than it looks. Operator ruling 2026-08-14 made test
+    # evidence the closure standard for 598-kibt M5, whose entire macOS half —
+    # the cloud submenu's loading-vs-confirmed-empty behaviour — is pinned in
+    # this crate. Closing a criterion on assertions no gate evaluates rebuilds
+    # the original defect's shape: the macOS half rots while every gate stays
+    # green. Adversarial review of that closure is what surfaced this.
+    #
+    # Darwin-only: the crate is cfg-gated to macOS (main.rs), so on Linux and
+    # Windows it compiles to a stub with nothing to assert.
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # @trace spec:macos-native-tray, spec:tray-ux
+        if run_rust_on_host cargo test -p tillandsias-macos-tray --bins 2>&1 | tee /tmp/macos-tray-check.log; then
+            log_pass "macOS tray tests pass"
+            archive_check_log "macos-tray-tests" "pass" /tmp/macos-tray-check.log
+        else
+            log_fail_tracked "macos-tray-tests" "macOS tray tests failed (see /tmp/macos-tray-check.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/macos-tray-check.log >&2
+            archive_check_log "macos-tray-tests" "fail" /tmp/macos-tray-check.log
+        fi
     fi
 
     # Headless signal shutdown contract

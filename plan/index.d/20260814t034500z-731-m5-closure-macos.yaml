@@ -1,0 +1,384 @@
+packets:
+  - packet_id: local-ci-errexit-leak-killed-the-deterministic-gate
+    order: 731-pc5r
+    status: implemented
+    desired_release: v0.5
+    priority: p0
+    kind: defect
+    title: "scripts/local-ci.sh inherited errexit from a sourced file and died at its own non-gating advisory step — every Rust check below it silently never ran"
+    deliverable: "scripts/local-ci.sh"
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - guards
+      - ci
+      - shell
+      - macos
+    estimated_hours: 2
+    context: |
+      `scripts/local-ci.sh --phase pre-build` produced FOUR LINES and exited 1 on
+      this host, naming no failure. It was supposed to run spec binding, drift,
+      trace coverage, version monotonicity, fmt, clippy, the whole test suite,
+      the policy checkers and the pre-build litmus suite.
+
+      ROOT CAUSE, two parts that are only lethal together:
+
+      1. local-ci.sh:27 declares `set -uo pipefail` and DELIBERATELY omits `-e`.
+         The suite is built to run every check and report all failures at the end
+         (`if cmd; then log_pass else log_fail_tracked fi`, then a "Failed
+         checks:" block). errexit is contrary to that design. But line 33
+         `source`s scripts/with-tillandsias-builder.sh, which does
+         `set -euo pipefail` at its own line 27 — and `source` runs in the
+         CURRENT shell. So errexit leaked in and the script had never actually
+         been running with the options it declares.
+
+      2. The FRESHNESS advisory step (local-ci.sh CHECK 0) does
+         `... | grep -E '^freshness-stale:' | ... | head -5`. On a host with no
+         stale components — this one, 13/1242 stamped, everything
+         `freshness-unstamped:` rather than `freshness-stale:` — grep exits 1,
+         `pipefail` makes that the pipeline's status, and leaked errexit killed
+         the run.
+
+      So the step whose own comment reads "Advisory ONLY ... NEVER fails the
+      suite" was the step that failed the suite, and it did so on the HAPPY path:
+      the fewer stale components a host has, the more certainly its gate dies.
+
+      This is the same family as 702-pwhc and 723-b9cn — a pipeline's exit status
+      deciding a guard's verdict for reasons unrelated to the guard's question —
+      and the same consequence: a check that reports success by not running.
+    exit_criteria:
+      - "local-ci.sh re-asserts `set +e` after its sources, with the leak documented. DONE."
+      - "The advisory grep carries `|| true` so it cannot hand a failure upward on the happy path, whatever the caller's errexit state. DONE."
+      - "Verified: `--phase pre-build` goes from 4 lines/exit 1 to 3414+ lines that reach Rust Code Quality and the litmus suite. DONE."
+      - |
+          OPEN: audit the other consumers of with-tillandsias-builder.sh for the
+          same leak, and consider whether that file should stop setting shell
+          options for its sourcers at all — a sourced helper silently rewriting
+          its caller's error handling is the general defect; this packet fixed
+          one victim.
+    events:
+      - type: progress
+        ts: "2026-08-14T03:45:00Z"
+        agent_id: macos-tlatoanis-macbook-air-fable5-20260813t223103z
+        host: macos
+        summary: |
+          Found while trying to VERIFY a different fix (731-vaqx), which is the
+          only reason it was found at all: the gate had to be run deliberately
+          and its output read, rather than trusted.
+
+          Falsified before fixing: reverted to HEAD's local-ci.sh in place (same
+          cwd, same REPO_ROOT) and reproduced 4 lines / exit 1 exactly, so the
+          early death was pre-existing and not introduced by this cycle's edits.
+          Traced with `bash -x` to the last executed line, `+ _fresh_flagged=`,
+          then confirmed the option leak directly: sourcing
+          with-tillandsias-builder.sh and common.sh in a bare shell leaves
+          `$-` = `ehuBc` — errexit ON.
+
+          AFTER the fix the suite runs and immediately reported four RED tests
+          nobody on macOS could see (filed as 731-5qz7). Those were always
+          failing; the gate simply never reached them. Restoring a gate makes
+          the tree look worse and IS the improvement.
+
+  - packet_id: cloud-loaded-flag-latched-before-sign-in
+    order: 731-m58f
+    status: implemented
+    desired_release: v0.5
+    priority: p0
+    kind: defect
+    title: "The cloud submenu told signed-in users with repositories that they have none — the M5 flag was latched by a pre-login reply and never cleared on sign-in"
+    deliverable: "crates/tillandsias-macos-tray/src/action_host.rs"
+    pickup_role: macos
+    release_target: stable-milestone-v1
+    capability_tags:
+      - macos
+      - tray
+      - ux
+    estimated_hours: 3
+    context: |
+      The INVERSE of 598-kibt M5, introduced by M5's own fix and found by
+      adversarially attacking the closure rather than by the criterion.
+
+      M5 asked: does a confirmed-empty account render "(no repos)" instead of
+      "(loading repos…)" forever? That became yes. Meanwhile the same flag began
+      rendering "(no repos)" to accounts that HAVE repositories.
+
+      THE ORDERING, all on one connection, all in production:
+
+        1. The push listener primes an UNCONDITIONAL CloudRefreshRequest at
+           subscription setup, BEFORE any login answer exists.
+        2. With no token the guest's `gh repo list` fails, and
+           crates/tillandsias-headless/src/cloud_projects.rs collapses EVERY
+           failure into an empty list — its docstring says so outright:
+           "Failure to invoke gh (binary missing, exit non-zero, no auth) also
+           yields an empty list — CloudRefreshReply is always well-formed."
+        3. apply_cloud_projects sets cloud_projects_loaded = true from that
+           reply, which confirmed nothing.
+        4. apply_login_state reset the flag ONLY when the NEW state was
+           LoggedOut, so LoggedOut -> LoggedIn kept the latch.
+        5. The cloud submenu is rendered ONLY in the LoggedIn arm — so the very
+           first time the user could see it, it said "(no repos)", with the
+           post-login fetch still in flight.
+
+      That is exactly the falsehood the flag was introduced to prevent (operator
+      report 2026-07-28), pointing the other way. Linux avoids it structurally:
+      it stamps `last_fetched` only on a SUCCESSFUL fetch and keeps the previous
+      list on failure, "so the menu doesn't flicker into (no repos)".
+
+      FIXED by resetting on a transition into LoggedIn as well as LoggedOut. We
+      are past the equality early-return, so reaching that branch means the state
+      really changed, and a new session's cloud verdict must be re-earned.
+    exit_criteria:
+      - "apply_login_state resets cloud_projects_loaded + cloud_projects on a transition into LoggedIn as well as LoggedOut. DONE."
+      - |
+          A test reproduces the PRODUCTION ORDERING — LoggedOut, then an empty
+          reply, then sign-in — and asserts the first post-login render is the
+          loading row. DONE:
+          cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in.
+          Hand-falsified: with the LoggedOut-only condition restored it fails
+          with left=("cloud-projects.empty","(no repos)"). The pre-existing M5
+          test could not catch this because it starts from LoggedIn, i.e. the
+          returning-user ordering, where the bug is invisible.
+      - "OPEN — WINDOWS: notify_icon::apply_github_login carries the identical `state == GithubLoginState::LoggedOut` condition and therefore the identical defect. This is not a parity gap, it is a shared bug; the macOS crate cannot fix it. Filed for the windows host as 731-qth3."
+
+  - packet_id: windows-cloud-loaded-flag-latched-before-sign-in
+    order: 731-qth3
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: defect
+    title: "Windows tray has the same pre-login latch: the cloud submenu can claim '(no repos)' to a signed-in user with repositories"
+    deliverable: "crates/tillandsias-windows-tray/src/notify_icon.rs"
+    pickup_role: windows
+    release_target: stable-milestone-v1
+    capability_tags:
+      - windows
+      - tray
+      - ux
+    estimated_hours: 2
+    context: |
+      Sibling of 731-m58f, found while fixing the macOS half. Windows resets the
+      cloud state only when the NEW login state is LoggedOut:
+
+        if menu.login != state && state == GithubLoginState::LoggedOut {
+            menu.cloud_projects_loaded = false;
+            menu.cloud_projects = Vec::new();
+        }
+
+      Same condition, same consequence: a cloud reply that lands while logged out
+      latches cloud_projects_loaded, the LoggedOut -> LoggedIn transition does not
+      clear it, and the submenu's first visible render claims "(no repos)".
+
+      Whether Windows primes an unconditional CloudRefreshRequest before login
+      resolves the way macOS does is the one thing to CHECK rather than assume —
+      that is what makes the latch reachable. If it does not, this is latent
+      rather than live, and should be fixed anyway so the two trays cannot drift.
+
+      The macOS fix and its falsification are in 731-m58f; mirror both, including
+      the test that encodes the ordering (LoggedOut -> empty reply -> sign-in).
+    exit_criteria:
+      - "Verify whether the Windows push/poll path can deliver a cloud reply before login resolves; record the answer either way."
+      - "Reset cloud_projects_loaded + cloud_projects on a transition into LoggedIn as well as LoggedOut."
+      - "A test reproducing the ordering, hand-falsified against the current condition."
+
+  - packet_id: macos-tray-tests-run-in-no-gate
+    order: 731-vaqx
+    status: implemented
+    desired_release: v0.5
+    priority: p1
+    kind: defect
+    title: "Every test in the macOS tray crate was skipped by every gate — the crate is bin-only and the deterministic pass selects --lib"
+    deliverable: "scripts/local-ci.sh"
+    pickup_role: macos
+    release_target: stable-milestone-v1
+    capability_tags:
+      - macos
+      - ci
+      - guards
+    estimated_hours: 2
+    context: |
+      tillandsias-macos-tray declares only `[[bin]]` and has no src/lib.rs. The
+      deterministic test step is `cargo test --workspace --lib`, which selects
+      LIBRARY targets only, so every test in action_host.rs was skipped even when
+      the suite ran on a Mac. `./build.sh --check` (the pre-push gate) runs no
+      tests at all, and the macOS release job runs only build-macos-tray.sh,
+      which contains no `cargo test`. The single command that executed them was a
+      hand-typed `./build.sh --test`.
+
+      Why this was worth stopping for: operator ruling 2026-08-14 made test
+      evidence the CLOSURE STANDARD for 598-kibt M5, whose entire macOS half is
+      pinned in this crate. Closing a criterion on assertions no gate evaluates
+      reproduces the original defect's shape — the macOS half rots while every
+      gate stays green — with the added twist that the ledger would record it as
+      verified.
+
+      Note the asymmetry that made this invisible: the host-shell half of the
+      same behaviour IS a lib test and does run. Half the chain was gated.
+    exit_criteria:
+      - "A Darwin-guarded `cargo test -p tillandsias-macos-tray --bins` runs beside the workspace --lib step in scripts/local-ci.sh. DONE."
+      - "Verified live: the suite now reports `macOS tray tests pass`, 84 passed / 1 ignored across 85 tests. DONE."
+      - |
+          OPEN: the macos-release job in .github/workflows/release.yml still runs
+          no tests, so a regression reaches a published .app. Add the same
+          command there, or state plainly that macOS release artifacts are
+          untested in CI.
+
+  - packet_id: headless-tray-tests-fail-on-macos
+    order: 731-5qz7
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: defect
+    title: "The tray feature contract is 4 RED on macOS — Linux-only tests run on Darwin, hidden until the gate was restored"
+    deliverable: "crates/tillandsias-headless/src/tray/mod.rs"
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - macos
+      - testing
+      - portability
+    estimated_hours: 3
+    context: |
+      Surfaced the moment 731-pc5r restored local-ci: `cargo test -p
+      tillandsias-headless --bin tillandsias --features tray` is
+      420 passed / 4 FAILED on macOS. These were always failing; the suite simply
+      died before reaching them.
+
+      Causes, from the captured output:
+
+        mcp_per_lane_socket_location_and_permissions_0600
+          "failed to bind mcp socket: path must be shorter than SUN_LEN"
+          Darwin's sockaddr_un.sun_path is 104 bytes (Linux 108) and macOS
+          TMPDIR is a long /var/folders/... path, so the per-lane socket path
+          from order 505 overflows it.
+
+        mcp_ndjson_connection_round_trips_handshake
+          assertion left: Null, right: 1 — almost certainly downstream of the
+          same bind failure; confirm rather than assume.
+
+        mcp_listener_derived_project_attribution_ignores_forged_environ
+          same family (order 505 per-lane listeners).
+
+        spawn_terminal_and_reap_does_not_leave_zombies
+          "failed to spawn terminal launcher: No such file or directory" — it
+          spawns a Linux terminal launcher that does not exist on Darwin. Note
+          638-ehzi already recorded this test as HOME/fixture-racing; this is a
+          different, deterministic failure.
+
+      IMPORTANT SCOPING: this is a TEST portability problem, not a product
+      defect on macOS. tillandsias-headless runs as a Linux guest binary; this
+      code is compiled but never executed on the Mac host. So the fix is to make
+      the tests honest about where they can run — cfg-gate to Linux, or make the
+      socket path short enough to be portable — NOT to chase a macOS runtime bug
+      that does not exist.
+    exit_criteria:
+      - "Each of the four is either cfg-gated to Linux with a stated reason, or made portable."
+      - "Decide explicitly whether the tray feature contract should run at all on Darwin; if not, skip it in local-ci with a named reason rather than leaving it permanently red."
+      - "`scripts/local-ci.sh --phase pre-build` reaches a clean tray-contract verdict on macOS."
+
+  - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+    order: 731-eupn
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: defect
+    title: "'(no repos)' also means 'the fetch failed' — the wire carries no success discriminator, so the tray states a fact it was never told"
+    deliverable: "crates/tillandsias-control-wire + cloud_projects.rs + both trays"
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags:
+      - ux
+      - control-wire
+      - tray
+    estimated_hours: 5
+    context: |
+      The deeper issue behind both 598-kibt M5 and 731-m58f, recorded separately
+      because neither of those should be held open on it.
+
+      MenuState defines cloud_projects_loaded as distinguishing "still fetching"
+      from "a confirmed empty answer". The guest cannot make that distinction and
+      does not claim to: cloud_projects.rs returns an empty Vec for a non-zero gh
+      exit, a missing binary, or missing auth, and CloudRefreshReply carries no
+      ok/err field. So "confirmed empty" is inferred from a message that means
+      "here is a list, which may be empty for any reason".
+
+      Consequences that survive 731-m58f's fix: a user whose gh/vault/proxy path
+      breaks mid-session gets a confident "(no repos)" with the tooltip "no
+      GitHub repos visible to the in-VM gh client" — a confirmation nobody made —
+      and it sticks until the next login transition.
+
+      It also explains why M5's runtime criterion could never have been decisive,
+      which is worth stating plainly next to the operator's 2026-08-14 ruling:
+      even with a zero-repo account in hand, observing "(no repos)" would not
+      have distinguished "confirmed zero repos" from "the fetch failed". The
+      criterion asked for a check the wire cannot support. That is an argument
+      for the ruling, not against it.
+
+      Linux already takes the defensive position: keep the previous list on
+      failure and stamp last_fetched only on success.
+    exit_criteria:
+      - "CloudRefreshReply carries an explicit success/failure discriminator (or a distinct error frame), so an empty list means empty."
+      - "Neither tray sets its loaded flag on a failed fetch."
+      - "A failed fetch renders something truthful — retain the previous list, or a distinct 'couldn't reach GitHub' row — never '(no repos)'."
+      - "Tests for: confirmed-empty renders (no repos); failed-fetch does NOT."
+
+events:
+  - packet_id: macos-v05-validation-bundle
+    order: 598-kibt
+    type: progress
+    ts: "2026-08-14T03:45:00Z"
+    agent_id: macos-tlatoanis-macbook-air-fable5-20260813t223103z
+    host: macos
+    summary: |
+      M5 — OPERATOR RULING AND WHAT IT COST TO HONOUR IT.
+
+      Operator, 2026-08-14: a GitHub account with zero visible repositories
+      cannot be provisioned, so M5's runtime check is unobtainable; test evidence
+      is the closure standard. "You're going to have to trust your tests only."
+
+      Taking that seriously meant raising the tests to carry the weight, not
+      declaring the existing ones sufficient. Four things came out of it, and
+      three were defects:
+
+      1. THE CHAIN IS REAL. A zero-repo account cannot produce an error or a
+         missing reply: the guest routes CloudRefreshRequest to a handler that
+         always writes a well-formed CloudRefreshReply, and parse_gh_repo_list
+         is pinned on "[]". So the empty vector the tests inject IS what the
+         hardware produces. The runtime check would have exercised the same code
+         path the tests do.
+
+      2. NEW INTEGRATED TEST crossing the seam the old pins left open —
+         empty_cloud_reply_renders_no_repos_through_the_real_build. The two
+         halves (macOS sets the flag / shared build() renders the row) were each
+         pinned separately, and that seam is exactly where M5's defect lived.
+         Hand-falsified twice: removing the flag-set reproduces "(loading
+         repos…)" forever; removing the logout reset reproduces a stale
+         "(no repos)". Also corrected to render as TargetSurface::MacosTray —
+         it had been asserting the Windows rendering of a macOS claim.
+
+      3. THE FIX HAD AN INVERSE DEFECT (731-m58f, fixed). The flag was latched by
+         the unconditional pre-login cloud prime and never cleared on sign-in, so
+         the submenu told signed-in users WITH repositories that they had none.
+         The pre-existing M5 test could not see it because it starts from
+         LoggedIn. Windows has the identical condition — filed as 731-qth3.
+
+      4. THE EVIDENCE RAN IN NO GATE (731-vaqx, fixed). The crate is bin-only and
+         the deterministic pass selects --lib, so every one of these tests was
+         skipped everywhere. Fixing that exposed 731-pc5r: local-ci had been
+         dying at its own non-gating advisory step for every host with no stale
+         components, which in turn exposed four long-standing red tray tests
+         (731-5qz7).
+
+      M5 DISPOSITION: the behaviour it names is implemented and now pinned by
+      tests that are falsifiable AND executed by a gate. Recorded honestly
+      alongside it: "(no repos)" still also means "the fetch failed"
+      (731-eupn), because the wire has no success discriminator — which is why
+      the zero-repo runtime check could not have been decisive even if the
+      account existed. The criterion asked for evidence the protocol cannot
+      produce. That supports the operator's ruling rather than undermining it.
+
+      Also added the parity-matrix row this capability never had, which is the
+      structural reason it could land on one platform and stay invisible —
+      the same remedy 626-r7kq applied to the sign-in state machine. Verified
+      the matrix still passes for all three host columns.
+
+      M1/M2/M3/M4/M6 unchanged and not re-run, per this packet's next_action.
