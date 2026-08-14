@@ -130,6 +130,44 @@ fn wall_clock_ceiling_error(
     )
 }
 
+/// Escape hatch for the deadlock report, mirroring the ceiling's own env.
+///
+/// Set to `0` to disable. Present because a new terminal condition on a path
+/// this critical should be switchable off by an operator who hits a case
+/// nobody anticipated, without editing code — the same reasoning that gave the
+/// wall-clock ceiling one.
+const EXEC_DEADLOCK_REPORT_ENV: &str = "TILLANDSIAS_VSOCK_EXEC_DEADLOCK_REPORT";
+
+fn deadlock_report_enabled() -> bool {
+    !matches!(
+        std::env::var(EXEC_DEADLOCK_REPORT_ENV).ok().as_deref(),
+        Some("0")
+    )
+}
+
+/// The message a guest-reported deadlock produces (order 723-g4bk).
+///
+/// Deliberately distinguishable from BOTH of its neighbours, because the whole
+/// point of the ladder is that these three are different failures and were
+/// previously indistinguishable:
+///
+///   * the idle timeout says the wire went silent — a dead connection;
+///   * the wall-clock ceiling says time ran out while the wire was alive — a
+///     bound, not a diagnosis;
+///   * this says the GUEST TOLD US it is waiting for input. Not an inference
+///     from elapsed time, which is exactly what 689-y2my's refuted progress
+///     deadline tried and could not do.
+fn guest_deadlock_error(pending_label: &str, bytes_seen: usize, elapsed_secs: u64) -> String {
+    format!(
+        "vsock_exec: DEADLOCK — the guest reports it is blocked reading its terminal, \
+         while this exec is still waiting for {pending_label} ({bytes_seen} bytes of guest output seen, \
+         {elapsed_secs}s elapsed). The guest is waiting for input this exec is not going to send, \
+         and this exec is waiting for a prompt the guest is not going to print. \
+         The wire is alive and the guest is healthy — neither a stale connection nor a timeout. \
+         Disable this report with {EXEC_DEADLOCK_REPORT_ENV}=0."
+    )
+}
+
 /// Outcome of a non-interactive guest exec.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecOutput {
@@ -829,6 +867,34 @@ where
                         started.elapsed().as_secs(),
                         stdout.len()
                     ));
+
+                    // ORDER 723-g4bk — the rung the other two were built for.
+                    //
+                    // Both sides are waiting for each other, and both said so:
+                    // the guest is blocked reading its terminal, and this exec
+                    // is still waiting for a prompt. That is a deadlock the
+                    // moment it is observed, not after a bound expires.
+                    //
+                    // WHY ONE HEARTBEAT IS ENOUGH, and this is the load-bearing
+                    // argument: frames are ORDERED on the stream. If the guest
+                    // had printed the prompt before blocking, that PtyData
+                    // arrived before this heartbeat and the arm above would
+                    // already have matched the needle and sent the response, so
+                    // `current` would not still be pending. A pending expect
+                    // co-occurring with a blocked guest therefore means the
+                    // needle genuinely has not been printed — established by
+                    // ordering, not by waiting long enough to be confident.
+                    //
+                    // This is NOT the refuted progress deadline. It never asks
+                    // whether quiet means stuck; a slow guest loading a 580MB
+                    // image reports NotBlocked and is untouched.
+                    if input_state == PtyInputState::BlockedOnInput && deadlock_report_enabled() {
+                        return Err(guest_deadlock_error(
+                            &exp.label,
+                            stdout.len(),
+                            started.elapsed().as_secs(),
+                        ));
+                    }
                 }
                 continue;
             }
@@ -992,6 +1058,15 @@ mod tests {
     /// shape the guest emits — writing four bespoke fakes would let them drift
     /// apart and stop being a comparison.
     async fn run_with_heartbeats(frames: Vec<ControlMessage>) -> (ExecOutput, Vec<String>) {
+        let (out, seen) = try_run_with_heartbeats(frames).await;
+        (out.expect("exchange completes"), seen)
+    }
+
+    /// Same fake guest, but surfacing the Result so a test can assert the
+    /// deadlock error (order 723-g4bk) rather than only successes.
+    async fn try_run_with_heartbeats(
+        frames: Vec<ControlMessage>,
+    ) -> (Result<ExecOutput, String>, Vec<String>) {
         let (client, mut guest) = tokio::io::duplex(8192);
         tokio::spawn(async move {
             let _ = read_envelope(&mut guest).await.unwrap();
@@ -1070,8 +1145,7 @@ mod tests {
             }],
             move |ev| sink.lock().unwrap().push(ev.to_string()),
         )
-        .await
-        .expect("exchange completes");
+        .await;
         let seen = events.lock().unwrap().clone();
         (out, seen)
     }
@@ -1106,12 +1180,10 @@ mod tests {
             "v1 heartbeats must still report the wait: {seen:?}"
         );
 
-        // v2 guest → v2 host, the new path, for each of the three states.
-        for state in [
-            PtyInputState::NotBlocked,
-            PtyInputState::BlockedOnInput,
-            PtyInputState::Unknown,
-        ] {
+        // v2 guest → v2 host, the new path. BlockedOnInput is deliberately
+        // absent here: since order 723-g4bk it TERMINATES the exec, which is
+        // the point of the ladder, and it has its own tests below.
+        for state in [PtyInputState::NotBlocked, PtyInputState::Unknown] {
             let (out, seen) = run_with_heartbeats(vec![v2_heartbeat(state)]).await;
             assert_eq!(out.exit.code, 0, "v2/{state:?} must complete");
             assert_eq!(
@@ -1137,7 +1209,7 @@ mod tests {
     #[tokio::test]
     async fn a_v2_heartbeat_reports_the_guests_input_state() {
         let (_, blocked) =
-            run_with_heartbeats(vec![v2_heartbeat(PtyInputState::BlockedOnInput)]).await;
+            try_run_with_heartbeats(vec![v2_heartbeat(PtyInputState::BlockedOnInput)]).await;
         assert!(
             blocked
                 .iter()
@@ -1161,6 +1233,101 @@ mod tests {
         assert!(
             unknown.iter().any(|e| e.contains("could not determine")),
             "…but it must be distinguishable from 'working': {unknown:?}"
+        );
+    }
+
+    /// ORDER 723-g4bk, THE REGRESSION TEST FOR THE WEDGE THAT STARTED ALL OF
+    /// THIS. A guest that heartbeats forever while blocked on a prompt this
+    /// exec will never answer must be REPORTED, not waited out.
+    ///
+    /// The original incident ran 70 minutes and was only stopped by an
+    /// operator. After item (a) it would have been stopped by the 4h ceiling.
+    /// Now it is stopped on the first heartbeat that says so — and the test
+    /// asserts that by feeding a hundred heartbeats: if the exec were still
+    /// waiting for a bound rather than acting on the report, it would consume
+    /// all of them and then hang waiting for a prompt that never comes.
+    #[tokio::test]
+    async fn a_blocked_guest_is_reported_immediately_not_waited_out() {
+        let (out, seen) = try_run_with_heartbeats(
+            std::iter::repeat_with(|| v2_heartbeat(PtyInputState::BlockedOnInput))
+                .take(100)
+                .collect(),
+        )
+        .await;
+
+        let err = out.expect_err("a guest-reported deadlock must fail the exec");
+        assert!(
+            err.contains("DEADLOCK"),
+            "the failure must name the condition, not read as a timeout: {err}"
+        );
+        assert!(
+            err.contains("github token"),
+            "it must name the pending expect — that is the diagnostic: {err}"
+        );
+        assert!(
+            err.contains("blocked reading its terminal"),
+            "it must say what the GUEST reported: {err}"
+        );
+        // Distinguishable from BOTH neighbours. These three failures were
+        // previously indistinguishable, which is the whole reason for the
+        // ladder.
+        assert!(
+            !err.contains("wall-clock ceiling"),
+            "a deadlock is not a ceiling breach: {err}"
+        );
+        assert!(
+            !err.contains("connection stale"),
+            "a deadlock is not a dead wire: {err}"
+        );
+        assert_eq!(
+            seen.iter().filter(|e| e.contains("still waiting")).count(),
+            1,
+            "it must act on the FIRST blocked heartbeat, not accumulate reports: {seen:?}"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the rung: the states that are NOT a deadlock must
+    /// behave exactly as before. Without this, "fail when blocked" could
+    /// degrade into "fail when heartbeating", which would kill the legitimate
+    /// 1290s first-run login that refuted the original progress deadline.
+    #[tokio::test]
+    async fn a_working_or_undeterminable_guest_is_never_reported_as_deadlocked() {
+        for state in [PtyInputState::NotBlocked, PtyInputState::Unknown] {
+            let (out, _) = try_run_with_heartbeats(
+                std::iter::repeat_with(|| v2_heartbeat(state))
+                    .take(50)
+                    .collect(),
+            )
+            .await;
+            let out = out.unwrap_or_else(|e| panic!("{state:?} must not fail the exec: {e}"));
+            assert_eq!(out.exit.code, 0, "{state:?} must complete normally");
+        }
+
+        // And a v1 guest — which cannot report anything — is likewise untouched.
+        let (out, _) =
+            try_run_with_heartbeats(std::iter::repeat_with(v1_heartbeat).take(50).collect()).await;
+        assert_eq!(
+            out.expect("a v1 guest must be unaffected by rung 3")
+                .exit
+                .code,
+            0
+        );
+    }
+
+    /// The escape hatch works, mirroring the ceiling's own env. An operator who
+    /// hits a case nobody anticipated must be able to switch a new terminal
+    /// condition off without editing code.
+    #[test]
+    fn the_deadlock_report_can_be_disabled() {
+        // Read through the same helper the loop uses, rather than asserting on
+        // env plumbing that the loop might not share.
+        assert!(deadlock_report_enabled() || std::env::var(EXEC_DEADLOCK_REPORT_ENV).is_ok());
+        unsafe { std::env::set_var(EXEC_DEADLOCK_REPORT_ENV, "0") };
+        assert!(!deadlock_report_enabled(), "0 must disable the report");
+        unsafe { std::env::remove_var(EXEC_DEADLOCK_REPORT_ENV) };
+        assert!(
+            deadlock_report_enabled(),
+            "absent env must leave it enabled"
         );
     }
 
