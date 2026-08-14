@@ -41428,6 +41428,28 @@ plan_index:
         - a test drives a peer that connects and then goes silent at each stage and asserts a bounded, stage-named failure
       events:
         - type: progress
+          ts: "2026-08-14T06:31:06Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL (2 of 5). The O(n^2) needle rescan is fixed; the packet stays ready for the remaining three.
+
+            WHAT LANDED. The expect driver re-searched the ENTIRE unmatched transcript on every inbound frame -- O(total_bytes x frames) -- which is worst exactly when the transcript is longest and the exchange is already in trouble. It now scans from a cursor, so each byte is examined a bounded number of times.
+
+            THE CORRECTNESS ARGUMENT, which is the whole packet here: a needle can straddle the boundary between the previous frame and this one, so the scan backs up by needle.len()-1 before resuming. A PTY delivers output in whatever chunks the kernel chooses, so a prompt arriving split across frames is NORMAL, not an edge case. Off by one and matches are lost SILENTLY -- the exec then waits for a prompt that already arrived and dies much later as a timeout, which is the least debuggable failure this seam can produce.
+
+            EVERY EXISTING TEST IN THIS FILE FEEDS EACH NEEDLE IN ONE FRAME, so not one of them would have caught it. Added a_needle_split_across_frames_is_still_matched, which delivers the prompt ONE BYTE PER FRAME -- the most adversarial split available, exercising the overlap on every frame.
+
+            HAND-FALSIFIED, and the failure mode is worth recording: setting the overlap to 0 did not produce a clean assertion failure. The test HUNG for over 60 seconds and then failed, because the driver sat waiting for a prompt it had already been sent. That is precisely the silent-loss-surfacing-as-timeout shape described above, reproduced. Restoring the overlap returned 26/26.
+
+            vsock_exec 26 passed (was 25).
+
+            STILL OPEN, unchanged from the previous cycle's note except that the rescan is now done:
+              * streaming transcript + cap (criterion 1). NOT started, and deliberately: ExecOutput.stdout is a public field callers parse, so capping it changes an observable contract. Dropping from the front also invalidates the search indices this cycle just made load-bearing. That deserves a recorded decision about what a caller receives when output is truncated, not a late-night guess.
+              * per-expect deadline -- the wall-clock ceiling bounds the CONVERSATION, not an individual needle.
+              * frame WRITES still have no timeout.
+              * criterion 3's two macOS sites (action_host.rs:2489, diagnose.rs:192) -- editable blind from here, not exercisable.
+        - type: progress
           ts: "2026-08-14T05:25:16Z"
           agent_id: "unknown"
           host: windows

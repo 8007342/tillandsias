@@ -755,6 +755,9 @@ where
 
     let mut stdout = Vec::new();
     let mut search_start = 0usize;
+    // Cursor for the incremental needle scan (order 690-eug2): everything
+    // before it has already been examined for the CURRENT needle.
+    let mut scan_from = 0usize;
     let mut pending = expects.into_iter();
     let mut current = pending.next();
     let idle_timeout = exec_idle_timeout()?;
@@ -813,12 +816,33 @@ where
                 while current.is_some() {
                     let end = {
                         let exp = current.as_ref().expect("current expect exists");
-                        find_subslice(&stdout[search_start..], &exp.needle)
+                        // ORDER 690-eug2: scan from a CURSOR, not from
+                        // search_start, so each byte is examined a bounded
+                        // number of times instead of once per subsequent frame.
+                        // The old form re-searched the entire unmatched
+                        // transcript on every inbound frame — O(bytes x frames)
+                        // — which is worst exactly when the transcript is
+                        // longest and the exchange is already in trouble.
+                        //
+                        // Backing up by needle.len()-1 is the whole correctness
+                        // argument: a needle can straddle the boundary between
+                        // the previous frame and this one, so the last
+                        // needle_len-1 bytes of what we already scanned must be
+                        // re-examined. Off-by-one here silently loses matches
+                        // that arrive split across frames, which is a normal
+                        // occurrence on a PTY, not an edge case.
+                        let overlap = exp.needle.len().saturating_sub(1);
+                        let from = scan_from.saturating_sub(overlap).max(search_start);
+                        find_subslice(&stdout[from..], &exp.needle)
+                            .map(|end| end + from - search_start)
                     };
                     if let Some(end) = end {
                         let exp = current.as_mut().expect("current expect exists");
                         on_event(&format!("matched: {}", exp.label));
                         search_start += end;
+                        // A new needle searches the whole remaining transcript,
+                        // so the cursor resets with it.
+                        scan_from = search_start;
                         seq += 1;
                         let response = (exp.response)()?;
                         write_envelope(
@@ -836,6 +860,11 @@ where
                         .await?;
                         current = pending.next();
                     } else {
+                        // No match in the transcript as it stands: everything
+                        // up to here has been examined for THIS needle, so the
+                        // next frame starts from the end (minus the overlap
+                        // computed above).
+                        scan_from = stdout.len();
                         break;
                     }
                 }
@@ -1265,6 +1294,102 @@ mod tests {
         assert!(
             unknown.iter().any(|e| e.contains("could not determine")),
             "…but it must be distinguishable from 'working': {unknown:?}"
+        );
+    }
+
+    /// ORDER 690-eug2, the correctness case for the incremental needle scan.
+    ///
+    /// A PTY delivers output in whatever chunks the kernel feels like, so a
+    /// prompt routinely arrives SPLIT across frames. The old scan re-searched
+    /// the whole transcript every time and could not care; the cursor version
+    /// can, and an off-by-one in its overlap would silently lose exactly these
+    /// matches — silently, because the exec would then wait for a prompt that
+    /// had already arrived and fail much later as a timeout.
+    ///
+    /// Every existing test in this file feeds each needle in ONE frame, so
+    /// none of them would have caught it.
+    #[tokio::test]
+    async fn a_needle_split_across_frames_is_still_matched() {
+        // One byte per frame: the most adversarial split available, and it
+        // exercises the overlap on every single frame.
+        let per_byte: Vec<ControlMessage> = b"authentication token: "
+            .iter()
+            .map(|b| ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToHost,
+                bytes: vec![*b],
+            })
+            .collect();
+
+        let (client, mut guest) = tokio::io::duplex(8192);
+        tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+            for body in per_byte {
+                write_envelope(
+                    &mut guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: 2,
+                        body,
+                    },
+                )
+                .await
+                .unwrap();
+            }
+            let _ = read_envelope(&mut guest).await.unwrap(); // our response
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 3,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = events.clone();
+        let out = exec_over_stream_expect_dynamic(
+            client,
+            &["/bin/login"],
+            vec![DynamicExpect {
+                needle: b"authentication token".to_vec(),
+                label: "github token".to_string(),
+                response: Box::new(|| Ok(b"tok\n".to_vec())),
+            }],
+            move |ev| sink.lock().unwrap().push(ev.to_string()),
+        )
+        .await
+        .expect("a byte-at-a-time prompt must still match");
+
+        assert_eq!(out.exit.code, 0);
+        let seen = events.lock().unwrap().clone();
+        assert!(
+            seen.iter().any(|e| e.contains("matched: github token")),
+            "a needle delivered one byte per frame must still be found: {seen:?}"
         );
     }
 
