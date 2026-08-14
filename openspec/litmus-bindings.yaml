@@ -159,6 +159,7 @@ specs:
   - litmus:parked-blocks-visibility-shape
   - litmus:fragment-closure-evidence-gate-shape
   - litmus:added-fragment-parse-gate-shape
+  - litmus:release-runbook-external-preconditions-shape
   - litmus:selector-urgency-not-inert-shape
   coverage_ratio: 75
   last_verified: '2026-08-12'
