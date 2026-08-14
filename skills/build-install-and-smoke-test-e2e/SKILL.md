@@ -107,8 +107,17 @@ printf 'build_install_exit=%s\n' "$BUILD_RC" | tee "$LOG_DIR/01-build-install-ex
 test "$BUILD_RC" -eq 0
 hash -r
 command -v tillandsias        | tee "$LOG_DIR/01-installed-path.txt"
+test "${PIPESTATUS[0]}" -eq 0     # `| tee` returns TEE's status, not the probe's
 tillandsias --version         | tee "$LOG_DIR/01-installed-version.txt"
+test "${PIPESTATUS[0]}" -eq 0
 ```
+
+> Those two `test` lines are not decoration (order 727-kmks). A pipeline's exit
+> status is the LAST command's, so `command -v tillandsias | tee …` exits 0 even
+> when nothing is installed — `tee` succeeded at writing an empty file. The
+> build step three lines above already knew this and captured `${PIPESTATUS[0]}`;
+> the two probes that prove the install actually landed did not, so a missing
+> binary produced two empty evidence files and a green step.
 
 ### 1·macOS
 
@@ -123,6 +132,7 @@ TRAY_BIN=dist/Tillandsias.app/Contents/MacOS/tillandsias-tray
 test -x "$TRAY_BIN"
 test -f dist/SHA256SUMS
 codesign --verify --deep --strict dist/Tillandsias.app 2>&1 | tee "$LOG_DIR/01-codesign.txt"
+test "${PIPESTATUS[0]}" -eq 0     # a signature failure must not survive `| tee` (727-kmks)
 
 # Install locally to ~/Applications (NEVER sudo /Applications in an unattended
 # skill). Stop any running tray first, then atomic .new + mv replace.

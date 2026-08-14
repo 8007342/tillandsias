@@ -109,9 +109,22 @@ TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   bash -c "curl -fsSL '${SMOKE_BASE}/install.sh' | TILLANDSIAS_RELEASE_BASE='${SMOKE_BASE}' bash" 2>&1 \
   | tee target/smoke-e2e/01-install.log
+INSTALL_RC=${PIPESTATUS[0]}; printf 'install_exit=%s\n' "$INSTALL_RC" | tee target/smoke-e2e/01-install-exit.txt
+test "$INSTALL_RC" -eq 0
 hash -r
-tillandsias --version | tee target/smoke-e2e/01-version.txt   # must equal $SMOKE_TAG
+tillandsias --version | tee target/smoke-e2e/01-version.txt
+test "${PIPESTATUS[0]}" -eq 0
+# The comment used to say "must equal $SMOKE_TAG". Now it is checked.
+grep -qF "${SMOKE_TAG#v}" target/smoke-e2e/01-version.txt
 ```
+
+> Three assertions replacing a pipe and a comment (order 727-kmks). The
+> installer ran through `| tee`, so a curl-install that failed outright exited 0
+> — `tee` wrote the failure into the evidence file and the smoke walked on. The
+> version line then carried `# must equal $SMOKE_TAG` as a comment, which meant
+> the clean-room test of a PUBLISHED release never once confirmed it was running
+> the release it claimed to be testing: a stale binary already on PATH would
+> answer `--version` and pass.
 
 macOS:
 
@@ -155,15 +168,27 @@ push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
   podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
+RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee target/smoke-e2e/02-reset-exit.txt
+test "$RESET_RC" -eq 0
 ```
 
 Confirm afterward that the store is empty:
 ```bash
-podman ps -a --format '{{.Names}}'; podman volume ls -q; podman images -q
+CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podman images -q)"
+printf '[containers]\n%s\n[volumes]\n%s\n[images]\n%s\n' "$CONTAINERS" "$VOLUMES" "$IMAGES" \
+  | tee target/smoke-e2e/02-empty-store.txt
+test -z "$CONTAINERS"; test -z "$VOLUMES"; test -z "$IMAGES"
 ```
-All three should be empty. If the reset errors or leaves residue → file a
-finding (capability: `podman`, `runtime`) and note it, then continue only if the
-store is actually clean.
+
+If the reset errors or leaves residue → file a finding (capability: `podman`,
+`runtime`).
+
+> This step was prose until 727-kmks: the reset was piped to `tee` with no
+> `PIPESTATUS` capture, so a failed reset exited 0, and "All three should be
+> empty" was an instruction rather than an assertion. Its sibling runbook
+> (`build-install-and-smoke-test-e2e` §2) already asserted both, which is what
+> made the gap visible — the same destruction gate was executable on one path
+> and advisory on the other, and this is the path that tests PUBLISHED releases.
 
 On macOS, stop the tray and remove `~/Library/Application Support/tillandsias`
 and `~/Library/Caches/tillandsias`. On Windows, run `wsl --shutdown` and

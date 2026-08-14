@@ -58,3 +58,73 @@ real gate expressed as an instruction to an agent, not as an executable
 assertion. Left as-is deliberately: rewriting it needs a decision about whether
 that skill's finalization should share meta-orchestration's boundary guard
 rather than growing its own check, and that is a design choice, not a fix.
+
+---
+
+## Round 2 (order 727-kmks): the remaining runbooks
+
+### The measured scope was inflated ~2x, and the biggest "offender" was noise
+
+727-kmks recorded 87 candidate sites from a grep for
+`command -v|which |gh <sub>|podman|wsl`. Re-measured three ways:
+
+| Scope | merge-to-main | meta-orchestration | build-install-e2e | smoke-curl-e2e | total |
+|---|---:|---:|---:|---:|---:|
+| loose grep (as filed) | 26 | 22 | 16 | 17 | 87 |
+| command position only | 18 | 3 | 14 | 12 | 49 |
+| **inside ```bash blocks** | **8** | **0** | **6** | **3** | **21** |
+
+`which ` matched the English word. meta-orchestration — the runbook every host
+executes every cycle, and the file the count made look second-worst — has **zero**
+external-command gates in executable position; all 22 hits were prose. The three
+remaining "command position" hits there are backticked mentions inside sentences.
+
+This matters beyond bookkeeping: a 6h estimate built on 87 sites, most of which
+are English, is what makes an audit keep getting deferred for being large. The
+real surface is 21 executable sites in three files.
+
+### Findings
+
+| Site | Shape | Verdict |
+|---|---|---|
+| build-install-e2e §1 | `command -v tillandsias \| tee …` then `tillandsias --version \| tee …` | **FIXED** — a pipeline exits with TEE's status, so a missing binary wrote two empty evidence files and passed. The build step three lines above already captured `${PIPESTATUS[0]}`; the two probes that prove the install landed did not. |
+| smoke-curl-e2e §2 | `podman system reset --force \| tee …`, then "All three should be empty" | **FIXED** — reset failure exited 0 (no `PIPESTATUS` capture) and the store check was an instruction, not an assertion. Its sibling runbook asserted both, and this is the path that tests PUBLISHED releases. |
+| build-install-e2e §2 | `RESET_RC=${PIPESTATUS[0]}`; `test -z "$CONTAINERS"` … | sound — this is the shape the smoke-curl path now matches |
+| build-install-e2e §2 (Windows) | `& wsl --unregister` tolerated, then `-contains 'tillandsias'` asserted | sound — absence is explicitly the tolerated case, presence is the failure |
+| smoke-curl-e2e §4b | `podman ps --format … \| tee` | advisory by construction (evidence capture, no gate) |
+
+### The pattern across both rounds
+
+Round 1's defects extracted a VALUE and trusted it (`gh … --jq '.[0].x'` →
+`null`). Round 2's extract an EXIT STATUS and lose it (`… | tee` → tee's status).
+Both are the same failure at different layers: the step consulted something and
+then treated the consultation as the answer. `| tee` is the more dangerous of the
+two in this repo, because logging every step to an evidence file is exactly the
+house style — the habit that makes the runbook auditable is the habit that
+silently discards its exit codes.
+
+### Round 2, second pass: `| tee` swallows exit codes, and that is the house style
+
+Classifying every in-code `| tee` pipeline by whether the next three lines
+recover `${PIPESTATUS[0]}` found three more live defects beyond the two above:
+
+| Site | Was | Now |
+|---|---|---|
+| build-install-e2e §1·macOS | `codesign --verify --deep --strict … \| tee` | asserted — a signature failure was being written to the evidence file and then discarded |
+| smoke-curl §1 | curl-install pipeline `\| tee 01-install.log` | asserted — a curl-install that failed outright exited 0 |
+| smoke-curl §1 | `tillandsias --version \| tee … # must equal $SMOKE_TAG` | `grep -qF` against the tag — the clean-room test of a PUBLISHED release never once confirmed it was running the release it claimed to test; a stale binary already on PATH would answer and pass |
+
+The remaining unguarded `| tee` lines are evidence capture with no gate
+(`git rev-parse HEAD`, `du -sh`, container listings): their exit status is not a
+fact anyone acts on. That distinction — gate versus evidence — is the whole
+classification, and it is why a blanket "every pipeline must capture PIPESTATUS"
+rule would be wrong here.
+
+### Why no executable guard for this class (yet)
+
+A checker for "a `| tee` pipeline whose left side is a gate" needs to know which
+commands are gates, and every version of that list is a guess. Two of the three
+defects above are gates only because of what the runbook does NEXT with them.
+Encoding that would produce a checker whose false positives train people to
+ignore it — the failure mode 731-d89b's narrowing was written to avoid. Recorded
+as a known gap rather than papered over with a noisy rule.
