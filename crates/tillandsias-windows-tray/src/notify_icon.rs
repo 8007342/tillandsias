@@ -2773,6 +2773,10 @@ fn summary_line(r: &DiagnoseReport) -> String {
     match code {
         0 => "Status: HEALTHY (exit 0)".to_string(),
         2 => "Status: DEGRADED (exit 2) -- see rows above for the failing check(s)".to_string(),
+        DIAGNOSE_EXIT_CONVERGING => format!(
+            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) -- the guest answered and named \
+             a phase it has not finished; this is not a failure. Re-run, or wait for phase Ready."
+        ),
         other => format!("Status: UNKNOWN (exit {other})"),
     }
 }
@@ -2785,10 +2789,40 @@ fn print_json(r: &DiagnoseReport) {
     );
 }
 
+/// Exit code for a converging VM: not ready yet, and not broken (order
+/// 647-i98k).
+///
+/// THE DEFECT: a converging state and a broken state shared exit 2, so any
+/// scripted post-install check that runs `--diagnose` once and branches on the
+/// code declares a healthy install broken. The 644-a3wj curl smoke walked into
+/// it on its first try — the check landed in the 8-second window between
+/// `provisioning phase "Connecting…"` and `VM ready — control wire
+/// established`, and a re-run was HEALTHY.
+///
+/// The human-facing output was already honest ("Connecting…"); only the exit
+/// code lied, which is the same shape as 632-retq and 643-bnag — a transient
+/// condition wearing the exit code of a terminal verdict.
+pub(crate) const DIAGNOSE_EXIT_CONVERGING: i32 = 3;
+
 fn exit_code_from(r: &DiagnoseReport) -> i32 {
-    let fully_healthy =
-        r.distro_registered && r.wire.reachable && r.wire.phase.as_deref() == Some("Ready");
-    if fully_healthy { 0 } else { 2 }
+    if r.distro_registered && r.wire.reachable && r.wire.phase.as_deref() == Some("Ready") {
+        return 0;
+    }
+    // REACHABLE with a non-Ready phase is the unambiguous converging case: the
+    // control wire answered and the guest NAMED a phase it has not finished.
+    // Nothing about that is a failure, and it is a fact from the guest rather
+    // than an inference from timing — which is why it gets its own code and an
+    // unreachable wire does not.
+    //
+    // An unreachable wire stays exit 2 deliberately. It is indistinguishable,
+    // at the moment of the probe, from a genuinely broken one, and inventing a
+    // third verdict from a guess would trade a false "broken" for a false
+    // "converging" — the worse error, because it tells automation to keep
+    // waiting on something that will never arrive.
+    if r.distro_registered && r.wire.reachable {
+        return DIAGNOSE_EXIT_CONVERGING;
+    }
+    2
 }
 
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
@@ -4317,7 +4351,7 @@ mod tests {
     /// silently flip "degraded" to "ok" or vice-versa for support scripts that
     /// trigger on the exit code (e.g. `scripts/tray-diagnose.ps1`).
     #[test]
-    fn exit_code_provisioned_zero_degraded_two() {
+    fn exit_code_separates_healthy_converging_and_degraded() {
         // Fully healthy: distro registered AND wire reachable AND phase Ready.
         let mut healthy = baseline_diagnose_report();
         healthy.distro_registered = true;
@@ -4338,7 +4372,11 @@ mod tests {
         deg.distro_registered = true;
         assert_eq!(exit_code_from(&deg), 2, "distro only -> 2");
 
-        // Wire reachable but phase != Ready -> 2.
+        // Wire reachable but phase != Ready -> CONVERGING, not degraded
+        // (order 647-i98k). This assertion used to demand 2, which is the
+        // conflation that made a scripted post-install check declare a healthy
+        // install broken. Updated rather than deleted: the case still matters,
+        // its expected answer changed.
         deg.wire = WireReport {
             reachable: true,
             phase: Some("Starting".to_string()),
@@ -4346,7 +4384,11 @@ mod tests {
             last_event: None,
             error: None,
         };
-        assert_eq!(exit_code_from(&deg), 2, "phase != Ready -> 2");
+        assert_eq!(
+            exit_code_from(&deg),
+            DIAGNOSE_EXIT_CONVERGING,
+            "phase != Ready is converging, not broken"
+        );
     }
 
     /// Pin the EXACT top-level key count of `DiagnoseReport`.
@@ -4402,18 +4444,94 @@ mod tests {
             "degraded report -> {s}"
         );
 
-        // Reachable but non-Ready phase = degraded.
-        let mut deg = baseline_diagnose_report();
-        deg.distro_registered = true;
-        deg.wire = WireReport {
+        // ORDER 647-i98k: reachable but non-Ready phase is CONVERGING, not
+        // degraded. It used to be exit 2, so a scripted post-install check
+        // that branches on the code declared a healthy install broken — the
+        // 644-a3wj curl smoke hit exactly that in an 8-second window.
+        let mut converging = baseline_diagnose_report();
+        converging.distro_registered = true;
+        converging.wire = WireReport {
             reachable: true,
             phase: Some("Starting".to_string()),
             podman_ready: Some(false),
             last_event: None,
             error: None,
         };
-        let s = summary_line(&deg);
-        assert!(s.contains("DEGRADED"), "reachable-but-not-Ready -> {s}");
+        let s = summary_line(&converging);
+        assert!(
+            s.contains("CONVERGING") && s.contains(&format!("exit {DIAGNOSE_EXIT_CONVERGING}")),
+            "reachable-but-not-Ready -> {s}"
+        );
+        assert!(
+            !s.contains("DEGRADED"),
+            "converging must not read as broken — that conflation is the defect: {s}"
+        );
+        assert_eq!(exit_code_from(&converging), DIAGNOSE_EXIT_CONVERGING);
+    }
+
+    /// ORDER 647-i98k. The three verdicts must stay DISTINCT, and the
+    /// unreachable case must NOT drift into the converging one.
+    ///
+    /// That restraint is the load-bearing half. An unreachable wire is
+    /// indistinguishable at probe time from a genuinely broken one, and calling
+    /// it converging would trade a false "broken" for a false "not ready yet" —
+    /// the worse error, because it tells automation to keep waiting on
+    /// something that will never arrive.
+    #[test]
+    fn diagnose_exit_codes_separate_converging_from_broken() {
+        // Built from the baseline each time rather than cloned: DiagnoseReport
+        // is not Clone, and deriving it on a production struct to save four
+        // lines in a test is the wrong direction of dependency.
+        let case = |registered: bool, wire: WireReport| {
+            let mut r = baseline_diagnose_report();
+            r.distro_registered = registered;
+            r.wire = wire;
+            r
+        };
+        let ready = || WireReport {
+            reachable: true,
+            phase: Some("Ready".to_string()),
+            podman_ready: Some(true),
+            last_event: None,
+            error: None,
+        };
+        let mid_phase = || WireReport {
+            reachable: true,
+            phase: Some("Connecting".to_string()),
+            podman_ready: Some(false),
+            last_event: None,
+            error: None,
+        };
+
+        assert_eq!(exit_code_from(&case(true, ready())), 0);
+
+        // Converging: the guest ANSWERED and named an unfinished phase.
+        assert_eq!(
+            exit_code_from(&case(true, mid_phase())),
+            DIAGNOSE_EXIT_CONVERGING
+        );
+
+        // NEGATIVE CONTROL 1 — unreachable wire stays DEGRADED. This is the
+        // exact shape of the reported incident (WSA 10060, phase None), and it
+        // deliberately does NOT get the converging code.
+        assert_eq!(
+            exit_code_from(&case(
+                true,
+                WireReport {
+                    reachable: false,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some("WSA_ERROR(10060)".to_string()),
+                }
+            )),
+            2,
+            "an unreachable wire is not knowably converging"
+        );
+
+        // NEGATIVE CONTROL 2 — no distro registered is terminal. Nothing is
+        // converging when there is nothing to converge.
+        assert_eq!(exit_code_from(&case(false, mid_phase())), 2);
     }
 
     #[test]

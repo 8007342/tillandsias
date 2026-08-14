@@ -37208,6 +37208,27 @@ plan_index:
       notes: |
         Low priority: the human-facing output is honest and a re-run is correct. This is about automation consuming the exit code.
       events:
+        - type: verified
+          ts: "2026-08-14T10:29:33Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE. `--diagnose` now separates CONVERGING from DEGRADED in the exit code, which is criterion 2's requirement.
+
+            WHAT LANDED. Exit 3 = CONVERGING, for the case where the control wire ANSWERED and the guest named a phase it has not finished. That is a fact reported by the guest, not an inference from timing, which is why it earns its own code.
+
+            THE RESTRAINT IS THE OTHER HALF, and it is deliberate: an UNREACHABLE wire stays exit 2, even though in the reported incident it was also merely converging (WSA 10060, phase None, inside the ~8s window). At probe time an unreachable wire is indistinguishable from a genuinely broken one, and calling it converging would trade a false "broken" for a false "not ready yet" -- the worse error, because it tells automation to keep waiting on something that may never arrive. Criterion 1's other branch (a bounded wait) would help that case and is NOT implemented; the packet allows either, and a wrong verdict is worse than a slow one.
+
+            CONSUMERS UPDATED IN THE SAME COMMIT, because a new exit code that its own consumers do not know about is how a fix degrades the thing it fixed:
+              * scripts/tray-diagnose.ps1 printed "UNKNOWN (exit 3)" for a perfectly ordinary post-provision state. It now says CONVERGING and that a re-run is the right response.
+              * cheatsheets/runtime/windows-tray-diagnostics.md documents the contract: retry on 3, fail only on 2, and why an unreachable wire is not 3.
+
+            DELIBERATELY NOT CHANGED: `--status-once`. It has its own older contract -- 0 Ready, 2 reachable-but-not-Ready, 1 unreachable -- which ALREADY separates converging from broken and has no conflation to fix. Changing it would break working scripts for symmetry alone. The resulting asymmetry (the two commands use different numbers for the same state) is real, is recorded in the cheatsheet, and is not worth a contract break at this priority.
+
+            EVIDENCE: tillandsias-windows-tray 89 passed.
+              * diagnose_exit_codes_separate_converging_from_broken -- the three verdicts, plus TWO NEGATIVE CONTROLS: an unreachable wire (the reported incident's exact shape) stays 2, and no-distro-registered stays 2 because nothing is converging when there is nothing to converge.
+              * summary_line_classifies_exit_code -- asserts the prose says CONVERGING and does NOT say DEGRADED, so the human line and the code cannot drift apart.
+              * A PRE-EXISTING test, exit_code_provisioned_zero_degraded_two, asserted "phase != Ready -> 2" -- the conflation itself. Updated rather than deleted, and renamed to exit_code_separates_healthy_converging_and_degraded: the case still matters, its expected answer changed.
         - ts: "2026-08-10T04:55:00Z"
           event: filed
           summary: Found during the 644-a3wj Windows curl smoke of v0.4.260810.1.
