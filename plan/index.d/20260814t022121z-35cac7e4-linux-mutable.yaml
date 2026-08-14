@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: release-runbook-drift-audit
+    field: status
+    value: completed
+    ts: "2026-08-14T02:21:21Z"
+    host: linux-mutable
+
+events:
+  - packet_id: release-runbook-drift-audit
+    event:
+      type: completed
+      ts: "2026-08-14T02:21:21Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: litmus:release-runbook-external-preconditions-shape 4/4 PASS (ci-release suite, scripts/run-litmus-test.sh ci-release --phase pre-build --size instant); fixtures test-resolve-open-pr.sh 5/5 and test-resolve-release-run.sh 6/6; enumeration in plan/issues/runbook-external-precondition-audit-2026-08-14.md with 3 sites fixed and 1 residual named
+  - packet_id: release-runbook-drift-audit
+    event:
+      type: note
+      ts: "2026-08-14T02:21:21Z"
+      host: linux-mutable
+      summary: >
+        601-462g audit executed

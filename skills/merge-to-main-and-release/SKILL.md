@@ -17,11 +17,17 @@ Establish identity and verify the environment is releasable:
 
 ```bash
 date -u +%Y-%m-%dT%H:%MZ
-git rev-parse --abbrev-ref HEAD              # MUST be linux-next
+test "$(git rev-parse --abbrev-ref HEAD)" = linux-next   # assert, don't display
 git fetch origin --prune
 git pull --ff-only origin linux-next         # local linux-next == origin/linux-next
-git status --short                           # MUST be clean
+test -z "$(git status --porcelain)"          # assert clean, don't display
 ```
+
+> Those two lines used to be bare `git rev-parse` / `git status --short` with a
+> `# MUST be ...` comment beside them. A comment is not a gate: both commands
+> exit 0 on the wrong branch and on a dirty tree, printing the disagreeing
+> answer to a log nobody re-reads. Same family as the `null`-vs-empty traps
+> below — a step that CONSULTS an external fact instead of REQUIRING it.
 
 If the worktree is dirty, stop and file/update a plan blocker. Do not stash
 release inputs or auto-artifact churn; local state is volatile and hidden stashes
@@ -104,15 +110,38 @@ This produces e.g. `v0.3.260605.1` for the first release of 2026-06-05, `v0.3.26
 GitHub has at most one open PR `linux-next → main` at a time. Reuse it if present; open a new one otherwise.
 
 ```bash
-existing_pr=$(gh pr list --base main --head linux-next --state open --json number --jq '.[0].number')
-if [[ -z "$existing_pr" ]]; then
+if pr="$(scripts/resolve-open-pr.sh main linux-next)"; then
+    existing_pr="${pr#ok:open-pr:}"
+else
+    case "$pr" in
+        blocked:open-pr:gh-failed:*) echo "$pr"; exit 1 ;;   # retryable, NOT "no PR"
+    esac
     gh pr create --base main --head linux-next \
         --title "release: ${new_tag} — daily linux-next promotion" \
         --body "Automated daily promotion of linux-next → main by the \`merge-to-main-and-release\` skill. The follow-on tag + workflow_dispatch trigger publishes ${new_tag} for Linux Silverblue smoke-test."
-    existing_pr=$(gh pr list --base main --head linux-next --state open --json number --jq '.[0].number')
+    pr="$(scripts/resolve-open-pr.sh main linux-next)" || { echo "$pr"; exit 1; }
+    existing_pr="${pr#ok:open-pr:}"
 fi
 echo "PR #${existing_pr}"
 ```
+
+> The trap this replaces — the THIRD instance of one class in this file, after
+> step 3's `gh pr checks --watch` note and step 7's. The step used to be:
+>
+> ```bash
+> existing_pr=$(gh pr list --base main --head linux-next --state open --json number --jq '.[0].number')
+> if [[ -z "$existing_pr" ]]; then ...
+> ```
+>
+> `--jq '.[0].number'` on an EMPTY array prints the literal `null`, not an empty
+> string. With no open PR the emptiness test was FALSE, so `gh pr create` never
+> ran and the runbook announced `PR #null` and walked into step 3 to merge a
+> pull request that does not exist. The re-query after creation had the same
+> shape, so a creation that silently failed produced `PR #null` too.
+>
+> `scripts/resolve-open-pr.sh` asserts a positive fact and, like its sibling
+> `resolve-release-run.sh`, keeps "gh failed" distinct from "gh has nothing to
+> say" — here that distinction decides between retrying and creating a PR.
 
 Update the PR body with today's `${new_tag}` even if reusing — the human reviewer should see which version is being shipped.
 
