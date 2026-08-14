@@ -12617,8 +12617,24 @@ fn maybe_spawn_vsock_listener(
     }))
 }
 
-/// Stub when the `listen-vsock` feature is disabled at compile time. Emits a
-/// friendly error on stderr if the user passed `--listen-vsock` anyway.
+/// Stub when the `listen-vsock` feature is disabled at compile time.
+///
+/// REFUSES TO RUN rather than warning and continuing (order 735-ewzp). This
+/// used to print to stderr and return `None`, and the process then went on
+/// serving nothing — which is how a guest binary built without the feature
+/// reached a Windows host as a seven-and-a-half minute control-wire timeout
+/// instead of a one-line error.
+///
+/// Everything downstream reported healthy while nothing was listening: systemd
+/// held the unit `active (running)` with `--listen-vsock 42420` on its command
+/// line, headless-preflight.sh reported `vsock_device=present` (it tests for
+/// /dev/vsock, which vsock_loopback alone provides), and the process logged
+/// `app.started`. A warning nobody reads on a stream nobody tails is not a
+/// failure signal; an exit code is.
+///
+/// Exiting here is safe precisely because `--listen-vsock` is the whole reason
+/// this process exists in the guest. There is no degraded mode worth running:
+/// a headless with no control wire cannot be reached by the host at all.
 ///
 /// @trace spec:vsock-transport
 #[cfg(not(feature = "listen-vsock"))]
@@ -12626,10 +12642,18 @@ fn maybe_spawn_vsock_listener(
     listen_vsock_port: Option<u32>,
     _shutdown: Arc<AtomicBool>,
 ) -> Option<tokio::task::JoinHandle<()>> {
-    if listen_vsock_port.is_some() {
+    if let Some(port) = listen_vsock_port {
+        // No backticks in this message. It is read by shells and log pipelines
+        // as often as by humans, and a diagnostic that executes when echoed is
+        // a hazard rather than a help — this one did exactly that while being
+        // tested.
         eprintln!(
-            "[tillandsias] --listen-vsock requires the binary to be built with --features listen-vsock"
+            "[tillandsias] FATAL: --listen-vsock {port} was requested but this binary was built \
+             WITHOUT the listen-vsock feature, so no listener can be bound. Refusing to run as a \
+             control-wire guest that cannot serve the wire. Rebuild with \
+             --features listen-vsock (scripts/build-guest-binaries.sh does this)."
         );
+        std::process::exit(78); // EX_CONFIG — the build, not the environment
     }
     None
 }
