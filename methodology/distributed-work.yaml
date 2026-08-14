@@ -1136,6 +1136,37 @@ distributed_work:
         loop-status entry so a systematically-refusing expert is visible rather
         than quietly routed around (this is the order-531 failure mode: truthful
         `experts: ready` while every answer was unsupported).
+      unavailable_record_where: >
+        Order 737-zcj5. "Record it" named no destination, and on 2026-08-14 two
+        hosts skipped the recording half on the same day — windows lost all 28
+        MCP tools mid-session and fell back to tillandsias-plan.exe silently;
+        linux ran a whole cycle whose session had never loaded the servers at
+        all. Neither outage left a trace anywhere in the ledger. The destination
+        is now concrete and does not depend on an agent remembering:
+
+          scripts/check-mcp-expert-health.sh   runs at Start-Of-Cycle, speaks the
+                                               MCP initialize handshake to each
+                                               expected expert, and appends one
+                                               JSONL record per server to
+                                               $TILLANDSIAS_EXPERT_HEALTH_LOG.
+          scripts/cycle-metrics.sh             reads that log and reports
+                                               `health=` on its `mcp:` line, plus
+                                               an `mcp_outage:` line WHEN AND ONLY
+                                               WHEN a non-up state was recorded.
+          the handoff / loop-status entry       carries cycle-metrics verbatim, so
+                                               the outage reaches plan/loop_status.d
+                                               without a discretionary write.
+
+        `health=` is the field that makes an outage visible at all: call volume
+        cannot distinguish a server that is DOWN from one nobody called, because
+        both produce zero usage rows. `health=unprobed` is deliberately NOT
+        `health=ok` — an unmeasured expert reported as healthy is the order-531
+        shape again.
+
+        The probe is ADVISORY. Its non-zero exit means record and continue, never
+        block — unlike check-credential-channel.sh, whose non-zero exit does fail
+        the cycle. A missing push channel silently destroys work; a missing expert
+        only makes reads more expensive.
       verification: >
         Before an IRREVERSIBLE act that depends on an MCP answer — a commit, a
         status flip, a deletion, a release — read the CITED SPAN to confirm it.
