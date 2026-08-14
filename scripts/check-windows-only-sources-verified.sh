@@ -95,7 +95,18 @@ digest_of() {
     done | sha256sum | cut -d' ' -f1
 }
 
-mapfile -t SOURCES < <(windows_only_sources)
+# NOT `mapfile -t` (order 723-b9cn, measured on macOS 2026-08-13). `mapfile` is
+# bash 4+; this host is GNU bash 3.2.57 (Apple ships 3.2 and `/usr/bin/env bash`
+# resolves to it), where the line failed with "mapfile: command not found" and
+# then SOURCES was unbound on three further lines — yet the script still exited
+# 0, so ./build.sh printed "Windows-only sources: " with an empty list and the
+# reader saw a verdict rather than a broken guard. That is the precise inversion
+# order 716-f5kc exists to prevent: it was written to make an invisible gap
+# visible, and on macOS it was reporting the gap as empty.
+SOURCES=()
+while IFS= read -r _line; do
+    [ -n "$_line" ] && SOURCES+=("$_line")
+done < <(windows_only_sources)
 if [ "${#SOURCES[@]}" -eq 0 ]; then
     echo "skip:no-windows-only-sources"
     exit 0

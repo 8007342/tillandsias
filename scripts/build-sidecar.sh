@@ -126,6 +126,32 @@ fi
 # extracted into a container; a few MB matters.
 strip "$SRC" 2>/dev/null || true
 
+# ASSERT THE FORMAT BEFORE STAGING (order 723-b9cn).
+#
+# This binary has exactly two consumers and both are Linux: the router
+# Containerfile COPYs it into the image, and tillandsias-headless/build.rs
+# include_bytes!s it as a runtime asset extracted inside the guest. The
+# host-target fallback above drops --target entirely, so on macOS it produces a
+# Mach-O and stages it under a name that says "Linux musl router sidecar".
+# Nothing downstream checks: `cargo check` goes green, `build.sh --check` goes
+# green, and the failure surfaces only at exec time in a container, where
+# images/router/entrypoint.sh gives up after ~5s and Caddy's forward_auth
+# degrades to a 502 — so the tray reports a healthy router while web-session
+# OTP gating is silently dead.
+#
+# scripts/build-guest-binaries.sh already verifies its own output this way; the
+# sidecar did not. Removing the bad artifact matters as much as refusing: the
+# is_stale() check above keys on mtime, so a wrong binary left in place would be
+# served to every later build as "up-to-date".
+if ! file "$SRC" | grep -q 'ELF'; then
+    echo "[build-sidecar] ERROR: built sidecar is not a Linux ELF: $(file -b "$SRC")" >&2
+    echo "[build-sidecar]   Its consumers are a Linux container image and the guest" >&2
+    echo "[build-sidecar]   runtime asset, so a host-target build cannot be staged." >&2
+    echo "[build-sidecar]   Install the cross target: rustup target add ${TARGET}" >&2
+    rm -f "$SRC"
+    exit 4
+fi
+
 mkdir -p "$(dirname "$SIDECAR_DEST")"
 cp "$SRC" "$SIDECAR_DEST"
 chmod 0755 "$SIDECAR_DEST"
