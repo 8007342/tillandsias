@@ -31326,7 +31326,7 @@ plan_index:
     - packet_id: release-runbook-drift-audit
       release_target: architecture-audit-epic
       order: 601-462g
-      status: ready
+      status: completed
       desired_release: v0.5
       role: methodology
       pickup_role: any
@@ -31438,6 +31438,22 @@ plan_index:
         
             REMAINING: 87 candidate sites across nine runbooks, counted per skill
             and triaged by blast radius in 727-kmks.
+        - type: completed
+          ts: "2026-08-14T02:21:21Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:release-runbook-external-preconditions-shape 4/4 PASS (ci-release suite, scripts/run-litmus-test.sh ci-release --phase pre-build --size instant); fixtures test-resolve-open-pr.sh 5/5 and test-resolve-release-run.sh 6/6; enumeration in plan/issues/runbook-external-precondition-audit-2026-08-14.md with 3 sites fixed and 1 residual named
+        - type: note
+          ts: "2026-08-14T02:21:21Z"
+          host: linux-mutable
+          summary: |
+            601-462g audit executed
+        - type: progress
+          ts: "2026-08-14T02:45:00Z"
+          agent_id: linux-mutable-20260814t0217z
+          host: linux_mutable
+          summary: |
+            AUDIT EXECUTED, three instances fixed. Full enumeration in plan/issues/runbook-external-precondition-audit-2026-08-14.md: every skill step gating on an external command, with what that command returns when the thing it asks about is ABSENT. The `gh` list subcommands are the dangerous family — they exit 0 on an empty result set and `--jq '.[0].x'` renders that emptiness as the literal string `null`, so a bare exit-status test AND a bare emptiness test both pass. skills/merge-to-main-and-release step 2 held the third instance in this one file: with no open PR the emptiness test was FALSE, `gh pr create` never ran, and the runbook announced `PR #null` before walking into step 3 to merge a pull request that does not exist. The re-query after creation had the same shape. Fixed: scripts/resolve-open-pr.sh (fixture 5/5, deliberately a twin of resolve-release-run.sh so the pair reads as one pattern), plus step 1's two `# MUST be ...` comments rewritten as assertions — a comment beside `git status --short` is not a gate; both commands exit 0 on the wrong branch and a dirty tree. The podman and wsl sites are all SOUND, for a structural reason worth naming: they assert a positive fact, or an emptiness that IS the requirement. The gh sites were unsound because they extracted a value and then trusted it. Extracting a value is where this class lives. Residual, deliberately not fixed: advance-work-from-plan's final worktree check is prose, and rewriting it needs a decision about whether that skill should share meta-orchestration's boundary guard rather than grow its own — a design choice, not a fix. Filed 731-d89b along the way: both Windows-authored resolvers landed at mode 100644, so the runbook's direct invocation was a permission error on Linux until this commit.
     - packet_id: version-guard-deadlocked-the-release
       order: 602-tfzg
       status: completed
@@ -40981,7 +40997,7 @@ plan_index:
     - packet_id: pty-heartbeat-defeats-exec-progress-deadline
       release_target: fail-loud-diagnosis-milestone
       order: 689-y2my
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p1
       title: The PTY liveness heartbeat silently defeats the vsock-exec inactivity deadline — every control-wire exec can wedge forever
@@ -41051,6 +41067,16 @@ plan_index:
           host: windows
           summary: |
             Remaining item (a) ANSWERED and implemented; criterion 1 left refuted, as instructed. The macOS scope correction asked whether any backstop is wanted at all, and if so that it be a generous configurable wall-clock ceiling explicitly justified against order 332. DECISION: yes, one is wanted, for exactly one property the observational fix cannot provide — TERMINATION. The heartbeat reports shipped in the safe half make a wedge legible within 30 seconds to anyone watching; a ceiling is what happens when nobody is, which is the normal case for an unattended recurring cycle that wedges at 02:00. It is NOT the refuted progress deadline. It never asks whether output means progress. It is a single wall-clock bound of 14400s (4h) against a measured 1290s worst-case legitimate first-run silence — a ~11x margin — configurable via TILLANDSIAS_VSOCK_EXEC_WALL_CLOCK_CEILING_SECS, with an explicit 0 to disable and a 300s floor so a host cannot quietly reintroduce a bound tight enough to kill working work. The breach message carries what the exec was waiting for and how many bytes the guest had produced, and says the wire was ALIVE — a ceiling breach is a wedged guest, not a stale connection, and reporting it as the latter is the misdirection that made the 70-minute wedge unreadable. Checking the ceiling at the top of the read loop is sufficient because the heartbeat wakes that loop every 30s; a guest that stops heartbeating is the other failure and the idle deadline already owns it. Tests: tillandsias-vm-layer vsock_exec 15 passed / 0 failed, including BOTH order-332 pins unchanged (streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline, streaming_exec_times_out_when_slow_guest_sends_no_frames). Three added: the parser contract (default / explicit-disable / floor refusal), the breach message with a negative control that an empty pending slot does NOT invent a label, and a guard asserting the ceiling stays at least 10x the measured worst case — which is the test that should fail if a later edit tightens it back toward the idle deadline. REMAINING: item (b), the protocol-level fix — a guest BLOCKED ON INPUT saying so in its heartbeat, which distinguishes "working" from "waiting for me" exactly instead of guessing from elapsed time. Not started here: it is a wire-format change across control-wire, the guest pty handler and the host exec client, needs capability negotiation (CAP_PTY_HEARTBEAT_V2) so a version-skewed guest keeps working, and does not fit one recurring-loop cycle. That is where the value is; this packet should stay open for it.
+        - type: completed
+          ts: "2026-08-14T04:23:40Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: 723-54zj/2yb3/g4bk all done; vsock_exec 22 passed and tillandsias-headless 28 passed, with both order-332 pins green throughout
+        - type: note
+          ts: "2026-08-14T04:23:40Z"
+          host: host
+          summary: |
+            item (a) shipped earlier; item (b) complete via the 723 rungs, all three closed and verified
     - packet_id: vsock-exec-expect-driver-drops-guest-error-envelope
       release_target: fail-loud-diagnosis-milestone
       order: 689-xpq7
@@ -42568,7 +42594,7 @@ plan_index:
 
     - packet_id: on-demand-image-ensure-ignores-source-digest
       order: 702-griq
-      status: done
+      status: implemented
       desired_release: v0.5
       priority: p0
       title: On-demand image ensure skips on VERSION tag alone, serving stale forge images forever
@@ -42694,6 +42720,11 @@ plan_index:
           summary: |
             split_into 712-bhdi. Exit criteria 4 (decisive check-running-image-freshness.sh verdict) and 5 (measured back-to-back launch showing no rebuild) require a podman-capable host; this Windows host has no podman runtime. They are carried to 712-bhdi with their evidence requirements intact, plus a live counter-case, rather than closed on assertion — asserting an unmeasured criterion is the exact false-success class this packet was filed against.
 
+        - type: progress
+          ts: "2026-08-13T00:50:58Z"
+          host: host
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: b39ddb15 cargo-test-headless:333/333-pass build.sh--check:green hand-falsified:3/3-fail-on-revert; residuals: freshness-gate indeterminate verdict + measured no-rebuild-on-second-launch not yet done
     - packet_id: macos-terminal-attach-renders-corrupt-from-launch
       order: 702-6jza
       status: ready
@@ -44720,7 +44751,7 @@ plan_index:
 
     - packet_id: pty-blocked-on-input-probe
       order: 723-54zj
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -44811,9 +44842,19 @@ plan_index:
             WHAT THE POSITIVE TEST WAS WORTH: without it, this module would have shipped with a symbol list that never matches anything on this kernel. Every other test — the classification table, the sleeper, the exited process — passed against the broken version, because they all assert that something is NOT blocked. A probe hard-wired to return NotBlocked would have satisfied the entire suite.
 
             LIMITATION recorded rather than hidden: probe_process_group reads the group LEADER. A leader that has delegated the terminal to a child reads as NotBlocked, which degrades to today's behaviour rather than to a false wedge report. Scanning every process every 30s to catch it costs more than the case is worth; rung 3 should revisit if it proves common.
+        - type: completed
+          ts: "2026-08-14T01:28:59Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: cargo test -p tillandsias-headless --bin tillandsias pty_input_probe: 4 passed in the WSL distro, including the positive case (cat on a real openpty -> BlockedOnInput) that refuted the wchan/n_tty_read approach
+        - type: note
+          ts: "2026-08-14T01:28:59Z"
+          host: host
+          summary: |
+            probe implemented; documented mechanism refuted by measurement and replaced with an exact one
     - packet_id: pty-heartbeat-v2-carries-blocked-state
       order: 723-2yb3
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -44884,9 +44925,19 @@ plan_index:
 
               * the verdict source is pty_input_probe::probe_pty_input_state, reading /proc/<pid>/syscall — NOT wchan. The wchan approach in the original split was refuted by measurement: a real PTY read reports wait_woken on this kernel, which is the generic wait helper and cannot discriminate a terminal read from a socket read.
               * Unknown is a real answer this host will give, not a theoretical one, because /proc/<pid>/syscall needs CONFIG_HAVE_ARCH_TRACEHOOK and can be denied by ptrace scope. A v2 heartbeat must be able to say "I cannot tell" on the wire, and a v2 host must treat that exactly as v1.
+        - type: completed
+          ts: "2026-08-14T03:30:08Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: vsock_exec 19 passed incl. the 4-combination matrix and both order-332 pins; tillandsias-headless 28 passed incl. the v1 heartbeat shape unchanged
+        - type: note
+          ts: "2026-08-14T03:30:08Z"
+          host: host
+          summary: |
+            v2 negotiated and carrying input state; reporting only, action is rung 3
     - packet_id: exec-client-distinguishes-waiting-from-working
       order: 723-g4bk
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -44951,9 +45002,19 @@ plan_index:
               * BOTH order-332 pins still green and untouched.
 
             ONE HONEST CONSEQUENCE, recorded because it changed a test I wrote an hour earlier: rung 2's version matrix asserted that a v2 BlockedOnInput heartbeat COMPLETES the exchange. It no longer does, by design. I updated that test rather than routing around it, and moved BlockedOnInput into its own cases.
+        - type: completed
+          ts: "2026-08-14T04:23:22Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: vsock_exec 22 passed incl. a_blocked_guest_is_reported_immediately_not_waited_out (100 heartbeats), the NotBlocked/Unknown/v1 negative controls, and both order-332 pins
+        - type: note
+          ts: "2026-08-14T04:23:22Z"
+          host: host
+          summary: |
+            rung 3 complete: a guest-reported deadlock fails fast, distinguishable from a stale wire and a ceiling breach
     - packet_id: boundary-retired-early-breaks-an-extended-cycle
       order: 725-bu54
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p2
       release_target: fail-loud-diagnosis-milestone
@@ -45041,6 +45102,16 @@ plan_index:
             worked; the lifecycle around it did not anticipate an operator
             extending a cycle past its first Finalization.
 
+        - type: completed
+          ts: "2026-08-14T02:22:55Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: scripts/test-worktree-boundary-guard.sh 9/9 green including extended-cycle-reverifies and the bystander-untouched negative control; hand-falsified in both directions
+        - type: note
+          ts: "2026-08-14T02:22:55Z"
+          host: host
+          summary: |
+            retirement moved to the next cycle's snapshot; neither filed option, and it preserves 717-3bvv's guarantee
     - packet_id: bare-metal-expert-inference-parity
       order: 718-rtnh
       status: ready
@@ -45308,7 +45379,7 @@ plan_index:
 
     - packet_id: external-gate-audit-remaining-skills
       order: 727-kmks
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       release_target: architecture-audit-epic
@@ -45392,9 +45463,80 @@ plan_index:
             enumeration with the count measured per skill and a triage order by
             blast radius.
 
+        - type: completed
+          ts: "2026-08-14T04:20:57Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: plan/issues/runbook-external-precondition-audit-2026-08-14.md rounds 1+2: per-skill classification of all 21 executable sites with 5 rewrites (build-install-e2e command -v/--version/codesign, smoke-curl install+destruction gate+version-equals-tag); scope corrected from 87 loose grep hits to 21 in-code sites; ./build.sh --check green
+        - type: note
+          ts: "2026-08-14T04:20:57Z"
+          host: linux-mutable
+          summary: |
+            727-kmks audit executed
+        - type: progress
+          ts: "2026-08-14T04:40:00Z"
+          agent_id: linux-mutable-20260814t0417z
+          host: linux_mutable
+          summary: |
+            AUDIT COMPLETE across the remaining runbooks, with the packet's own
+            measured scope corrected first. The filed count of 87 candidate sites
+            came from a grep whose `which ` term matched the ENGLISH WORD. Measured
+            three ways: 87 loose, 49 in command position, 21 inside ```bash blocks.
+            meta-orchestration — the runbook every host runs every cycle, and the
+            file the count made look second-worst at 22 — has ZERO external-command
+            gates in executable position. All 22 were prose. That is not
+            bookkeeping: a 6h estimate built on 87 sites, most of them English, is
+            what makes an audit keep getting deferred for being large.
+        
+            Round 1 (601-462g) found defects that extracted a VALUE and trusted it
+            (`gh … --jq '.[0].x'` renders an empty set as the string `null`). Round 2
+            found the same failure one layer down: steps that extract an EXIT STATUS
+            and lose it, because a pipeline exits with its LAST command's status and
+            this repo's house style pipes every step through `| tee` for evidence.
+            The habit that makes the runbooks auditable is the habit that discards
+            their exit codes.
+        
+            Five fixes: build-install-e2e's `command -v tillandsias | tee` and
+            `tillandsias --version | tee` (a missing binary wrote two empty evidence
+            files and passed, three lines below a build step that already captured
+            PIPESTATUS); its macOS `codesign --verify --deep --strict | tee` (a
+            signature failure written to the log and discarded); smoke-curl's
+            destruction gate (reset failure exited 0, and "All three should be
+            empty" was an instruction while its sibling runbook asserted the same
+            thing executably — on the path that tests PUBLISHED releases); and
+            smoke-curl's `tillandsias --version | tee # must equal $SMOKE_TAG`,
+            where the comment is now a grep. That last one means the clean-room test
+            of a published release had never once confirmed it was running the
+            release it claimed to test — a stale binary already on PATH would answer
+            --version and pass.
+        
+            Remaining unguarded `| tee` lines are evidence capture with no gate
+            (git rev-parse, du -sh, container listings). Gate versus evidence IS the
+            classification, which is why a blanket "capture PIPESTATUS everywhere"
+            rule would be wrong.
+        
+            NO executable guard for this class, deliberately, and recorded as a
+            known gap: a checker for "a `| tee` whose left side is a gate" needs a
+            list of which commands are gates, and every version of that list is a
+            guess — two of these three were gates only because of what the runbook
+            does NEXT with them. A checker whose false positives train people to
+            ignore it is the failure 731-d89b's narrowing was written to avoid.
+        - type: verified-by
+          ts: "2026-08-14T04:40:30Z"
+          agent_id: linux-mutable-20260814t0417z
+          host: linux_mutable
+          summary: |
+            Deliverable satisfied: per-skill classification with a rewrite or an
+            explicit advisory marking for every executable site, in
+            plan/issues/runbook-external-precondition-audit-2026-08-14.md (rounds 1
+            and 2). Residual named rather than silently dropped:
+            advance-work-from-plan's final worktree check remains prose, because
+            rewriting it needs a decision about whether that skill shares
+            meta-orchestration's boundary guard rather than growing its own.
+            ./build.sh --check green with all five rewrites in the tree.
     - packet_id: append-event-base-writer-mangles-multiline-summaries
       order: 728-n456
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p1
       release_target: fail-loud-diagnosis-milestone
@@ -45459,3 +45601,1071 @@ plan_index:
             Found while recording a routine progress note on 601-462g: the note
             contained a code sample and a bullet list, which is what a real note
             looks like. Worked around by writing the event as a fragment.
+        - type: verified
+          ts: "2026-08-14T00:23:43Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            DEFECT 1 FIXED. DEFECT 2 RETRACTED -- it was an artifact of my own probe, and leaving it standing would have sent the next host hunting a bug that does not exist.  DEFECT 1 (real). edit::event_block emitted the summary interpolated raw onto a single FOLDED-scalar line:            summary: >             {summary}  correct only while the summary has no newline. Every line after the first landed at its own indentation, usually column 0, terminating the scalar early. Now it emits a LITERAL block and indents every line to the block's column; blank lines are emitted truly empty rather than as twelve spaces of trailing whitespace, because paragraph breaks are part of what the author wrote. Literal rather than folded on purpose: folding would join the note's lines and silently destroy its structure, a quieter version of the same disrespect for the content.  Empty summaries take a plain-scalar path, since a block scalar with no content followed by a dedented key is ambiguous.  DEFECT 2 (retracted). I reported that the write validator refuses over a dangling agent-login-flows-impl depends_on while the read check calls the ledger sound, and concluded the two validators disagree. They do not. My four bisect probes ran against a COPY of the ledger at /tmp/idx-probe.yaml, and the archived-packet set is resolved relative to the index path -- so plan/archive/ was invisible and agent-login-flows-research, which is genuinely archived in plan/archive/packets-2026-07.yaml, looked dangling. On the real ledger both validators agree. The evidence was already in the same cycle and I misread it: the ORIGINAL failure verdict was the parse error, and the depends_on verdict appeared only under the temp-file probes.  The probe technique had a real flaw worth keeping: bisecting against a copy is right, but a copy placed outside the repo silently changes what the tool can resolve. That is the same measurement-context error as running a fixture under pwsh 7 for a script the operator invokes with 5.1.  EVIDENCE:   * cargo test -p tillandsias-plan --lib event_block -- 2 passed, in the WSL distro. Five summary shapes including both measured failures (indented code, star bullets), plus paragraph breaks, trailing newline, and a line carrying a colon, hash and dash.   * The content NEGATIVE CONTROL matters more than parseability: a block that parses but joined or dropped the author's lines would satisfy a parse assertion while destroying the note, so the test asserts the final line survives at block indentation.   * End-to-end on the REAL ledger: this packet's sibling 601-462g now carries a base-path note containing an indented code sample, a bullet list and a blank line. tillandsias-plan check: ok, 820 packets. The written block preserves the structure verbatim.
+        - type: completed
+          ts: "2026-08-14T00:23:43Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: cargo test -p tillandsias-plan --lib event_block 2 passed (5 shapes + content negative control); end-to-end base-path write of the previously-refusing shape onto plan/index.yaml, check ok 820 packets
+        - type: note
+          ts: "2026-08-14T00:23:43Z"
+          host: host
+          summary: |
+            multiline writer fixed; second reported defect retracted as a probe artifact
+    - packet_id: version-guard-fails-open-via-sigpipe-under-pipefail
+      order: 702-pwhc
+      status: implemented
+      desired_release: v0.5
+      priority: p0
+      title: Pre-push VERSION guard failed OPEN via SIGPIPE under pipefail — verdict depended on git's runtime
+      kind: defect
+      deliverable: scripts/hooks/pre-push-version-guard.sh + scripts/test-pre-push-version-guard.sh
+      pickup_role: any
+      capability_tags:
+        - guards
+        - release
+        - shell
+        - hooks
+      estimated_hours: 2
+      context: |
+        Found while investigating why a push the guard had just refused went
+        through minutes later under a different branch name. The answer was not
+        a branch exemption. The guard was broken.
+        
+        THE DEFECT. The decision line was:
+        
+          if git diff --name-only "$r" 2>/dev/null | grep -qx "VERSION"; then
+        
+        with `set -uo pipefail` at the top of the file. `grep -q` exits the
+        INSTANT it matches. git is then killed by SIGPIPE and exits 141, and
+        `pipefail` promotes that to the pipeline's status — so the `if` evaluated
+        FALSE precisely BECAUSE the match was found early. `version_touched`
+        stayed false and the guard allowed the push.
+        
+        It is a TIMING race on git's runtime, not a policy and not a size cutoff:
+        
+          range origin/osx-next..HEAD    64 files,  ~7 KB  -> rc=0,   REFUSED (correct)
+          range 1496e89f..HEAD          445 files, 23.6 KB -> rc=141, ALLOWED (wrong)
+        
+        `VERSION` sorts FIRST in `git diff --name-only` output (ASCII uppercase
+        precedes lowercase, so it precedes crates/, images/, plan/, scripts/),
+        so grep matches on line 1 essentially always. Whether the guard works
+        therefore comes down to whether git had finished walking the tree before
+        that first line was consumed. On a small range it has; on a large one it
+        has not.
+        
+        WHY THIS IS p0 AND NOT A CURIOSITY. The guard fails open exactly where it
+        is load-bearing. A foreign VERSION only ever arrives through a large
+        cross-branch merge — which is the case that produces the long tree walk
+        that triggers the race. Small, local, single-purpose pushes (the ones
+        least likely to carry an unintended bump) are the ones it still catches.
+        The guard's own header says "a guard has to be right to be obeyed"; this
+        one was wrong in the direction that produces silent false confidence.
+        
+        Observed live: this host was refused a push of osx-next carrying an
+        inherited VERSION divergence (702-eusw), then pushed the IDENTICAL
+        content to a new branch minutes later with the guard reporting clean. I
+        initially concluded that `agent/*` refs were exempt. They are not. There
+        is no exemption; the second range was simply large enough to lose the
+        race. Recorded because that wrong conclusion is the natural one to draw
+        and would have been written into methodology as fact.
+        
+        THE FIX. Remove the pipe from the decision entirely: capture the file
+        list into a variable, then match with shell pattern matching. No
+        subprocess can be signalled, so the verdict cannot depend on scheduling.
+        
+        SIBLING SITES — NOT swept in this packet, deliberately, because each
+        needs its own reasoning about whether an early exit can strand a writer:
+          scripts/hooks/post-commit-expert-refresh.sh:49
+          scripts/hooks/pre-push-local-gate.sh:213
+        Both are `| grep -q`-shaped in files that set pipefail. Neither is known
+        to be wrong; both are unaudited.
+      outcome: |
+        The VERSION guard's verdict is a function of the commits being pushed
+        only, and a regression to the piped form is caught by a fixture that
+        actually reproduces the race.
+      exit_criteria:
+        - 'DONE: the range decision contains no pipeline whose left side can be signalled by an early-exiting right side (scripts/hooks/pre-push-version-guard.sh).'
+        - 'DONE: scripts/test-pre-push-version-guard.sh covers 4 cases — large VERSION-changing range refused, same as a NEW remote branch refused, a range not touching VERSION allowed (negative control), sync-forward allowed. 4/4 pass.'
+        - 'DONE: hand-falsified — restoring the exact `| grep -qx` line makes cases 1 and 2 FAIL and leaves 3 and 4 passing. The fixture was VACUOUS on first write (600 short paths, ~12 KB, did not reproduce) and was widened to ~120 KB after measuring the threshold; that first version is the reason this criterion is written as falsification and not as ''tests pass''.'
+        - 'OPEN: audit the two sibling `| grep -q` sites listed above and either fix or record why each is safe.'
+        - 'OPEN: wire scripts/test-pre-push-version-guard.sh into a CI phase so the guard cannot silently regress; it is currently runnable but not scheduled.'
+      events:
+        - type: filed
+          ts: "2026-08-13T03:00:27Z"
+          host: macos
+          summary: |
+            Filed and fixed in the same cycle. Found by chasing an inconsistency
+            — the same content refused on one branch and accepted on another —
+            rather than accepting the convenient explanation that agent/* refs
+            were exempt.
+        - type: implemented
+          ts: "2026-08-13T03:00:27Z"
+          host: macos
+          summary: |
+            status 'implemented' with evidence_refs: pipe removed from the range
+            decision; test-pre-push-version-guard.sh 4/4 pass; hand-falsified
+            (piped form restored -> cases 1+2 fail, 3+4 pass); measured
+            reproduction threshold ~28KB of diff output, real-world case 23.6KB.
+            Residuals named in exit_criteria: two unaudited sibling grep -q
+            sites, and the fixture is not yet wired into CI.
+
+    - packet_id: fold-emits-bare-yaml11-timestamps
+      order: 729-biik
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: Compaction itself writes bare YAML-1.1 timestamps, so no fragment gate can catch them
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - plan-ledger
+        - compaction
+        - fail-loud
+      context: |
+        Second occurrence of the 720-24u6 shape, from a different writer. That
+        packet taught scripts/check-added-fragments-parse.sh to refuse a
+        hand-authored fragment carrying `ts: 2026-08-12T15:31:54Z`, after 231 such
+        scalars reached the base. The very next fold added 51 more, and the gate
+        was green the whole time — correctly, because the fragments were clean.
+        The fold does not copy event text. It re-serializes event mappings through
+        serde_yaml, a YAML 1.2 writer, where a bare ISO-8601 scalar is a string
+        needing no quotes. Ruby's Psych reads YAML 1.1, where the same scalar is a
+        Time instance that safe_load refuses — so ./build.sh --check could not load
+        the base compaction had just produced.
+        The lesson worth keeping: 720-24u6 hardened the input path and the writer
+        was downstream of it. A gate on what hosts submit says nothing about what
+        the tool emits.
+      exit_criteria:
+        - the fold quotes any value with the YAML 1.1 timestamp shape, in both the scalar path and the serde-serialized mapping path
+        - a unit test asserts on the rendered TEXT, since a Value-domain assertion cannot tell the two spellings apart
+        - a real compaction of the live ledger leaves plan/index.yaml loadable by Ruby
+      verifiable_closure: |
+        cargo test -p tillandsias-plan
+        a_folded_event_timestamp_is_quoted_so_yaml11_readers_do_not_see_a_time
+        passes, and after compacting the live ledger
+        `ruby -ryaml -e "YAML.load_file('plan/index.yaml')"` succeeds with zero
+        bare `ts:` lines added.
+      events:
+        - type: completed
+          ts: "2026-08-14T00:20:28Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: cargo test -p tillandsias-plan a_folded_event_timestamp_is_quoted_so_yaml11_readers_do_not_see_a_time PASS (13 compaction tests green); live re-fold of 33 fragments added 0 bare ts lines where the previous binary added 51, and ruby -ryaml YAML.load_file('plan/index.yaml') succeeds
+        - type: note
+          ts: "2026-08-14T00:20:28Z"
+          host: linux-mutable
+          summary: |
+            729-biik closed
+        - type: filed
+          ts: "2026-08-14T00:30:00Z"
+          agent_id: linux-mutable-20260814t0017z
+          host: linux_mutable
+          summary: |
+            Found by running the Ruby load check immediately after this cycle's compaction, which is the check 720-24u6 added to the reader side.
+        - type: verified-by
+          ts: "2026-08-14T00:30:30Z"
+          agent_id: linux-mutable-20260814t0017z
+          host: linux_mutable
+          summary: |
+            Fix landed in crates/tillandsias-plan/src/fragments.rs: is_yaml11_timestamp gates a quoting branch in scalar_text (inline scalars) and quote_timestamp_line applied to the serde-serialized mapping block (the event path that produced all 51). Re-folding the live ledger with the fixed binary added 0 bare timestamps where the previous binary added 51, and Ruby loads the result. Unit test asserts on rendered text; 13 compaction tests pass.
+
+    - packet_id: freshness-counts-untracked-staging-copies
+      order: 730-j26z
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: fix
+      title: The freshness audit queue offered a gitignored staging copy as its next target
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - freshness
+        - convergence
+      context: |
+        Found by actually RUNNING the standing FRESHNESS audit rather than
+        deferring it. `freshness-next:` named
+        images/default/skills/multihost-orchestration/SKILL.md — one of 13 files
+        in images/default/skills/, a gitignored staging tree a script copies from
+        the canonical skills/, and several of whose files already DIFFER from
+        their source. Auditing a stale copy for "is this still meaningful, sound,
+        complete?" answers a question about the copier, not about a component.
+        640-iujb had excluded the sibling generated tree
+        (images/default/cheatsheets/) by PATH. A prefix list only catches the
+        derived trees someone remembered to name — and nobody had named this one.
+        The general property is trackedness: a file git does not track cannot
+        encode design intent the audit can act on, because re-materializing the
+        build context changes it without a commit.
+      exit_criteria:
+        - the inventory drops untracked files from the denominator, stated as a property rather than another path prefix
+        - the exclusion degrades safely where git cannot answer, rather than silently emptying the inventory
+        - a litmus asserts every reported component is git-tracked
+      verifiable_closure: |
+        litmus:freshness-inventory-shape asserts `git ls-files --error-unmatch`
+        succeeds for every path the report names as a component.
+      notes: |
+        13 components left the denominator (1253 -> 1240), reported honestly as
+        denominator_delta=-13 by the 720-bmm9 field rather than appearing as an
+        unexplained coverage move.
+      events:
+        - type: completed
+          ts: "2026-08-14T01:20:24Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:freshness-inventory-shape 13/13 PASS (scripts/run-litmus-test.sh spec-traceability --phase pre-build --size instant); step 5 requires git ls-files --error-unmatch for every reported component; inventory 1253 -> 1240 with denominator_delta=-13
+        - type: note
+          ts: "2026-08-14T01:20:24Z"
+          host: linux-mutable
+          summary: |
+            730-j26z closed
+        - type: filed
+          ts: "2026-08-14T01:30:00Z"
+          agent_id: linux-mutable-20260814t0117z
+          host: linux_mutable
+          summary: |
+            Surfaced by the standing FRESHNESS audit class doing its job — the queue handed this host a target that turned out to be out of scope.
+        - type: verified-by
+          ts: "2026-08-14T01:30:30Z"
+          agent_id: linux-mutable-20260814t0117z
+          host: linux_mutable
+          summary: |
+            litmus:freshness-inventory-shape step 5 walks every component the report names and requires git ls-files --error-unmatch to succeed; 13/13 PASS. The tracked check is skipped when git returns nothing at all, so a tarball checkout degrades to the previous behaviour instead of reporting an empty inventory.
+
+    - packet_id: build-entrypoints-do-not-stage-router-sidecar
+      order: 723-wd8i
+      status: implemented
+      desired_release: v0.5
+      priority: p0
+      kind: defect
+      title: Un-committing the router sidecar broke every build entrypoint that was not taught to produce it
+      deliverable: scripts/build-macos-tray.sh + scripts/local-ci.sh + crates/tillandsias-headless/build.rs
+      pickup_role: any
+      release_target: stable-milestone-v1
+      capability_tags:
+        - build
+        - macos
+        - release
+      estimated_hours: 2
+      context: |
+        The DESIGN is not in question and is not the defect. The sidecar is a
+        build artifact: at development runtime the host builds and injects it, at
+        user runtime the matching release ships it as a version-matched, signed
+        asset. That is correct and order 710-w9kc was right to un-commit it.
+        
+        What actually happened is narrower and duller: removing the blob deleted
+        the file from git, and only SOME of the entrypoints that compile
+        tillandsias-headless learned to produce it.
+        
+          LEARNED IT   build.sh (_stage_router_sidecar_if_compiling, :639-656)
+                       scripts/build-image.sh:174
+          DID NOT      scripts/build-macos-tray.sh   <- the macOS product build
+                       scripts/local-ci.sh           <- the clippy/test gate
+                       .github/workflows/release.yml <- see 723-sazx
+        
+        crates/tillandsias-headless/build.rs:93 lists the file among its REQUIRED
+        runtime assets and panics at :104 without it, so each of those dies on a
+        fresh clone.
+        
+        WHY IT SURVIVED, and the part worth remembering: removing a file from git
+        does not remove it from any working tree that already had it. Every host
+        that had ever built kept its copy on disk, so the break is invisible
+        locally and certain on a fresh clone or in CI. This host reproduced it by
+        moving the artifact aside — the macOS build died at build.rs:104 — and
+        then confirmed the fix by deleting the artifact and running
+        scripts/build-macos-tray.sh to completion.
+        
+        STRUCTURAL NOTE (operator observation, 2026-08-13). build.rs DEMANDS the
+        asset but nothing PRODUCES it, so the obligation is spread across every
+        caller and each can forget independently. The invariant sits at the wrong
+        layer. Making build.rs stage it itself is the obvious answer and was
+        deliberately NOT taken here: a nested cargo inside build.rs contends on
+        the global package-cache lock, which is the class of deadlock
+        scripts/build-sidecar.sh:18-21 already records. The compromise is that
+        the demand now explains how to satisfy itself. See 723-ydmk for the
+        durable guard.
+      exit_criteria:
+        - scripts/build-macos-tray.sh stages the sidecar before its first cargo invocation. DONE.
+        - scripts/local-ci.sh stages it before the Rust gate. DONE.
+        - build.rs names the remedy for this one artifact instead of emitting a bare path. DONE.
+        - 'OPEN: a falsifiable guard that a new entrypoint cannot omit the staging call — filed as 723-ydmk.'
+      events:
+        - type: progress
+          ts: "2026-08-14T02:11:23Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260813t223103z
+          host: macos
+          summary: |
+            REPRODUCED then FIXED then RE-VERIFIED on hardware.
+        
+            Reproduction: moved images/router/tillandsias-router-sidecar aside,
+            touched build.rs, ran cargo check -p tillandsias-headless ->
+            "thread 'main' panicked at crates/tillandsias-headless/build.rs:104:13:
+            required runtime asset missing: .../images/router/tillandsias-router-sidecar".
+        
+            Fix: added `bash "$ROOT/scripts/build-sidecar.sh"` to
+            scripts/build-macos-tray.sh before the first cargo invocation, and the
+            equivalent to scripts/local-ci.sh before the Rust gate. Both are cheap
+            no-ops when the staged binary is current (build-sidecar.sh:47-67).
+        
+            Re-verification, the load-bearing one: DELETED the staged artifact and
+            ran scripts/build-macos-tray.sh end to end. Exit 0. Log line 2 is
+            "staging router sidecar (build artifact — not committed)", the sidecar
+            is produced, and the run completes through both guest zigbuilds, ad-hoc
+            codesign ("valid on disk", "satisfies its Designated Requirement") and
+            tarball: dist/tillandsias-tray-0.4.260812.1-macos-arm64.tar.gz,
+            12.85 MiB, sha256 0191082230b27aef04a47348c7691822e68d0ba987715da208f2e1353bf96458.
+        
+            This restores 598-kibt's M2 criterion, whose PASS evidence (2026-08-03
+            and 08-09) predates the blob removal and was therefore recorded against
+            a tree where the file still existed.
+        
+            Cold-build evidence for the artifact itself: removed target-musl/ and
+            the staged binary, then ran scripts/build-sidecar.sh from nothing —
+            13.35s, produced a correct "ELF 64-bit LSB executable, x86-64,
+            statically linked, stripped". The musl cross-compile path on macOS is
+            healthy; the 702-griq rust-lld pin for darwin is doing its job.
+
+    - packet_id: release-nix-builds-headless-without-staging-the-sidecar
+      order: 723-sazx
+      status: implemented
+      desired_release: v0.5
+      priority: p0
+      kind: defect
+      title: Release workflow builds tillandsias-headless before the sidecar exists — the published-binary path has never been exercised since 710-w9kc
+      deliverable: .github/workflows/release.yml
+      pickup_role: linux
+      release_target: stable-milestone-v1
+      capability_tags:
+        - release
+        - ci
+        - nix
+      estimated_hours: 2
+      context: |
+        Same root cause as 723-wd8i, on the path that produces what users install.
+        
+        .github/workflows/release.yml built in this order:
+        
+          nix build .#tillandsias-x86_64-musl            (line 105)
+          nix build .#tillandsias-headless-x86_64-musl   (line 106)
+          nix build .#tillandsias-headless-aarch64-musl  (line 107)
+          nix build .#tillandsias-router-sidecar-x86_64-musl  (line 109)
+        
+        The headless derivations build from craneSrc — the checked-out tree — and
+        their build.rs requires images/router/tillandsias-router-sidecar, which is
+        no longer in git. The sidecar derivation that could supply it ran AFTER
+        them and its output was never installed into the source tree.
+        
+        The step's own comment asserted the opposite: "The router sidecar +
+        runtime assets are git-tracked, so nix embeds them from the checked-out
+        tree." True when written, false since 710-w9kc, and nothing re-read it.
+        The last release predates the removal, so this has never run.
+        
+        FIXED HERE by building the sidecar FIRST and installing it into
+        images/router/ before the headless builds, and by correcting the comment.
+        This also makes the shipped bytes and the separately published cosign-signed
+        asset the SAME binary rather than two independent builds sharing a name.
+        
+        The macOS release job needed no separate change: it runs
+        scripts/build-macos-tray.sh, fixed under 723-wd8i.
+      exit_criteria:
+        - Sidecar derivation builds and stages into images/router/ before the headless nix builds. DONE (untested in CI).
+        - The false 'git-tracked' comment is corrected. DONE.
+        - |
+            OPEN, and the reason this packet is not `done`: NO CI RUN HAS PROVEN IT.
+            This was authored on the macOS host, which cannot execute the workflow or
+            evaluate flake.nix. A linux host must dispatch the release workflow (or
+            `nix build .#tillandsias-headless-x86_64-musl` on a clean checkout) and
+            confirm the headless derivations succeed.
+
+        - |
+            OPEN, deeper fix: the ordering fix makes the WORKFLOW correct but leaves
+            the DERIVATION unsound — `nix build .#tillandsias-headless-x86_64-musl`
+            on a clean tree still fails outside CI. The proper form is a preBuild in
+            flake.nix that installs the sidecar derivation's output into the unpacked
+            source, so the requirement is satisfied by the build graph rather than by
+            step ordering in one caller.
+
+      events:
+        - type: progress
+          ts: "2026-08-14T02:11:23Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260813t223103z
+          host: macos
+          summary: |
+            Found during the post-blob-removal build-stack audit and fixed at the
+            workflow level; explicitly NOT verified, because this host cannot run
+            GitHub Actions or nix. Filed with the deeper flake.nix fix stated so the
+            linux host does not have to re-derive it.
+
+    - packet_id: main-still-tracks-the-committed-sidecar-elf
+      order: 723-qeju
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: defect
+      title: origin/main still tracks the sidecar ELF, so a release cut from main ships bytes that are not the signed asset
+      deliverable: origin/main (via PR) + flake.nix craneSrc
+      pickup_role: linux
+      release_target: stable-milestone-v1
+      capability_tags:
+        - release
+        - security
+        - nix
+      estimated_hours: 2
+      context: |
+        Commit 9879f7f4 removed images/router/tillandsias-router-sidecar, but it
+        never landed on main. origin/main still tracks the identical 1,955,952-byte
+        ELF (blob 3be4d56b).
+        
+        Releases are cut from main, and flake.nix deliberately keeps the whole tree
+        in craneSrc, so a release cut from main today embeds the STALE COMMITTED ELF
+        in the shipped binary while separately publishing a freshly built,
+        cosign-signed sidecar asset. The signature would then attest bytes that are
+        not the bytes users run. That is the precise failure 710-w9kc set out to
+        prevent, surviving on the one branch that matters for releases.
+        
+        Note the interaction with 723-sazx: once main carries the removal, the
+        release workflow REQUIRES the staging fix, because nothing will supply the
+        file any more. Land them together or land 723-sazx first.
+      exit_criteria:
+        - The removal reaches main through a PR (main is PR-only).
+        - '`git ls-tree -r origin/main --name-only | grep router-sidecar` returns nothing.'
+        - A release built from main embeds the same bytes it publishes as the signed asset — verified by comparing the embedded asset's sha256 to the published tillandsias-router-sidecar-x86_64-unknown-linux-musl.
+
+    - packet_id: sidecar-arch-hardcoded-x86-64-vs-aarch64-guest
+      order: 723-ji4v
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: defect
+      title: Router sidecar is always built x86_64 while the macOS guest is aarch64 Linux — it cannot exec, and the failure degrades to a silent 502
+      deliverable: scripts/build-sidecar.sh + images/router/entrypoint.sh
+      pickup_role: macos
+      release_target: stable-milestone-v1
+      capability_tags:
+        - macos
+        - build
+        - router
+      estimated_hours: 3
+      context: |
+        scripts/build-sidecar.sh:35 pins TARGET="x86_64-unknown-linux-musl"
+        unconditionally. On Apple Silicon the VZ guest is aarch64 Linux —
+        scripts/build-macos-tray.sh itself builds BOTH guest binaries, aarch64
+        first — so the router image inside that guest receives an x86_64 sidecar
+        it cannot execute.
+        
+        The consequence is not a loud failure. images/router/entrypoint.sh gives
+        up after roughly five seconds and Caddy's forward_auth then 502s, so
+        web-session OTP gating is non-functional while the tray reports a healthy
+        router. A capability that fails OPEN-looking rather than closed.
+        
+        NOT YET MEASURED ON HARDWARE, and it must be before the fix is designed:
+        the sidecar may be consumed only on the x86_64 lane, in which case this is
+        a latent trap rather than a live break. The one-command falsification is to
+        exec the staged sidecar inside the aarch64 guest's router container and
+        look for ENOEXEC.
+      exit_criteria:
+        - 'MEASURE FIRST: run the staged sidecar inside the router container in the aarch64 VZ guest and record whether it execs.'
+        - 'If it does not: derive TARGET from the guest architecture, and make the CARGO_TARGET_<TRIPLE>_LINKER / RUSTFLAGS exports at build-sidecar.sh:103-104 target-derived rather than literally X86_64.'
+        - images/router/entrypoint.sh fails loud on an unexecutable sidecar instead of degrading to a 502 after ~5s.
+
+    - packet_id: no-guard-against-recommitting-a-binary
+      order: 723-ydmk
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: enhancement
+      title: Nothing prevents a build artifact from being committed again, and the .gitignore block added for that class misses the extensions actually in the history
+      deliverable: scripts/check-no-tracked-binaries.sh + .gitignore + a litmus
+      pickup_role: any
+      release_target: stable-milestone-v1
+      capability_tags:
+        - guards
+        - hygiene
+      estimated_hours: 3
+      context: |
+        710-w9kc removed one instance of a class. The mechanism that allowed it —
+        a build artifact matching a .gitignore rule but ALREADY TRACKED, so the
+        ignore is inert — is unchanged, and this repo's history contains at least
+        three separate binary leaks (target-musl/**, images/default/
+        tillandsias-mcp-browser, images/router/tillandsias-router-sidecar). Three
+        occurrences is a pattern, not an accident.
+        
+        The .gitignore defense-in-depth block added for exactly this class covers
+        *.o and *.rlib but not *.so, *.dylib, *.dll, *.exe, *.a or *.wasm —
+        including the .so files that are in the leaked history. A guard that reads
+        as protective and is not is worse than none, because it stops the next
+        person looking.
+        
+        This is also the durable answer to 723-wd8i's structural note: a check that
+        fails loud on its own, rather than N callers each remembering.
+      exit_criteria:
+        - |
+            scripts/check-no-tracked-binaries.sh fails on any tracked path git
+            itself classifies as binary, outside a small documented allowlist (the
+            five icon/image assets). Base it on `git diff --numstat` against the
+            empty tree (binary files report `-` / `-`), NOT on file(1): a tracked
+            markdown file in plan/archive/ contains a stray NUL and file(1) calls
+            it data, which would be a permanent false positive.
+
+        - Wired into scripts/local-ci.sh beside the other check-*.sh gates.
+        - 'Pinned by a litmus with a NEGATIVE CONTROL: a repo with only text files must pass, or ''refuse everything'' would satisfy the positive case.'
+        - The .gitignore block is extended to the extensions actually seen; verify `git ls-files | grep -iE '\.(so|dylib|dll|exe|a|wasm|pdb)$'` is empty first so the change is safe.
+
+    - packet_id: e2e-preflight-false-live-runtime-on-macos
+      order: 723-fndi
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: defect
+      title: e2e-preflight reports skip:live-runtime-present on macOS whenever podman is installed but its machine is stopped, so the local-build e2e gate never runs here
+      deliverable: scripts/e2e-preflight.sh
+      pickup_role: macos
+      release_target: stable-milestone-v1
+      capability_tags:
+        - macos
+        - e2e
+        - guards
+      estimated_hours: 2
+      context: |
+        scripts/e2e-preflight.sh:64-65 treats an ERRORED `podman ps` listing as
+        evidence that a live runtime is PRESENT. On macOS with podman installed
+        but no machine running, the listing errors, so the probe concludes a live
+        runtime exists and the eligibility verdict becomes
+        skip:live-runtime-present.
+        
+        The effect is that the one gate which would actually prove the from-scratch
+        build produces a WORKING product on macOS is skipped for a reason that is
+        false, and it presents as a tidy "host not eligible" rather than as a
+        broken probe. It also reproduces the exact class the file says it already
+        fixed for skip:no-podman-user-session.
+      exit_criteria:
+        - '`podman info` (or an equivalent reachability probe) must succeed before the ps-based inference runs; unreachable means ABSENT, not present.'
+        - On Darwin the probe consults the Virtualization.framework guest, which is the actual macOS runtime substrate, rather than podman.
+        - 'Verified on this host: with the podman machine stopped, `scripts/e2e-preflight.sh eligibility` no longer prints skip:live-runtime-present.'
+
+    - packet_id: build-sh-install-and-init-broken-on-macos
+      order: 723-whrx
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: defect
+      title: build.sh --install / --ci-full --install / --init are silently unsupported or broken on macOS while the host guard says the host is ready
+      deliverable: build.sh
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - build
+      estimated_hours: 2
+      context: |
+        build.sh has no host branch at all: `grep -niE 'darwin|uname|OSTYPE|macos'`
+        over the whole file returns only two comment lines.
+        
+        --install (build.sh:901ff) builds and then EXECUTES an x86_64 Linux musl
+        launcher, which cannot run on macOS, while the readiness guard at :469-480
+        reports the host as ready. --ci-full --install is the phased gate the
+        release and meta-orchestration skills treat as the strong evidence path,
+        so on macOS that path is not merely unsupported, it is unsupported
+        silently.
+        
+        Separately, --init executes target/debug/tillandsias without building it,
+        so it fails from a clean tree on any platform — after validating podman and
+        bumping VERSION, which also leaves a dirty tree that build.sh:573-577 then
+        tells the operator not to commit.
+        
+        Consequence for how this project reports itself: any "builds from scratch
+        on macOS" claim must be scoped to --check / --test /
+        scripts/build-macos-tray.sh, and must not cite the install or ci-full
+        ladder.
+      exit_criteria:
+        - --install refuses on Darwin with a message naming scripts/build-macos-tray.sh as the macOS path, instead of building a Linux binary and trying to run it.
+        - --init builds the binary it then executes (or refuses when it is absent) rather than failing after the podman gate and the VERSION bump.
+
+    - packet_id: windows-authored-scripts-land-without-exec-bit
+      order: 731-d89b
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: fix
+      title: A script committed from the Windows host lands mode 100644, so the runbook that calls it fails on Linux
+      pickup_role: any
+      depends_on: []
+      capability_tags:
+        - cross-platform
+        - release
+        - fail-loud
+      context: |
+        scripts/resolve-release-run.sh and scripts/test-resolve-release-run.sh
+        were committed from the Windows host at mode 100644. The release runbook
+        invokes the first one directly — `run_id="$(scripts/resolve-release-run.sh
+        "${new_tag}")"` — which on Linux is a permission-denied, not a verdict.
+        The irony is exact: that script exists to stop a release step from
+        mistaking absence for health, and it would itself have failed in a way the
+        caller reads as `blocked:` output.
+        Found because a new litmus asserted `test -x` on both resolvers and the
+        step went red. Nothing else would have caught it until the next release
+        ran.
+      exit_criteria:
+        - a check refuses any tracked file under scripts/ with a shebang and mode 100644
+        - the check names the offending paths and the one-line fix (git update-index --chmod=+x)
+        - a fixture proves both directions, since a check that passes everything is indistinguishable from one that works
+      verifiable_closure: |
+        A fixture repo containing a shebanged script at mode 100644 fails the
+        check and names it; the same script at 100755 passes.
+      notes: |
+        Fixed in this commit for the two known files (git update-index --chmod=+x).
+        The packet is the GUARD — the fix does not prevent the next Windows-side
+        script from landing the same way.
+      events:
+        - type: filed
+          ts: "2026-08-14T02:45:00Z"
+          agent_id: linux-mutable-20260814t0217z
+          host: linux_mutable
+          summary: |
+            Surfaced by the 601-462g litmus asserting test -x on the resolvers it pins.
+        - type: completed
+          ts: "2026-08-14T03:19:54Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: litmus:script-exec-bit-shape 3/3 PASS (ci-release suite) with a four-way hermetic control (scripts/test-script-exec-bits.sh 4/4); scripts/check-script-exec-bits.sh wired into ./build.sh --check, reports ok:script-exec-bits:26 checked; second live offender scripts/cycle-preflight.sh fixed
+        - type: note
+          ts: "2026-08-14T03:19:54Z"
+          host: linux-mutable
+          summary: |
+            731-d89b closed
+        - type: progress
+          ts: "2026-08-14T03:30:00Z"
+          agent_id: linux-mutable-20260814t0317z
+          host: linux_mutable
+          summary: |
+            All three exit criteria met, and the guard found a SECOND live instance
+            while being written: scripts/cycle-preflight.sh, mode 100644, invoked
+            bare from skills/meta-orchestration/SKILL.md:241 — the runbook this very
+            cycle executes. Fixed with git update-index --chmod=+x.
+        
+            The rule had to be narrowed twice, and the narrowing is the interesting
+            part. "Shebang implies executable" flags 27 files here, nearly all
+            correct: scripts/common.sh and help*.sh are SOURCED libraries that
+            should never be executable, and most other scripts are invoked as
+            `bash scripts/x.sh`, which works at any mode. The property that actually
+            breaks is narrower — someone runs the path WITHOUT naming an
+            interpreter. With that rule the tree has 26 candidates and had exactly
+            one offender.
+        
+            Callers are read only from files that EXECUTE (scripts/*.sh, build.sh,
+            skills/*/SKILL.md, litmus command: lines), never from prose:
+            plan/index.yaml mentions script paths constantly in event summaries, and
+            treating those as callers would make the checker a noise generator.
+        
+            scripts/check-script-exec-bits.sh emits ok:script-exec-bits:<n> checked
+            or violation:script-not-executable:<n> and is wired into
+            ./build.sh --check. The osx merge this same cycle carried two more mode
+            flips (test-pre-push-version-guard.sh 644->755 plus two new 755 files),
+            which is the evidence that the class is live on all three platforms
+            rather than a Windows quirk.
+        - type: verified-by
+          ts: "2026-08-14T03:30:30Z"
+          agent_id: linux-mutable-20260814t0317z
+          host: linux_mutable
+          summary: |
+            litmus:script-exec-bit-shape 3/3, bound to ci-release. Step 2 runs a
+            four-way hermetic control — bare+644 refused, bare+755 passes,
+            bash-prefixed unflagged, sourced unflagged. The last two carry the
+            weight: a guard that flagged every shebanged file would satisfy the
+            breach case while condemning most of scripts/.
+
+    - packet_id: local-ci-errexit-leak-killed-the-deterministic-gate
+      order: 731-pc5r
+      status: implemented
+      desired_release: v0.5
+      priority: p0
+      kind: defect
+      title: scripts/local-ci.sh inherited errexit from a sourced file and died at its own non-gating advisory step — every Rust check below it silently never ran
+      deliverable: scripts/local-ci.sh
+      pickup_role: any
+      release_target: stable-milestone-v1
+      capability_tags:
+        - guards
+        - ci
+        - shell
+        - macos
+      estimated_hours: 2
+      context: |
+        `scripts/local-ci.sh --phase pre-build` produced FOUR LINES and exited 1 on
+        this host, naming no failure. It was supposed to run spec binding, drift,
+        trace coverage, version monotonicity, fmt, clippy, the whole test suite,
+        the policy checkers and the pre-build litmus suite.
+        
+        ROOT CAUSE, two parts that are only lethal together:
+        
+        1. local-ci.sh:27 declares `set -uo pipefail` and DELIBERATELY omits `-e`.
+           The suite is built to run every check and report all failures at the end
+           (`if cmd; then log_pass else log_fail_tracked fi`, then a "Failed
+           checks:" block). errexit is contrary to that design. But line 33
+           `source`s scripts/with-tillandsias-builder.sh, which does
+           `set -euo pipefail` at its own line 27 — and `source` runs in the
+           CURRENT shell. So errexit leaked in and the script had never actually
+           been running with the options it declares.
+        
+        2. The FRESHNESS advisory step (local-ci.sh CHECK 0) does
+           `... | grep -E '^freshness-stale:' | ... | head -5`. On a host with no
+           stale components — this one, 13/1242 stamped, everything
+           `freshness-unstamped:` rather than `freshness-stale:` — grep exits 1,
+           `pipefail` makes that the pipeline's status, and leaked errexit killed
+           the run.
+        
+        So the step whose own comment reads "Advisory ONLY ... NEVER fails the
+        suite" was the step that failed the suite, and it did so on the HAPPY path:
+        the fewer stale components a host has, the more certainly its gate dies.
+        
+        This is the same family as 702-pwhc and 723-b9cn — a pipeline's exit status
+        deciding a guard's verdict for reasons unrelated to the guard's question —
+        and the same consequence: a check that reports success by not running.
+      exit_criteria:
+        - local-ci.sh re-asserts `set +e` after its sources, with the leak documented. DONE.
+        - The advisory grep carries `|| true` so it cannot hand a failure upward on the happy path, whatever the caller's errexit state. DONE.
+        - 'Verified: `--phase pre-build` goes from 4 lines/exit 1 to 3414+ lines that reach Rust Code Quality and the litmus suite. DONE.'
+        - |
+            OPEN: audit the other consumers of with-tillandsias-builder.sh for the
+            same leak, and consider whether that file should stop setting shell
+            options for its sourcers at all — a sourced helper silently rewriting
+            its caller's error handling is the general defect; this packet fixed
+            one victim.
+
+      events:
+        - type: progress
+          ts: "2026-08-14T03:45:00Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260813t223103z
+          host: macos
+          summary: |
+            Found while trying to VERIFY a different fix (731-vaqx), which is the
+            only reason it was found at all: the gate had to be run deliberately
+            and its output read, rather than trusted.
+        
+            Falsified before fixing: reverted to HEAD's local-ci.sh in place (same
+            cwd, same REPO_ROOT) and reproduced 4 lines / exit 1 exactly, so the
+            early death was pre-existing and not introduced by this cycle's edits.
+            Traced with `bash -x` to the last executed line, `+ _fresh_flagged=`,
+            then confirmed the option leak directly: sourcing
+            with-tillandsias-builder.sh and common.sh in a bare shell leaves
+            `$-` = `ehuBc` — errexit ON.
+        
+            AFTER the fix the suite runs and immediately reported four RED tests
+            nobody on macOS could see (filed as 731-5qz7). Those were always
+            failing; the gate simply never reached them. Restoring a gate makes
+            the tree look worse and IS the improvement.
+
+    - packet_id: cloud-loaded-flag-latched-before-sign-in
+      order: 731-m58f
+      status: implemented
+      desired_release: v0.5
+      priority: p0
+      kind: defect
+      title: The cloud submenu told signed-in users with repositories that they have none — the M5 flag was latched by a pre-login reply and never cleared on sign-in
+      deliverable: crates/tillandsias-macos-tray/src/action_host.rs
+      pickup_role: macos
+      release_target: stable-milestone-v1
+      capability_tags:
+        - macos
+        - tray
+        - ux
+      estimated_hours: 3
+      context: |
+        The INVERSE of 598-kibt M5, introduced by M5's own fix and found by
+        adversarially attacking the closure rather than by the criterion.
+        
+        M5 asked: does a confirmed-empty account render "(no repos)" instead of
+        "(loading repos…)" forever? That became yes. Meanwhile the same flag began
+        rendering "(no repos)" to accounts that HAVE repositories.
+        
+        THE ORDERING, all on one connection, all in production:
+        
+          1. The push listener primes an UNCONDITIONAL CloudRefreshRequest at
+             subscription setup, BEFORE any login answer exists.
+          2. With no token the guest's `gh repo list` fails, and
+             crates/tillandsias-headless/src/cloud_projects.rs collapses EVERY
+             failure into an empty list — its docstring says so outright:
+             "Failure to invoke gh (binary missing, exit non-zero, no auth) also
+             yields an empty list — CloudRefreshReply is always well-formed."
+          3. apply_cloud_projects sets cloud_projects_loaded = true from that
+             reply, which confirmed nothing.
+          4. apply_login_state reset the flag ONLY when the NEW state was
+             LoggedOut, so LoggedOut -> LoggedIn kept the latch.
+          5. The cloud submenu is rendered ONLY in the LoggedIn arm — so the very
+             first time the user could see it, it said "(no repos)", with the
+             post-login fetch still in flight.
+        
+        That is exactly the falsehood the flag was introduced to prevent (operator
+        report 2026-07-28), pointing the other way. Linux avoids it structurally:
+        it stamps `last_fetched` only on a SUCCESSFUL fetch and keeps the previous
+        list on failure, "so the menu doesn't flicker into (no repos)".
+        
+        FIXED by resetting on a transition into LoggedIn as well as LoggedOut. We
+        are past the equality early-return, so reaching that branch means the state
+        really changed, and a new session's cloud verdict must be re-earned.
+      exit_criteria:
+        - apply_login_state resets cloud_projects_loaded + cloud_projects on a transition into LoggedIn as well as LoggedOut. DONE.
+        - |
+            A test reproduces the PRODUCTION ORDERING — LoggedOut, then an empty
+            reply, then sign-in — and asserts the first post-login render is the
+            loading row. DONE:
+            cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in.
+            Hand-falsified: with the LoggedOut-only condition restored it fails
+            with left=("cloud-projects.empty","(no repos)"). The pre-existing M5
+            test could not catch this because it starts from LoggedIn, i.e. the
+            returning-user ordering, where the bug is invisible.
+
+        - 'OPEN — WINDOWS: notify_icon::apply_github_login carries the identical `state == GithubLoginState::LoggedOut` condition and therefore the identical defect. This is not a parity gap, it is a shared bug; the macOS crate cannot fix it. Filed for the windows host as 731-qth3.'
+
+    - packet_id: windows-cloud-loaded-flag-latched-before-sign-in
+      order: 731-qth3
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: defect
+      title: 'Windows tray has the same pre-login latch: the cloud submenu can claim ''(no repos)'' to a signed-in user with repositories'
+      deliverable: crates/tillandsias-windows-tray/src/notify_icon.rs
+      pickup_role: windows
+      release_target: stable-milestone-v1
+      capability_tags:
+        - windows
+        - tray
+        - ux
+      estimated_hours: 2
+      context: |
+        Sibling of 731-m58f, found while fixing the macOS half. Windows resets the
+        cloud state only when the NEW login state is LoggedOut:
+        
+          if menu.login != state && state == GithubLoginState::LoggedOut {
+              menu.cloud_projects_loaded = false;
+              menu.cloud_projects = Vec::new();
+          }
+        
+        Same condition, same consequence: a cloud reply that lands while logged out
+        latches cloud_projects_loaded, the LoggedOut -> LoggedIn transition does not
+        clear it, and the submenu's first visible render claims "(no repos)".
+        
+        Whether Windows primes an unconditional CloudRefreshRequest before login
+        resolves the way macOS does is the one thing to CHECK rather than assume —
+        that is what makes the latch reachable. If it does not, this is latent
+        rather than live, and should be fixed anyway so the two trays cannot drift.
+        
+        The macOS fix and its falsification are in 731-m58f; mirror both, including
+        the test that encodes the ordering (LoggedOut -> empty reply -> sign-in).
+      exit_criteria:
+        - Verify whether the Windows push/poll path can deliver a cloud reply before login resolves; record the answer either way.
+        - Reset cloud_projects_loaded + cloud_projects on a transition into LoggedIn as well as LoggedOut.
+        - A test reproducing the ordering, hand-falsified against the current condition.
+
+    - packet_id: macos-tray-tests-run-in-no-gate
+      order: 731-vaqx
+      status: implemented
+      desired_release: v0.5
+      priority: p1
+      kind: defect
+      title: Every test in the macOS tray crate was skipped by every gate — the crate is bin-only and the deterministic pass selects --lib
+      deliverable: scripts/local-ci.sh
+      pickup_role: macos
+      release_target: stable-milestone-v1
+      capability_tags:
+        - macos
+        - ci
+        - guards
+      estimated_hours: 2
+      context: |
+        tillandsias-macos-tray declares only `[[bin]]` and has no src/lib.rs. The
+        deterministic test step is `cargo test --workspace --lib`, which selects
+        LIBRARY targets only, so every test in action_host.rs was skipped even when
+        the suite ran on a Mac. `./build.sh --check` (the pre-push gate) runs no
+        tests at all, and the macOS release job runs only build-macos-tray.sh,
+        which contains no `cargo test`. The single command that executed them was a
+        hand-typed `./build.sh --test`.
+        
+        Why this was worth stopping for: operator ruling 2026-08-14 made test
+        evidence the CLOSURE STANDARD for 598-kibt M5, whose entire macOS half is
+        pinned in this crate. Closing a criterion on assertions no gate evaluates
+        reproduces the original defect's shape — the macOS half rots while every
+        gate stays green — with the added twist that the ledger would record it as
+        verified.
+        
+        Note the asymmetry that made this invisible: the host-shell half of the
+        same behaviour IS a lib test and does run. Half the chain was gated.
+      exit_criteria:
+        - A Darwin-guarded `cargo test -p tillandsias-macos-tray --bins` runs beside the workspace --lib step in scripts/local-ci.sh. DONE.
+        - 'Verified live: the suite now reports `macOS tray tests pass`, 84 passed / 1 ignored across 85 tests. DONE.'
+        - |
+            OPEN: the macos-release job in .github/workflows/release.yml still runs
+            no tests, so a regression reaches a published .app. Add the same
+            command there, or state plainly that macOS release artifacts are
+            untested in CI.
+
+
+    - packet_id: headless-tray-tests-fail-on-macos
+      order: 731-5qz7
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: defect
+      title: The tray feature contract is 4 RED on macOS — Linux-only tests run on Darwin, hidden until the gate was restored
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs
+      pickup_role: any
+      release_target: stable-milestone-v1
+      capability_tags:
+        - macos
+        - testing
+        - portability
+      estimated_hours: 3
+      context: |
+        Surfaced the moment 731-pc5r restored local-ci: `cargo test -p
+        tillandsias-headless --bin tillandsias --features tray` is
+        420 passed / 4 FAILED on macOS. These were always failing; the suite simply
+        died before reaching them.
+        
+        Causes, from the captured output:
+        
+          mcp_per_lane_socket_location_and_permissions_0600
+            "failed to bind mcp socket: path must be shorter than SUN_LEN"
+            Darwin's sockaddr_un.sun_path is 104 bytes (Linux 108) and macOS
+            TMPDIR is a long /var/folders/... path, so the per-lane socket path
+            from order 505 overflows it.
+        
+          mcp_ndjson_connection_round_trips_handshake
+            assertion left: Null, right: 1 — almost certainly downstream of the
+            same bind failure; confirm rather than assume.
+        
+          mcp_listener_derived_project_attribution_ignores_forged_environ
+            same family (order 505 per-lane listeners).
+        
+          spawn_terminal_and_reap_does_not_leave_zombies
+            "failed to spawn terminal launcher: No such file or directory" — it
+            spawns a Linux terminal launcher that does not exist on Darwin. Note
+            638-ehzi already recorded this test as HOME/fixture-racing; this is a
+            different, deterministic failure.
+        
+        IMPORTANT SCOPING: this is a TEST portability problem, not a product
+        defect on macOS. tillandsias-headless runs as a Linux guest binary; this
+        code is compiled but never executed on the Mac host. So the fix is to make
+        the tests honest about where they can run — cfg-gate to Linux, or make the
+        socket path short enough to be portable — NOT to chase a macOS runtime bug
+        that does not exist.
+      exit_criteria:
+        - Each of the four is either cfg-gated to Linux with a stated reason, or made portable.
+        - Decide explicitly whether the tray feature contract should run at all on Darwin; if not, skip it in local-ci with a named reason rather than leaving it permanently red.
+        - '`scripts/local-ci.sh --phase pre-build` reaches a clean tray-contract verdict on macOS.'
+
+    - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+      order: 731-eupn
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: defect
+      title: '''(no repos)'' also means ''the fetch failed'' — the wire carries no success discriminator, so the tray states a fact it was never told'
+      deliverable: crates/tillandsias-control-wire + cloud_projects.rs + both trays
+      pickup_role: any
+      release_target: stable-milestone-v1
+      capability_tags:
+        - ux
+        - control-wire
+        - tray
+      estimated_hours: 5
+      context: |
+        The deeper issue behind both 598-kibt M5 and 731-m58f, recorded separately
+        because neither of those should be held open on it.
+        
+        MenuState defines cloud_projects_loaded as distinguishing "still fetching"
+        from "a confirmed empty answer". The guest cannot make that distinction and
+        does not claim to: cloud_projects.rs returns an empty Vec for a non-zero gh
+        exit, a missing binary, or missing auth, and CloudRefreshReply carries no
+        ok/err field. So "confirmed empty" is inferred from a message that means
+        "here is a list, which may be empty for any reason".
+        
+        Consequences that survive 731-m58f's fix: a user whose gh/vault/proxy path
+        breaks mid-session gets a confident "(no repos)" with the tooltip "no
+        GitHub repos visible to the in-VM gh client" — a confirmation nobody made —
+        and it sticks until the next login transition.
+        
+        It also explains why M5's runtime criterion could never have been decisive,
+        which is worth stating plainly next to the operator's 2026-08-14 ruling:
+        even with a zero-repo account in hand, observing "(no repos)" would not
+        have distinguished "confirmed zero repos" from "the fetch failed". The
+        criterion asked for a check the wire cannot support. That is an argument
+        for the ruling, not against it.
+        
+        Linux already takes the defensive position: keep the previous list on
+        failure and stamp last_fetched only on success.
+      exit_criteria:
+        - CloudRefreshReply carries an explicit success/failure discriminator (or a distinct error frame), so an empty list means empty.
+        - Neither tray sets its loaded flag on a failed fetch.
+        - A failed fetch renders something truthful — retain the previous list, or a distinct 'couldn't reach GitHub' row — never '(no repos)'.
+        - 'Tests for: confirmed-empty renders (no repos); failed-fetch does NOT.'
+
+    - packet_id: forge-validate-push-absent-reported-as-failed
+      order: 732-z8ef
+      release_target: architecture-audit-epic
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: fix
+      title: forge-validate reported FAIL exit:1 for a push that never ran
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - fail-loud
+        - forge
+        - freshness
+      context: |
+        Found by the standing FRESHNESS audit, which named scripts/forge-validate.sh
+        as the next target.
+        Five of its six checks distinguish "could not run" from "ran and failed" —
+        service-health and e2e-eligibility both carry a SKIP verdict. The
+        push-route check did not. On a detached HEAD `push_cmd` stays empty, the
+        `&&` short-circuits, and the script printed `FAIL push-route-dry-run
+        exit:1` — an exit code no push produced, followed by empty failure logs
+        because nothing had run. Same absent-reads-as-something-else family as
+        601-462g and 727-kmks, inverted: there, absence read as healthy; here,
+        absence read as a failure with a fabricated exit code.
+        The fixture could not have caught it: FORGE_VALIDATE_CHECK_DIR always set
+        push_cmd to a stub path, so the empty-route state was unreachable in
+        tests. The stub is now optional, which is what makes the case testable at
+        all.
+      exit_criteria:
+        - an absent push route reports SKIP with a named reason, not FAIL with a synthesised exit code
+        - the fixture can model an absent route, not only a route that ran and failed
+        - the profile still exits non-zero when a push route exists and genuinely fails
+      verifiable_closure: |
+        scripts/test-forge-validate.sh covers all three: omitting the push stub
+        yields `SKIP push-route-dry-run skip:no-branch-to-push` and pass=4 skip=2
+        fail=0; the existing failure case still yields `FAIL push-route-dry-run
+        exit:6`.
+      events:
+        - type: completed
+          ts: "2026-08-14T05:20:13Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: scripts/test-forge-validate.sh PASS including the new absent-push-route case (SKIP push-route-dry-run skip:no-branch-to-push, pass=4 skip=2 fail=0) while the existing FAIL exit:6 case still holds; litmus:forge-validation-profile green in default-image suite 10/10
+        - type: note
+          ts: "2026-08-14T05:20:13Z"
+          host: linux-mutable
+          summary: |
+            732-z8ef closed
+        - type: filed
+          ts: "2026-08-14T05:25:00Z"
+          agent_id: linux-mutable-20260814t0517z
+          host: linux_mutable
+          summary: |
+            Surfaced by the standing FRESHNESS audit target for this cycle.
+        - type: verified-by
+          ts: "2026-08-14T05:25:30Z"
+          agent_id: linux-mutable-20260814t0517z
+          host: linux_mutable
+          summary: |
+            scripts/test-forge-validate.sh PASS with the new absent-route case;
+            litmus:forge-validation-profile green in the default-image suite
+            (10/10 executed). The component carries an updated freshness stamp.
