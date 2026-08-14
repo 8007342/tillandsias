@@ -44812,6 +44812,27 @@ plan_index:
         - 'The two order-332 pins still pass untouched: streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline and streaming_exec_times_out_when_slow_guest_sends_no_frames.'
 
       events:
+        - type: verified
+          ts: "2026-08-14T03:30:08Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE. CAP_PTY_HEARTBEAT_V2 negotiated end to end; the heartbeat now carries the guest's answer instead of only proving the wire is alive.
+
+            SHAPE. A new trailing ControlMessage::PtyHeartbeat { session_id, input_state } plus a wire-level PtyInputState, appended per the enum's own rule for additive changes. NOT an encoding stuffed into the existing empty PtyData: a sentinel payload in `bytes` would be printed as terminal output by any v1 host, so the frame had to be one a v1 host refuses rather than misreads. It refuses it as Error::UnknownVariant, which is exactly why negotiation is load-bearing rather than decorative — the guest emits PtyHeartbeat ONLY to a peer advertising v2.
+
+            The two input-state types are deliberately separate: the probe's InputState is a measurement detail of tillandsias-headless, the wire's PtyInputState is a contract other binaries decode. Collapsing them would make a probe refactor a wire-compatibility event.
+
+            Negotiation checks v1 and v2 as INDEPENDENT tokens rather than as a version ladder. A peer may advertise v2 alone, and treating either as implying the other is how a negotiation grows a case nobody tests.
+
+            REPORTING ONLY, on purpose. The host names the state in its waiting report and changes no control flow; acting on BlockedOnInput (failing fast instead of waiting out the 4h ceiling) is rung 3, 723-g4bk. Shipping the observation first makes the wedge legible on this cycle without touching deadline semantics, and lets rung 3 be judged on its own.
+
+            EVIDENCE, tillandsias-vm-layer vsock_exec: 19 passed.
+              * every_heartbeat_version_combination_completes_the_exchange — the matrix: v1 guest against a v2-capable host, v2 guest for each of the three states, and a guest MIXING shapes mid-session, which is what a rolling upgrade actually produces. One shared fake-guest helper drives all of them, so the combinations cannot drift into being different tests.
+              * a_v2_heartbeat_reports_the_guests_input_state — plus NEGATIVE CONTROLS asserting that NotBlocked and Unknown never claim blockage, and that Unknown stays distinguishable from working. Without those, a report that said "blocked" every time would pass the positive assertion while restoring the ambiguity this rung removes.
+              * BOTH order-332 pins still green, untouched: streaming_exec_heartbeats_survive_total_silence_beyond_idle_deadline and streaming_exec_times_out_when_slow_guest_sends_no_frames.
+
+            tillandsias-headless: 28 passed, including quiet_pty_pump_emits_empty_to_host_heartbeat (the v1 shape, pinned unchanged) and pty_heartbeat_requires_explicit_client_capability.
         - type: note
           ts: "2026-08-14T01:29:15Z"
           agent_id: "unknown"

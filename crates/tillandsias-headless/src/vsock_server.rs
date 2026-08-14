@@ -26,8 +26,9 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CloudProjectEntry, ControlEnvelope, ControlMessage,
-    ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
+    ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase,
+    WIRE_VERSION, decode, encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -42,7 +43,20 @@ const SERVER_NAME: &str = "tillandsias-in-vm";
 fn client_supports_pty_heartbeat(capabilities: &[String]) -> bool {
     capabilities
         .iter()
-        .any(|capability| capability == CAP_PTY_HEARTBEAT_V1)
+        .any(|capability| capability == CAP_PTY_HEARTBEAT_V1 || capability == CAP_PTY_HEARTBEAT_V2)
+}
+
+/// Order 723-2yb3. A v2 client gets `PtyHeartbeat` frames carrying the input
+/// state; everyone else keeps the v1 empty-`PtyData` heartbeat.
+///
+/// Checked SEPARATELY from v1 rather than as a version ladder: a client may
+/// advertise v2 alone, and treating v2 as implying v1 (or the reverse) is how
+/// a negotiation grows a case nobody tests. Both tokens are independent facts
+/// about what the peer can decode.
+fn client_supports_pty_heartbeat_v2(capabilities: &[String]) -> bool {
+    capabilities
+        .iter()
+        .any(|capability| capability == CAP_PTY_HEARTBEAT_V2)
 }
 
 /// Guard so vault bootstrap runs at most once per process even if multiple
@@ -674,7 +688,10 @@ async fn handle_connection(
     let (pty_tx, mut pty_rx) = mpsc::channel::<ControlEnvelope>(PTY_OUTBOUND_CAPACITY);
     #[cfg(unix)]
     let mut pty_store = if client_supports_pty_heartbeat(&client_capabilities) {
-        PtySessionStore::new_with_heartbeat(pty_tx.clone())
+        PtySessionStore::new_with_heartbeat(
+            pty_tx.clone(),
+            client_supports_pty_heartbeat_v2(&client_capabilities),
+        )
     } else {
         PtySessionStore::new(pty_tx.clone())
     };

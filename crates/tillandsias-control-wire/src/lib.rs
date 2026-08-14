@@ -75,6 +75,13 @@ pub const CAP_PTY_ATTACH_V1: &str = "pty.attach@v1";
 /// keeping mixed-version interactive attach clients unchanged.
 pub const CAP_PTY_HEARTBEAT_V1: &str = "pty.heartbeat@v1";
 
+/// Capability advertised by exec clients that understand `PtyHeartbeat`
+/// frames, which carry the guest's [`PtyInputState`] alongside liveness
+/// (order 723-2yb3). A guest emits `PtyHeartbeat` ONLY to a peer advertising
+/// this token; every other peer keeps receiving the v1 empty-`PtyData`
+/// heartbeat, which is what lets a mixed-version fleet keep working unchanged.
+pub const CAP_PTY_HEARTBEAT_V2: &str = "pty.heartbeat@v2";
+
 /// Maximum permitted MCP frame payload size (for McpFrame variant only).
 /// Screenshots and large tool responses may require multi-MB capacity.
 ///
@@ -323,6 +330,41 @@ pub enum ControlMessage {
         seq: u64,
         entries: Vec<LocalProjectEntry>,
     },
+    /// Guest → host: a liveness heartbeat that also SAYS SOMETHING (order
+    /// 723-2yb3). Trailing addition, appended per this enum's own rule.
+    ///
+    /// The v1 heartbeat is an empty `PtyData{ToHost}` frame, which proves the
+    /// wire is alive and nothing else — it is why a 70-minute wedge was
+    /// externally indistinguishable from healthy progress. This carries the
+    /// guest's answer to the one question the host cannot answer for itself:
+    /// is the child blocked reading its terminal?
+    ///
+    /// Emitted ONLY to a peer that advertised [`CAP_PTY_HEARTBEAT_V2`]. A v1
+    /// host would decode this as `Error::UnknownVariant`, so negotiation is
+    /// not decoration — it is what keeps a mixed-version fleet working.
+    PtyHeartbeat {
+        session_id: u32,
+        input_state: PtyInputState,
+    },
+}
+
+/// What the guest established about a PTY session's foreground process.
+///
+/// Three-valued on the wire for the same reason it is three-valued in the
+/// probe: `/proc/<pid>/syscall` is not readable on every kernel, and a host
+/// that cannot distinguish "not blocked" from "could not tell" would act
+/// confidently on an absent measurement. `Unknown` obliges the host to behave
+/// exactly as it did before v2.
+///
+/// @trace spec:vsock-transport
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PtyInputState {
+    /// Blocked reading the terminal. It will not proceed until someone writes.
+    BlockedOnInput,
+    /// Running, or blocked on something that is not the terminal.
+    NotBlocked,
+    /// The guest could not establish the answer on this kernel.
+    Unknown,
 }
 
 /// Direction tag for `PtyData` frames.
@@ -453,6 +495,7 @@ impl ControlMessage {
             ControlMessage::PtyData { .. } => "PtyData",
             ControlMessage::PtyResize { .. } => "PtyResize",
             ControlMessage::PtyClose { .. } => "PtyClose",
+            ControlMessage::PtyHeartbeat { .. } => "PtyHeartbeat",
             ControlMessage::DeliverCredentials { .. } => "DeliverCredentials",
             ControlMessage::DeliverCredentialsReply { .. } => "DeliverCredentialsReply",
             ControlMessage::GetVaultHandover { .. } => "GetVaultHandover",

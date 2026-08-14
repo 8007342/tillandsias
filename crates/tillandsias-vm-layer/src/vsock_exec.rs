@@ -24,8 +24,9 @@
 //!        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
 
 use tillandsias_control_wire::{
-    CAP_PTY_HEARTBEAT_V1, ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES,
-    PtyDirection, PtyExit, VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES,
+    MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit, PtyInputState, VmPhase, WIRE_VERSION, decode,
+    encode,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -250,6 +251,7 @@ where
                 capabilities: vec![
                     "pty.attach@v1".to_string(),
                     CAP_PTY_HEARTBEAT_V1.to_string(),
+                    CAP_PTY_HEARTBEAT_V2.to_string(),
                 ],
                 build_version: None,
             },
@@ -396,6 +398,7 @@ where
                 capabilities: vec![
                     "pty.attach@v1".to_string(),
                     CAP_PTY_HEARTBEAT_V1.to_string(),
+                    CAP_PTY_HEARTBEAT_V2.to_string(),
                 ],
                 build_version: None,
             },
@@ -641,6 +644,7 @@ where
                 capabilities: vec![
                     "pty.attach@v1".to_string(),
                     CAP_PTY_HEARTBEAT_V1.to_string(),
+                    CAP_PTY_HEARTBEAT_V2.to_string(),
                 ],
                 build_version: None,
             },
@@ -794,6 +798,40 @@ where
                     None => format!("vsock_exec: guest error: {message}"),
                 });
             }
+            // Order 723-2yb3: the v2 heartbeat. Same liveness role as the v1
+            // empty PtyData above — it is NOT output, it does NOT satisfy an
+            // expect, and it does not alter the deadline — but it carries the
+            // guest's answer to the question elapsed time cannot answer.
+            //
+            // REPORTING ONLY, deliberately. Acting on BlockedOnInput (failing
+            // the exec fast instead of waiting out the ceiling) is rung 3
+            // (723-g4bk). Shipping the observation first means the wedge
+            // becomes legible on this cycle without changing any control flow,
+            // and rung 3 can be judged on its own.
+            ControlMessage::PtyHeartbeat {
+                session_id: sid,
+                input_state,
+            } if sid == session_id => {
+                if let Some(exp) = current.as_ref() {
+                    let posture = match input_state {
+                        PtyInputState::BlockedOnInput => {
+                            "guest is BLOCKED READING ITS TERMINAL — it is waiting for input \
+                             this exec is not sending"
+                        }
+                        PtyInputState::NotBlocked => "guest is working",
+                        PtyInputState::Unknown => {
+                            "guest could not determine its input state on this kernel"
+                        }
+                    };
+                    on_event(&format!(
+                        "still waiting for {} — {}s elapsed, {} bytes of guest output so far; {posture}",
+                        exp.label,
+                        started.elapsed().as_secs(),
+                        stdout.len()
+                    ));
+                }
+                continue;
+            }
             _ => {}
         }
     }
@@ -942,6 +980,187 @@ mod tests {
         assert!(
             seen.iter().any(|e| e.contains("matched: github token")),
             "the match event must still fire. got: {seen:?}"
+        );
+    }
+
+    /// Order 723-2yb3. Drive the expect loop against a fake guest that sends
+    /// `heartbeats` frames of the given shape before prompting, and return
+    /// every reported event.
+    ///
+    /// One helper for all four version combinations, because the point of the
+    /// matrix is that the SAME exchange succeeds regardless of which heartbeat
+    /// shape the guest emits — writing four bespoke fakes would let them drift
+    /// apart and stop being a comparison.
+    async fn run_with_heartbeats(frames: Vec<ControlMessage>) -> (ExecOutput, Vec<String>) {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![
+                            CAP_PTY_HEARTBEAT_V1.to_string(),
+                            CAP_PTY_HEARTBEAT_V2.to_string(),
+                        ],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+            for body in frames {
+                write_envelope(
+                    &mut guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: 2,
+                        body,
+                    },
+                )
+                .await
+                .unwrap();
+            }
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 3,
+                    body: ControlMessage::PtyData {
+                        session_id: 1,
+                        direction: PtyDirection::ToHost,
+                        bytes: b"authentication token: ".to_vec(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 4,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = events.clone();
+        let out = exec_over_stream_expect_dynamic(
+            client,
+            &["/bin/login"],
+            vec![DynamicExpect {
+                needle: b"authentication token".to_vec(),
+                label: "github token".to_string(),
+                response: Box::new(|| Ok(b"tok\n".to_vec())),
+            }],
+            move |ev| sink.lock().unwrap().push(ev.to_string()),
+        )
+        .await
+        .expect("exchange completes");
+        let seen = events.lock().unwrap().clone();
+        (out, seen)
+    }
+
+    fn v1_heartbeat() -> ControlMessage {
+        ControlMessage::PtyData {
+            session_id: 1,
+            direction: PtyDirection::ToHost,
+            bytes: Vec::new(),
+        }
+    }
+
+    fn v2_heartbeat(input_state: PtyInputState) -> ControlMessage {
+        ControlMessage::PtyHeartbeat {
+            session_id: 1,
+            input_state,
+        }
+    }
+
+    /// Order 723-2yb3, THE COMPATIBILITY MATRIX. All four combinations must
+    /// complete the same exchange; the two MIXED ones are the reason this is
+    /// its own rung, because a version-skewed pair must degrade, never wedge.
+    #[tokio::test]
+    async fn every_heartbeat_version_combination_completes_the_exchange() {
+        // v1 guest → v2-capable host. The host advertises v2 but the guest
+        // keeps sending empty PtyData; nothing may change for it.
+        let (out, seen) = run_with_heartbeats(vec![v1_heartbeat(), v1_heartbeat()]).await;
+        assert_eq!(out.exit.code, 0, "v1 guest + v2 host must complete");
+        assert_eq!(
+            seen.iter().filter(|e| e.contains("still waiting")).count(),
+            2,
+            "v1 heartbeats must still report the wait: {seen:?}"
+        );
+
+        // v2 guest → v2 host, the new path, for each of the three states.
+        for state in [
+            PtyInputState::NotBlocked,
+            PtyInputState::BlockedOnInput,
+            PtyInputState::Unknown,
+        ] {
+            let (out, seen) = run_with_heartbeats(vec![v2_heartbeat(state)]).await;
+            assert_eq!(out.exit.code, 0, "v2/{state:?} must complete");
+            assert_eq!(
+                seen.iter().filter(|e| e.contains("still waiting")).count(),
+                1,
+                "a v2 heartbeat must report the wait exactly like v1: {seen:?}"
+            );
+        }
+
+        // A guest that MIXES shapes mid-session — the shape a rolling upgrade
+        // produces — must also be fine.
+        let (out, _) = run_with_heartbeats(vec![
+            v1_heartbeat(),
+            v2_heartbeat(PtyInputState::NotBlocked),
+            v1_heartbeat(),
+        ])
+        .await;
+        assert_eq!(out.exit.code, 0, "mixed-shape heartbeats must complete");
+    }
+
+    /// The v2 heartbeat must SAY something the v1 one could not. Without this
+    /// the whole rung reduces to a renamed frame.
+    #[tokio::test]
+    async fn a_v2_heartbeat_reports_the_guests_input_state() {
+        let (_, blocked) =
+            run_with_heartbeats(vec![v2_heartbeat(PtyInputState::BlockedOnInput)]).await;
+        assert!(
+            blocked
+                .iter()
+                .any(|e| e.contains("BLOCKED READING ITS TERMINAL")),
+            "a blocked guest must be reported as blocked — this is the fact elapsed time cannot supply: {blocked:?}"
+        );
+
+        // NEGATIVE CONTROL: the other two states must NOT claim blockage. A
+        // report that said "blocked" for every heartbeat would satisfy the
+        // assertion above while resurrecting the ambiguity this rung removes.
+        let (_, working) = run_with_heartbeats(vec![v2_heartbeat(PtyInputState::NotBlocked)]).await;
+        assert!(
+            !working.iter().any(|e| e.contains("BLOCKED")),
+            "a working guest must never be reported as blocked: {working:?}"
+        );
+        let (_, unknown) = run_with_heartbeats(vec![v2_heartbeat(PtyInputState::Unknown)]).await;
+        assert!(
+            !unknown.iter().any(|e| e.contains("BLOCKED")),
+            "an undeterminable state must never be reported as blocked: {unknown:?}"
+        );
+        assert!(
+            unknown.iter().any(|e| e.contains("could not determine")),
+            "…but it must be distinguishable from 'working': {unknown:?}"
         );
     }
 
