@@ -1,0 +1,84 @@
+packets:
+  - packet_id: windows-fresh-provision-control-wire-never-comes-up
+    order: 735-ewzp
+    status: ready
+    desired_release: v0.5
+    priority: p0
+    release_target: stable-milestone-v1
+    kind: bug
+    title: "A from-scratch Windows install never reaches a usable state: the control wire times out for 7.5 minutes and provisioning fails"
+    deliverable: "root cause + a guest-side readiness check that can actually detect it"
+    pickup_role: windows
+    capability_tags: [windows, wsl2, vsock, provisioning, e2e, fail-loud, release-blocker]
+    estimated_hours: 4
+    context: |
+      MEASURED 2026-08-14 on a genuine from-scratch cycle run at the operator's
+      request as pre-release validation. Full write-up with all commands and
+      output:
+      plan/issues/windows-from-scratch-provision-control-wire-never-comes-up-2026-08-14.md
+
+      SEQUENCE: guest binary built from CURRENT source in the WSL build distro
+      and staged (verified to carry VERSION 0.4.260812.1, so the embed actually
+      happens rather than falling back to the published 0.4.260810.1); full
+      -Purge; then -Provision -Launch.
+
+      Build, install and embed all succeeded. Provisioning downloaded the Fedora
+      rootfs, created the distro, injected the guest, started the VM — and then
+      the control wire never came up: ten attempts at 30s each, ~7.5 minutes,
+      bounded `wsl --shutdown` recovery, provisioning failed. `--diagnose`
+      reports WSA_ERROR(10060) against a utility VM that `hcsdiag list` confirms
+      is Running.
+
+      RULED OUT BY MEASUREMENT, not by assumption:
+        * the guest binary — runs in the distro, reports v0.4.260812.1, exit 0;
+        * the guest service — systemd `active (running)`, listening
+          `--listen-vsock 42420`, all three ExecStartPre preflights SUCCESS;
+        * a missing Hyper-V vsock transport — this was the first hypothesis and
+          the evidence REFUTED it: dmesg shows `hv_vmbus: registering driver
+          hv_sock` and /sys/module/hv_sock exists;
+        * disk — 954 GiB free in the guest.
+
+      STRONGEST OPEN LEAD, causation NOT proven: Windows routes host→guest
+      Hyper-V socket connections through service GUIDs registered under
+      HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\GuestCommunicationServices.
+      That key on this host holds only the two built-in VM Session Services —
+      no entry for port 42420, whose template GUID
+      (0000a5b4-facb-11e6-bd58-64006a7986d3) the code itself computes at
+      transport_windows.rs:37-38. Nothing in this repository ever WRITES that
+      key. But this host had a working wire on 2026-08-11, so either the
+      registration existed and was removed (by the purge, or by the WSL 2.7.11.0
+      update this host now runs), or it was never required and something else
+      regressed.
+
+      The decisive experiment is one elevated registry add plus a retry. It is a
+      machine-scope change and was deliberately left to the operator rather than
+      done unilaterally by an unattended cycle.
+    outcome: |
+      A from-scratch Windows install reaches a healthy control wire, or fails
+      within seconds naming the actual fault instead of timing out for seven and
+      a half minutes.
+    exit_criteria:
+      - "Root cause established by experiment, not inference — state which of the candidates it was and what evidence settled it."
+      - "A from-scratch -Purge then -Provision run reaches `--diagnose` exit 0 on this host, with the log quoted."
+      - "The guest preflight can DETECT this condition: `/dev/vsock` existing is not evidence of a host-reachable transport, because vsock_loopback alone provides that node and this image loads it deliberately via /etc/modules-load.d/tillandsias-vsock.conf. Replace the proxy with a check of the property."
+      - "NEGATIVE CONTROL: the new check must PASS on a healthy host — a readiness check that refuses everything is not an improvement over one that accepts everything."
+      - "If the fix is a host-scope registry registration, decide and record WHO creates it (installer, tray first-run, or documented operator step) — an install step nobody owns is how this recurs on the next clean machine."
+    notes: |
+      Filed p0 because it gates the pre-release Windows validation the operator
+      asked for: the last Windows evidence in the ledger is against the
+      PUBLISHED 0.4.260810.1, not this tree, so "Windows works" is currently
+      unproven for the build being considered for promotion.
+
+      Do NOT fold the fail-loud preflight gap into the root-cause hunt as one
+      task. The preflight is wrong regardless of what caused this instance —
+      every guest-side signal was green while the host could not connect at all
+      — and it should be fixed even if the wire turns out to be a host registry
+      issue.
+    events:
+      - type: filed
+        ts: "2026-08-14T19:25:00Z"
+        host: windows
+        summary: |
+          Found by running the from-scratch e2e the operator asked for before a
+          v0.4 promotion. The run is the evidence; the packet exists because the
+          run did not reach a usable state.
