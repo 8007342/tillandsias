@@ -130,6 +130,43 @@ fn wall_clock_ceiling_error(
     )
 }
 
+/// How much of an arriving output frame is shown in a progress preview, and
+/// how often previews may be emitted (order 690-eug2).
+///
+/// The packet's headline defect: the driver accumulated everything and emitted
+/// it only at `PtyClose`, with `on_event` firing solely on a needle match, so
+/// during a long or hung run the operator saw NOTHING. The heartbeat reports
+/// and the deadlock detection added since tell you THAT the guest is quiet or
+/// stuck; a preview tells you WHAT it is saying, which is the difference
+/// between "still waiting" and "oh, it is asking for a passphrase".
+const EXEC_PREVIEW_BYTES: usize = 200;
+const EXEC_PREVIEW_MIN_GAP: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Render an arriving frame as a single-line, bounded, escaped preview.
+///
+/// Escaping is not cosmetic. Guest output is raw PTY bytes: control sequences,
+/// carriage returns, and cursor movement. Passing those through to a caller's
+/// log would let a guest rewrite lines it does not own — the log is the
+/// diagnostic surface for a wedged guest, so it must not be forgeable by the
+/// thing being diagnosed.
+fn preview_of(bytes: &[u8]) -> String {
+    let shown = &bytes[..bytes.len().min(EXEC_PREVIEW_BYTES)];
+    let mut out = String::with_capacity(shown.len() + 16);
+    for &b in shown {
+        match b {
+            b'\n' => out.push_str("\\n"),
+            b'\r' => out.push_str("\\r"),
+            b'\t' => out.push_str("\\t"),
+            0x20..=0x7e => out.push(b as char),
+            _ => out.push_str(&format!("\\x{b:02x}")),
+        }
+    }
+    if bytes.len() > shown.len() {
+        out.push_str(&format!(" …(+{} bytes)", bytes.len() - shown.len()));
+    }
+    out
+}
+
 /// How many bytes of guest transcript the expect driver retains (order
 /// 690-eug2). 8 MiB: far above any real prompt-driven exchange, low enough that
 /// a runaway guest cannot exhaust host memory.
@@ -868,6 +905,8 @@ where
     let mut pending = expects.into_iter();
     let mut current = pending.next();
     let transcript_cap = exec_transcript_cap();
+    // Last time an output preview was emitted; None until the first frame.
+    let mut last_preview: Option<std::time::Instant> = None;
     let mut elided_bytes = 0usize;
     let idle_timeout = exec_idle_timeout()?;
     // 689-y2my: make the WAIT observable. The deadline deliberately stays as it
@@ -919,6 +958,30 @@ where
                         ));
                     }
                     continue;
+                }
+                // Surface output AS IT ARRIVES (order 690-eug2). Rate-limited
+                // rather than per-frame: a chatty guest (`yes`, a build log)
+                // would otherwise turn the caller's log into a firehose, and an
+                // observability feature that has to be switched off to keep the
+                // logs usable is not observability.
+                //
+                // The FIRST frame is always shown, because "the guest has begun
+                // talking" is the single most useful early signal and waiting a
+                // second to say it defeats the point.
+                if !bytes.is_empty() {
+                    let now = std::time::Instant::now();
+                    let due = last_preview
+                        .map(|t: std::time::Instant| now.duration_since(t) >= EXEC_PREVIEW_MIN_GAP)
+                        .unwrap_or(true);
+                    if due {
+                        last_preview = Some(now);
+                        on_event(&format!(
+                            "guest output ({}s, {} bytes so far): {}",
+                            started.elapsed().as_secs(),
+                            stdout.len() + bytes.len(),
+                            preview_of(&bytes)
+                        ));
+                    }
                 }
                 stdout.extend_from_slice(&bytes);
                 // Bound the retained transcript (order 690-eug2). Runs BEFORE
@@ -1424,6 +1487,105 @@ mod tests {
         assert!(
             unknown.iter().any(|e| e.contains("could not determine")),
             "…but it must be distinguishable from 'working': {unknown:?}"
+        );
+    }
+
+    /// ORDER 690-eug2, criterion 1: guest output must be surfaced AS IT
+    /// ARRIVES, not only at PtyClose.
+    ///
+    /// The packet's headline defect. `on_event` fired solely on a needle match,
+    /// so during a long or hung run the operator saw nothing at all — which is
+    /// what made every wedge of that week undiagnosable from outside.
+    #[tokio::test]
+    async fn guest_output_is_surfaced_before_the_session_closes() {
+        let (_, seen) = run_with_heartbeats(vec![ControlMessage::PtyData {
+            session_id: 1,
+            direction: PtyDirection::ToHost,
+            bytes: b"Loading image layer 1 of 7\n".to_vec(),
+        }])
+        .await;
+
+        let previews: Vec<&String> = seen
+            .iter()
+            .filter(|e| e.starts_with("guest output"))
+            .collect();
+        assert!(
+            !previews.is_empty(),
+            "output must be reported while the exchange runs: {seen:?}"
+        );
+        assert!(
+            previews[0].contains("Loading image layer 1 of 7"),
+            "the preview must show WHAT the guest said — that is the difference \
+             between 'still waiting' and 'oh, it is asking for something': {previews:?}"
+        );
+        assert!(
+            previews[0].contains("bytes so far"),
+            "and how much has arrived: {previews:?}"
+        );
+    }
+
+    /// The preview must not be forgeable by the thing being diagnosed.
+    ///
+    /// Guest output is raw PTY bytes. Passing control sequences through to a
+    /// caller's log would let a wedged guest rewrite lines it does not own —
+    /// and that log is the diagnostic surface for exactly that guest.
+    #[test]
+    fn previews_escape_control_bytes_and_are_bounded() {
+        let p = preview_of(b"ok\r\n\x1b[2K\x1b[1Gforged: everything is fine");
+        assert!(
+            !p.contains('\r') && !p.contains('\n'),
+            "no raw newlines: {p}"
+        );
+        assert!(!p.contains('\x1b'), "no raw escape sequences: {p}");
+        assert!(p.contains("\\r\\n"), "they are shown, not dropped: {p}");
+        assert!(p.contains("\\x1b"), "escape bytes are visible as hex: {p}");
+        assert!(
+            p.contains("forged: everything is fine"),
+            "text survives: {p}"
+        );
+
+        // Bounded, and it SAYS it truncated rather than silently cutting off.
+        let long = preview_of(&vec![b'a'; EXEC_PREVIEW_BYTES * 3]);
+        assert!(
+            long.contains(&format!("+{} bytes", EXEC_PREVIEW_BYTES * 2)),
+            "truncation must be stated: {long}"
+        );
+        assert!(long.len() < EXEC_PREVIEW_BYTES * 2, "and actually bounded");
+
+        // NEGATIVE CONTROL: ordinary output passes through unmangled, or the
+        // preview would be useless for reading a prompt.
+        assert_eq!(
+            preview_of(b"authentication token: "),
+            "authentication token: "
+        );
+    }
+
+    /// Rate-limited, or a chatty guest turns the caller's log into a firehose.
+    /// An observability feature that has to be switched off to keep the logs
+    /// usable is not observability.
+    #[tokio::test]
+    async fn a_chatty_guest_does_not_flood_the_event_sink() {
+        let burst: Vec<ControlMessage> = (0..200)
+            .map(|i| ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToHost,
+                bytes: format!("line {i}\n").into_bytes(),
+            })
+            .collect();
+        let (_, seen) = run_with_heartbeats(burst).await;
+
+        let previews = seen
+            .iter()
+            .filter(|e| e.starts_with("guest output"))
+            .count();
+        assert!(
+            previews <= 3,
+            "200 frames inside one second must not produce 200 events; got {previews}: {seen:?}"
+        );
+        assert!(
+            previews >= 1,
+            "…but the first frame is always shown, because 'the guest has begun \
+             talking' is the most useful early signal: {seen:?}"
         );
     }
 

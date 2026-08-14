@@ -41427,6 +41427,31 @@ plan_index:
         - the same bound covers the tray's push-subscription handshake and the Noise handshake after the VZ connect
         - a test drives a peer that connects and then goes silent at each stage and asserts a bounded, stage-named failure
       events:
+        - type: verified
+          ts: "2026-08-14T09:24:36Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE for this crate. Criterion 1's streaming half landed; criterion 3's two macOS sites are split to 733-mppc so this packet closes on the work its own crate owns.
+
+            STREAMING, the packet's headline defect. on_event fired SOLELY on a needle match, so during a long or hung run the operator saw nothing at all -- which is what made every wedge of that week undiagnosable from outside. Output is now surfaced as it arrives.
+
+            Two things that make it usable rather than merely present:
+              * RATE-LIMITED to one preview per second, with the FIRST frame always shown. A chatty guest -- `yes`, a build log -- would otherwise turn the caller's log into a firehose, and an observability feature that has to be switched off to keep the logs usable is not observability. The first frame is exempt because "the guest has begun talking" is the most useful early signal and delaying it a second defeats the point.
+              * ESCAPED and bounded. Guest output is raw PTY bytes: control sequences, carriage returns, cursor movement. Passing those through to a caller's log would let a wedged guest rewrite lines it does not own -- and that log is the diagnostic surface for exactly that guest. Truncation is stated, not silent.
+
+            The preview says WHAT the guest is saying, which is the gap the heartbeat reports could not fill: those tell you the guest is quiet or stuck, this tells you it is asking for a passphrase.
+
+            EVIDENCE: vsock_exec 32 passed.
+              * guest_output_is_surfaced_before_the_session_closes -- the criterion itself.
+              * previews_escape_control_bytes_and_are_bounded -- including a forged ANSI line-rewrite, with a NEGATIVE CONTROL that ordinary prompt text passes through unmangled (an escaper that mangled everything would satisfy the escaping assertions and make previews useless).
+              * a_chatty_guest_does_not_flood_the_event_sink -- 200 frames in under a second must not produce 200 events, and must produce at least one.
+
+            WHERE THIS PACKET ENDED UP, across five cycles:
+              * criterion 1 -- DONE (streaming + the transcript cap).
+              * criterion 2 -- DONE structurally: every read AND write on this seam now carries a deadline. Its per-expect-deadline half was RETIRED as superseded, with reasons recorded, because it is 689-y2my's refuted timing shape at a finer grain.
+              * criterion 3 -- split to 733-mppc (macOS, cannot be exercised here).
+              * criterion 4 -- DONE for this crate: a peer that connects then goes silent fails bounded and stage-named at every setup stage, and a peer that stops draining fails as back-pressure.
         - type: progress
           ts: "2026-08-14T08:25:05Z"
           agent_id: "unknown"
