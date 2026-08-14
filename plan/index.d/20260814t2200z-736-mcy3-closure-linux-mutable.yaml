@@ -1,0 +1,39 @@
+events:
+  - packet_id: sidecar-staging-never-reached-nix
+    event:
+      type: verified-by
+      ts: "2026-08-14T22:00:00Z"
+      agent_id: "linux-mutable-20260814-release"
+      host: linux_mutable
+      summary: |
+        MEASURED FROM A PRISTINE CLONE, both directions, exactly the
+        reproduction the windows host specified.
+
+        Setup: git clone --no-hardlinks of linux-next@aebd1559 into a fresh
+        directory; confirmed images/router/tillandsias-router-sidecar ABSENT
+        (the windows host's warning was right — an existing worktree with a
+        stale staged sidecar would have falsely passed).
+
+        WITH the fix: `nix build -L .#tillandsias-headless-x86_64-musl` exits 0.
+        The log shows tillandsias-router-sidecar-x86_64 building as part of the
+        graph before the headless crate compiles — the dependency edge is real.
+
+        WITHOUT the fix (same clone, the three `preBuild = stageRouterSidecar;`
+        lines deleted, committed so the flake sees it): exits 1 with
+          thread 'main' panicked at crates/tillandsias-headless/build.rs:116:17:
+          required runtime asset missing: /build/source/images/router/tillandsias-router-sidecar
+        That is the predicted failure, at the predicted line, from the predicted
+        cause. The inference was correct in every particular.
+
+        Note the path in the panic: /build/source/... — the nix sandbox's copy
+        of craneSrc. The file the release workflow installs into the working
+        tree is not there and never was.
+
+        HOW IT WAS RUN, since three things blocked the obvious route: nix-daemon
+        inactive and `sudo` prompting; `podman pull` broken because
+        containers.conf points http_proxy at the enclave proxy container, which
+        was stopped; a fresh fedora-toolbox having neither /nix nor passwordless
+        sudo. scripts/nix-toolbox.sh (new, idempotent) resolves a working nix by
+        preference — daemon, rootless chroot store, toolbox — and landed on
+        `chroot`. It also creates and initializes the toolbox when that rung is
+        needed, per the operator's requirement that it work on a fresh host.

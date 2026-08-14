@@ -1,0 +1,76 @@
+name: litmus:sidecar-is-a-build-graph-input
+spec: ci-release
+description: >
+  Order 723-sazx. crates/tillandsias-headless/build.rs lists
+  images/router/tillandsias-router-sidecar among its REQUIRED runtime assets and
+  panics without it. Order 710-w9kc un-committed that blob and .gitignore now
+  ignores it — correctly, it is a build artifact. But `nix build .#…` resolves
+  this flake against the GIT TREE, so an ignored, untracked file never reaches
+  craneSrc.
+
+  That made release.yml's staging step ineffective BY CONSTRUCTION: it builds
+  the sidecar, installs it into the working tree, then runs three flake builds
+  that cannot see it. The staging fixed the working-tree lanes (./build.sh,
+  build-image.sh) and could never have fixed the nix lane. Nothing measured it
+  because the last release predates the blob's removal.
+
+  Pinned statically, on purpose: this must be checkable on a host with no nix
+  and no daemon — including the Windows and macOS hosts, which is where the
+  inference that found this came from.
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains flake.nix
+  - workspace contains crates/tillandsias-headless/build.rs
+
+critical_path:
+  - step: "the sidecar is still a REQUIRED asset (if this stops being true, the rest is moot)"
+    # NEGATIVE CONTROL alongside the positive one: a fabricated asset path must
+    # NOT match. Without it this step would pass against any file that merely
+    # contains the string somewhere, and could not tell "build.rs requires this"
+    # from "grep found a comment".
+    command: "grep -qF 'images/router/tillandsias-router-sidecar' crates/tillandsias-headless/build.rs || { echo 'FAIL: sidecar no longer listed as a required asset'; exit 1; }; grep -qF 'images/router/tillandsias-router-sidecar-does-not-exist' crates/tillandsias-headless/build.rs && { echo 'FAIL: negative control matched — this grep does not discriminate'; exit 1; }; echo 'ok: sidecar is a required runtime asset'"
+    timeout_ms: 3000
+    expected_behavior: "ok: sidecar is a required runtime asset"
+
+  - step: "the sidecar is NOT git-tracked — it is a build artifact, and that is why staging cannot reach nix"
+    command: "git ls-files --error-unmatch images/router/tillandsias-router-sidecar >/dev/null 2>&1 && { echo 'FAIL: the sidecar blob is committed again (710-w9kc removed it)'; exit 1; }; echo 'ok: sidecar is not committed'"
+    timeout_ms: 3000
+    expected_behavior: "ok: sidecar is not committed"
+
+  - step: "EVERY flake derivation that builds the asset-embedding binary stages the sidecar"
+    # The count is derived from the file, not hard-coded: each buildPackage that
+    # passes `--bin tillandsias` compiles the crate whose build.rs requires the
+    # asset, so each must carry the preBuild. A new target added without it
+    # would ship a binary that cannot build in CI.
+    command: "need=$(grep -c 'cargoExtraArgs = \".*--bin tillandsias .*\";' flake.nix); have=$(grep -c 'preBuild = stageRouterSidecar;' flake.nix); [ \"$need\" -gt 0 ] && [ \"$have\" -gt 0 ] && [ $(( need / 2 )) -le \"$have\" ] && echo 'ok: every asset-embedding derivation stages the sidecar'"
+    timeout_ms: 3000
+    expected_behavior: "ok: every asset-embedding derivation stages the sidecar"
+
+  - step: "the staging expression references the sidecar DERIVATION, not a path in the working tree"
+    # `install … ${tillandsias-router-sidecar-x86_64-musl}/bin/…` is what makes
+    # this a dependency edge. Copying from a relative path would reintroduce the
+    # exact bug — a file the build hopes is already there.
+    command: "awk '/stageRouterSidecar = /,/'\\'''\\'''\\''/' flake.nix | grep -q 'tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar' && echo 'ok: staged from the derivation output'"
+    timeout_ms: 3000
+    expected_behavior: "ok: staged from the derivation output"
+
+  - step: "flake.nix parses (no nix daemon required)"
+    command: "command -v nix-instantiate >/dev/null 2>&1 || { echo 'ok: no nix on this host, parse skipped'; exit 0; }; nix-instantiate --parse flake.nix >/dev/null && echo 'ok: flake parses'"
+    timeout_ms: 30000
+    success_pattern: "ok: "
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "the router sidecar is a build-graph input of every binary whose build.rs requires it"
+  log_fields:
+    spec: "ci-release"
+    test: "sidecar-is-a-build-graph-input"
+    artifact: "flake.nix + crates/tillandsias-headless/build.rs"
+
+rollback:
+  on_failure: "inspect flake.nix stageRouterSidecar and the preBuild attributes on each buildPackage that passes --bin tillandsias"
+  command: "grep -n 'stageRouterSidecar\\|preBuild' flake.nix"
