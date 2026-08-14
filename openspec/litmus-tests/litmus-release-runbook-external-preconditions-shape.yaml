@@ -1,0 +1,64 @@
+name: litmus:release-runbook-external-preconditions-shape
+spec: ci-release
+description: >
+  Pin the release runbook's external-precondition resolvers (order 601-462g).
+  A step that CONSULTS an external system and reports success when that system
+  has nothing to say is the class 601-f6ci was one instance of. The `gh` list
+  subcommands are the dangerous family: they exit 0 on an empty result set, and
+  `--jq '.[0].x'` renders that emptiness as the literal string `null`, so both a
+  bare exit-status test and a bare emptiness test pass.
+
+  Two resolvers close the two instances found in skills/merge-to-main-and-release
+  — the open PR (which announced `PR #null` and walked into merging a pull
+  request that does not exist) and the release run (`gh run watch ""`). Both
+  fixtures are hermetic: they inject a stub `gh` through $GH and never touch
+  GitHub or need auth. Full enumeration:
+  plan/issues/runbook-external-precondition-audit-2026-08-14.md
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/resolve-open-pr.sh
+  - workspace contains scripts/resolve-release-run.sh
+
+critical_path:
+  - step: "Req: both resolvers exist and are executable"
+    command: "test -x scripts/resolve-open-pr.sh && test -x scripts/resolve-release-run.sh && echo 'ok: resolvers present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: resolvers present"
+
+  - step: "OPEN PR: absence as `null`, absence as empty, gh failure, and a real number are four DISTINCT outcomes"
+    # The fixture asserts all four plus whitespace tolerance. Its positive
+    # control matters most: every other scenario asserts a refusal, and a
+    # resolver that refused everything would satisfy them all while making the
+    # daily release unmergeable.
+    command: "scripts/test-resolve-open-pr.sh"
+    success_pattern: "PASS: open-pr-resolver fixture"
+    timeout_ms: 30000
+
+  - step: "RELEASE RUN: the same four outcomes for the workflow-run resolver"
+    command: "scripts/test-resolve-release-run.sh"
+    success_pattern: "PASS: release-run-resolver fixture"
+    timeout_ms: 30000
+
+  - step: "GRAMMAR: each resolver emits exactly one line and separates gh-failure from nothing-to-say"
+    # Collapsing "gh failed" into "nothing there" is a smaller copy of the bug
+    # these scripts exist to fix — and in the PR case that distinction decides
+    # between retrying and creating a pull request.
+    command: "d=$(mktemp -d); printf '#!/usr/bin/env bash\\nexit 1\\n' > \"$d/gh\"; chmod +x \"$d/gh\"; a=$(GH=\"$d/gh\" scripts/resolve-open-pr.sh main linux-next); b=$(GH=\"$d/gh\" scripts/resolve-release-run.sh v0.0.0.1); rm -rf \"$d\"; [ \"$(printf '%s' \"$a\" | wc -l)\" -eq 0 ] && printf '%s' \"$a\" | grep -q '^blocked:open-pr:gh-failed:' && printf '%s' \"$b\" | grep -q '^blocked:release-run:gh-failed:' && echo 'ok: gh failure named distinctly'"
+    timeout_ms: 15000
+    expected_behavior: "ok: gh failure named distinctly"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "release runbook resolvers refuse absence instead of returning a plausible-looking value"
+  log_fields:
+    spec: "ci-release"
+    test: "release-runbook-external-preconditions-shape"
+    artifact: "scripts/resolve-open-pr.sh + scripts/resolve-release-run.sh"
+
+rollback:
+  on_failure: "run scripts/test-resolve-open-pr.sh and scripts/test-resolve-release-run.sh directly; each names the failing scenario"
+  command: "scripts/test-resolve-open-pr.sh; scripts/test-resolve-release-run.sh"
