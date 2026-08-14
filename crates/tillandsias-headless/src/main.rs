@@ -3070,22 +3070,32 @@ const GIT_VAULT_APPROLE_SECRET_OPTS: &str = "target=vault-approle,uid=1000,gid=1
 
 /// Project-unique DNS identity of the per-project git-mirror service.
 ///
-/// Returns the sanitized per-project hostname (`git-{project}`) — the same
+/// Returns the opaque per-project hostname (`git-<mirror-id>`) when the
+/// launcher has minted-or-read the project's mirror identity — the same
 /// string `build_git_run_args` sets as the container `--hostname` and
-/// `--network-alias`. Every consumer of the mirror's name (alias assignment,
-/// the `TILLANDSIAS_GIT_SERVICE` injection into forges, the readiness probe,
-/// the generated gitconfig `insteadOf` redirect) derives it HERE, never from
-/// a constant (order 659-8faj: the old constant aliases `git-service` /
+/// `--network-alias`, and the one the Vault SSH-CA host role certifies
+/// (design D9/D13, `mirror_service_hostname`). Every consumer of the mirror's
+/// name (alias assignment, the `TILLANDSIAS_GIT_SERVICE` injection into
+/// forges, the readiness probe, the generated gitconfig `insteadOf` redirect)
+/// derives it HERE, never from a constant or by re-deriving from the project
+/// name (order 659-8faj: the old constant aliases `git-service` /
 /// `tillandsias-git` gave every project's mirror the same DNS name, so two
 /// simultaneous projects produced two A records for one name and routing
 /// between projects was non-deterministic and cross-project).
 ///
-/// The opaque/salted identity upgrade is decided by the SSH-CA design under
-/// 606-bvnp; this function is the single swap point for it.
+/// `mirror_id` is `None` only on the mirror-CREATE lane that tolerates a
+/// downed Vault (status-check's throwaway no-push mirror): the derivation
+/// then falls back to the sanitized project-derived name, which is exactly
+/// the guest-side fallback in `git_mirror_host()` (`lib-common.sh`) when
+/// `TILLANDSIAS_GIT_SERVICE` is unset. The live mirrors of every
+/// Vault-dependency lane always carry a minted opaque id.
 ///
-/// @trace spec:git-mirror-service
-pub(crate) fn git_mirror_service_identity(project_name: &str) -> String {
-    sanitize_hostname(&format!("git-{project_name}"))
+/// @trace spec:git-mirror-service, spec:tillandsias-vault
+pub(crate) fn git_mirror_service_identity(mirror_id: Option<&str>, project_name: &str) -> String {
+    match mirror_id {
+        Some(id) => crate::vault_bootstrap::mirror_service_hostname(id),
+        None => sanitize_hostname(&format!("git-{project_name}")),
+    }
 }
 
 /// Build the podman launch args for the per-project git-mirror container.
@@ -3098,6 +3108,7 @@ pub(crate) fn git_mirror_service_identity(project_name: &str) -> String {
 /// @trace spec:tillandsias-vault, spec:git-mirror-service
 fn build_git_run_args(
     project_name: &str,
+    mirror_id: Option<&str>,
     certs_dir: &Path,
     image: &str,
     project_remote_url: Option<&str>,
@@ -3118,7 +3129,7 @@ fn build_git_run_args(
         "--name".into(),
         format!("tillandsias-git-{project_name}"),
         "--hostname".into(),
-        git_mirror_service_identity(project_name),
+        git_mirror_service_identity(mirror_id, project_name),
         // Order 659-8faj: the DNS identity is PER-PROJECT. The old constant
         // aliases (`git-service`, `tillandsias-git`) were assigned to EVERY
         // project's mirror, so with two projects up one name had two A records
@@ -3127,7 +3138,7 @@ fn build_git_run_args(
         // an anonymous write path. Clients receive this exact name via
         // TILLANDSIAS_GIT_SERVICE; do not reintroduce a shared alias.
         "--network-alias".into(),
-        git_mirror_service_identity(project_name),
+        git_mirror_service_identity(mirror_id, project_name),
         "--network".into(),
         // Order 606-9wqd: enclave-only. The post-receive hook's `git push`
         // already goes through the proxy via proxy_env_args() below — that was
@@ -5143,6 +5154,7 @@ async fn cleanup_shared_stack_if_no_running_forge(
 fn build_status_check_forge_args(
     project_path: &Path,
     project_name: &str,
+    mirror_id: Option<&str>,
     certs_dir: &Path,
     version: &str,
 ) -> Vec<String> {
@@ -5207,7 +5219,7 @@ fn build_status_check_forge_args(
             // shared `git-service` alias is no longer assigned to any mirror.
             + &format!(
                 "\ncheck_port {} 9418 git\ncheck_inference\necho \"[status-check] forge online\"",
-                git_mirror_service_identity(project_name)
+                git_mirror_service_identity(mirror_id, project_name)
             ),
     ]);
 
@@ -5266,6 +5278,7 @@ fn env_or(name: &str, fallback: &str) -> String {
 fn build_opencode_forge_args(
     project_path: &Path,
     project_name: &str,
+    mirror_id: Option<&str>,
     prompt: Option<&str>,
     certs_dir: &Path,
     version: &str,
@@ -5417,7 +5430,7 @@ fn build_opencode_forge_args(
             "--env".into(),
             format!(
                 "TILLANDSIAS_GIT_SERVICE={}",
-                git_mirror_service_identity(project_name)
+                git_mirror_service_identity(mirror_id, project_name)
             ),
         ]);
     } else if forge_uses_host_mount() {
@@ -5452,7 +5465,7 @@ fn build_opencode_forge_args(
             "--env".into(),
             format!(
                 "TILLANDSIAS_GIT_SERVICE={}",
-                git_mirror_service_identity(project_name)
+                git_mirror_service_identity(mirror_id, project_name)
             ),
         ]);
     }
@@ -5480,7 +5493,7 @@ fn build_opencode_forge_args(
     // the forge. lib-common.sh's rewrite_origin_for_enclave_push detects the
     // pre-injected config and skips redundant writes.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, project_path) {
+    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, mirror_id, project_path) {
         args.extend([
             "--mount".into(),
             format!(
@@ -7132,17 +7145,24 @@ fn run_status_check(debug: bool) -> Result<(), String> {
         // status lane (the mint below tolerates), so identity provisioning
         // follows the same site rule: tolerate, but LOUD (not debug-gated;
         // windows-260716-2).
-        if let Err(e) = crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+        let status_mirror_id = match crate::vault_bootstrap::ensure_mirror_identity_provisioned(
             project_name,
             &enclave_subnet(),
             debug,
         )
         .await
         {
-            eprintln!(
-                "[tillandsias] WARNING: status-check mirror service-identity provisioning skipped: {e}"
-            );
-        }
+            Ok(id) => Some(id),
+            Err(e) => {
+                // Tolerant lane: Vault may be down; the mirror falls back to
+                // the project-derived hostname (matching the guest-side
+                // git_mirror_host() fallback). Loud, not debug-gated.
+                eprintln!(
+                    "[tillandsias] WARNING: status-check mirror service-identity provisioning skipped: {e}"
+                );
+                None
+            }
+        };
         let git_vault_secret = match mint_git_mirror_vault_auto_auth(project_name, debug).await {
             Ok(secret) => Some(secret),
             Err(e) => {
@@ -7163,6 +7183,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 // throwaway.
                 &build_git_run_args(
                     project_name,
+                    status_mirror_id.as_deref(),
                     &certs_dir,
                     &git_image,
                     None,
@@ -7191,8 +7212,13 @@ fn run_status_check(debug: bool) -> Result<(), String> {
                 .map_err(|e| e.to_string())?;
         }
 
-        let status_args =
-            build_status_check_forge_args(root.as_path(), project_name, &certs_dir, version);
+        let status_args = build_status_check_forge_args(
+            root.as_path(),
+            project_name,
+            status_mirror_id.as_deref(),
+            &certs_dir,
+            version,
+        );
         let result = client
             .run_container_observed(
                 "status-forge",
@@ -8149,7 +8175,11 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 /// Returns `Some(path)` on success, `None` on any I/O error.
 /// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
-pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> Option<PathBuf> {
+pub(crate) fn write_forge_gitconfig(
+    project_name: &str,
+    mirror_id: Option<&str>,
+    project_path: &Path,
+) -> Option<PathBuf> {
     let home = std::env::var("HOME").ok()?;
     let forge_git_dir = PathBuf::from(home)
         .join(".cache")
@@ -8216,7 +8246,7 @@ pub(crate) fn write_forge_gitconfig(project_name: &str, project_path: &Path) -> 
         // shared `tillandsias-git` alias is no longer assigned to any mirror.
         let mirror_url = format!(
             "git://{}/{}",
-            git_mirror_service_identity(project_name),
+            git_mirror_service_identity(mirror_id, project_name),
             project_name
         );
         config.push_str(&format!("[url \"{}\"]\n", mirror_url));
@@ -9668,7 +9698,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         // construction. Vault is already a hard dependency of this lane
         // (ensure_vault_running above; the mint below fails loud), so
         // failure here is LOUD by the same windows-260716-2 rule.
-        crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+        let opencode_mirror_id = crate::vault_bootstrap::ensure_mirror_identity_provisioned(
             project_name,
             &enclave_subnet(),
             debug,
@@ -9682,6 +9712,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                 &git_container_name,
                 &build_git_run_args(
                     project_name,
+                    Some(&opencode_mirror_id),
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
@@ -9731,6 +9762,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
             project_name,
+            Some(&opencode_mirror_id),
             prompt,
             &certs_dir,
             version,
@@ -10766,7 +10798,7 @@ pub(crate) fn run_opencode_web_mode(
         // no reuse branch) and Vault is already a hard dependency here
         // (ensure_vault_running above; mint below fails loud), so failure is
         // LOUD by the same windows-260716-2 rule.
-        crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+        let opencode_web_mirror_id = crate::vault_bootstrap::ensure_mirror_identity_provisioned(
             project_name,
             &enclave_subnet(),
             debug,
@@ -10780,6 +10812,7 @@ pub(crate) fn run_opencode_web_mode(
                 &git_container_name,
                 &build_git_run_args(
                     project_name,
+                    Some(&opencode_web_mirror_id),
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
@@ -10830,6 +10863,7 @@ pub(crate) fn run_opencode_web_mode(
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
             project_name,
+            Some(&opencode_web_mirror_id),
             prompt,
             &certs_dir,
             version,
@@ -11149,7 +11183,7 @@ pub(crate) fn ensure_enclave_for_project(
     project_path: Option<&Path>,
     own_launch_marker: Option<&str>,
     debug: bool,
-) -> Result<PathBuf, String> {
+) -> Result<(PathBuf, Option<String>), String> {
     // Idempotent re-attach wipe FIRST, prerequisites AFTER. The shared-stack
     // cleanup removes tillandsias-proxy whenever no lane container is live —
     // and on a FIRST launch none is — so running it after ensure_forge_launch
@@ -11224,7 +11258,7 @@ pub(crate) fn ensure_enclave_for_project(
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
-    rt.block_on(async {
+    let mirror_identity = rt.block_on(async {
         // Step 15 slice 2: bring the router up BEFORE the per-project
         // git/inference/forge spawn so the enclave's `router` alias
         // is live by the time Squid's cache_peer / git-service HTTPS
@@ -11252,7 +11286,7 @@ pub(crate) fn ensure_enclave_for_project(
         // ad-hoc proxy container start that duplicated ensure_proxy_running.
         // @trace plan/issues/launch-paths-route-through-dependency-model
 
-        ensure_shared_git_and_inference_for_launch(
+        let mirror_identity = ensure_shared_git_and_inference_for_launch(
             &client,
             project_name,
             &certs_dir,
@@ -11297,12 +11331,11 @@ pub(crate) fn ensure_enclave_for_project(
             )
             .await?;
         }
-        Ok::<(), String>(())
+        Ok::<Option<String>, String>(mirror_identity)
     })?;
 
-    Ok(certs_dir)
+    Ok((certs_dir, mirror_identity))
 }
-
 /// Ensure the project's git mirror and the shared inference container for a
 /// forge launch, per the operator's order-443 per-component concurrency rule:
 /// the STATEFUL mirror is ensure-if-running (never replace a healthy one a
@@ -11321,7 +11354,7 @@ async fn ensure_shared_git_and_inference_for_launch(
     project_remote_url: Option<&str>,
     project_default_branch: Option<&str>,
     debug: bool,
-) -> Result<(), String> {
+) -> Result<Option<String>, String> {
     // Order 443: the git mirror is STATEFUL — it serves clones and holds a
     // Vault lease. Do NOT --replace a running mirror on a forge launch: a
     // concurrent second forge would destroy the mirror out from under a
@@ -11331,7 +11364,14 @@ async fn ensure_shared_git_and_inference_for_launch(
     // down) still recreates it fresh with the current image. Only mint a new
     // Vault token when actually creating the container.
     let git_container_name = format!("tillandsias-git-{project_name}");
-    if crate::vault_bootstrap::container_running(&git_container_name) {
+    // The mirror-id the launch lane must pass to the forge builders so every
+    // guest artifact (TILLANDSIAS_GIT_SERVICE, gitconfig insteadOf, clone
+    // transport) names the SAME per-project DNS identity the mirror actually
+    // answers as (order 606-bvnp D13). None → the project-derived fallback
+    // (`git-<sanitized project>`), matching the guest-side git_mirror_host()
+    // fallback and pre-swap mirrors.
+    let git_mirror_running = crate::vault_bootstrap::container_running(&git_container_name);
+    let mirror_identity: Option<String> = if git_mirror_running {
         if debug {
             eprintln!(
                 "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
@@ -11418,6 +11458,20 @@ async fn ensure_shared_git_and_inference_for_launch(
                 "[tillandsias] [forge-launch] WARNING: reused-mirror HEAD repair failed: {e}"
             );
         }
+        // Order 606-bvnp D13: a REUSED mirror's DNS identity is whatever the
+        // running container was launched with — never re-mint (a fresh mint
+        // produces a NEW opaque id and the builders would address a hostname
+        // no container answers as; pre-swap mirrors answer as `git-<project>`).
+        // Recover it Vault-free by reading the container's own Config.Hostname
+        // and returning the id portion after the `git-` prefix; an unreadable
+        // or empty hostname degrades to `None` (project-derived fallback,
+        // exactly what a pre-swap mirror answers as).
+        client
+            .inspect_container(&git_container_name)
+            .await
+            .ok()
+            .filter(|i| !i.config_hostname.is_empty())
+            .and_then(|i| i.config_hostname.strip_prefix("git-").map(str::to_string))
     } else {
         // Order 606-bvnp (design D13 + §2.3, rungs T1/T2): a project's FIRST
         // mirror provision mints its opaque mirror-id and the exact
@@ -11429,7 +11483,7 @@ async fn ensure_shared_git_and_inference_for_launch(
         // failure here is LOUD by the same windows-260716-2 rule as the
         // credential mint below (Vault is already a hard dependency of this
         // create path).
-        crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+        let forge_launch_mirror_id = crate::vault_bootstrap::ensure_mirror_identity_provisioned(
             project_name,
             &enclave_subnet(),
             debug,
@@ -11443,6 +11497,7 @@ async fn ensure_shared_git_and_inference_for_launch(
                 &git_container_name,
                 &build_git_run_args(
                     project_name,
+                    Some(&forge_launch_mirror_id),
                     certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url,
@@ -11453,7 +11508,8 @@ async fn ensure_shared_git_and_inference_for_launch(
             )
             .await
             .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
-    }
+        Some(forge_launch_mirror_id)
+    };
     // Order 443: inference is nearly stateless but --replacing it on every
     // launch drops loaded models and interrupts a sibling's inference.
     // Recreate-if-not-running (ephemerality/idempotency), not always.
@@ -11483,7 +11539,7 @@ async fn ensure_shared_git_and_inference_for_launch(
             .await
             .map_err(|e| format!("[forge-launch] failed to start inference: {e}"))?;
     }
-    Ok(())
+    Ok(mirror_identity)
 }
 
 /// Build the forge `podman run` args for an interactive launch.
@@ -11514,6 +11570,7 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
     project_name: &str,
+    mirror_id: Option<&str>,
     certs_dir: &Path,
     version: &str,
     mode: ForgeAgentMode,
@@ -11522,6 +11579,7 @@ pub(crate) fn build_forge_agent_run_args(
     build_forge_agent_run_args_with_vault(
         project_path,
         project_name,
+        mirror_id,
         certs_dir,
         version,
         mode,
@@ -11537,6 +11595,7 @@ pub(crate) fn build_forge_agent_run_args(
 fn build_forge_agent_run_args_with_vault(
     project_path: &Path,
     project_name: &str,
+    mirror_id: Option<&str>,
     certs_dir: &Path,
     version: &str,
     mode: ForgeAgentMode,
@@ -11638,7 +11697,7 @@ fn build_forge_agent_run_args_with_vault(
         // Order 659-8faj: per-project mirror identity, not a shared constant.
         spec.env(
             "TILLANDSIAS_GIT_SERVICE",
-            git_mirror_service_identity(project_name),
+            git_mirror_service_identity(mirror_id, project_name),
         )
     };
     // Seed-branch pin (order 501, repair B6): same sticky-HEAD repair as
@@ -11750,7 +11809,7 @@ fn build_forge_agent_run_args_with_vault(
     // /home/forge/.config/git — the file is owned by Tillandsias, stored
     // outside the project workspace, and bind-mounted read-only.
     // @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, project_path) {
+    if let Some(gitconfig_path) = write_forge_gitconfig(project_name, mirror_id, project_path) {
         spec = spec.bind_mount(
             gitconfig_path.display().to_string(),
             "/home/forge/.gitconfig",
@@ -11852,6 +11911,7 @@ fn build_forge_agent_run_args_with_vault(
 pub(crate) fn build_forge_agent_run_argv(
     project_path: &Path,
     project_name: &str,
+    mirror_id: Option<&str>,
     certs_dir: &Path,
     version: &str,
     mode: ForgeAgentMode,
@@ -11869,6 +11929,7 @@ pub(crate) fn build_forge_agent_run_argv(
     argv.extend(build_forge_agent_run_args(
         project_path,
         project_name,
+        mirror_id,
         certs_dir,
         version,
         mode,
@@ -12003,7 +12064,7 @@ fn run_forge_agent_cli_mode(
     // during our pre-create window keeps the shared stack up for us. Held for
     // the whole session; the exit cleanup below excludes it by name.
     let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-    let certs_dir =
+    let (certs_dir, mirror_identity) =
         ensure_enclave_for_project(project_name, Some(&canonical), Some(&launch_marker), debug)?;
     ensure_provider_auth(mode, debug)?;
 
@@ -12029,6 +12090,7 @@ fn run_forge_agent_cli_mode(
     let forge_args = build_forge_agent_run_args_with_vault(
         &canonical,
         project_name,
+        mirror_identity.as_deref(),
         &certs_dir,
         version,
         mode,
@@ -12167,7 +12229,7 @@ pub(crate) fn launch_forge_agent(
         // concern from the slice-2 progress note. Credentialed modes are
         // covered: they re-exec the CLI lane, which holds its own marker.
         let (launch_marker, _launch_guard) = acquire_launch_in_flight_marker(project_name, debug)?;
-        let certs_dir = ensure_enclave_for_project(
+        let (certs_dir, mirror_identity) = ensure_enclave_for_project(
             project_name,
             Some(&canonical),
             Some(&launch_marker),
@@ -12176,6 +12238,7 @@ pub(crate) fn launch_forge_agent(
         build_forge_agent_run_argv(
             &canonical,
             project_name,
+            mirror_identity.as_deref(),
             &certs_dir,
             VERSION.trim(),
             mode,
@@ -15312,6 +15375,7 @@ mod tests {
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Maintenance,
@@ -15710,6 +15774,7 @@ mod tests {
             let argv = build_forge_agent_run_argv(
                 &PathBuf::from("/tmp/project"),
                 "alpha",
+                None,
                 &PathBuf::from("/tmp/ca"),
                 "1.2.3",
                 mode,
@@ -15769,6 +15834,7 @@ mod tests {
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
@@ -15864,6 +15930,7 @@ mod tests {
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             certs.path(),
             "1.2.3",
             ForgeAgentMode::Claude,
@@ -15940,6 +16007,7 @@ mod tests {
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
@@ -15961,6 +16029,7 @@ mod tests {
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/home/tlatoani/src/tillandsias"),
             "tillandsias",
+            None,
             &PathBuf::from("/tmp/tillandsias-ca"),
             "0.2.260518",
             ForgeAgentMode::Claude,
@@ -16027,7 +16096,15 @@ mod tests {
     fn enclave_egress_dual_home_targets_managed_egress_network() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+        let git = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
 
         // The proxy dual-homes because the spec REQUIRES it (enclave-network
         // spec.md:39) — it is the one sanctioned exception.
@@ -17019,7 +17096,15 @@ mod tests {
             "proxy args must include --replace (order 387): {proxy:?}"
         );
 
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+        let git = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
         assert!(
             has_arg(&git, "--replace"),
             "git-mirror args must include --replace (order 387): {git:?}"
@@ -17055,7 +17140,15 @@ mod tests {
     fn stack_service_args_do_not_pin_static_ips() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+        let git = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
         let inference = build_inference_run_args(&certs, "tillandsias-inference:v1", false);
         let router = build_router_run_args(&certs, "tillandsias-router:v1", 8080);
 
@@ -17089,7 +17182,15 @@ mod tests {
         // /srv/git must be writable (named volume) so the bare repo persists
         // and the post-receive hook can be installed.
         let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
 
         // No `--base-path=...` override appended after the image — confirms
         // we let the image entrypoint take over.
@@ -17113,7 +17214,15 @@ mod tests {
     #[test]
     fn git_run_args_assign_per_project_dns_identity_never_shared_aliases() {
         let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
 
         // Hostname and network alias are the SAME per-project identity.
         assert!(
@@ -17139,10 +17248,45 @@ mod tests {
         );
 
         // Sanitization flows through the single derivation point.
-        assert_eq!(git_mirror_service_identity("alpha"), "git-alpha");
+        assert_eq!(git_mirror_service_identity(None, "alpha"), "git-alpha");
         assert_eq!(
-            git_mirror_service_identity("has_underscore"),
+            git_mirror_service_identity(None, "has_underscore"),
             "git-has-underscore"
+        );
+
+        // D13 opaque mirror-id: when a minted per-project id is threaded
+        // through, the DNS identity is `git-<mirror-id>` — NOT derived from
+        // the plaintext project name at all. A 20-char base32hex id overrides
+        // the legacy name-based hostname entirely.
+        let opaque = "abcdef0123456789abcdef";
+        assert_eq!(
+            git_mirror_service_identity(Some(opaque), "alpha"),
+            format!("git-{opaque}"),
+            "opaque mirror-id must fully replace the name-based hostname (D13)"
+        );
+        let with_mirror_id = build_git_run_args(
+            "alpha",
+            Some(opaque),
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
+        assert!(
+            has_arg(&with_mirror_id, &format!("git-{opaque}")),
+            "mirror-id must reach the container hostname: {with_mirror_id:?}"
+        );
+        let opaque_aliases: Vec<&String> = with_mirror_id
+            .iter()
+            .zip(with_mirror_id.iter().skip(1))
+            .filter(|(flag, _)| flag.as_str() == "--network-alias")
+            .map(|(_, value)| value)
+            .collect();
+        assert_eq!(
+            opaque_aliases,
+            vec![&format!("git-{opaque}")],
+            "network alias must match the opaque identity: {with_mirror_id:?}"
         );
     }
 
@@ -17150,8 +17294,15 @@ mod tests {
     fn git_run_args_forward_project_remote_url_when_present() {
         let certs = PathBuf::from("/tmp/ca");
         let url = "https://github.com/example/repo.git";
-        let with_url =
-            build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None, None);
+        let with_url = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            Some(url),
+            None,
+            None,
+        );
         assert!(
             with_url
                 .iter()
@@ -17159,8 +17310,15 @@ mod tests {
             "expected upstream URL env var: {with_url:?}"
         );
 
-        let without_url =
-            build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+        let without_url = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
         assert!(
             !without_url
                 .iter()
@@ -17174,6 +17332,7 @@ mod tests {
         let certs = PathBuf::from("/tmp/ca");
         let args = build_git_run_args(
             "alpha",
+            None,
             &certs,
             "tillandsias-git:v1",
             Some("https://host-user:host-secret@github.com/example/repo.git"),
@@ -17201,6 +17360,7 @@ mod tests {
         let secret = "tillandsias-vault-approle-git-mirror-agent-alpha-1234-1";
         let args = build_git_run_args(
             "alpha",
+            None,
             &certs,
             "tillandsias-git:v1",
             None,
@@ -17268,7 +17428,15 @@ mod tests {
         // caller actually minted, silently defeating the fail-loud mint
         // discipline enforced upstream by `?` propagation.
         let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None, None);
+        let args = build_git_run_args(
+            "alpha",
+            None,
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            None,
+            None,
+        );
 
         assert!(
             !args.iter().any(|a| a.contains("target=vault-approle")),
@@ -17293,6 +17461,7 @@ mod tests {
         let args = build_status_check_forge_args(
             &PathBuf::from("/tmp/workspace"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
         );
@@ -17349,6 +17518,7 @@ mod tests {
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             None, // no prompt → interactive lane
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
@@ -17371,6 +17541,7 @@ mod tests {
         let prompted = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             Some("one shot"),
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
@@ -17404,6 +17575,7 @@ mod tests {
         let opencode = build_opencode_forge_args(
             &project,
             "alpha",
+            None,
             Some("delegated opencode"),
             &certs,
             "1.2.3",
@@ -17415,6 +17587,7 @@ mod tests {
         let codex = build_forge_agent_run_args_with_vault(
             &project,
             "alpha",
+            None,
             &certs,
             "1.2.3",
             ForgeAgentMode::Codex,
@@ -17440,6 +17613,7 @@ mod tests {
         let web = build_opencode_forge_args(
             &project,
             "alpha",
+            None,
             Some("detached web seed"),
             &certs,
             "1.2.3",
@@ -17457,6 +17631,7 @@ mod tests {
         let unstructured = build_opencode_forge_args(
             &project,
             "alpha",
+            None,
             Some("ordinary prompt"),
             &certs,
             "1.2.3",
@@ -17500,6 +17675,7 @@ mod tests {
             &project,
             "alpha",
             None,
+            None,
             &certs,
             "1.2.3",
             ForgeMode::Cli,
@@ -17510,6 +17686,7 @@ mod tests {
         let agent = build_forge_agent_run_args_with_vault(
             &project,
             "alpha",
+            None,
             &certs,
             "1.2.3",
             ForgeAgentMode::Maintenance,
@@ -17531,6 +17708,7 @@ mod tests {
             &no_repo,
             "alpha",
             None,
+            None,
             &certs,
             "1.2.3",
             ForgeMode::Cli,
@@ -17541,6 +17719,7 @@ mod tests {
         let agent = build_forge_agent_run_args_with_vault(
             &no_repo,
             "alpha",
+            None,
             &certs,
             "1.2.3",
             ForgeAgentMode::Maintenance,
@@ -17735,6 +17914,7 @@ mod tests {
             build_opencode_forge_args(
                 &project,
                 "alpha",
+                None,
                 Some("seed prompt"),
                 &certs,
                 "1.2.3",
@@ -18147,6 +18327,7 @@ esac
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             Some("hello"),
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
@@ -18246,6 +18427,7 @@ esac
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             Some("hello"),
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
@@ -18267,6 +18449,7 @@ esac
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
@@ -18297,6 +18480,7 @@ esac
             &PathBuf::from("/tmp/project"),
             "alpha",
             None,
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
@@ -18320,6 +18504,7 @@ esac
         let args = build_opencode_forge_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             Some("hello"),
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
@@ -18368,6 +18553,7 @@ esac
         let argv = build_forge_agent_run_argv(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Codex,
@@ -18396,6 +18582,7 @@ esac
             let args = build_forge_agent_run_args_with_vault(
                 &PathBuf::from("/tmp/project"),
                 "alpha",
+                None,
                 &PathBuf::from("/tmp/ca"),
                 "1.2.3",
                 mode,
@@ -18418,6 +18605,7 @@ esac
             let args = build_forge_agent_run_args_with_vault(
                 &PathBuf::from("/tmp/project"),
                 "alpha",
+                None,
                 &PathBuf::from("/tmp/ca"),
                 "1.2.3",
                 mode,
@@ -18444,6 +18632,7 @@ esac
         let with_prompt = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Codex,
@@ -18464,6 +18653,7 @@ esac
         let no_prompt = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Codex,
@@ -18539,7 +18729,8 @@ esac
             (ForgeAgentMode::Antigravity, "antigravity"),
             (ForgeAgentMode::Maintenance, "terminal"),
         ] {
-            let args = build_forge_agent_run_args(&project, "alpha", &certs, "1.2.3", mode, false);
+            let args =
+                build_forge_agent_run_args(&project, "alpha", None, &certs, "1.2.3", mode, false);
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
                 has_arg(&args, &identity),
@@ -18559,7 +18750,7 @@ esac
             (ForgeMode::Web, "opencode-web"),
         ] {
             let args = build_opencode_forge_args(
-                &project, "alpha", None, &certs, "1.2.3", mode, None, false, false,
+                &project, "alpha", None, None, &certs, "1.2.3", mode, None, false, false,
             );
             let identity = format!("TILLANDSIAS_AGENT={expected}");
             assert!(
@@ -18581,6 +18772,7 @@ esac
         let args = build_forge_agent_run_args(
             &PathBuf::from("/tmp/project"),
             "alpha",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::Codex,
@@ -18703,7 +18895,7 @@ esac
             return; // no git binary on this host; the resolver test covers the rest
         }
 
-        let path = write_forge_gitconfig("local-only", &proj).expect("config written");
+        let path = write_forge_gitconfig("local-only", None, &proj).expect("config written");
         let text = std::fs::read_to_string(&path).expect("read config");
         assert!(
             !text.contains("[url "),
@@ -18770,7 +18962,7 @@ esac
         // SAFETY: single-threaded test, no concurrent env reads.
         unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
 
-        let result = write_forge_gitconfig("test-project", &project_path);
+        let result = write_forge_gitconfig("test-project", None, &project_path);
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let config_path = result.unwrap();
 
@@ -18857,7 +19049,7 @@ esac
         // SAFETY: single-threaded test, no concurrent env reads.
         unsafe { std::env::set_var("HOME", tmp.path().to_string_lossy().as_ref()) }
 
-        let result = write_forge_gitconfig("ssh-test", &project_path);
+        let result = write_forge_gitconfig("ssh-test", None, &project_path);
         assert!(result.is_some(), "write_forge_gitconfig should succeed");
         let contents =
             std::fs::read_to_string(result.as_ref().unwrap()).expect("read forge gitconfig");
@@ -19030,6 +19222,7 @@ esac
         let agent_args = build_forge_agent_run_args(
             &project_path,
             "alpha",
+            None,
             &tmp.path().join("ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
@@ -19038,6 +19231,7 @@ esac
         let raw_args = build_opencode_forge_args(
             &project_path,
             "alpha",
+            None,
             None,
             &tmp.path().join("ca"),
             "1.2.3",
@@ -19089,6 +19283,7 @@ esac
         let fail_closed_agent = build_forge_agent_run_args(
             &project_path,
             "alpha",
+            None,
             &tmp.path().join("ca"),
             "1.2.3",
             ForgeAgentMode::Claude,
@@ -19097,6 +19292,7 @@ esac
         let fail_closed_raw = build_opencode_forge_args(
             &project_path,
             "alpha",
+            None,
             None,
             &tmp.path().join("ca"),
             "1.2.3",
@@ -19375,7 +19571,7 @@ esac
             .unwrap_or("tillandsias");
         let certs_dir = ensure_ca_bundle(false).expect("ensure_ca_bundle");
         let status_args =
-            build_status_check_forge_args(root.as_path(), project_name, &certs_dir, version);
+            build_status_check_forge_args(root.as_path(), project_name, None, &certs_dir, version);
         assert!(
             status_args.join(" ").contains("check_inference()"),
             "status-check plan should keep the inference probe"
@@ -19467,7 +19663,7 @@ esac
         );
         assert!(
             window.contains("TILLANDSIAS_GIT_SERVICE={}")
-                && window.contains("git_mirror_service_identity(project_name)"),
+                && window.contains("git_mirror_service_identity(mirror_id, project_name)"),
             "clone-only default must set the mirror network-clone presence flag \
              to the per-project identity (order 659-8faj)"
         );
@@ -20745,6 +20941,7 @@ esac
         let args = build_forge_agent_run_args_with_vault(
             &PathBuf::from("/tmp/project"),
             "testproj",
+            None,
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeAgentMode::OpenCode,

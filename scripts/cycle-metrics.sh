@@ -240,6 +240,48 @@ printf 'experts_substitution: unknown (needs the agent harness tool log; not der
 # the log contains no tagged rows at all, keep the exact pre-682-m8ek line
 # (distinct tools as a server proxy, the rest NAMED uninstrumented) rather than
 # fabricating zeros — this is what keeps the shape byte-identical on old logs.
+# ── expert health (packet 737-zcj5) ──────────────────────────────────────────
+# CALL VOLUME CANNOT SEE AN OUTAGE. A server that is DOWN writes no usage rows,
+# and neither does a server nobody called — both render as absence in every
+# count above. `health=` is the field that separates them, sourced from
+# scripts/check-mcp-expert-health.sh's JSONL rather than from usage at all.
+#   health=ok         every expected expert answered its last probe
+#   health=down:<csv> named experts failed their last probe (the outage)
+#   health=absent     no expected expert is registered in this environment
+#   health=unprobed   the probe has not run here; NOT the same as healthy
+# Keeping `unprobed` distinct from `ok` matters: reporting an unmeasured expert
+# as healthy is the order-531 shape (truthful `experts: ready`, every answer
+# unsupported) this line exists to prevent.
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
+mcp_health="unprobed"
+mcp_outages=0
+if [ -s "$HEALTH_LOG" ]; then
+    # Last state wins per server; count every non-up record for the outage line.
+    mcp_health="$(awk -F'"' '
+        /"server":/ {
+            srv=""; st="";
+            for (i = 1; i <= NF; i++) {
+                if ($i == "server") srv = $(i + 2);
+                if ($i == "state")  st  = $(i + 2);
+            }
+            if (srv != "" && st != "") last[srv] = st;
+        }
+        END {
+            down = ""; absent = 0; total = 0;
+            for (s in last) {
+                total++;
+                if (last[s] == "down") down = down (down == "" ? "" : ",") s;
+                else if (last[s] == "absent") absent++;
+            }
+            if (total == 0) { print "unprobed" }
+            else if (down != "") { print "down:" down }
+            else if (absent == total) { print "absent" }
+            else { print "ok" }
+        }' "$HEALTH_LOG" 2>/dev/null)"
+    [ -n "$mcp_health" ] || mcp_health="unprobed"
+    mcp_outages="$(grep -c '"state":"\(down\|absent\)"' "$HEALTH_LOG" 2>/dev/null)" || mcp_outages=0
+fi
+
 if grep -q '"server":"' "$USAGE_LOG" 2>/dev/null; then
     # Real per-server counts. grep|sed|sort|uniq (no python); tolerant of
     # malformed lines. `legacy_untagged` counts any pre-682-m8ek rows still in
@@ -251,15 +293,27 @@ if grep -q '"server":"' "$USAGE_LOG" 2>/dev/null; then
     mcp_servers=$(grep -o '"server":"[^"]*"' "$USAGE_LOG" 2>/dev/null \
         | sed 's/.*:"//; s/"$//' | sort -u | grep -c .) || mcp_servers=0
     legacy_untagged=$(grep -vc '"server":"' "$USAGE_LOG" 2>/dev/null) || legacy_untagged=0
-    printf 'mcp: servers=%s per_server=%s legacy_untagged=%s source=%s\n' \
-        "$mcp_servers" "$per_server" "$legacy_untagged" "$source_state"
+    printf 'mcp: servers=%s per_server=%s legacy_untagged=%s health=%s source=%s\n' \
+        "$mcp_servers" "$per_server" "$legacy_untagged" "$mcp_health" "$source_state"
 else
     mcp_servers=0
     if [ "$tools" != "-" ]; then
         mcp_servers=$(printf '%s' "$tools" | tr ',' '\n' | grep -c .)
     fi
-    printf 'mcp: servers=%s plan-expert-calls=%s other-servers=uninstrumented-see-682-m8ek source=%s\n' \
-        "$mcp_servers" "$calls" "$source_state"
+    printf 'mcp: servers=%s plan-expert-calls=%s other-servers=uninstrumented-see-682-m8ek health=%s source=%s\n' \
+        "$mcp_servers" "$calls" "$mcp_health" "$source_state"
+fi
+
+# NEGATIVE CONTROL (packet 737-zcj5, exit criterion 3). This line is emitted
+# ONLY when a probe actually recorded a non-up state. A healthy cycle prints
+# nothing here, because a signal that fires every cycle is one nobody reads —
+# this milestone's own recurring failure. When it does fire it carries the
+# ledger trace: the handoff pastes cycle-metrics verbatim, and the loop-status
+# entry is built from the handoff, so the outage reaches the plan without any
+# agent choosing to write it down.
+if [ "${mcp_outages:-0}" -gt 0 ] 2>/dev/null; then
+    printf 'mcp_outage: records=%s health=%s log=%s action=record-and-continue-see-737-zcj5\n' \
+        "$mcp_outages" "$mcp_health" "$HEALTH_LOG"
 fi
 
 # ── expert accuracy (packet 682-ym68) ────────────────────────────────────────

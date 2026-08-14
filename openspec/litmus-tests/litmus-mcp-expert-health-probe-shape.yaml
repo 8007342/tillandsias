@@ -1,0 +1,113 @@
+# @trace spec:meta-orchestration
+# @trace order:737-zcj5
+#
+# Pins the executable MCP expert health probe (order 737-zcj5). `mcp_first_read_path`
+# has always said "fall back and keep going, THEN RECORD IT" — but named no
+# destination, so on 2026-08-14 two hosts skipped the recording half on the same
+# day and both outages left no trace in the ledger at all. This test falsifies
+# drift in the probe's verdict grammar, its four branches, the durable JSONL
+# trace, the `health=` field that makes an outage distinguishable from silence,
+# the negative control that keeps a healthy cycle quiet, and the wiring that
+# gives the methodology rule a concrete referent.
+name: litmus:mcp-expert-health-probe-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/check-mcp-expert-health.sh: the falsifiable verdict grammar
+  ^(ok:experts-healthy|down:<csv>|absent:not-registered|skip:<reason>)$, the
+  healthy/down/partial/absent branches, the health JSONL trace, the args-honoured
+  regression guard, cycle-metrics.sh's health= field and its mcp_outage: negative
+  control, and the meta-orchestration + methodology wiring to the probe.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-mcp-expert-health.sh
+  - workspace contains scripts/cycle-metrics.sh
+  - workspace contains skills/meta-orchestration/SKILL.md
+  - workspace contains methodology/distributed-work.yaml
+  - shell utilities (grep, bash, jq, mktemp, awk) are available in PATH
+
+critical_path:
+  - step: "probe is executable and exposes its fixture mode"
+    command: "test -x scripts/check-mcp-expert-health.sh && grep -q 'fixture()' scripts/check-mcp-expert-health.sh && echo 'ok: probe-defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-defined"
+
+  - step: "all hermetic scenarios pass (healthy, both-down, partial, absent, grammar, log trace)"
+    command: "scripts/check-mcp-expert-health.sh fixture >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/check-mcp-expert-health.sh fixture; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: scenarios-pass"
+
+  - step: "a registration naming no expected expert yields absent, not a false healthy"
+    command: "d=$(mktemp -d); printf '%s\\n' '{\"mcpServers\":{\"git-tools\":{\"command\":\"true\"}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 2 ] && [ \"$out\" = 'absent:not-registered' ] && echo 'ok: absent-not-healthy' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: absent-not-healthy"
+
+  - step: "a registered but non-answering expert is reported down (handshake, not file-existence)"
+    # `true` EXISTS and exits 0 — a `test -x`-style check would call it healthy.
+    # Only speaking the MCP initialize handshake catches a server that starts and
+    # never answers, which is the outage shape worth catching.
+    command: "d=$(mktemp -d); printf '%s\\n' '{\"mcpServers\":{\"forge-plan\":{\"command\":\"true\"},\"project-info\":{\"command\":\"true\"}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" TILLANDSIAS_MCP_PROBE_TIMEOUT=5 bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'down:forge-plan,project-info' ] && echo 'ok: existing-but-mute-is-down' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: existing-but-mute-is-down"
+
+  - step: "registration args are honoured (regression: reading .command alone reported healthy experts as down)"
+    command: "d=$(mktemp -d); printf '%s\\n' '{\"mcpServers\":{\"forge-plan\":{\"command\":\"echo\",\"args\":[\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1,\\\"result\\\":{}}\"]},\"project-info\":{\"command\":\"echo\",\"args\":[\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1,\\\"result\\\":{}}\"]}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:experts-healthy' ] && echo 'ok: args-honoured' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: args-honoured"
+
+  - step: "an outage leaves a durable down record in the health log"
+    command: "d=$(mktemp -d); printf '%s\\n' '{\"mcpServers\":{\"forge-plan\":{\"command\":\"false\"},\"project-info\":{\"command\":\"false\"}}}' > \"$d/r.json\"; TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" TILLANDSIAS_MCP_PROBE_TIMEOUT=5 bash scripts/check-mcp-expert-health.sh >/dev/null; n=$(grep -c '\"state\":\"down\"' \"$d/h.jsonl\"); rm -rf \"$d\"; [ \"$n\" = \"2\" ] && echo 'ok: outage-trace-durable' || { echo \"FAIL: down records=$n\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: outage-trace-durable"
+
+  - step: "cycle-metrics reports health= on the mcp: line"
+    command: "grep -q 'health=%s' scripts/cycle-metrics.sh && grep -q 'TILLANDSIAS_EXPERT_HEALTH_LOG' scripts/cycle-metrics.sh && echo 'ok: metrics-carries-health'"
+    timeout_ms: 3000
+    expected_behavior: "ok: metrics-carries-health"
+
+  - step: "NEGATIVE CONTROL: cycle-metrics emits mcp_outage: only when a non-up state was recorded"
+    # A signal that fires every cycle is one nobody reads. The guard is that the
+    # mcp_outage: printf is reachable only under the outage-count test.
+    command: "grep -q 'mcp_outages:-0.*-gt 0' scripts/cycle-metrics.sh && grep -q \"printf 'mcp_outage:\" scripts/cycle-metrics.sh && echo 'ok: outage-line-is-conditional'"
+    timeout_ms: 3000
+    expected_behavior: "ok: outage-line-is-conditional"
+
+  - step: "health=unprobed is distinct from health=ok (an unmeasured expert is never reported healthy)"
+    command: "grep -q 'mcp_health=\"unprobed\"' scripts/cycle-metrics.sh && echo 'ok: unprobed-distinct-from-ok'"
+    timeout_ms: 3000
+    expected_behavior: "ok: unprobed-distinct-from-ok"
+
+  - step: "the meta-orchestration skill runs the probe and marks it advisory"
+    command: "grep -q 'check-mcp-expert-health.sh' skills/meta-orchestration/SKILL.md && grep -q 'record, never block' skills/meta-orchestration/SKILL.md && echo 'ok: skill-wires-probe'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skill-wires-probe"
+
+  - step: "the methodology fall-back rule gained a concrete referent"
+    command: "grep -q 'unavailable_record_where' methodology/distributed-work.yaml && grep -q 'check-mcp-expert-health.sh' methodology/distributed-work.yaml && echo 'ok: methodology-names-destination'"
+    timeout_ms: 3000
+    expected_behavior: "ok: methodology-names-destination"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+    - "@trace order:737-zcj5"
+  expected_log: "mcp expert health probe pinned (grammar + four branches + durable trace + metrics health field + negative control + wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "mcp-expert-health-probe-shape"
+    artifact: "scripts/check-mcp-expert-health.sh + scripts/cycle-metrics.sh + skills/meta-orchestration/SKILL.md + methodology/distributed-work.yaml"
+
+rollback:
+  on_failure: >
+    The MCP expert health probe drifted. Restore
+    scripts/check-mcp-expert-health.sh emitting exactly one line matching
+    ^(ok:experts-healthy|down:[a-z0-9-]+(,[a-z0-9-]+)*|absent:not-registered|skip:[a-z0-9-]+)$
+    with exit codes 0/1/2/3, keep it executable, keep server_command joining
+    .command with .args (dropping .args reports healthy experts as down), keep
+    the JSONL trace append, restore cycle-metrics.sh's health= field and its
+    CONDITIONAL mcp_outage: line, and restore the probe references in
+    skills/meta-orchestration/SKILL.md and methodology/distributed-work.yaml
+    (unavailable_record_where).
+  command: "scripts/check-mcp-expert-health.sh fixture; grep -nE 'health=|mcp_outage:|mcp_health' scripts/cycle-metrics.sh | head -20"

@@ -393,6 +393,7 @@ impl PodmanClient {
                     name: distro.to_string(),
                     state: "running".to_string(),
                     image: distro.to_string(),
+                    config_hostname: String::new(),
                 })
             } else {
                 Err(PodmanError::NotFound(distro.to_string()))
@@ -423,10 +424,19 @@ impl PodmanClient {
                             .unwrap_or("unknown")
                             .to_string();
                         let image = inspect["ImageName"].as_str().unwrap_or("").to_string();
+                        // Config.Hostname carries the container's --hostname.
+                        // The forge reads it back on the order-443 reuse path
+                        // to recover a running mirror's per-project DNS
+                        // identity without touching Vault.
+                        let config_hostname = inspect["Config"]["Hostname"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string();
                         Ok(ContainerInspect {
                             name: name.to_string(),
                             state,
                             image,
+                            config_hostname,
                         })
                     } else {
                         Err(PodmanError::NotFound(name.to_string()))
@@ -1858,6 +1868,11 @@ pub struct ContainerInspect {
     pub name: String,
     pub state: String,
     pub image: String,
+    /// The container's `Config.Hostname` (its `--hostname`), recovered so the
+    /// forge can match a reused running mirror's per-project DNS identity
+    /// without touching Vault (order 606-bvnp D13). Empty on backends that
+    /// cannot read it (WSL stub).
+    pub config_hostname: String,
 }
 
 #[derive(Debug, Clone)]

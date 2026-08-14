@@ -264,7 +264,10 @@ with a loud warning naming the gap, never silently.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the
-   Committable Branch Guard below before any committable work.
+   Committable Branch Guard below before any committable work. Run the MCP
+   Expert Health Probe here too — it is advisory and never blocks, but it must
+   run BEFORE the cycle's first expert read, or an outage during that read has
+   no recorded baseline to be visible against.
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
@@ -407,6 +410,44 @@ On `blocked:expert-sources-absent`, do NOT launch a forge expecting expert
 answers. Switch this checkout to a branch carrying the expert sources first. On
 `ok:no-plan-crate` the target project simply has no plan expert, which is normal
 off-Tillandsias.
+
+## MCP Expert Health Probe (advisory — record, never block)
+
+Run at Start-Of-Cycle, alongside the guards above:
+
+```bash
+scripts/check-mcp-expert-health.sh
+```
+
+It speaks the MCP `initialize` handshake to each expected expert and prints
+exactly one line matching
+`^(ok:experts-healthy|down:[a-z0-9-]+(,[a-z0-9-]+)*|absent:not-registered|skip:[a-z0-9-]+)$`,
+appending one JSONL record per server to `$TILLANDSIAS_EXPERT_HEALTH_LOG`
+(default `/tmp/forge-expert-health.jsonl`). ~40ms when healthy.
+
+**This is the concrete referent for `mcp_first_read_path`'s "fall back and keep
+going, THEN RECORD IT".** That rule named no destination, and on 2026-08-14 two
+hosts skipped the recording half on the same day: windows lost all 28 MCP tools
+mid-session and fell back to `tillandsias-plan.exe` silently; linux ran an entire
+cycle whose session had never loaded the servers at all. Both outages were
+invisible in the ledger and would have stayed invisible (order 737-zcj5).
+
+Unlike the guards above, a non-zero exit here **does not fail the cycle** — an
+unavailable expert is a degraded read path, never a blocked one. Record and
+continue:
+
+- `down:<csv>` / `absent:not-registered` — keep working through
+  `./target/release/tillandsias-plan` (the same binary the MCP wrapper wraps) and
+  let the `mcp_outage:` line carry it into the handoff. Name the fallback reason,
+  as the rule has always required.
+- `ok:experts-healthy` — say nothing further. The probe is silent by design when
+  healthy; a signal that fires every cycle is one nobody reads.
+
+Do NOT substitute `test -x` or a registration-file check for the handshake. A
+server that exists but wedges on startup is precisely the outage worth catching,
+and a file-existence test calls it healthy. (The first draft of the probe read
+`.command` while dropping `.args`, launched a bare `bash`, and reported both
+healthy experts as `down` — a false outage is as bad as a missed one.)
 
 ## Reduction Engine
 
@@ -818,6 +859,19 @@ distinct — measure before you optimize:
 - **`mcp:`** — "are the servers used?" Per-server call volume (`servers=`,
   `plan-expert-calls=`). Today only the plan expert is instrumented; the other
   servers are named `uninstrumented-see-682-m8ek`, not faked as zero.
+  Also carries **`health=`** (order 737-zcj5) — `ok` / `down:<csv>` / `absent` /
+  `unprobed` — sourced from the health probe, NOT from usage. Call volume cannot
+  see an outage: a server that is down writes no usage rows, and neither does one
+  nobody called, so both render as absence in every count on this line.
+  `health=unprobed` is deliberately not `health=ok`; reporting an unmeasured
+  expert as healthy is the order-531 shape.
+
+- **`mcp_outage:`** — emitted ONLY when a probe recorded a non-up state
+  (`records=`, `health=`, `log=`). Its absence on a healthy cycle is the
+  negative control, not an omission. When present, it is the ledger trace of the
+  outage: the handoff pastes these metrics verbatim and the loop-status entry is
+  built from the handoff, so the outage reaches `plan/loop_status.d/` without any
+  agent choosing to write it down.
 - **`expert_accuracy:`** — "are the experts RIGHT?" The groundtruth pass-rate
   (`pass=/total=/rate=`), graded against the committed rung-1 query set. Distinct
   from `answer_rate`: an expert can answer every question yet cite spans that do

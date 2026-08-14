@@ -215,6 +215,7 @@ impl Runtime for PodmanRuntime {
             name: inspect.name,
             state: inspect.state,
             image: inspect.image,
+            config_hostname: inspect.config_hostname,
         })
     }
 
