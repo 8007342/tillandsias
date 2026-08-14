@@ -45594,6 +45594,30 @@ plan_index:
         the same mistake one level up. The audit's output is a classification and
         a set of executable checks on the rewritten steps.
       events:
+        - type: progress
+          ts: "2026-08-14T23:39:33Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            FIRST RUNBOOK CLASSIFIED, and the format the other eight can be filled into is established: plan/audits/external-gate-classification.yaml.
+
+            WHY meta-orchestration FIRST: it is the runbook this loop executes hourly, so its sites were classified by EXECUTION rather than by reading — most of them roughly twenty times across a night of cycles, with the exit code observed directly each time. That is the strongest evidence available for this class and it was already in hand.
+
+            RESULT — 14 sites: 9 safe, 4 advisory (by design and documented), 2 rewritten.
+
+            THE USEFUL FINDING IS THE SHAPE, not the count: meta-orchestration scores well precisely because it has been hardened continuously — most of its typed verdicts were added by packets in this same milestone over the last week. The runbook the loop runs hourly is NOT where the remaining risk is. Exactly one site still misreports, and only off-host: check-windows-only-sources-verified.sh, whose stamp cannot cross a host boundary (736-28m7 / 738-3pft, already filed, and it held a release yesterday).
+
+            Two sites are worth calling out because they LOOK unsafe to anyone auditing exit codes alone:
+              * e2e-preflight.sh eligibility always exits 0 — but the verdict is the string (`eligible` / `skip:<reason>`) and the runbook branches on that, not the code. Recorded so a future auditor does not "fix" it into failing.
+              * check-opsx-generated-dirt.sh returns exit 4 for `ok:clean-tree`, a documented distinct code. It reads like a bug from the caller's side and is not.
+
+            METHOD, and it is deliberate: hand-classified by execution, not pattern-matched. This packet forbids a grep-based gate because 601-462g's own problem statement names "a freshness gate that greps its own comment" as a sibling defect — a pattern-matcher over runbook TEXT would be the same mistake one level up. Measured: grepping meta-orchestration for command substitutions returns mostly PROSE (documentation lines about `git rev-parse`), not steps that execute it. A grep would have produced 21 "sites" of which most are sentences.
+
+            COMMITTED AS DATA, per this packet's fourth exit criterion, so a later cycle DIFFS it rather than re-reading nine runbooks, and a newly added gate site shows up as an absent row.
+
+            REMAINING: 8 runbooks, 66 sites, listed in the file with their counts. merge-to-main-and-release (24) is the largest and already has two instances fixed — one by me under 601-462g, one by linux — so it is the most likely to hold more.
+
+            NOT DONE THIS CYCLE, honestly: the other eight. Classifying by execution is what made this one trustworthy, and I cannot execute the macOS or release runbooks from here. Whoever takes those should say which method they used per runbook — reading is weaker evidence than running, and the file should not pretend otherwise.
         - type: filed
           ts: "2026-08-13T23:40:00Z"
           host: windows
