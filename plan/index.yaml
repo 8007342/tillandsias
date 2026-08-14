@@ -44922,6 +44922,26 @@ plan_index:
         - 'NEGATIVE CONTROL: a cycle that never snapshotted still cannot attest — whatever the fix, blocked:no-snapshot-taken must survive it.'
         - The chosen shape is recorded with its cost, since both candidates trade against the guarantee 717-3bvv added.
       events:
+        - type: verified
+          ts: "2026-08-14T02:22:55Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE, with a third shape neither of the two I filed. The packet offered: (a) keep the boundary until the process exits, or (b) re-verify by re-snapshotting when the tree is clean. I recorded both as having a real cost, and (b) as dangerously close to "snapshot at the end and call it a startup boundary" -- the exact move 717-3bvv exists to forbid.
+
+            THE SHAPE THAT LANDED: retirement moves to the NEXT cycle's snapshot. Finalization stops removing the state dir entirely; `snapshot` retires the previous cycle's boundary before taking its own, reading the path from the $GIT_DIR stamp it already writes.
+
+            Why this is better than either filed option: the boundary a continued cycle re-verifies against is STILL the one taken before any work. Re-verification after more commits compares against cycle start -- which is precisely what the guard is for -- and re-stamps the head it observed so the marker matches what was actually pushed. Nothing about 717-3bvv's guarantee is weakened; the only thing that changed is WHO cleans up, and cleanup by the next start rather than by an exit that may never come is also the project's stated posture on ephemerality.
+
+            SAFETY on the new rm -rf: it fires only for a path this guard itself recorded, that still looks like a boundary (repo-root file + startup dir present), and that lives outside the worktree. A stale or hand-edited stamp cannot turn it into an arbitrary delete.
+
+            EVIDENCE: scripts/test-worktree-boundary-guard.sh grew 6 -> 9, all green.
+              * extended-cycle-reverifies -- verify, commit more, verify again, which is the shape that cost a marker;
+              * extended-cycle-restamps -- the second verification must record the NEW head, or mo-full-attest still refuses;
+              * previous-boundary-retired -- the next snapshot removes the old dir;
+              * bystander-untouched -- NEGATIVE CONTROL: a stamp pointed at a directory that is not a boundary must survive untouched.
+
+            HAND-FALSIFIED both directions: disabling the retirement flipped previous-boundary-retired to FAIL; removing the re-stamp flipped both stamp assertions to FAIL; restoring each returned 9/9. The pre-existing no-snapshot-taken scenario is untouched and still green, so the criterion that a cycle which never snapshotted still cannot attest survives this change.
         - type: filed
           ts: "2026-08-13T22:50:00Z"
           host: windows

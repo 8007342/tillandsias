@@ -924,9 +924,19 @@ Before exit:
 5. Commit targeted files only.
 6. Push the relevant branch.
 7. If a startup boundary was recorded, run the guard's `verify` mode. A guard
-   failure is a blocker: do not attempt destructive Git cleanup. After a
-   successful verification, remove only the unique external `$boundary_dir`;
-   finalization never deletes, restores, or resets a worktree path.
+   failure is a blocker: do not attempt destructive Git cleanup. Finalization
+   never deletes, restores, or resets a worktree path.
+
+   **Do NOT remove `$boundary_dir` here** (order 725-bu54). Retirement belongs
+   to the NEXT cycle's `snapshot`, which retires the previous boundary before
+   taking its own. Removing it here treats this Finalization as THE end of the
+   cycle — but an operator-driven loop has no single exit, and a cycle that
+   continues after a completed Finalization then finds its own boundary gone
+   and cannot attest. That happened twice in one night and cost a valid marker.
+
+   Re-running `verify` after further commits is correct and expected: it still
+   compares against the boundary taken BEFORE any work, and re-stamps the head
+   it observed so the marker matches what was actually pushed.
 8. Confirm there are no uncommitted changes created by this cycle and the
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.

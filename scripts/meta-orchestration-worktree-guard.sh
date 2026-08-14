@@ -105,6 +105,42 @@ case "$mode" in
         printf '%s\n' "$repo_root" >"$state_dir/repo-root"
         cd "$repo_root"
         capture "$state_dir/startup"
+        # RETIRE THE PREVIOUS CYCLE'S BOUNDARY HERE, not at the end of the
+        # cycle that created it (order 725-bu54).
+        #
+        # Finalization used to remove the state dir on its way out, which
+        # treated its first completion as THE end of the cycle. An
+        # operator-driven loop does not have one exit: the cycle continues
+        # whenever the operator asks for more, and the second Finalization then
+        # found its own boundary gone and could not attest. That happened twice
+        # in one night, and cost a valid marker.
+        #
+        # Retiring at the START of the NEXT cycle fixes it without weakening
+        # what 717-3bvv guarantees. The boundary being verified is still the
+        # one taken BEFORE any work — re-verification after more commits
+        # compares against cycle start, which is strictly what the guard is
+        # for. The alternative, re-snapshotting when the tree looks clean, is
+        # exactly the "snapshot at the end and call it a startup boundary" move
+        # that guarantee exists to forbid.
+        #
+        # It also matches the project's stated posture: everything safe to
+        # destroy and relaunch, with cleanup owned by the next start rather
+        # than by a previous exit that may never come.
+        previous_stamp="$(stamp_path boundary-state)"
+        if [[ -f "$previous_stamp" ]]; then
+            previous_dir="$(cat "$previous_stamp")"
+            # Remove ONLY a path this guard recorded, that still looks like a
+            # boundary, and that lives outside the worktree. A stale or edited
+            # stamp must not become an arbitrary rm -rf.
+            if [[ -n "$previous_dir" && "$previous_dir" != "$state_dir" \
+                && -f "$previous_dir/repo-root" && -d "$previous_dir/startup" ]]; then
+                case "$previous_dir/" in
+                    "$repo_root/"*) : ;;   # never inside the worktree
+                    *) rm -rf "$previous_dir" ;;
+                esac
+            fi
+        fi
+
         # Open the cycle's boundary: record where it lives and clear any
         # verification left by the previous cycle, so a stale stamp can never
         # satisfy this one.

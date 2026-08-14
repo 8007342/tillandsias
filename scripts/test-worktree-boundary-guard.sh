@@ -76,7 +76,20 @@ printf 'mutated by the cycle\n' >>"$repo/tracked.txt"
 run "dirty-exit" 1 "worktree differs from startup boundary" -- verify "$state"
 git -C "$repo" checkout -q -- tracked.txt
 
-# 6. A fresh snapshot clears the previous verification, so a stale stamp can
+# 6. EXTENDED CYCLE (order 725-bu54): a cycle that verifies, then does MORE
+#    committed work, must be able to verify AGAIN — against the same startup
+#    boundary, not a fresh one. Finalization used to remove the state dir on
+#    its first completion, so the second attestation found it gone. This is the
+#    shape that cost a real marker.
+printf 'more cycle work\n' >>"$repo/tracked.txt"
+git -C "$repo" add tracked.txt
+git -C "$repo" commit -qm "the work the operator asked for after Finalization"
+run "extended-cycle-reverifies" 0 "ok: startup worktree boundary preserved" -- verify "$state"
+if [ "$(cat "$stamp" 2>/dev/null | tr -d '[:space:]')" != "$(git -C "$repo" rev-parse HEAD)" ]; then
+    failures+=("extended-cycle-restamps: the second verification must record the NEW head, or the marker still refuses")
+fi
+
+# 7. A fresh snapshot clears the previous verification, so a stale stamp can
 #    never satisfy the next cycle's marker.
 state_b="$work/state-b"
 (cd "$repo" && "$GUARD" snapshot "$state_b") || failures+=("snapshot-b: guard refused")
@@ -84,9 +97,29 @@ if [ -e "$stamp" ]; then
     failures+=("stamp-cleared: boundary-verified survived a new snapshot")
 fi
 
+# 8. …and that fresh snapshot RETIRES the previous cycle's state dir, which is
+#    what lets Finalization stop removing it. Cleanup is owned by the next
+#    start, not by an exit that may never come.
+if [ -e "$state" ]; then
+    failures+=("previous-boundary-retired: $state survived the next cycle's snapshot")
+fi
+
+# 9. NEGATIVE CONTROL on that retirement: a stamp pointing somewhere that is
+#    NOT a boundary must not become an arbitrary rm -rf. Point the stamp at a
+#    directory holding real files and assert it survives.
+bystander="$work/not-a-boundary"
+mkdir -p "$bystander"
+printf 'operator data\n' >"$bystander/precious.txt"
+printf '%s\n' "$bystander" >"$repo/.git/boundary-state"
+state_c="$work/state-c"
+(cd "$repo" && "$GUARD" snapshot "$state_c") || failures+=("snapshot-c: guard refused")
+if [ ! -f "$bystander/precious.txt" ]; then
+    failures+=("bystander-untouched: snapshot deleted a directory that was not a boundary")
+fi
+
 if [ "${#failures[@]}" -gt 0 ]; then
     printf 'FAIL: %s\n' "${failures[@]}" >&2
     echo "boundary-guard: FAIL ${#failures[@]} scenario(s) did not match expected verdicts"
     exit 1
 fi
-echo "PASS: worktree-boundary-guard fixture 6/6 scenarios green (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, stamp-cleared)"
+echo "PASS: worktree-boundary-guard fixture 9/9 scenarios green (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, extended-cycle-reverifies, stamp-cleared, previous-boundary-retired, bystander-untouched)"
