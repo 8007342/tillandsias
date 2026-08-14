@@ -167,6 +167,11 @@ Write-Host
 $binVerdict = switch ($trayExit) {
     0 { 'HEALTHY' }
     2 { 'DEGRADED' }
+    # Order 647-i98k. Converging is not broken: the wire answered and the guest
+    # named a phase it has not finished. Without this arm the script printed
+    # "UNKNOWN" for a perfectly ordinary post-provision state, which is how a
+    # new exit code silently degrades its own consumers.
+    3 { 'CONVERGING (not ready yet, not broken -- re-run)' }
     default { "UNKNOWN (exit $trayExit)" }
 }
 Write-Host "Binary --diagnose exit: $trayExit ($binVerdict)" -ForegroundColor DarkGray

@@ -30277,6 +30277,34 @@ plan_index:
         - a multi-column or paginated design is chosen per-platform with its constraints recorded, or multi-column is rejected with a stated reason
 
       events:
+        - type: progress
+          ts: "2026-08-14T11:33:56Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL: the minimum acceptable outcome is met and the false comment corrected. The picker (criteria 1-2) remains open. The packet also stays ready because one of its stated premises is WRONG, and the correction narrows it substantially.
+
+            PREMISE CORRECTED -- the dead control is LINUX-ONLY, not "present on ALL platforms". Verified by reading all three trays:
+              * Linux (tillandsias-headless/src/tray/mod.rs) -- CLOUD_OVERFLOW_ID emitted with enabled=true, click dumps to stderr. The defect.
+              * macOS (tillandsias-macos-tray/src/action_host.rs:1650) -- `MenuAction::CloudOverflow | MenuAction::Inert => {}`, already explicitly inert. Already resolved the way this packet's minimum outcome asks for.
+              * Windows -- no cloud overflow control at all.
+            What IS cross-platform is the operator's underlying complaint, the COLLAPSED LISTING. So criterion 2's "same behaviour ships on all three" is mostly already true for the dead-button half, and the remaining cross-platform work is the picker itself.
+
+            WHAT LANDED (Linux):
+              * The overflow row is now enabled=false -- informational, not a control. The packet's minimum: clicking must do something visible OR the item must not be clickable, because a control that silently does nothing is worse than an absent one. A picker needs window plumbing this module does not have.
+              * PARITY, not preference, is the justification for choosing "not clickable" over "make it do something": macOS already made that choice. Disabling converges the three trays rather than inventing a fourth behaviour -- which matters because I cannot see a Linux GUI from this host, so an unverifiable UX invention would have been the wrong call.
+              * The label carries a remedy the user can act on instead of a promise the control does not keep: "… 13 more of 23 (raise TILLANDSIAS_MAX_CLOUD_MENU_ITEMS, now 10)". The env var already existed and was mentioned only in a stderr tip nobody sees.
+              * Criterion 3 DONE: the comment claiming "the cap + overflow item ... resolves the user-visible clipping bug on its own" is replaced with what actually happens and why the row is now disabled.
+
+            The stderr dispatch arm is KEPT, with a note: a non-conforming DBusMenu client can still deliver the id, and the listing is still useful to someone running the tray from a terminal. It is simply no longer presented to a GUI user as a control that works.
+
+            EVIDENCE: tillandsias-headless tray module 70 passed.
+              * cloud_overflow_row_is_informational_not_a_dead_button -- asserts not-clickable, the hidden count, the total, the env var, and that the old "All cloud projects" promise is gone.
+              * A PRE-EXISTING test, cloud_menu_caps_overflow_with_50_projects, pinned the old label. Updated rather than deleted, and its real assertion (the label carries the TOTAL) is kept -- which is why the new label carries both counts instead of only the hidden one.
+
+            TESTED AS A PURE FUNCTION, deliberately: the built menu's children are serialized OwnedValues, so a test walking the finished node would assert against a DBus encoding rather than against the decision. The decision is what the packet is about, so it was extracted into `cloud_overflow_row`.
+
+            REMAINING: criteria 1 and 2's picker -- multi-column or paginated, researched per platform. Untouched, and it is the 12-hour half.
         - type: note
           ts: "2026-08-12T15:32:54Z"
           host: forge
@@ -37208,6 +37236,27 @@ plan_index:
       notes: |
         Low priority: the human-facing output is honest and a re-run is correct. This is about automation consuming the exit code.
       events:
+        - type: verified
+          ts: "2026-08-14T10:29:33Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE. `--diagnose` now separates CONVERGING from DEGRADED in the exit code, which is criterion 2's requirement.
+
+            WHAT LANDED. Exit 3 = CONVERGING, for the case where the control wire ANSWERED and the guest named a phase it has not finished. That is a fact reported by the guest, not an inference from timing, which is why it earns its own code.
+
+            THE RESTRAINT IS THE OTHER HALF, and it is deliberate: an UNREACHABLE wire stays exit 2, even though in the reported incident it was also merely converging (WSA 10060, phase None, inside the ~8s window). At probe time an unreachable wire is indistinguishable from a genuinely broken one, and calling it converging would trade a false "broken" for a false "not ready yet" -- the worse error, because it tells automation to keep waiting on something that may never arrive. Criterion 1's other branch (a bounded wait) would help that case and is NOT implemented; the packet allows either, and a wrong verdict is worse than a slow one.
+
+            CONSUMERS UPDATED IN THE SAME COMMIT, because a new exit code that its own consumers do not know about is how a fix degrades the thing it fixed:
+              * scripts/tray-diagnose.ps1 printed "UNKNOWN (exit 3)" for a perfectly ordinary post-provision state. It now says CONVERGING and that a re-run is the right response.
+              * cheatsheets/runtime/windows-tray-diagnostics.md documents the contract: retry on 3, fail only on 2, and why an unreachable wire is not 3.
+
+            DELIBERATELY NOT CHANGED: `--status-once`. It has its own older contract -- 0 Ready, 2 reachable-but-not-Ready, 1 unreachable -- which ALREADY separates converging from broken and has no conflation to fix. Changing it would break working scripts for symmetry alone. The resulting asymmetry (the two commands use different numbers for the same state) is real, is recorded in the cheatsheet, and is not worth a contract break at this priority.
+
+            EVIDENCE: tillandsias-windows-tray 89 passed.
+              * diagnose_exit_codes_separate_converging_from_broken -- the three verdicts, plus TWO NEGATIVE CONTROLS: an unreachable wire (the reported incident's exact shape) stays 2, and no-distro-registered stays 2 because nothing is converging when there is nothing to converge.
+              * summary_line_classifies_exit_code -- asserts the prose says CONVERGING and does NOT say DEGRADED, so the human line and the code cannot drift apart.
+              * A PRE-EXISTING test, exit_code_provisioned_zero_degraded_two, asserted "phase != Ready -> 2" -- the conflation itself. Updated rather than deleted, and renamed to exit_code_separates_healthy_converging_and_degraded: the case still matters, its expected answer changed.
         - ts: "2026-08-10T04:55:00Z"
           event: filed
           summary: Found during the 644-a3wj Windows curl smoke of v0.4.260810.1.
@@ -41427,6 +41476,97 @@ plan_index:
         - the same bound covers the tray's push-subscription handshake and the Noise handshake after the VZ connect
         - a test drives a peer that connects and then goes silent at each stage and asserts a bounded, stage-named failure
       events:
+        - type: verified
+          ts: "2026-08-14T09:24:36Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE for this crate. Criterion 1's streaming half landed; criterion 3's two macOS sites are split to 733-mppc so this packet closes on the work its own crate owns.
+
+            STREAMING, the packet's headline defect. on_event fired SOLELY on a needle match, so during a long or hung run the operator saw nothing at all -- which is what made every wedge of that week undiagnosable from outside. Output is now surfaced as it arrives.
+
+            Two things that make it usable rather than merely present:
+              * RATE-LIMITED to one preview per second, with the FIRST frame always shown. A chatty guest -- `yes`, a build log -- would otherwise turn the caller's log into a firehose, and an observability feature that has to be switched off to keep the logs usable is not observability. The first frame is exempt because "the guest has begun talking" is the most useful early signal and delaying it a second defeats the point.
+              * ESCAPED and bounded. Guest output is raw PTY bytes: control sequences, carriage returns, cursor movement. Passing those through to a caller's log would let a wedged guest rewrite lines it does not own -- and that log is the diagnostic surface for exactly that guest. Truncation is stated, not silent.
+
+            The preview says WHAT the guest is saying, which is the gap the heartbeat reports could not fill: those tell you the guest is quiet or stuck, this tells you it is asking for a passphrase.
+
+            EVIDENCE: vsock_exec 32 passed.
+              * guest_output_is_surfaced_before_the_session_closes -- the criterion itself.
+              * previews_escape_control_bytes_and_are_bounded -- including a forged ANSI line-rewrite, with a NEGATIVE CONTROL that ordinary prompt text passes through unmangled (an escaper that mangled everything would satisfy the escaping assertions and make previews useless).
+              * a_chatty_guest_does_not_flood_the_event_sink -- 200 frames in under a second must not produce 200 events, and must produce at least one.
+
+            WHERE THIS PACKET ENDED UP, across five cycles:
+              * criterion 1 -- DONE (streaming + the transcript cap).
+              * criterion 2 -- DONE structurally: every read AND write on this seam now carries a deadline. Its per-expect-deadline half was RETIRED as superseded, with reasons recorded, because it is 689-y2my's refuted timing shape at a finer grain.
+              * criterion 3 -- split to 733-mppc (macOS, cannot be exercised here).
+              * criterion 4 -- DONE for this crate: a peer that connects then goes silent fails bounded and stage-named at every setup stage, and a peer that stops draining fails as back-pressure.
+        - type: progress
+          ts: "2026-08-14T08:25:05Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL (4 of 5), plus a DECISION that retires one criterion by reasoning rather than by code.
+
+            THE TRANSCRIPT CAP LANDED, after being deferred three cycles for a real reason: ExecOutput.stdout is public and callers parse it. The resolution came from the rescan fix's own invariant. No match can START before scan_from - (needle.len()-1), because everything earlier has been examined for the current needle; and search_start only moves forward, so nothing before it is searched again. Bytes before the later of those two points are dead for matching BY CONSTRUCTION, not by estimate — so they can be dropped without any risk to correctness.
+
+            Default 8 MiB, overridable, 0 disables. The elision is REPORTED through on_event and nothing is injected into stdout: a marker in the byte stream would corrupt exactly what callers parse, and a silently short transcript would send someone hunting for output the guest definitely produced. When nothing is droppable yet — a guest flooding before the first prompt — the trim REFUSES and the cap is exceeded, because match context is never sacrificed to a bound.
+
+            DECISION, criterion 2's per-expect-deadline half: SUPERSEDED, not implemented. That criterion was written before 689-y2my's criterion 1 was refuted. The refutation is that a deadlock and a slow-but-healthy command are indistinguishable BY TIMING ALONE — a first-run login legitimately sits silent for ~1290s — so a per-needle timing bound is the refuted shape at a finer grain, and a generous one would not fire on anything the wall-clock ceiling does not already catch. What the criterion actually wanted, "say that needle X never arrived", is now delivered better by two things that do not guess from elapsed time: the heartbeat waiting reports name the pending needle every 30s, and 723-g4bk fails the exec outright when the guest reports it is blocked on input. Implementing a per-expect deadline now would reintroduce exactly what three cycles of this milestone removed.
+
+            EVIDENCE: vsock_exec 29 passed. trimming_keeps_exactly_what_matching_still_needs covers the overlap-window case (a match straddling the trim point), search_start winning when it is later, no-expect-pending, and three NEGATIVE CONTROLS: under the cap never trims, cap 0 disables, and nothing-droppable refuses.
+
+            TWO DEFECTS OF MINE, both caught by running the tests:
+              1. `*search_start -= drop_to` underflowed. drop_to is the MAX of search_start and the dead window, so it can exceed search_start; the search origin then becomes the new buffer start. Saturating now, with the reason written down.
+              2. I wrote an end-to-end trim test that set the cap env var, with the comment "safe to set here: no other test reads this variable". False — every expect-driver test reads it. Four unrelated tests failed. That is the SAME mistake this file already documents one cycle earlier, made again. The end-to-end test is deliberately not replaced: buying one assertion at the cost of a test that only passes when it runs alone is a bad trade, and the note now says so where the next author will read it.
+
+            REMAINING: criterion 1's streaming half (output surfaced as it arrives, not only at PtyClose) and criterion 3's two macOS sites. Everything else on this packet is closed.
+        - type: progress
+          ts: "2026-08-14T07:23:35Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL (3 of 5). Frame writes are now bounded. Setup reads and the rescan landed in the two previous cycles; two items remain, both named below.
+
+            WHAT LANDED. write_envelope's two write_all calls and its flush now carry a deadline. This is the failure NO read-side bound can observe: the host is not waiting for data, it is waiting for buffer space. The idle deadline, the wall-clock ceiling and last cycle's setup deadlines are all reads, so a peer that accepted the connection and then stopped DRAINING left the host parked inside a send with nothing on any timer.
+
+            The message names back-pressure explicitly and says which part of the frame stalled -- length, body, or flush. It also says this is not a stale or refused connection, because those are the two things an operator would otherwise assume, and they have different causes and different fixes.
+
+            Reuses the idle timeout rather than inventing a knob: a write that cannot make progress for as long as a read may go silent is stuck by the same standard, and one env var is easier to reason about than two.
+
+            EVIDENCE: vsock_exec 28 passed (was 26).
+              * a_peer_that_stops_draining_does_not_park_the_writer -- a 64-byte duplex nobody reads, so write_all blocks exactly as a stalled peer would.
+              * a_draining_peer_is_not_killed_by_the_write_bound -- NEGATIVE CONTROL.
+              * HAND-FALSIFIED: reverting to a bare write_all made the test's OWN 20s timeout fire (20.03s), which is the writer genuinely parking. Restoring returned 28/28.
+
+            REMAINING, unchanged and not started:
+              * streaming transcript + cap (criterion 1). Still deliberately untouched: ExecOutput.stdout is a public field callers parse, so capping changes an observable contract, and dropping from the front invalidates the search indices the rescan fix made load-bearing. It wants a recorded decision about what a caller receives on truncation.
+              * per-expect deadline -- the wall-clock ceiling bounds the CONVERSATION, not an individual needle, so "needle X never arrived in Ns" is still unsayable.
+              * criterion 3's two macOS sites (action_host.rs:2489, diagnose.rs:192). Editable blind from here, not exercisable; this seam is where an unexercised fix is worse than the gap.
+
+            So every read AND write on the vsock_exec seam now has a deadline, which is criterion 2's structural half and criterion 4 for this crate. The packet stays ready for the transcript work and the macOS sites.
+        - type: progress
+          ts: "2026-08-14T06:31:06Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            PARTIAL (2 of 5). The O(n^2) needle rescan is fixed; the packet stays ready for the remaining three.
+
+            WHAT LANDED. The expect driver re-searched the ENTIRE unmatched transcript on every inbound frame -- O(total_bytes x frames) -- which is worst exactly when the transcript is longest and the exchange is already in trouble. It now scans from a cursor, so each byte is examined a bounded number of times.
+
+            THE CORRECTNESS ARGUMENT, which is the whole packet here: a needle can straddle the boundary between the previous frame and this one, so the scan backs up by needle.len()-1 before resuming. A PTY delivers output in whatever chunks the kernel chooses, so a prompt arriving split across frames is NORMAL, not an edge case. Off by one and matches are lost SILENTLY -- the exec then waits for a prompt that already arrived and dies much later as a timeout, which is the least debuggable failure this seam can produce.
+
+            EVERY EXISTING TEST IN THIS FILE FEEDS EACH NEEDLE IN ONE FRAME, so not one of them would have caught it. Added a_needle_split_across_frames_is_still_matched, which delivers the prompt ONE BYTE PER FRAME -- the most adversarial split available, exercising the overlap on every frame.
+
+            HAND-FALSIFIED, and the failure mode is worth recording: setting the overlap to 0 did not produce a clean assertion failure. The test HUNG for over 60 seconds and then failed, because the driver sat waiting for a prompt it had already been sent. That is precisely the silent-loss-surfacing-as-timeout shape described above, reproduced. Restoring the overlap returned 26/26.
+
+            vsock_exec 26 passed (was 25).
+
+            STILL OPEN, unchanged from the previous cycle's note except that the rescan is now done:
+              * streaming transcript + cap (criterion 1). NOT started, and deliberately: ExecOutput.stdout is a public field callers parse, so capping it changes an observable contract. Dropping from the front also invalidates the search indices this cycle just made load-bearing. That deserves a recorded decision about what a caller receives when output is truncated, not a late-night guess.
+              * per-expect deadline -- the wall-clock ceiling bounds the CONVERSATION, not an individual needle.
+              * frame WRITES still have no timeout.
+              * criterion 3's two macOS sites (action_host.rs:2489, diagnose.rs:192) -- editable blind from here, not exercisable.
         - type: progress
           ts: "2026-08-14T05:25:16Z"
           agent_id: "unknown"

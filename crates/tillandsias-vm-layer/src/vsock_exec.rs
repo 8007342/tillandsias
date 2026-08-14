@@ -130,6 +130,106 @@ fn wall_clock_ceiling_error(
     )
 }
 
+/// How much of an arriving output frame is shown in a progress preview, and
+/// how often previews may be emitted (order 690-eug2).
+///
+/// The packet's headline defect: the driver accumulated everything and emitted
+/// it only at `PtyClose`, with `on_event` firing solely on a needle match, so
+/// during a long or hung run the operator saw NOTHING. The heartbeat reports
+/// and the deadlock detection added since tell you THAT the guest is quiet or
+/// stuck; a preview tells you WHAT it is saying, which is the difference
+/// between "still waiting" and "oh, it is asking for a passphrase".
+const EXEC_PREVIEW_BYTES: usize = 200;
+const EXEC_PREVIEW_MIN_GAP: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Render an arriving frame as a single-line, bounded, escaped preview.
+///
+/// Escaping is not cosmetic. Guest output is raw PTY bytes: control sequences,
+/// carriage returns, and cursor movement. Passing those through to a caller's
+/// log would let a guest rewrite lines it does not own — the log is the
+/// diagnostic surface for a wedged guest, so it must not be forgeable by the
+/// thing being diagnosed.
+fn preview_of(bytes: &[u8]) -> String {
+    let shown = &bytes[..bytes.len().min(EXEC_PREVIEW_BYTES)];
+    let mut out = String::with_capacity(shown.len() + 16);
+    for &b in shown {
+        match b {
+            b'\n' => out.push_str("\\n"),
+            b'\r' => out.push_str("\\r"),
+            b'\t' => out.push_str("\\t"),
+            0x20..=0x7e => out.push(b as char),
+            _ => out.push_str(&format!("\\x{b:02x}")),
+        }
+    }
+    if bytes.len() > shown.len() {
+        out.push_str(&format!(" …(+{} bytes)", bytes.len() - shown.len()));
+    }
+    out
+}
+
+/// How many bytes of guest transcript the expect driver retains (order
+/// 690-eug2). 8 MiB: far above any real prompt-driven exchange, low enough that
+/// a runaway guest cannot exhaust host memory.
+const EXEC_TRANSCRIPT_CAP_BYTES: usize = 8 * 1024 * 1024;
+const EXEC_TRANSCRIPT_CAP_ENV: &str = "TILLANDSIAS_VSOCK_EXEC_TRANSCRIPT_CAP_BYTES";
+
+/// The cap, overridable; `0` disables trimming entirely.
+fn exec_transcript_cap() -> usize {
+    std::env::var(EXEC_TRANSCRIPT_CAP_ENV)
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(EXEC_TRANSCRIPT_CAP_BYTES)
+}
+
+/// Drop transcript bytes that can no longer participate in a match, returning
+/// how many were dropped and adjusting the two cursors.
+///
+/// WHY THIS IS SAFE, and it rests on the cursor invariant the rescan fix
+/// established: no match can START before `scan_from - (needle.len()-1)`,
+/// because everything before that has already been examined for the CURRENT
+/// needle. And `search_start` only ever moves forward, so nothing before it is
+/// ever searched again. Bytes before the later of those two points are
+/// therefore dead for matching, by construction rather than by estimate.
+///
+/// The dropped bytes are the OLDEST guest output, and the caller loses them
+/// from `ExecOutput.stdout`. That is the honest trade for a bound, and it is
+/// why the elision is REPORTED through on_event rather than papered over: a
+/// silently short transcript would send someone hunting for output the guest
+/// definitely produced. Nothing is injected into `stdout` itself — a marker in
+/// the byte stream would corrupt exactly what callers parse.
+fn trim_transcript(
+    stdout: &mut Vec<u8>,
+    search_start: &mut usize,
+    scan_from: &mut usize,
+    current_needle_len: Option<usize>,
+    cap: usize,
+) -> usize {
+    if cap == 0 || stdout.len() <= cap {
+        return 0;
+    }
+    let dead_for_current = match current_needle_len {
+        // An expect is pending: keep the overlap window the scan needs.
+        Some(len) => scan_from.saturating_sub(len.saturating_sub(1)),
+        // No expect pending: matching is over, everything is dead.
+        None => stdout.len(),
+    };
+    let drop_to = (*search_start).max(dead_for_current).min(stdout.len());
+    if drop_to == 0 {
+        // Cannot trim without losing match context — a guest that floods
+        // before the first prompt. Reported by the caller rather than silently
+        // exceeding the cap.
+        return 0;
+    }
+    stdout.drain(..drop_to);
+    // SATURATING, not `-=`. drop_to is the MAX of search_start and the dead
+    // window, so it can exceed search_start whenever the cursor has moved past
+    // it — and then the search origin is simply the new start of the buffer.
+    // Writing `*search_start -= drop_to` underflowed on the first run.
+    *search_start = search_start.saturating_sub(drop_to);
+    *scan_from = scan_from.saturating_sub(drop_to);
+    drop_to
+}
+
 /// Escape hatch for the deadlock report, mirroring the ceiling's own env.
 ///
 /// Set to `0` to disable. Present because a new terminal condition on a path
@@ -189,16 +289,60 @@ async fn write_envelope<W: AsyncWrite + Unpin>(
             bytes.len()
         ));
     }
-    w.write_all(&(bytes.len() as u32).to_be_bytes())
-        .await
-        .map_err(|e| format!("vsock_exec: write len: {e}"))?;
-    w.write_all(&bytes)
-        .await
-        .map_err(|e| format!("vsock_exec: write body: {e}"))?;
-    w.flush()
-        .await
-        .map_err(|e| format!("vsock_exec: flush: {e}"))?;
+    // ORDER 690-eug2: bound the WRITE side too.
+    //
+    // Every bound this seam has grown was on reads — the idle deadline, the
+    // wall-clock ceiling, the setup deadlines added last cycle. A peer that
+    // accepts the connection and then stops DRAINING blocks the writer
+    // indefinitely, and no read-side deadline can observe that: the host is not
+    // waiting for data, it is waiting for buffer space. The symptom is a host
+    // parked inside a send with nothing on any timer.
+    //
+    // Reuses the idle timeout rather than inventing a knob. A write that cannot
+    // make progress for as long as a read may go silent is stuck by the same
+    // standard, and one env var is easier to reason about than two.
+    let deadline = exec_idle_timeout()?;
+    write_all_bounded(
+        w,
+        &(bytes.len() as u32).to_be_bytes(),
+        deadline,
+        "the frame length",
+    )
+    .await?;
+    write_all_bounded(w, &bytes, deadline, "the frame body").await?;
+    match tokio::time::timeout(deadline, w.flush()).await {
+        Ok(r) => r.map_err(|e| format!("vsock_exec: flush: {e}"))?,
+        Err(_) => {
+            return Err(format!(
+                "vsock_exec: the peer stopped draining — flush blocked for {}s. \
+                 The connection is open and the peer is not reading; this is back-pressure, \
+                 not a stale or refused connection (override with {EXEC_IDLE_TIMEOUT_ENV})",
+                deadline.as_secs()
+            ));
+        }
+    }
     Ok(())
+}
+
+/// `write_all` under a deadline, naming which part of the frame stalled.
+///
+/// Split out so the two writes share one message shape and the stage is not
+/// guessed from a stack trace.
+async fn write_all_bounded<W: AsyncWrite + Unpin>(
+    w: &mut W,
+    buf: &[u8],
+    deadline: std::time::Duration,
+    stage: &str,
+) -> Result<(), String> {
+    match tokio::time::timeout(deadline, w.write_all(buf)).await {
+        Ok(r) => r.map_err(|e| format!("vsock_exec: write {stage}: {e}")),
+        Err(_) => Err(format!(
+            "vsock_exec: the peer stopped draining — writing {stage} blocked for {}s. \
+             The connection is open and the peer is not reading; this is back-pressure, \
+             not a stale or refused connection (override with {EXEC_IDLE_TIMEOUT_ENV})",
+            deadline.as_secs()
+        )),
+    }
 }
 
 /// Read one length-prefixed `ControlEnvelope` frame.
@@ -755,8 +899,15 @@ where
 
     let mut stdout = Vec::new();
     let mut search_start = 0usize;
+    // Cursor for the incremental needle scan (order 690-eug2): everything
+    // before it has already been examined for the CURRENT needle.
+    let mut scan_from = 0usize;
     let mut pending = expects.into_iter();
     let mut current = pending.next();
+    let transcript_cap = exec_transcript_cap();
+    // Last time an output preview was emitted; None until the first frame.
+    let mut last_preview: Option<std::time::Instant> = None;
+    let mut elided_bytes = 0usize;
     let idle_timeout = exec_idle_timeout()?;
     // 689-y2my: make the WAIT observable. The deadline deliberately stays as it
     // is — heartbeats extending it is load-bearing (order 332, 4c9da7cc: a
@@ -808,17 +959,83 @@ where
                     }
                     continue;
                 }
+                // Surface output AS IT ARRIVES (order 690-eug2). Rate-limited
+                // rather than per-frame: a chatty guest (`yes`, a build log)
+                // would otherwise turn the caller's log into a firehose, and an
+                // observability feature that has to be switched off to keep the
+                // logs usable is not observability.
+                //
+                // The FIRST frame is always shown, because "the guest has begun
+                // talking" is the single most useful early signal and waiting a
+                // second to say it defeats the point.
+                if !bytes.is_empty() {
+                    let now = std::time::Instant::now();
+                    let due = last_preview
+                        .map(|t: std::time::Instant| now.duration_since(t) >= EXEC_PREVIEW_MIN_GAP)
+                        .unwrap_or(true);
+                    if due {
+                        last_preview = Some(now);
+                        on_event(&format!(
+                            "guest output ({}s, {} bytes so far): {}",
+                            started.elapsed().as_secs(),
+                            stdout.len() + bytes.len(),
+                            preview_of(&bytes)
+                        ));
+                    }
+                }
                 stdout.extend_from_slice(&bytes);
+                // Bound the retained transcript (order 690-eug2). Runs BEFORE
+                // matching so the cursors this adjusts are the ones the scan
+                // below reads.
+                if stdout.len() > transcript_cap {
+                    let dropped = trim_transcript(
+                        &mut stdout,
+                        &mut search_start,
+                        &mut scan_from,
+                        current.as_ref().map(|e| e.needle.len()),
+                        transcript_cap,
+                    );
+                    if dropped > 0 {
+                        elided_bytes += dropped;
+                        on_event(&format!(
+                            "transcript cap reached: elided {dropped} bytes of earlier guest output \
+                             ({elided_bytes} total). The retained transcript is the most recent \
+                             {} bytes; override with {EXEC_TRANSCRIPT_CAP_ENV} (0 disables).",
+                            stdout.len()
+                        ));
+                    }
+                }
                 // Satisfy as many sequential expects as the new output allows.
                 while current.is_some() {
                     let end = {
                         let exp = current.as_ref().expect("current expect exists");
-                        find_subslice(&stdout[search_start..], &exp.needle)
+                        // ORDER 690-eug2: scan from a CURSOR, not from
+                        // search_start, so each byte is examined a bounded
+                        // number of times instead of once per subsequent frame.
+                        // The old form re-searched the entire unmatched
+                        // transcript on every inbound frame — O(bytes x frames)
+                        // — which is worst exactly when the transcript is
+                        // longest and the exchange is already in trouble.
+                        //
+                        // Backing up by needle.len()-1 is the whole correctness
+                        // argument: a needle can straddle the boundary between
+                        // the previous frame and this one, so the last
+                        // needle_len-1 bytes of what we already scanned must be
+                        // re-examined. Off-by-one here silently loses matches
+                        // that arrive split across frames, which is a normal
+                        // occurrence on a PTY, not an edge case.
+                        let overlap = exp.needle.len().saturating_sub(1);
+                        let from = scan_from.saturating_sub(overlap).max(search_start);
+                        find_subslice(&stdout[from..], &exp.needle)
+                            .map(|end| end + from - search_start)
                     };
                     if let Some(end) = end {
                         let exp = current.as_mut().expect("current expect exists");
                         on_event(&format!("matched: {}", exp.label));
                         search_start += end;
+                        // A new needle searches the whole remaining transcript,
+                        // so the cursor resets with it.
+                        scan_from = search_start;
                         seq += 1;
                         let response = (exp.response)()?;
                         write_envelope(
@@ -836,6 +1053,11 @@ where
                         .await?;
                         current = pending.next();
                     } else {
+                        // No match in the transcript as it stands: everything
+                        // up to here has been examined for THIS needle, so the
+                        // next frame starts from the end (minus the overlap
+                        // computed above).
+                        scan_from = stdout.len();
                         break;
                     }
                 }
@@ -1265,6 +1487,357 @@ mod tests {
         assert!(
             unknown.iter().any(|e| e.contains("could not determine")),
             "…but it must be distinguishable from 'working': {unknown:?}"
+        );
+    }
+
+    /// ORDER 690-eug2, criterion 1: guest output must be surfaced AS IT
+    /// ARRIVES, not only at PtyClose.
+    ///
+    /// The packet's headline defect. `on_event` fired solely on a needle match,
+    /// so during a long or hung run the operator saw nothing at all — which is
+    /// what made every wedge of that week undiagnosable from outside.
+    #[tokio::test]
+    async fn guest_output_is_surfaced_before_the_session_closes() {
+        let (_, seen) = run_with_heartbeats(vec![ControlMessage::PtyData {
+            session_id: 1,
+            direction: PtyDirection::ToHost,
+            bytes: b"Loading image layer 1 of 7\n".to_vec(),
+        }])
+        .await;
+
+        let previews: Vec<&String> = seen
+            .iter()
+            .filter(|e| e.starts_with("guest output"))
+            .collect();
+        assert!(
+            !previews.is_empty(),
+            "output must be reported while the exchange runs: {seen:?}"
+        );
+        assert!(
+            previews[0].contains("Loading image layer 1 of 7"),
+            "the preview must show WHAT the guest said — that is the difference \
+             between 'still waiting' and 'oh, it is asking for something': {previews:?}"
+        );
+        assert!(
+            previews[0].contains("bytes so far"),
+            "and how much has arrived: {previews:?}"
+        );
+    }
+
+    /// The preview must not be forgeable by the thing being diagnosed.
+    ///
+    /// Guest output is raw PTY bytes. Passing control sequences through to a
+    /// caller's log would let a wedged guest rewrite lines it does not own —
+    /// and that log is the diagnostic surface for exactly that guest.
+    #[test]
+    fn previews_escape_control_bytes_and_are_bounded() {
+        let p = preview_of(b"ok\r\n\x1b[2K\x1b[1Gforged: everything is fine");
+        assert!(
+            !p.contains('\r') && !p.contains('\n'),
+            "no raw newlines: {p}"
+        );
+        assert!(!p.contains('\x1b'), "no raw escape sequences: {p}");
+        assert!(p.contains("\\r\\n"), "they are shown, not dropped: {p}");
+        assert!(p.contains("\\x1b"), "escape bytes are visible as hex: {p}");
+        assert!(
+            p.contains("forged: everything is fine"),
+            "text survives: {p}"
+        );
+
+        // Bounded, and it SAYS it truncated rather than silently cutting off.
+        let long = preview_of(&vec![b'a'; EXEC_PREVIEW_BYTES * 3]);
+        assert!(
+            long.contains(&format!("+{} bytes", EXEC_PREVIEW_BYTES * 2)),
+            "truncation must be stated: {long}"
+        );
+        assert!(long.len() < EXEC_PREVIEW_BYTES * 2, "and actually bounded");
+
+        // NEGATIVE CONTROL: ordinary output passes through unmangled, or the
+        // preview would be useless for reading a prompt.
+        assert_eq!(
+            preview_of(b"authentication token: "),
+            "authentication token: "
+        );
+    }
+
+    /// Rate-limited, or a chatty guest turns the caller's log into a firehose.
+    /// An observability feature that has to be switched off to keep the logs
+    /// usable is not observability.
+    #[tokio::test]
+    async fn a_chatty_guest_does_not_flood_the_event_sink() {
+        let burst: Vec<ControlMessage> = (0..200)
+            .map(|i| ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToHost,
+                bytes: format!("line {i}\n").into_bytes(),
+            })
+            .collect();
+        let (_, seen) = run_with_heartbeats(burst).await;
+
+        let previews = seen
+            .iter()
+            .filter(|e| e.starts_with("guest output"))
+            .count();
+        assert!(
+            previews <= 3,
+            "200 frames inside one second must not produce 200 events; got {previews}: {seen:?}"
+        );
+        assert!(
+            previews >= 1,
+            "…but the first frame is always shown, because 'the guest has begun \
+             talking' is the most useful early signal: {seen:?}"
+        );
+    }
+
+    /// ORDER 690-eug2, the transcript cap. Pure unit tests over the trim, so
+    /// the invariant is checked directly rather than inferred from an exchange.
+    #[test]
+    fn trimming_keeps_exactly_what_matching_still_needs() {
+        // A pending needle: the overlap window must survive, because a match
+        // can straddle the trim point exactly as it can straddle a frame.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 10usize;
+        let mut scan_from = 90usize;
+        let dropped = trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(5), 10);
+        // dead_for_current = 90 - 4 = 86; max(search_start=10, 86) = 86.
+        assert_eq!(dropped, 86);
+        assert_eq!(buf.len(), 14, "the overlap window and the tail survive");
+        assert_eq!(buf[0], 86, "the retained bytes are the most recent ones");
+        assert_eq!(scan_from, 4, "the cursor follows the bytes it points at");
+        assert_eq!(search_start, 0);
+
+        // search_start WINS when it is later than the scan window: nothing
+        // before it is ever searched again, but the scan window must not be
+        // trimmed past it either.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 95usize;
+        let mut scan_from = 96usize;
+        let dropped = trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(50), 10);
+        assert_eq!(dropped, 95, "trim to search_start, not past it");
+        assert_eq!(search_start, 0);
+
+        // No expect pending: matching is over, so everything is dead.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 0usize;
+        let mut scan_from = 0usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, None, 10),
+            100
+        );
+
+        // NEGATIVE CONTROLS. Under the cap: never trim — the common case must
+        // be untouched, and a trim that fired early would silently shorten
+        // every transcript.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 50usize;
+        let mut scan_from = 50usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(3), 1000),
+            0
+        );
+        assert_eq!(buf.len(), 100);
+
+        // Cap 0 disables trimming entirely, even over the limit.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 50usize;
+        let mut scan_from = 50usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(3), 0),
+            0
+        );
+
+        // Nothing droppable yet (a guest flooding before the first prompt):
+        // refuse rather than lose match context. The cap is exceeded and said
+        // so, which is better than a match silently lost.
+        let mut buf: Vec<u8> = (0..100u8).collect();
+        let mut search_start = 0usize;
+        let mut scan_from = 0usize;
+        assert_eq!(
+            trim_transcript(&mut buf, &mut search_start, &mut scan_from, Some(3), 10),
+            0
+        );
+        assert_eq!(
+            buf.len(),
+            100,
+            "match context is never sacrificed to the cap"
+        );
+    }
+
+    /// NO END-TO-END TRIM TEST, deliberately, and this is the second time the
+    /// same trap has been recorded in this file.
+    ///
+    /// An end-to-end version needs a low cap, and the cap is read from an env
+    /// var. The first attempt set `TILLANDSIAS_VSOCK_EXEC_TRANSCRIPT_CAP_BYTES`
+    /// inside a `#[tokio::test]` with the comment "safe to set here: no other
+    /// test reads this variable" — which was simply false, since every
+    /// expect-driver test reads it through `exec_transcript_cap()`. Cargo runs
+    /// tests in threads of ONE process, so four unrelated tests failed. Exactly
+    /// the mistake `a_peer_that_goes_silent_during_setup_fails_bounded_and_named`
+    /// already documents, made again one cycle later.
+    ///
+    /// The arithmetic — including the case where a match straddles the trim
+    /// point — is covered by the unit test above, and the whole existing suite
+    /// exercises the driver with trimming compiled in at the real cap. Buying
+    /// one more assertion at the cost of a test that only passes when it runs
+    /// alone is a bad trade.
+    /// ORDER 690-eug2. A peer that stops DRAINING must not park the writer.
+    ///
+    /// This is the failure no read-side deadline can observe: the host is not
+    /// waiting for data, it is waiting for buffer space. The idle deadline, the
+    /// wall-clock ceiling and the setup deadlines are all reads, so a peer that
+    /// accepts the connection and then simply stops reading left the host
+    /// parked inside a send with nothing on any timer.
+    #[tokio::test]
+    async fn a_peer_that_stops_draining_does_not_park_the_writer() {
+        // A tiny duplex buffer that nobody reads: the second frame cannot fit,
+        // so write_all blocks exactly as a real stalled peer would.
+        let (mut client, guest) = tokio::io::duplex(64);
+
+        let big = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToGuest,
+                bytes: vec![b'x'; 8192],
+            },
+        };
+
+        let err = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            write_all_bounded(
+                &mut client,
+                &encode(&big).unwrap(),
+                std::time::Duration::from_millis(50),
+                "the frame body",
+            ),
+        )
+        .await
+        .expect("the bound must fire well inside the test's own timeout")
+        .expect_err("a peer that stops draining must not block forever");
+
+        assert!(
+            err.contains("stopped draining"),
+            "the failure must name back-pressure, not read as a stale connection: {err}"
+        );
+        assert!(
+            err.contains("the frame body"),
+            "it must name WHICH part of the frame stalled: {err}"
+        );
+        assert!(
+            !err.contains("connection stale"),
+            "back-pressure is not a stale connection — they have different causes \
+             and different fixes: {err}"
+        );
+        drop(guest);
+    }
+
+    /// NEGATIVE CONTROL: a peer that IS draining must not be killed by the
+    /// write bound. Every other test in this file writes frames through
+    /// write_envelope, so they collectively assert this too — but stating it
+    /// once makes the intent explicit rather than incidental.
+    #[tokio::test]
+    async fn a_draining_peer_is_not_killed_by_the_write_bound() {
+        let (out, _) = run_with_heartbeats(vec![]).await;
+        assert_eq!(
+            out.exit.code, 0,
+            "a normal exchange must complete under the write bound"
+        );
+    }
+
+    /// ORDER 690-eug2, the correctness case for the incremental needle scan.
+    ///
+    /// A PTY delivers output in whatever chunks the kernel feels like, so a
+    /// prompt routinely arrives SPLIT across frames. The old scan re-searched
+    /// the whole transcript every time and could not care; the cursor version
+    /// can, and an off-by-one in its overlap would silently lose exactly these
+    /// matches — silently, because the exec would then wait for a prompt that
+    /// had already arrived and fail much later as a timeout.
+    ///
+    /// Every existing test in this file feeds each needle in ONE frame, so
+    /// none of them would have caught it.
+    #[tokio::test]
+    async fn a_needle_split_across_frames_is_still_matched() {
+        // One byte per frame: the most adversarial split available, and it
+        // exercises the overlap on every single frame.
+        let per_byte: Vec<ControlMessage> = b"authentication token: "
+            .iter()
+            .map(|b| ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToHost,
+                bytes: vec![*b],
+            })
+            .collect();
+
+        let (client, mut guest) = tokio::io::duplex(8192);
+        tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap();
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                        build_version: None,
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+            for body in per_byte {
+                write_envelope(
+                    &mut guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: 2,
+                        body,
+                    },
+                )
+                .await
+                .unwrap();
+            }
+            let _ = read_envelope(&mut guest).await.unwrap(); // our response
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 3,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+        let sink = events.clone();
+        let out = exec_over_stream_expect_dynamic(
+            client,
+            &["/bin/login"],
+            vec![DynamicExpect {
+                needle: b"authentication token".to_vec(),
+                label: "github token".to_string(),
+                response: Box::new(|| Ok(b"tok\n".to_vec())),
+            }],
+            move |ev| sink.lock().unwrap().push(ev.to_string()),
+        )
+        .await
+        .expect("a byte-at-a-time prompt must still match");
+
+        assert_eq!(out.exit.code, 0);
+        let seen = events.lock().unwrap().clone();
+        assert!(
+            seen.iter().any(|e| e.contains("matched: github token")),
+            "a needle delivered one byte per frame must still be found: {seen:?}"
         );
     }
 

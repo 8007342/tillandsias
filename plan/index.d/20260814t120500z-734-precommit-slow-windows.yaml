@@ -1,0 +1,65 @@
+packets:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    order: 734-sjb3
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: optimization
+    title: "The pre-commit OpenSpec trace scan takes >10 minutes when a large source file is staged, and nothing says so"
+    deliverable: "the pre-commit hook's OpenSpec scan (scope, caching, or a progress signal)"
+    pickup_role: any
+    capability_tags: [hooks, developer-experience, performance, fail-loud]
+    estimated_hours: 3
+    context: |
+      MEASURED, twice, on this host tonight. Committing a change to
+      crates/tillandsias-headless/src/tray/mod.rs (~5,800 lines) ran the
+      pre-commit hook past TEN MINUTES on two consecutive attempts before the
+      invoking tool's timeout killed it. Both attempts left the change staged
+      and uncommitted. Every other commit this session — plan fragments, the
+      vsock_exec crate, the Windows tray crate — completed in seconds.
+
+      What the hook prints while doing it is a list of PRE-EXISTING ghost
+      traces in that same file:
+
+        ✗ OpenSpec: ghost trace 'spec:mcp-tool-socket' in
+          crates/tillandsias-headless/src/tray/mod.rs:502 — no spec exists
+        … fifteen more, at lines nobody touched
+
+      so the visible output is entirely about debt the commit did not create,
+      while the thing actually happening — a scan that will not finish inside a
+      reasonable window — is never stated.
+
+      WHY THIS IS A FAIL-LOUD PACKET AND NOT JUST A SLOW SCRIPT. The failure
+      mode is silent-and-expensive: the operator (or an unattended cycle) sees a
+      commit "hang", kills it, and is left with staged-but-uncommitted work and
+      no verdict. That is how a cycle loses work at its exit contract — the one
+      moment the loop is least able to absorb a surprise. Two of tonight's
+      cycles ran into it back to back.
+
+      NOT YET DIAGNOSED, deliberately, because the honest first step is to
+      measure WHICH part is slow rather than guess: the trace scan itself, the
+      spec-existence lookup per trace (16 ghost traces × a lookup that may
+      re-read the spec tree each time?), or something quadratic in file length.
+      A `time` around the hook's phases answers it in one run.
+    outcome: |
+      A commit touching a large file completes in a time an operator will wait
+      for, or the hook says what it is doing and how long it will take.
+    exit_criteria:
+      - "MEASURE FIRST: record where the time goes, per phase, on the file that reproduces it (crates/tillandsias-headless/src/tray/mod.rs). No fix designed before that number exists."
+      - "A commit touching that file completes within a bounded, stated time budget."
+      - "If any phase can still be slow, the hook SAYS so before it starts — a progress line, or a named phase with an expected duration. A hook that goes quiet for ten minutes is indistinguishable from one that has hung."
+      - "NEGATIVE CONTROL: the scan still catches a genuinely NEW ghost trace. Speeding it up by narrowing what it looks at must not silently retire the check — that would trade a slow guard for an absent one."
+    notes: |
+      The 16 pre-existing `spec:mcp-tool-socket` ghost traces in that file are a
+      separate matter: they are tolerated by the ratchet by design (it fails
+      only on NEWLY added ones). Do not fold "clean up the ghosts" into this
+      packet — that is a different decision about a retired spec name, and
+      bundling it would make a performance fix look like a behaviour change.
+    events:
+      - type: filed
+        ts: "2026-08-14T12:05:00Z"
+        host: windows
+        summary: |
+          Filed after it cost two consecutive commit attempts on this host, ~20
+          minutes total, with the work left staged both times.
