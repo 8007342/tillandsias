@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: v04-release-gate-macos-e2e-evidence
+    field: status
+    value: completed
+    ts: "2026-08-14T21:46:50Z"
+    host: linux-mutable
+
+events:
+  - packet_id: v04-release-gate-macos-e2e-evidence
+    event:
+      type: completed
+      ts: "2026-08-14T21:46:50Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: sibling-posted e2e evidence event on this packet: windows b482b279 (11 stage verdicts, post-mutation --diagnose exit 0, 89/89 native, stamp applied); macos e71bc6f7 (per-stage verdicts + evidence dir, codesign asserted on dist and installed bundle, cold re-provision green). Both tested commits are ancestors of the promotion candidate.
+  - packet_id: v04-release-gate-macos-e2e-evidence
+    event:
+      type: note
+      ts: "2026-08-14T21:46:50Z"
+      host: linux-mutable
+      summary: >
+        release gate accepted
