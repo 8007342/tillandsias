@@ -31352,6 +31352,21 @@ plan_index:
             At least one executable check per rewritten step, so the distinction is pinned rather than described.
 
       events:
+        - type: note
+          ts: "2026-08-14T00:23:19Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            728-n456 verification: this note is the regression test, written through the BASE path with the shape that used to refuse.
+
+              run_id="$(scripts/resolve-release-run.sh "$tag")"
+
+            Bullets too:
+              * an indented code sample
+              * a bullet list
+              * a blank line between paragraphs
+
+            If this event is in plan/index.yaml and the ledger parses, the writer emits a correct literal block scalar.
         - type: filed
           ts: "2026-08-04T01:00:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260804
