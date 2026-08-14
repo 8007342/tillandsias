@@ -160,6 +160,7 @@ specs:
   - litmus:fragment-closure-evidence-gate-shape
   - litmus:added-fragment-parse-gate-shape
   - litmus:release-runbook-external-preconditions-shape
+  - litmus:script-exec-bit-shape
   - litmus:selector-urgency-not-inert-shape
   coverage_ratio: 75
   last_verified: '2026-08-12'
