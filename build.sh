@@ -1185,6 +1185,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Litmus pin-claim check passed"
 
+    # Order 731-d89b. A script a caller RUNS by path must be tracked executable.
+    # resolve-release-run.sh reached linux-next at mode 100644 from the Windows
+    # host, so the release runbook's direct invocation of it was a permission
+    # error rather than the verdict it exists to produce. Narrow by design: a
+    # `bash scripts/x.sh` caller works at any mode, and sourced libraries here
+    # are correctly non-executable.
+    _step "Checking scripts invoked by path are executable (731-d89b)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
+        _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
+        exit 1
+    fi
+    _info "Script exec-bit check passed"
+
     # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
     # compiles src/stubs/ and goes green without ever parsing the edited file,
     # which produced two unverified changes on 2026-08-13 alone. Refusing here

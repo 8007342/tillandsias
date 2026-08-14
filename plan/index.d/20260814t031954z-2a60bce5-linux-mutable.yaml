@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-authored-scripts-land-without-exec-bit
+    field: status
+    value: completed
+    ts: "2026-08-14T03:19:54Z"
+    host: linux-mutable
+
+events:
+  - packet_id: windows-authored-scripts-land-without-exec-bit
+    event:
+      type: completed
+      ts: "2026-08-14T03:19:54Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: litmus:script-exec-bit-shape 3/3 PASS (ci-release suite) with a four-way hermetic control (scripts/test-script-exec-bits.sh 4/4); scripts/check-script-exec-bits.sh wired into ./build.sh --check, reports ok:script-exec-bits:26 checked; second live offender scripts/cycle-preflight.sh fixed
+  - packet_id: windows-authored-scripts-land-without-exec-bit
+    event:
+      type: note
+      ts: "2026-08-14T03:19:54Z"
+      host: linux-mutable
+      summary: >
+        731-d89b closed

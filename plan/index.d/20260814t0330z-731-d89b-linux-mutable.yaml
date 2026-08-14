@@ -1,0 +1,46 @@
+events:
+  - packet_id: windows-authored-scripts-land-without-exec-bit
+    event:
+      type: progress
+      ts: "2026-08-14T03:30:00Z"
+      agent_id: "linux-mutable-20260814t0317z"
+      host: linux_mutable
+      summary: |
+        All three exit criteria met, and the guard found a SECOND live instance
+        while being written: scripts/cycle-preflight.sh, mode 100644, invoked
+        bare from skills/meta-orchestration/SKILL.md:241 — the runbook this very
+        cycle executes. Fixed with git update-index --chmod=+x.
+
+        The rule had to be narrowed twice, and the narrowing is the interesting
+        part. "Shebang implies executable" flags 27 files here, nearly all
+        correct: scripts/common.sh and help*.sh are SOURCED libraries that
+        should never be executable, and most other scripts are invoked as
+        `bash scripts/x.sh`, which works at any mode. The property that actually
+        breaks is narrower — someone runs the path WITHOUT naming an
+        interpreter. With that rule the tree has 26 candidates and had exactly
+        one offender.
+
+        Callers are read only from files that EXECUTE (scripts/*.sh, build.sh,
+        skills/*/SKILL.md, litmus command: lines), never from prose:
+        plan/index.yaml mentions script paths constantly in event summaries, and
+        treating those as callers would make the checker a noise generator.
+
+        scripts/check-script-exec-bits.sh emits ok:script-exec-bits:<n> checked
+        or violation:script-not-executable:<n> and is wired into
+        ./build.sh --check. The osx merge this same cycle carried two more mode
+        flips (test-pre-push-version-guard.sh 644->755 plus two new 755 files),
+        which is the evidence that the class is live on all three platforms
+        rather than a Windows quirk.
+
+  - packet_id: windows-authored-scripts-land-without-exec-bit
+    event:
+      type: verified-by
+      ts: "2026-08-14T03:30:30Z"
+      agent_id: "linux-mutable-20260814t0317z"
+      host: linux_mutable
+      summary: |
+        litmus:script-exec-bit-shape 3/3, bound to ci-release. Step 2 runs a
+        four-way hermetic control — bare+644 refused, bare+755 passes,
+        bash-prefixed unflagged, sourced unflagged. The last two carry the
+        weight: a guard that flagged every shebanged file would satisfy the
+        breach case while condemning most of scripts/.

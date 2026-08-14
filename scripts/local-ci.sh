@@ -897,6 +897,18 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     log_section "Rust Code Quality (fmt, clippy, tests)"
 
+    # Stage the router sidecar before the first cargo invocation (723-wd8i).
+    # crates/tillandsias-headless/build.rs:93 lists
+    # images/router/tillandsias-router-sidecar among its REQUIRED runtime assets
+    # and panics at build.rs:104 when it is absent. Order 710-w9kc un-committed
+    # that file and taught build.sh and scripts/build-image.sh to produce it,
+    # but not this script, so the clippy gate below dies on any fresh clone.
+    # Cheap no-op when the staged binary is already current.
+    if [ -x "$REPO_ROOT/scripts/build-sidecar.sh" ]; then
+        run_rust_on_host bash "$REPO_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1 \
+            || log_info "build-sidecar.sh could not stage the router sidecar; cargo gates may fail"
+    fi
+
     # @trace spec:dev-build, spec:ci-release
     # Run cargo commands directly on the host workstation.
 

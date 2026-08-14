@@ -80,13 +80,26 @@ fi
 
 if [[ "$USE_TARGET" == true ]]; then
     # @trace spec:cross-platform
-    # Windows host (Git Bash / MSYS) has no `cc` in PATH, so the default
-    # linker probe for the musl target fails with "linker `cc` not found".
-    # Pin rust-lld + link-self-contained=yes so the cross-link to ELF musl
-    # works without an external toolchain. Linux/macOS hosts skip this and
-    # keep using the system cc resolution they have always used.
+    # Hosts whose system `cc` cannot drive an ELF link need rust-lld pinned.
+    #
+    # Windows (Git Bash / MSYS) has no `cc` in PATH at all, so the linker probe
+    # fails with "linker `cc` not found".
+    #
+    # macOS (702-griq, measured 2026-08-12) has a `cc`, which is why it was
+    # originally grouped with Linux here — but it is Apple clang driving ld64,
+    # which cannot emit ELF and rejects the GNU linker flags rustc passes:
+    #   ld: unknown options: --as-needed -Bstatic -Bdynamic --eh-frame-hdr
+    #       -z --gc-sections --strip-all
+    #   clang: error: linker command failed with exit code 1
+    # Since 710-w9kc made this sidecar a REQUIRED build asset
+    # (tillandsias-headless/build.rs include_bytes!s it), that link failure
+    # means `cargo build` for the whole workspace fails on macOS — not just
+    # this crate. Having a `cc` is not the same as having one that can link
+    # for the target.
+    #
+    # Linux keeps the system cc resolution it has always used.
     case "${OSTYPE:-}" in
-        msys*|cygwin*|win32*)
+        msys*|cygwin*|win32*|darwin*)
             export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER="rust-lld"
             export CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C link-self-contained=yes"
             ;;
@@ -112,6 +125,32 @@ fi
 # Strip debug symbols — we ship the binary embedded in the tray and
 # extracted into a container; a few MB matters.
 strip "$SRC" 2>/dev/null || true
+
+# ASSERT THE FORMAT BEFORE STAGING (order 723-b9cn).
+#
+# This binary has exactly two consumers and both are Linux: the router
+# Containerfile COPYs it into the image, and tillandsias-headless/build.rs
+# include_bytes!s it as a runtime asset extracted inside the guest. The
+# host-target fallback above drops --target entirely, so on macOS it produces a
+# Mach-O and stages it under a name that says "Linux musl router sidecar".
+# Nothing downstream checks: `cargo check` goes green, `build.sh --check` goes
+# green, and the failure surfaces only at exec time in a container, where
+# images/router/entrypoint.sh gives up after ~5s and Caddy's forward_auth
+# degrades to a 502 — so the tray reports a healthy router while web-session
+# OTP gating is silently dead.
+#
+# scripts/build-guest-binaries.sh already verifies its own output this way; the
+# sidecar did not. Removing the bad artifact matters as much as refusing: the
+# is_stale() check above keys on mtime, so a wrong binary left in place would be
+# served to every later build as "up-to-date".
+if ! file "$SRC" | grep -q 'ELF'; then
+    echo "[build-sidecar] ERROR: built sidecar is not a Linux ELF: $(file -b "$SRC")" >&2
+    echo "[build-sidecar]   Its consumers are a Linux container image and the guest" >&2
+    echo "[build-sidecar]   runtime asset, so a host-target build cannot be staged." >&2
+    echo "[build-sidecar]   Install the cross target: rustup target add ${TARGET}" >&2
+    rm -f "$SRC"
+    exit 4
+fi
 
 mkdir -p "$(dirname "$SIDECAR_DEST")"
 cp "$SRC" "$SIDECAR_DEST"

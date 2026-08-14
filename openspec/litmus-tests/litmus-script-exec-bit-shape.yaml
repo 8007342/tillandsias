@@ -1,0 +1,52 @@
+name: litmus:script-exec-bit-shape
+spec: ci-release
+description: >
+  Pin the exec-bit guard (order 731-d89b). scripts/resolve-release-run.sh
+  reached linux-next at mode 100644 from the Windows host, and the release
+  runbook invokes it directly — so on a POSIX host that step was a permission
+  error rather than the verdict the script exists to produce. The osx host
+  landed two more mode flips in the same window; the class is live on all three
+  platforms and nothing would have caught it before the next release ran.
+
+  The rule is deliberately NARROW and the negative controls are the reason to
+  trust it: `bash scripts/x.sh` works at any mode, and several scripts here are
+  SOURCED libraries that should never be executable. A blanket "shebang implies
+  +x" rule would flag 27 files, nearly all correct.
+severity: medium
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains scripts/check-script-exec-bits.sh
+
+critical_path:
+  - step: "Req: the guard exists, is itself executable, and emits its pinned grammar"
+    command: "test -x scripts/check-script-exec-bits.sh && scripts/check-script-exec-bits.sh | grep -qE '^(ok:script-exec-bits:[0-9]+ checked|violation:script-not-executable:[0-9]+)$' && echo 'ok: guard present and grammar pinned'"
+    timeout_ms: 30000
+    expected_behavior: "ok: guard present and grammar pinned"
+
+  - step: "FOUR-WAY CONTROL: bare+644 refused, bare+755 passes, `bash`-prefixed and sourced stay unflagged"
+    # One hermetic throwaway repo per scenario. The two negative controls carry
+    # the weight: a guard that flagged every shebanged file would satisfy the
+    # breach case while condemning most of scripts/.
+    command: "scripts/test-script-exec-bits.sh"
+    success_pattern: "PASS: script-exec-bits fixture"
+    timeout_ms: 60000
+
+  - step: "LIVE: every bare-invoked script in this tree is tracked executable"
+    command: "scripts/check-script-exec-bits.sh | grep -qE '^ok:script-exec-bits:[0-9]+ checked$' && echo 'ok: tree clean'"
+    timeout_ms: 30000
+    expected_behavior: "ok: tree clean"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "scripts invoked by path are tracked executable; interpreter-prefixed and sourced scripts are not required to be"
+  log_fields:
+    spec: "ci-release"
+    test: "script-exec-bit-shape"
+    artifact: "scripts/check-script-exec-bits.sh"
+
+rollback:
+  on_failure: "run scripts/check-script-exec-bits.sh — it names each offending path and prints the one-line git update-index --chmod=+x fix"
+  command: "scripts/check-script-exec-bits.sh"
