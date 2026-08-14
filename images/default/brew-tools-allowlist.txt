@@ -4,12 +4,22 @@
 #
 # Format: <command> <homebrew-core formula>   (one per line, # = comment)
 #
-# Every entry MUST be a homebrew-core FORMULA (Sigstore-attested bottles,
-# verified at install via HOMEBREW_VERIFY_ATTESTATIONS=1). Casks and
-# third-party taps are rejected by ensure_brew_tool — do not add them.
+# Every entry MUST be a homebrew-core FORMULA. Integrity at install is
+# authenticated single-publisher (pinned homebrew-1.pem verifies the formula
+# index JWS; the bottle_checksum is checked against the downloaded bytes).
+# HOMEBREW_VERIFY_ATTESTATIONS=1 cannot run in a forge (gh would need a
+# GitHub token, which must never exist here — operator directive 2026-08-01);
+# see tillandsias-brew-shim-exec for the exact contract. Casks and
+# third-party taps are rejected — do not add them.
 # Commands listed here get a PATH shim in the forge: running the command
 # installs the tool on first use (or prints the brew install hint when
 # auto-install is disabled). Keep entries general-purpose dev tooling.
+# Sanctioned validators that the build gates require (e.g. ruby for the
+# `ruby -ryaml` YAML fallback, methodology runtime_language_policy) BELONG
+# here so a fresh forge can bootstrap them itself.
+
+# --- Sanctioned validators (build gates require these) ---
+ruby ruby
 
 # --- JSON/YAML/data wrangling ---
 jq jq

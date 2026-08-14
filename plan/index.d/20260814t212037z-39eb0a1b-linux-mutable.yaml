@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: sidecar-staging-never-reached-nix
+    field: status
+    value: completed
+    ts: "2026-08-14T21:20:37Z"
+    host: linux-mutable
+
+events:
+  - packet_id: sidecar-staging-never-reached-nix
+    event:
+      type: completed
+      ts: "2026-08-14T21:20:37Z"
+      host: linux-mutable
+      summary: >
+        status 'completed' with evidence_refs: pristine clone of linux-next@aebd1559, sidecar absent: WITH fix nix build -L .#tillandsias-headless-x86_64-musl exits 0 (sidecar derivation builds in-graph); WITHOUT fix exits 1 with panic at build.rs:116:17 'required runtime asset missing: /build/source/images/router/tillandsias-router-sidecar'. Run via scripts/nix-toolbox.sh rung=chroot
+  - packet_id: sidecar-staging-never-reached-nix
+    event:
+      type: note
+      ts: "2026-08-14T21:20:37Z"
+      host: linux-mutable
+      summary: >
+        736-mcy3 measured both directions

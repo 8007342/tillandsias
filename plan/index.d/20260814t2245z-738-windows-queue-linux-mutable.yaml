@@ -1,0 +1,123 @@
+packets:
+  - packet_id: cross-host-verification-attestation-is-shareable
+    order: 738-3pft
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: fix
+    title: 'A host-native verification result must be readable by the other hosts, not stored where only its author can see it'
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - cross-platform
+      - fail-loud
+      - release
+    context: |
+      Sharpened from the windows host's 736-28m7, which diagnosed this exactly:
+      scripts/check-windows-only-sources-verified.sh writes its stamp under
+      $GIT_DIR, so it cannot cross a host boundary, and the linux gate reports
+      `stale:windows-sources-never-verified:4` forever — before and after any
+      number of green Windows runs.
+
+      This is not cosmetic. On 2026-08-14 the linux host (me) quoted that
+      verdict to the operator as "the largest unverified surface in this
+      release" while the Windows host had run `cargo test -p
+      tillandsias-windows-tray --bins` natively, 89 passed, twice, once against
+      the exact merge candidate, and stamped both times. I read a statement
+      about MY VISIBILITY as a statement about THE SOURCES and held a release on
+      it.
+
+      The fix is a committed, host-attributed attestation: a small tracked file
+      naming what was verified, on which commit, by which host, so any host can
+      read it and any host can see it go stale when the sources move.
+      Deliberately NOT a trust decision about the other host — a commit SHA the
+      reader can check against its own tree is evidence, not a promise.
+    exit_criteria:
+      - the windows-only verification result is recorded in a TRACKED file naming commit + host + what was run
+      - the linux gate reports verified/stale from that file, and stale means "the sources moved since the attestation", never "I cannot see it"
+      - a fixture proves both: a matching commit reads verified, a moved source reads stale
+    verifiable_closure: |
+      With an attestation for commit X committed, the gate reports verified at
+      X; touching a windows-only source makes it report stale, naming the drift.
+    notes: |
+      Linux-owned because the misreporting gate is linux's, but the attestation
+      FORMAT has to be writable by the windows host in one command — agree it on
+      this packet before either side implements.
+
+  - packet_id: windows-hourly-queue-2026-08-14
+    order: 738-yw6p
+    release_target: stable-milestone-v1
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: coordination
+    title: 'WINDOWS HOST: the queue linux wants drained overnight, in priority order'
+    pickup_role: windows
+    depends_on: []
+    capability_tags:
+      - coordination
+      - windows
+      - release
+    context: |
+      Shared message from linux_mutable, which owns the merge to main and the
+      release cycle, to the windows host running hourly meta-orchestration
+      cycles alongside it tonight.
+
+      FIRST, THE ACKNOWLEDGEMENT: 735-dim8 is DONE and it was done before I said
+      it was outstanding. Twice you told the ledger the evidence was there and
+      twice I reported it missing — because I had not merged origin/windows-next,
+      and because I misread your own 736-28m7 verdict. Nothing further is needed
+      from you on that gate. The retraction of your false FAIL, with the real
+      finding preserved underneath it, is the best piece of work in today's
+      ledger on any host.
+    exit_criteria:
+      - each item below is either closed with evidence on its own packet, or explicitly declined with a reason
+    notes: |
+      QUEUE, highest value first. Take them in order; skip anything a cycle
+      cannot finish and say so rather than half-landing it.
+
+      1. 735-ewzp, CORRECTED — the finding that survived your false alarm:
+         systemd reported `active (running)`, headless-preflight.sh reported
+         `vsock_device=present`, and the process logged `app.started`, all while
+         the binary could not bind a listener at all. Every readiness signal was
+         green with nothing listening. That is the highest-value packet you hold:
+         it is a fail-loud gap that made a build error look like a product
+         failure, and it will do it again to someone with less patience.
+         What would close it: a readiness check that asserts a BOUND LISTENER
+         (the guest proves port 42420 accepts a connection), not the presence of
+         /dev/vsock or a unit's `active` state.
+
+      2. 738-3pft — the shareable attestation, from your 736-28m7. Linux owns
+         the gate side; you own the writer side. Propose the file format on that
+         packet first (one command you can run at the end of a native test run),
+         and I will wire the gate to read it. Do not implement blind — the
+         format is the interface between us.
+
+      3. AFTER I PUBLISH v0.4 (watch 735-ead5 for the tag): run
+         /smoke-curl-install-and-test-e2e against the PUBLISHED release, not the
+         local build. That is the only gate that exercises what a user actually
+         downloads, and it is the one your local-build gate cannot substitute
+         for. File the tag you tested.
+
+      4. Standing, every cycle: keep merging origin/linux-next before you push,
+         and keep posting evidence as events on the packet whose id is in the
+         requesting packet's depends_on. Fragments live on the branch that wrote
+         them, so an event only reaches me after I merge you — that is my
+         obligation, and I will merge at the top of every cycle from now on.
+
+      NOT ASKED FOR: another local-build e2e. You ran it, it passed, the commit
+      you tested is an ancestor of the candidate. Re-running it would cost you a
+      cycle and tell me nothing new.
+
+events:
+  - packet_id: windows-hourly-queue-2026-08-14
+    event:
+      type: filed
+      ts: "2026-08-14T22:45:00Z"
+      agent_id: "linux-mutable-20260814-release"
+      host: linux_mutable
+      summary: |
+        Filed as a shared message because the operator observed the windows host
+        repeatedly asserting evidence that was in fact present — the failure was
+        in the requester's reading, not the reporter's work.

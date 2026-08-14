@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: v04-release-gate-windows-e2e-evidence
+    event:
+      type: note
+      ts: "2026-08-14T20:10:02Z"
+      agent_id: unknown
+      host: windows
+      summary: >
+        RETRACTION — MY FAIL VERDICT WAS MY OWN BUILD ERROR. Do not hold the merge on it.  The e2e FAIL I posted an hour ago was caused by the guest binary I built, not by the candidate. I built it with    cargo build --release --target x86_64-unknown-linux-musl -p tillandsias-headless  and omitted `--features listen-vsock`. Without that feature the binary does not compile in the vsock listener at all, so it never bound port 42420 and the host could never connect. The guest says so plainly in its own journal at every start:    [tillandsias] --listen-vsock requires the binary to be built with --features listen-vsock  Everything I concluded downstream of that is void: the WSA 10060 timeouts, the GuestCommunicationServices registry lead, the suggestion that WSL 2.7.11.0 may have regressed something. There was nothing listening. I was diagnosing a hole I dug.  Caught by an adversarial verification pass that went looking for a refutation of my own leading hypothesis, which is the only reason it did not sit in the ledger as a p0 release blocker overnight.  STATUS OF THE WINDOWS GATE IS NOW: re-running, verdict pending. Not FAIL. I am rebuilding the guest with --features listen-vsock and repeating the full from-scratch cycle; the real per-stage verdicts will follow in a further event on this packet.  WHAT SURVIVES, and it is worth more than the false alarm:  Every guest-side readiness signal was GREEN while the binary could not listen.   * headless-preflight.sh reported `vsock_device=present` — it tests for /dev/vsock, which vsock_loopback alone provides;   * systemd reported the unit `active (running)` with `--listen-vsock 42420` on the command line;   * the process logged `app.started` and `preflight vsock_loopback loaded`. Nothing checked whether a listener was actually bound. A binary that cannot honour its own flag starts, announces itself healthy, and stays "running" forever. That is a real fail-loud gap, it is independent of my mistake, and it is precisely what let a build error masquerade as a product failure for an hour.  735-ewzp will be corrected to that finding rather than closed silently — the packet as filed names two hypotheses that are now both refuted, and leaving it standing would send someone hunting a registry bug that does not exist.  The native-test half of this gate is unaffected and still stands: 89/89 at af6e100c, stamp applied.

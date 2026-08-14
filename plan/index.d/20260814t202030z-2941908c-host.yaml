@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-fresh-provision-control-wire-never-comes-up
+    field: priority
+    value: p2
+    ts: "2026-08-14T20:20:30Z"
+    host: host
+
+events:
+  - packet_id: windows-fresh-provision-control-wire-never-comes-up
+    event:
+      type: note
+      ts: "2026-08-14T20:20:30Z"
+      host: host
+      summary: >
+        root cause was my own guest build missing --features listen-vsock, not a product defect; rescoped to the readiness-signal gap that hid it

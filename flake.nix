@@ -61,21 +61,47 @@
           doCheck = false; # release builds don't run tests (./build.sh does)
         };
 
+        # ORDER 723-sazx. The sidecar must be a BUILD-GRAPH INPUT, not a file
+        # someone remembered to stage.
+        #
+        # crates/tillandsias-headless/build.rs:93 lists
+        # images/router/tillandsias-router-sidecar among its REQUIRED runtime
+        # assets and panics at :116 without it. Order 710-w9kc un-committed that
+        # blob — correctly — and `.gitignore:79` now ignores it. But `nix build
+        # .#...` resolves this flake against the GIT TREE, so an ignored,
+        # untracked file is not copied into `craneSrc` at all.
+        #
+        # That makes the release workflow's staging step ineffective by
+        # construction: release.yml builds the sidecar, `install`s it into the
+        # working tree, and then runs three flake builds that cannot see it.
+        # The staging fixed the `./build.sh` and `build-image.sh` paths, which
+        # compile from the working tree, and could never have fixed the nix
+        # path. Nothing measured it because the last release predates the blob's
+        # removal, so the nix lane has not been exercised since.
+        #
+        # Making it a `preBuild` closes the class rather than the instance: the
+        # sidecar derivation becomes a dependency edge, so it is impossible to
+        # build these binaries without it, on any host, in any lane.
+        stageRouterSidecar = ''
+          install -Dm0755 \
+            ${tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar \
+            images/router/tillandsias-router-sidecar
+        '';
+
         tillandsias-x86_64-musl =
           let
             cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
               CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
               cargoExtraArgs = "--bin tillandsias --features tray";
-              preBuild = routerSidecarPreBuild;
             });
           in
           craneLib.buildPackage (commonCraneArgs // {
-            preBuild = routerSidecarPreBuild;
             inherit cargoArtifacts;
             pname = "tillandsias";
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "--bin tillandsias --features tray";
+            preBuild = stageRouterSidecar;
           });
 
         tillandsias-headless-x86_64-musl =
@@ -83,16 +109,15 @@
             cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
               CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
               cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-              preBuild = routerSidecarPreBuild;
             });
           in
           craneLib.buildPackage (commonCraneArgs // {
-            preBuild = routerSidecarPreBuild;
             inherit cargoArtifacts;
             pname = "tillandsias-headless-x86_64";
             version = "0.0.0";
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+            preBuild = stageRouterSidecar;
           });
 
         tillandsias-headless-aarch64-musl =
@@ -107,16 +132,15 @@
               AR_aarch64_unknown_linux_musl = aarch64Ar;
               TARGET_CC = aarch64Cc;
               HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
-              preBuild = routerSidecarPreBuild;
             });
           in
           craneLib.buildPackage (commonCraneArgs // {
-            preBuild = routerSidecarPreBuild;
             inherit cargoArtifacts;
             pname = "tillandsias-headless-aarch64";
             version = "0.0.0";
             CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+            preBuild = stageRouterSidecar;
             # aarch64-musl cross toolchain (ring's build.rs + linker).
             depsBuildBuild = [ crossPkgs.stdenv.cc ];
             CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
@@ -145,38 +169,6 @@
             CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
             cargoExtraArgs = "-p tillandsias-router-sidecar --bin tillandsias-router-sidecar --features unix-only";
           });
-
-        # THE SIDECAR MUST BE A BUILD-GRAPH INPUT, NOT A FILE SOMEBODY STAGED
-        # (order 723-sazx).
-        #
-        # crates/tillandsias-headless/build.rs:93 lists
-        # images/router/tillandsias-router-sidecar among its REQUIRED runtime
-        # assets and panics at :104 without it. Order 710-w9kc un-committed that
-        # file, so nothing in a clean checkout provides it any more.
-        #
-        # The first attempt at this fixed the WORKFLOW: build the sidecar
-        # derivation first and `install` it into images/router/ before the
-        # headless builds. That does not work, and the way it fails is quiet.
-        # `.gitignore:79` covers exactly this path, and `nix build .#…` resolves
-        # the flake to the GIT TREE — untracked and ignored files are not copied
-        # to the store — so `craneSrc` (`./.`, line 43) never contains the
-        # staged file no matter how carefully the workflow put it there.
-        # build.rs panics anyway, and a working tree that happens to have a
-        # stale sidecar on disk passes locally while CI fails. Credit: the
-        # windows host called this out from inference before any nix host had
-        # measured it.
-        #
-        # Making it a preBuild puts the sidecar in the build graph, where the
-        # requirement can be satisfied by construction rather than by a caller
-        # remembering. `install -D` creates images/router/ when the dummy source
-        # crane uses for buildDepsOnly lacks it.
-        #
-        # NOT applied via commonCraneArgs: the sidecar derivation itself uses
-        # those args, and referring to the sidecar from them is a cycle.
-        routerSidecarPreBuild = ''
-          install -Dm0755 ${tillandsias-router-sidecar-x86_64-musl}/bin/tillandsias-router-sidecar \
-            images/router/tillandsias-router-sidecar
-        '';
 
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
