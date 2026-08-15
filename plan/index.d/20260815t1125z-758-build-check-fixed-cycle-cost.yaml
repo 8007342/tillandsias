@@ -1,0 +1,90 @@
+packets:
+  - packet_id: build-check-is-the-dominant-fixed-per-cycle-cost-on-windows
+    order: 758-jw6v
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: optimization
+    title: "`./build.sh --check` takes ~130s and a cycle runs it three or four times; the remaining cost is measured and unattributed"
+    deliverable: "a gate whose per-run cost is known per phase, and the two named hot spots removed"
+    pickup_role: any
+    capability_tags: [ci-release, developer-experience, performance, windows]
+    estimated_hours: 3
+    context: |
+      MEASURED on windows 2026-08-15, by timestamping every line of the gate's
+      output and taking the gaps.
+
+      `./build.sh --check` is now the largest fixed cost in a meta-orchestration
+      cycle by a wide margin. The pre-commit hook is ~5s after 734-sjb3; the gate
+      is ~130s and a cycle runs it three or four times, so 6-9 minutes per cycle
+      goes here.
+
+      FIXED THIS CYCLE (the part that was diagnosable):
+
+        scripts/trace-coverage.sh --ghosts   455s -> 20s   (23x)
+        scripts/trace-coverage.sh --gate     ~455s -> 20s
+
+      Two per-item-subprocess loops, the same defect as 734-sjb3 one directory
+      over:
+        * the annotation scan spawned a grep, a sed and a subshell FOR EVERY
+          MATCHING LINE -- 1868 lines here, so roughly six thousand processes.
+          Now one awk pass.
+        * `_locate_spec` ran TWO deep `find` walks PER REFERENCED SPEC, over
+          openspec/changes (1130 files) and openspec/changes/archive (1062).
+          With 189 specs that is ~380 walks. Now three walks and a bash set.
+
+      WHAT I GOT WRONG, and it is the useful part of this packet. I attributed a
+      58s gap in the gate's output to trace-coverage and predicted the gate would
+      drop to ~90s. It went 146s -> 130s. The standalone win is real and
+      verified; the ATTRIBUTION was not. The gap between
+      "Windows-only sources: ok" and "Gate stamp recorded" is now measured at
+      66.9s while everything known to run in it (trace-coverage 20s +
+      gate-stamp write 4.5s) accounts for ~25s. Roughly 40 seconds of every gate
+      run is unaccounted for and produces no output while it runs.
+
+      THE TWO REMAINING TARGETS, measured:
+
+        ~40s  the silent tail of _write_gate_stamp, unattributed. Nothing prints
+              between the windows-sources verdict and the stamp, so a reader
+              cannot tell a slow gate from a hung one -- the same legibility
+              problem 734-sjb3's third criterion was about, in a different file.
+
+        30.1s scripts/check-script-exec-bits.sh, "26 checked". For each
+              candidate script it runs `xargs grep` over the WHOLE caller corpus
+              (git ls-files over scripts/, build.sh, skills/*/SKILL.md,
+              openspec/litmus-tests/*.yaml) -- 26 full sweeps where one would
+              do, plus a `head -c2 | grep` per tracked file. Textbook same
+              shape; I did not fix it because inverting it changes which lines
+              the interpreter-exclusion sees, and that needs its own equivalence
+              check rather than a 4am edit.
+    outcome: |
+      A cycle's gate runs cost what their work costs, and any phase that does
+      not is visible as a number rather than as a pause.
+    exit_criteria:
+      - "Per-phase timings for ./build.sh --check are emitted or recorded, so the ~40s currently unattributed is attributed to something named. No optimisation of that segment before the number exists."
+      - "check-script-exec-bits.sh does one sweep rather than one per script, with its output diffed against the current implementation over the real tree and shown identical -- including the interpreter-exclusion behaviour, which is the part an inversion is most likely to change."
+      - "NEGATIVE CONTROL for that: a script tracked 100644 and invoked bare is still REFUSED, and one invoked as `bash path` is still not flagged. Prove both by adding each case, not by reading the regex."
+      - "The gate reports its own total, so the next person measuring this does not have to timestamp output lines to find out."
+    notes: |
+      Do NOT optimise the 40s tail by guessing. The one attribution I made
+      without measuring in this area was wrong by a factor of three, and it was
+      wrong in the direction that would have justified work on the thing that
+      was already fixed.
+
+      trace-coverage.sh's equivalence was checked against
+      openspec/ghost-trace-baseline.txt -- a committed artifact produced by the
+      OLD implementation, which the new one reproduces exactly (9 specs, same
+      names). That is a stronger check than diffing against a fresh run of the
+      old code, because the baseline predates the change and could not have been
+      influenced by it.
+    events:
+      - type: filed
+        ts: "2026-08-15T11:25:00Z"
+        host: windows
+        summary: |
+          Filed after fixing the diagnosable half. Recording the failed
+          attribution deliberately: "trace-coverage is the 58s" was a plausible
+          reading of a gap in the output and it was wrong, which is exactly why
+          this packet's first criterion demands per-phase numbers before any
+          further work on that segment.
