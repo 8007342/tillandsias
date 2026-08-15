@@ -42,6 +42,100 @@ SHA_RE='^[0-9a-f]{40}$'
 TS_RE='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$'
 BRANCH_RE='^[A-Za-z0-9][A-Za-z0-9._/-]*$'
 
+# Hermetic scenario fixtures (order 742-ye7w, pinned by
+# litmus:mo-full-attestation-ledger-shape). Nothing here touches the real ledger:
+# each scenario builds a throwaway repo and writes a ledger for a host name that
+# is NOT this host, so the reachability branch stays out of the way and the
+# PARSER is what gets exercised.
+#
+# The multi-entry scenario is the regression that motivated all of this: the
+# heading branch tested `heading_marker -ne 0`, which is true exactly when the
+# previous heading WAS correctly paired, so a second appended attestation was
+# refused. No litmus pinned this checker, so the inversion shipped and every
+# host's second full-mode cycle would have failed ./build.sh --check.
+if [ "${1:-}" = "fixture" ]; then
+    _fx_self="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    _fx_dir="$(mktemp -d)"
+    _fx_fail=0
+    _fx_sha_a="$(printf '%040d' 1)"
+    _fx_sha_b="$(printf '%040d' 2)"
+
+    _fx_case() { # _fx_case <name> <want:ok|refuse> <ledger-body>
+        _n="$1"; _want="$2"; _body="$3"
+        rm -rf "$_fx_dir/repo"
+        mkdir -p "$_fx_dir/repo/plan/mo-full-attestations.d" "$_fx_dir/repo/scripts"
+        ( cd "$_fx_dir/repo" && git init -q . ) >/dev/null 2>&1
+        printf '%s' "$_body" >"$_fx_dir/repo/plan/mo-full-attestations.d/fixturehost.md"
+        # The checker resolves ROOT from its OWN location and cd's there, so a
+        # fixture that merely cd's into a temp repo silently validates the REAL
+        # ledger and every scenario "passes". Run a COPY inside the fixture repo.
+        cp "$_fx_self" "$_fx_dir/repo/scripts/"
+        _out="$( cd "$_fx_dir/repo" && bash "scripts/$(basename "$_fx_self")" 2>&1 )"
+        _rc=$?
+        if [ "$_want" = ok ] && [ "$_rc" = 0 ]; then
+            echo "ok: $_n"
+        elif [ "$_want" = refuse ] && [ "$_rc" != 0 ]; then
+            echo "ok: $_n (refused as required)"
+        else
+            echo "FAIL: $_n wanted $_want, rc=$_rc out=$_out"
+            _fx_fail=1
+        fi
+    }
+
+    _fx_hdr='# MO-FULL attestation ledger
+'
+    _fx_case "single-entry-passes" ok "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+"
+    # THE REGRESSION (742-ye7w): a ledger must hold more than one cycle.
+    _fx_case "REGRESSION multi-entry-ledger-passes" ok "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+
+## 2026-08-15T01:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_b linux-next $_fx_sha_b
+"
+    _fx_case "three-entry-ledger-passes" ok "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+
+## 2026-08-15T01:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_b linux-next $_fx_sha_b
+
+## 2026-08-15T02:00:00Z fixturehost
+MO-FULL: BLOCKED $_fx_sha_a linux-next $_fx_sha_a
+"
+    # NEGATIVE CONTROLS — the pairing rule must still bite.
+    _fx_case "NEGATIVE unpaired-trailing-heading-refused" refuse "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+
+## 2026-08-15T01:00:00Z fixturehost
+"
+    _fx_case "NEGATIVE heading-followed-by-heading-refused" refuse "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+
+## 2026-08-15T01:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+"
+    _fx_case "NEGATIVE two-markers-under-one-heading-refused" refuse "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+MO-FULL: COMPLETE $_fx_sha_b linux-next $_fx_sha_b
+"
+    _fx_case "NEGATIVE marker-before-any-heading-refused" refuse "$_fx_hdr
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+"
+    _fx_case "NEGATIVE unpushed-claim-local-ne-remote-refused" refuse "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_b
+"
+    rm -rf "$_fx_dir"
+    [ "$_fx_fail" = 0 ] && echo "ok: all mo-full-attestation-ledger scenarios passed"
+    exit "$_fx_fail"
+fi
+
 ledger_dir="plan/mo-full-attestations.d"
 violations=0
 markers=0
@@ -74,8 +168,16 @@ verify_file() { # verify_file <path>
         ln=$((ln + 1))
         case "$line_no" in
             '## '*)
-                if [ "$heading_marker" -ne 0 ]; then
-                    refuse "$f" "heading at line $ln has no following marker line (parsing becomes ambiguous)"
+                # Refuse when the PREVIOUS heading never got a marker. The sense
+                # matters: `heading_marker=1` means "a marker was seen for the
+                # heading we are leaving", so testing `-ne 0` here refused every
+                # correctly-paired entry the moment a SECOND one was appended —
+                # i.e. the ledger accepted exactly one attestation per host, and
+                # every host's second full-mode cycle failed ./build.sh --check
+                # and could not push. The EOF check below already uses the
+                # correct sense, which is what makes the inversion visible.
+                if [ "$seen_heading" -ne 0 ] && [ "$heading_marker" -eq 0 ]; then
+                    refuse "$f" "heading '$last_heading' has no following marker line (parsing becomes ambiguous)"
                 fi
                 heading="${line_no#\#\# }"
                 ts="${heading%% *}"
