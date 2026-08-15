@@ -3880,13 +3880,38 @@ CONTEXT_EOF
     # fail-soft by construction: a missing file is the normal case off
     # Tillandsias, and an unreadable one must never take down a launch over a
     # documentation append.
+    # "Fail-soft" has to mean the LAUNCH survives, not just that the shell does
+    # not exit (order 747-kw8u). The first version gated on `[[ -r ]]` and then
+    # ran an unbounded `cat`, wrapped in `2>/dev/null || true` — which cannot
+    # help a `cat` that never returns. `[[ -r ]]` is TRUE for FIFOs and character
+    # devices, and git stores symlinks (mode 120000), so a pushed
+    # `startup-context-addendum.md -> /dev/zero` hung every in-forge launch
+    # forever while the `|| true` hid the failure. Measured: a FIFO blocks
+    # indefinitely; a symlink to /dev/zero grew the context file 259 MB in 3s.
+    # There is no timeout around inject_startup_context to save it.
+    #
+    # `[[ -f ]]` is false for FIFOs, character devices and directories, true for
+    # the legitimate regular file, and follows symlinks so a link onto a device
+    # is rejected by what it points AT. The read is byte-bounded on top of that,
+    # because a regular file can still be enormous.
     local addendum="$project_dir/images/default/startup-context-addendum.md"
-    if [[ -r "$addendum" ]]; then
+    local addendum_max_bytes="${TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES:-65536}"
+    if [[ -f "$addendum" && -r "$addendum" ]]; then
         {
             printf '\n'
-            cat "$addendum"
+            head -c "$addendum_max_bytes" "$addendum"
+            printf '\n'
         } >>"$ctx_file" 2>/dev/null || true
-        trace_lifecycle "startup-context" "appended checkout addendum from $addendum"
+        trace_lifecycle "startup-context" "appended checkout addendum from $addendum (<=${addendum_max_bytes}B)"
+    elif [[ -e "$addendum" || -L "$addendum" ]]; then
+        # PRESENT BUT REJECTED is the surprising case and must not be silent
+        # (order 747-n52p): the path exists, so someone intended a warning to
+        # reach agents, and skipping it quietly delivers nothing while looking
+        # healthy. A merely ABSENT addendum stays silent — that is the normal
+        # case off Tillandsias and the negative control this file's own guidance
+        # demands.
+        trace_lifecycle "startup-context" \
+            "SKIPPED checkout addendum $addendum — not a readable regular file (FIFO, device, directory or dangling symlink); no warning was delivered"
     fi
 
     # Ensure the file is gitignored (idempotent append).

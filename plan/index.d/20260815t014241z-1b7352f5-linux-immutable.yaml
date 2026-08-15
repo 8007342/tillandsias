@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: startup-context-addendum-missing-delivers-nothing-silently
+    event:
+      type: implemented
+      ts: "2026-08-15T01:42:41Z"
+      agent_id: unknown
+      host: linux_immutable
+      summary: >
+        A PRESENT-but-rejected addendum now emits a trace_lifecycle SKIPPED line naming the path and why no warning was delivered — that is the surprising case, where someone intended a warning to reach agents and it silently did not. A merely ABSENT addendum stays silent, which is the normal case off Tillandsias and the negative control this mechanism's own guidance demands. Pinned by STEP 8.

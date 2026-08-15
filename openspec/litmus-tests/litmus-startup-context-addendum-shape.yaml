@@ -61,6 +61,39 @@ critical_path:
     timeout_ms: 8000
     expected_behavior: "ok: append-preserves-both"
 
+  - step: "the append is gated on a REGULAR FILE, not merely a readable one (747-kw8u)"
+    # `[[ -r ]]` is true for FIFOs and character devices, and the read that
+    # followed was an unbounded `cat` wrapped in `|| true` — which cannot help a
+    # cat that never returns. Git stores symlinks (mode 120000), so a pushed
+    # `startup-context-addendum.md -> /dev/zero` hung EVERY in-forge launch.
+    command: "grep -A3 'local addendum=' images/default/lib-common.sh | grep -q '\\-f \"\\$addendum\"' && echo 'ok: regular-file-gate'"
+    timeout_ms: 3000
+    expected_behavior: "ok: regular-file-gate"
+
+  - step: "the read is byte-bounded, so a huge regular file cannot blow up the context (747-iavs)"
+    command: "grep -A8 'local addendum=' images/default/lib-common.sh | grep -q 'head -c' && grep -q 'TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES' images/default/lib-common.sh && echo 'ok: bounded-read'"
+    timeout_ms: 3000
+    expected_behavior: "ok: bounded-read"
+
+  - step: "a PRESENT-but-rejected addendum is traced, while a merely absent one stays silent (747-n52p)"
+    # Present-but-rejected means someone intended a warning to reach agents and
+    # it did not. Absent is the normal case off Tillandsias and must stay quiet.
+    # Asserted over the whole file rather than a fixed -A window: an earlier
+    # draft used -A16 while the trace sits 17 lines below the anchor, so the pin
+    # failed on correct code. A line-window pin that drifts with formatting is a
+    # pin that reports the wrong thing.
+    command: "grep -q 'SKIPPED checkout addendum' images/default/lib-common.sh && grep -qE 'elif \\[\\[ -e \"\\$addendum\" \\|\\| -L \"\\$addendum\" \\]\\]' images/default/lib-common.sh && echo 'ok: rejected-is-traced'"
+    timeout_ms: 3000
+    expected_behavior: "ok: rejected-is-traced"
+
+  - step: "FUNCTIONAL: the chosen predicate rejects every hang vector and accepts the real file"
+    # Proves the predicate itself is right, independent of the surrounding
+    # function: -f must be false for a FIFO, a symlink to a character device, a
+    # directory and a dangling symlink, and true for a regular file.
+    command: "d=$(mktemp -d); p=\"$d/a\"; fail=0; mkfifo \"$p\"; [ -f \"$p\" ] && { echo 'FAIL: fifo accepted'; fail=1; }; rm -f \"$p\"; ln -s /dev/zero \"$p\"; [ -f \"$p\" ] && { echo 'FAIL: char-device symlink accepted'; fail=1; }; rm -f \"$p\"; mkdir \"$p\"; [ -f \"$p\" ] && { echo 'FAIL: directory accepted'; fail=1; }; rmdir \"$p\"; ln -s /nonexistent \"$p\"; [ -f \"$p\" ] && { echo 'FAIL: dangling symlink accepted'; fail=1; }; rm -f \"$p\"; printf 'x\\n' > \"$p\"; [ -f \"$p\" ] || { echo 'FAIL: regular file rejected'; fail=1; }; rm -rf \"$d\"; [ \"$fail\" = 0 ] && echo 'ok: predicate-rejects-hang-vectors' || exit 1"
+    timeout_ms: 10000
+    expected_behavior: "ok: predicate-rejects-hang-vectors"
+
   - step: "AGENTS.md states the rule at CHECKOUT level (live without an image rebuild)"
     # The surface that cannot be stale. An agent whose only bootstrap is the
     # checkout must still meet the gate.

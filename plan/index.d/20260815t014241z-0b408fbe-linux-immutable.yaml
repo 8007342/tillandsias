@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: startup-context-addendum-can-hang-launch-via-fifo-or-char-device
+    event:
+      type: implemented
+      ts: "2026-08-15T01:42:41Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        Gate changed from [[ -r ]] to [[ -f && -r ]] and the unbounded cat replaced with a byte-bounded head -c (TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES, default 65536). -f is false for FIFOs, character devices and directories, true for the legitimate regular file, and follows symlinks so a link onto a device is rejected by what it points AT. Verified against every reported vector with a harness built from the real block: FIFO, symlink to /dev/zero, directory and dangling symlink all skip in milliseconds with zero bytes written (previously: hang forever / 259MB in 3s); a 1MB regular file is capped at 65538 bytes; a legitimate addendum still appends; an ABSENT addendum stays silent. Pinned by litmus:startup-context-addendum-shape STEP 6/7/9, including a functional predicate test that rejects all four hang vectors.

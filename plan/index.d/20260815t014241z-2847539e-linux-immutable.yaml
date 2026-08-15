@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: startup-context-addendum-append-has-no-size-cap
+    event:
+      type: implemented
+      ts: "2026-08-15T01:42:41Z"
+      agent_id: unknown
+      host: linux_immutable
+      summary: >
+        Byte cap added: head -c $TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES (default 65536) replaces the unbounded cat. A 1MB addendum now contributes 65538 bytes instead of its full size. Pinned by STEP 7.
