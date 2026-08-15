@@ -3863,6 +3863,32 @@ Two flows; pick by intent:
    today (public Cloudflare share is a planned rung).
 CONTEXT_EOF
 
+    # ── Checkout-sourced addendum (order 743-y5wh) ───────────────────────────
+    # Everything above is IMAGE content: this function is baked into
+    # /usr/local/lib/tillandsias/lib-common.sh at build time, so a change to the
+    # heredoc reaches running forges only after an image rebuild. That is fine
+    # for descriptive state and WRONG for a fail-loud guard.
+    #
+    # Measured 2026-08-15: commit 02b1482c added the "THIS CHECKOUT IS EPHEMERAL"
+    # warning to the heredoc, and the very next forge launch generated a startup
+    # context WITHOUT it, because the running image was baked 2026-08-09. The
+    # warning existed, was correct, and reached nobody — the same delivery gap as
+    # order 531 (`experts: ready` reported truthfully by a pre-expert binary).
+    #
+    # This appends a file read from the MOUNTED CHECKOUT at launch, so anything
+    # written there is live on the next launch with no rebuild. Additive and
+    # fail-soft by construction: a missing file is the normal case off
+    # Tillandsias, and an unreadable one must never take down a launch over a
+    # documentation append.
+    local addendum="$project_dir/images/default/startup-context-addendum.md"
+    if [[ -r "$addendum" ]]; then
+        {
+            printf '\n'
+            cat "$addendum"
+        } >>"$ctx_file" 2>/dev/null || true
+        trace_lifecycle "startup-context" "appended checkout addendum from $addendum"
+    fi
+
     # Ensure the file is gitignored (idempotent append).
     local gitignore="$project_dir/.gitignore"
     if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-startup-context.md' "$gitignore"; then

@@ -627,6 +627,7 @@ specs:
   - litmus:mcp-expert-health-probe-shape
   - litmus:forge-findings-persistence-shape
   - litmus:mo-full-attestation-ledger-shape
+  - litmus:startup-context-addendum-shape
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels

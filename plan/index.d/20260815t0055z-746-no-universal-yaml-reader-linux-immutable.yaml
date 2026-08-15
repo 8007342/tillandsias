@@ -1,0 +1,85 @@
+packets:
+  - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+    order: 746-htj9
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "Committed automation has no YAML reader present in all three environments — ruby broke the forge, the yq rewrite broke the host AND the builder toolbox, on the same day"
+    deliverable: "one YAML read path that exists everywhere committed automation runs"
+    pickup_role: linux
+    capability_tags: [tooling, portability, fail-loud, build-gate, yaml]
+    estimated_hours: 3
+    context: |
+      MEASURED 2026-08-15 on tlatoani, after a forge cycle fixed 744-agyy by
+      rewriting scripts/check-plan-schema-divergence.sh from ruby to yq. Both
+      changes were locally correct and both caused an outage, because there is no
+      interpreter common to the environments this repo's gates actually run in:
+
+                          yq        ruby      jq        python3
+        forge             present   ABSENT    present   present (FORBIDDEN)
+        host (Silverblue) ABSENT    ABSENT    present   present (FORBIDDEN)
+        builder toolbox   ABSENT    present   present   present (FORBIDDEN)
+
+      Ruby broke the forge — that is 744-agyy, filed by an in-forge review that
+      found `./build.sh --check` unfinishable there. The yq rewrite then broke
+      the HOST and the BUILDER TOOLBOX, where `./build.sh --check` runs on every
+      Linux cycle:
+
+        blocked:index-load-failed: plan/index.yaml:
+          scripts/check-plan-schema-divergence.sh: ligne 41: yq: commande introuvable
+
+      That is the pre-push gate, and it is the trunk's only protection, so a
+      green tree could not be pushed at all until the script was made to fall
+      back. Two outages in one day, from two locally-correct fixes, is the
+      signature of a missing invariant rather than two mistakes.
+
+      IMMEDIATE MITIGATION ALREADY LANDED: the script now tries yq, then ruby,
+      and fails with `no YAML reader on PATH (tried yq, ruby)` instead of a raw
+      command-not-found that reads like a corrupt ledger. The ruby branch passes
+      `permitted_classes: [Time, Date]`, which is what order 720-24u6 was about —
+      without it, 231 bare ISO-8601 timestamps in the folded ledger make
+      safe_load raise before either vocabulary is read, and the gate then reports
+      a divergence that does not exist.
+
+      THAT MITIGATION IS NOT THE FIX. A fallback chain still leaves the bare host
+      with no reader, and every future YAML-reading script has to remember to
+      write the same chain. `jq` is the only tool present everywhere and cannot
+      read YAML.
+
+      The repo already owns a compiled YAML reader that runs everywhere: the
+      `tillandsias-plan` binary parses plan/index.yaml with serde_yaml, is
+      rebuilt by `scripts/cycle-preflight.sh` at the top of every cycle, and is
+      already the sanctioned path for ledger reads (`mcp_first_read_path`,
+      `ledger_write_path`). `tillandsias-policy validate-yaml` is named by the
+      meta-orchestration skill for exactly this purpose and is not built by
+      default.
+    outcome: |
+      Committed automation reads YAML through one path that exists in the forge,
+      on the host, and in the builder toolbox, and no future script has to
+      rediscover which interpreter is missing where.
+    exit_criteria:
+      - "A single sanctioned YAML read path is named and available in all three environments — forge, bare host, builder toolbox — and check-plan-schema-divergence.sh uses it instead of an interpreter chain."
+      - "An executable check proves availability in each environment rather than asserting it: run the reader in the forge, on the host, and in the toolbox and record the verdicts."
+      - "The methodology's YAML-validation guidance stops naming tools per-environment (`ruby` is NOT in the forge; `yq` is NOT on the host) and names the sanctioned path once."
+      - "NEGATIVE CONTROL: the load-failure verdict stays distinct from the divergence verdict (order 720-24u6) — a file that will not load must never be reported as a vocabulary mismatch."
+      - "Bare ISO-8601 timestamps in the folded ledger still load (the 720-24u6 regression), verified against the real plan/index.yaml, not a fixture."
+    notes: |
+      Prefer extending `tillandsias-plan` over building `tillandsias-policy` into
+      every lane: cycle-preflight already guarantees the former is current, which
+      is the property that makes it usable from a pre-push gate.
+
+      While here, audit the other scripts that shell out to a YAML interpreter —
+      `grep -rln 'ruby\|yq' scripts/` had 10 hits at filing time, and each one is
+      the same latent outage in a different environment.
+    events:
+      - type: filed
+        ts: "2026-08-15T00:55:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Found when the pre-push gate refused on this host immediately after
+          the forge's 744-agyy fix landed: yq is absent in the builder toolbox
+          where ./build.sh --check runs. Mitigated with a yq→ruby fallback and a
+          named no-reader verdict; filing the real fix separately.

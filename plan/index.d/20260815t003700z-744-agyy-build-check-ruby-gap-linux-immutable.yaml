@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+# Attack/verification run by BigPickle in the forge, 2026-08-15T00:34Z.
+# Empirical proof: reproduced by running ./build.sh --check in the forge.
+
+packets:
+  - packet_id: build-check-hard-depends-on-ruby-that-the-forge-documents-absent
+    order: 744-agyy
+    release_target: forge-local-experts-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "./build.sh --check cannot pass in the forge: check-plan-schema-divergence.sh hard-depends on ruby, which this image documents ABSENT — the mandated pre-push gate is red for every in-forge cycle"
+    deliverable: "check-plan-schema-divergence.sh rewritten to a validator present in the forge (yq), or a rubric-equivalent tillandsias-policy check wired into build.sh --check"
+    pickup_role: linux
+    capability_tags: [forge, build, fail-loud, gate, adversarial-review]
+    estimated_hours: 1
+    context: |
+      Measured in the forge during the 741-3y48 end-to-end verification, on an
+      otherwise clean checkout plus five valid plan fragments:
+
+          [build] Checking plan/schema status-vocab divergence (440)...
+          scripts/check-plan-schema-divergence.sh: line 36: ruby: command not found
+          [build] plan/schema status-vocab gate refused (440) — see the verdict line above
+          rc=1
+
+      The script (order 440) runs `ruby -ryaml -e '...'` unconditionally and
+      even asserts its assumption in a comment: "Ruby is the methodology's
+      sanctioned YAML fallback and this script runs HOST-side, where ruby
+      exists." The forge image contradicts the assumption — .forge-startup-context.md
+      documents ruby ABSENT in the same breath it names the trap ("the
+      sanctioned validator (ruby) is missing, the compiled one
+      (tillandsias-policy) is built per-lane and may not exist yet... Reach for
+      yq"), and yq IS present.
+
+      Why this matters for 741-3y48 specifically: AGENTS.md makes
+      `./build.sh --check` the trunk-protection gate "before EVERY push", and
+      this milestone's whole argument is that in-forge cycles must obey the
+      same rules as hosts. In-forge, that gate is unfinishable — it goes red on
+      the ruby check for reasons unrelated to the change being pushed. The
+      choices an agent then faces are "push with a known-red gate" (what
+      AGENTS.md forbids) or "skip the gate" — both normalize the exact
+      uncontrolled behavior this milestone exists to prevent. The failure also
+      masks real results: everything before line 36 of the script printed ok,
+      so the red is drowned in greens and easy to dismiss as environmental.
+    exit_criteria:
+      - "./build.sh --check exits 0 in the forge on a change whose plan/schema vocabularies are in sync."
+      - "The check still produces the same verdicts (ok / blocked:status-vocab-diverges / blocked:index-load-failed) and still refuses a real divergence."
+      - "A bare-ISO-8601 timestamp fold still loads (the 720-24u6 regression class) under the new validator."
+    notes: |
+      The startup context already names this exact environment (ruby absent, yq
+      present, python3 forbidden) — the script predates the forge's ruby-less
+      base or was never run inside it. Reuse the same yq pattern the startup
+      context documents so the sanctioned path is the one the code uses.
+    events:
+      - type: filed
+        ts: "2026-08-15T00:37:00Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
+        summary: >
+          Measured while proving 741-3y48 end-to-end: ./build.sh --check goes
+          red in the forge because scripts/check-plan-schema-divergence.sh calls
+          ruby, which this image documents ABSENT. The mandated pre-push gate is
+          unfinishable in-forge, independent of any change; every in-forge cycle
+          is pushed under a known-red gate or skips the gate entirely.

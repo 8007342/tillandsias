@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: startup-context-ephemeral-section-not-live-in-running-image
+    event:
+      type: implemented
+      ts: "2026-08-15T01:22:52Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        Two surfaces that cannot go stale, plus an image rebuild. (1) NEW images/default/startup-context-addendum.md, appended by inject_startup_context from the MOUNTED CHECKOUT at launch — anything written there is live on the next launch with no rebuild. Additive and fail-soft (guarded by -r and || true): a missing file is normal off Tillandsias, and a documentation append must never take down a launch. (2) AGENTS.md states the rule at CHECKOUT level, so an agent whose only bootstrap is the checkout still meets the gate — that surface is current in every forge the moment it is pushed. The rationale is recorded in AGENTS.md too, because without it the next editor moves the guard back into the baked generator, which is exactly how this happened. The split to keep: descriptive live state (inference readiness, expert skew, accel envelope) belongs in the generator which can compute it; rules an agent must not miss belong in the addendum where they cannot be stale. Pinned by NEW litmus:startup-context-addendum-shape 7/7; spec suite 15/15 PASS. Image rebuild follows to make the heredoc half live — scripts/build-image.sh correctly refused while the addendum was untracked, since its source-hash cache requires tracked inputs.

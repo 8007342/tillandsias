@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-diagnostics-is-gitignored-while-skills-call-it-durable-and-committed
+    field: status
+    value: completed
+    ts: "2026-08-15T01:03:59Z"
+    host: forge
+
+events:
+  - packet_id: plan-diagnostics-is-gitignored-while-skills-call-it-durable-and-committed
+    event:
+      type: completed
+      ts: "2026-08-15T01:03:59Z"
+      host: forge
+      summary: >
+        status 'completed' with evidence_refs: .gitignore lines 89-94 narrowed to raw logs/dumps; verified positive and negative controls via git add and git check-ignore
+  - packet_id: plan-diagnostics-is-gitignored-while-skills-call-it-durable-and-committed
+    event:
+      type: note
+      ts: "2026-08-15T01:03:59Z"
+      host: forge
+      summary: >
+        plan/diagnostics gitignore narrowed to raw dumps/logs; durable findings/summaries now committable

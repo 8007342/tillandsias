@@ -1,0 +1,72 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+# Attack/verification run by BigPickle in the forge, 2026-08-15T00:34Z.
+# Empirical proof: reproduced against throwaway fixture repos.
+
+packets:
+  - packet_id: mo-full-attestation-gate-fails-open-when-host-label-resolves-empty
+    order: 743-mgf3
+    release_target: forge-local-experts-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "When scripts/mo-full-attest.sh host resolves empty the gate drops to grammar-only and a fabricated 40-hex marker in the host's OWN ledger file passes rc=0"
+    deliverable: "a hard fail (or an explicit unverified-state verdict) when the host label cannot be determined, instead of silently skipping reachability"
+    pickup_role: linux
+    capability_tags: [forge, plan, fail-loud, attestation, adversarial-review]
+    estimated_hours: 1
+    context: |
+      Attack on scripts/check-mo-full-attestations.sh (order 742-ye7w). The
+      reachability half of the gate is gated on the host label:
+
+          host="$(bash scripts/mo-full-attest.sh host 2>/dev/null | tr -d '[:space:]' || true)"
+          if [ -n "$host" ] && [ -f "$ledger_dir/$host.md" ]; then own_file=...
+
+      If `mo-full-attest.sh host` outputs nothing — helper missing, or
+      MO_FULL_HOST unset and `hostname -s` failing — then `own_file` stays
+      empty and the OWN host's ledger file is swept GRAMMAR-ONLY. Every
+      reachability refusal is skipped, and the gate prints the reassuring
+      "grammar-verified (no own-host file)" verdict.
+
+      EMPIRICAL (fixture repo, gate copied in, helper DELETED):
+          # plan/mo-full-attestations.d/forge.md contains a fabricated marker:
+          ## 2026-08-15T00:00:00Z forge
+          MO-FULL: COMPLETE 9999999999999999999999999999999999999999 linux-next 9999999999999999999999999999999999999999
+          scripts/check-mo-full-attestations.sh   # -> ok:mo-full-attestations:1 files 1 markers grammar-verified  rc=0
+
+      With the helper present the SAME file refuses (LOCAL_SHA is not a real
+      commit), so the entire reachability guarantee is one helper failure away
+      from being silent. The script header documents this as deliberate ("the
+      gate never hard-fails because its own helper is absent, only because the
+      DATA is bad") — but the consequence is that a broken or removed helper
+      quietly downgrades the strongest check in the ledger, and a fabricated
+      attestation reaches origin with a green verdict.
+
+      SECONDARY (same gate, same run): the pairing rule claims each heading is
+      "immediately followed by exactly one marker", but inert lines (blank, '#'
+      comment, '--') between heading and marker are allowed — heading, blank,
+      marker passes rc=0. And a marker-line-shaped string embedded in the
+      heading's host field (`## <ts> fixturehost MO-FULL: COMPLETE <sha> ...`)
+      also passes grammar. Both are parser leniencies, lower severity than the
+      fail-open but worth tightening while the parser is being touched.
+    exit_criteria:
+      - "An undeterminable host label cannot downgrade the OWN host's reachability check; the gate refuses or reports an explicit unverified state instead."
+      - "A fabricated 40-hex marker in the own host's ledger file refuses the gate whether or not the host helper resolves."
+      - "The pairing rule is enforced modulo zero inert lines, or the 'immediately followed' claim is corrected to match the parser."
+    notes: |
+      Consider resolving the host label INSIDE the check script (or failing the
+      gate when it is empty), so the reachability guarantee does not depend on a
+      separate helper succeeding.
+    events:
+      - type: filed
+        ts: "2026-08-15T00:34:40Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
+        summary: >
+          Attack on 742-ye7w. With scripts/mo-full-attest.sh host resolving
+          empty (helper deleted), a fabricated 40-hex marker in the host's own
+          ledger file passes rc=0 grammar-only; the same file refuses when the
+          helper is present. Also noted: inert lines between heading and marker
+          pass despite the 'immediately followed' claim, and marker text can be
+          embedded in the heading host field.

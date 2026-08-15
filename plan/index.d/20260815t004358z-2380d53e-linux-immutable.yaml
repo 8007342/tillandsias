@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: mo-full-attestation-gate-exempts-readme
+    event:
+      type: implemented
+      ts: "2026-08-15T00:43:58Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        The README exemption no longer exempts markers. Exempt files are still not parsed as ledgers, but a column-0 'MO-FULL: ' line in one is now refused — the README documents its grammar INDENTED, so a marker at column 0 in an exempt file is fabricated by construction. Two fixtures: the indented example still passes, a fabricated column-0 marker refuses. Found by in-forge adversarial review (BigPickle) during the 741-3y48 end-to-end proof; fixed on host. Attestation fixtures 11/11, findings-gate fixtures 12/12, spec suite 14/14 PASS (100%).

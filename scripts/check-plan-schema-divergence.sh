@@ -1,5 +1,6 @@
 #!/bin/sh
-# Plan/schema status vocabulary divergence check (order 440).
+# @trace order:744-agyy (order 440, order 720-24u6)
+# Plan/schema status vocabulary divergence check (order 440, 744-agyy).
 # Exits 0 if plan/index.yaml default_status_values and plan/schema.yaml statuses
 # are identical. Emits a one-line verdict:
 #   ok:status-vocab-in-sync
@@ -20,35 +21,78 @@
 # A failing gate that names the wrong cause is worse than a silent one: it sends
 # the reader to diff two lists that already match. Load failure and divergence
 # are different facts and now get different verdicts.
-
+#
+# ORDER 744-agyy (2026-08-15):
+# ----------------------------
+# Rewritten from ruby to yq (the forge container has no ruby, but documents yq
+# present; python3 is forbidden under tlatoani_hard_no_python).
+#
+# ORDER 746-* (2026-08-15, same day): THAT REWRITE MOVED THE BREAKAGE, IT DID
+# NOT REMOVE IT. Measured across the three environments this gate actually runs
+# in:
+#
+#                     yq        ruby      jq
+#   forge             present   ABSENT    present
+#   host (Silverblue) ABSENT    ABSENT    present
+#   builder toolbox   ABSENT    present   present
+#
+# Ruby broke the forge. yq then broke the host AND the builder toolbox, where
+# `./build.sh --check` runs on every Linux cycle — the pre-push gate started
+# refusing with `blocked:index-load-failed: … yq: commande introuvable`, so a
+# green tree could not be pushed at all. Neither interpreter is universal, and
+# picking one and hoping is what produced two outages in one day.
+#
+# So: TRY EACH IN TURN, and fail with a verdict that names what is missing
+# instead of a parser error that reads like a corrupt ledger. jq is the only
+# tool present everywhere but cannot read YAML, so it is not a candidate here —
+# a universal reader is the real fix and is filed separately.
 set -eu
 
-INDEX="plan/index.yaml"
-SCHEMA="plan/schema.yaml"
+INDEX="${1:-plan/index.yaml}"
+SCHEMA="${2:-plan/schema.yaml}"
 
 if [ ! -f "$INDEX" ] || [ ! -f "$SCHEMA" ]; then
   echo "blocked:status-vocab-diverges: could not read $INDEX or $SCHEMA"
   exit 1
 fi
 
-# Rewritten from python3 (tlatoani_hard_no_python). Ruby is the methodology's
-# sanctioned YAML fallback and this script runs HOST-side, where ruby exists.
-ruby -ryaml -e '
-  def load_or_report(path)
-    YAML.load_file(path)
-  rescue => e
-    # One line, first line of the parser message only: a 20-line Psych backtrace
-    # buries the verdict the caller greps for.
-    puts "blocked:index-load-failed: #{path}: #{e.message.to_s.lines.first.to_s.strip}"
-    exit 1
-  end
-  idx = load_or_report(ARGV[0])
-  sch = load_or_report(ARGV[1])
-  idx_list = (idx["plan_index"] || {})["default_status_values"] || []
-  sch_list = sch["statuses"] || []
-  if idx_list != sch_list
-    puts "blocked:status-vocab-diverges: plan/index.yaml=(#{idx_list.join(" ")}) vs plan/schema.yaml=(#{sch_list.join(" ")})"
-    exit 1
-  end
-  puts "ok:status-vocab-in-sync"
-' "$INDEX" "$SCHEMA"
+# read_seq <file> <yq-path> <ruby-expr> -> space-joined sequence on stdout.
+# Returns non-zero and leaves the reader's message on stdout when the file will
+# not load, so the caller can report it verbatim.
+read_seq() {
+  _rs_file="$1"; _rs_yq="$2"; _rs_rb="$3"
+  if command -v yq >/dev/null 2>&1; then
+    yq eval "$_rs_yq" "$_rs_file" 2>&1
+    return $?
+  fi
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -e "$_rs_rb" "$_rs_file" 2>&1
+    return $?
+  fi
+  echo "no YAML reader on PATH (tried yq, ruby)"
+  return 2
+}
+
+RB_INDEX='d=YAML.safe_load_file(ARGV[0], permitted_classes: [Time, Date]); puts((d.dig("plan_index","default_status_values") || []).join(" "))'
+RB_SCHEMA='d=YAML.safe_load_file(ARGV[0], permitted_classes: [Time, Date]); puts((d["statuses"] || []).join(" "))'
+
+# Load index
+if ! idx_raw=$(read_seq "$INDEX" '.plan_index.default_status_values // [] | join(" ")' "$RB_INDEX"); then
+  first_err=$(printf '%s\n' "$idx_raw" | head -n 1)
+  echo "blocked:index-load-failed: $INDEX: $first_err"
+  exit 1
+fi
+
+# Load schema
+if ! sch_raw=$(read_seq "$SCHEMA" '.statuses // [] | join(" ")' "$RB_SCHEMA"); then
+  first_err=$(printf '%s\n' "$sch_raw" | head -n 1)
+  echo "blocked:index-load-failed: $SCHEMA: $first_err"
+  exit 1
+fi
+
+if [ "$idx_raw" != "$sch_raw" ]; then
+  echo "blocked:status-vocab-diverges: $INDEX=($idx_raw) vs $SCHEMA=($sch_raw)"
+  exit 1
+fi
+
+echo "ok:status-vocab-in-sync"

@@ -86,8 +86,11 @@ images/default/cheatsheet-sources/
 # Generated per-image build logs (build-image.sh writes build-<IMAGE>.log)
 build-*.log
 
-# Generated diagnostic dumps (forge diagnostics, etc.)
-/plan/diagnostics/
+# Generated diagnostic raw logs and dumps (summaries in plan/diagnostics/ are durable and committed; see plan/diagnostics/README.md; 745-48q6)
+/plan/diagnostics/*.log
+/plan/diagnostics/*.raw
+/plan/diagnostics/*.dump
+/plan/diagnostics/*.tmp
 /forge-diagnostics.json
 
 # Generated headless binaries for Windows tray embed

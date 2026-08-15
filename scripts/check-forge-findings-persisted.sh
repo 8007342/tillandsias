@@ -49,7 +49,10 @@ set -uo pipefail
 #   unpersisted:uncommitted findings exist in the worktree and are not committed
 #   unpersisted:unpushed    findings are committed but the branch is ahead of its
 #                           remote — one teardown from being lost
-#   skip:<reason>           the probe could not decide (not a repo, no remote ref)
+#   unpersisted:no-remote-tracking  a finding exists but no remote-tracking ref
+#                           can prove it landed (detached HEAD, upstream-less
+#                           branch, or an upstream pointing at a LOCAL ref)
+#   skip:<reason>           the probe could not decide (not a repo, no remote)
 #
 # Exit: 0 ok, 1 unpersisted, 3 skip.
 #
@@ -65,7 +68,18 @@ set -uo pipefail
 # Testability seam: TILLANDSIAS_FINDINGS_REMOTE_REF overrides the remote ref the
 # comparison uses, so fixtures need no network.
 
-FINDING_PATHS="plan/index.d plan/loop_status.d plan/issues plan/mo-full-attestations.d"
+# THE WHOLE plan/ TREE, not an enumeration (order 743-rhr4). The first version
+# listed four directories, and an in-forge adversarial review immediately filed a
+# finding into `plan/forge-improvements/proposals/` — a surface
+# `advance-work-from-plan` explicitly instructs in-forge agents to use — committed
+# it, never pushed it, and got `ok:no-findings`. Green while losing work.
+#
+# Enumerating surfaces is a losing game: skills reference plan/issues,
+# plan/diagnostics, plan/forge-improvements, plan/steps and plan/localwork today,
+# and any new one silently falls outside the gate. The whole tree is the honest
+# superset, and git's own ignore rules already exclude generated content, so
+# widening this cannot create the false alarms the negative control forbids.
+FINDING_PATHS="plan"
 
 usage() {
     echo "usage: check-forge-findings-persisted.sh [--since <ref>]" >&2
@@ -121,6 +135,53 @@ fixture() {
     _fx_expect "pushed-finding-passes" "ok:no-findings" 0
     _fx_expect "pushed-finding-with-since-reports-persisted" "ok:findings-persisted" 0 "--since HEAD~1"
 
+    # ── 743-rhr4: a surface the first version did not enumerate ───────────────
+    # `advance-work-from-plan` tells in-forge agents to file proposals here. The
+    # enumerated gate returned ok:no-findings for a committed, unpushed one.
+    mkdir -p "$_fx_dir/repo/plan/forge-improvements/proposals"
+    printf '# proposal\n' >"$_fx_dir/repo/plan/forge-improvements/proposals/2026-08-15-x.md"
+    ( cd "$_fx_dir/repo" && git add -A && git commit -qm "file a proposal" ) >/dev/null 2>&1
+    _fx_expect "REGRESSION uncovered-surface-forge-improvements-is-caught" "unpersisted:unpushed" 1
+    ( cd "$_fx_dir/repo" && git push -q origin linux-next ) >/dev/null 2>&1
+    _fx_expect "…and passes once pushed" "ok:no-findings" 0
+
+    # ── 743-yej2: @{upstream} pointed at a LOCAL branch ───────────────────────
+    # A local ref that already contains the finding commits made the gate green
+    # while the work existed only on container-local refs.
+    printf '# proposal 2\n' >"$_fx_dir/repo/plan/forge-improvements/proposals/2026-08-15-y.md"
+    ( cd "$_fx_dir/repo" \
+        && git add -A && git commit -qm "second proposal" \
+        && git branch -f decoy HEAD \
+        && git branch --set-upstream-to=decoy -q ) >/dev/null 2>&1
+    # The poisoned upstream is rejected, and the origin/<branch> fallback then
+    # supplies a MORE precise reason than no-remote-tracking. Refusing is the
+    # requirement; `unpushed` is the accurate diagnosis when a real remote
+    # counterpart exists to compare against.
+    _fx_expect "REGRESSION local-branch-upstream-is-not-trusted" "unpersisted:unpushed" 1
+    ( cd "$_fx_dir/repo" && git branch --set-upstream-to=origin/linux-next -q && git push -q origin linux-next ) >/dev/null 2>&1
+    _fx_expect "…and passes once a real remote-tracking ref is restored" "ok:no-findings" 0
+
+    # Poisoned upstream with NO origin counterpart to fall back to — the shape
+    # where trusting @{upstream} blindly produced a green verdict over work that
+    # lived only on container-local refs.
+    printf '# proposal on an unpublished branch\n' >"$_fx_dir/repo/plan/forge-improvements/proposals/2026-08-15-w.md"
+    ( cd "$_fx_dir/repo" \
+        && git checkout -q -b never-pushed \
+        && git add -A && git commit -qm "finding on an unpublished branch" \
+        && git branch --set-upstream-to=decoy -q ) >/dev/null 2>&1
+    _fx_expect "REGRESSION poisoned-upstream-with-no-remote-counterpart-refuses" "unpersisted:no-remote-tracking" 1
+    ( cd "$_fx_dir/repo" && git checkout -q linux-next ) >/dev/null 2>&1
+
+    # ── 743-yej2 (second half): detached HEAD carrying a committed finding ────
+    # Previously `skip:no-remote-ref` exit 3 — a non-refusal every caller reads
+    # as success, for a finding one teardown from gone.
+    printf '# proposal 3\n' >"$_fx_dir/repo/plan/forge-improvements/proposals/2026-08-15-z.md"
+    ( cd "$_fx_dir/repo" \
+        && git checkout -q --detach HEAD \
+        && git add -A && git commit -qm "detached proposal" ) >/dev/null 2>&1
+    _fx_expect "REGRESSION detached-head-with-committed-finding-refuses" "unpersisted:no-remote-tracking" 1
+    ( cd "$_fx_dir/repo" && git checkout -q linux-next ) >/dev/null 2>&1
+
     # A project with no plan surfaces at all is not a Tillandsias checkout and
     # must never be told it has unpersisted findings.
     rm -rf "$_fx_dir/repo/plan"
@@ -173,21 +234,39 @@ fi
 branch="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
 remote_ref="${TILLANDSIAS_FINDINGS_REMOTE_REF:-}"
 if [ -z "$remote_ref" ] && [ -n "$branch" ]; then
-    if git rev-parse --verify --quiet "@{upstream}" >/dev/null 2>&1; then
-        remote_ref="@{upstream}"
-    elif git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null 2>&1; then
+    # The upstream must be a REMOTE-TRACKING ref (order 743-yej2). `@{upstream}`
+    # can legally point at another LOCAL branch, and the first version trusted it
+    # blindly: pointing it at a local branch that already contained the finding
+    # commits produced `ok:no-findings` while the work existed only on
+    # container-local refs — precisely the loss this gate exists to prevent,
+    # wearing a green verdict. Resolve it and require refs/remotes/.
+    upstream_full="$(git rev-parse --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+    case "$upstream_full" in
+        refs/remotes/*) remote_ref="$upstream_full" ;;
+        *) : ;;
+    esac
+    if [ -z "$remote_ref" ] && git rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null 2>&1; then
         remote_ref="refs/remotes/origin/$branch"
     fi
 fi
 
 if [ -z "$remote_ref" ]; then
-    # Cannot prove persistence. Fail closed ONLY if there is something to lose:
-    # a fresh checkout with no remote and no findings is not a problem.
     if [ -n "$reasons" ]; then
         echo "unpersisted:$reasons"
         exit 1
     fi
-    echo "skip:no-remote-ref"
+    # No remote-tracking ref. If the repo HAS a remote, persistence is simply
+    # unproven — and for a GATE that must be a refusal, not a pass. A detached
+    # HEAD or an upstream-less branch carrying a committed finding previously
+    # returned `skip:no-remote-ref` (exit 3), which every caller treats as
+    # not-a-failure: the finding was one teardown from gone and the gate shrugged.
+    if [ -n "$(git remote 2>/dev/null)" ]; then
+        echo "unpersisted:no-remote-tracking"
+        exit 1
+    fi
+    # Genuinely remote-less repo (a scratch clone, never a forge): nothing to
+    # prove and nowhere to prove it.
+    echo "skip:no-remote"
     exit 3
 fi
 
