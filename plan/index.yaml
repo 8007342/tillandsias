@@ -17175,6 +17175,12 @@ plan_index:
         - "with a stubbed /api/tags serving 3 models, the machine line is exactly ONE line with inference_models=3 and inference_warm a comma-separated csv; the extended litmus case is committed and was demonstrated red against the pre-fix code"
 
       events:
+        - type: note
+          ts: "2026-08-15T03:17:09Z"
+          agent_id: "tlatoani-linux-immutable-20260814"
+          host: linux_immutable
+          summary: |
+            Status recovered by the host stranded-claim sweep. The work landed in-forge (commit 06f6330f) and TWO completed events were written at 02:01:51 and 02:02:00, but a claim event at 02:06:00 followed them and left status: in_progress — so the packet read as claimable while its exit criterion was already green. Verified against the tree before closing (litmus STEP 15 PASS, spec suite 7/7), per the stranded-sweep rule that closing requires checking exit criteria rather than guessing.
         - type: completed
           ts: "2026-08-15T02:01:51Z"
           agent_id: "bigpickle-forge-20260815"
