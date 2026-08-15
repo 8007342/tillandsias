@@ -453,6 +453,7 @@ specs:
   - litmus:forge-config-trust-cross-platform-parity
   - litmus:forge-gitdir-staging-chown
   - litmus:git-mirror-relay-token-expiry
+  - litmus:mirror-sshd-posture-shape
   coverage_ratio: 83
   last_verified: '2026-07-23'
 - spec_id: github-credential-health

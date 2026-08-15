@@ -1,0 +1,57 @@
+# @trace spec:git-mirror-service
+name: litmus:mirror-sshd-posture-shape
+spec: git-mirror-service
+phase: pre-build
+size: quick
+severity: critical
+description: >
+  Order 749-wv4d (design T3 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md,
+  R1 in §5): sshd runs IN the real images/git container under the mirror's
+  actual security posture — --read-only, --cap-drop=ALL, uid 1000, port 2222,
+  writable state only on the /tmp tmpfs and the /srv/git volume — and accepts a
+  TCP connection (SSH-2.0 banner read in-container by busybox nc; no published
+  ports). R1 called this the design's highest-risk rung: T4-T13 all assume it.
+
+  The posture flags are the reason the mirror is safe to expose. If this suite
+  ever goes red, the fix is NEVER to relax --read-only or --cap-drop — that
+  trade belongs to the operator (packet notes, 749-wv4d).
+
+  Posture subtlety the negative control encodes: podman's --read-only mounts a
+  tmpfs on /tmp BY DEFAULT (--read-only-tmpfs=true), so the control must pass
+  --read-only-tmpfs=false to genuinely remove the writable paths; omitting the
+  explicit --tmpfs alone removes nothing and would pass vacuously.
+
+preconditions:
+  - workspace contains images/git/Containerfile
+  - workspace contains scripts/test-mirror-sshd-posture.sh
+  - podman is available on the host
+
+critical_path:
+  - step: "openssh-server is installed by the mirror Containerfile"
+    command: "grep -qE '^[[:space:]]*openssh-server[[:space:]]*\\\\?' images/git/Containerfile && echo 'ok: openssh-server in the image package set'"
+    timeout_ms: 5000
+    expected_behavior: "ok: openssh-server in the image package set"
+
+  - step: "sshd accepts a connection under --read-only --cap-drop=ALL as uid 1000 on 2222 (demonstrated in the real container)"
+    command: "bash scripts/test-mirror-sshd-posture.sh positive 2>&1 | tail -1"
+    timeout_ms: 300000
+    expected_behavior: "ok:sshd-under-posture:banner-accepted"
+
+  - step: "NEGATIVE CONTROL: removing the writable paths (--read-only-tmpfs=false, no tmpfs) makes the probe FAIL with the named cause 'Read-only file system' — the posture is proven, not vacuous"
+    command: "bash scripts/test-mirror-sshd-posture.sh negative 2>&1 | tail -1"
+    timeout_ms: 300000
+    expected_behavior: "ok:sshd-negative-control:read-only-blocks-writable-state"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "sshd serves an SSH-2.0 banner as uid 1000:2222 under the read-only, cap-dropped posture"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "mirror-sshd-posture-shape"
+
+failure_modes:
+  - "openssh-server dropped from the Containerfile package set"
+  - "sshd cannot start as uid 1000 with a read-only rootfs (host key, pid, privsep state need a path outside /tmp tmpfs or /srv/git)"
+  - "sshd needs a capability that --cap-drop=ALL removes"
+  - "the negative control passes vacuously because podman's default read-only tmpfs was left mounted"
