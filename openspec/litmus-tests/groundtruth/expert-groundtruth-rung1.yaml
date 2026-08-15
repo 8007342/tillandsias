@@ -274,6 +274,24 @@ cases:
       answer_contains:
         - "unsupported:"
 
+  - id: plan-already-does-not-route-to-the-ready-listing
+    engine: plan.answer
+    query: "is there already a packet about the forge image missing the hostname executable?"
+    why: >
+      ROUTING (ORDER 757-yi8c, from the 2026-08-15 failed-forge handoff). A
+      duplicate-detection question whose only routing signals were the
+      substring "ready" inside "alREADY" and the role word "forge" was
+      answered with the ENTIRE ready-for-forge listing, served as exact — a
+      semantically unrelated exact answer, which the answer-rate and accuracy
+      metrics both scored as healthy. Unsupported is preferable to an
+      unrelated exact answer; this case is what makes that preference graded
+      rather than aspirational.
+    expect:
+      confidence: unsupported
+      max_citations: 0
+      answer_excludes:
+        - "ready packets for pickup_role"
+
   # ══ METHODOLOGY EXPERT (L0 YAML path query) ═════════════════════════════
   # A completely different corpus with completely different authority keys,
   # graded by the same code. That is the corpus-agnosticism claim, exercised
