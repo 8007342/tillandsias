@@ -41422,6 +41422,23 @@ plan_index:
         - the tray's fallback timer stops firing while the push subscription is healthy, and resumes on drop
         - a measurement records idle wakeups/second before and after for both guest and tray — the claim 'near-zero at idle' must be evidenced, not asserted
       events:
+        - type: note
+          ts: "2026-08-15T08:37:04Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            SELECTOR NOTE, so this stops costing a cycle to rediscover: this packet has been ranked urgent= by scripts/select-work-batch.sh windows on FOUR consecutive cycles and no windows cycle can drain it further.
+
+            The windows-verifiable half is DONE and measured (79 ctx/20s -> 3 ctx/90s, ~0.03 wakeups/s, recorded 2026-08-15). What remains is:
+              - the 30s podman shell-out and the 2s/15s/500ms ticks in main.rs (guest-side,
+                still windows-testable in principle but below the noise floor now -- the
+                measurement says what is left is already ~0.03/s)
+              - vz.rs:1494, transport_macos.rs:383, action_host.rs:2835 -- macOS only
+              - criterion 4's tray half -- macOS only
+
+            So the majority of the residue is NOT claimable from this host, and a windows cycle that claims this packet spends its budget discovering that. This is the shape linux filed as 750-zrt4 (a packet whose residual work lives elsewhere still competes for a cycle), with one difference worth recording: 750-zrt4 is about parents fully delegated to CHILDREN, whereas this is a single packet whose remaining exit criteria are host-specific. A selector that only learns about split parents will still offer this one.
+
+            Not changing status. It is genuinely open and macOS should claim it. Recording the fact where the next windows agent will read it before claiming.
         - type: verified
           ts: "2026-08-15T02:48:33Z"
           agent_id: "unknown"
