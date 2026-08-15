@@ -1008,6 +1008,26 @@ Before exit:
 8. Confirm there are no uncommitted changes created by this cycle and the
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.
+
+   Then prove the cycle's FINDINGS survive it (order 741-3y48):
+
+   ```bash
+   scripts/check-forge-findings-persisted.sh
+   ```
+
+   A GATE, not advisory — non-zero means work already done is about to be thrown
+   away. It covers `plan/index.d/`, `plan/loop_status.d/`, `plan/issues/` and
+   `plan/mo-full-attestations.d/`, and it catches what `git status` cannot: a
+   COMMITTED fragment that was never pushed presents as a clean tree and is one
+   teardown from gone. That is not hypothetical — on 2026-08-15 an in-forge
+   review filed three valid fragments, `tillandsias-plan check` accepted them,
+   and the container took all three with it; they survived only because a human
+   happened to be reading stdout. A cycle that files nothing prints
+   `ok:no-findings` and is silent, so a clean run stays quiet.
+
+   This matters most inside a forge, where the checkout is a clone that dies with
+   the container — but it is correct everywhere, and an unattended host that
+   commits without pushing loses the same work to the next `git reset`.
 9. Record the verified marker durably, then emit the terminal marker (orders
    614-2gqx + 651-2x5s) as your FINAL output line. `record` derives-and-verifies
    the marker exactly as `self` does and appends the verified line to the
