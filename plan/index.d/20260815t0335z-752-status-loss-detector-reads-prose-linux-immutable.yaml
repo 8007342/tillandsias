@@ -1,0 +1,79 @@
+packets:
+  - packet_id: status-loss-detector-attributes-closure-markers-found-in-prose
+    order: 752-pst5
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "check-fragment-status-loss.sh flags a packet whose PROSE quotes the closure marker — it invents a completion from a block scalar, and its own comments say that is worse than no checker"
+    deliverable: "attribution that distinguishes an event declaration from text about one"
+    pickup_role: any
+    capability_tags: [plan, ledger, fail-loud, false-positive, detector]
+    estimated_hours: 2
+    context: |
+      REPRODUCED 2026-08-15 on tlatoani, by filing packet 751-i9mb. The gate
+      refused the push:
+
+        violation:fragment-status-loss:1
+          base-ledger-completions-are-outside-the-status-loss-detector:
+            has a 'completed' EVENT but folds as 'ready'
+
+      That packet has exactly one event, `type: filed`. It has no closure event.
+      What it HAS is a context block quoting the methodology verbatim —
+      `ledger_write_path.why`, describing how a host once wrote closure events
+      with no status block. The quotation contains the marker string the awk
+      greps for, inside a `|` block scalar.
+
+      The attribution logic:
+
+        /^  - packet_id:/            { pid = $3; next }
+        pid != "" && /<marker>/      { print pid; pid = ""; next }
+        pid != "" && /^  [a-z_]+:/   { pid = "" }
+
+      The reset only fires on a key at exactly two-space indent. Packet fields in
+      these fragments are indented four, so `pid` is never cleared and stays live
+      for the WHOLE packet body — including every prose line. Any packet that
+      discusses closure events in its own description is flagged.
+
+      THE CHECKER'S OWN COMMENTS ARGUE THIS IS SERIOUS. It already carries a fix
+      for a sibling false-positive — awk variables carrying across file
+      boundaries, which invented a completion for 598-kibt whose real event was
+      `type: progress` — and records the reason plainly: "A checker that invents
+      completions is worse than no checker: acting on it would have closed
+      partial work." This is the same class through a different door: the
+      file-boundary reset was added, the indent-depth reset was not.
+
+      The cost is not only a blocked push. It teaches agents that the gate fires
+      on correct fragments, and the remedy it prints — "write a NEW fragment with
+      a status: entry" — is wrong advice here, because the packet's status is
+      already right. A wrong remedy on a false positive is how a real one gets
+      dismissed later.
+    outcome: |
+      The detector flags packets whose events declare a closure, and stays silent
+      about packets that merely describe one.
+    exit_criteria:
+      - "A fragment whose prose quotes the closure marker but whose events do not declare one is NOT flagged — verified with a fixture built from 751-i9mb's real body, which is the reproduction."
+      - "A fragment that genuinely declares a closure event beside a non-terminal status IS still flagged — the existing behaviour must survive the fix, proven by mutation rather than inspection."
+      - "Attribution is bounded by the packet's actual events block rather than by an indent-depth heuristic, so a change in fragment indentation cannot silently disable OR widen the check."
+      - "NEGATIVE CONTROL retained: the 598-kibt file-boundary case stays covered — a packet_id last in one fragment must not inherit the first closure marker in the next."
+    notes: |
+      Both known false positives come from the same root: the scanner is a line
+      grep with ad-hoc resets, so it cannot tell structure from text. Adding a
+      third reset rule buys the next one too. Prefer parsing the fragment (the
+      repo already has a YAML reader available in every environment via
+      tillandsias-plan — see 746-htj9) over extending the awk.
+
+      Workaround used to land 751-i9mb: its prose was rewritten to describe the
+      marker instead of quoting it. That is a documentation contortion to satisfy
+      a checker, and it is not a fix — the next packet about ledger mechanics
+      will hit the same wall.
+    events:
+      - type: filed
+        ts: "2026-08-15T03:35:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Reproduced by filing 751-i9mb, whose context quotes the methodology
+          passage about closure events written without a status block. The gate
+          read the quotation as a declaration and refused the push.

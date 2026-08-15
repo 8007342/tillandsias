@@ -1,0 +1,95 @@
+packets:
+  - packet_id: base-ledger-completions-are-outside-the-status-loss-detector
+    order: 751-i9mb
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "check-fragment-status-loss.sh scans plan/index.d only, so a completion recorded inline in the BASE ledger is invisible — 532 sat claimable with its exit criterion already green"
+    deliverable: "the same completion check, applied wherever the events actually live"
+    pickup_role: any
+    capability_tags: [plan, ledger, fail-loud, data-integrity, detector-gap]
+    estimated_hours: 2
+    context: |
+      MEASURED 2026-08-15 on tlatoani by the stranded-claim sweep, which rose
+      0 -> 2 between cycles.
+
+      Packet 532 (inference-state-warm-grammar-multimodel) read `in_progress`.
+      Its work was DONE and on the remote: the litmus step its exit criterion
+      names — litmus:inference-model-preload-policy STEP 15, "THREE cached models
+      yield exactly ONE machine line" — is committed (06f6330f) and passes, and
+      the whole inference-container spec is 7/7 PASS. The ledger carried TWO
+      closure events for it, at 02:01:51 and 02:02:00.
+
+      A `claim` event at 02:06:00 landed AFTER both and left `status:
+      in_progress`. So the packet advertised itself as claimable work whose exit
+      criterion was already green — the mechanical root of agents "going in
+      circles on work that is already done".
+
+      SCOPE CORRECTION (this packet's first draft got it wrong, 2026-08-15).
+      I first filed this as "the closure-event shape has NO detector". That is
+      false and the record should not carry it: check-fragment-status-loss.sh
+      HAS had that check since 2026-08-09 — it collects packet_ids whose event
+      block declares a closure and flags any that fold to a non-terminal status.
+      I had read only its first `case` block and stopped, which is exactly the
+      half-reading this project keeps filing packets about. The real gap is
+      narrower and still real:
+
+        the detector reads "$FRAG_DIR"/*.yaml — plan/index.d only.
+
+      532's events are INLINE in plan/index.yaml, because the ledger had just
+      been compacted and compaction folds every fragment into the base. So the
+      check that exists could not see the packet it was written for. Nothing
+      re-examines the base after a fold.
+
+      `./build.sh --check` was green throughout, including
+      `ok:no-fragment-status-loss:16 checked` — 16 fragments checked, and the
+      one packet with the defect was not among them because it no longer lived
+      in a fragment.
+
+      RECOVERED BY HAND: exit criterion checked against the TREE (litmus re-run,
+      7/7) before writing `completed` with evidence, per the stranded-sweep rule
+      that closing requires checking exit criteria rather than guessing from
+      events.
+    outcome: |
+      A packet carrying a closure event while its status says otherwise is
+      reported wherever the events live, so compaction cannot hide a lost
+      completion.
+    exit_criteria:
+      - "The existing closure-event check also scans the base ledger, not only plan/index.d — verify against real history, which contained 532 inline on 2026-08-15."
+      - "Running it against a base ledger that contains a closure event beside a non-terminal status REPORTS that packet; running it against the same ledger with the status corrected does not."
+      - "NEGATIVE CONTROL: a packet legitimately in_progress with only progress/claim/note events is NOT flagged, and neither is one whose closure was later falsified."
+      - "ADVISORY, not a hard gate: report and let a cycle check exit criteria. Auto-promoting a status from an event is how a false completion becomes permanent — 532 was only closable because its litmus was re-run and passed."
+    notes: |
+      Do NOT fix this by making append-event refuse a closure event without a
+      status change. The event log is append-only and honest; status is a
+      separate LWW channel by design (ledger_write_path), and coupling them would
+      break the deliberate `implemented` -> field-verification hand-off.
+
+      The ORDERING is the more valuable half: 532's claim event postdates its
+      closures, so a claim taken after work finished silently reverted a terminal
+      status. Whether `claim` should refuse to move a packet backwards off a
+      terminal rung is a separate question from detection.
+
+      See 752-pst5 for a false-positive in the same detector, found while filing
+      this: it attributes the closure marker to a packet even when the marker
+      appears inside PROSE. This packet's own first draft tripped it by quoting
+      the methodology.
+
+      Deliberately NOT folded in: the same sweep flagged 735-ead5
+      (v04-release-promotion) as stranded, but its notes say it is HELD pending
+      two sibling e2e gates. The detector cannot distinguish "deliberately parked
+      pending external evidence" from "abandoned" — a third shape, and its own
+      packet if anyone wants it.
+    events:
+      - type: filed
+        ts: "2026-08-15T03:20:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Found by the stranded sweep rising 0 -> 2. 532 had two closure events,
+          a green exit criterion on the remote, and a non-terminal status —
+          outside the detector because compaction had moved its events from a
+          fragment into the base. First draft of this packet wrongly claimed no
+          detector existed; corrected before landing.
