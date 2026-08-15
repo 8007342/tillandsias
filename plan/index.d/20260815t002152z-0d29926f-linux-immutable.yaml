@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: meta-orchestration-spec-is-a-ghost-with-a-100-percent-coverage-claim
+    event:
+      type: measured
+      ts: "2026-08-15T00:21:52Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        CONFIRMED SYSTEMIC — the packet's own open question ('check whether other spec ids have the same shape before fixing only this one') is now answered: they do. Touching images/default/lib-common.sh in an unrelated commit made the pre-commit hook check that file, and it reported 8 further ghost traces across THREE more nonexistent spec ids: spec:windows-wsl-runtime (lines 102, 194, 675, 753, 2152), spec:forge-git-ergonomics (114), spec:forge-git-identity-anonymization (327, 345). So meta-orchestration is not a lone gap — at least four spec ids are traced by real code and backed by no spec. This moves the fix away from 'write the meta-orchestration spec' and toward 'make litmus-bindings derive its ids from what exists, and make the ghost-trace check run over the whole tree rather than only newly-added files'. The hook only inspects files a commit touches, which is why four ids hid for months: the traces are old and the files are rarely edited.

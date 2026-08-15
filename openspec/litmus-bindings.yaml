@@ -625,6 +625,8 @@ specs:
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
   - litmus:mcp-expert-health-probe-shape
+  - litmus:forge-findings-persistence-shape
+  - litmus:mo-full-attestation-ledger-shape
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels

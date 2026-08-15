@@ -30,6 +30,8 @@
 # Usage:
 #   scripts/mo-full-attest.sh check <log-file> [timeout-s]
 #   scripts/mo-full-attest.sh self [timeout-s]
+#   scripts/mo-full-attest.sh record [ledger-file] [timeout-s]
+#   scripts/mo-full-attest.sh host
 #   scripts/mo-full-attest.sh fixture
 #
 # check — validate a real forge log (used by
@@ -50,6 +52,22 @@
 #   defaults to COMPLETE; set MO_FULL_DISPOSITION=BLOCKED for a
 #   blocked-but-pushed cycle. Same $MO_FULL_REMOTE_PROBE override as check.
 #
+# record — make the verified marker DURABLE (651-2x5s): run the self
+#   verification, and on success append the verified line to the per-host
+#   ledger under plan/mo-full-attestations.d/<host>.md (or the file given as
+#   the first argument), then print the marker. The ledger is a committed,
+#   machine-parseable log automation can consume — a marker recorded there is
+#   evidence a transcript marker is not. The ledger line attests the WORK head
+#   at record time; the cycle then commits+pushes the ledger and re-derives the
+#   TERMINAL marker at the head containing the record (see
+#   methodology/mo-full-attestation.yaml bookkeeping_commit). Never touches the
+#   ledger on failure — a failed verification must not leave a record behind.
+#
+# host — print the host label that names this host's ledger file
+#   (MO_FULL_HOST if set, else `forge` inside the forge container, else the
+#   short hostname lowercased). Shared by record and
+#   check-mo-full-attestations.sh so the two can never drift apart.
+#
 # fixture — run the hermetic failure scenarios (missing marker, malformed
 #   marker, unpushed local commit, branch mismatch, remote-head mismatch, and a
 #   well-formed-but-fabricated SHA that matches nothing on the remote — the
@@ -67,8 +85,28 @@ set -uo pipefail
 SHA_RE='^[0-9a-f]{40}$'
 
 usage() {
-    echo "MO-FULL: FAIL usage: $0 {check <log-file> [timeout-s]|self [timeout-s]|fixture}" >&2
+    echo "MO-FULL: FAIL usage: $0 {check <log-file> [timeout-s]|self [timeout-s]|record [ledger-file] [timeout-s]|host|fixture}" >&2
     exit 1
+}
+
+# mo_full_host — the stable host label that names this host's ledger file.
+# The forge container reports a generated container hostname; the mesh
+# convention (plan/loop_status.d headings) calls it `forge`. On real hosts the
+# short hostname (lowercased) is stable. MO_FULL_HOST overrides for tests and
+# unusual deployments. This is the single source of truth for the label —
+# check-mo-full-attestations.sh derives the current host's ledger by calling
+# `mo-full-attest.sh host`, so the two can never disagree.
+mo_full_host() {
+    if [ -n "${MO_FULL_HOST:-}" ]; then
+        printf '%s' "$MO_FULL_HOST"
+        return 0
+    fi
+    if [ -f "$(git rev-parse --show-toplevel 2>/dev/null || echo .)/.forge-startup-context.md" ]; then
+        printf '%s' 'forge'
+        return 0
+    fi
+    printf '%s' "$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+    return 0
 }
 
 # remote_head <branch> — print the current remote head for <branch>.
@@ -229,6 +267,65 @@ self_attest() {
     return 2
 }
 
+# record_attest <ledger-file> <timeout-s> — DERIVE-and-verify the marker via
+# self, and on success append it to the durable ledger. The ledger entry is:
+#
+#   ## <ISO-UTC-timestamp> <host>
+#   MO-FULL: <DISPOSITION> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>
+#
+# On success prints ONLY the recorded marker (so the caller can emit it); on
+# failure prints self's typed FAIL through stderr, exits non-zero, and MUST NOT
+# create or modify the ledger — a failed verification leaves no record.
+record_attest() {
+    local ledger="$1" timeout_s="$2"
+    local out marker disp local_sha branch remote_sha ts host
+
+    if [ -z "$ledger" ]; then
+        echo "MO-FULL: FAIL record: missing ledger file path"
+        return 1
+    fi
+    if [ -z "$(mo_full_host | tr -d '[:space:]')" ]; then
+        echo "MO-FULL: FAIL record: cannot determine host label (no MO_FULL_HOST, no /etc/hostname hostname command)"
+        return 1
+    fi
+
+    out="$(mktemp "${TMPDIR:-/tmp}/mo-full-record.XXXXXX")"
+    "$0" self "$timeout_s" >"$out" 2>&1
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        cat "$out" >&2
+        rm -f "$out"
+        return "$rc"
+    fi
+    marker="$(grep -E '^MO-FULL: ' "$out" | tail -1 || true)"
+    rm -f "$out"
+    if [ -z "$marker" ]; then
+        echo "MO-FULL: FAIL record: self-attestation produced no marker line"
+        return 1
+    fi
+    # shellcheck disable=SC2034
+    read -r _tag disp local_sha branch remote_sha <<< "$marker"
+    if [ "$local_sha" != "$remote_sha" ] || ! printf '%s' "$local_sha" | grep -qE "$SHA_RE"; then
+        echo "MO-FULL: FAIL record: internal error — self returned an unverifiable marker: $marker"
+        return 1
+    fi
+
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    host="$(mo_full_host)"
+
+    mkdir -p "$(dirname "$ledger")"
+    if [ ! -f "$ledger" ]; then
+        printf '%s\n' "# MO-FULL attestation ledger — <host>.md (see methodology/mo-full-attestation.yaml)" \
+            "# One verified marker per cycle, appended by: scripts/mo-full-attest.sh record" \
+            "# Grammar: MO-FULL: <COMPLETE|BLOCKED> <LOCAL_SHA> <BRANCH> <REMOTE_SHA> (LOCAL_SHA == REMOTE_SHA)" \
+            "# Verified at write time: startup boundary (717-3bvv) + remote convergence (614-2gqx)." \
+            "# Gate: scripts/check-mo-full-attestations.sh (./build.sh --check)." >>"$ledger"
+    fi
+    printf '\n## %s %s\n%s\n' "$ts" "$host" "$marker" >>"$ledger"
+    printf '%s\n' "$marker"
+    return 0
+}
+
 # fixture — hermetic reproduction of the breach shapes. Each scenario builds a
 # synthetic log plus a fake remote probe and asserts the validator verdict.
 fixture() {
@@ -335,6 +432,40 @@ fixture() {
         printf '%s\n' "$live_head" >"$work/good-stamp"
         run_self_case "self-verified-boundary" "$work/good-stamp" 0 \
             "MO-FULL: COMPLETE $live_head $live_branch $live_head"
+
+        # 11-12. record mode — the durable-ledger path (651-2x5s). record runs
+        #    self internally, so these use the same live-repo gating and must
+        #    never touch the real ledger (always a scratch file under $work).
+        local ledger_path
+        ledger_path="$work/ledger.md"
+        run_record_case() {
+            # run_record_case <name> <stamp-file> <expect-exit>
+            local rname="$1" rstamp="$2" rrc_want="$3" rrc=0
+            rm -f "$ledger_path"
+            MO_FULL_BOUNDARY_STAMP="$rstamp" \
+            MO_FULL_REMOTE_PROBE="printf '${live_head}'" \
+                "$0" record "$ledger_path" 2 >"$work/record-out" 2>&1 || rrc=$?
+            if [ "$rrc" -ne "$rrc_want" ]; then
+                failures+=("$rname: exit=$rrc expected=$rrc_want (out: $(tail -1 "$work/record-out"))")
+            elif [ "$rrc_want" -eq 0 ]; then
+                if ! grep -Fq "MO-FULL: COMPLETE $live_head $live_branch $live_head" "$work/record-out"; then
+                    failures+=("$rname: expected verified marker on stdout, got: $(tail -1 "$work/record-out")")
+                elif ! grep -Fq "MO-FULL: COMPLETE $live_head $live_branch $live_head" "$ledger_path"; then
+                    failures+=("$rname: expected marker appended to ledger, ledger: $(cat "$ledger_path")")
+                elif [ "$(grep -c '^MO-FULL: ' "$ledger_path")" -ne 1 ]; then
+                    failures+=("$rname: expected exactly one marker line in ledger")
+                fi
+            elif [ -e "$ledger_path" ]; then
+                failures+=("$rname: failed verification must NOT create or touch the ledger")
+            fi
+        }
+
+        # 11. record appends the verified marker to the ledger and prints it.
+        run_record_case "record-verified-boundary" "$work/good-stamp" 0 ""
+
+        # 12. NEGATIVE CONTROL: record with no boundary must fail AND leave the
+        #     ledger untouched — a failed verification records nothing.
+        run_record_case "record-no-boundary" "$work/absent-stamp" 1 "no verified startup boundary"
     fi
 
     if [ "${#failures[@]}" -gt 0 ]; then
@@ -345,10 +476,10 @@ fixture() {
     if [ "$self_cases" -eq 0 ]; then
         # Say what was NOT run. A fixture that silently covers less on some
         # checkouts reports the same "green" as one that covered everything.
-        echo "PASS: mo-full-attest fixture 7/7 check scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
+        echo "PASS: mo-full-attest fixture 7/7 check scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha); self/record boundary scenarios SKIPPED — not attestable from branch '${live_branch:-none}'"
         return 0
     fi
-    echo "PASS: mo-full-attest fixture 10/10 scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary)"
+    echo "PASS: mo-full-attest fixture 12/12 scenarios green (no-marker, malformed, unpushed-commit, branch-mismatch, remote-head-mismatch, clean-pass, fabricated-sha, self-no-boundary, self-stale-boundary, self-verified-boundary, record-verified-boundary, record-no-boundary)"
     return 0
 }
 
@@ -364,6 +495,14 @@ case "$cmd" in
     self)
         timeout_s="${1:-${LITMUS_GIT_DELTA_TIMEOUT_S:-120}}"
         self_attest "$timeout_s"
+        ;;
+    record)
+        ledger="${1:-plan/mo-full-attestations.d/$(mo_full_host).md}"
+        timeout_s="${2:-${LITMUS_GIT_DELTA_TIMEOUT_S:-120}}"
+        record_attest "$ledger" "$timeout_s"
+        ;;
+    host)
+        mo_full_host
         ;;
     fixture)
         fixture

@@ -1,0 +1,99 @@
+# @trace spec:meta-orchestration
+# @trace order:741-3y48
+#
+# Pins the forge findings-persistence gate (order 741-3y48). An in-forge agent's
+# checkout is a clone into the container and dies with it, so a fragment that is
+# written and validated but never pushed is a finding that was destroyed. This
+# test falsifies drift in the gate's verdict grammar, its unpersisted branches
+# (including the committed-but-unpushed state `git status` reports as clean), the
+# negative control that keeps a clean cycle silent, and the forge startup context
+# that tells in-forge agents the rule.
+name: litmus:forge-findings-persistence-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/check-forge-findings-persisted.sh: the verdict grammar
+  ^(ok:(no-findings|findings-persisted)|unpersisted:<why>|skip:<reason>)$, the
+  uncommitted and unpushed branches with non-zero exits, the --since
+  findings-persisted report, the off-Tillandsias no-op, the silent-clean-cycle
+  negative control, and the startup-context wiring that makes in-forge agents
+  aware their checkout is ephemeral.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-forge-findings-persisted.sh
+  - workspace contains images/default/lib-common.sh
+  - shell utilities (git, grep, bash, mktemp) are available in PATH
+
+critical_path:
+  - step: "gate is executable, parses, and exposes its fixture mode"
+    command: "test -x scripts/check-forge-findings-persisted.sh && bash -n scripts/check-forge-findings-persisted.sh && grep -q 'fixture()' scripts/check-forge-findings-persisted.sh && echo 'ok: gate-defined'"
+    timeout_ms: 5000
+    expected_behavior: "ok: gate-defined"
+
+  - step: "all hermetic scenarios pass (clean, uncommitted, unpushed, pushed, since, off-project)"
+    command: "scripts/check-forge-findings-persisted.sh fixture >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/check-forge-findings-persisted.sh fixture; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: scenarios-pass"
+
+  - step: "NEGATIVE CONTROL: a cycle that files nothing is silent and exits zero"
+    # The hard requirement. A gate that fires on every clean cycle is one every
+    # agent learns to ignore, which is the failure mode this milestone keeps
+    # repairing. Verified against a real repo, not by inspecting the source.
+    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/r\"; ( cd \"$d/r\" && git config user.email f@l && git config user.name f && mkdir -p plan/index.d && printf 'packets: []\\n' > plan/index.d/base.yaml && git add -A && git commit -qm base ) >/dev/null 2>&1; git init -q --bare \"$d/rem\"; ( cd \"$d/r\" && git remote add origin \"$d/rem\" && git push -q origin linux-next && git branch --set-upstream-to=origin/linux-next -q ) >/dev/null 2>&1; out=$( cd \"$d/r\" && bash \"$OLDPWD/scripts/check-forge-findings-persisted.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:no-findings' ] && echo 'ok: clean-cycle-silent' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: clean-cycle-silent"
+
+  - step: "a COMMITTED but unpushed finding fails loud (the state git status calls clean)"
+    # This is the 2026-08-15 loss shape. `git status --porcelain` is empty here,
+    # so any check built on working-tree dirt alone would pass it straight
+    # through to teardown.
+    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/r\"; git init -q --bare \"$d/rem\"; ( cd \"$d/r\" && git config user.email f@l && git config user.name f && mkdir -p plan/index.d && printf 'packets: []\\n' > plan/index.d/base.yaml && git add -A && git commit -qm base && git remote add origin \"$d/rem\" && git push -q origin linux-next && git branch --set-upstream-to=origin/linux-next -q && printf 'packets: [{packet_id: x}]\\n' > plan/index.d/finding.yaml && git add -A && git commit -qm finding ) >/dev/null 2>&1; dirt=$( cd \"$d/r\" && git status --porcelain | wc -l ); out=$( cd \"$d/r\" && bash \"$OLDPWD/scripts/check-forge-findings-persisted.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$dirt\" = \"0\" ] && [ \"$rc\" = 1 ] && [ \"$out\" = 'unpersisted:unpushed' ] && echo 'ok: unpushed-fails-loud-on-clean-tree' || { echo \"FAIL: dirt=$dirt rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: unpushed-fails-loud-on-clean-tree"
+
+  - step: "an uncommitted finding fails loud"
+    command: "d=$(mktemp -d); git init -q -b linux-next \"$d/r\"; git init -q --bare \"$d/rem\"; ( cd \"$d/r\" && git config user.email f@l && git config user.name f && mkdir -p plan/index.d && printf 'packets: []\\n' > plan/index.d/base.yaml && git add -A && git commit -qm base && git remote add origin \"$d/rem\" && git push -q origin linux-next && git branch --set-upstream-to=origin/linux-next -q && printf 'packets: [{packet_id: x}]\\n' > plan/index.d/finding.yaml ) >/dev/null 2>&1; out=$( cd \"$d/r\" && bash \"$OLDPWD/scripts/check-forge-findings-persisted.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'unpersisted:uncommitted' ] && echo 'ok: uncommitted-fails-loud' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: uncommitted-fails-loud"
+
+  - step: "a project with no plan surfaces is a no-op, never a false alarm"
+    command: "d=$(mktemp -d); git init -q -b main \"$d/r\"; ( cd \"$d/r\" && git config user.email f@l && git config user.name f && echo hi > README.md && git add -A && git commit -qm base ) >/dev/null 2>&1; out=$( cd \"$d/r\" && bash \"$OLDPWD/scripts/check-forge-findings-persisted.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:no-findings' ] && echo 'ok: off-project-noop' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: off-project-noop"
+
+  - step: "the gate covers every append-only plan surface an agent files into"
+    command: "for p in plan/index.d plan/loop_status.d plan/issues plan/mo-full-attestations.d; do grep -q \"$p\" scripts/check-forge-findings-persisted.sh || { echo \"FAIL: $p not covered\"; exit 1; }; done; echo 'ok: all-surfaces-covered'"
+    timeout_ms: 3000
+    expected_behavior: "ok: all-surfaces-covered"
+
+  - step: "the forge startup context warns in-forge agents their checkout is ephemeral and names the gate"
+    # Wiring is the whole point: the gate only helps if the agent inside the
+    # container knows to run it before exiting.
+    command: "grep -q 'check-forge-findings-persisted.sh' images/default/lib-common.sh && grep -q 'THIS CHECKOUT IS EPHEMERAL' images/default/lib-common.sh && echo 'ok: startup-context-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: startup-context-wired"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+    - "@trace order:741-3y48"
+  expected_log: "forge findings-persistence gate pinned (grammar + unpersisted branches + negative control + startup-context wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "forge-findings-persistence-shape"
+    artifact: "scripts/check-forge-findings-persisted.sh + images/default/lib-common.sh"
+
+rollback:
+  on_failure: >
+    The forge findings-persistence gate drifted. Restore
+    scripts/check-forge-findings-persisted.sh emitting exactly one line matching
+    ^(ok:(no-findings|findings-persisted)|unpersisted:[a-z-]+(,[a-z-]+)*|skip:[a-z0-9-]+)$
+    with exit 0/1/3, keep it executable, keep BOTH unpersisted branches
+    (uncommitted from git status, unpushed from rev-list against the remote ref —
+    dropping the second re-opens the exact 2026-08-15 loss, which presents as a
+    clean tree), keep the clean-cycle negative control silent, keep all four plan
+    surfaces covered, and restore the ephemeral-checkout warning naming the gate
+    in images/default/lib-common.sh's startup context.
+  command: "scripts/check-forge-findings-persisted.sh fixture; grep -n 'unpersisted:\\|ok:no-findings\\|ok:findings-persisted' scripts/check-forge-findings-persisted.sh | head -20"

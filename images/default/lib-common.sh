@@ -3773,6 +3773,39 @@ You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA
 
 Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-plan\`.
 
+### THIS CHECKOUT IS EPHEMERAL — a finding you do not PUSH is a finding you destroyed
+
+This workspace is a \`git clone\` into the container. When the forge tears down it
+goes with it, and nothing warns you. Writing a fragment to \`plan/index.d/\` and
+validating it with \`tillandsias-plan check\` proves it is WELL-FORMED, not that it
+survives — those are different claims, and the second one is the only one that
+matters to the host that launched you.
+
+On 2026-08-15 a review agent here found four real defects, minted three order
+tokens, wrote three valid fragments, confirmed the ledger accepted them
+(857 packets), and exited. Every fragment was destroyed. They reached the ledger
+only because a human-readable summary happened to be on stdout and the launching
+host re-filed them BY HAND. Unattended, all four findings would have been lost
+while the launcher returned zero (order 741-3y48).
+
+So: **commit and push every finding before you exit.** Git push routes through
+the enclave mirror and needs no configuration. Then prove it:
+
+\`\`\`bash
+scripts/check-forge-findings-persisted.sh   # ok:no-findings | ok:findings-persisted | unpersisted:<why>
+\`\`\`
+
+It is a GATE, not advice — a non-zero exit means work already done is about to be
+thrown away, which is unrecoverable once this container stops. It covers
+\`plan/index.d/\`, \`plan/loop_status.d/\`, \`plan/issues/\` and
+\`plan/mo-full-attestations.d/\`, and it catches the case \`git status\` cannot: a
+COMMITTED fragment that was never pushed looks identical to a pushed one.
+A cycle that legitimately files nothing prints \`ok:no-findings\` and is silent.
+
+If you genuinely cannot push, say so loudly in your final output and reproduce
+each finding there in full, so the launching host can re-file it. Do not exit
+quietly.
+
 ## Skills
 
 Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).

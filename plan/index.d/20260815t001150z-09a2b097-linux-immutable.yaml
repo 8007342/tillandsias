@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: mcp-expert-outages-are-invisible-to-the-plan
+    event:
+      type: verified
+      ts: "2026-08-15T00:11:50Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        Adversarially validated in-forge (BigPickle) the night it landed, and HARDENED as a result. The review confirmed the nominal path and proved the negative control is real (seeding a down record makes mcp_outage: appear; removing it restores silence), then defeated the probe in both directions: 4 false-healthy vectors (error frame embedding the word result, result:null, result:{}, a plain log line) and 3 false-outage/absent vectors (registration env dropped, 8KB byte truncation, malformed registration reported absent instead of down). Root cause was the success DEFINITION: grep for a substring rather than validating an InitializeResult — and the original fixture pinned that weak definition, so the litmus passed because it was wrong. probe_server now applies a jq predicate (jsonrpc 2.0, matching id, no error member, result.protocolVersion and result.serverInfo.name strings), scans line-oriented instead of byte-truncated, honours registration env, and separates registration PRESENCE from command extraction so named-but-malformed is down rather than absent. Every counterexample is now a permanent fixture: 14/14 fixture scenarios, 15/15 litmus steps, meta-orchestration suite 12/12 PASS (100%). Findings re-filed durably as 741-t66e/2izr/na2c because the forge's own fragments died with the container (741-3y48).
