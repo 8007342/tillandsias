@@ -52,6 +52,41 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: both-volumes-relabelled"
 
+  - step: "BEHAVIOUR: the volume-arg contract is unit-tested, not merely grepped (753-ii5f)"
+    # An in-forge review of the first version of this litmus made the right
+    # objection: five greps over the source cannot fail when a refactor moves the
+    # HOST directory somewhere the container's vault user cannot write. Records
+    # stop persisting, every grep stays green, and `vault audit list` still
+    # reports healthy — which is V12's exact blindness. The contract is now
+    # behind vault_audit_volume_arg() with tests that assert the destination,
+    # the :U relabel and the host path verbatim, so init_cache_dir() drift shows
+    # up as a changed argument instead of silently relocating the records.
+    command: "grep -q 'fn vault_audit_volume_arg' crates/tillandsias-headless/src/vault_bootstrap.rs && for t in audit_volume_targets_the_path_the_entrypoint_writes_to audit_volume_is_relabelled_for_userns_drift audit_volume_uses_the_supplied_host_dir_verbatim audit_volume_is_distinct_from_the_data_volume; do grep -q \"fn $t\" crates/tillandsias-headless/src/vault_bootstrap.rs || { echo \"FAIL: missing test $t\"; exit 1; }; done; echo 'ok: contract-unit-tested'"
+    timeout_ms: 5000
+    expected_behavior: "ok: contract-unit-tested"
+
+  - step: "EXACTLY ONE mount targets /vault/audit (a later --volume must not shadow it)"
+    # 753-ii5f: counting audit_volume_arg references cannot notice a SECOND
+    # --volume on the same container destination, where podman's last-wins would
+    # silently override the persisted mount.
+    # Counted over NON-TEST code only. The first draft of this step grepped the
+    # whole file and reported 3, because the unit tests added in the same change
+    # assert on the very string it counts — a pin that cannot tell code from text
+    # about code, which is the class 752-pst5 was filed for. Third instance
+    # tonight; the awk stops at the test module rather than pattern-matching
+    # around it.
+    command: "n=$(awk '/^#\\[cfg\\(test\\)\\]/{exit} {print}' crates/tillandsias-headless/src/vault_bootstrap.rs | grep -c ':/vault/audit:'); [ \"$n\" = \"1\" ] && echo \"ok: single-audit-destination ($n)\" || { echo \"FAIL: $n mounts target /vault/audit in non-test code — a later one shadows the persisted mount\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: single-audit-destination"
+
+  - step: "EXACTLY ONE file audit device is enabled (a second device may write to a layer path)"
+    # 753-ii5f: step 1 only proves the expected path is PRESENT. A second file
+    # device pointed at an unmounted path would keep step 1 green while sending
+    # records back onto the container layer.
+    command: "n=$(grep -c 'sys/audit/' images/vault/entrypoint.sh); [ \"$n\" = \"1\" ] && echo \"ok: single-audit-device ($n)\" || { echo \"FAIL: $n audit devices enabled — a second may write to an unmounted path\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: single-audit-device"
+
   - step: "the reason is recorded next to the code, naming V12 and M6"
     # Without the rationale the next editor drops the mount as redundant — the
     # device looks healthy without it, which is exactly how this survived.
