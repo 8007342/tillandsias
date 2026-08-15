@@ -3897,12 +3897,25 @@ CONTEXT_EOF
     local addendum="$project_dir/images/default/startup-context-addendum.md"
     local addendum_max_bytes="${TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES:-65536}"
     if [[ -f "$addendum" && -r "$addendum" ]]; then
+        # Order 747-hws2: the append lands VERBATIM and LAST, so a checkout
+        # addendum could (a) corrupt the generated Markdown with ``` fences /
+        # backticks and (b) append machine-looking state lines that win any
+        # `grep <token> | tail -1` read over the generator's real values. The
+        # regular-file gate and the byte bound (747-kw8u) stop a hang, not
+        # content injection — the checkout is the repo under test, so the
+        # CONTENT stays trusted. What the mechanism owes the reader is a
+        # self-documenting boundary: emit an explicit header FIRST, so every
+        # generator machine-readable line provably precedes it, and a
+        # tail-grep consumer can stop there. The header is part of the baked
+        # image, so it can never be spoofed by the addendum it delimits.
         {
             printf '\n'
+            printf '## Checkout addendum — NOT authoritative for machine-readable lines\n'
+            printf 'The generator lines ABOVE this header (base_state, inference_state, expert_capability, project_engine) are authoritative. Tail-grep consumers stop at this header.\n\n'
             head -c "$addendum_max_bytes" "$addendum"
             printf '\n'
         } >>"$ctx_file" 2>/dev/null || true
-        trace_lifecycle "startup-context" "appended checkout addendum from $addendum (<=${addendum_max_bytes}B)"
+        trace_lifecycle "startup-context" "appended checkout addendum from $addendum (<=${addendum_max_bytes}B) under boundary header"
     elif [[ -e "$addendum" || -L "$addendum" ]]; then
         # PRESENT BUT REJECTED is the surprising case and must not be silent
         # (order 747-n52p): the path exists, so someone intended a warning to
