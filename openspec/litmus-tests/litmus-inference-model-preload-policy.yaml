@@ -138,6 +138,19 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: ready grammar"
 
+  - step: "THREE cached models yield exactly ONE machine line — models=3 and a comma-separated warm csv (order 532)"
+    # Order 532: the warm grammar is PINNED one-line. With >1 cached model the
+    # pre-fix code reported models=1 and joined warm with embedded newlines,
+    # splitting the machine line into four. Seeded-red proof (2026-08-15):
+    # reverting `for _tis_n in $_tis_names` to the quoted form
+    # `for _tis_n in \"$_tis_names\"` reproduced `READY (models=1,
+    # warm=<m1>\\n<m2>\\n<m3>)` and failed exactly this assertion.
+    # The warm csv is sorted (sort -u in the helper), so the exact match below
+    # pins the deterministic order too.
+    command: "d=$(mktemp -d); mkdir -p \"$d/bin\"; printf '{\"models\":[{\"name\":\"qwen2.5:0.5b\",\"model\":\"q\"},{\"name\":\"llama3.2:1b\",\"model\":\"l\"},{\"name\":\"mistral:7b\",\"model\":\"m\"}]}' > \"$d/tags.json\"; printf '#!/bin/sh\\ncat %s/tags.json\\n' \"$d\" > \"$d/bin/curl\"; chmod +x \"$d/bin/curl\"; out=$(PATH=\"$d/bin:$PATH\" sh images/default/lib-inference-state.sh); rm -rf \"$d\"; lines=$(printf '%s\\n' \"$out\" | wc -l); echo \"lines=$lines\"; echo \"$out\"; [ \"$lines\" -eq 2 ] && printf '%s' \"$out\" | grep -q '^READY (models=3, warm=llama3.2:1b,mistral:7b,qwen2.5:0.5b)$' && printf '%s' \"$out\" | grep -q '^inference_state=ready inference_models=3 inference_warm=llama3.2:1b,mistral:7b,qwen2.5:0.5b inference_reason=-$' && echo 'ok: 3-model one-line grammar'"
+    timeout_ms: 10000
+    expected_behavior: "ok: 3-model one-line grammar"
+
   - step: "an endpoint that answers with ZERO models is NOT-READY (no-models), not READY"
     # This is the exact indeterminacy 392a removes: pre-392a this reported READY
     # and the agent only discovered the emptiness at request time.
@@ -203,7 +216,7 @@ observability:
   traces:
     - "@trace spec:inference-container"
     - "@trace spec:async-inference-launch"
-  expected_log: "preload policy (eager/lazy/off) + expert-slot reservation + inventory checkpoint pinned; startup-context model-warm grammar exercised on every branch with stubbed inputs"
+  expected_log: "preload policy (eager/lazy/off) + expert-slot reservation + inventory checkpoint pinned; startup-context model-warm grammar exercised on every branch with stubbed inputs — single- and multi-model (order 532)"
   log_fields:
     spec: "inference-container"
     test: "inference-model-preload-policy"

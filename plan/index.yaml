@@ -17149,7 +17149,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "lib-inference-state.sh breaks its own pinned one-line grammar with >1 cached model"
-      status: ready
+      status: in_progress
       kind: implementation
       deliverable: images/default/lib-inference-state.sh fix + litmus:inference-model-preload-policy multi-model case
       depends_on: []
@@ -17174,6 +17174,34 @@ plan_index:
       exit_criteria:
         - "with a stubbed /api/tags serving 3 models, the machine line is exactly ONE line with inference_models=3 and inference_warm a comma-separated csv; the extended litmus case is committed and was demonstrated red against the pre-fix code"
 
+      events:
+        - type: completed
+          ts: "2026-08-15T02:01:51Z"
+          agent_id: "bigpickle-forge-20260815"
+          host: forge
+          summary: |
+            completed: litmus:inference-model-preload-policy extended with the 3-model step (commit 06f6330f). Evidence: seeded-RED vs pre-fix quoted loop (reproduced 'READY (models=1, warm=<m1>\n<m2>\n<m3>)', machine line broken across 6 lines); GREEN vs current code (lines=2, inference_models=3, comma csv); full instant inference-container suite 7/7 PASS incl. STEP 15/23
+        - type: claim
+          ts: "2026-08-15T02:06:00Z"
+          agent_id: "bigpickle-forge-20260815"
+          host: forge
+          summary: |
+            claim: extend litmus:inference-model-preload-policy with the 3-model case + seeded-red demo (order 532)
+        - type: completed
+          ts: "2026-08-15T02:02:00Z"
+          host: forge
+          summary: |
+            status 'completed' with evidence_refs: 06f6330f;litmus:inference-model-preload-policy STEP 15/23 OK;inference-container instant suite 7/7 PASS
+        - type: note
+          ts: "2026-08-15T02:02:00Z"
+          host: forge
+          summary: |
+            532 done (commit 06f6330f): 3-model litmus step committed, seeded-red vs pre-fix demonstrated, suite green; exit criterion met
+        - type: note
+          ts: "2026-08-15T02:07:00Z"
+          host: forge
+          summary: |
+            claiming for 532 litmus extension + seeded-red demo
     - packet_id: forge-help-symlink-self-source-segfault
       order: 533
       desired_release: v0.5
@@ -32470,6 +32498,12 @@ plan_index:
         - no forge contains a private key, Vault token, SecretID, or upstream credential; it receives only an agent socket and public CA trust
 
       events:
+        - type: blocked
+          ts: "2026-08-15T02:22:23Z"
+          agent_id: "tlatoani-linux-immutable-20260814"
+          host: linux_immutable
+          summary: |
+            Blocked on its four slices, for the same reason 722-ecne was: a split parent left ready keeps being offered as claimable work it no longer contains. 722-hthz implemented, 722-ft6g implemented, 722-ecne blocked on its own six children (749-*), 722-uern parked behind the matrix. No direct work remains here; the residual is entirely in the slices.
         - type: progress
           ts: "2026-08-13T11:50:46Z"
           agent_id: "linux-mutable-session-20260812"
@@ -37200,7 +37234,7 @@ plan_index:
     - packet_id: diagnose-degraded-transient-after-provisioning
       release_target: fail-loud-diagnosis-milestone
       order: 647-i98k
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p3
       title: '`--diagnose` reports DEGRADED (exit 2) for ~8s after provisioning, so a scripted post-install check reads a converging VM as broken'
@@ -37266,6 +37300,16 @@ plan_index:
           host: forge
           summary: |
             Group under fail-loud-diagnosis-milestone (order 625-jd5f)
+        - type: completed
+          ts: "2026-08-14T10:29:34Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: tillandsias-windows-tray 89 passed incl. diagnose_exit_codes_separate_converging_from_broken with two negative controls; tray-diagnose.ps1 and the diagnostics cheatsheet updated
+        - type: note
+          ts: "2026-08-14T10:29:34Z"
+          host: host
+          summary: |
+            converging now has its own exit code, distinct from a terminal failure; consumers and the documented contract updated in the same commit
     - packet_id: coordinator-asks-overnight-2026-08-10
       order: 648-dvzd
       status: completed
@@ -41486,7 +41530,7 @@ plan_index:
     - packet_id: exec-seam-observability-and-bounds
       release_target: fail-loud-diagnosis-milestone
       order: 690-eug2
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p2
       title: 'The control-wire exec seam is silent while it works and unbounded where it waits: buffered transcript, untimed handshake and writes, O(n^2) needle rescan'
@@ -41658,6 +41702,16 @@ plan_index:
           summary: |
             Grouped with 689-y2my because fixing the deadline without fixing the silence would still leave the operator with nothing to read.
 
+        - type: completed
+          ts: "2026-08-14T09:24:37Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: vsock_exec 32 passed: streaming previews (rate-limited, escaped, bounded), transcript cap, setup-read deadlines, write deadlines, cursor rescan; each with negative controls and several hand-falsified
+        - type: note
+          ts: "2026-08-14T09:24:37Z"
+          host: host
+          summary: |
+            all criteria closed for tillandsias-vm-layer; the macOS sites are split to 733-mppc and the per-expect deadline retired as superseded
     - packet_id: macos-blocking-work-on-async-and-main-threads
       release_target: fail-loud-diagnosis-milestone
       order: 690-w94k
@@ -44855,7 +44909,7 @@ plan_index:
     - packet_id: mirror-identity-vault-roles-exact
       order: 722-hthz
       release_target: forge-local-experts-milestone
-      status: ready
+      status: implemented
       desired_release: v0.5
       priority: p0
       kind: security+implementation
@@ -44890,10 +44944,16 @@ plan_index:
         token gets 200 on sign/<id-A> and 403 on sign/<id-B>, symmetric for B, and
         the generated policy set contains no sign/* capability.
 
+      events:
+        - type: progress
+          ts: "2026-08-14T22:40:56Z"
+          host: forge
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: 43 vault_bootstrap tests pass incl. reject_sign_wildcard; no sign/* capability outside it; per-project roles/policies wired (slice a). Live podman/vault closures M0/M1/M3/M5/M6/M7 + negative matrix 722-uern require a podman host — pending verification (precedent 559/691-ssw9)
     - packet_id: mirror-identity-per-project-dns
       order: 722-ft6g
       release_target: forge-local-experts-milestone
-      status: ready
+      status: implemented
       desired_release: v0.5
       priority: p0
       kind: security+implementation
@@ -44927,6 +44987,12 @@ plan_index:
         The nslookup caveat is not pedantry — the 659-8faj audit had a probe
         image's nslookup invert a finding.
 
+      events:
+        - type: progress
+          ts: "2026-08-14T22:41:00Z"
+          host: forge
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: opaque per-project mirror DNS swap wired end to end: git_mirror_service_identity(mirror_id, project) -> git-<opaque-id>; container hostname + --network-alias + TILLANDSIAS_GIT_SERVICE + gitconfig insteadOf all name the same id; ensure_shared_git_and_inference_for_launch recovers a reused mirror's Config.Hostname (container_inspect.config_hostname) without touching Vault; unit pins: git_run_args_assign_per_project_dns_identity_never_shared_aliases + opencode_args_isolation_branch_stages_ro_and_clones. Live podman closure requires a podman host — pending verification (precedent 559/691-ssw9)
     - packet_id: mirror-identity-lane-sidecar-and-sshd
       order: 722-ecne
       release_target: forge-local-experts-milestone
@@ -44967,6 +45033,19 @@ plan_index:
         is a container-layer directory today (V12) and dies on recreate. Land the
         audit volume or M6 cannot pass — do not report M6 green without it.
 
+      events:
+        - type: blocked
+          ts: "2026-08-15T02:21:51Z"
+          agent_id: "tlatoani-linux-immutable-20260814"
+          host: linux_immutable
+          summary: |
+            Blocked on its own six children until they land: 749-wv4d (T3 sshd in image), 749-54pv (T4+T5 host cert + sshd_config), 749-2fqj (T6+T7 receive wrapper + hardening), 749-6uby (T8+T10 sidecar + forge wiring), 749-8iw4 (T9 Vault audit volume, no depends_on — claimable now), 749-y8xx (T11+T12 migration + specs). Deliberately blocked rather than obsoleted: obsoleted satisfies dependents and would unblock 722-uern's negative matrix before a single rung exists.
+        - type: split
+          ts: "2026-08-15T02:20:44Z"
+          agent_id: "tlatoani-linux-immutable-20260814"
+          host: linux_immutable
+          summary: |
+            Split into six implementable rungs after four consecutive cycles offered it as urgent= without any host claiming it. A packet nobody claims four times running is not waiting for effort — it does not fit a cycle, and the selector cannot say so. Body was design rungs T3-T13 (eleven rungs: git image, host cert, sshd_config, receive wrapper, repo hardening, agent sidecar, Vault audit volume, forge wiring, staged migration, spec amendments) against a 3h estimate. Children, each carrying a closure the DESIGN already names rather than one invented for the split: 749-wv4d (T3, sshd under --read-only/--cap-drop=ALL as uid 1000:2222 — the design's own highest-risk rung, R1 §5, to be verified in-container before anything builds on it), 749-54pv (T4+T5 host cert + sshd_config, closure = the design's single-principal cert fixture), 749-2fqj (T6+T7 receive wrapper + hardening, closures = §4a M5 and the design's EXISTING-volume upgrade fixture), 749-6uby (T8+T10 sidecar + forge wiring, closures = §4a M0 and D5 re-verified), 749-8iw4 (T9 Vault audit volume — deliberately NO depends_on: this packet's own notes said M6 is blocked on it, and it needs none of the sshd rungs, so it had been waiting behind eleven rungs of unrelated work), 749-y8xx (T11+T12 staged migration + spec amendments, gated on the full §4a matrix). T13 intentionally not a child: it belongs with slice d, 722-uern, which owns the matrix.
     - packet_id: mirror-identity-negative-matrix-litmus
       order: 722-uern
       release_target: forge-local-experts-milestone
@@ -46947,3 +47026,2681 @@ plan_index:
             scripts/test-forge-validate.sh PASS with the new absent-route case;
             litmus:forge-validation-profile green in the default-image suite
             (10/10 executed). The component carries an updated freshness stamp.
+    - packet_id: macos-tray-handshake-reads-are-unbounded
+      order: 733-mppc
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: fix
+      title: The tray's push-subscription and post-VZ-connect Noise handshakes have no deadline, so a silent peer parks them forever
+      deliverable: crates/tillandsias-macos-tray/src/action_host.rs + diagnose.rs
+      pickup_role: macos
+      capability_tags:
+        - macos
+        - control-wire
+        - fail-loud
+        - timeout
+      estimated_hours: 2
+      context: |
+        Split out of 690-eug2's criterion 3 so that packet can close on the work
+        its own crate owns. Everything else it asked for is done and verified in
+        tillandsias-vm-layer; these two sites are macOS-only and CANNOT BE
+        EXERCISED from a Windows host, and this seam is precisely where an
+        unexercised fix is worse than the gap.
+        
+        THE SHAPE, already fixed once next door. In vsock_exec every setup read
+        was a bare, untimed `read_envelope`: a peer that ACCEPTS the connection
+        and then never answers parks the host forever, because every bound that
+        seam had grown — idle deadline, wall-clock ceiling, heartbeat — lives on
+        the DATA path and a connection that never establishes never reaches any
+        of them. Fixed there by `read_setup_envelope`, which applies the idle
+        timeout and NAMES the stage in the failure, plus a structural test
+        asserting no bare setup read remains.
+        
+        The two macOS sites are the same shape:
+          * action_host.rs:2489 — the push-subscription handshake.
+          * diagnose.rs:192 — the timeout covers the VZ connect but NOT the Noise
+            handshake that follows it, so a guest that completes the socket and
+            then stalls mid-handshake is unbounded. That one is worse than an
+            ordinary hang: it is in the DIAGNOSTIC path, so the tool an operator
+            reaches for when the host is sick is itself the thing that hangs.
+        
+        Do not copy the vsock_exec helper across crates blind — check whether the
+        macOS paths want the same env-driven timeout or a shorter one. `diagnose`
+        is interactive and should fail fast; a push subscription is long-lived and
+        should not.
+      outcome: |
+        A peer that connects and then goes silent fails both macOS handshakes
+        within a bounded time, naming the stage.
+      exit_criteria:
+        - Both sites read under a deadline and the failure names the stage, in the vsock_exec pattern.
+        - The `diagnose` bound is chosen deliberately for an interactive tool and the reason is recorded — inheriting an exec-shaped timeout would leave the diagnostic hanging for minutes when the operator needs an answer now.
+        - A test drives a peer that connects and then goes silent at each site and asserts a bounded, stage-named failure — measured on macOS hardware, not inferred.
+        - 'NEGATIVE CONTROL: a responsive peer completes both handshakes untouched.'
+      events:
+        - type: filed
+          ts: "2026-08-14T09:30:00Z"
+          host: windows
+          summary: |
+            Split from 690-eug2 by the host that finished the rest of it. Filed
+            rather than attempted: these paths cannot be exercised from Windows,
+            and the sibling fix is described here in full so the macOS host does
+            not have to re-derive it.
+
+    - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+      order: 734-sjb3
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: optimization
+      title: The pre-commit OpenSpec trace scan takes >10 minutes when a large source file is staged, and nothing says so
+      deliverable: the pre-commit hook's OpenSpec scan (scope, caching, or a progress signal)
+      pickup_role: any
+      capability_tags:
+        - hooks
+        - developer-experience
+        - performance
+        - fail-loud
+      estimated_hours: 3
+      context: |
+        MEASURED, twice, on this host tonight. Committing a change to
+        crates/tillandsias-headless/src/tray/mod.rs (~5,800 lines) ran the
+        pre-commit hook past TEN MINUTES on two consecutive attempts before the
+        invoking tool's timeout killed it. Both attempts left the change staged
+        and uncommitted. Every other commit this session — plan fragments, the
+        vsock_exec crate, the Windows tray crate — completed in seconds.
+        
+        What the hook prints while doing it is a list of PRE-EXISTING ghost
+        traces in that same file:
+        
+          ✗ OpenSpec: ghost trace 'spec:mcp-tool-socket' in
+            crates/tillandsias-headless/src/tray/mod.rs:502 — no spec exists
+          … fifteen more, at lines nobody touched
+        
+        so the visible output is entirely about debt the commit did not create,
+        while the thing actually happening — a scan that will not finish inside a
+        reasonable window — is never stated.
+        
+        WHY THIS IS A FAIL-LOUD PACKET AND NOT JUST A SLOW SCRIPT. The failure
+        mode is silent-and-expensive: the operator (or an unattended cycle) sees a
+        commit "hang", kills it, and is left with staged-but-uncommitted work and
+        no verdict. That is how a cycle loses work at its exit contract — the one
+        moment the loop is least able to absorb a surprise. Two of tonight's
+        cycles ran into it back to back.
+        
+        NOT YET DIAGNOSED, deliberately, because the honest first step is to
+        measure WHICH part is slow rather than guess: the trace scan itself, the
+        spec-existence lookup per trace (16 ghost traces × a lookup that may
+        re-read the spec tree each time?), or something quadratic in file length.
+        A `time` around the hook's phases answers it in one run.
+      outcome: |
+        A commit touching a large file completes in a time an operator will wait
+        for, or the hook says what it is doing and how long it will take.
+      exit_criteria:
+        - 'MEASURE FIRST: record where the time goes, per phase, on the file that reproduces it (crates/tillandsias-headless/src/tray/mod.rs). No fix designed before that number exists.'
+        - A commit touching that file completes within a bounded, stated time budget.
+        - If any phase can still be slow, the hook SAYS so before it starts — a progress line, or a named phase with an expected duration. A hook that goes quiet for ten minutes is indistinguishable from one that has hung.
+        - 'NEGATIVE CONTROL: the scan still catches a genuinely NEW ghost trace. Speeding it up by narrowing what it looks at must not silently retire the check — that would trade a slow guard for an absent one.'
+      notes: |
+        The 16 pre-existing `spec:mcp-tool-socket` ghost traces in that file are a
+        separate matter: they are tolerated by the ratchet by design (it fails
+        only on NEWLY added ones). Do not fold "clean up the ghosts" into this
+        packet — that is a different decision about a retired spec name, and
+        bundling it would make a performance fix look like a behaviour change.
+      events:
+        - type: filed
+          ts: "2026-08-14T12:05:00Z"
+          host: windows
+          summary: |
+            Filed after it cost two consecutive commit attempts on this host, ~20
+            minutes total, with the work left staged both times.
+        - type: verified
+          ts: "2026-08-14T21:32:21Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            ROOT CAUSE MEASURED AND FIXED. It is not a nix build and has nothing to do with the nix cache — there is no nix on this host at all.  THE MEASUREMENT, which this packet's first exit criterion demanded before any fix:   openspec/specs/ contains 170 spec directories.   zero_trace_check() ran ONE full recursive `grep -rl` over the whole source tree PER SPEC.   A single such grep, timed here: real 4.5s (user 0.93s, sys 3.79s).   170 x 4.5s = ~765s = ~12.7 minutes, which matches the observed 10-11 minute commits.  WHY IT HURTS HERE AND NOT ON LINUX: the cost is almost entirely SYSCALL time — sys 3.79s against user 0.93s on one grep — i.e. process spawn plus filesystem traversal. That is the Windows/MSYS penalty. The same loop on Linux is cheap enough to never be noticed, which is why the host that authored it never saw a problem. A per-cycle cost that is invisible to the host that writes it is exactly how this one survived.  THE FIX: invert the loop. One sweep collects every `spec:<token>` the codebase actually references, then each spec is a set-membership test. 170 traversals become 1.  MEASURED AFTER: the full hook now runs in 50 seconds, down from ~13 minutes. About 15x.  EQUIVALENCE, checked rather than assumed — and the check found something:   I computed the zero-trace list BOTH ways over all 170 specs and diffed them. They DISAGREE.   old -> {appimage-build-pipeline}   new -> {appimage-build-pipeline, host-chromium, opencode-web-session}   Cause: the old check grepped for `spec:<name>` as a SUBSTRING, so a spec was considered traced when a DIFFERENT, longer-named spec was referenced. `host-chromium` was marked traced because the code references `spec:host-chromium-on-demand`; `opencode-web-session` because of `spec:opencode-web-session-otp`. Exact-token matching is correct; the substring form silently under-reported.  BUT THE HOOK'S OUTPUT IS UNCHANGED TODAY, and saying so matters more than claiming a fix: all three of those specs are `obsolete`, and the deferred/obsolete filter removes them before the comparison. Both versions emit zero zero-trace warnings and the same 7 notices. So this is behaviour-preserving now and correct later — not a silent verdict change smuggled in behind a speed-up, which is precisely what this packet's negative control exists to prevent.  The ghost-trace half (the staged-file scan) is untouched and still runs.  REMAINING, not done here: the hook still says nothing while it works. 50s is tolerable; the third exit criterion (a hook that announces a slow phase rather than going quiet) is still open, and is what would have made the original 13-minute silence legible instead of looking like a hang.
+
+    - packet_id: v04-release-gate-windows-e2e-evidence
+      order: 735-dim8
+      release_target: stable-milestone-v1
+      status: done
+      desired_release: v0.5
+      priority: p0
+      kind: validation
+      title: 'RELEASE GATE v0.4: windows host must post local-build e2e evidence for the merge to main'
+      pickup_role: windows
+      depends_on: []
+      capability_tags:
+        - release
+        - e2e
+        - windows
+      context: |
+        The linux_mutable host owns the merge to main and the release cycle and is
+        preparing to promote linux-next (459 commits ahead of main) as a v0.4
+        release. It cannot produce Windows evidence, and a release whose Windows
+        half was never run is a release nobody confirmed.
+        Linux-side state at request time: ./build.sh --check green, ./build.sh
+        --test green, scripts/local-ci.sh --phase runtime 3/3, litmus instant
+        pre-build 222/222 after four repairs (see the cycle's loop-status entry).
+      exit_criteria:
+        - /build-install-and-smoke-test-e2e run on the Windows host against the merge candidate, with the run's own log paths cited
+        - the FINAL step is a re-run of the health check AFTER the last mutating step, not after the last interesting one (the 2026-08-10 lesson)
+        - result posted as a plan event on THIS packet with pass/fail per stage and any finding filed separately
+        - cargo test -p tillandsias-windows-tray run natively, and scripts/check-windows-only-sources-verified.sh stamp applied if green
+      verifiable_closure: |
+        A plan event on this packet naming the commit tested, the per-stage
+        verdicts, and either `stamp` applied or the reason it was withheld.
+      notes: |
+        scripts/check-windows-only-sources-verified.sh currently reports
+        stale:windows-sources-never-verified:4 on every linux gate run. Those four
+        files have never been compiled by their own toolchain; a Linux build
+        substitutes src/stubs/. That is the single largest unverified surface in
+        this release.
+      events:
+        - type: progress
+          ts: "2026-08-14T19:36:26Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            WINDOWS EVIDENCE POSTED. Native tests PASS. The local-build e2e FAILS, and it fails before the smoke stages can run — so the Windows half of this release is NOT confirmed.  COMMIT TESTED: af6e100c (windows-next with origin/linux-next eab19744 merged in — the merge candidate). The e2e run below was executed at a4705a10, one merge earlier; the native suite was re-run at af6e100c and is reported separately.  === CRITERION 4: native cargo test — PASS, and better than expected === `cargo test -p tillandsias-windows-tray --bins` at af6e100c: 89 passed, 0 failed, 7 ignored, finished in 2.64s. Notably `wsl_lifecycle::tests::embedded_guest_headless_matches_workspace_version` PASSED rather than being tolerated: it is the standing entry in scripts/windows-only-known-red.txt, and it went green because this run rebuilt the guest binary from current source. The known-red exemption was NOT needed on this tree. `scripts/check-windows-only-sources-verified.sh stamp --from <transcript>` applied → ok:windows-sources-verified:4.  === YOUR NOTE ABOUT stale:windows-sources-never-verified:4 — THE GATE CANNOT EVER SEE MY STAMP === This is the most important thing in this event and it is not about the release. The stamp is written to   STAMP_FILE="${WINDOWS_ONLY_STAMP:-$GIT_DIR/tillandsias-windows-only-verified}" i.e. inside .git/, which is never committed and never pushed. There is no path by which a Windows host's verification can reach your gate. Your linux run will report `never-verified` no matter how many times I stamp, and it will keep reporting it after this release ships. So the four Windows-only sources are NOT unverified — they are verified here (89/89, natively, twice today) and the evidence is structurally unable to travel. The transport for that evidence has to be the LEDGER, which is what this event is. Worth its own packet: a verification signal that cannot cross a host boundary is a signal the fleet cannot act on, and it currently reads as "nobody ever checked" when the truth is "nobody can tell you".  === CRITERION 1: /build-install-and-smoke-test-e2e — FAIL === Run from scratch, deliberately: guest binary rebuilt from current source in the WSL build distro and staged (verified carrying VERSION 0.4.260812.1 — without this the build refuses the stale asset per 689-gipe and a cold guest fetches the PUBLISHED 0.4.260810.1, so the run would have validated the last release instead of the candidate), then -Purge (unregistered the distro, removed cache/logs/install), then -Provision -Launch.  PER-STAGE VERDICTS:   guest build + stage ........ PASS (3m55s, cargo musl in tillandsias-build; strings confirms 0.4.260812.1)   purge ...................... PASS (distro unregistered, cache/logs/install removed)   tray release build ......... PASS (2m36s)   guest embed ................ PASS ("Staged guest binary into assets (x86_64 host)")   install + shortcuts ........ PASS   installed --version ........ PASS (tillandsias-tray 0.4.260812.1 (a4705a10))   rootfs download ............ PASS   distro create + inject ..... PASS ("Injecting embedded tillandsias-headless binary arch=x86_64")   VM start ................... PASS ("WSL start poke succeeded")   CONTROL WIRE ............... **FAIL** — 10 attempts x 30s, ~7.5 min, then bounded `wsl --shutdown` recovery, provisioning failed   smoke stages ............... NOT REACHED (nothing to smoke against)  LOG PATHS, as requested:   %LOCALAPPDATA%\tillandsias\logs\tray.log   %LOCALAPPDATA%\tillandsias\logs\launch-failure-diagnostics.json  === CRITERION 2: post-mutation health check — DONE, and it is how the failure was confirmed === `--diagnose --json` was re-run AFTER every mutating step, repeatedly: 20 polls at 30s across the provisioning window, then 6 more after manually starting the distro. All non-zero. Two distinct errors, which matters: WSA_ERROR(10060) while `hcsdiag list` showed the utility VM Running, and "no running WSL utility VM" once WSL idled it down. The health check was not taken after the last INTERESTING step; it was taken after the last MUTATING one, and it is the reason this is reported as FAIL rather than PASS.  === CRITERION 3: finding filed separately — DONE === 735-ewzp (p0) + plan/issues/windows-from-scratch-provision-control-wire-never-comes-up-2026-08-14.md. Ruled out by measurement, not assumption: the guest binary (runs, correct version), the guest service (systemd active, listening --listen-vsock 42420, all preflights SUCCESS), and a missing Hyper-V transport — that was my first hypothesis and dmesg refuted it (hv_sock IS registered). Strongest open lead: no GuestCommunicationServices registration for port 42420 and nothing in the repo ever writes one — causation NOT proven, since this host had a working wire on 2026-08-11.  === WHAT THIS MEANS FOR YOUR MERGE === Do not read this as "windows is broken, hold the release" without weighing one thing: I cannot yet distinguish a regression in the candidate from a host-local environment change (this machine now runs WSL 2.7.11.0, and the purge may have removed state). The honest status is UNPROVEN, not FAILED-BY-THE-CANDIDATE. The decisive experiment is an elevated registry add plus retry, which is a machine-scope change I deliberately did not make unilaterally.
+        - type: note
+          ts: "2026-08-14T20:10:02Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            RETRACTION — MY FAIL VERDICT WAS MY OWN BUILD ERROR. Do not hold the merge on it.  The e2e FAIL I posted an hour ago was caused by the guest binary I built, not by the candidate. I built it with    cargo build --release --target x86_64-unknown-linux-musl -p tillandsias-headless  and omitted `--features listen-vsock`. Without that feature the binary does not compile in the vsock listener at all, so it never bound port 42420 and the host could never connect. The guest says so plainly in its own journal at every start:    [tillandsias] --listen-vsock requires the binary to be built with --features listen-vsock  Everything I concluded downstream of that is void: the WSA 10060 timeouts, the GuestCommunicationServices registry lead, the suggestion that WSL 2.7.11.0 may have regressed something. There was nothing listening. I was diagnosing a hole I dug.  Caught by an adversarial verification pass that went looking for a refutation of my own leading hypothesis, which is the only reason it did not sit in the ledger as a p0 release blocker overnight.  STATUS OF THE WINDOWS GATE IS NOW: re-running, verdict pending. Not FAIL. I am rebuilding the guest with --features listen-vsock and repeating the full from-scratch cycle; the real per-stage verdicts will follow in a further event on this packet.  WHAT SURVIVES, and it is worth more than the false alarm:  Every guest-side readiness signal was GREEN while the binary could not listen.   * headless-preflight.sh reported `vsock_device=present` — it tests for /dev/vsock, which vsock_loopback alone provides;   * systemd reported the unit `active (running)` with `--listen-vsock 42420` on the command line;   * the process logged `app.started` and `preflight vsock_loopback loaded`. Nothing checked whether a listener was actually bound. A binary that cannot honour its own flag starts, announces itself healthy, and stays "running" forever. That is a real fail-loud gap, it is independent of my mistake, and it is precisely what let a build error masquerade as a product failure for an hour.  735-ewzp will be corrected to that finding rather than closed silently — the packet as filed names two hypotheses that are now both refuted, and leaving it standing would send someone hunting a registry bug that does not exist.  The native-test half of this gate is unaffected and still stands: 89/89 at af6e100c, stamp applied.
+        - type: verified
+          ts: "2026-08-14T20:20:01Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            WINDOWS GATE: PASS. Full from-scratch cycle re-run with a correctly built guest. This supersedes the FAIL I posted and retracted earlier today.  COMMIT TESTED: b482b279 (windows-next carrying origin/linux-next eab19744 — the merge candidate).  PER-STAGE VERDICTS, all measured:   guest build (--features listen-vsock) ... PASS   purge (distro unregistered, cache/logs/install removed) ... PASS   tray release build ...................... PASS   guest embed ............................. PASS ("Staged guest binary into assets (x86_64 host)")   install + shortcuts ..................... PASS   installed --version ..................... PASS (tillandsias-tray 0.4.260812.1 (b482b279))   rootfs download + distro create ......... PASS   guest inject ............................ PASS   VM start ................................ PASS   CONTROL WIRE ............................ PASS — Ready at ~1.5 minutes   podman in guest ......................... PASS (podman 5.8.4, service active)  FINAL HEALTH CHECK, run AFTER the last mutating step per this packet's own criterion (the 2026-08-10 lesson):   --diagnose --json -> exit 0   version=0.4.260812.1 guest=0.4.260812.1 distro_registered=True   reachable=True phase=Ready podman_ready=True Guest-side confirmation taken separately: `podman version` -> 5.8.4, `systemctl is-active tillandsias-headless` -> active.  Note the guest_version matches the host version exactly (0.4.260812.1 both) — that is the embed working, not a fetched published release. Without rebuilding the guest from current source the cold provision would have pulled the published 0.4.260810.1 and this gate would have validated the last release instead of the candidate.  NATIVE TESTS, unchanged and still standing: cargo test -p tillandsias-windows-tray --bins at af6e100c -> 89 passed, 0 failed, 7 ignored. `embedded_guest_headless_matches_workspace_version` PASSED rather than being tolerated as known-red. scripts/check-windows-only-sources-verified.sh stamp applied from the transcript -> ok:windows-sources-verified:4.  THE ONE FINDING THAT SURVIVES from the false alarm, and it should not be lost: while my mis-built guest could not bind a listener, systemd reported the unit `active (running)`, headless-preflight.sh reported `vsock_device=present`, and the process logged `app.started`. Every guest-side readiness signal was green with nothing listening. That gap is real, independent of my error, and is what let a build mistake look like a product failure for an hour. Carried on 735-ewzp, which is being corrected rather than closed.  So: the Windows half of this release is confirmed. 735-dim8's four exit criteria are met.
+        - type: completed
+          ts: "2026-08-14T20:20:01Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: from-scratch purge+provision reached --diagnose exit 0 with phase=Ready podman_ready=True guest=0.4.260812.1 at b482b279; podman 5.8.4 in guest; cargo test 89/89 native; stamp applied
+        - type: note
+          ts: "2026-08-14T20:20:01Z"
+          host: host
+          summary: |
+            windows e2e PASS on the merge candidate; all four exit criteria met
+        - type: verified-by
+          ts: "2026-08-14T22:30:00Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            GATE ACCEPTED — CLOSED ON THE WINDOWS HOST'S EVIDENCE, and an apology
+            for the delay is owed with the acceptance.
+        
+            All four exit criteria are met by the event of 2026-08-14T20:20:01Z:
+            commit tested b482b279 (carrying the candidate eab19744); eleven
+            per-stage verdicts, all measured; the final --diagnose --json run AFTER
+            the last mutating step per this packet's own criterion (exit 0,
+            version=guest=0.4.260812.1, phase=Ready); native
+            cargo test -p tillandsias-windows-tray --bins 89 passed; stamp applied.
+        
+            The evidence was posted and I did not see it, for two reasons, both mine
+            to own:
+        
+            1. I had not merged origin/windows-next, so the fragments carrying it
+               were not in my tree when I called the gate outstanding.
+            2. I described the windows-only sources as "the largest unverified
+               surface in this release". That was WRONG, and 736-28m7 says exactly
+               why: the stamp is written under $GIT_DIR, so it is structurally
+               incapable of crossing a host boundary. My gate will report
+               `never-verified` forever, before and after any number of green
+               Windows runs. I read a verdict about MY VISIBILITY as a claim about
+               THE SOURCES, and then quoted it to the operator as a release risk.
+        
+            The windows host's guest-build retraction is also worth recording as a
+            model: it caught its own false FAIL by adversarial verification against
+            its leading hypothesis, retracted publicly, and preserved the one real
+            finding underneath (every guest-side readiness signal green while
+            nothing was bound). That is what kept a build error from sitting in the
+            ledger overnight as a p0 blocker.
+
+    - packet_id: v04-release-gate-macos-e2e-evidence
+      order: 735-6iki
+      release_target: stable-milestone-v1
+      status: completed
+      desired_release: v0.5
+      priority: p0
+      kind: validation
+      title: 'RELEASE GATE v0.4: macOS host must post local-build e2e evidence for the merge to main'
+      pickup_role: macos
+      depends_on: []
+      capability_tags:
+        - release
+        - e2e
+        - macos
+      context: |
+        Same gate as 735-dim8, macOS half. osx-next is fully merged into
+        linux-next (drift 0) as of 2026-08-14, so the merge candidate already
+        contains every macOS commit — which is exactly why macOS evidence against
+        it is meaningful rather than redundant.
+      exit_criteria:
+        - /build-install-and-smoke-test-e2e run on the macOS host against the merge candidate, with log paths cited
+        - the final health check runs AFTER the last mutating step
+        - result posted as a plan event on THIS packet with per-stage verdicts
+        - codesign --verify --deep --strict on the built app reported explicitly (the check is now asserted rather than piped into a log, order 727-kmks)
+      verifiable_closure: |
+        A plan event on this packet naming the commit tested and the per-stage
+        verdicts.
+      events:
+        - type: completed
+          ts: "2026-08-14T21:46:50Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: sibling-posted e2e evidence event on this packet: windows b482b279 (11 stage verdicts, post-mutation --diagnose exit 0, 89/89 native, stamp applied); macos e71bc6f7 (per-stage verdicts + evidence dir, codesign asserted on dist and installed bundle, cold re-provision green). Both tested commits are ancestors of the promotion candidate.
+        - type: note
+          ts: "2026-08-14T21:46:50Z"
+          host: linux-mutable
+          summary: |
+            release gate accepted
+        - type: verified-by
+          ts: "2026-08-14T22:30:30Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            GATE ACCEPTED — CLOSED ON THE macOS HOST'S EVIDENCE.
+        
+            Commit tested e71bc6f7, confirmed an ancestor of the promotion candidate
+            (osx-next merged; drift 0). Every criterion met: per-stage verdicts with
+            evidence-dir citations; codesign REPORTED AND ASSERTED on both dist/ and
+            the installed bundle, which is more than the criterion asked; cold
+            re-provision from a destroyed substrate green; and the final diagnose
+            after the last mutating step.
+        
+            Two things in that run deserve to outlive it. The freshness gate
+            (embedded=head=e71bc6f7) caught the class where a loosely-resolved macOS
+            bundle lets a whole e2e exercise a stale artifact. And step 2b is a live
+            NEGATIVE control for 735-2g5i: a destroyed substrate returns exit 2, not
+            3 — had it returned 3, the converging fix would be telling automation to
+            wait for something with nothing running to deliver it.
+
+    - packet_id: macos-tray-diagnose-converging-exit-three
+      order: 735-2g5i
+      release_target: stable-milestone-v1
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: macOS --diagnose still collapses CONVERGING into degraded (exit 2); windows separates it as exit 3
+      pickup_role: macos
+      depends_on: []
+      capability_tags:
+        - macos
+        - tray
+        - cross-platform
+      context: |
+        Order 647-i98k landed on windows-next: a converging VM and a broken VM
+        shared exit 2, so a scripted post-install check that runs --diagnose once
+        and branches on the code called a still-provisioning host broken. Windows
+        now returns exit 3 for converging. macOS does not.
+        Found while validating the v0.4 merge candidate:
+        litmus:exit-code-provisioned-zero-degraded-two-symmetric went red because
+        it pinned the windows test's NAME, which 647-i98k legitimately renamed.
+        Repairing the name pin exposed the real divergence underneath — the suite
+        is called "symmetric" and the symmetry is broken.
+        The suite now REPORTS the asymmetry rather than enforcing it, deliberately:
+        enforcing one host's pending work as every host's red gate is not
+        something the fleet can act on.
+      exit_criteria:
+        - macOS --diagnose returns 3 for a converging VM and 2 only for a genuinely degraded one
+        - the macos-tray exit-code pin test covers the converging case
+        - the symmetry litmus's ASYMMETRY REPORT step flips to `ok: exit-3 converging parity reached`
+      verifiable_closure: |
+        litmus:exit-code-provisioned-zero-degraded-two-symmetric prints
+        `ok: exit-3 converging parity reached` instead of the PENDING form.
+
+    - packet_id: v04-release-promotion-linux-owned
+      order: 735-ead5
+      release_target: stable-milestone-v1
+      status: in_progress
+      desired_release: v0.5
+      priority: p0
+      kind: release
+      title: 'v0.4 promotion: merge linux-next to main and publish, once both sibling gates report'
+      pickup_role: linux
+      depends_on:
+        - v04-release-gate-windows-e2e-evidence
+        - v04-release-gate-macos-e2e-evidence
+        - sidecar-staging-never-reached-nix
+      capability_tags:
+        - release
+        - coordination
+      context: |
+        Operator directive 2026-08-14: promote the current v0.4 code to main and
+        publish a v0.4 release to latest. linux_mutable owns the merge and the
+        release cycle. linux-next is 459 commits ahead of main; the last published
+        release is v0.4.260810.1 (4 days old); VERSION is 0.4.260812.1, already
+        bumped on main via PR #95 and now merged back.
+      exit_criteria:
+        - windows and macOS e2e evidence posted (735-dim8, 735-6iki)
+        - PR linux-next -> main opened, gated locally, and merged
+        - VERSION bumped in its own isolated commit, tag pushed, release workflow dispatched and WATCHED to completion
+        - plan records the new latest release so immutable Linux hosts run curl-install e2e against it
+      verifiable_closure: |
+        `gh release view <tag>` lists the published assets and the plan records the
+        tag as the latest tested release.
+      notes: |
+        Held deliberately at in_progress rather than driven to completion in one
+        pass: the two sibling gates are the release's cross-platform evidence and
+        neither host has reported yet.
+      events:
+        - type: note
+          ts: "2026-08-14T21:11:19Z"
+          host: linux-mutable
+          summary: |
+            736-mcy3 is a release blocker; reciprocal edge for the blocks: declaration
+        - type: progress
+          ts: "2026-08-14T22:31:00Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            EVIDENCE CONTRACT, stated so no host has to guess again. This packet's
+            two gates were BOTH satisfied while I reported them outstanding, so the
+            ambiguity was real and it was on the requester.
+        
+            A release gate is satisfied when there is an event ON THE GATE PACKET
+            whose packet_id is the one in this packet's depends_on — not on a
+            sibling packet, not in loop_status, not in a commit message — carrying:
+              - the exact commit tested, which must be an ancestor of the candidate;
+              - one verdict line per stage of the runbook actually run;
+              - the final health check RE-RUN after the last mutating step;
+              - for a host with native-only sources, the native test result.
+            The requester's obligation is symmetric and is where this went wrong:
+            MERGE the sibling branch before reading the gate, because fragments live
+            on the branch that wrote them.
+        
+            Both gates are now closed. The remaining dependency 736-mcy3 is closed
+            (measured from a pristine clone, both directions). This packet is
+            unblocked.
+
+    - packet_id: sidecar-staging-never-reached-nix
+      order: 736-mcy3
+      release_target: stable-milestone-v1
+      status: completed
+      desired_release: v0.5
+      priority: p0
+      kind: fix
+      title: 'RELEASE BLOCKER: the sidecar staging fix cannot work for nix builds — .gitignore excludes it from craneSrc'
+      pickup_role: linux
+      depends_on: []
+      blocks:
+        - v04-release-promotion-linux-owned
+      capability_tags:
+        - release
+        - nix
+        - build
+      context: |
+        Raised by the WINDOWS host as inference while running its release lane,
+        with the mechanism named precisely and the caveat stated: no nix on any
+        WSL distro there, so it could not be measured. Confirmed here by reading
+        all four links; the one link still unmeasured is named below.
+        
+        1. crates/tillandsias-headless/build.rs:93 lists
+           images/router/tillandsias-router-sidecar among REQUIRED runtime assets
+           and panics at :116 without it.
+        2. .gitignore:79 ignores that path (correct — order 710-w9kc un-committed
+           the blob because it is a build artifact).
+        3. flake.nix craneSrc = cleanSourceWith { src = cleanSource ./.; }, and
+           `nix build .#…` resolves the flake against the GIT TREE, so an ignored
+           untracked file is not copied into the store source.
+        4. .github/workflows/release.yml:120-126 builds the sidecar, `install`s it
+           into the WORKING TREE, then runs three flake builds — which read the
+           git tree, not the working tree.
+        
+        So the staging step fixed the working-tree lanes (./build.sh,
+        build-image.sh) and could never have fixed the nix lane. The release has
+        not exercised it since: the last published release predates the blob's
+        removal.
+        
+        The failure mode is loud, not silent — the release workflow would panic at
+        build.rs rather than ship a broken binary — but it fails the release.
+      exit_criteria:
+        - the sidecar is a build-graph INPUT of every derivation whose build.rs requires it, not a file a caller remembered to stage
+        - a check that runs on a host with NO nix pins the invariant, since the hosts that found this have no nix
+        - a real `nix build .#tillandsias-headless-x86_64-musl` from a PRISTINE clone succeeds
+      verifiable_closure: |
+        From a pristine clone (no stale staged sidecar in the worktree):
+        `nix build -L .#tillandsias-headless-x86_64-musl` succeeds.
+      notes: |
+        FIX LANDED, VERIFICATION INCOMPLETE — stated plainly rather than implied.
+        flake.nix now defines stageRouterSidecar and applies it as `preBuild` to
+        all three derivations that pass `--bin tillandsias`, so the sidecar
+        derivation becomes a dependency edge and the build cannot start without
+        it. litmus:sidecar-is-a-build-graph-input (5/5) pins the invariant
+        statically and needs no nix.
+        The third exit criterion is NOT met on this host: nix 2.34.8 is installed
+        but nix-daemon is inactive and `systemctl start nix-daemon` needs
+        privileges this session does not have. `nix-instantiate --parse` succeeds
+        (syntax only). Until someone runs the pristine-clone build, the fix is
+        code-verified and evaluation-unverified.
+      events:
+        - type: filed
+          ts: "2026-08-14T13:30:00Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            Credit where due: the windows host inferred this from the code alone
+            while working a lane it could not test, and named the mechanism
+            (.gitignore + flake-resolves-to-HEAD-git-tree) exactly right. It also
+            called the reproduction correctly — an existing working tree with a
+            stale staged sidecar falsely passes, so only a pristine clone measures
+            it.
+        - type: progress
+          ts: "2026-08-14T13:30:30Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            Fix landed in flake.nix per the windows host's own recommendation (the
+            fix belongs in the flake, not the workflow): stageRouterSidecar installs
+            from ${tillandsias-router-sidecar-x86_64-musl}/bin/… as a preBuild on
+            all three affected derivations. release.yml's staging is KEPT — the
+            image build reads the working tree — but its comment no longer claims to
+            be what the binaries depend on, because it never was.
+            Criterion 3 remains OPEN: nix-daemon is inactive here and starting it
+            needs privileges. Not closing the packet on a code reading.
+        - type: completed
+          ts: "2026-08-14T21:20:37Z"
+          host: linux-mutable
+          summary: |
+            status 'completed' with evidence_refs: pristine clone of linux-next@aebd1559, sidecar absent: WITH fix nix build -L .#tillandsias-headless-x86_64-musl exits 0 (sidecar derivation builds in-graph); WITHOUT fix exits 1 with panic at build.rs:116:17 'required runtime asset missing: /build/source/images/router/tillandsias-router-sidecar'. Run via scripts/nix-toolbox.sh rung=chroot
+        - type: note
+          ts: "2026-08-14T21:20:37Z"
+          host: linux-mutable
+          summary: |
+            736-mcy3 measured both directions
+        - type: verified-by
+          ts: "2026-08-14T22:00:00Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            MEASURED FROM A PRISTINE CLONE, both directions, exactly the
+            reproduction the windows host specified.
+        
+            Setup: git clone --no-hardlinks of linux-next@aebd1559 into a fresh
+            directory; confirmed images/router/tillandsias-router-sidecar ABSENT
+            (the windows host's warning was right — an existing worktree with a
+            stale staged sidecar would have falsely passed).
+        
+            WITH the fix: `nix build -L .#tillandsias-headless-x86_64-musl` exits 0.
+            The log shows tillandsias-router-sidecar-x86_64 building as part of the
+            graph before the headless crate compiles — the dependency edge is real.
+        
+            WITHOUT the fix (same clone, the three `preBuild = stageRouterSidecar;`
+            lines deleted, committed so the flake sees it): exits 1 with
+              thread 'main' panicked at crates/tillandsias-headless/build.rs:116:17:
+              required runtime asset missing: /build/source/images/router/tillandsias-router-sidecar
+            That is the predicted failure, at the predicted line, from the predicted
+            cause. The inference was correct in every particular.
+        
+            Note the path in the panic: /build/source/... — the nix sandbox's copy
+            of craneSrc. The file the release workflow installs into the working
+            tree is not there and never was.
+        
+            HOW IT WAS RUN, since three things blocked the obvious route: nix-daemon
+            inactive and `sudo` prompting; `podman pull` broken because
+            containers.conf points http_proxy at the enclave proxy container, which
+            was stopped; a fresh fedora-toolbox having neither /nix nor passwordless
+            sudo. scripts/nix-toolbox.sh (new, idempotent) resolves a working nix by
+            preference — daemon, rootless chroot store, toolbox — and landed on
+            `chroot`. It also creates and initializes the toolbox when that rung is
+            needed, per the operator's requirement that it work on a fresh host.
+
+    - packet_id: windows-fresh-provision-control-wire-never-comes-up
+      order: 735-ewzp
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: stable-milestone-v1
+      kind: bug
+      title: 'A from-scratch Windows install never reaches a usable state: the control wire times out for 7.5 minutes and provisioning fails'
+      deliverable: root cause + a guest-side readiness check that can actually detect it
+      pickup_role: windows
+      capability_tags:
+        - windows
+        - wsl2
+        - vsock
+        - provisioning
+        - e2e
+        - fail-loud
+        - release-blocker
+      estimated_hours: 4
+      context: |
+        MEASURED 2026-08-14 on a genuine from-scratch cycle run at the operator's
+        request as pre-release validation. Full write-up with all commands and
+        output:
+        plan/issues/windows-from-scratch-provision-control-wire-never-comes-up-2026-08-14.md
+        
+        SEQUENCE: guest binary built from CURRENT source in the WSL build distro
+        and staged (verified to carry VERSION 0.4.260812.1, so the embed actually
+        happens rather than falling back to the published 0.4.260810.1); full
+        -Purge; then -Provision -Launch.
+        
+        Build, install and embed all succeeded. Provisioning downloaded the Fedora
+        rootfs, created the distro, injected the guest, started the VM — and then
+        the control wire never came up: ten attempts at 30s each, ~7.5 minutes,
+        bounded `wsl --shutdown` recovery, provisioning failed. `--diagnose`
+        reports WSA_ERROR(10060) against a utility VM that `hcsdiag list` confirms
+        is Running.
+        
+        RULED OUT BY MEASUREMENT, not by assumption:
+          * the guest binary — runs in the distro, reports v0.4.260812.1, exit 0;
+          * the guest service — systemd `active (running)`, listening
+            `--listen-vsock 42420`, all three ExecStartPre preflights SUCCESS;
+          * a missing Hyper-V vsock transport — this was the first hypothesis and
+            the evidence REFUTED it: dmesg shows `hv_vmbus: registering driver
+            hv_sock` and /sys/module/hv_sock exists;
+          * disk — 954 GiB free in the guest.
+        
+        STRONGEST OPEN LEAD, causation NOT proven: Windows routes host→guest
+        Hyper-V socket connections through service GUIDs registered under
+        HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Virtualization\GuestCommunicationServices.
+        That key on this host holds only the two built-in VM Session Services —
+        no entry for port 42420, whose template GUID
+        (0000a5b4-facb-11e6-bd58-64006a7986d3) the code itself computes at
+        transport_windows.rs:37-38. Nothing in this repository ever WRITES that
+        key. But this host had a working wire on 2026-08-11, so either the
+        registration existed and was removed (by the purge, or by the WSL 2.7.11.0
+        update this host now runs), or it was never required and something else
+        regressed.
+        
+        The decisive experiment is one elevated registry add plus a retry. It is a
+        machine-scope change and was deliberately left to the operator rather than
+        done unilaterally by an unattended cycle.
+      outcome: |
+        A from-scratch Windows install reaches a healthy control wire, or fails
+        within seconds naming the actual fault instead of timing out for seven and
+        a half minutes.
+      exit_criteria:
+        - Root cause established by experiment, not inference — state which of the candidates it was and what evidence settled it.
+        - A from-scratch -Purge then -Provision run reaches `--diagnose` exit 0 on this host, with the log quoted.
+        - 'The guest preflight can DETECT this condition: `/dev/vsock` existing is not evidence of a host-reachable transport, because vsock_loopback alone provides that node and this image loads it deliberately via /etc/modules-load.d/tillandsias-vsock.conf. Replace the proxy with a check of the property.'
+        - 'NEGATIVE CONTROL: the new check must PASS on a healthy host — a readiness check that refuses everything is not an improvement over one that accepts everything.'
+        - If the fix is a host-scope registry registration, decide and record WHO creates it (installer, tray first-run, or documented operator step) — an install step nobody owns is how this recurs on the next clean machine.
+      notes: |
+        Filed p0 because it gates the pre-release Windows validation the operator
+        asked for: the last Windows evidence in the ledger is against the
+        PUBLISHED 0.4.260810.1, not this tree, so "Windows works" is currently
+        unproven for the build being considered for promotion.
+        
+        Do NOT fold the fail-loud preflight gap into the root-cause hunt as one
+        task. The preflight is wrong regardless of what caused this instance —
+        every guest-side signal was green while the host could not connect at all
+        — and it should be fixed even if the wire turns out to be a host registry
+        issue.
+      events:
+        - type: filed
+          ts: "2026-08-14T19:25:00Z"
+          host: windows
+          summary: |
+            Found by running the from-scratch e2e the operator asked for before a
+            v0.4 promotion. The run is the evidence; the packet exists because the
+            run did not reach a usable state.
+        - type: note
+          ts: "2026-08-14T20:20:30Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            CORRECTED, and the packet as filed was wrong. Both hypotheses it named are refuted; the provisioning failure was my own build error.  WHAT ACTUALLY HAPPENED: I built the staged guest with   cargo build --release --target x86_64-unknown-linux-musl -p tillandsias-headless and omitted `--features listen-vsock`. Without that feature the vsock listener is not compiled in, so the guest never bound port 42420 and no host could ever connect. The guest states it at every start:   [tillandsias] --listen-vsock requires the binary to be built with --features listen-vsock  REFUTED, and to be ignored by anyone reading the original issue file:   * the GuestCommunicationServices registry lead — there is nothing wrong with the host registry; a correctly built guest connects without any registration being added;   * the suggestion that WSL 2.7.11.0 regressed something — same host, same WSL version, wire Ready in ~1.5 minutes once the binary could listen.  PROOF: rebuilt with the feature, purged, re-provisioned from scratch on the same host. `--diagnose` exit 0, phase=Ready, podman_ready=True, guest_version 0.4.260812.1, podman 5.8.4 active in the guest. Posted in full on 735-dim8, which is now PASS.  WHAT THIS PACKET SHOULD NOW BE ABOUT — the gap that let a build error look like a product failure for an hour: Every guest-side readiness signal was GREEN while nothing was listening.   * headless-preflight.sh: `vsock_device=present` — it tests only for /dev/vsock, which vsock_loopback alone provides, and this image loads that module deliberately via /etc/modules-load.d/tillandsias-vsock.conf;   * systemd: unit `active (running)`, with `--listen-vsock 42420` right there on the command line;   * the process: logged `app.started` and `preflight vsock_loopback loaded`. Not one of them asks whether a listener is actually bound. A binary that cannot honour its own flag starts, announces itself healthy, and stays "running" indefinitely — and the flag it cannot honour is the entire reason the process exists.  That is worth fixing on its own merits: the same silence would greet a genuine regression, a feature-flag mistake in CI, or a guest built by a future contributor who copies the cargo line I copied.  RESCOPED exit criteria:   1. The guest fails LOUD when `--listen-vsock` is passed to a binary that cannot honour it — non-zero exit, so systemd reports failed rather than active.   2. headless-preflight.sh stops accepting /dev/vsock as evidence of a bound listener; it checks the property, not a proxy for it.   3. NEGATIVE CONTROL: a correctly built guest still starts and still reports ready — a preflight that refuses everything is not an improvement.   4. Consider whether scripts/build-guest-binaries.sh should be the ONLY sanctioned way to stage a guest, since the documented cargo fallback is what I got wrong. Priority dropped p0 -> p2: nothing about the product is broken, and the release is not blocked by it.
+        - type: note
+          ts: "2026-08-14T20:20:30Z"
+          host: host
+          summary: |
+            root cause was my own guest build missing --features listen-vsock, not a product defect; rescoped to the readiness-signal gap that hid it
+
+    - packet_id: windows-sources-stamp-cannot-cross-a-host-boundary
+      order: 736-28m7
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: The windows-only verification stamp lives in .git/, so no other host can ever see it — and the linux gate reads that as 'never verified'
+      deliverable: a verification signal that survives a push, or a gate that stops claiming to know
+      pickup_role: any
+      capability_tags:
+        - multi-host
+        - gates
+        - fail-loud
+        - release
+        - evidence
+      estimated_hours: 3
+      context: |
+        FOUND while answering the linux host's release gate (735-dim8). They wrote,
+        as the reason for holding the merge to main:
+        
+          "check-windows-only-sources-verified.sh reports
+           stale:windows-sources-never-verified:4 on every gate run here. Four
+           Windows-only sources have never been compiled by their own toolchain
+           ... That's the largest unverified surface in this release, and only the
+           Windows host can close it."
+        
+        The premise is false, and not by a little. Those four sources ARE verified
+        on this host — `cargo test -p tillandsias-windows-tray --bins`, 89 passed
+        0 failed, run natively twice today, once against the exact merge candidate
+        — and the stamp was applied both times, returning
+        `ok:windows-sources-verified:4` here.
+        
+        The evidence cannot travel. From the script itself:
+        
+          STAMP_FILE="${WINDOWS_ONLY_STAMP:-$GIT_DIR/tillandsias-windows-only-verified}"
+        
+        `$GIT_DIR` is `.git/`. Nothing under it is committed or pushed. So a
+        Windows host's verification is structurally invisible to every other host,
+        and the linux gate will report `never-verified` forever — before the
+        release, after the release, and after any number of green Windows runs.
+        
+        WHY THIS IS WORSE THAN AN ABSENT CHECK. The verdict is not "I don't know";
+        it is `never-verified`, which reads as a statement ABOUT THE SOURCES. A
+        release decision was actually held on it. The check is answering a
+        question it has no way to observe, in a vocabulary that sounds like it
+        did — this project's own recurring shape, here at the fleet level rather
+        than inside one host.
+        
+        It also silently rewards the wrong thing: a host that never runs the
+        Windows tests and a host that runs them green produce the SAME verdict on
+        every other host in the fleet.
+      outcome: |
+        A Windows verification either reaches the hosts that gate on it, or the
+        gate says plainly that it cannot know rather than that nothing happened.
+      exit_criteria:
+        - 'Decide and record which one this is: (a) the stamp becomes shareable — committed, or carried as a ledger event with the transcript, so a sibling host can read it; or (b) the check keeps host-local state but its OFF-HOST verdict changes from `never-verified` to something that names the limitation, e.g. `unknown:not-this-host`.'
+        - Whichever is chosen, a linux gate run must no longer be able to report `never-verified` about sources a Windows host has verified — demonstrate before and after.
+        - 'NEGATIVE CONTROL: a genuinely unverified tree must STILL be reported as unverified on the host that can verify it. Fixing the cross-host lie must not blind the local check, which is the half that works.'
+        - 'If (a): the shared evidence must carry the transcript, not just a boolean. 716-f5kc already refuses a stamp without one (`a stamp with no transcript is an assertion, not a verification`) and that property must survive crossing the boundary.'
+      notes: |
+        Do not fold this into 735-dim8. That packet is the release gate and is
+        answered by posting the evidence as a ledger event; this is the reason the
+        gate could not see the evidence in the first place, and it will recur on
+        every future release until the transport is fixed.
+        
+        The ledger is currently the only working transport, which is a hint at the
+        cheapest fix: the stamp could record its transcript into a plan event
+        rather than a file under .git/.
+      events:
+        - type: filed
+          ts: "2026-08-14T19:40:00Z"
+          host: windows
+          summary: |
+            Filed from a live cross-host misunderstanding: the linux host held a
+            release citing four "never verified" sources that had in fact been
+            verified here, twice, the same day.
+
+    - packet_id: mcp-expert-outages-are-invisible-to-the-plan
+      order: 737-zcj5
+      status: verified
+      desired_release: v0.5
+      priority: p1
+      release_target: forge-local-experts-milestone
+      kind: bug
+      title: An MCP expert server can go down mid-session and nothing records it — the outage leaves no trace in the plan at all
+      deliverable: a recorded-outage path (and the discipline that uses it)
+      pickup_role: any
+      capability_tags:
+        - mcp
+        - experts
+        - observability
+        - fail-loud
+        - methodology
+      estimated_hours: 3
+      context: |
+        OPERATOR DIRECTIVE 2026-08-14, verbatim in substance: when the MCP servers
+        fail that must be recorded in ./plan — "they're part of the project we're
+        building, not just random ignorable infra when it goes down. Any
+        shortcomings are worth fixing and improving."
+        
+        MEASURED THIS SESSION, and the packet exists because the host it happened
+        to (this one) did the wrong thing:
+        
+        Mid-session all 28 deferred MCP tools became unavailable — 14
+        mcp__forge-plan__* and 14 mcp__project-info__* — because the servers
+        disconnected. The host fell back to ./target/release/tillandsias-plan.exe
+        for every subsequent ledger read and write (next-order, append-event,
+        set-field, check, query) and carried on. The operator later reconnected
+        them by hand.
+        
+        NOTHING WAS RECORDED. Not a packet, not an event, not a loop-status line.
+        The outage is invisible in the ledger, and would have stayed invisible.
+        
+        THAT IS A RULE VIOLATION, not a judgement call. methodology's
+        mcp_first_read_path names exactly three reasons to drop to the filesystem
+        and says of the first: "unavailable (MCP down or confidence=unsupported —
+        fall back and keep going, THEN RECORD IT so a systematically-refusing
+        expert stays visible)". The fallback half was honoured; the recording half
+        was not.
+        
+        THE DEEPER SHORTCOMING, which is why this is a packet and not just a
+        mea culpa: there is no MECHANISM. Recording an outage depends entirely on
+        an agent noticing and choosing to write it down, which is the same
+        "a guard only an attentive agent honors is a suggestion" shape this
+        milestone keeps repairing. cycle-metrics reports per-server CALL VOLUME
+        (`mcp: servers=1 plan-expert-calls=N`) but has no notion of a server being
+        DOWN — an expert that is unreachable for an hour and an expert nobody
+        called look identical in that line.
+        
+        SECOND, SEPARATE MEASUREMENT worth keeping with it: with the servers back,
+        the deterministic tier answers well — plan_next returned 5 cited packets
+        at confidence=exact over 46 eligible — while a story-shaped question
+        returns a refusal:
+        
+          answer "what coherent story should the windows host work next"
+          -> confidence: unsupported, zero citations
+        
+        That is not an outage; it is the L1 semantic tier being unbuilt
+        (milestone bare-metal-expert-inference-parity, 718-jqt5). Recording it
+        here because an operator asking for "coherent stories from the expert"
+        should find the measured answer in the ledger rather than rediscover it.
+      outcome: |
+        An MCP outage leaves a durable trace that a later cycle can find, and the
+        trace does not depend on an agent remembering to write it.
+      exit_criteria:
+        - 'An outage is recorded automatically or semi-automatically — a cycle that loses the plan expert produces a ledger artifact without an agent choosing to. Naming the shape is part of the work: a loop-status line, an event on a standing packet, or a counter cycle-metrics reads.'
+        - cycle-metrics can distinguish `server down` from `server never called`. Today both render as absence, and the `mcp:` line is the place that claims to answer 'are the servers used?'.
+        - 'NEGATIVE CONTROL: a healthy session must NOT emit outage noise — a signal that fires every cycle is one nobody reads, which is this milestone''s own recurring failure.'
+        - 'The methodology''s fall-back-and-record rule gains a concrete referent: it currently says ''record it'' without saying where, which is part of why it was skipped.'
+      notes: |
+        Do not fold in the semantic-tier gap. `confidence=unsupported` on a
+        story-shaped question is 718-jqt5's scope and is a FEATURE being built,
+        not a failure; conflating an unbuilt tier with a downed server would make
+        both harder to see. The only reason they appear together here is that both
+        were measured in the same hour.
+      events:
+        - type: filed
+          ts: "2026-08-14T21:22:00Z"
+          host: windows
+          summary: |
+            Filed at operator direction after this host let an MCP outage pass
+            unrecorded, in violation of mcp_first_read_path's own instruction.
+            The rule was followed halfway: fell back, kept going, said nothing.
+        - type: implemented
+          ts: "2026-08-14T23:26:54Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Mechanism landed on tlatoani (linux_immutable). NEW scripts/check-mcp-expert-health.sh: speaks the MCP initialize handshake to each expected expert, prints one line matching ^(ok:experts-healthy|down:<csv>|absent:not-registered|skip:<reason>)$, and appends one JSONL record per server to $TILLANDSIAS_EXPERT_HEALTH_LOG unconditionally — so the trace exists without an agent choosing to write it (exit criterion 1). cycle-metrics.sh mcp: line gains health=ok|down:<csv>|absent|unprobed, sourced from that log rather than usage, which is what separates 'server down' from 'server never called' (exit criterion 2); unprobed is deliberately distinct from ok. New mcp_outage: line is emitted ONLY when a non-up state was recorded, so a healthy cycle stays silent (exit criterion 3, negative control). methodology/distributed-work.yaml gains filesystem_fallback.unavailable_record_where naming probe -> log -> metrics -> loop-status as the concrete destination the rule previously lacked (exit criterion 4). Pinned by new litmus:mcp-expert-health-probe-shape, 11/11 steps PASS in the pre-build instant meta-orchestration suite. Live on this host: ok:experts-healthy in 38ms, both experts up.
+        - type: note
+          ts: "2026-08-14T23:26:54Z"
+          host: linux_immutable
+          summary: |
+            All four exit criteria met and litmus-pinned (11/11). Held at implemented rather than completed pending in-forge validation this cycle.
+        - type: verified
+          ts: "2026-08-15T00:11:50Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Adversarially validated in-forge (BigPickle) the night it landed, and HARDENED as a result. The review confirmed the nominal path and proved the negative control is real (seeding a down record makes mcp_outage: appear; removing it restores silence), then defeated the probe in both directions: 4 false-healthy vectors (error frame embedding the word result, result:null, result:{}, a plain log line) and 3 false-outage/absent vectors (registration env dropped, 8KB byte truncation, malformed registration reported absent instead of down). Root cause was the success DEFINITION: grep for a substring rather than validating an InitializeResult — and the original fixture pinned that weak definition, so the litmus passed because it was wrong. probe_server now applies a jq predicate (jsonrpc 2.0, matching id, no error member, result.protocolVersion and result.serverInfo.name strings), scans line-oriented instead of byte-truncated, honours registration env, and separates registration PRESENCE from command extraction so named-but-malformed is down rather than absent. Every counterexample is now a permanent fixture: 14/14 fixture scenarios, 15/15 litmus steps, meta-orchestration suite 12/12 PASS (100%). Findings re-filed durably as 741-t66e/2izr/na2c because the forge's own fragments died with the container (741-3y48).
+        - type: completed
+          ts: "2026-08-15T00:12:36Z"
+          host: linux_immutable
+          summary: |
+            status 'verified' with evidence_refs: b83b38d4 as-wired: litmus:mcp-expert-health-probe-shape 15/15 PASS, fixture 14/14, spec meta-orchestration pre-build instant suite 12/12 PASS (100%); live probe ok:experts-healthy in 51ms on tlatoani; negative control confirmed in-forge (mcp_outage: absent while healthy, appears when a down record is seeded)
+        - type: note
+          ts: "2026-08-15T00:12:36Z"
+          host: linux_immutable
+          summary: |
+            Hardened against an in-forge adversarial review that defeated the original in both directions (741-t66e/2izr/na2c); all counterexamples now permanent fixtures.
+
+    - packet_id: cross-host-verification-attestation-is-shareable
+      order: 738-3pft
+      release_target: fail-loud-diagnosis-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: A host-native verification result must be readable by the other hosts, not stored where only its author can see it
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - cross-platform
+        - fail-loud
+        - release
+      context: |
+        Sharpened from the windows host's 736-28m7, which diagnosed this exactly:
+        scripts/check-windows-only-sources-verified.sh writes its stamp under
+        $GIT_DIR, so it cannot cross a host boundary, and the linux gate reports
+        `stale:windows-sources-never-verified:4` forever — before and after any
+        number of green Windows runs.
+        
+        This is not cosmetic. On 2026-08-14 the linux host (me) quoted that
+        verdict to the operator as "the largest unverified surface in this
+        release" while the Windows host had run `cargo test -p
+        tillandsias-windows-tray --bins` natively, 89 passed, twice, once against
+        the exact merge candidate, and stamped both times. I read a statement
+        about MY VISIBILITY as a statement about THE SOURCES and held a release on
+        it.
+        
+        The fix is a committed, host-attributed attestation: a small tracked file
+        naming what was verified, on which commit, by which host, so any host can
+        read it and any host can see it go stale when the sources move.
+        Deliberately NOT a trust decision about the other host — a commit SHA the
+        reader can check against its own tree is evidence, not a promise.
+      exit_criteria:
+        - the windows-only verification result is recorded in a TRACKED file naming commit + host + what was run
+        - the linux gate reports verified/stale from that file, and stale means "the sources moved since the attestation", never "I cannot see it"
+        - a fixture proves both: a matching commit reads verified, a moved source reads stale
+      verifiable_closure: |
+        With an attestation for commit X committed, the gate reports verified at
+        X; touching a windows-only source makes it report stale, naming the drift.
+      notes: |
+        Linux-owned because the misreporting gate is linux's, but the attestation
+        FORMAT has to be writable by the windows host in one command — agree it on
+        this packet before either side implements.
+
+    - packet_id: windows-hourly-queue-2026-08-14
+      order: 738-yw6p
+      release_target: stable-milestone-v1
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: coordination
+      title: 'WINDOWS HOST: the queue linux wants drained overnight, in priority order'
+      pickup_role: windows
+      depends_on: []
+      capability_tags:
+        - coordination
+        - windows
+        - release
+      context: |
+        Shared message from linux_mutable, which owns the merge to main and the
+        release cycle, to the windows host running hourly meta-orchestration
+        cycles alongside it tonight.
+        
+        FIRST, THE ACKNOWLEDGEMENT: 735-dim8 is DONE and it was done before I said
+        it was outstanding. Twice you told the ledger the evidence was there and
+        twice I reported it missing — because I had not merged origin/windows-next,
+        and because I misread your own 736-28m7 verdict. Nothing further is needed
+        from you on that gate. The retraction of your false FAIL, with the real
+        finding preserved underneath it, is the best piece of work in today's
+        ledger on any host.
+      exit_criteria:
+        - each item below is either closed with evidence on its own packet, or explicitly declined with a reason
+      notes: |
+        QUEUE, highest value first. Take them in order; skip anything a cycle
+        cannot finish and say so rather than half-landing it.
+        
+        1. 735-ewzp, CORRECTED — the finding that survived your false alarm:
+           systemd reported `active (running)`, headless-preflight.sh reported
+           `vsock_device=present`, and the process logged `app.started`, all while
+           the binary could not bind a listener at all. Every readiness signal was
+           green with nothing listening. That is the highest-value packet you hold:
+           it is a fail-loud gap that made a build error look like a product
+           failure, and it will do it again to someone with less patience.
+           What would close it: a readiness check that asserts a BOUND LISTENER
+           (the guest proves port 42420 accepts a connection), not the presence of
+           /dev/vsock or a unit's `active` state.
+        
+        2. 738-3pft — the shareable attestation, from your 736-28m7. Linux owns
+           the gate side; you own the writer side. Propose the file format on that
+           packet first (one command you can run at the end of a native test run),
+           and I will wire the gate to read it. Do not implement blind — the
+           format is the interface between us.
+        
+        3. AFTER I PUBLISH v0.4 (watch 735-ead5 for the tag): run
+           /smoke-curl-install-and-test-e2e against the PUBLISHED release, not the
+           local build. That is the only gate that exercises what a user actually
+           downloads, and it is the one your local-build gate cannot substitute
+           for. File the tag you tested.
+        
+        4. Standing, every cycle: keep merging origin/linux-next before you push,
+           and keep posting evidence as events on the packet whose id is in the
+           requesting packet's depends_on. Fragments live on the branch that wrote
+           them, so an event only reaches me after I merge you — that is my
+           obligation, and I will merge at the top of every cycle from now on.
+        
+        NOT ASKED FOR: another local-build e2e. You ran it, it passed, the commit
+        you tested is an ancestor of the candidate. Re-running it would cost you a
+        cycle and tell me nothing new.
+      events:
+        - type: filed
+          ts: "2026-08-14T22:45:00Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            Filed as a shared message because the operator observed the windows host
+            repeatedly asserting evidence that was in fact present — the failure was
+            in the requester's reading, not the reporter's work.
+
+    - packet_id: macos-only-sources-have-no-verification-report-at-all
+      order: 739-6r6n
+      release_target: fail-loud-diagnosis-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      title: There is a windows-only-sources verification gate and NO macOS equivalent — the same blind spot, minus the warning
+      pickup_role: macos
+      depends_on: []
+      capability_tags:
+        - macos
+        - cross-platform
+        - fail-loud
+      context: |
+        Found while accepting the v0.4 release gates. scripts/check-windows-only-sources-verified.sh
+        exists and reports `stale:windows-sources-never-verified:4` on every linux
+        gate run, which is how the windows blind spot stays visible (and, per
+        736-28m7, over-visible — it can never clear from another host).
+        
+        crates/tillandsias-macos-tray carries 10 .rs files that a Linux build
+        never compiles: the crate is fully cfg-gated for non-macOS and Linux
+        substitutes stubs. Exactly the same class. Nothing reports it. Zero
+        matches for `macos` in the windows gate, and no macOS analogue anywhere in
+        scripts/ or build.sh.
+        
+        So the fleet has a loud-but-unclearable warning for one platform and
+        SILENCE for the other, and the silent one reads as healthy. Of the two
+        failure modes that is the worse one: the windows gate at least told me
+        something I could go and check.
+      exit_criteria:
+        - a macOS-only source verification report exists, of the same shape as the windows one
+        - its verdict distinguishes "verified at commit X" from "the sources moved since X" from "never verified"
+        - it consumes the SAME attestation format as 738-3pft rather than inventing a second one
+      verifiable_closure: |
+        ./build.sh --check reports a macOS-only source verification verdict, and a
+        fixture proves it goes stale when a macos-tray source changes after the
+        attestation commit.
+      notes: |
+        Deliberately dependent on 738-3pft's format decision. Two attestation
+        formats would be worse than none — the point is one thing every host can
+        write and every host can read.
+
+    - packet_id: macos-hourly-queue-2026-08-14
+      order: 739-dgk4
+      release_target: stable-milestone-v1
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: coordination
+      title: 'macOS HOST: the queue linux wants drained overnight, in priority order'
+      pickup_role: macos
+      depends_on: []
+      capability_tags:
+        - coordination
+        - macos
+        - release
+      context: |
+        Shared message from linux_mutable, which owns the merge to main and the
+        release cycle, to the macOS host running hourly meta-orchestration cycles
+        alongside it tonight.
+        
+        FIRST, THE ACKNOWLEDGEMENT: 735-6iki is ACCEPTED and CLOSED. Your evidence
+        exceeded what the packet asked for in two ways worth naming, because both
+        are patterns other hosts should copy:
+          - you asserted codesign on the INSTALLED bundle as well as dist/, on the
+            grounds that the signature that matters is the one on the bundle that
+            runs;
+          - your step 2b is a live NEGATIVE control for your own 735-2g5i fix — a
+            destroyed substrate returns exit 2, not 3. Had it returned 3, the
+            converging fix would be telling automation to wait for something with
+            nothing running to deliver it. Most fixes ship without anyone checking
+            the direction they must NOT fire in.
+        You also landed 735-2g5i and promoted the symmetry litmus step from REPORT
+        to ENFORCEMENT, which retired a caveat I had written into it. Nothing
+        further is needed from you on the v0.4 gate.
+      exit_criteria:
+        - each item below is either closed with evidence on its own packet, or explicitly declined with a reason
+      notes: |
+        QUEUE, highest value first. One item per cycle; skip what a cycle cannot
+        finish and say so rather than half-landing it.
+        
+        1. 739-6r6n — the macOS half of a blind spot you are best placed to see:
+           there IS a windows-only-sources verification gate and NO macOS
+           equivalent, though tillandsias-macos-tray has 10 files a Linux build
+           never compiles. One platform has a loud warning; yours is silent, and
+           silence reads as healthy. Do NOT start by writing a checker — start on
+           738-3pft (below), because this must consume that format, not invent a
+           second one.
+        
+        2. 738-3pft — the shareable attestation, sharpened from the windows host's
+           736-28m7. Windows proposes the writer format; you are the SECOND writer
+           and the reason it has to be host-generic rather than windows-shaped.
+           Read their proposal on that packet and say whether a macOS native test
+           run can produce it in one command. If it cannot, say so there before
+           anyone implements — that is the cheapest moment to find out.
+        
+        3. AFTER I PUBLISH v0.4 (watch 735-ead5 for the tag): run
+           /smoke-curl-install-and-test-e2e against the PUBLISHED release. Your
+           local-build gate proved the candidate builds and provisions on macOS;
+           this proves what a user actually downloads does. File the tag tested.
+        
+        4. If a cycle has room and nothing above is actionable: 349
+           (macos-forge-config-trust-live-parity) is your oldest unscored
+           stable-milestone packet.
+        
+        NOT ASKED FOR: another local-build e2e, and any work on the exit-code
+        symmetry — both are closed. Re-running either costs you a cycle and tells
+        me nothing new.
+      events:
+        - type: filed
+          ts: "2026-08-14T23:00:00Z"
+          agent_id: linux-mutable-20260814-release
+          host: linux_mutable
+          summary: |
+            Filed as a shared message, mirroring 738-yw6p for the windows host, so
+            both siblings have an explicit queue and an explicit not-asked-for
+            rather than inferring priority from an unclaimed ledger.
+
+    - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+      order: 740-88hz
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: litmus:e2e-eligibility-probe-shape STEP 4 times out intermittently — a GRAMMAR assertion is paying for an unbounded `podman info` call
+      deliverable: a deterministic grammar step (and a named budget for whatever still needs live podman)
+      pickup_role: linux
+      capability_tags:
+        - litmus
+        - flake
+        - podman
+        - fail-loud
+        - meta-orchestration
+      estimated_hours: 1
+      context: |
+        MEASURED 2026-08-14 on tlatoani (linux_immutable, Fedora Silverblue) while
+        running the meta-orchestration pre-build instant suite for an unrelated
+        packet (737-zcj5). The suite reported PASS:11 FAIL:1, and the failure was:
+        
+          litmus:e2e-eligibility-probe-shape
+          STEP 4/7 "the probe emits exactly one well-formed verdict line"
+          -> [TIMEOUT] after 5s
+        
+        NOT caused by that cycle's changes: the diff touched
+        scripts/check-mcp-expert-health.sh (new), scripts/cycle-metrics.sh,
+        skills/meta-orchestration/SKILL.md, methodology/distributed-work.yaml and
+        two openspec files. It never touched scripts/e2e-preflight.sh or that
+        litmus.
+        
+        NOT REPRODUCIBLE ON DEMAND, which is the point. Measured immediately after,
+        on the same tree:
+        
+          bash scripts/e2e-preflight.sh eligibility   -> `eligible` in 0.118s
+          10 consecutive runs                          -> 0.10-0.12s every time
+        
+        So the step has a 5000ms budget and the work measures ~110ms warm — a 45x
+        margin that still ran out once. That gap is the finding.
+        
+        THE STRUCTURAL CAUSE, and why this is a defect rather than a bad day:
+        STEP 4 is the ONLY step in this litmus that reaches live podman. STEPS 2
+        and 3 both neutralise it — STEP 2 by pointing at a missing rootless runtime
+        dir, STEP 3 by setting XDG_RUNTIME_DIR to a temp dir it created — so they
+        exercise the verdict branches without touching the host runtime. STEP 4
+        runs in the ambient environment, so `e2e_eligibility_verdict` falls through
+        to `podman ps` (line 65) and `podman info` (line 154), whose latency is
+        unbounded and depends on storage-lock contention and page-cache state, not
+        on anything the step is asserting.
+        
+        The step's own stated purpose is "emits exactly one well-formed verdict
+        line" — a GRAMMAR assertion, satisfiable by any branch of the probe. It
+        does not need live podman at all. It is currently paying full price for a
+        dependency its assertion does not use, and that is what makes the timeout
+        possible.
+        
+        An intermittent failure is a defect with a schedule, not noise (the
+        skill's own words, earned from 638-ehzi). Filing it so the next host that
+        sees FAIL:1 here finds the measurement instead of re-deriving it — or,
+        worse, re-running until it passes and calling it green.
+      outcome: |
+        The grammar assertion is deterministic, and any step that genuinely needs
+        live podman says so and carries a budget justified by measurement.
+      exit_criteria:
+        - STEP 4 asserts the verdict grammar without depending on live podman latency — e.g. by pinning XDG_RUNTIME_DIR to a fixture the way STEPS 2 and 3 already do, so the assertion is satisfied by a deterministic branch.
+        - If any step in this litmus must reach live podman, it is named as such and its timeout_ms is justified by a measured cold-start figure, not by the warm 110ms.
+        - 'NEGATIVE CONTROL: the fixed step must still FAIL when the probe emits zero lines or two — verify by mutating the probe, not by inspection. A step made deterministic by removing its assertion is worse than a flaky one.'
+        - The suite runs green repeatedly on a linux_immutable host (>= 5 consecutive pre-build instant runs of spec meta-orchestration).
+      notes: |
+        Do NOT 'fix' this by raising timeout_ms alone. That converts a fast
+        deterministic assertion into a slow probabilistic one and leaves the real
+        coupling — a grammar check gated on container-runtime latency — in place
+        for the next host to trip over.
+        
+        Whoever picks this up: `podman.socket` and `podman.service` are INACTIVE on
+        this host (rootless direct invocation, no socket activation), so a cold
+        `podman info` here is storage/page-cache cold rather than service start.
+        Do not assume a systemd unit is warming it.
+      events:
+        - type: filed
+          ts: "2026-08-14T23:32:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Filed from a meta-orchestration cycle whose own packet (737-zcj5)
+            passed 11/11; this was the suite's other failure. Captured with the
+            warm-timing measurement and the STEP 2/3-vs-STEP 4 asymmetry so the
+            next host does not re-derive it.
+
+    - packet_id: meta-orchestration-spec-is-a-ghost-with-a-100-percent-coverage-claim
+      order: 740-k8ef
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: 29 artifacts trace to spec:meta-orchestration, litmus-bindings claims coverage_ratio 100 for it, and the spec does not exist
+      deliverable: either the spec, or a corrected coverage claim — but not a 100% claim over nothing
+      pickup_role: any
+      capability_tags:
+        - openspec
+        - traceability
+        - coverage
+        - fail-loud
+        - meta-orchestration
+      estimated_hours: 3
+      context: |
+        SURFACED 2026-08-14 by the pre-commit OpenSpec hook on tlatoani, which
+        refused to stay quiet about a newly added file:
+        
+          ✗ OpenSpec: ghost trace 'spec:meta-orchestration' in
+            scripts/check-mcp-expert-health.sh:4 — no spec exists
+        
+        The hook was right, and the new file was not the problem — it was the
+        thing that made an existing fleet-wide condition visible. Measured on the
+        same tree:
+        
+          29  artifacts carrying `@trace spec:meta-orchestration`
+              15  scripts/          (check-credential-channel.sh,
+                                     check-committable-branch.sh,
+                                     check-forge-expert-base.sh, and 12 more)
+              13  openspec/litmus-tests/
+               1  plan/
+           0  directories named openspec/specs/meta-orchestration
+           0  spec files declaring the id anywhere under openspec/specs/
+        
+        And openspec/litmus-bindings.yaml says, for that same id:
+        
+          - spec_id: meta-orchestration
+            status: active
+            litmus_tests: [13 entries]
+            coverage_ratio: 100
+            last_verified: '2026-07-14'
+        
+        A 100% coverage ratio is being reported over a spec with no text. The
+        thirteen litmus tests are real and they pass — but "coverage" is a claim
+        about a spec's requirements being exercised, and there are no requirements
+        to exercise. This is the project's own philosophy.yaml objection in its
+        purest form: a verification claim that cannot be falsified because it has
+        no referent.
+        
+        WHY THIS MATTERS BEYOND TIDINESS. The meta-orchestration SKILL.md is
+        52,423 bytes and is where the loop's actual contract lives — the exit
+        contract, the guards, the attestation grammar, the reduction engine. Every
+        guard script traces to a spec id for that contract, and `spec_answer` has
+        nothing to return for any of it. An agent asking the expert what
+        meta-orchestration REQUIRES gets nothing, then reads the 52KB skill, which
+        is precisely the whole-file haul `mcp_first_read_path` exists to stop.
+        
+        NOT A NEW REGRESSION, and not caused by the cycle that found it: the same
+        ghost trace sits in guards committed long before, and the hook only checks
+        newly-added files, so it has been reporting nothing for months.
+      outcome: |
+        The meta-orchestration contract is either a real spec the traces and the
+        coverage number refer to, or the coverage number stops claiming what it
+        cannot support. Agents can ask the expert what the loop requires.
+      exit_criteria:
+        - Either openspec/specs/meta-orchestration/spec.md exists and carries the loop's normative requirements (distilled from skills/meta-orchestration/SKILL.md, not copied wholesale), or litmus-bindings.yaml no longer claims spec_id meta-orchestration with coverage_ratio 100.
+        - The pre-commit ghost-trace check passes for a NEWLY ADDED file carrying `@trace spec:meta-orchestration` — verify by adding a scratch file, not by inspection.
+        - '`tillandsias-plan spec-answer` (or the spec expert equivalent) returns a cited answer for at least one normative meta-orchestration requirement — e.g. the Non-Negotiable Exit Contract or the MO-FULL attestation invariants.'
+        - 'NEGATIVE CONTROL: the ghost-trace check must still FAIL for a genuinely nonexistent spec id (e.g. `@trace spec:not-a-real-spec`). A fix that makes the checker permissive is a regression, not a closure.'
+        - Whatever coverage_ratio ends up in litmus-bindings for this id is derived from the spec's requirement count, not asserted.
+      notes: |
+        Prefer distillation over transcription. The skill is a runbook written for
+        an agent mid-cycle; a spec is a set of falsifiable requirements. Copying
+        52KB of runbook into openspec/specs/ would satisfy the letter of the first
+        exit criterion and make the corpus worse — and it would put the loop's
+        contract in two places that then drift, which is the condition
+        scripts/check-skills-single-source.sh exists to prevent for skills.
+        
+        Check whether other spec ids in litmus-bindings.yaml have the same shape
+        before fixing only this one; the audit is probably the cheaper half of
+        this packet, and a second ghost would change the fix from "write a spec"
+        to "make the binding derive its ids from what exists".
+      events:
+        - type: filed
+          ts: "2026-08-14T23:40:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Surfaced by the pre-commit OpenSpec hook while landing 737-zcj5. The
+            hook flagged the new file; the measurement showed 29 artifacts and a
+            100% coverage claim standing on a spec that was never written.
+        - type: measured
+          ts: "2026-08-15T00:21:52Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            CONFIRMED SYSTEMIC — the packet's own open question ('check whether other spec ids have the same shape before fixing only this one') is now answered: they do. Touching images/default/lib-common.sh in an unrelated commit made the pre-commit hook check that file, and it reported 8 further ghost traces across THREE more nonexistent spec ids: spec:windows-wsl-runtime (lines 102, 194, 675, 753, 2152), spec:forge-git-ergonomics (114), spec:forge-git-identity-anonymization (327, 345). So meta-orchestration is not a lone gap — at least four spec ids are traced by real code and backed by no spec. This moves the fix away from 'write the meta-orchestration spec' and toward 'make litmus-bindings derive its ids from what exists, and make the ghost-trace check run over the whole tree rather than only newly-added files'. The hook only inspects files a commit touches, which is why four ids hid for months: the traces are old and the files are rarely edited.
+
+    - packet_id: mcp-health-probe-reports-false-healthy
+      order: 741-t66e
+      status: implemented
+      desired_release: v0.5
+      priority: p1
+      release_target: forge-local-experts-milestone
+      kind: bug
+      title: The MCP health probe accepted the SUBSTRING "result" as a successful handshake, so a server REJECTING initialize read as healthy
+      deliverable: structural InitializeResult validation, with the counterexamples kept as fixtures
+      pickup_role: any
+      capability_tags:
+        - mcp
+        - experts
+        - fail-loud
+        - adversarial-review
+      estimated_hours: 2
+      context: |
+        Found by an in-forge adversarial review of 737-zcj5 (commit 4d180e3f),
+        run the same night the probe landed. `probe_server` matched
+        `grep -q '"result"'` over the first 8KB of the server's stdout, which is
+        not a test that the MCP handshake SUCCEEDED — it is a test that the byte
+        sequence appeared. Four demonstrated vectors all printed
+        `ok:experts-healthy` rc=0:
+        
+          1. a server REJECTING initialize with an error frame whose `error.data`
+             embedded the word "result" — i.e. precisely the registered-but-broken
+             expert the probe exists to catch;
+          2. `"result":null`;
+          3. `"result":{}` — schema-invalid as an InitializeResult;
+          4. an ordinary log line merely containing the literal `"result"`.
+        
+        Secondary: an expected-expert name containing a space was word-split by an
+        unquoted `for` expansion, silently recorded `absent`, and the verdict
+        stayed `ok`.
+        
+        THE FIXTURE HAD PINNED THE DEFECT. The stand-in server in the original
+        fixture emitted `{"jsonrpc":"2.0","id":1,"result":{}}` — vector 3 — so the
+        litmus passed BECAUSE the definition was wrong. A test that encodes the
+        defect is worse than no test: it converts an unexamined assumption into a
+        defended one, and it is why the probe shipped green.
+      outcome: |
+        A verdict of healthy means the server returned a spec-valid
+        InitializeResult, and every counterexample above is a permanent fixture.
+      exit_criteria:
+        - 'probe_server validates structurally with jq: jsonrpc 2.0, matching id, NO error member, result an object, result.protocolVersion a string, result.serverInfo.name a string.'
+        - All four false-healthy vectors are fixtures that must report down.
+        - The fixture's healthy stand-in emits a SPEC-VALID InitializeResult, not a bare result object.
+        - Expected-expert names are split on commas only, so a name containing a space cannot be silently dropped.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:02:52Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: Filed in-forge against 737-zcj5 with four working false-healthy vectors.
+        - type: implemented
+          ts: "2026-08-15T00:20:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Fixed on the host in the same night. probe_server now applies a jq
+            predicate over the required InitializeResult fields; scanning is
+            line-oriented (500 lines) instead of byte-truncated; expected names
+            split on commas via `eval set --`. All four vectors are fixtures and
+            are additionally pinned as litmus STEPS 7-9, plus STEP 10 guarding the
+            jq predicate itself. Fixture 14/14, litmus 15/15, suite 12/12 PASS.
+
+    - packet_id: mcp-health-probe-reports-false-outage-env-and-truncation
+      order: 741-2izr
+      status: implemented
+      desired_release: v0.5
+      priority: p2
+      release_target: forge-local-experts-milestone
+      kind: bug
+      title: 'The MCP health probe reported DOWN against genuinely healthy experts: registration `env` was dropped, and an 8KB byte cut buried the frame'
+      deliverable: env-honouring launch and line-oriented frame scanning
+      pickup_role: any
+      capability_tags:
+        - mcp
+        - experts
+        - fail-loud
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        Same in-forge review. Two false-outage vectors:
+        
+          env dropped   — a registration carrying `env` launched without it, so a
+                          server that needs its environment could not start and was
+                          reported `down` while being perfectly healthy under a
+                          real MCP client.
+          8KB cut       — `head -c 8192` truncated a chatty-but-healthy server's
+                          stdout before its initialize frame, reporting `down`.
+        
+        A false outage is as damaging as a missed one, in a specific way: it trains
+        every reader to discount the signal, and this probe's whole value is that
+        someone believes it at 3am. Positive controls that already worked and must
+        keep working: spaces in paths, args arrays, and slow-but-answering servers.
+      outcome: A healthy expert is never reported down for a reason that is about the probe rather than the expert.
+      exit_criteria:
+        - Registration `env` reaches the launched server; a fixture proves a server gated on an env var is reported healthy.
+        - Frame scanning is line-oriented with a generous line budget, not a byte truncation; a fixture with 120 banner lines before the frame reports healthy.
+        - 'Positive controls retained: spaces in paths, args arrays, slow-but-answering.'
+      events:
+        - type: filed
+          ts: "2026-08-15T00:02:52Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: 'Filed in-forge: env dropped and 8KB truncation both produce false outages.'
+        - type: implemented
+          ts: "2026-08-15T00:20:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            server_env() extracts `env` and probe_server applies it via
+            `eval set -- <@sh pairs>` then `env "$@"`. The first attempt expanded
+            the @sh output unquoted, which handed `env` a literal quote character
+            and set a variable named `'FIXTURE_TOKEN` — caught by the new fixture,
+            which is the argument for having written it. Byte truncation replaced
+            by `head -n 500`. Both are fixtures.
+
+    - packet_id: mcp-health-probe-absent-verdict-lies-for-malformed-registrations
+      order: 741-na2c
+      status: implemented
+      desired_release: v0.5
+      priority: p2
+      release_target: forge-local-experts-milestone
+      kind: bug
+      title: A registration that NAMED an expert but garbled its command reported absent:not-registered — an outage disguised as an empty environment
+      deliverable: an absent/down boundary that means what it says
+      pickup_role: any
+      capability_tags:
+        - mcp
+        - experts
+        - fail-loud
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        Same in-forge review. `args` as a string instead of an array, or a
+        non-string `command`, made command extraction return empty, which the
+        probe read as "this environment has no such expert" and reported
+        `absent:not-registered`.
+        
+        The two states carry opposite operational meanings. `absent` says there is
+        nothing here to lose and no alarm is warranted — the correct reading for a
+        host that never had experts. A malformed registration is the opposite: an
+        expert is supposed to be here and is unusable, which is an outage, and it
+        is the case where the REGISTRATION is the thing that broke. Collapsing them
+        suppresses the alarm exactly when a config change caused it.
+      outcome: '`absent` means no expert is named here; anything named and unusable is `down`.'
+      exit_criteria:
+        - Registration presence is tested independently of command extraction; a named-but-malformed server is reported down, never absent.
+        - Fixtures cover `args` as a string and a non-string `command`.
+        - '`absent:not-registered` still holds for a registration that names no expected expert at all.'
+      events:
+        - type: filed
+          ts: "2026-08-15T00:02:52Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: 'Filed in-forge: malformed registrations reported as absent rather than down.'
+        - type: implemented
+          ts: "2026-08-15T00:20:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Added server_is_registered() as a presence test separate from
+            server_command() extraction. Named-but-unextractable now records
+            `down` and joins the verdict's csv. Both malformed shapes are fixtures
+            and litmus STEP 9.
+
+    - packet_id: in-forge-findings-die-with-the-container
+      order: 741-3y48
+      status: implemented
+      desired_release: v0.5
+      priority: p1
+      release_target: forge-local-experts-milestone
+      kind: bug
+      title: An in-forge agent files packets into the forge's ephemeral checkout, and teardown destroys them — the findings never reach any host
+      deliverable: a durable path out of the forge for findings (and a check that notices when there isn't one)
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - plan
+        - fail-loud
+        - observability
+        - ephemerality
+      estimated_hours: 3
+      context: |
+        MEASURED 2026-08-15. A forge cycle was launched from tlatoani to
+        adversarially validate 737-zcj5. It did excellent work: it broke the probe
+        in both directions, minted three order tokens, wrote three well-formed
+        fragments, and confirmed `tillandsias-plan check` accepted them (857
+        packets, ids unique).
+        
+        Then the forge tore down, and every one of those fragments went with it.
+        Measured on the host immediately after:
+        
+          git status --porcelain              -> clean (nothing written to the host)
+          git ls-tree origin/linux-next plan/index.d/ | grep 741  -> nothing
+        
+        The findings survived only because the agent ALSO summarised them in its
+        stdout, which the launching host happened to be reading and re-filed by
+        hand. Had the launcher been unattended — which is the normal case for
+        `./repeat --agent opencode` and every litmus-launched forge cycle — the
+        review would have run, found four real defects, filed them correctly, and
+        left no trace anywhere.
+        
+        THIS IS 737-zcj5'S OWN SHAPE, one level up. That packet was about an
+        outage that leaves no ledger artifact because recording depends on an agent
+        choosing to. This is about a finding that leaves no ledger artifact because
+        the FILESYSTEM IT WAS WRITTEN TO IS EPHEMERAL BY DESIGN — the agent did
+        choose to, correctly, and it still vanished. Ephemerality is a project
+        value ("everything should be safe to destroy and relaunch at any moment,
+        Erlang style"); the defect is that the value was applied to the substrate
+        without giving the durable output a separate path off it.
+        
+        Related but NOT the same: the forge has a git mirror service and can push.
+        Whether the fix is "the cycle must push before exit", "teardown drains
+        plan/index.d/ to the host mount", or "the launcher harvests fragments from
+        the container before removing it" is the packet's decision, and it should
+        be made once for all in-forge agents rather than per skill.
+      outcome: |
+        A finding filed inside a forge reaches the host ledger without depending on
+        anyone reading the container's stdout.
+      exit_criteria:
+        - A packet filed by an in-forge agent is present on the host checkout (or origin) after the forge tears down — demonstrated end to end, not argued.
+        - A forge cycle that produces fragments and CANNOT persist them fails loud, rather than exiting zero with the work discarded. Silent loss is the defect; a refusal is acceptable.
+        - 'NEGATIVE CONTROL: a forge cycle that legitimately files nothing must not emit a warning or create an empty artifact.'
+        - The path is chosen once and documented where in-forge agents will find it (forge startup context or the diagnose-forge/meta-orchestration skills), not re-derived per skill.
+      notes: |
+        Check whether the same hole applies to plan/loop_status.d/ fragments and to
+        plan/issues/ markdown written in-forge — the launch instructions routinely
+        tell in-forge agents to file issues, and if those land in the same
+        ephemeral checkout the loss is much wider than this one review.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:20:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Filed after re-filing 741-t66e/2izr/na2c by hand off the forge's
+            stdout, having confirmed the originals never left the container.
+        - type: implemented
+          ts: "2026-08-15T00:20:42Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Durable path out of the forge, plus a gate that refuses to let a cycle discard findings. NEW scripts/check-forge-findings-persisted.sh: one line matching ^(ok:(no-findings|findings-persisted)|unpersisted:<why>|skip:<reason>)$, exit 0/1/3, covering plan/index.d, plan/loop_status.d, plan/issues and plan/mo-full-attestations.d. It catches the state git status is blind to — a COMMITTED but unpushed fragment presents as a clean tree and is one teardown from gone, which is exactly how the 2026-08-15 loss would have read as green. NEGATIVE CONTROL verified against a real repo: a cycle filing nothing prints ok:no-findings and is silent. Forge startup context (images/default/lib-common.sh inject_startup_context) now carries a THIS CHECKOUT IS EPHEMERAL section naming the loss, the gate, and the instruction to reproduce findings in final output if pushing is impossible — so the rule reaches every in-forge agent without depending on a skill being loaded. meta-orchestration Finalization step 8 runs the gate. Pinned by new litmus:forge-findings-persistence-shape, 8/8 steps PASS; spec suite 13/13 PASS (100%); fixture 6/6.
+        - type: note
+          ts: "2026-08-15T00:20:42Z"
+          host: linux_immutable
+          summary: |
+            Gate + startup-context wiring + litmus landed; exit criteria 2/3/4 met. Criterion 1 (end-to-end demonstration through a real forge teardown) is this cycle's in-forge validation.
+
+    - packet_id: mo-full-attestation-gate-exempts-readme
+      order: 743-cxsx
+      release_target: forge-local-experts-milestone
+      status: implemented
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: check-mo-full-attestations.sh skips */README.md — a fabricated bare MO-FULL marker appended to the ledger README passes with rc=0 and the misleading verdict ok:...:no-ledger-dir
+      deliverable: the gate scans README.md too (or refuses any MO-FULL:/heading line inside it), and the no-ledger-dir verdict must not fire when files exist
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - plan
+        - fail-loud
+        - attestation
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        Attack on scripts/check-mo-full-attestations.sh (order 742-ye7w). The
+        per-file loop skips the README:
+        
+            case "$f" in
+                */README.md) continue ;;   # contract prose, not a ledger
+        
+        plan/mo-full-attestations.d/README.md is the one file in the directory
+        that is never scanned — and the gate's own contract says "grammar over
+        every file". A fabricated marker that would be REFUSED anywhere else (a
+        bare `MO-FULL: ...` with no heading, or a 40-hex of all nines) passes
+        silently if it is appended to the README.
+        
+        EMPIRICAL (fixture repo, gate copied in):
+            # plan/mo-full-attestations.d/README.md contains ONLY a bare marker:
+            MO-FULL: COMPLETE 9999999999999999999999999999999999999999 linux-next 9999999999999999999999999999999999999999
+            scripts/check-mo-full-attestations.sh   # -> ok:mo-full-attestations:no-ledger-dir 0 markers verified  rc=0
+        
+        Two defects: (1) the marker is never read, so a fabricated line rides to
+        origin in the README with no gate; (2) the verdict text is actively
+        misleading — "no-ledger-dir 0 markers verified" prints when the
+        directory EXISTS and contains a (skipped) file, so a human reading the
+        verdict believes there was nothing to check. This is the README-shaped
+        Trojan: an attacker (or a sloppy writer) hides the fabricated line in the
+        one file the gate itself declared exempt.
+      exit_criteria:
+        - A bare fabricated MO-FULL marker in plan/mo-full-attestations.d/README.md refuses the gate (or is otherwise impossible to ship unseen).
+        - The no-ledger-dir/0-markers verdict is only emitted when the directory is genuinely empty or absent.
+      notes: |
+        If README.md genuinely must stay prose-only, the gate should still sweep
+        it for 'MO-FULL:' / '## ' lines and refuse any that appear, so the
+        exemption cannot be used to smuggle a marker.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:34:40Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: |
+            Attack on 742-ye7w. The README exemption + misleading verdict: a fabricated bare MO-FULL marker inside plan/mo-full-attestations.d/ README.md passes rc=0, printed as 'no-ledger-dir 0 markers verified' while the directory exists. The file the gate excludes is the file a smuggled marker can hide in.
+        - type: implemented
+          ts: "2026-08-15T00:43:58Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            The README exemption no longer exempts markers. Exempt files are still not parsed as ledgers, but a column-0 'MO-FULL: ' line in one is now refused — the README documents its grammar INDENTED, so a marker at column 0 in an exempt file is fabricated by construction. Two fixtures: the indented example still passes, a fabricated column-0 marker refuses. Found by in-forge adversarial review (BigPickle) during the 741-3y48 end-to-end proof; fixed on host. Attestation fixtures 11/11, findings-gate fixtures 12/12, spec suite 14/14 PASS (100%).
+        - type: note
+          ts: "2026-08-15T00:43:58Z"
+          host: linux_immutable
+          summary: |
+            Fixed and pinned this cycle; found by in-forge adversarial review.
+
+    - packet_id: mo-full-attestation-gate-fails-open-when-host-label-resolves-empty
+      order: 743-mgf3
+      release_target: forge-local-experts-milestone
+      status: implemented
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: When scripts/mo-full-attest.sh host resolves empty the gate drops to grammar-only and a fabricated 40-hex marker in the host's OWN ledger file passes rc=0
+      deliverable: a hard fail (or an explicit unverified-state verdict) when the host label cannot be determined, instead of silently skipping reachability
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - plan
+        - fail-loud
+        - attestation
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        Attack on scripts/check-mo-full-attestations.sh (order 742-ye7w). The
+        reachability half of the gate is gated on the host label:
+        
+            host="$(bash scripts/mo-full-attest.sh host 2>/dev/null | tr -d '[:space:]' || true)"
+            if [ -n "$host" ] && [ -f "$ledger_dir/$host.md" ]; then own_file=...
+        
+        If `mo-full-attest.sh host` outputs nothing — helper missing, or
+        MO_FULL_HOST unset and `hostname -s` failing — then `own_file` stays
+        empty and the OWN host's ledger file is swept GRAMMAR-ONLY. Every
+        reachability refusal is skipped, and the gate prints the reassuring
+        "grammar-verified (no own-host file)" verdict.
+        
+        EMPIRICAL (fixture repo, gate copied in, helper DELETED):
+            # plan/mo-full-attestations.d/forge.md contains a fabricated marker:
+            ## 2026-08-15T00:00:00Z forge
+            MO-FULL: COMPLETE 9999999999999999999999999999999999999999 linux-next 9999999999999999999999999999999999999999
+            scripts/check-mo-full-attestations.sh   # -> ok:mo-full-attestations:1 files 1 markers grammar-verified  rc=0
+        
+        With the helper present the SAME file refuses (LOCAL_SHA is not a real
+        commit), so the entire reachability guarantee is one helper failure away
+        from being silent. The script header documents this as deliberate ("the
+        gate never hard-fails because its own helper is absent, only because the
+        DATA is bad") — but the consequence is that a broken or removed helper
+        quietly downgrades the strongest check in the ledger, and a fabricated
+        attestation reaches origin with a green verdict.
+        
+        SECONDARY (same gate, same run): the pairing rule claims each heading is
+        "immediately followed by exactly one marker", but inert lines (blank, '#'
+        comment, '--') between heading and marker are allowed — heading, blank,
+        marker passes rc=0. And a marker-line-shaped string embedded in the
+        heading's host field (`## <ts> fixturehost MO-FULL: COMPLETE <sha> ...`)
+        also passes grammar. Both are parser leniencies, lower severity than the
+        fail-open but worth tightening while the parser is being touched.
+      exit_criteria:
+        - An undeterminable host label cannot downgrade the OWN host's reachability check; the gate refuses or reports an explicit unverified state instead.
+        - A fabricated 40-hex marker in the own host's ledger file refuses the gate whether or not the host helper resolves.
+        - The pairing rule is enforced modulo zero inert lines, or the 'immediately followed' claim is corrected to match the parser.
+      notes: |
+        Consider resolving the host label INSIDE the check script (or failing the
+        gate when it is empty), so the reachability guarantee does not depend on a
+        separate helper succeeding.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:34:40Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: |
+            Attack on 742-ye7w. With scripts/mo-full-attest.sh host resolving empty (helper deleted), a fabricated 40-hex marker in the host's own ledger file passes rc=0 grammar-only; the same file refuses when the helper is present. Also noted: inert lines between heading and marker pass despite the 'immediately followed' claim, and marker text can be embedded in the heading host field.
+        - type: implemented
+          ts: "2026-08-15T00:43:58Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Unresolvable host label now FAILS CLOSED. own_file selects which ledger gets git cat-file plus reachability, so an empty host silently downgraded every file to a grammar sweep and a fabricated 40-hex marker passed. A host that resolves fine but owns no ledger file (e.g. inside the builder toolbox) remains a legitimate pass. Fixture stubs the helper to return empty and asserts refusal. Found by in-forge adversarial review (BigPickle) during the 741-3y48 end-to-end proof; fixed on host. Attestation fixtures 11/11, findings-gate fixtures 12/12, spec suite 14/14 PASS (100%).
+        - type: note
+          ts: "2026-08-15T00:43:58Z"
+          host: linux_immutable
+          summary: |
+            Fixed and pinned this cycle; found by in-forge adversarial review.
+
+    - packet_id: findings-gate-uncovered-finding-surfaces
+      order: 743-rhr4
+      release_target: forge-local-experts-milestone
+      status: implemented
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      title: The persistence gate covers four paths, but documented finding surfaces sit outside them — a committed+unpushed finding in plan/diagnostics/ or plan/forge-improvements/proposals/ reports ok:no-findings
+      deliverable: FINDING_PATHS in scripts/check-forge-findings-persisted.sh widened to every surface skills instruct agents to file findings into (or an explicit, audited exclusion list)
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - plan
+        - fail-loud
+        - ephemerality
+        - adversarial-review
+      estimated_hours: 2
+      context: |
+        Attack on scripts/check-forge-findings-persisted.sh (order 741-3y48),
+        found in the end-to-end verification of that fix. The gate hard-codes:
+        
+            FINDING_PATHS="plan/index.d plan/loop_status.d plan/issues plan/mo-full-attestations.d"
+        
+        but two other locations are DOCUMENTED finding surfaces that in-forge
+        agents are told to write to:
+        
+          * skills/build-windows-tray/SKILL.md step 2 — "Capture findings into a
+            per-day file in plan/diagnostics/" (a third of the way down: "Capture
+            findings into a per-day file in plan/diagnostics/").
+          * skills/forge-continuous-enhancement/SKILL.md — "File findings, bugs,
+            and enhancement proposals under ./plan/issues/ or
+            plan/forge-improvements/proposals/".
+        
+        plan/issues/ is covered; the other three are not. A finding committed to
+        an uncovered path and never pushed is invisible to both halves of the
+        gate: `git status` shows it as a clean tracked commit, and
+        `git rev-list origin/linux-next..HEAD -- <covered paths>` counts zero
+        commits. The gate prints `ok:no-findings` rc=0 while the finding exists
+        only on a filesystem about to be destroyed.
+        
+        EMPIRICAL (throwaway repo, real bare remote, gate at HEAD):
+            mkdir -p plan/diagnostics
+            printf '# diag finding\n' > plan/diagnostics/2026-08-15.md
+            git add plan/diagnostics/2026-08-15.md && git commit -qm diag
+            scripts/check-forge-findings-persisted.sh   # -> ok:no-findings rc=0
+            git ls-tree origin/linux-next plan/diagnostics/  # -> nothing
+            git rev-list --count origin/linux-next..HEAD     # -> 1 (ahead, unpushed)
+        
+        Same result for plan/forge-improvements/proposals/. This defeats exit
+        criterion 2 of 741-3y48 ("a forge cycle that produces fragments and
+        CANNOT persist them fails loud") for every agent whose skill routes its
+        findings into an uncovered directory.
+      exit_criteria:
+        - Every directory that a shipped skill tells an agent to file findings into is covered by FINDING_PATHS (or is explicitly named and argued as safe to exclude).
+        - A committed+unpushed finding in plan/diagnostics/ and one in plan/forge-improvements/proposals/ each fail the gate with unpersisted:unpushed.
+        - 'The negative control still holds: a clean cycle prints ok:no-findings.'
+      notes: |
+        Consider deriving the path set by scanning skills for 'plan/<dir>' writes
+        rather than maintaining a second list, or pin a litmus asserting the set
+        of covered paths ⊇ the paths skills write to. Anything an agent is told
+        to file into is a finding surface by definition.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:34:40Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: |
+            End-to-end proof run for 741-3y48. Reproduced green-while-losing-work on the gate itself: a finding committed to plan/diagnostics/ (the surface skills/build-windows-tray/SKILL.md instructs agents to file into) and never pushed reports ok:no-findings rc=0 with the local branch ahead of origin. plan/forge-improvements/proposals/ has the same shape. Full repro in context.
+        - type: implemented
+          ts: "2026-08-15T00:43:58Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Gate now covers the WHOLE plan/ tree instead of four enumerated directories. Enumeration was the wrong shape: skills point agents at plan/issues, plan/diagnostics, plan/forge-improvements, plan/steps and plan/localwork, and any new surface fell outside silently. git's own ignore rules keep generated content out, so widening cannot create the false alarms the negative control forbids. Regression fixture files a proposal into plan/forge-improvements/proposals, commits it, and asserts unpersisted:unpushed. Found by in-forge adversarial review (BigPickle) during the 741-3y48 end-to-end proof; fixed on host. Attestation fixtures 11/11, findings-gate fixtures 12/12, spec suite 14/14 PASS (100%).
+        - type: note
+          ts: "2026-08-15T00:43:58Z"
+          host: linux_immutable
+          summary: |
+            Fixed and pinned this cycle; found by in-forge adversarial review.
+
+    - packet_id: startup-context-ephemeral-section-not-live-in-running-image
+      order: 743-y5wh
+      release_target: forge-local-experts-milestone
+      status: implemented
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: The 741-3y48 warning lives in the checkout's lib-common.sh but the RUNNING image (baked 2026-08-09) generated this launch's .forge-startup-context.md without it — in-forge agents can still miss the gate
+      deliverable: an image rebuild that carries the section (or a startup-context regeneration step that re-injects it per launch from the checkout), plus a miss-surface audit
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - plan
+        - fail-loud
+        - ephemerality
+        - image
+      estimated_hours: 1
+      context: |
+        Delivery-gap finding on order 741-3y48's mitigation. Commit 02b1482c adds
+        a "THIS CHECKOUT IS EPHEMERAL — a finding you do not PUSH is a finding
+        you destroyed" section to the startup-context template in
+        images/default/lib-common.sh (inject_startup_context, heredoc around
+        line 3776). But the template is IMAGE content, and the running forge's
+        startup context is written by the image-baked generator:
+        
+            /usr/local/lib/tillandsias/lib-common.sh   (baked 2026-08-09 18:36)
+              grep -c 'THIS CHECKOUT IS EPHEMERAL'    -> 0
+            images/default/lib-common.sh (checkout @ 8bf752ff)
+              grep -c 'THIS CHECKOUT IS EPHEMERAL'    -> 1
+        
+        Measured this launch: .forge-startup-context.md (generated
+        2026-08-15T00:30Z) contains no EPHEMERAL section — it jumps from "Pick up
+        work using the /meta-orchestration skill" straight to "## Skills". The
+        section is a heredoc literal with no conditionals, so the file can only
+        lack it because the generator that ran was the image-baked (pre-fix) one.
+        
+        The startup context is the ONE surface every in-forge agent reads before
+        anything else (AGENTS.md: "If .forge-startup-context.md exists in the
+        repository root, you are inside a Tillandsias forge container — read it
+        for live infrastructure state"). While the image predates the fix, the
+        primary warning surface for that launch is silently absent. The only
+        other surface naming the gate today is the meta-orchestration skill's
+        Finalization step — an agent that runs a review loop without a full
+        Finalization (the exact shape of the 2026-08-15 loss this fix repairs)
+        never sees it anywhere.
+      exit_criteria:
+        - A launch whose image predates the fix still ends up with the EPHEMERAL section in its .forge-startup-context.md (regenerate from the checkout, or fail the launch).
+        - The section is reachable by an agent that reads the startup context AND by an agent that reads no skill at all.
+        - AGENTS.md (the checkout-level bootstrap) names the gate or points to the startup context section, so a checkout-pinned reader cannot miss it.
+      notes: |
+        This is the same family as plan/issues/forge-litmus-failures-pre-existing-2026-07-24.md
+        ("host tree may have been updated without rebuilding the image"). The fix
+        should not depend on image-bake timing for a fail-loud guard: regenerate
+        the startup context from the checkout at launch (the entrypoints already
+        call inject_startup_context) or gate the launch on the checkout template
+        version.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:34:40Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: |
+            Measured in the running forge: the checkout template carries the EPHEMERAL section but the image-baked generator (2026-08-09) wrote this launch's .forge-startup-context.md without it. Agents whose only bootstrap is the startup context (per AGENTS.md) still never see the gate; the skill is the only live surface.
+        - type: implemented
+          ts: "2026-08-15T01:22:52Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Two surfaces that cannot go stale, plus an image rebuild. (1) NEW images/default/startup-context-addendum.md, appended by inject_startup_context from the MOUNTED CHECKOUT at launch — anything written there is live on the next launch with no rebuild. Additive and fail-soft (guarded by -r and || true): a missing file is normal off Tillandsias, and a documentation append must never take down a launch. (2) AGENTS.md states the rule at CHECKOUT level, so an agent whose only bootstrap is the checkout still meets the gate — that surface is current in every forge the moment it is pushed. The rationale is recorded in AGENTS.md too, because without it the next editor moves the guard back into the baked generator, which is exactly how this happened. The split to keep: descriptive live state (inference readiness, expert skew, accel envelope) belongs in the generator which can compute it; rules an agent must not miss belong in the addendum where they cannot be stale. Pinned by NEW litmus:startup-context-addendum-shape 7/7; spec suite 15/15 PASS. Image rebuild follows to make the heredoc half live — scripts/build-image.sh correctly refused while the addendum was untracked, since its source-hash cache requires tracked inputs.
+        - type: note
+          ts: "2026-08-15T01:22:52Z"
+          host: linux_immutable
+          summary: |
+            Addendum mechanism + AGENTS.md landed and pinned; image rebuild in flight, in-forge launch is the end-to-end proof.
+
+    - packet_id: findings-gate-trusts-upstream-without-proving-it-is-remote
+      order: 743-yej2
+      release_target: forge-local-experts-milestone
+      status: implemented
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      title: '@{upstream} is trusted without verifying it is a REMOTE-tracking ref — a local branch that already contains the finding commits reports ok:no-findings while the finding exists only on container-local refs'
+      deliverable: the unpushed comparison must resolve against a ref the container cannot own alone (verify the upstream is refs/remotes/**, or diff against refs/remotes/origin/<branch> when it exists)
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - plan
+        - fail-loud
+        - ephemerality
+        - adversarial-review
+      estimated_hours: 2
+      context: |
+        Attack on scripts/check-forge-findings-persisted.sh (order 741-3y48).
+        The gate's "unpushed" check resolves the remote as:
+        
+            if git rev-parse --verify --quiet "@{upstream}"; then remote_ref="@{upstream}"
+            elif refs/remotes/origin/$branch exists; then remote_ref="refs/remotes/origin/$branch"
+        
+        `@{upstream}` is accepted UNCONDITIONALLY. Git allows the upstream to be
+        ANY ref — including a local branch. `git branch --set-upstream-to=<local>
+        (or -u <local>)` succeeds with a warning, and after that the gate compares
+        HEAD against a ref that lives on the same ephemeral filesystem.
+        
+        EMPIRICAL (throwaway repo, real bare remote, gate at HEAD):
+            git branch local-sink HEAD          # local branch already CONTAINS the finding commit
+            git branch --set-upstream-to=local-sink
+            scripts/check-forge-findings-persisted.sh   # -> ok:no-findings rc=0
+            git ls-tree origin/linux-next plan/index.d/ | grep <finding>  # -> nothing
+        
+        The finding is committed, the tree is clean, and the gate is green while
+        the commit is reachable ONLY from local refs (HEAD, refs/heads/local-sink)
+        — every one of which dies with the container. The local branch does not
+        even need to be ahead: pointing upstream at ANY local ref that already
+        contains the commits zeroes the ahead count. This is exactly the class
+        the gate exists for ("catches what git status cannot: a COMMITTED
+        fragment that was never pushed") and it walks straight through it.
+        
+        RELATED, lower severity: with a committed finding on a detached HEAD, or
+        on a branch with no upstream and no origin/<branch> ref, the gate prints
+        `skip:no-remote-ref` rc=3 — a non-refusal. The doc frames skip as "a fresh
+        checkout with no remote and no findings", but the code fires it even when
+        there IS something to lose. A wrapper that treats `skip:` as "nothing to
+        check" waves the loss through.
+      exit_criteria:
+        - The unpushed comparison never runs against a ref that the container alone can create or advance; a local-branch upstream must not silence the gate.
+        - A committed finding on a detached HEAD or an upstream-less branch with committed findings FAILS (unpersisted) rather than skip:no-remote-ref.
+        - 'The negative control still holds: a clean cycle prints ok:no-findings.'
+      notes: |
+        The fix should prefer refs/remotes/origin/<branch> when it exists and only
+        fall back to @{upstream} after asserting it is a refs/remotes/** ref; a
+        poisoned upstream is one `git branch -u` away for any agent that creates a
+        topic branch.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:34:40Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: |
+            End-to-end proof run for 741-3y48. Reproduced a second green-while-losing-work verdict on the gate: pointing @{upstream} at a local branch that already contains the finding commit makes the gate print ok:no-findings rc=0 while the finding is reachable only from container-local refs. Also documented skip:no-remote-ref firing on committed findings under a detached HEAD / upstream-less branch.
+        - type: implemented
+          ts: "2026-08-15T00:43:58Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            @{upstream} is now resolved with --symbolic-full-name and REQUIRED to be under refs/remotes/; a local decoy ref is rejected. When a poisoned or absent upstream still has an origin/<branch> counterpart the gate falls back to it and reports the more precise unpersisted:unpushed; with no counterpart it reports unpersisted:no-remote-tracking. The skip:no-remote-ref non-refusal is gone: a detached HEAD or upstream-less branch carrying a committed finding now EXITS 1, because exit 3 is read as success by every caller and the finding was one teardown from gone. skip: is reserved for a repo with no remote at all. Three regression fixtures. Found by in-forge adversarial review (BigPickle) during the 741-3y48 end-to-end proof; fixed on host. Attestation fixtures 11/11, findings-gate fixtures 12/12, spec suite 14/14 PASS (100%).
+        - type: note
+          ts: "2026-08-15T00:43:58Z"
+          host: linux_immutable
+          summary: |
+            Fixed and pinned this cycle; found by in-forge adversarial review.
+
+    - packet_id: mo-full-attestation-ledger-accepts-only-one-entry-per-host
+      order: 742-ye7w
+      status: implemented
+      desired_release: v0.5
+      priority: p0
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: The durable MO-FULL attestation ledger refused any host file with a SECOND attestation — every host's second full-mode cycle could not push
+      deliverable: a ledger that accumulates, pinned by a litmus that nothing had
+      pickup_role: any
+      capability_tags:
+        - attestation
+        - fail-loud
+        - meta-orchestration
+        - fleet-blocker
+      estimated_hours: 1
+      context: |
+        FOUND 2026-08-15 on tlatoani, on the SECOND full-mode cycle of the night —
+        the first cycle a host could possibly hit it.
+        
+        `scripts/check-mo-full-attestations.sh` (landed hours earlier with 651-2x5s)
+        paired each `## <ts> <host>` heading with its marker line. The heading
+        branch read:
+        
+          '## '*)
+              if [ "$heading_marker" -ne 0 ]; then
+                  refuse "$f" "heading at line $ln has no following marker line"
+        
+        `heading_marker` is set to 1 when a marker IS seen. So the condition fires
+        exactly when the previous heading was correctly paired — the opposite of
+        its own error message. The EOF check twenty lines below uses the correct
+        sense (`-eq 0` → refuse), which is what makes the inversion visible on
+        reading.
+        
+        OBSERVED, not theorised. The ledger held two well-formed, remote-reachable
+        attestations:
+        
+          ## 2026-08-15T00:14:14Z yoga
+          MO-FULL: COMPLETE a174e3cc… linux-next a174e3cc…
+          ## 2026-08-15T00:22:15Z yoga
+          MO-FULL: COMPLETE f7d82adc… linux-next f7d82adc…
+        
+        Both SHAs verified reachable from origin/linux-next. `./build.sh --check`
+        still returned `violation:mo-full-attestations:1`, and since that gate is
+        the trunk's only protection, the push was refused. `mo-full-attest.sh self`
+        then correctly declined to emit a marker for an unpushed HEAD. The cycle
+        was wedged with green work it could not land.
+        
+        BLAST RADIUS: fleet-wide and imminent. The ledger is per-host and
+        append-once-per-cycle, so EVERY host — linux, windows, macOS — hits this on
+        its second full-mode cycle after adopting 651-2x5s. A host that adopted it
+        today and ran overnight would wedge on cycle 2 and stay wedged.
+        
+        ROOT CAUSE OF THE ROOT CAUSE: no litmus pinned this checker. It is wired
+        into `./build.sh --check` as trunk protection, and nothing tested it. The
+        inversion could not have survived a single multi-entry fixture.
+      outcome: |
+        A per-host ledger accumulates attestations across cycles, and the pairing
+        rule that keeps it parseable is pinned by a test that would have caught
+        this before it shipped.
+      exit_criteria:
+        - A ledger file with two or more correctly-paired attestations is ACCEPTED (regression fixture).
+        - 'NEGATIVE CONTROLS retained: trailing heading with no marker, heading immediately followed by another heading, two markers under one heading, marker before any heading, and LOCAL_SHA != REMOTE_SHA are each still refused.'
+        - A litmus pins the checker, and the fixture demonstrably FAILS when the inverted condition is reintroduced — verified by mutation, not by inspection.
+        - 'The fixture is isolated: it must exercise a throwaway ledger, not the repo''s real one.'
+      notes: |
+        The fixture's own first draft `cd`-ed into a temp repo, but the checker
+        resolves ROOT from its own `BASH_SOURCE` and `cd`s there — so every
+        scenario silently validated the REAL ledger and all five negative controls
+        "passed" while testing nothing. The fixture now copies the script into the
+        throwaway repo's `scripts/` dir. Worth remembering for any other checker
+        fixture in this repo: these scripts relocate themselves to the repo root.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:35:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Found when this host's second full-mode cycle could not push. Two
+            valid, reachable attestations in the ledger; gate returned
+            violation:1.
+        - type: implemented
+          ts: "2026-08-15T00:35:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Heading branch now refuses only when the PREVIOUS heading got no
+            marker (seen_heading -ne 0 && heading_marker -eq 0). Added a fixture
+            mode with the multi-entry regression plus five negative controls, and
+            litmus:mo-full-attestation-ledger-shape to pin it — the checker had no
+            test at all, which is how an inverted condition reached trunk
+            protection. Reintroducing the inversion flips the multi-entry and
+            three-entry scenarios to FAIL. Real ledger now verifies:
+            ok:mo-full-attestations:2 files 2 markers.
+
+    - packet_id: build-check-hard-depends-on-ruby-that-the-forge-documents-absent
+      order: 744-agyy
+      release_target: forge-local-experts-milestone
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      title: './build.sh --check cannot pass in the forge: check-plan-schema-divergence.sh hard-depends on ruby, which this image documents ABSENT — the mandated pre-push gate is red for every in-forge cycle'
+      deliverable: check-plan-schema-divergence.sh rewritten to a validator present in the forge (yq), or a rubric-equivalent tillandsias-policy check wired into build.sh --check
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - build
+        - fail-loud
+        - gate
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        Measured in the forge during the 741-3y48 end-to-end verification, on an
+        otherwise clean checkout plus five valid plan fragments:
+        
+            [build] Checking plan/schema status-vocab divergence (440)...
+            scripts/check-plan-schema-divergence.sh: line 36: ruby: command not found
+            [build] plan/schema status-vocab gate refused (440) — see the verdict line above
+            rc=1
+        
+        The script (order 440) runs `ruby -ryaml -e '...'` unconditionally and
+        even asserts its assumption in a comment: "Ruby is the methodology's
+        sanctioned YAML fallback and this script runs HOST-side, where ruby
+        exists." The forge image contradicts the assumption — .forge-startup-context.md
+        documents ruby ABSENT in the same breath it names the trap ("the
+        sanctioned validator (ruby) is missing, the compiled one
+        (tillandsias-policy) is built per-lane and may not exist yet... Reach for
+        yq"), and yq IS present.
+        
+        Why this matters for 741-3y48 specifically: AGENTS.md makes
+        `./build.sh --check` the trunk-protection gate "before EVERY push", and
+        this milestone's whole argument is that in-forge cycles must obey the
+        same rules as hosts. In-forge, that gate is unfinishable — it goes red on
+        the ruby check for reasons unrelated to the change being pushed. The
+        choices an agent then faces are "push with a known-red gate" (what
+        AGENTS.md forbids) or "skip the gate" — both normalize the exact
+        uncontrolled behavior this milestone exists to prevent. The failure also
+        masks real results: everything before line 36 of the script printed ok,
+        so the red is drowned in greens and easy to dismiss as environmental.
+      exit_criteria:
+        - ./build.sh --check exits 0 in the forge on a change whose plan/schema vocabularies are in sync.
+        - The check still produces the same verdicts (ok / blocked:status-vocab-diverges / blocked:index-load-failed) and still refuses a real divergence.
+        - A bare-ISO-8601 timestamp fold still loads (the 720-24u6 regression class) under the new validator.
+      notes: |
+        The startup context already names this exact environment (ruby absent, yq
+        present, python3 forbidden) — the script predates the forge's ruby-less
+        base or was never run inside it. Reuse the same yq pattern the startup
+        context documents so the sanctioned path is the one the code uses.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:37:00Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+          summary: |
+            Measured while proving 741-3y48 end-to-end: ./build.sh --check goes red in the forge because scripts/check-plan-schema-divergence.sh calls ruby, which this image documents ABSENT. The mandated pre-push gate is unfinishable in-forge, independent of any change; every in-forge cycle is pushed under a known-red gate or skips the gate entirely.
+        - type: completed
+          ts: "2026-08-15T01:03:29Z"
+          host: forge
+          summary: |
+            status 'completed' with evidence_refs: litmus:added-fragment-parse-gate-shape 8/8 PASS; ./build.sh --check exit 0
+        - type: note
+          ts: "2026-08-15T01:03:29Z"
+          host: forge
+          summary: |
+            check-plan-schema-divergence.sh rewritten from ruby to yq
+
+    - packet_id: plan-diagnostics-is-gitignored-while-skills-call-it-durable-and-committed
+      order: 745-48q6
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: plan/diagnostics/ is gitignored, three skills tell agents to file durable findings there, and one runs `git add` on it — the write silently cannot persist
+      deliverable: one answer to 'is plan/diagnostics durable?', applied to .gitignore and the skills together
+      pickup_role: any
+      capability_tags:
+        - plan
+        - gitignore
+        - skills
+        - fail-loud
+        - findings-persistence
+      estimated_hours: 2
+      context: |
+        MEASURED 2026-08-15 on tlatoani while widening the findings-persistence gate
+        (741-3y48 / 743-rhr4). The repo contradicts itself about this directory:
+        
+          .gitignore:90                     /plan/diagnostics/
+                                            (under "# Generated diagnostic dumps")
+        
+          skills/diagnose-forge/SKILL.md:31 "plan/diagnostics/diagnostics_*-summary.md
+                                             — distilled summaries (DURABLE, COMMITTED)"
+          skills/build-windows-tray:25      "Capture findings into a per-day file in
+                                             `plan/diagnostics/`"
+          skills/probe-macos-tray-on-windows:164
+                                            "git add plan/diagnostics/build-macos-tray-
+                                             from-windows-YYYY-MM-DD.md"
+        
+        Verified behaviour on a clean tree:
+        
+          $ echo test > plan/diagnostics/.gate-probe.md
+          $ git add plan/diagnostics/.gate-probe.md
+          The following paths are ignored by one of your .gitignore files:
+          plan/diagnostics
+          hint: Use -f if you really want to add them.
+          $ git status --porcelain -- plan/diagnostics
+          (nothing)
+        
+        So an agent following `diagnose-forge` or `build-windows-tray` writes a
+        findings file, `git add` REFUSES it, `git status` does not show it, and the
+        file is invisible to every persistence check — including the new
+        741-3y48 gate, which cannot see ignored paths by construction. It dies with
+        the container, or with the next clean checkout.
+        
+        WHAT MAKES IT WORSE THAN A PLAIN GAP: 76 files ARE tracked under
+        plan/diagnostics/ (README.md, build-windows-tray-2026-05-29.md,
+        diagnostics_*-summary.md, …), added before the ignore rule or force-added.
+        So the directory LOOKS committed and durable to anyone who lists it, and
+        only NEW writes fail. That is the most misleading possible state: the
+        evidence that the surface works is right there next to the write that
+        silently didn't.
+        
+        This is the same family as 741-3y48 (a finding filed correctly and lost
+        anyway) but a different mechanism: there the substrate was ephemeral, here
+        the substrate refuses the write while every doc says it accepts it.
+      outcome: |
+        plan/diagnostics/ has ONE meaning. Either it is durable and the ignore rule
+        stops covering the files skills commit there, or it is scratch and no skill
+        claims otherwise or runs `git add` on it.
+      exit_criteria:
+        - 'Decide and apply: EITHER narrow .gitignore so the durable summaries skills commit are trackable (e.g. ignore only the raw dumps by pattern, not the whole directory), OR redirect every skill that files durable findings to a tracked surface and delete the `git add plan/diagnostics/...` step.'
+        - Whichever way it goes, the 76 already-tracked files stay consistent with the new rule — no half-tracked directory.
+        - 'An executable check proves it: writing a findings-shaped file to the durable location and running `git add` must succeed (or, in the scratch reading, no skill instructs a durable write there). Verify by doing it, not by reading .gitignore.'
+        - 'NEGATIVE CONTROL: genuinely generated dumps must still be ignored — a fix that tracks every diagnostic dump trades a silent loss for a noisy repo.'
+      notes: |
+        Do not 'fix' this by adding `-f` to the skills' `git add`. Force-adding into
+        an ignored directory keeps the contradiction and makes the next reader
+        believe the ignore rule is advisory.
+        
+        Check plan/localwork/ and plan/steps/ for the same shape while here — both
+        are referenced by skills and neither was examined during this measurement.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:45:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Found while widening the findings gate to the whole plan/ tree: the
+            gate cannot see plan/diagnostics because git ignores it, and three
+            skills tell agents it is durable. Reproduced the refused `git add` and
+            the invisible `git status` on a clean tree; 76 tracked files already
+            sit there, which is what makes the surface look healthy.
+        - type: completed
+          ts: "2026-08-15T01:03:59Z"
+          host: forge
+          summary: |
+            status 'completed' with evidence_refs: .gitignore lines 89-94 narrowed to raw logs/dumps; verified positive and negative controls via git add and git check-ignore
+        - type: note
+          ts: "2026-08-15T01:03:59Z"
+          host: forge
+          summary: |
+            plan/diagnostics gitignore narrowed to raw dumps/logs; durable findings/summaries now committable
+
+    - packet_id: no-yaml-reader-exists-in-every-environment-the-gates-run-in
+      order: 746-htj9
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: Committed automation has no YAML reader present in all three environments — ruby broke the forge, the yq rewrite broke the host AND the builder toolbox, on the same day
+      deliverable: one YAML read path that exists everywhere committed automation runs
+      pickup_role: linux
+      capability_tags:
+        - tooling
+        - portability
+        - fail-loud
+        - build-gate
+        - yaml
+      estimated_hours: 3
+      context: |
+        MEASURED 2026-08-15 on tlatoani, after a forge cycle fixed 744-agyy by
+        rewriting scripts/check-plan-schema-divergence.sh from ruby to yq. Both
+        changes were locally correct and both caused an outage, because there is no
+        interpreter common to the environments this repo's gates actually run in:
+        
+                            yq        ruby      jq        python3
+          forge             present   ABSENT    present   present (FORBIDDEN)
+          host (Silverblue) ABSENT    ABSENT    present   present (FORBIDDEN)
+          builder toolbox   ABSENT    present   present   present (FORBIDDEN)
+        
+        Ruby broke the forge — that is 744-agyy, filed by an in-forge review that
+        found `./build.sh --check` unfinishable there. The yq rewrite then broke
+        the HOST and the BUILDER TOOLBOX, where `./build.sh --check` runs on every
+        Linux cycle:
+        
+          blocked:index-load-failed: plan/index.yaml:
+            scripts/check-plan-schema-divergence.sh: ligne 41: yq: commande introuvable
+        
+        That is the pre-push gate, and it is the trunk's only protection, so a
+        green tree could not be pushed at all until the script was made to fall
+        back. Two outages in one day, from two locally-correct fixes, is the
+        signature of a missing invariant rather than two mistakes.
+        
+        IMMEDIATE MITIGATION ALREADY LANDED: the script now tries yq, then ruby,
+        and fails with `no YAML reader on PATH (tried yq, ruby)` instead of a raw
+        command-not-found that reads like a corrupt ledger. The ruby branch passes
+        `permitted_classes: [Time, Date]`, which is what order 720-24u6 was about —
+        without it, 231 bare ISO-8601 timestamps in the folded ledger make
+        safe_load raise before either vocabulary is read, and the gate then reports
+        a divergence that does not exist.
+        
+        THAT MITIGATION IS NOT THE FIX. A fallback chain still leaves the bare host
+        with no reader, and every future YAML-reading script has to remember to
+        write the same chain. `jq` is the only tool present everywhere and cannot
+        read YAML.
+        
+        The repo already owns a compiled YAML reader that runs everywhere: the
+        `tillandsias-plan` binary parses plan/index.yaml with serde_yaml, is
+        rebuilt by `scripts/cycle-preflight.sh` at the top of every cycle, and is
+        already the sanctioned path for ledger reads (`mcp_first_read_path`,
+        `ledger_write_path`). `tillandsias-policy validate-yaml` is named by the
+        meta-orchestration skill for exactly this purpose and is not built by
+        default.
+      outcome: |
+        Committed automation reads YAML through one path that exists in the forge,
+        on the host, and in the builder toolbox, and no future script has to
+        rediscover which interpreter is missing where.
+      exit_criteria:
+        - A single sanctioned YAML read path is named and available in all three environments — forge, bare host, builder toolbox — and check-plan-schema-divergence.sh uses it instead of an interpreter chain.
+        - 'An executable check proves availability in each environment rather than asserting it: run the reader in the forge, on the host, and in the toolbox and record the verdicts.'
+        - The methodology's YAML-validation guidance stops naming tools per-environment (`ruby` is NOT in the forge; `yq` is NOT on the host) and names the sanctioned path once.
+        - 'NEGATIVE CONTROL: the load-failure verdict stays distinct from the divergence verdict (order 720-24u6) — a file that will not load must never be reported as a vocabulary mismatch.'
+        - Bare ISO-8601 timestamps in the folded ledger still load (the 720-24u6 regression), verified against the real plan/index.yaml, not a fixture.
+      notes: |
+        Prefer extending `tillandsias-plan` over building `tillandsias-policy` into
+        every lane: cycle-preflight already guarantees the former is current, which
+        is the property that makes it usable from a pre-push gate.
+        
+        While here, audit the other scripts that shell out to a YAML interpreter —
+        `grep -rln 'ruby\|yq' scripts/` had 10 hits at filing time, and each one is
+        the same latent outage in a different environment.
+      events:
+        - type: filed
+          ts: "2026-08-15T00:55:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Found when the pre-push gate refused on this host immediately after
+            the forge's 744-agyy fix landed: yq is absent in the builder toolbox
+            where ./build.sh --check runs. Mitigated with a yq→ruby fallback and a
+            named no-reader verdict; filing the real fix separately.
+
+    - packet_id: image-rebuild-orphans-the-tag-the-installed-binary-launches-by
+      order: 747-knbp
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: scripts/build-image.sh tags by the VERSION FILE while the launcher resolves by the INSTALLED BINARY's version — a rebuild silently deletes the tag every forge launch needs
+      deliverable: a rebuild that cannot orphan the launch tag, or a launch that fails loud instead of DOA
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - images
+        - version-skew
+        - fail-loud
+        - launch
+      estimated_hours: 2
+      context: |
+        REPRODUCED 2026-08-15 on tlatoani, by doing the ordinary thing: rebuilding
+        the forge image so a source fix (743-y5wh) would reach running forges.
+        
+          installed binary            v0.4.260809.2
+          VERSION file (checkout)     0.4.260812.1
+        
+        `scripts/build-image.sh forge` tags the result from the VERSION FILE:
+        
+          Aliases: tillandsias-forge:v0.4.260812.1, tillandsias-forge:latest
+        
+        The launcher resolves the image by the RUNNING BINARY's version —
+        `forge_image_tag(version)` -> `versioned_image_tag("forge", version)` ->
+        `localhost/tillandsias-forge:v<version>` (crates/tillandsias-headless/
+        src/main.rs:1874, called at :5167, :5549, :11606). So it asks for
+        `v0.4.260809.2`.
+        
+        That tag no longer existed after the rebuild:
+        
+          podman image exists localhost/tillandsias-forge:v0.4.260809.2
+            -> MISSING
+        
+        The rebuild had moved the tag onto the new image under a DIFFERENT version
+        alias and left nothing at the old one. Any forge launch from the installed
+        binary would have been dead on arrival, and the only reason it was caught
+        is that this cycle checked the tag before launching rather than after.
+        
+        WHY THE SKEW IS THE NORMAL CASE, not an edge case: the installed tray is
+        whatever the operator last installed, while VERSION advances with every
+        release bump on the branch. Any developer host that rebuilds an image from
+        a checkout newer than its installed binary — which is what "rebuild the
+        image so my fix is live" means — lands exactly here.
+        
+        The Start-Of-Day gate already knows about this class: "rebuild forge images
+        at the installed VERSION before launching any forge (version-skew DOA)"
+        (skills/meta-orchestration, order 718-nuvm). But that is prose addressed to
+        an agent, and `build-image.sh` does nothing to honour it — it neither reads
+        the installed version nor warns that it is about to orphan the tag the
+        launcher needs. A guard only an attentive agent honours is a suggestion.
+        
+        MITIGATED LOCALLY, not fixed: `podman tag
+        localhost/tillandsias-forge:latest localhost/tillandsias-forge:v0.4.260809.2`
+        restored the launch path on this host and it now points at the NEW image.
+        Every other host that rebuilds an image will hit this again.
+      outcome: |
+        Rebuilding an image cannot leave the installed binary without a resolvable
+        forge image, and a launch that cannot resolve one says so instead of dying.
+      exit_criteria:
+        - After `scripts/build-image.sh <img>` on a host whose installed binary version differs from VERSION, the tag the launcher resolves still points at a real image — demonstrated by rebuilding under a deliberate skew, not argued.
+        - EITHER build-image.sh also aliases the installed binary's version (reading it from the installed tray, not from VERSION), OR the launcher falls back to `:latest` with a loud named warning, OR the launch fails with a verdict naming the missing tag and the command that fixes it. Any of the three, chosen once.
+        - 'NEGATIVE CONTROL: a host where the installed binary and VERSION agree must gain no extra tags and no warning — the common case stays silent.'
+        - An executable check covers it, so the guarantee is not prose in a skill (the existing Start-Of-Day sentence did not prevent this).
+      notes: |
+        Do not fix this by pinning build-image.sh to `:latest` only. The versioned
+        alias is what makes a host's image set auditable, and the release path
+        depends on it.
+        
+        Check whether the same mismatch exists for the other images build-image.sh
+        knows (`web`, `proxy`, `git`, `inference`) — the tagging code is shared, so
+        probably yes, and a vault or router image that cannot be resolved fails in
+        a much less obvious place than the forge.
+      events:
+        - type: filed
+          ts: "2026-08-15T01:10:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Reproduced by rebuilding the forge image to deliver a source fix: the
+            rebuild tagged v0.4.260812.1 from VERSION and left the installed
+            binary's v0.4.260809.2 tag pointing at nothing. Repaired locally with
+            podman tag; filing the durable fix.
+
+    - packet_id: startup-context-addendum-last-writer-can-corrupt-markdown-and-state
+      order: 747-hws2
+      release_target: forge-local-experts-milestone
+      status: completed
+      desired_release: v0.5
+      priority: p3
+      kind: bug
+      title: The addendum is appended VERBATIM and LAST — a poisoned addendum can corrupt the generated Markdown (backticks / ``` fences) and append machine-looking state lines that tail-grep readers prefer over the generator's real values
+      deliverable: delimit the appended addendum with an explicit header (e.g. '## Checkout addendum — NOT authoritative for machine-readable lines above'), so the boundary is obvious and tail-grep consumers stop at it
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - startup-context
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        The append is raw `cat` (lib-common.sh:3887). Verified with the verbatim
+        block: an addendum containing ``` fences and backticks lands unescaped in
+        .forge-startup-context.md, corrupting its Markdown for every agent that
+        reads it as instructions. And because the addendum is appended AFTER all
+        generator-emitted machine-readable lines (base_state, inference_state,
+        expert_capability), an addendum containing e.g. `base_state=ok
+        base_actual=IMPOSTOR` or `inference_state=ready inference_models=999`
+        wins any `grep <token> | tail -1` read of the file.
+        
+        No consumer parses the file programmatically today (verified: consumers
+        are existence/untracked checks only — check-launch-artifacts-untracked.sh,
+        mo-full-attest.sh), so this is latent, not active; agents DO read the file
+        as authoritative. The cheap fix is a clear boundary marker so the file
+        self-documents which part the checkout controls.
+      exit_criteria:
+        - The generated context marks the addendum boundary with an explicit header.
+        - The header states the generator's machine-readable lines above it are authoritative.
+      notes: |
+        No structural fix needed beyond the delimiter: the checkout is the repo
+        under test, so a hostile addendum is out of scope of the mechanism itself;
+        the point is that a reader must be able to tell generator content from
+        checkout content at a glance.
+      events:
+        - type: filed
+          ts: "2026-08-15T01:35:00Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+        - type: completed
+          ts: "2026-08-15T02:01:51Z"
+          agent_id: bigpickle-forge-20260815
+          host: forge
+          summary: |
+            completed: boundary header '## Checkout addendum — NOT authoritative for machine-readable lines' emitted before addendum content (commit 06f6330f). Evidence: attack harness 23/23 PASS vs repo lib-common.sh (12 adversarial scenarios none hang/grow; verbatim append; header present, generator machine lines above it, injected content below it, absent-addendum negative control); ./build.sh --check rc=0
+        - type: completed
+          ts: "2026-08-15T02:02:00Z"
+          host: forge
+          summary: |
+            status 'completed' with evidence_refs: 06f6330f;attack-harness 23/23 PASS;build.sh --check rc=0
+        - type: note
+          ts: "2026-08-15T02:02:00Z"
+          host: forge
+          summary: |
+            747-hws2 fixed (commit 06f6330f): boundary header delimits the addendum; exit criteria met — header present + states generator lines authoritative; harness 23/23; build-check green
+        - type: note
+          ts: "2026-08-15T02:05:00Z"
+          host: forge
+          summary: |
+            claiming for fix implementation (747-hws2)
+        - type: claim
+          ts: "2026-08-15T02:06:00Z"
+          agent_id: bigpickle-forge-20260815
+          host: forge
+          summary: |
+            claim: implement the 747-hws2 boundary-header fix (verifiable closure: header present, generator lines above it, 12-scenario attack harness green)
+
+    - packet_id: startup-context-addendum-append-has-no-size-cap
+      order: 747-iavs
+      release_target: forge-local-experts-milestone
+      status: implemented
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: The addendum append has no size cap — a 64MB addendum is appended in full, bloating the context file every in-forge agent reads first from ~16KB to ~64MB
+      deliverable: size-cap the append (e.g. 32KB); an oversized addendum appends nothing but a loud 'ADDENDUM OVERSIZED (<bytes>), NOT APPENDED' placeholder plus a trace_lifecycle warning, and can never fail the launch
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - startup-context
+        - fail-loud
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        The append (lib-common.sh:3883-3888) has no size bound. Measured: a 64MB
+        regular addendum grew the generated .forge-startup-context.md to 64MB
+        (baseline 16KB); a symlink to /dev/zero grew it 259MB in 3s before the
+        test timeout. The addendum's own comment warns "Keep it short. This is
+        appended to a file every in-forge agent reads first, and a long addendum
+        is one nobody finishes" — prose, not enforcement.
+        
+        A bloat is not only a tokens cost: every in-forge agent's very first file
+        read becomes multi-megabyte, so a single large addendum (accidental
+        working-tree edit, or a generated file checked in) degrades every launch
+        on the host. Combine with 747-kw8u's `[[ -f ]]` gate so the cap covers the
+        regular-file case that gate still lets through.
+      exit_criteria:
+        - An addendum larger than the cap yields a bounded context file and a loud notice in it.
+        - A normal-sized addendum appends unchanged.
+        - The cap can never fail or hang a launch.
+      notes: |
+        Suggested shape: `[[ -f ]] && [[ $(stat -c %s) -le 32768 ]]` before
+        appending; on the false branch write the placeholder and trace. stat is
+        present in the forge base (util-linux/coreutils).
+      events:
+        - type: filed
+          ts: "2026-08-15T01:35:00Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+        - type: implemented
+          ts: "2026-08-15T01:42:41Z"
+          agent_id: unknown
+          host: linux_immutable
+          summary: |
+            Byte cap added: head -c $TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES (default 65536) replaces the unbounded cat. A 1MB addendum now contributes 65538 bytes instead of its full size. Pinned by STEP 7.
+        - type: note
+          ts: "2026-08-15T01:42:41Z"
+          host: linux_immutable
+          summary: |
+            Bounded read landed with the 747-kw8u fix.
+
+    - packet_id: startup-context-addendum-can-hang-launch-via-fifo-or-char-device
+      order: 747-kw8u
+      release_target: forge-local-experts-milestone
+      status: verified
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      title: 'The 743-y5wh addendum append is NOT fail-soft: a FIFO or a symlink to a character device at images/default/startup-context-addendum.md hangs inject_startup_context and every launch'
+      deliverable: gate the append on a regular-file test ([[ -f ]]) and a bounded read (size cap / head -c), so a non-regular addendum is skipped, never hung
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - startup-context
+        - fail-loud
+        - adversarial-review
+        - dos
+      estimated_hours: 1
+      context: |
+        The 743-y5wh fix reads the addendum from the MOUNTED CHECKOUT and claims
+        "fail-soft by construction". The gate is `[[ -r "$addendum" ]]` followed by
+        an UNBOUNDED `cat "$addendum"` (lib-common.sh:3884-3888), wrapped only in
+        `2>/dev/null || true` — which cannot help a `cat` that never terminates.
+        
+        Measured with the block extracted verbatim (timeout-bounded here; a real
+        launch has NO timeout around `inject_startup_context`, entrypoint-forge-opencode.sh:132):
+        
+          addendum path = FIFO             -> `cat` blocks forever: launch HANGS
+          addendum path = symlink->/dev/zero -> HANGS and grows the context file
+                                                259MB in 3s before the test timeout
+        
+        Both are reachable from a push. Git stores symlinks as mode 120000, so a
+        committed `startup-context-addendum.md -> /dev/zero` (or any char device,
+        or a symlink chain landing on a FIFO) hangs EVERY in-forge launch forever
+        with no error, while the `|| true` swallows the visible failure mode.
+        `[[ -r ]]` is true for FIFOs and character devices; `[[ -f ]]` is false for
+        both, true for the legitimate regular file — verified empirically.
+      exit_criteria:
+        - A FIFO at the addendum path does not hang inject_startup_context (launch completes normally).
+        - A symlink to /dev/zero does not hang and does not grow the context file.
+        - A legitimate regular-file addendum still appends verbatim.
+      notes: |
+        Also the seed of 747-iavs (size bound): even for a regular file, the read
+        must be bounded so a future or working-tree change cannot bloat the
+        append. The `[[ -f ]]` gate alone kills the FIFO/char-device class.
+      events:
+        - type: filed
+          ts: "2026-08-15T01:35:00Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+        - type: implemented
+          ts: "2026-08-15T01:42:41Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Gate changed from [[ -r ]] to [[ -f && -r ]] and the unbounded cat replaced with a byte-bounded head -c (TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES, default 65536). -f is false for FIFOs, character devices and directories, true for the legitimate regular file, and follows symlinks so a link onto a device is rejected by what it points AT. Verified against every reported vector with a harness built from the real block: FIFO, symlink to /dev/zero, directory and dangling symlink all skip in milliseconds with zero bytes written (previously: hang forever / 259MB in 3s); a 1MB regular file is capped at 65538 bytes; a legitimate addendum still appends; an ABSENT addendum stays silent. Pinned by litmus:startup-context-addendum-shape STEP 6/7/9, including a functional predicate test that rejects all four hang vectors.
+        - type: note
+          ts: "2026-08-15T01:42:41Z"
+          host: linux_immutable
+          summary: |
+            Launch-hang DoS closed: regular-file gate + bounded read, all vectors verified.
+        - type: verified
+          ts: "2026-08-15T02:06:29Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Verified LIVE in the rebuilt image by the in-forge review that filed it: /usr/local/lib/tillandsias/lib-common.sh gates on [[ -f && -r ]] and reads with head -c 65536, identical to the checkout. Its 12-scenario attack harness passes against the image copy — FIFO, symlink to /dev/zero, symlink to /dev/null, directory and dangling symlink all SKIPPED; a 64MB addendum truncated at exactly 64KiB; no hang and no unbounded growth. The launch-hang vector it reported (259MB in 3s) no longer reproduces.
+        - type: completed
+          ts: "2026-08-15T02:06:29Z"
+          host: linux_immutable
+          summary: |
+            status 'verified' with evidence_refs: 06f6330f/90b1514b as-wired: 12-scenario in-forge attack harness against the rebuilt image copy, all pass; litmus:startup-context-addendum-shape 12/12 including a functional predicate test over all four hang vectors; spec meta-orchestration suite 15/15 PASS (100%)
+        - type: note
+          ts: "2026-08-15T02:06:29Z"
+          host: linux_immutable
+          summary: |
+            In-forge attack harness re-run against the live image confirms the fix; no vector reproduces.
+
+    - packet_id: startup-context-addendum-missing-delivers-nothing-silently
+      order: 747-n52p
+      release_target: forge-local-experts-milestone
+      status: implemented
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: A missing, unreadable, empty, or non-regular addendum delivers NO warning with exit 0 and no trace — the 743-y5wh fail-loud guard silently degrades into the exact silent-loss it was built to prevent
+      deliverable: when the addendum path is git-tracked (or the project is Tillandsias) but missing/unreadable/empty/non-regular, append a loud 'ADDENDUM NOT DELIVERED (<reason>)' placeholder to the context file and trace_lifecycle a warning; keep the append itself fail-soft (never fail a launch); stay silent off-project
+      pickup_role: linux
+      capability_tags:
+        - forge
+        - startup-context
+        - fail-loud
+        - adversarial-review
+      estimated_hours: 1
+      context: |
+        The append is guarded only by `[[ -r ... ]]` and `|| true`
+        (lib-common.sh:3884-3888), so every failure mode below exits 0 and appends
+        zero bytes of warning, with no trace_lifecycle line (that fires only in the
+        -r branch):
+        
+          absent           -> skip, exit 0, 0 bytes          [silent]
+          chmod 000        -> skip, exit 0, 0 bytes          [silent]
+          empty            -> appends newline only           [silent]
+          whitespace-only  -> appends 6 whitespace bytes     [silent]
+          path is a dir    -> cat fails, || true swallows    [silent]
+          symlink->/dev/null -> appends nothing              [silent]
+        
+        On Tillandsias the addendum is git-TRACKED (mode 100644). A push that
+        deletes it, a shallow/partial clone whose working tree lacks it, or a
+        checkout race therefore restores the exact class 743-y5wh fixed — agents
+        read a context file with no live guard and the launch reports success. The
+        normal-case silence is correct OFF Tillandsias (untracked path); on
+        Tillandsias absence is anomalous and must be loud.
+      exit_criteria:
+        - Deleting the addendum from the working tree still yields a startup context that warns the agent (placeholder).
+        - A launch never fails or hangs because of the addendum (fail-soft preserved).
+        - Off Tillandsias (path not tracked) behavior is unchanged and silent.
+      notes: |
+        Distinguish 'expected but missing' via `git ls-files --error-unmatch
+        images/default/startup-context-addendum.md` (fail-soft: a git error means
+        'not expected', stay silent). Keep the append's own `|| true` so a write
+        error still cannot red the launch.
+      events:
+        - type: filed
+          ts: "2026-08-15T01:35:00Z"
+          host: forge
+          agent_id: bigpickle-forge-20260815
+        - type: implemented
+          ts: "2026-08-15T01:42:41Z"
+          agent_id: unknown
+          host: linux_immutable
+          summary: |
+            A PRESENT-but-rejected addendum now emits a trace_lifecycle SKIPPED line naming the path and why no warning was delivered — that is the surprising case, where someone intended a warning to reach agents and it silently did not. A merely ABSENT addendum stays silent, which is the normal case off Tillandsias and the negative control this mechanism's own guidance demands. Pinned by STEP 8.
+        - type: note
+          ts: "2026-08-15T01:42:41Z"
+          host: linux_immutable
+          summary: |
+            Present-but-rejected is traced; absent stays silent.
+
+    - packet_id: editing-a-shared-file-breaks-litmus-in-specs-you-never-ran
+      order: 748-tkjx
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: Nothing tells an editor which litmus specs cover the file they touched — a green ./build.sh --check plus the spec you did run can both pass while another spec's litmus is broken
+      deliverable: a file -> covering-specs answer an editor can get before pushing
+      pickup_role: any
+      capability_tags:
+        - litmus
+        - coverage
+        - fail-loud
+        - traceability
+        - cross-spec
+      estimated_hours: 3
+      context: |
+        OBSERVED 2026-08-15, twice in one hour, on the same file.
+        
+        An in-forge agent fixed 747-hws2 by editing `images/default/lib-common.sh`
+        (adding a boundary header inside `inject_startup_context`). It then did
+        everything the contract asks:
+        
+          ./build.sh --check                                    -> rc=0
+          run-litmus-test.sh --spec inference-container …       -> PASS 7/7
+          check-mcp-expert-health / findings-persisted / …      -> ok
+          pushed, ledger updated with evidence
+        
+        All true, and `litmus:startup-context-addendum-shape` — which pins the very
+        block it edited — was RED the whole time. The host found it on the next
+        cycle by running the `meta-orchestration` spec.
+        
+        TWO SEPARATE CAUSES, and only one is the agent's:
+        
+        1. `./build.sh --check` does not run litmus at all (deliberate — cost), so
+           the pre-push gate cannot see a broken pin. The only way to learn is to
+           run the covering spec, and nothing says which spec that is.
+        2. `openspec/litmus-bindings.yaml` maps spec -> tests. There is no reverse
+           map from FILE -> specs, even though every litmus already names its
+           artifacts (`observability.log_fields.artifact`,
+           `preconditions: workspace contains <path>`). The information exists and
+           is not queryable.
+        
+        So an editor of a shared file — `lib-common.sh` is touched by the forge,
+        startup-context, git-mirror and inference lanes — has no way to ask "what
+        do I need to re-run?" and reasonably runs only the spec they were working
+        in.
+        
+        SECOND-ORDER, worth keeping with it: both failures were in HOST-authored
+        pins that grepped a fixed line window (`-A16`, then `-A8`) around an
+        anchor. Inserted comments and the new header pushed the target outside the
+        window, so the pins failed on CORRECT code. That is a self-inflicted
+        variant of the same blind spot — a pin whose verdict depends on how many
+        comment lines sit above the code is measuring formatting. Those are fixed
+        (assert over the file, never a window), but the pattern will recur: grep
+        -A<N> against a source file is a latent false failure.
+      outcome: |
+        Before pushing, an editor can ask which litmus specs cover the files they
+        changed, and a cross-spec break stops being discovered by whoever happens
+        to run the other spec next.
+      exit_criteria:
+        - An executable answers `which litmus specs cover <path>` from committed data (litmus-bindings + each test's declared artifacts/preconditions), with no hand-maintained second list to drift.
+        - The meta-orchestration/advance-work-from-plan finalization names it, so an agent that edited a shared file learns what to re-run BEFORE pushing rather than after.
+        - 'Demonstrated on the real case: asking for `images/default/lib-common.sh` must return the meta-orchestration spec (which pins inject_startup_context) — verify by running it, not by reading the map.'
+        - 'NEGATIVE CONTROL: a path no litmus references returns an empty set and no warning; an editor of an uncovered file must not be nagged.'
+        - Cheap enough to run per-cycle — if it costs more than the litmus run it replaces, it will be skipped.
+      notes: |
+        Do NOT fix this by making ./build.sh --check run the whole litmus suite.
+        The suite is minutes of wall clock and the gate is already the slowest step
+        in a cycle (see the `timing:` metrics line); making every push pay for full
+        coverage is how gates get bypassed with --no-verify.
+        
+        The cheap version is a query, not an enforcement: tell the editor which
+        specs to run and let the cycle decide. Enforcement can come later if the
+        query shows people ignore it.
+        
+        While here: audit existing litmus steps for `grep -A<N>`/`-B<N>` windows
+        against source files. Each is a false-failure waiting for the next comment
+        to be added. Two were found and fixed in litmus-startup-context-addendum-shape
+        on 2026-08-15; there are likely more.
+      events:
+        - type: filed
+          ts: "2026-08-15T02:15:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Filed after an in-forge fix to lib-common.sh left
+            litmus:startup-context-addendum-shape red while build.sh --check and
+            the spec the agent did run were both green. The agent followed the
+            contract; the contract cannot point at the covering spec.
