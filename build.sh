@@ -1104,6 +1104,17 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Closure-evidence enforcement passed"
 
+    # Order 614-2gqx / 651-2x5s. The durable MO-FULL attestation ledger
+    # (plan/mo-full-attestations.d/) must never carry a tampered, fabricated,
+    # or unreachable marker — the terminal marker is only as strong as the
+    # record that outlives the transcript it was emitted into.
+    _step "Checking the durable MO-FULL attestation ledger (614-2gqx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-mo-full-attestations.sh" 2>&1; then
+        _error "the MO-FULL attestation ledger records a marker that is fabricated, tampered, or unreachable (plan/mo-full-attestations.d/)"
+        exit 1
+    fi
+    _info "MO-FULL attestation ledger check passed"
+
     # Order 680-zphp. Fail loud if an expert-groundtruth case pins `status:` on a
     # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
     # ratification harness on the next legitimate ledger update (it fired 3x:

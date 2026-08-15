@@ -1,0 +1,98 @@
+trace: order:614-2gqx, spec:meta-orchestration
+
+mo_full_attestation:
+  purpose: >
+    Durable, machine-consumable record of the full-mode terminal attestation
+    marker (order 614-2gqx). A marker that lives only in a transcript nothing
+    parses is decorative — the 2026-08-10 breach (651-2x5s) shipped a marker
+    whose first eight characters came from `git push` output and whose
+    remaining 32 were invented to look like a SHA, and no check ran. A marker
+    recorded durably is evidence automation can consume and the pre-push gate
+    can re-verify.
+
+  marker_grammar: "MO-FULL: <DISPOSITION> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>"
+  disposition:
+    - "COMPLETE"
+    - "BLOCKED"
+
+  invariants:
+    local_equals_remote:
+      rule: "LOCAL_SHA == REMOTE_SHA — a marker never follows an unpushed commit."
+    branch_matches_host:
+      rule: "BRANCH equals the host's current branch; `self`/`record` refuse on main and detached HEAD."
+    startup_boundary_required:
+      rule: >
+        A startup boundary must be snapshotted at Start Of Cycle and verified
+        at Finalization at the attested HEAD (order 717-3bvv). `self` and
+        `record` refuse to print without it — skipping the snapshot costs the
+        marker, which is the point.
+    remote_convergence:
+      rule: >
+        `git ls-remote origin refs/heads/<BRANCH>` must converge on REMOTE_SHA
+        within the bounded window, so a fabricated SHA is rejected by
+        non-convergence (the negative-control fixture shape).
+
+  durability:
+    mechanism: "scripts/mo-full-attest.sh record — runs the self verification, then appends the verified line."
+    ledger_dir: "plan/mo-full-attestations.d/"
+    ledger_layout: >
+      One file per host: plan/mo-full-attestations.d/<host>.md, so concurrent
+      hosts append without cross-host merge conflicts (same per-host-fragment
+      spirit as plan/loop_status.d, packet 582-nqw5). Host label from
+      `scripts/mo-full-attest.sh host`: MO_FULL_HOST if set, else `forge`
+      inside the forge container (.forge-startup-context.md present), else the
+      short hostname lowercased.
+    entry_shape: |
+      ## <ISO-UTC-timestamp> <host>
+      MO-FULL: <DISPOSITION> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>
+    derivation_rule: >
+      The marker is never typed and no ledger line is hand-authored. record
+      derives every field from live git state and appends ONLY the verified
+      line; a failed verification must not leave a record behind.
+    bookkeeping_commit:
+      rule: >
+        The cycle commits + pushes the ledger immediately after record, then
+        re-runs the guard `verify` and `self` once more and emits THAT terminal
+        marker. The ledger line therefore attests the cycle's WORK head (X);
+        the emitted terminal line attests the head that CONTAINS the ledger
+        record (Y). Both are real, reachable commits; they differ by exactly
+        the bookkeeping commit. A consumer must NOT require a ledger LOCAL_SHA
+        to equal the current remote head (the head has since advanced) — it
+        must require reachability (ancestor of the branch head).
+
+  verification_modes:
+    terminal_check:
+      rule: >
+        `scripts/mo-full-attest.sh check` requires `git ls-remote` to CONVERGE
+        on the claimed remote SHA. Correct for the terminal marker emitted at
+        the final head; wired into
+        scripts/litmus-opencode-e2e-launch.sh.
+    self_check:
+      rule: >
+        `scripts/mo-full-attest.sh self` applies the same convergence
+        verification at emission time so EVERY lane self-checks, not only the
+        litmus lane. Any full-mode run that exits without a valid, converging
+        marker has not completed its exit contract regardless of process exit
+        code.
+    ledger_gate:
+      rule: >
+        `scripts/check-mo-full-attestations.sh`, wired into `./build.sh
+        --check`. Grammar over every ledger file (disposition, 40-hex SHAs,
+        LOCAL_SHA == REMOTE_SHA, branch shape, one `## <ts> <host>` heading per
+        marker); for the CURRENT host's file, each LOCAL_SHA must be a real
+        commit object (`git cat-file -e`) reachable from the local ref of the
+        branch it names (`git merge-base --is-ancestor`). Cross-host files are
+        grammar-swept only — the owning host's gate re-proves its own objects,
+        so one host can never red another host's gate (the repo's
+        break-it-your-push-fails posture).
+
+  automation_contract:
+    consume: >
+      Read plan/mo-full-attestations.d/<host>.md, take the last MO-FULL: line
+      as that host's most recent verified cycle proof, and verify LOCAL_SHA is
+      a real commit reachable on BRANCH (ancestor of the fetched remote branch
+      head). The hash is a durable, verifiable identity for the cycle's work.
+    never_hand_author: >
+      Do not fabricate or edit a ledger line. It is only evidence because
+      record verified it at write time and the gate re-verifies it at push
+      time; a hand-written line carries none of that provenance.

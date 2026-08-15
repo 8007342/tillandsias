@@ -125,6 +125,20 @@ remote head, so an unpushed or fabricated value is caught at emission, in every
 lane. (`MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self` for a
 blocked-but-pushed cycle.)
 
+**Make the marker durable — the transcript is not the record (order 651-2x5s).**
+`self` verifies at emission time, but the emitted line lands in a transcript
+nothing parses unless the litmus launcher runs; an operator-prompt or `./repeat`
+cycle emits it into the void. `record` closes that: it runs the SAME
+verification and appends the verified line to the per-host ledger under
+`plan/mo-full-attestations.d/<host>.md`, a committed, machine-parseable log the
+pre-push gate (`scripts/check-mo-full-attestations.sh`, wired into
+`./build.sh --check`) re-verifies. Automation consumes the ledger, never the
+transcript. The ledger line attests the cycle's WORK head; committing the
+ledger moves the head, so the terminal marker is re-derived at the head that
+CONTAINS the record (see Finalization step 9 and
+`methodology/mo-full-attestation.yaml`). Do not hand-write a ledger line: only
+`record` may append, and only after the verification passes.
+
 This is not pedantry. On 2026-08-10 a full-mode cycle on this host emitted a
 marker whose first eight characters came from the `git push` output and whose
 remaining **32 were invented to look like a SHA**. The work was genuinely
@@ -940,24 +954,31 @@ Before exit:
 8. Confirm there are no uncommitted changes created by this cycle and the
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.
-9. Emit the full-mode terminal marker (order 614-2gqx) as your FINAL output
-   line by running the self-attestation, which derives every field from the
-   live post-push state and verifies local HEAD is durably on the remote before
-   it prints — so you emit exactly what was verified, never a typed or
-   fabricated SHA:
+9. Record the verified marker durably, then emit the terminal marker (orders
+   614-2gqx + 651-2x5s) as your FINAL output line. `record` derives-and-verifies
+   the marker exactly as `self` does and appends the verified line to the
+   per-host ledger (`plan/mo-full-attestations.d/<host>.md`) so automation can
+   consume a real, reachable hash without parsing a transcript. The ledger
+   line attests the WORK head; committing it advances the head, so re-run the
+   guard `verify` (permitted: further commits are expected, step 7) and
+   re-derive ONCE more — the terminal marker must name the head that CONTAINS
+   the ledger record:
    ```bash
-   scripts/mo-full-attest.sh self                              # COMPLETE cycle
-   MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self  # blocked-but-pushed cycle
+   scripts/mo-full-attest.sh record                                  # verify + append + print the marker
+   git add plan/mo-full-attestations.d/ && git commit -m "record(mo-full): attest <branch> cycle"
+   git push
+   scripts/meta-orchestration-worktree-guard.sh verify "$boundary_dir"   # re-stamp the new head
+   scripts/mo-full-attest.sh self                                   # terminal marker at the head containing the record
    ```
-   It prints the marker —
-   ```text
-   MO-FULL: <COMPLETE|BLOCKED> <git rev-parse HEAD> <branch> <remote head>
-   ```
-   — which you emit verbatim as your final line; do not retype or edit it. If it
-   instead prints `MO-FULL: FAIL …` and exits non-zero, local HEAD is not on the
-   remote: do NOT emit a marker — treat it as a blocker (a missing marker is
-   itself the loud failure). This self-check gives EVERY full-mode lane the same
-   convergence verification the litmus launcher's `check` applies to its one
-   lane. The marker is the machine attestation that finalization steps 1-8 all
-   passed; the outer launcher rejects exit zero without it. See "Full-Mode
-   Terminal Attestation" above for the grammar and invariants.
+   Emit the FINAL `self` line verbatim as your final line — do not retype or
+   edit it. If any step prints `MO-FULL: FAIL …` and exits non-zero, do NOT
+   emit a marker — treat it as a blocker (a missing marker is itself the loud
+   failure). The ledger line and the emitted line differ by exactly the
+   bookkeeping commit; both are real commits the pre-push gate
+   (`scripts/check-mo-full-attestations.sh`) verifies exist and are reachable.
+   This gives EVERY full-mode lane the same convergence verification the
+   litmus launcher's `check` applies to its one lane, and leaves a durable
+   record that outlives the transcript. The marker is the machine attestation
+   that finalization steps 1-8 all passed; the outer launcher rejects exit
+   zero without it. See "Full-Mode Terminal Attestation" above for the grammar
+   and invariants.
