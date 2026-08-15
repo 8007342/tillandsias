@@ -622,7 +622,9 @@ distributed_work:
       - id: 1_identify_self
         action: >
           Determine host (uname/$OS), agent identity, intended capabilities.
-          Compose agent_id = "<host>-<workstation>-<harness>-<utc-stamp>".
+          agent_id comes from the canonical helper — `scripts/agent-identity.sh
+          id <backend>` — never hand-composed (order 756-hn3a; grammar,
+          precedence, and refusal rules in agent_identity_contract below).
       - id: 2_fetch_canonical_state
         action: >
           `git fetch origin --prune` then `git checkout <active-branch> && git
@@ -1512,3 +1514,67 @@ distributed_work:
     - cheatsheets/concurrent-git/branches.md
     - cheatsheets/concurrent-git/agent-handoff.md
     - cheatsheets/concurrent-git/plan-discipline.md
+
+  # Order 756-hn3a. Appended 2026-08-15 after a fresh-Windows forge (codex
+  # lane) minted lease id "forge--codex-20260815t162555z" — an EMPTY
+  # workstation component — because its claim recipe shelled out to a
+  # `hostname` executable the forge image does not ship, while
+  # HOSTNAME=forge-tillandsias and /etc/hostname were BOTH present in the
+  # same process. Identity is now an executable contract, not prose.
+  agent_identity_contract:
+    trace: order:756-hn3a
+    purpose: >
+      One canonical, falsifiable source for the agent id every claiming
+      workflow writes into leases and events. Hand-composed ids drift with
+      whatever executables a host happens to ship; the helper resolves the
+      id from stable environment-first sources and REFUSES rather than
+      minting an id with an empty component.
+    canonical_helper: scripts/agent-identity.sh
+    invocation: 'agent_id="$(scripts/agent-identity.sh id <backend>)" || abort-before-claim'
+    sourceable: >
+      The helper is also sourceable (functions only, no side effects):
+      tillandsias_agent_id, tillandsias_node_name,
+      tillandsias_sanitize_component.
+    id_shape: "<platform>-<workstation>-<backend>-<utc-timestamp>"
+    precedence:
+      explicit_whole: >
+        1. TILLANDSIAS_AGENT_ID — launch-provided, taken WHOLE (sanitized
+        once, never recomposed). Preferred: launchers that know the full
+        identity should inject it.
+      platform: >
+        TILLANDSIAS_HOST_KIND=forge or the .forge-startup-context.md
+        workspace marker => forge; else bash's own $OSTYPE (survives env -i
+        and an empty PATH); else $OS; else `uname -s`. Values: forge, linux,
+        macos, windows.
+      workstation: >
+        2. TILLANDSIAS_WORKSTATION (stable launch-provided identity), else
+        3. $HOSTNAME (bash sets it even under env -i; inherited-empty is
+        honored as absent), else 4. /etc/hostname via the read builtin — no
+        executable needed (TILLANDSIAS_ETC_HOSTNAME overrides the path for
+        hermetic fixtures ONLY), else 5. the portable node-name probe
+        tillandsias_node_name (hostname -s -> hostname -> uname -n ->
+        /etc/hostname), which is the SAME function mo-full-attest.sh's host
+        label uses (743-mgf3) — one implementation, no drift.
+      backend: >
+        The harness lane: explicit argument to `id`, else TILLANDSIAS_AGENT
+        (the harness TYPE — claude|codex|opencode|gemini — order 570). Never
+        guessed.
+      timestamp: >
+        UTC, %Y%m%dt%H%M%Sz, via bash's printf '%(...)T' builtin — a minimal
+        image without date(1) cannot lose this component.
+    sanitization: >
+      Exactly once, in the helper: lowercase, every character outside
+      [a-z0-9-] becomes '-', runs of '-' collapse, leading/trailing '-'
+      trimmed. Consumers never re-sanitize.
+    refusal: >
+      If platform, workstation, backend, or timestamp resolves empty (or an
+      explicit id sanitizes to nothing): stdout stays EMPTY, exactly one
+      stderr line matching
+      ^refused:agent-identity:empty-(explicit-id|platform|workstation|backend|timestamp)$
+      and a non-zero exit — BEFORE any append-event. A refused identity is a
+      blocked claim, never an improvised one.
+    fixture: scripts/test-agent-identity.sh
+    pinned_by: litmus:agent-identity-canonical-source-shape
+    consumers:
+      - "skills/advance-work-from-plan/SKILL.md §1.4 (Create Agent ID) and §3 (claim events)"
+      - "scripts/mo-full-attest.sh (shares tillandsias_node_name for its ledger host label)"

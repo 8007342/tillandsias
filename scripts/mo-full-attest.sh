@@ -82,6 +82,18 @@
 
 set -uo pipefail
 
+# Order 756-hn3a: the node-name fallback chain that used to live inline in
+# mo_full_host() is now the SHARED probe tillandsias_node_name() in
+# scripts/agent-identity.sh, so the canonical agent-identity helper and this
+# ledger label derive from ONE implementation (743-mgf3) and cannot drift.
+# The source path is computed with parameter expansion, not dirname(1), so
+# `host` mode keeps resolving with an empty PATH — builtins only, same
+# posture as the probe itself.
+_ai_dir="${BASH_SOURCE[0]%/*}"
+[ "$_ai_dir" = "${BASH_SOURCE[0]}" ] && _ai_dir=.
+# shellcheck source=scripts/agent-identity.sh
+. "$_ai_dir/agent-identity.sh"
+
 SHA_RE='^[0-9a-f]{40}$'
 
 usage() {
@@ -105,28 +117,13 @@ mo_full_host() {
         printf '%s' 'forge'
         return 0
     fi
-    # `hostname -s` is a GNU/BSD spelling. MSYS/Git Bash on Windows ships a
-    # hostname that REJECTS -s ("unknown option -- s") and there is no
-    # /etc/hostname, so the -s form returned empty and `record` refused with
-    # "cannot determine host label" on every Windows host — locking this host
-    # out of the attestation ledger entirely (measured 2026-08-15).
-    #
-    # Fall back to bare `hostname` and strip any domain ourselves, which is all
-    # -s does. Lowercased for a stable filename either way.
-    local h=""
-    h="$(hostname -s 2>/dev/null || true)"
-    [ -n "$h" ] || h="$(hostname 2>/dev/null || true)"
-    # Last resort before giving up: the kernel's own view. Some environments
-    # ship no hostname(1) at all.
-    [ -n "$h" ] || h="$(uname -n 2>/dev/null || true)"
-    [ -n "$h" ] || { [ -r /etc/hostname ] && read -r h < /etc/hostname; }
-    # Strip the domain and lowercase with BASH BUILTINS, not cut/tr. The
-    # external form resolved correctly when run by hand and returned EMPTY
-    # under ./build.sh --check, which is the difference between a helper that
-    # works and one that works where you tested it. Builtins have no PATH
-    # sensitivity, so this cannot depend on the caller's environment.
-    h="${h%%.*}"
-    printf '%s' "${h,,}"
+    # Node-name fallback chain: the SHARED probe (order 756-hn3a), sourced
+    # from scripts/agent-identity.sh above. The chain and its builtin-only
+    # post-processing are unchanged from when it lived inline here:
+    # hostname -s -> hostname -> uname -n -> /etc/hostname, then strip the
+    # domain and lowercase with bash builtins (743-mgf3, incl. the MSYS
+    # `hostname -s` rejection measured 2026-08-15).
+    printf '%s' "$(tillandsias_node_name)"
     return 0
 }
 
