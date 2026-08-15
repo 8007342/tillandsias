@@ -2083,6 +2083,28 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     std::fs::create_dir_all(&vault_dir)
         .map_err(|e| format!("failed to create vault data dir: {}", e))?;
     let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
+    // Order 749-8iw4 (design T9). `images/vault/entrypoint.sh` enables a FILE
+    // audit device at /vault/audit/audit.json, but nothing mounted /vault/audit
+    // — so it was a container-layer directory (V12) and every audit record died
+    // with the container. D11's third attribution channel therefore did not
+    // exist in practice, and §4a row M6 ("the audit records carry project, lane,
+    // principal, fingerprint, serial and refs AND survive a mirror/Vault
+    // container recreation") could not pass however well the other rungs landed.
+    //
+    // The device was enabled and writing the whole time, which is what made this
+    // easy to miss: `vault audit list` shows a healthy file device, and the
+    // records are really there — until the container is recreated.
+    //
+    // `:U` for the same reason as /vault/data above: a userns mapping shift
+    // between launches would otherwise leave the directory owned by a uid the
+    // `vault` user cannot write, and an audit device that cannot write is FATAL
+    // to Vault — every request fails once no audit device can record it.
+    let vault_audit_dir = crate::init_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("vault-audit");
+    std::fs::create_dir_all(&vault_audit_dir)
+        .map_err(|e| format!("failed to create vault audit dir: {}", e))?;
+    let audit_volume_arg = format!("{}:/vault/audit:U", vault_audit_dir.display());
     let mut run_args: Vec<String> = vec![
         "run".into(),
         "-d".into(),
@@ -2110,6 +2132,8 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         tls_ca_arg,
         "--volume".into(),
         volume_arg,
+        "--volume".into(),
+        audit_volume_arg,
         "--tmpfs".into(),
         "/run/vault-handover:size=1m,mode=0777".into(),
         // NOTE: intentionally NO `--rm`. If vault crashes on boot (e.g. an
