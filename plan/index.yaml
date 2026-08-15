@@ -32498,6 +32498,12 @@ plan_index:
         - no forge contains a private key, Vault token, SecretID, or upstream credential; it receives only an agent socket and public CA trust
 
       events:
+        - type: blocked
+          ts: "2026-08-15T02:22:23Z"
+          agent_id: "tlatoani-linux-immutable-20260814"
+          host: linux_immutable
+          summary: |
+            Blocked on its four slices, for the same reason 722-ecne was: a split parent left ready keeps being offered as claimable work it no longer contains. 722-hthz implemented, 722-ft6g implemented, 722-ecne blocked on its own six children (749-*), 722-uern parked behind the matrix. No direct work remains here; the residual is entirely in the slices.
         - type: progress
           ts: "2026-08-13T11:50:46Z"
           agent_id: "linux-mutable-session-20260812"
@@ -44913,6 +44919,19 @@ plan_index:
         is a container-layer directory today (V12) and dies on recreate. Land the
         audit volume or M6 cannot pass — do not report M6 green without it.
 
+      events:
+        - type: blocked
+          ts: "2026-08-15T02:21:51Z"
+          agent_id: "tlatoani-linux-immutable-20260814"
+          host: linux_immutable
+          summary: |
+            Blocked on its own six children until they land: 749-wv4d (T3 sshd in image), 749-54pv (T4+T5 host cert + sshd_config), 749-2fqj (T6+T7 receive wrapper + hardening), 749-6uby (T8+T10 sidecar + forge wiring), 749-8iw4 (T9 Vault audit volume, no depends_on — claimable now), 749-y8xx (T11+T12 migration + specs). Deliberately blocked rather than obsoleted: obsoleted satisfies dependents and would unblock 722-uern's negative matrix before a single rung exists.
+        - type: split
+          ts: "2026-08-15T02:20:44Z"
+          agent_id: "tlatoani-linux-immutable-20260814"
+          host: linux_immutable
+          summary: |
+            Split into six implementable rungs after four consecutive cycles offered it as urgent= without any host claiming it. A packet nobody claims four times running is not waiting for effort — it does not fit a cycle, and the selector cannot say so. Body was design rungs T3-T13 (eleven rungs: git image, host cert, sshd_config, receive wrapper, repo hardening, agent sidecar, Vault audit volume, forge wiring, staged migration, spec amendments) against a 3h estimate. Children, each carrying a closure the DESIGN already names rather than one invented for the split: 749-wv4d (T3, sshd under --read-only/--cap-drop=ALL as uid 1000:2222 — the design's own highest-risk rung, R1 §5, to be verified in-container before anything builds on it), 749-54pv (T4+T5 host cert + sshd_config, closure = the design's single-principal cert fixture), 749-2fqj (T6+T7 receive wrapper + hardening, closures = §4a M5 and the design's EXISTING-volume upgrade fixture), 749-6uby (T8+T10 sidecar + forge wiring, closures = §4a M0 and D5 re-verified), 749-8iw4 (T9 Vault audit volume — deliberately NO depends_on: this packet's own notes said M6 is blocked on it, and it needs none of the sshd rungs, so it had been waiting behind eleven rungs of unrelated work), 749-y8xx (T11+T12 staged migration + spec amendments, gated on the full §4a matrix). T13 intentionally not a child: it belongs with slice d, 722-uern, which owns the matrix.
     - packet_id: mirror-identity-negative-matrix-litmus
       order: 722-uern
       release_target: forge-local-experts-milestone
