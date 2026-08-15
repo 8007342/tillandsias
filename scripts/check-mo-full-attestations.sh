@@ -70,6 +70,15 @@ if [ "${1:-}" = "fixture" ]; then
         # fixture that merely cd's into a temp repo silently validates the REAL
         # ledger and every scenario "passes". Run a COPY inside the fixture repo.
         cp "$_fx_self" "$_fx_dir/repo/scripts/"
+        # Host-label helper stub. The name deliberately does NOT match the
+        # fixture ledger file, so `own_file` stays unset and the reachability
+        # half (which needs real commits) is out of the way while the PARSER is
+        # what gets exercised. An absent stub would trip the 743-mgf3
+        # fail-closed branch and mask every scenario.
+        printf '#!/bin/sh\necho fixture-nonledger-host\n' >"$_fx_dir/repo/scripts/mo-full-attest.sh"
+        chmod +x "$_fx_dir/repo/scripts/mo-full-attest.sh"
+        [ -n "${_fx_extra_readme:-}" ] && printf '%s\n' "$_fx_extra_readme" >"$_fx_dir/repo/plan/mo-full-attestations.d/README.md"
+        [ -n "${_fx_empty_host:-}" ] && printf '#!/bin/sh\necho ""\n' >"$_fx_dir/repo/scripts/mo-full-attest.sh"
         _out="$( cd "$_fx_dir/repo" && bash "scripts/$(basename "$_fx_self")" 2>&1 )"
         _rc=$?
         if [ "$_want" = ok ] && [ "$_rc" = 0 ]; then
@@ -131,6 +140,33 @@ MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
 ## 2026-08-15T00:00:00Z fixturehost
 MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_b
 "
+    # ── 743-cxsx: the README exemption was a blind spot ──────────────────────
+    # A column-0 marker in an exempt file previously passed with the reassuring
+    # verdict "0 markers verified". The README's real example is indented.
+    _fx_extra_readme="# prose
+  MO-FULL: <COMPLETE|BLOCKED> <LOCAL_SHA> <BRANCH> <REMOTE_SHA>"
+    _fx_case "NEGATIVE indented-grammar-example-in-readme-is-fine" ok "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+"
+    _fx_extra_readme="# prose
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a"
+    _fx_case "NEGATIVE fabricated-marker-in-exempt-readme-refused" refuse "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+"
+    _fx_extra_readme=""
+
+    # ── 743-mgf3: an unresolvable host label must fail CLOSED ────────────────
+    # own_file selects which ledger gets reachability checking, so an empty host
+    # silently downgraded every file to a grammar sweep.
+    _fx_empty_host=1
+    _fx_case "NEGATIVE unresolvable-host-label-fails-closed" refuse "$_fx_hdr
+## 2026-08-15T00:00:00Z fixturehost
+MO-FULL: COMPLETE $_fx_sha_a linux-next $_fx_sha_a
+"
+    _fx_empty_host=""
+
     rm -rf "$_fx_dir"
     [ "$_fx_fail" = 0 ] && echo "ok: all mo-full-attestation-ledger scenarios passed"
     exit "$_fx_fail"
@@ -145,6 +181,25 @@ own_file=""
 host="$(bash scripts/mo-full-attest.sh host 2>/dev/null | tr -d '[:space:]' || true)"
 if [ -n "$host" ] && [ -f "$ledger_dir/$host.md" ]; then
     own_file="$ledger_dir/$host.md"
+fi
+
+# FAIL CLOSED when the host label cannot be resolved (order 743-mgf3). own_file
+# selects which ledger gets the expensive half — `git cat-file` + reachability —
+# so an EMPTY host silently downgrades every file to a grammar sweep, and a
+# fabricated 40-hex marker in this host's own ledger sails through. The same
+# file correctly refuses that marker when the helper answers, which is what makes
+# this a fail-open rather than a policy: the check's strength depends on a helper
+# that is allowed to fail quietly.
+#
+# `host` resolving fine with NO matching file is a different, legitimate state
+# (e.g. running inside the builder toolbox, whose hostname owns no ledger) and
+# stays a pass — reachability is owned by the recording host.
+if [ -z "$host" ] && [ -d "$ledger_dir" ]; then
+    printf 'REFUSED: %s\n' "$ledger_dir" >&2
+    printf '   cannot resolve this host label (scripts/mo-full-attest.sh host returned empty)\n' >&2
+    printf '   without it every ledger degrades to a grammar sweep and fabricated markers pass\n' >&2
+    echo "violation:mo-full-attestations:host-unresolved"
+    exit 1
 fi
 
 refuse() { # refuse <file> <detail...>
@@ -242,7 +297,22 @@ if [ -d "$ledger_dir" ]; then
     for f in "$ledger_dir"/*.md; do
         [ -e "$f" ] || continue
         case "$f" in
-            */README.md) continue ;;   # contract prose, not a ledger
+            */README.md)
+                # Contract prose, not a ledger — but NOT a blind spot (order
+                # 743-cxsx). Exempting the file from ledger PARSING also exempted
+                # it from every marker check, so a bare fabricated `MO-FULL:`
+                # line appended here passed with the reassuring verdict
+                # "0 markers verified". The README's own example is INDENTED
+                # (see its grammar block), so a marker at column 0 in an exempt
+                # file is fabricated by construction.
+                if grep -qE '^MO-FULL: ' "$f" 2>/dev/null; then
+                    printf 'REFUSED: %s\n' "$f" >&2
+                    printf '   exempt file carries a column-0 MO-FULL marker — fabricated or misplaced\n' >&2
+                    printf '   (document the grammar indented, as the rest of this README does)\n' >&2
+                    violations=$((violations + 1))
+                fi
+                continue
+                ;;
         esac
         files=$((files + 1))
         verify_file "$f"
