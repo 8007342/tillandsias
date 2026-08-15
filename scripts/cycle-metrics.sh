@@ -63,13 +63,30 @@
 # ratio FALLS as batch size rises. The emit is best-effort by construction (a
 # metric may never fail the cycle it measures), exactly like mcp-usage-log.sh.
 #
-# EMIT GRAMMAR (append one record; never fails):
-#   cycle-metrics.sh --emit-flow host=<h> batch_epic=<id> batch_seed=<s> \
-#       batch_size=<n> budget=<n> claimed=<n> completed=<n> filed=<n> \
-#       commits=<n> plan_open=<n> plan_total=<n>
-#   → {"ts":<utc>,"host":<h>,"batch_epic":<id>,"batch_seed":<s>,
+# EMIT GRAMMAR (one record per cycle; never fails):
+#   cycle-metrics.sh --emit-flow host=<h> cycle=<id> batch_epic=<id> \
+#       batch_seed=<s> batch_size=<n> budget=<n> claimed=<n> completed=<n> \
+#       filed=<n> commits=<n> plan_open=<n> plan_total=<n>
+#   → {"ts":<utc>,"host":<h>,"cycle":<id>,"batch_epic":<id>,"batch_seed":<s>,
 #      "batch_size":<n>,"budget":<n>,"claimed":<n>,"completed":<n>,"filed":<n>,
 #      "commits":<n>,"plan_open":<n>,"plan_total":<n>}
+#
+# `cycle=` MAKES THE EMIT IDEMPOTENT and it is not optional in practice. A cycle
+# that re-runs the emit -- because the gate failed and the finalization was
+# retried, which is the normal shape of a bad cycle -- used to append a SECOND
+# record. Measured: one cycle wrote three, and `cycles=8 overhead_ratio=2.25`
+# was reporting six real cycles. The corruption is directional, not noise: the
+# retried cycles are precisely the expensive ones, so duplicates inflate the
+# cycle count with the worst cases while diluting avg_completed_per_cycle. The
+# metric that the greedier-batching decision (682-yiz7) consumes was being
+# skewed by the act of measuring it badly.
+#
+# With `cycle=<id>`, a second emit for the same host+cycle REPLACES the first.
+# Replace rather than skip: a retry happens after MORE work, so its counts are
+# the truthful ones. Without `cycle=`, behaviour is the old append and a warning
+# goes to stderr naming the risk -- a silent heuristic (bucket by hour, say)
+# would drop genuine records to hide a caller's omission, which is the same
+# class of lie this file exists to avoid.
 #
 # Exit status is 0 whenever the report was produced. A metrics reporter that
 # fails the cycle it is measuring is a metric that can take down what it
@@ -126,12 +143,13 @@ fi
 # any order; absent numeric fields default to 0, absent strings to "-".
 if [ "${1:-}" = "--emit-flow" ]; then
     shift
-    ef_host="-"; ef_epic="-"; ef_seed="-"
+    ef_host="-"; ef_epic="-"; ef_seed="-"; ef_cycle=""
     ef_batch_size=0; ef_budget=0; ef_claimed=0; ef_completed=0; ef_filed=0
     ef_commits=0; ef_plan_open=0; ef_plan_total=0
     for tok in "$@"; do
         case "$tok" in
             host=*)        ef_host="${tok#host=}" ;;
+            cycle=*)       ef_cycle="${tok#cycle=}" ;;
             batch_epic=*)  ef_epic="${tok#batch_epic=}" ;;
             batch_seed=*)  ef_seed="${tok#batch_seed=}" ;;
             batch_size=*)  ef_batch_size="${tok#batch_size=}" ;;
@@ -150,13 +168,32 @@ if [ "${1:-}" = "--emit-flow" ]; then
              ef_commits ef_plan_open ef_plan_total; do
         eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
     done
+    if [ -z "$ef_cycle" ]; then
+        ef_cycle="-"
+        echo "warn: --emit-flow without cycle=<id>; a retried finalization will append a SECOND record for this cycle and skew overhead_ratio (682-epud)" >&2
+    fi
     {
         ef_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
-        printf '{"ts":"%s","host":"%s","batch_epic":"%s","batch_seed":"%s","batch_size":%s,"budget":%s,"claimed":%s,"completed":%s,"filed":%s,"commits":%s,"plan_open":%s,"plan_total":%s}\n' \
-            "$ef_ts" "$ef_host" "$ef_epic" "$ef_seed" \
+        record="$(printf '{"ts":"%s","host":"%s","cycle":"%s","batch_epic":"%s","batch_seed":"%s","batch_size":%s,"budget":%s,"claimed":%s,"completed":%s,"filed":%s,"commits":%s,"plan_open":%s,"plan_total":%s}' \
+            "$ef_ts" "$ef_host" "$ef_cycle" "$ef_epic" "$ef_seed" \
             "$ef_batch_size" "$ef_budget" "$ef_claimed" "$ef_completed" \
-            "$ef_filed" "$ef_commits" "$ef_plan_open" "$ef_plan_total" \
-            >>"$FLOW_LOG"
+            "$ef_filed" "$ef_commits" "$ef_plan_open" "$ef_plan_total")"
+        # Replace-if-present, keyed on host+cycle. Rewrite via a temp file and
+        # mv so an interrupted emit cannot truncate the log it is correcting.
+        if [ "$ef_cycle" != "-" ] && [ -f "$FLOW_LOG" ] \
+           && grep -q "\"host\":\"${ef_host}\",\"cycle\":\"${ef_cycle}\"" "$FLOW_LOG"; then
+            tmp="${FLOW_LOG}.$$"
+            # `|| true` is load-bearing: when the log holds ONLY the record
+            # being replaced, grep -v emits nothing and exits 1, which used to
+            # abandon the && chain and leave the stale record in place -- the
+            # emit reporting success while replacing nothing. The fixture's
+            # scenario 2 is that exact case.
+            { grep -v "\"host\":\"${ef_host}\",\"cycle\":\"${ef_cycle}\"" "$FLOW_LOG" || true; } > "$tmp"
+            printf '%s\n' "$record" >> "$tmp" && mv -f "$tmp" "$FLOW_LOG"
+            rm -f "$tmp"
+        else
+            printf '%s\n' "$record" >> "$FLOW_LOG"
+        fi
     } 2>/dev/null || true
     exit 0
 fi
@@ -326,11 +363,12 @@ fi
 # defers to the litmus gate rather than reporting a number the tooling did not
 # produce.
 GRADE_BIN=""
-for cand in "$REPO_ROOT/target/release/tillandsias-plan" \
-            "$HOME/.local/bin/tillandsias-plan" \
-            "$(command -v tillandsias-plan 2>/dev/null || true)"; do
-    if [ -n "$cand" ] && [ -x "$cand" ]; then GRADE_BIN="$cand"; break; fi
-done
+# Order 721-nyev: resolve by EXECUTION. The old loop trusted the executable
+# bit, which on a shared Windows/WSL checkout picks the Linux ELF over the
+# runnable .exe -- this line reported plan_bin=absent on a host where the
+# binary was present and working.
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
+GRADE_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harness'
 if [ -n "$GRADE_BIN" ]; then
     gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
@@ -433,11 +471,12 @@ fi
 # ── plan ────────────────────────────────────────────────────────────────────
 packets="-"; ready="-"; blocked="-"; pending="-"
 PLAN_BIN=""
-for cand in "$REPO_ROOT/target/release/tillandsias-plan" \
-            "$HOME/.local/bin/tillandsias-plan" \
-            "$(command -v tillandsias-plan 2>/dev/null || true)"; do
-    if [ -n "$cand" ] && [ -x "$cand" ]; then PLAN_BIN="$cand"; break; fi
-done
+# Order 721-nyev: resolve by EXECUTION. The old loop trusted the executable
+# bit, which on a shared Windows/WSL checkout picks the Linux ELF over the
+# runnable .exe -- this line reported plan_bin=absent on a host where the
+# binary was present and working.
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
+PLAN_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 if [ -n "$PLAN_BIN" ]; then
     chk="$("$PLAN_BIN" check 2>/dev/null | tail -1 || true)"
     case "$chk" in

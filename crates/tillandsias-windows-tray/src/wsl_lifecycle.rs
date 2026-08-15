@@ -1535,6 +1535,60 @@ fi
         )
         .await?;
 
+        // 2b. headless-ready.sh — ASSERT A BOUND LISTENER (order 735-ewzp).
+        //
+        // The preflight above cannot do this and never could: it is an
+        // ExecStartPre, so it runs BEFORE the binary and by construction has
+        // nothing to observe. Its `vsock_device=present` test only proves
+        // /dev/vsock exists, and vsock_loopback alone provides that node —
+        // this image loads that module deliberately.
+        //
+        // The gap that motivates it: a guest binary built without the
+        // listen-vsock feature started, logged `app.started`, satisfied the
+        // preflight, and systemd held the unit `active (running)` with
+        // `--listen-vsock 42420` on its command line — while nothing was bound
+        // and no host could ever connect. Every readiness signal was green.
+        // The host saw only a seven-and-a-half minute timeout.
+        //
+        // This proves the property instead of a proxy for it: connect to the
+        // port and see whether something accepts. CID 1 is VMADDR_CID_LOCAL,
+        // so the probe stays inside the guest and needs no host involvement —
+        // measured working in a live guest before this was written. socat
+        // ships in the image built WITH_VSOCK, so no new dependency.
+        //
+        // It retries because ExecStartPost races a Type=simple ExecStart: the
+        // process is forked but may not have bound yet. The window is bounded
+        // so a genuinely dead listener still fails rather than hanging.
+        let ready_script = r#"#!/usr/bin/env bash
+set -uo pipefail
+PORT="${1:-42420}"
+DEADLINE=$(( $(date +%s) + 15 ))
+while :; do
+  # The CONNECT address must come FIRST. Written the other way round --
+  # `socat -u /dev/null VSOCK-CONNECT:1:$PORT` -- socat reaches EOF on
+  # /dev/null and exits 0 BEFORE the connection can fail, so the probe passes
+  # against a dead port. That form was measured returning 0 for both a live
+  # and a dead port: a readiness check that always succeeds, which is worse
+  # than the signal it replaces. Verified discriminating: exit 0 on a bound
+  # 42420, exit 1 on an unbound 42999.
+  if timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>/dev/null; then
+    echo "[tillandsias-ready] vsock_listener=bound port=${PORT}"
+    exit 0
+  fi
+  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+    echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the process is running but nothing accepts on the control-wire port; the host cannot reach this guest" >&2
+    exit 1
+  fi
+  sleep 1
+done
+"#;
+        self.wsl_root_write(
+            "/usr/local/lib/tillandsias/headless-ready.sh",
+            ready_script,
+            true,
+        )
+        .await?;
+
         // 3. tillandsias-headless-fetch.service
         let fetch_unit = r#"[Unit]
 Description=Ensure tillandsias-headless is present
@@ -1591,6 +1645,14 @@ Description=Tillandsias headless (in-VM vsock control wire)
 After=network-online.target podman.socket tillandsias-headless-fetch.service
 Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
+# Bound the restart loop the ExecStartPost readiness probe can create (order
+# 735-ewzp). A guest that can never bind should end in `failed`, loudly and
+# once, not restart every two seconds forever. These are [Unit] directives on
+# modern systemd -- placing them under [Service], where they read more
+# naturally, gets them silently ignored, which would be the same
+# looks-configured-does-nothing shape this packet exists to remove.
+StartLimitIntervalSec=120
+StartLimitBurst=3
 [Service]
 Type=exec
 ExecStartPre=/usr/bin/mkdir -p /run/user/0
@@ -1600,6 +1662,7 @@ Environment=HOME=/root
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 {low_power_env}ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
+ExecStartPost=/usr/local/lib/tillandsias/headless-ready.sh 42420
 Restart=on-failure
 RestartSec=2s
 StandardOutput=journal+console
@@ -2414,6 +2477,62 @@ mod tests {
         assert!(
             headless_unit.contains("ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh")
         );
+
+        // ORDER 735-ewzp: the unit must ASSERT A BOUND LISTENER after start,
+        // not merely reach `active`. A guest binary built without the
+        // listen-vsock feature satisfied every existing signal here — the
+        // preflight passed, the process logged app.started, systemd held the
+        // unit active — while nothing accepted on 42420 and the host saw a
+        // seven-and-a-half minute timeout.
+        assert!(
+            headless_unit
+                .contains("ExecStartPost=/usr/local/lib/tillandsias/headless-ready.sh 42420"),
+            "the unit must probe the port after start: {headless_unit}"
+        );
+        // The script it names must actually be installed, or the unit fails on
+        // a missing file and the diagnosis is about the wrong thing.
+        assert!(
+            source.contains("/usr/local/lib/tillandsias/headless-ready.sh"),
+            "the readiness script the unit references must be written to the guest"
+        );
+        assert!(
+            source.contains("VSOCK-CONNECT:1:"),
+            "readiness must connect to the port (CID 1 = VMADDR_CID_LOCAL), not test /dev/vsock"
+        );
+        // The connect address must be socat's FIRST argument. With /dev/null
+        // first, socat hits EOF and exits 0 before the connection can fail --
+        // measured returning 0 against BOTH a live and a dead port, i.e. a
+        // check that always passes. This assertion pins the discriminating
+        // form, not merely the presence of the address.
+        assert!(
+            source.contains("socat -T1 \"VSOCK-CONNECT:1:${PORT}\" /dev/null"),
+            "the connect address must precede the sink, or the probe passes against a dead port"
+        );
+        assert!(
+            source.contains("vsock_listener=NOT-BOUND"),
+            "the failure must name the property that is false, not a generic error"
+        );
+        // The restart bound belongs to [Unit]; under [Service] systemd ignores
+        // it silently, which would leave a permanently-broken guest restarting
+        // every two seconds forever.
+        // Positional, not a split: this test slices raw SOURCE between two
+        // comment markers, so the window contains prose that mentions
+        // [Service] and a naive split lands in a comment.
+        let burst = headless_unit
+            .find("StartLimitBurst=3")
+            .expect("start-limit burst is declared");
+        let interval = headless_unit
+            .find("StartLimitIntervalSec=120")
+            .expect("start-limit interval is declared");
+        let service_block = headless_unit
+            .find("Type=exec")
+            .expect("the [Service] block starts at Type=exec");
+        assert!(
+            burst < service_block && interval < service_block,
+            "start-limit directives must precede the [Service] block, i.e. sit in [Unit], \
+             where systemd actually reads them"
+        );
+
         assert!(headless_unit.contains("Environment=HOME=/root"));
         assert!(headless_unit.contains("Environment=XDG_RUNTIME_DIR=/run/user/0"));
         assert!(

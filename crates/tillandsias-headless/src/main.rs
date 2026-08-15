@@ -12680,8 +12680,24 @@ fn maybe_spawn_vsock_listener(
     }))
 }
 
-/// Stub when the `listen-vsock` feature is disabled at compile time. Emits a
-/// friendly error on stderr if the user passed `--listen-vsock` anyway.
+/// Stub when the `listen-vsock` feature is disabled at compile time.
+///
+/// REFUSES TO RUN rather than warning and continuing (order 735-ewzp). This
+/// used to print to stderr and return `None`, and the process then went on
+/// serving nothing — which is how a guest binary built without the feature
+/// reached a Windows host as a seven-and-a-half minute control-wire timeout
+/// instead of a one-line error.
+///
+/// Everything downstream reported healthy while nothing was listening: systemd
+/// held the unit `active (running)` with `--listen-vsock 42420` on its command
+/// line, headless-preflight.sh reported `vsock_device=present` (it tests for
+/// /dev/vsock, which vsock_loopback alone provides), and the process logged
+/// `app.started`. A warning nobody reads on a stream nobody tails is not a
+/// failure signal; an exit code is.
+///
+/// Exiting here is safe precisely because `--listen-vsock` is the whole reason
+/// this process exists in the guest. There is no degraded mode worth running:
+/// a headless with no control wire cannot be reached by the host at all.
 ///
 /// @trace spec:vsock-transport
 #[cfg(not(feature = "listen-vsock"))]
@@ -12689,10 +12705,18 @@ fn maybe_spawn_vsock_listener(
     listen_vsock_port: Option<u32>,
     _shutdown: Arc<AtomicBool>,
 ) -> Option<tokio::task::JoinHandle<()>> {
-    if listen_vsock_port.is_some() {
+    if let Some(port) = listen_vsock_port {
+        // No backticks in this message. It is read by shells and log pipelines
+        // as often as by humans, and a diagnostic that executes when echoed is
+        // a hazard rather than a help — this one did exactly that while being
+        // tested.
         eprintln!(
-            "[tillandsias] --listen-vsock requires the binary to be built with --features listen-vsock"
+            "[tillandsias] FATAL: --listen-vsock {port} was requested but this binary was built \
+             WITHOUT the listen-vsock feature, so no listener can be bound. Refusing to run as a \
+             control-wire guest that cannot serve the wire. Rebuild with \
+             --features listen-vsock (scripts/build-guest-binaries.sh does this)."
         );
+        std::process::exit(78); // EX_CONFIG — the build, not the environment
     }
     None
 }
@@ -13428,19 +13452,121 @@ pub(crate) fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, Stri
 }
 
 async fn wait_for_shutdown_signal(terminated: Arc<AtomicBool>) -> Result<(), String> {
-    let mut poll_delay_ms = 25_u64;
-    while !terminated.load(Ordering::SeqCst) {
-        tokio::time::sleep(std::time::Duration::from_millis(poll_delay_ms)).await;
-        poll_delay_ms = next_shutdown_poll_delay_ms(poll_delay_ms);
+    // ORDER 690-xeda, second pass: this is now EVENT-DRIVEN, not a poll.
+    //
+    // The previous form backed off to a cap and sat there re-reading an atomic
+    // — measured as the dominant idle wakeup source in the guest, 4/s at the
+    // old 250 ms cap and still 1/s after raising it. tokio already carries the
+    // `signal` feature (workspace tokio uses features = ["full"]), so real
+    // async signal delivery needs no new dependency; the earlier note that this
+    // required signal-hook-tokio was wrong.
+    //
+    // signal_hook's flag registration STAYS: several other readers (the tray
+    // phase watcher, the vsock waiters) consume that AtomicBool, and this
+    // function is not the only thing that must observe termination. But this
+    // path also sets the flag itself, so the flag is set even if tokio's
+    // sigaction handler displaces signal_hook's — two registrations for one
+    // signal is exactly the situation where assuming the other one still runs
+    // would be a silent correctness bet.
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm = signal(SignalKind::terminate())
+            .map_err(|e| format!("Failed to install SIGTERM listener: {e}"))?;
+        let mut sigint = signal(SignalKind::interrupt())
+            .map_err(|e| format!("Failed to install SIGINT listener: {e}"))?;
+        while !terminated.load(Ordering::SeqCst) {
+            // The backstop covers the window between the flag check and the
+            // select, and any path that sets the flag without a signal (a
+            // programmatic shutdown). It is long because the signal edge — not
+            // the timer — is what normally wakes this now.
+            // Set the flag ONLY on a real signal. The backstop arm must fall
+            // through and re-read it instead.
+            //
+            // The first version of this stored `true` after ANY arm, backstop
+            // included, so the guest decided it had been terminated 30 seconds
+            // after boot and shut down cleanly -- every 30 seconds, forever,
+            // with exit code 0 so `Restart=on-failure` would not even bring it
+            // back. The journal read "Consumed 2.808s CPU time over 30.085s
+            // wall clock" and then "Graceful shutdown completed".
+            //
+            // It was caught only because an idle measurement that reported a
+            // beautiful ZERO wakeups was actually reading a dead process, and
+            // the measurement script refused with MEASUREMENT-INVALID when the
+            // pid came back 0. A number that flatters the change is exactly
+            // when to check what produced it.
+            let signalled = tokio::select! {
+                _ = sigterm.recv() => true,
+                _ = sigint.recv() => true,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(
+                        SHUTDOWN_POLL_CAP_MS * 30)) => false,
+            };
+            if signalled {
+                terminated.store(true, Ordering::SeqCst);
+            }
+        }
+        // Wake the vsock waiters on the same edge so they exit promptly rather
+        // than on their own 30 s backstop.
+        #[cfg(feature = "listen-vsock")]
+        vsock_server::wake_shutdown_waiters();
+        Ok(())
     }
-    Ok(())
+    #[cfg(not(unix))]
+    {
+        let mut poll_delay_ms = 25_u64;
+        while !terminated.load(Ordering::SeqCst) {
+            tokio::time::sleep(std::time::Duration::from_millis(poll_delay_ms)).await;
+            poll_delay_ms = next_shutdown_poll_delay_ms(poll_delay_ms);
+        }
+        Ok(())
+    }
 }
 
 /// Conservative shutdown polling backoff. This only governs the wait loop
 /// after shutdown has already been requested, so it cannot affect user-facing
 /// launch or tray responsiveness.
+/// Backoff cap for the shutdown wait (order 690-xeda).
+///
+/// MEASURED, and it overturned the comment above: this loop is NOT "only
+/// reached during shutdown". It is what AWAITS shutdown, so it runs from
+/// startup to termination, and at the old 250 ms cap it was the DOMINANT idle
+/// wakeup source in the guest -- 4 wakeups/second for the life of every VM.
+///
+/// It was found only because converting the two sites 690-xeda actually names
+/// (the vsock AtomicBool poll and the accept-loop timeout) moved the measured
+/// idle rate by nothing at all: 79 context switches/20s before, 80 after. The
+/// named sites were real, and they were not what was costing the wakeups.
+///
+/// WHY 1 s AND NOT THE 30 s BACKSTOP the vsock waiters use: this interval is
+/// the SIGTERM response latency. signal_hook::flag::register writes the atomic
+/// from a C signal handler, so there is no Rust path that could notify a
+/// waiter -- the delay between the signal and this loop noticing is exactly
+/// this cap. 30 s would trade a 120x wakeup reduction for a shutdown that
+/// looks hung. 1 s is a 4x reduction that keeps termination prompt.
+///
+/// A genuinely event-driven fix needs async signal delivery
+/// (signal-hook-tokio), which is a dependency decision rather than a tuning
+/// one and is left to 690-xeda's remaining scope.
+const SHUTDOWN_POLL_CAP_MS: u64 = 1_000;
+
+/// The cap IS the SIGTERM response latency, so guard it at COMPILE time rather
+/// than in a test: signal_hook writes the flag from a C handler with no path to
+/// wake a waiter, and nothing can shorten the gap between the signal and this
+/// loop noticing it. A future pass chasing idle wakeups must not be able to
+/// trade a prompt shutdown for a number it cannot measure — this refuses to
+/// build instead of refusing at test time.
+const _: () = assert!(
+    SHUTDOWN_POLL_CAP_MS <= 1_000,
+    "shutdown latency is bounded by this cap; keep it human-prompt"
+);
+
+/// Only reachable on non-unix hosts since order 690-xeda made the unix wait
+/// event-driven. Kept rather than deleted: the doubling behaviour is still the
+/// fallback contract on any platform without `tokio::signal::unix`, and its
+/// test still pins it there.
+#[cfg_attr(unix, allow(dead_code))]
 fn next_shutdown_poll_delay_ms(current_ms: u64) -> u64 {
-    current_ms.saturating_mul(2).min(250)
+    current_ms.saturating_mul(2).min(SHUTDOWN_POLL_CAP_MS)
 }
 
 /// Load headless configuration from TOML file.
@@ -16047,8 +16173,14 @@ mod tests {
         assert_eq!(next_shutdown_poll_delay_ms(25), 50);
         assert_eq!(next_shutdown_poll_delay_ms(50), 100);
         assert_eq!(next_shutdown_poll_delay_ms(125), 250);
-        assert_eq!(next_shutdown_poll_delay_ms(250), 250);
-        assert_eq!(next_shutdown_poll_delay_ms(u64::MAX), 250);
+        // Order 690-xeda: the cap moved 250ms -> 1s. This loop AWAITS
+        // shutdown, so it runs for the life of the process and was the
+        // dominant idle wakeup source in the guest -- not the sites the packet
+        // named. Updated rather than deleted: the doubling behaviour it pins
+        // still matters, only the ceiling changed.
+        assert_eq!(next_shutdown_poll_delay_ms(250), 500);
+        assert_eq!(next_shutdown_poll_delay_ms(500), SHUTDOWN_POLL_CAP_MS);
+        assert_eq!(next_shutdown_poll_delay_ms(u64::MAX), SHUTDOWN_POLL_CAP_MS);
     }
 
     #[test]

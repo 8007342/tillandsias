@@ -105,16 +105,10 @@ extract_ready_packets() {
   if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
     pbin="${TILLANDSIAS_PLAN_BIN}"
   else
-    for candidate in \
-      "$HOME/.local/bin/tillandsias-plan" \
-      "/usr/local/bin/tillandsias-plan" \
-      "/usr/bin/tillandsias-plan" \
-      "$(pwd)/target/release/tillandsias-plan"; do
-      if [ -x "$candidate" ]; then
-        pbin="$candidate"
-        break
-      fi
-    done
+    # Order 721-nyev: resolve by EXECUTION through the shared probe rather
+    # than by the executable bit, which lies across the Windows/WSL boundary.
+    . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+    pbin="$(resolve_plan_binary || true)"
   fi
   if [ -z "$pbin" ]; then
     log "ERROR: tillandsias-plan binary not found — cannot read the FOLDED ledger (fragment-only ready packets would be missed). Install it (build.sh) or set TILLANDSIAS_PLAN_BIN."

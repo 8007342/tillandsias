@@ -130,8 +130,13 @@ pub fn probe_pty_input_state(master_fd: std::os::fd::RawFd) -> InputState {
     probe_process_group(pgrp)
 }
 
+// `std::os::fd::RawFd` does not exist on Windows, and this crate is compiled on
+// every host. Take the underlying `i32` (which is exactly what RawFd is on
+// unix) so the stub has no unix-only path in its signature. Caught by
+// ./build.sh --check on Windows after the Linux build had been green for two
+// cycles -- a reminder that "it compiles in WSL" is not "it compiles".
 #[cfg(not(target_os = "linux"))]
-pub fn probe_pty_input_state(_master_fd: std::os::fd::RawFd) -> InputState {
+pub fn probe_pty_input_state(_master_fd: i32) -> InputState {
     // The crate builds on every host; the guest it describes is always Linux.
     // Returning Unknown rather than #[cfg]-ing the caller keeps one code path.
     InputState::Unknown

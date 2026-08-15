@@ -105,7 +105,28 @@ mo_full_host() {
         printf '%s' 'forge'
         return 0
     fi
-    printf '%s' "$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+    # `hostname -s` is a GNU/BSD spelling. MSYS/Git Bash on Windows ships a
+    # hostname that REJECTS -s ("unknown option -- s") and there is no
+    # /etc/hostname, so the -s form returned empty and `record` refused with
+    # "cannot determine host label" on every Windows host — locking this host
+    # out of the attestation ledger entirely (measured 2026-08-15).
+    #
+    # Fall back to bare `hostname` and strip any domain ourselves, which is all
+    # -s does. Lowercased for a stable filename either way.
+    local h=""
+    h="$(hostname -s 2>/dev/null || true)"
+    [ -n "$h" ] || h="$(hostname 2>/dev/null || true)"
+    # Last resort before giving up: the kernel's own view. Some environments
+    # ship no hostname(1) at all.
+    [ -n "$h" ] || h="$(uname -n 2>/dev/null || true)"
+    [ -n "$h" ] || { [ -r /etc/hostname ] && read -r h < /etc/hostname; }
+    # Strip the domain and lowercase with BASH BUILTINS, not cut/tr. The
+    # external form resolved correctly when run by hand and returned EMPTY
+    # under ./build.sh --check, which is the difference between a helper that
+    # works and one that works where you tested it. Builtins have no PATH
+    # sensitivity, so this cannot depend on the caller's environment.
+    h="${h%%.*}"
+    printf '%s' "${h,,}"
     return 0
 }
 

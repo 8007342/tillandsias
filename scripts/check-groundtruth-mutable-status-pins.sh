@@ -30,10 +30,9 @@ cd "$REPO_ROOT" || exit 2
 # resolved against the LIVE ledger, so the fixture cites real packet ids).
 GT_DIR="${1:-openspec/litmus-tests/groundtruth}"
 
-_bin=""
-for cand in "target/release/tillandsias-plan" "target/debug/tillandsias-plan"; do
-    [ -x "$cand" ] && { _bin="$cand"; break; }
-done
+# Order 721-nyev: resolve by execution, not by the executable bit.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+_bin="$(resolve_plan_binary || true)"
 if [ -z "$_bin" ]; then
     echo "ok:groundtruth-status-pins:0 live-checked"
     echo "  note: tillandsias-plan not built — groundtruth status-pin guard skipped" >&2

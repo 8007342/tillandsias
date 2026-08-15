@@ -41397,6 +41397,97 @@ plan_index:
         - the tray's fallback timer stops firing while the push subscription is healthy, and resumes on drop
         - a measurement records idle wakeups/second before and after for both guest and tray — the claim 'near-zero at idle' must be evidenced, not asserted
       events:
+        - type: verified
+          ts: "2026-08-15T02:48:33Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            GUEST HALF DONE, event-driven, measured at ~0.03 wakeups/s. And this cycle nearly shipped a guest that killed itself every 30 seconds — caught by the measurement refusing to report, not by review.
+
+            FINAL MEASUREMENTS on a live idle guest, no client attached:
+              baseline (as filed)                          79 ctx / 20s   ~4    wakeups/s
+              after both sites 690-xeda NAMES              80 ctx / 20s   ~4    wakeups/s  (no change)
+              after the unnamed shutdown-wait cap 250ms->1s 20 ctx / 20s   ~1    wakeups/s
+              after making the shutdown wait EVENT-DRIVEN   3 ctx / 90s   ~0.03 wakeups/s
+            That is ~120x off the baseline, and it satisfies this packet's outcome — an idle VM with no attached client approaching zero periodic wakeups.
+
+            NO NEW DEPENDENCY WAS NEEDED. My previous event said a truly event-driven wait required signal-hook-tokio and was therefore a dependency decision. That was WRONG: the workspace already sets tokio features = ["full"], so tokio::signal::unix was available the whole time. Correcting it here because the earlier note would have parked this work behind a decision that did not exist.
+
+            signal_hook's flag registration STAYS. Other readers (the tray phase watcher, the vsock waiters) consume that AtomicBool, and two registrations for one signal is exactly the situation where assuming the other handler still runs would be a silent correctness bet — so the tokio path sets the flag itself.
+
+            wake_shutdown_waiters() is BACK, and this time it has a real caller: the signal edge wakes the vsock waiters, so those two sites are now genuinely event-driven rather than 30s-backstopped. Last cycle I deleted the same helper as decorative because nothing could call it. That was right then and it is right that it returns now — the difference is an event source that exists.
+
+            THE NEAR-MISS, recorded because the shape matters more than the fix:
+            The first version stored terminated=true after ANY select arm, backstop included. The guest therefore decided it had been terminated 30 seconds after boot and shut down — cleanly, exit code 0, so Restart=on-failure would not even bring it back. The journal says it plainly: "Consumed 2.808s CPU time over 30.085s wall clock time" followed by "Graceful shutdown completed".
+
+            It was caught because an idle measurement reported a BEAUTIFUL ZERO — 0 context switches in 20s — and the follow-up measurement script refused with MEASUREMENT-INVALID when systemctl returned MainPID=0. The zero was real; it was the wakeup count of a dead process. A number that flatters the change is exactly when to check what produced it. I had already written that guard into the script for unrelated reasons and it is the only reason this did not ship.
+
+            VERIFICATION NOW, all measured after the fix:
+              same pid after 90s (spans the 30s backstop three times) -> the self-termination is gone
+              3 context switches in that 90s window, service active throughout
+              vsock listener accepts (socat VSOCK-CONNECT:1:42420 -> 0)
+              SIGTERM stop latency 0 ms — the event path is prompt, which was the whole risk of rewiring it
+              host --diagnose exit 0, reachable=True phase=Ready podman_ready=True
+
+            REMAINING on this packet: the 30s podman shell-out and the 2s/15s/500ms ticks in main.rs (now the largest guest items, though the measurement says what is left is already ~0.03/s), and ALL macOS/host sites (vz.rs, transport_macos.rs, action_host.rs) plus criterion 4's tray half — none verifiable from this host.
+        - type: progress
+          ts: "2026-08-15T01:49:14Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            GUEST HALF MEASURED AND REDUCED 4x. And the measurement overturned the packet: the two sites this packet NAMES cost essentially nothing, while an unnamed one accounted for almost all of it.
+
+            MEASURED ON A LIVE IDLE GUEST, no client attached, 20s windows of
+            voluntary+nonvoluntary context switches from /proc/<pid>/status:
+
+              baseline (as filed)                          79 / 20s  -> ~4 wakeups/s
+              after fixing BOTH named vsock sites          80 / 20s  -> ~4 wakeups/s   (NO CHANGE)
+              after fixing the unnamed shutdown-wait cap   20 / 20s  -> ~1 wakeup/s    (4x)
+
+            THE UNNAMED SITE: wait_for_shutdown_signal in main.rs backs off to a 250 ms cap
+            and then stays there. Its own doc comment says "This loop is only reached during
+            shutdown. It is not on the hot path" — the opposite of what it does. It is what
+            AWAITS shutdown, so it runs from startup to termination, at 4 Hz, for the life
+            of every VM. Raised the cap to 1 s: a 4x reduction that keeps termination
+            prompt.
+
+            WHY NOT 30 s THERE: that cap IS the SIGTERM response latency.
+            signal_hook::flag::register writes the atomic from a C signal handler, so no
+            Rust code path can wake a waiter — the delay between the signal arriving and
+            this loop noticing is exactly the cap. 30 s would trade wakeups for a shutdown
+            that looks hung.
+
+            CRITERION 1 (the two named sites) IS DONE, and they were real even though they
+            were not the cost:
+              * vsock_server.rs watch_shutdown_and_mark_stopping — 250 ms sleep loop, now
+                parked on a Notify.
+              * vsock_server.rs serve_listener — the accept() call raced a 250 ms timer
+                purely to re-read the flag; now it parks in accept() and is woken by the
+                shutdown signal.
+            Both keep a 30 s backstop and re-read the AtomicBool on every wake, so the flag
+            stays the source of truth. That backstop is REQUIRED, not cautious: the same
+            signal_hook fact above means a pure `notified().await` would hang shutdown
+            forever on SIGTERM. I designed the backstop before finding that out and the
+            evidence arrived afterwards.
+
+            NO REGRESSION: guest service active, vsock listener still accepts
+            (socat VSOCK-CONNECT:1:42420 -> exit 0), and the host's --diagnose returns
+            exit 0 with reachable=True phase=Ready podman_ready=True guest=0.4.260812.1.
+
+            REMAINING on this packet, untouched:
+              * the 30 s podman shell-out (main.rs:12237) and the 2 s / 15 s / 500 ms ticks
+                — the next-largest guest items now that the 4 Hz source is gone;
+              * ALL macOS/host sites (vz.rs:1494, transport_macos.rs:383,
+                action_host.rs:2835) — not verifiable from this host;
+              * criterion 4's TRAY half of the before/after measurement.
+            A truly event-driven shutdown wait needs async signal delivery
+            (signal-hook-tokio), which is a dependency decision rather than a tuning one.
+
+            THE LESSON WORTH KEEPING: this packet's criterion 4 — "the claim near-zero at
+            idle must be evidenced, not asserted" — is the only reason the real cost was
+            found. Fixing the named sites and stopping would have produced a plausible
+            commit, a true claim that two polls were removed, and no change whatsoever to
+            idle wakeups.
         - type: filed
           ts: "2026-08-11T23:45:20Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z
@@ -44326,6 +44417,62 @@ plan_index:
         - The check is red before the conversion and green after — demonstrate both, so it is proven to be able to fail.
         - 'NEGATIVE CONTROL: plan-binary-probe.sh itself, and any script legitimately naming the path in a comment or a message, do not trip the check.'
       events:
+        - type: verified
+          ts: "2026-08-15T00:48:09Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE. All nine sites converted, the gate is wired into ./build.sh --check, and it is proven able to fail.
+
+            SITES CONVERTED (the eight this packet counted, plus one it did not):
+              check-fragment-status-loss.sh, check-groundtruth-mutable-status-pins.sh,
+              reclaim-stranded-claims.sh, cycle-metrics.sh (two loops), delegate-outcome.sh,
+              drain-queue.sh, hooks/pre-push-local-gate.sh, release-preflight.sh
+              + check-pickup-role-grammar.sh, which was ALREADY .exe-aware and therefore
+                correct, but hand-rolled — a private copy of a rule that lives in one place.
+                Converting it lets the gate be a simple invariant rather than a heuristic
+                carrying an exception table, which 727-kmks warns against.
+
+            THE DEGRADATION WAS REAL AND MEASURABLE, not theoretical. Two cycle-metrics
+            lines were blind on this host and are now correct:
+              before -> plan: packets=- ready=- plan_bin=absent
+              after  -> plan: packets=860 ready=303 plan_bin=./target/release/tillandsias-plan.exe
+              before -> expert_accuracy: deferred source=litmus:expert-groundtruth-harness
+              after  -> expert_accuracy: pass=20 total=20 rate=100% source=groundtruth-rung1
+            The expert-accuracy line is the sharper one: the harness could grade all along.
+            GRADE_BIN simply never resolved, so the metric reported "deferred" — an honest-
+            looking word for a measurement that was silently unavailable. Nobody would have
+            questioned it.
+
+            THE WORST SITE was hooks/pre-push-local-gate.sh, and it deserves naming: its
+            `[[ -x target/release/tillandsias-plan ]]` test PASSES on the Linux ELF, after
+            which the lane ran a validation that could not execute and reported on evidence
+            it never gathered. A gate vouching for a check it did not perform is worse than
+            an absent gate.
+
+            THE GATE: scripts/check-plan-binary-probe-usage.sh, wired into ./build.sh
+            --check. Verdict grammar ok:plan-binary-probe-usage:<eligible> of <scanned>
+            scanned / violation:...
+              RED BEFORE / GREEN AFTER, demonstrated rather than asserted: reconstructing
+              the pre-sweep form of release-preflight.sh turned it red naming that exact
+              file; restoring returned it green. The current tree reads
+              "1 eligible of 243 scanned".
+              It reports BOTH numbers deliberately. "1 checked" reads as "it only looked at
+              one file" when it means "one file mentions the path and is compliant" — the
+              same misreading-a-number-for-a-verdict shape this whole class is about.
+              It also strips comments and message-emitting lines before matching, so it
+              cannot flag its own explanatory comment — the "gate that greps its own
+              comment" antipattern 601-462g names, one level up.
+
+            DELIBERATELY NO ALLOW-LIST. The fix for every real site is the same single
+            line, so no exception table should be necessary; if a genuine exception ever
+            appears, that is a signal to reconsider the rule rather than to weaken it.
+
+            VERIFIED by running the converted scripts, not by syntax-checking them:
+              check-fragment-status-loss -> ok:no-fragment-status-loss:23 checked
+              check-groundtruth-mutable-status-pins -> ok:groundtruth-status-pins:3 live-checked
+              check-pickup-role-grammar -> pickup-role: total=851 canonical=823 ...
+              ./build.sh --check -> "Plan-binary probe usage check passed", gate stamp recorded
         - type: filed
           ts: "2026-08-13T19:25:00Z"
           host: windows
@@ -45679,6 +45826,30 @@ plan_index:
         the same mistake one level up. The audit's output is a classification and
         a set of executable checks on the rewritten steps.
       events:
+        - type: progress
+          ts: "2026-08-14T23:39:33Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            FIRST RUNBOOK CLASSIFIED, and the format the other eight can be filled into is established: plan/audits/external-gate-classification.yaml.
+
+            WHY meta-orchestration FIRST: it is the runbook this loop executes hourly, so its sites were classified by EXECUTION rather than by reading — most of them roughly twenty times across a night of cycles, with the exit code observed directly each time. That is the strongest evidence available for this class and it was already in hand.
+
+            RESULT — 14 sites: 9 safe, 4 advisory (by design and documented), 2 rewritten.
+
+            THE USEFUL FINDING IS THE SHAPE, not the count: meta-orchestration scores well precisely because it has been hardened continuously — most of its typed verdicts were added by packets in this same milestone over the last week. The runbook the loop runs hourly is NOT where the remaining risk is. Exactly one site still misreports, and only off-host: check-windows-only-sources-verified.sh, whose stamp cannot cross a host boundary (736-28m7 / 738-3pft, already filed, and it held a release yesterday).
+
+            Two sites are worth calling out because they LOOK unsafe to anyone auditing exit codes alone:
+              * e2e-preflight.sh eligibility always exits 0 — but the verdict is the string (`eligible` / `skip:<reason>`) and the runbook branches on that, not the code. Recorded so a future auditor does not "fix" it into failing.
+              * check-opsx-generated-dirt.sh returns exit 4 for `ok:clean-tree`, a documented distinct code. It reads like a bug from the caller's side and is not.
+
+            METHOD, and it is deliberate: hand-classified by execution, not pattern-matched. This packet forbids a grep-based gate because 601-462g's own problem statement names "a freshness gate that greps its own comment" as a sibling defect — a pattern-matcher over runbook TEXT would be the same mistake one level up. Measured: grepping meta-orchestration for command substitutions returns mostly PROSE (documentation lines about `git rev-parse`), not steps that execute it. A grep would have produced 21 "sites" of which most are sentences.
+
+            COMMITTED AS DATA, per this packet's fourth exit criterion, so a later cycle DIFFS it rather than re-reading nine runbooks, and a newly added gate site shows up as an absent row.
+
+            REMAINING: 8 runbooks, 66 sites, listed in the file with their counts. merge-to-main-and-release (24) is the largest and already has two instances fixed — one by me under 601-462g, one by linux — so it is the most likely to hold more.
+
+            NOT DONE THIS CYCLE, honestly: the other eight. Classifying by execution is what made this one trustworthy, and I cannot execute the macOS or release runbooks from here. Whoever takes those should say which method they used per runbook — reading is weaker evidence than running, and the file should not pretend otherwise.
         - type: filed
           ts: "2026-08-13T23:40:00Z"
           host: windows

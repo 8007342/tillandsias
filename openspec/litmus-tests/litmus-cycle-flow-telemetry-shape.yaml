@@ -67,6 +67,18 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: emit survives unwritable log"
 
+  - step: "a RETRIED finalization replaces its cycle's record instead of appending a second one"
+    # 682-epud. Retries are not random -- they happen on the cycles that went
+    # wrong -- so duplicate records add cycle-count from the worst cases while
+    # diluting the per-cycle averages. Measured on windows 2026-08-15: one cycle
+    # wrote three records and the reporter said cycles=8 over six real cycles.
+    # The fixture also pins that the LATER record wins (a retry runs after more
+    # work), that a same-cycle-id row on another host is untouched, and that
+    # omitting cycle= warns rather than silently bucketing.
+    command: "scripts/test-cycle-flow-emit-idempotency.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:cycle-flow-emit-idempotency:7"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"
@@ -80,6 +92,7 @@ failure_modes:
   - "the flow: line reports the last row or call volume instead of a rolling average"
   - "overhead_ratio computed as something other than total-commits-per-total-completed"
   - "an unwritable flow log path fails the cycle it was measuring"
+  - "a retried finalization appends a duplicate record, so the metric is corrupted by the act of measuring"
 
 rollback:
   on_failure: "inspect scripts/cycle-metrics.sh --emit-flow emitter and the flow: reporting block for grammar or arithmetic drift"

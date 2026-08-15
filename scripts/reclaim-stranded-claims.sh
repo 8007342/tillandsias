@@ -57,10 +57,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
 command -v jq >/dev/null 2>&1 || { echo "summary: candidates=0 reclaimed=0 mode=refused-missing-jq"; exit 1; }
-PLAN=""
-for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
-    [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
-done
+# Order 721-nyev: resolve by EXECUTION through the shared probe. The old loop
+# took the first candidate with an executable bit, which on a shared
+# Windows/WSL checkout selects the Linux ELF sitting beside the runnable .exe.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary || true)"
 [ -n "$PLAN" ] || { echo "summary: candidates=0 reclaimed=0 mode=refused-no-plan-binary"; exit 1; }
 
 [ -n "$NOW_EPOCH" ] || NOW_EPOCH="$(date -u +%s)"
