@@ -1867,6 +1867,31 @@ fn refresh_vault_tls_secrets(certs_dir: &std::path::Path, debug: bool) -> Result
     )
 }
 
+/// The `--volume` argument that persists Vault's file audit device (order
+/// 749-8iw4, design T9).
+///
+/// Extracted so the CONTRACT is testable without podman (order 753-ii5f). The
+/// first pin for this fix was five greps over the source, and an in-forge review
+/// pointed out the obvious hole: a refactor can keep every grep green while
+/// persistence breaks — most plausibly by moving the host directory somewhere
+/// the container's `vault` user cannot write, since `vault audit list` reports a
+/// healthy device either way. That blindness IS the original defect (V12); a
+/// gate that cannot see it is not pinning the fix.
+///
+/// Three things are load-bearing and each has a test below:
+///   * the destination is exactly `/vault/audit` — where
+///     `images/vault/entrypoint.sh` enables the file device;
+///   * the mount carries `:U`, because a userns mapping shift would otherwise
+///     leave it owned by a uid `vault` cannot write, and an audit device that
+///     cannot write is FATAL to Vault (every request fails once nothing can
+///     record it);
+///   * the host side is the caller's directory verbatim, so a change to
+///     `init_cache_dir()` shows up as a changed argument rather than silently
+///     relocating the records.
+fn vault_audit_volume_arg(host_dir: &std::path::Path) -> String {
+    format!("{}:/vault/audit:U", host_dir.display())
+}
+
 fn canonical_vault_launch_tag(image_tag: &str) -> Result<&str, String> {
     let digest = image_tag
         .strip_prefix("localhost/tillandsias-vault:sha256-")
@@ -2104,7 +2129,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         .join("vault-audit");
     std::fs::create_dir_all(&vault_audit_dir)
         .map_err(|e| format!("failed to create vault audit dir: {}", e))?;
-    let audit_volume_arg = format!("{}:/vault/audit:U", vault_audit_dir.display());
+    let audit_volume_arg = vault_audit_volume_arg(&vault_audit_dir);
     let mut run_args: Vec<String> = vec![
         "run".into(),
         "-d".into(),
@@ -4705,6 +4730,53 @@ mod tests {
         assert_eq!(APPROLE_TOKEN_TTL_SECS, 3_600);
         // 24h ceiling matches the spec's max_ttl guidance.
         assert_eq!(APPROLE_TOKEN_MAX_TTL_SECS, 86_400);
+    }
+
+    // -----------------------------------------------------------------------
+    // Order 749-8iw4 / 753-ii5f — the audit volume contract, testable without podman
+    // -----------------------------------------------------------------------
+    #[test]
+    fn audit_volume_targets_the_path_the_entrypoint_writes_to() {
+        // images/vault/entrypoint.sh enables a file audit device at
+        // /vault/audit/audit.json. If the destination here drifts, the device
+        // writes to a container layer again and dies on recreate — while
+        // `vault audit list` keeps reporting it healthy. That is V12 exactly.
+        let arg = vault_audit_volume_arg(std::path::Path::new(
+            "/home/u/.cache/tillandsias/vault-audit",
+        ));
+        assert!(
+            arg.contains(":/vault/audit:"),
+            "audit volume must target /vault/audit, got {arg}"
+        );
+    }
+
+    #[test]
+    fn audit_volume_is_relabelled_for_userns_drift() {
+        // Without :U a userns mapping shift leaves the directory owned by a uid
+        // `vault` cannot write. An audit device that cannot write is fatal to
+        // Vault: every request fails once nothing can record it.
+        let arg = vault_audit_volume_arg(std::path::Path::new("/tmp/x"));
+        assert!(arg.ends_with(":U"), "audit volume must carry :U, got {arg}");
+    }
+
+    #[test]
+    fn audit_volume_uses_the_supplied_host_dir_verbatim() {
+        // Pins the host side to the caller's directory, so a change to
+        // init_cache_dir() surfaces as a changed argument instead of silently
+        // relocating the audit records somewhere unwritable.
+        let arg = vault_audit_volume_arg(std::path::Path::new("/some/where/vault-audit"));
+        assert_eq!(arg, "/some/where/vault-audit:/vault/audit:U");
+    }
+
+    #[test]
+    fn audit_volume_is_distinct_from_the_data_volume() {
+        // A single mount cannot serve both: /vault/data holds Vault's storage
+        // and /vault/audit holds the audit log. Collapsing them would make the
+        // grep-level pins pass while persistence semantics changed.
+        let audit = vault_audit_volume_arg(std::path::Path::new("/c/vault-audit"));
+        let data = format!("{}:/vault/data:U", "/c/vault-data");
+        assert_ne!(audit, data);
+        assert!(!audit.contains("/vault/data"));
     }
 
     #[test]

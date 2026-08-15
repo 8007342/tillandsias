@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: vault-audit-litmus-pins-construction-not-behavior
+    event:
+      type: note
+      ts: "2026-08-15T04:21:17Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        SELF-INFLICTED, worth recording: the first draft of the shadowing step grepped the WHOLE file and reported 3 mounts, because the unit tests added in the same change assert on the very string it counts. A pin that cannot tell code from text about code — the exact class 752-pst5 was filed for, and the third instance tonight. Now bounded to non-test code by stopping the awk at the test module.
