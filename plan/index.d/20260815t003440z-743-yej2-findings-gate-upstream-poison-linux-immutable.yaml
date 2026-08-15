@@ -1,0 +1,71 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+# Attack/verification run by BigPickle in the forge, 2026-08-15T00:34Z.
+# Empirical proof: reproduced against a throwaway repo with a real bare remote.
+
+packets:
+  - packet_id: findings-gate-trusts-upstream-without-proving-it-is-remote
+    order: 743-yej2
+    release_target: forge-local-experts-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "@{upstream} is trusted without verifying it is a REMOTE-tracking ref — a local branch that already contains the finding commits reports ok:no-findings while the finding exists only on container-local refs"
+    deliverable: "the unpushed comparison must resolve against a ref the container cannot own alone (verify the upstream is refs/remotes/**, or diff against refs/remotes/origin/<branch> when it exists)"
+    pickup_role: linux
+    capability_tags: [forge, plan, fail-loud, ephemerality, adversarial-review]
+    estimated_hours: 2
+    context: |
+      Attack on scripts/check-forge-findings-persisted.sh (order 741-3y48).
+      The gate's "unpushed" check resolves the remote as:
+
+          if git rev-parse --verify --quiet "@{upstream}"; then remote_ref="@{upstream}"
+          elif refs/remotes/origin/$branch exists; then remote_ref="refs/remotes/origin/$branch"
+
+      `@{upstream}` is accepted UNCONDITIONALLY. Git allows the upstream to be
+      ANY ref — including a local branch. `git branch --set-upstream-to=<local>
+      (or -u <local>)` succeeds with a warning, and after that the gate compares
+      HEAD against a ref that lives on the same ephemeral filesystem.
+
+      EMPIRICAL (throwaway repo, real bare remote, gate at HEAD):
+          git branch local-sink HEAD          # local branch already CONTAINS the finding commit
+          git branch --set-upstream-to=local-sink
+          scripts/check-forge-findings-persisted.sh   # -> ok:no-findings rc=0
+          git ls-tree origin/linux-next plan/index.d/ | grep <finding>  # -> nothing
+
+      The finding is committed, the tree is clean, and the gate is green while
+      the commit is reachable ONLY from local refs (HEAD, refs/heads/local-sink)
+      — every one of which dies with the container. The local branch does not
+      even need to be ahead: pointing upstream at ANY local ref that already
+      contains the commits zeroes the ahead count. This is exactly the class
+      the gate exists for ("catches what git status cannot: a COMMITTED
+      fragment that was never pushed") and it walks straight through it.
+
+      RELATED, lower severity: with a committed finding on a detached HEAD, or
+      on a branch with no upstream and no origin/<branch> ref, the gate prints
+      `skip:no-remote-ref` rc=3 — a non-refusal. The doc frames skip as "a fresh
+      checkout with no remote and no findings", but the code fires it even when
+      there IS something to lose. A wrapper that treats `skip:` as "nothing to
+      check" waves the loss through.
+    exit_criteria:
+      - "The unpushed comparison never runs against a ref that the container alone can create or advance; a local-branch upstream must not silence the gate."
+      - "A committed finding on a detached HEAD or an upstream-less branch with committed findings FAILS (unpersisted) rather than skip:no-remote-ref."
+      - "The negative control still holds: a clean cycle prints ok:no-findings."
+    notes: |
+      The fix should prefer refs/remotes/origin/<branch> when it exists and only
+      fall back to @{upstream} after asserting it is a refs/remotes/** ref; a
+      poisoned upstream is one `git branch -u` away for any agent that creates a
+      topic branch.
+    events:
+      - type: filed
+        ts: "2026-08-15T00:34:40Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
+        summary: >
+          End-to-end proof run for 741-3y48. Reproduced a second
+          green-while-losing-work verdict on the gate: pointing @{upstream} at a
+          local branch that already contains the finding commit makes the gate
+          print ok:no-findings rc=0 while the finding is reachable only from
+          container-local refs. Also documented skip:no-remote-ref firing on
+          committed findings under a detached HEAD / upstream-less branch.

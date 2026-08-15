@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+# Attack/verification run by BigPickle in the forge, 2026-08-15T00:34Z.
+# Empirical proof: measured in the running forge, not argued.
+
+packets:
+  - packet_id: startup-context-ephemeral-section-not-live-in-running-image
+    order: 743-y5wh
+    release_target: forge-local-experts-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "The 741-3y48 warning lives in the checkout's lib-common.sh but the RUNNING image (baked 2026-08-09) generated this launch's .forge-startup-context.md without it — in-forge agents can still miss the gate"
+    deliverable: "an image rebuild that carries the section (or a startup-context regeneration step that re-injects it per launch from the checkout), plus a miss-surface audit"
+    pickup_role: linux
+    capability_tags: [forge, plan, fail-loud, ephemerality, image]
+    estimated_hours: 1
+    context: |
+      Delivery-gap finding on order 741-3y48's mitigation. Commit 02b1482c adds
+      a "THIS CHECKOUT IS EPHEMERAL — a finding you do not PUSH is a finding
+      you destroyed" section to the startup-context template in
+      images/default/lib-common.sh (inject_startup_context, heredoc around
+      line 3776). But the template is IMAGE content, and the running forge's
+      startup context is written by the image-baked generator:
+
+          /usr/local/lib/tillandsias/lib-common.sh   (baked 2026-08-09 18:36)
+            grep -c 'THIS CHECKOUT IS EPHEMERAL'    -> 0
+          images/default/lib-common.sh (checkout @ 8bf752ff)
+            grep -c 'THIS CHECKOUT IS EPHEMERAL'    -> 1
+
+      Measured this launch: .forge-startup-context.md (generated
+      2026-08-15T00:30Z) contains no EPHEMERAL section — it jumps from "Pick up
+      work using the /meta-orchestration skill" straight to "## Skills". The
+      section is a heredoc literal with no conditionals, so the file can only
+      lack it because the generator that ran was the image-baked (pre-fix) one.
+
+      The startup context is the ONE surface every in-forge agent reads before
+      anything else (AGENTS.md: "If .forge-startup-context.md exists in the
+      repository root, you are inside a Tillandsias forge container — read it
+      for live infrastructure state"). While the image predates the fix, the
+      primary warning surface for that launch is silently absent. The only
+      other surface naming the gate today is the meta-orchestration skill's
+      Finalization step — an agent that runs a review loop without a full
+      Finalization (the exact shape of the 2026-08-15 loss this fix repairs)
+      never sees it anywhere.
+    exit_criteria:
+      - "A launch whose image predates the fix still ends up with the EPHEMERAL section in its .forge-startup-context.md (regenerate from the checkout, or fail the launch)."
+      - "The section is reachable by an agent that reads the startup context AND by an agent that reads no skill at all."
+      - "AGENTS.md (the checkout-level bootstrap) names the gate or points to the startup context section, so a checkout-pinned reader cannot miss it."
+    notes: |
+      This is the same family as plan/issues/forge-litmus-failures-pre-existing-2026-07-24.md
+      ("host tree may have been updated without rebuilding the image"). The fix
+      should not depend on image-bake timing for a fail-loud guard: regenerate
+      the startup context from the checkout at launch (the entrypoints already
+      call inject_startup_context) or gate the launch on the checkout template
+      version.
+    events:
+      - type: filed
+        ts: "2026-08-15T00:34:40Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
+        summary: >
+          Measured in the running forge: the checkout template carries the
+          EPHEMERAL section but the image-baked generator (2026-08-09) wrote
+          this launch's .forge-startup-context.md without it. Agents whose only
+          bootstrap is the startup context (per AGENTS.md) still never see the
+          gate; the skill is the only live surface.
