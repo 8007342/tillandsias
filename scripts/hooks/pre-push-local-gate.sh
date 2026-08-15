@@ -166,9 +166,16 @@ attempt_plan_only_lane() {
     # pushed YAML blob; tillandsias-plan check validates fragment schema by
     # folding every fragment (so it also parses them — which is why yq-absent
     # may delegate to it, but BOTH absent is a refusal, never a pass).
-    local have_yq=0 have_plan=0
+    local have_yq=0 have_plan=0 plan_bin=""
     command -v yq >/dev/null 2>&1 && have_yq=1
-    [[ -x target/release/tillandsias-plan ]] && have_plan=1
+    # Order 721-nyev: `-x` is a CLAIM; running the binary is evidence. On a
+    # shared Windows/WSL checkout that test passes on a Linux ELF sitting
+    # beside the runnable .exe, after which this lane reported on a validation
+    # it never actually performed -- a gate vouching for evidence it did not
+    # gather, which is the worst shape in this file.
+    . "$(dirname "${BASH_SOURCE[0]}")/../plan-binary-probe.sh"
+    plan_bin="$(resolve_plan_binary || true)"
+    [[ -n "$plan_bin" ]] && have_plan=1
     if [[ $have_yq -eq 0 && $have_plan -eq 0 ]]; then
         echo "plan-only lane: not applicable — neither yq nor target/release/tillandsias-plan is available to validate fragments (fail closed; full gate required)" >&2
         return 1
@@ -224,7 +231,7 @@ attempt_plan_only_lane() {
     # the skip honestly (yq already parsed every blob above).
     local out
     if [[ $have_plan -eq 1 ]]; then
-        if ! out="$(target/release/tillandsias-plan check 2>&1)"; then
+        if ! out="$("$plan_bin" check 2>&1)"; then
             echo "plan-only lane: validation FAILED — tillandsias-plan check refused the folded ledger (full gate required):" >&2
             echo "$out" | head -6 | sed 's/^/  /' >&2
             return 1

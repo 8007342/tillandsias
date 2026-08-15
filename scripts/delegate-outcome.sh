@@ -149,7 +149,11 @@ file_silent_death() { # file_silent_death <id> <order> [--dry-run]
     echo "would-file:died-without-outcome $id $order"
     return 0
   fi
-  next_order="$(./target/release/tillandsias-plan next-order 2>/dev/null | head -1)"
+  # Order 721-nyev: a hardcoded target/ path selects the Linux ELF on a shared
+  # Windows/WSL checkout. Resolve by execution.
+  . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+  _pbin="$(resolve_plan_binary || true)"
+  next_order="$([ -n "$_pbin" ] && "$_pbin" next-order 2>/dev/null | head -1)"
   [ -n "$next_order" ] || die "sweep: could not allocate next-order to file silent death"
   ts="$(date -u +%Y%m%dt%H%M%sz)"
   realts="$(now_iso)"

@@ -326,11 +326,12 @@ fi
 # defers to the litmus gate rather than reporting a number the tooling did not
 # produce.
 GRADE_BIN=""
-for cand in "$REPO_ROOT/target/release/tillandsias-plan" \
-            "$HOME/.local/bin/tillandsias-plan" \
-            "$(command -v tillandsias-plan 2>/dev/null || true)"; do
-    if [ -n "$cand" ] && [ -x "$cand" ]; then GRADE_BIN="$cand"; break; fi
-done
+# Order 721-nyev: resolve by EXECUTION. The old loop trusted the executable
+# bit, which on a shared Windows/WSL checkout picks the Linux ELF over the
+# runnable .exe -- this line reported plan_bin=absent on a host where the
+# binary was present and working.
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
+GRADE_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harness'
 if [ -n "$GRADE_BIN" ]; then
     gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
@@ -433,11 +434,12 @@ fi
 # ── plan ────────────────────────────────────────────────────────────────────
 packets="-"; ready="-"; blocked="-"; pending="-"
 PLAN_BIN=""
-for cand in "$REPO_ROOT/target/release/tillandsias-plan" \
-            "$HOME/.local/bin/tillandsias-plan" \
-            "$(command -v tillandsias-plan 2>/dev/null || true)"; do
-    if [ -n "$cand" ] && [ -x "$cand" ]; then PLAN_BIN="$cand"; break; fi
-done
+# Order 721-nyev: resolve by EXECUTION. The old loop trusted the executable
+# bit, which on a shared Windows/WSL checkout picks the Linux ELF over the
+# runnable .exe -- this line reported plan_bin=absent on a host where the
+# binary was present and working.
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
+PLAN_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 if [ -n "$PLAN_BIN" ]; then
     chk="$("$PLAN_BIN" check 2>/dev/null | tail -1 || true)"
     case "$chk" in

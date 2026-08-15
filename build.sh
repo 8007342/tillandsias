@@ -1057,6 +1057,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a no-op, because `packets:` is a G-Set. 11 of 21 fragment-recorded
     # completions were being thrown away when this was found, and the batch
     # selector was handing already-completed packets back out as next work.
+    # Order 721-nyev. Every script that RUNS tillandsias-plan must resolve it
+    # through the shared probe, never a hardcoded target/ path. 704-zcgi
+    # centralised that probe on the reasoning that fixing instances is not
+    # enough, and four more instances appeared afterwards anyway — each written
+    # by someone with no reason to know the probe existed. This makes the rule
+    # enforceable rather than remembered.
+    _step "Checking plan-binary resolution goes through the shared probe (721-nyev)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-binary-probe-usage.sh" 2>&1; then
+        _error "a script runs tillandsias-plan from a hardcoded target/ path — an executable bit is a claim, running the binary is evidence"
+        exit 1
+    fi
+    _info "Plan-binary probe usage check passed"
+
     _step "Checking for fragment status transitions the fold discards..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
         _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"

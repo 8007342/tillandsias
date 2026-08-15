@@ -44266,6 +44266,62 @@ plan_index:
         - The check is red before the conversion and green after — demonstrate both, so it is proven to be able to fail.
         - 'NEGATIVE CONTROL: plan-binary-probe.sh itself, and any script legitimately naming the path in a comment or a message, do not trip the check.'
       events:
+        - type: verified
+          ts: "2026-08-15T00:48:09Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            DONE. All nine sites converted, the gate is wired into ./build.sh --check, and it is proven able to fail.
+
+            SITES CONVERTED (the eight this packet counted, plus one it did not):
+              check-fragment-status-loss.sh, check-groundtruth-mutable-status-pins.sh,
+              reclaim-stranded-claims.sh, cycle-metrics.sh (two loops), delegate-outcome.sh,
+              drain-queue.sh, hooks/pre-push-local-gate.sh, release-preflight.sh
+              + check-pickup-role-grammar.sh, which was ALREADY .exe-aware and therefore
+                correct, but hand-rolled — a private copy of a rule that lives in one place.
+                Converting it lets the gate be a simple invariant rather than a heuristic
+                carrying an exception table, which 727-kmks warns against.
+
+            THE DEGRADATION WAS REAL AND MEASURABLE, not theoretical. Two cycle-metrics
+            lines were blind on this host and are now correct:
+              before -> plan: packets=- ready=- plan_bin=absent
+              after  -> plan: packets=860 ready=303 plan_bin=./target/release/tillandsias-plan.exe
+              before -> expert_accuracy: deferred source=litmus:expert-groundtruth-harness
+              after  -> expert_accuracy: pass=20 total=20 rate=100% source=groundtruth-rung1
+            The expert-accuracy line is the sharper one: the harness could grade all along.
+            GRADE_BIN simply never resolved, so the metric reported "deferred" — an honest-
+            looking word for a measurement that was silently unavailable. Nobody would have
+            questioned it.
+
+            THE WORST SITE was hooks/pre-push-local-gate.sh, and it deserves naming: its
+            `[[ -x target/release/tillandsias-plan ]]` test PASSES on the Linux ELF, after
+            which the lane ran a validation that could not execute and reported on evidence
+            it never gathered. A gate vouching for a check it did not perform is worse than
+            an absent gate.
+
+            THE GATE: scripts/check-plan-binary-probe-usage.sh, wired into ./build.sh
+            --check. Verdict grammar ok:plan-binary-probe-usage:<eligible> of <scanned>
+            scanned / violation:...
+              RED BEFORE / GREEN AFTER, demonstrated rather than asserted: reconstructing
+              the pre-sweep form of release-preflight.sh turned it red naming that exact
+              file; restoring returned it green. The current tree reads
+              "1 eligible of 243 scanned".
+              It reports BOTH numbers deliberately. "1 checked" reads as "it only looked at
+              one file" when it means "one file mentions the path and is compliant" — the
+              same misreading-a-number-for-a-verdict shape this whole class is about.
+              It also strips comments and message-emitting lines before matching, so it
+              cannot flag its own explanatory comment — the "gate that greps its own
+              comment" antipattern 601-462g names, one level up.
+
+            DELIBERATELY NO ALLOW-LIST. The fix for every real site is the same single
+            line, so no exception table should be necessary; if a genuine exception ever
+            appears, that is a signal to reconsider the rule rather than to weaken it.
+
+            VERIFIED by running the converted scripts, not by syntax-checking them:
+              check-fragment-status-loss -> ok:no-fragment-status-loss:23 checked
+              check-groundtruth-mutable-status-pins -> ok:groundtruth-status-pins:3 live-checked
+              check-pickup-role-grammar -> pickup-role: total=851 canonical=823 ...
+              ./build.sh --check -> "Plan-binary probe usage check passed", gate stamp recorded
         - type: filed
           ts: "2026-08-13T19:25:00Z"
           host: windows

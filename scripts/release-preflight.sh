@@ -110,8 +110,13 @@ fi
 # ── Gate 3: plan ledger integrity ──────────────────────────────────────────────
 # A release whose ledger does not parse cannot have a trustworthy provenance
 # trail. Cheap, local, and already compiled.
-if [[ -x target/release/tillandsias-plan ]]; then
-    if ! out="$(target/release/tillandsias-plan check 2>&1)"; then
+# Order 721-nyev: `-x` is a claim, running the binary is evidence. On a shared
+# Windows/WSL checkout the -x test passes on a Linux ELF that cannot execute,
+# so this gate reported on a check it never ran.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+_plan_bin="$(resolve_plan_binary || true)"
+if [[ -n "$_plan_bin" ]]; then
+    if ! out="$("$_plan_bin" check 2>&1)"; then
         fail "plan ledger check FAILED:"
         fail "$out"
         echo "blocked:plan-ledger-invalid"

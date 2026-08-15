@@ -111,12 +111,13 @@ else
     # active, internally consistent, and measuring a population the system does
     # not use. Reading the fold is not an optimization here, it is the only way
     # the number means anything.
-    PLAN=""
-    for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan \
-             ./target/release/tillandsias-plan.exe ./target/debug/tillandsias-plan.exe \
-             "$(command -v tillandsias-plan 2>/dev/null)"; do
-        [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
-    done
+    # Order 721-nyev: this list was already .exe-aware, which made it CORRECT
+    # but hand-rolled -- a private copy of a rule that lives in one place.
+    # Routed through the shared probe so there is exactly one definition of
+    # which tillandsias-plan a host can run, and so the sweep gate can be a
+    # simple invariant instead of a heuristic that knows about exceptions.
+    . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+    PLAN="$(resolve_plan_binary || true)"
     if [ -z "$PLAN" ]; then
         # Refuse rather than fall back to the raw grep. A fallback that silently
         # measures a different population is precisely what this script exists to

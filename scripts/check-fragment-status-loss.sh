@@ -38,10 +38,13 @@ cd "$ROOT" || exit 2
 FRAG_DIR="plan/index.d"
 [ -d "$FRAG_DIR" ] || { echo "ok:no-fragment-status-loss:0 checked"; exit 0; }
 
-PLAN=""
-for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
-    [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
-done
+# Order 721-nyev: resolve by EXECUTION through the shared probe. An
+# executable BIT is a claim; running the binary is evidence. On a shared
+# Windows/WSL checkout a WSL build leaves a Linux ELF at
+# target/release/tillandsias-plan beside the runnable .exe, and the old
+# first-match-on--x loop selected the ELF.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary || true)"
 [ -n "$PLAN" ] || { echo "violation:fragment-status-loss:0"; echo "  tillandsias-plan not built; cannot resolve the fold" >&2; exit 2; }
 
 # Every (packet_id, status) pair declared under a `packets:` list in any
