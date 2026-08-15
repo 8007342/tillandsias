@@ -93,20 +93,51 @@ present and the wire bound at t+15s.
 Same mistake as cause 1 in a different variable: verified where the dependency
 happened to already be satisfied.
 
-### Residue — not yet diagnosed
+### Cause 3 — the probe asserts a path the host never uses
 
-Final reading after the guest converged internally:
+With the wire reachable and `phase: Ready`, the readiness unit still sat in
+`activating`:
 
 ```
-guest_version   0.4.260815.1
-wire            {"reachable": false, "error": "VmStatusRequest: early eof"}
+vsock_loopback loaded: 0
+socat VSOCK-CONNECT:1:42420 -> E connect(… cid:1 …): Network is unreachable
 ```
 
-The host can now read the guest's version, so the wire opens — then the guest
-closes it mid-request. This is a *different* error from the
-`WSA_ERROR(10060)` timeout seen while the daemon was being killed every fifteen
-seconds, and it is a third problem. It has no packet yet and needs its own
-investigation before this tag can pass.
+CID 1 is `VMADDR_CID_LOCAL` and needs the `vsock_loopback` module. The host does
+not use that path — it arrives over hvsocket to the VM's own CID. So the probe
+reported the control wire down *while the control wire was working*: a false
+alarm about a healthy system, and the exact mirror of the defect 735-ewzp was
+filed for.
+
+Fixed and falsified by execution in all three states: module absent → loads it,
+reports `bound` (exit 0); transport up with a dead port → `NOT-BOUND` (exit 1);
+no loopback transport → `INDETERMINATE` (exit 2), explicitly stating it implies
+nothing about host reachability.
+
+### Correction — `VmStatusRequest: early eof` was not a defect
+
+An earlier revision of this report listed that error as a third, undiagnosed
+problem. It was transient: the guest was mid-restart when it was sampled. Held
+running deliberately instead of racing WSL's idle shutdown, the reading is:
+
+```
+distro_running True   guest_version 0.4.260815.1
+wire {"reachable": true, "phase": "Ready", "podman_ready": true, "error": null}
+```
+
+The `WSA_ERROR(10060)` timeout seen earlier was real and is explained by the
+daemon being killed every fifteen seconds by cause 1.
+
+## Current status of the tag
+
+The three causes above are fixed **in code**, and the wire has been observed
+`reachable: true, phase: Ready, podman_ready: true` on a guest whose units were
+edited by hand to match those fixes.
+
+That is **not** a passing smoke. This report's verdict stands at FAIL until a
+clean-room provision from a rebuilt installer is run and reaches a reachable
+wire without hand edits. 757-4hdt's first exit criterion covers exactly that
+and is still open.
 
 ## What this run does not establish
 

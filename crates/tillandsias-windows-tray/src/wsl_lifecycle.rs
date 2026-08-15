@@ -1586,22 +1586,49 @@ fi
         let ready_script = r#"#!/usr/bin/env bash
 set -uo pipefail
 PORT="${1:-42420}"
+
+# CID 1 is VMADDR_CID_LOCAL, and reaching it requires the vsock_loopback
+# module. A fresh guest does NOT have it loaded -- measured on a clean-room
+# provision of v0.4.260815.1 -- and without it this probe reported the control
+# wire down while the HOST was talking to the guest perfectly happily
+# (phase=Ready, podman_ready=true). The host arrives over hvsocket to the VM's
+# own CID and never touches loopback, so the probe was asserting a path nobody
+# depends on and failing a healthy system (order 757-4hdt).
+modprobe vsock_loopback 2>/dev/null || true
+
+# The two failure modes are DISTINGUISHABLE and must not be conflated:
+#   ENETUNREACH "Network is unreachable"  -> no loopback transport; this probe
+#                                            cannot see the property from here
+#   ECONNREFUSED "Connection refused"     -> transport fine, nothing listening,
+#                                            which is exactly the defect
+#                                            735-ewzp exists to catch
+# Reporting the first as NOT-BOUND is a false alarm about a working system;
+# reporting it as OK would be the always-passes probe 735-ewzp replaced.
+# So it gets its own verdict and its own exit code.
 DEADLINE=$(( $(date +%s) + ${TILLANDSIAS_READY_TIMEOUT:-900} ))
+last=""
 while :; do
   # The CONNECT address must come FIRST. Written the other way round --
   # `socat -u /dev/null VSOCK-CONNECT:1:$PORT` -- socat reaches EOF on
   # /dev/null and exits 0 BEFORE the connection can fail, so the probe passes
   # against a dead port. That form was measured returning 0 for both a live
   # and a dead port: a readiness check that always succeeds, which is worse
-  # than the signal it replaces. Verified discriminating: exit 0 on a bound
-  # 42420, exit 1 on an unbound 42999.
-  if timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>/dev/null; then
+  # than the signal it replaces.
+  last="$(timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>&1)" && {
     echo "[tillandsias-ready] vsock_listener=bound port=${PORT}"
     exit 0
-  fi
+  }
   if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the process is running but nothing accepts on the control-wire port; the host cannot reach this guest" >&2
-    exit 1
+    case "$last" in
+      *"Network is unreachable"*)
+        echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- no vsock loopback transport in this guest (vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which uses hvsocket. Check the host side with: tillandsias-tray --diagnose --json" >&2
+        exit 2
+        ;;
+      *)
+        echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
+        exit 1
+        ;;
+    esac
   fi
   sleep 1
 done
@@ -2608,6 +2635,26 @@ mod tests {
         assert!(
             source.contains("VSOCK-CONNECT:1:"),
             "readiness must connect to the port (CID 1 = VMADDR_CID_LOCAL), not test /dev/vsock"
+        );
+        // ORDER 757-4hdt: CID 1 needs the vsock_loopback module, which a fresh
+        // guest does NOT have loaded. Without these three properties the probe
+        // reported the wire down while the host was talking to the guest
+        // happily (phase=Ready, podman_ready=true) — a false alarm about a
+        // working system. Verified by execution in a live guest: module absent
+        // -> loads it and reports bound (exit 0); transport up with nothing
+        // listening -> NOT-BOUND (exit 1); no loopback transport at all ->
+        // INDETERMINATE (exit 2).
+        assert!(
+            source.contains("modprobe vsock_loopback"),
+            "the probe must load the transport CID 1 depends on before judging"
+        );
+        assert!(
+            source.contains("vsock_listener=INDETERMINATE"),
+            "an absent loopback transport must get its own verdict, not be              reported as an unbound listener"
+        );
+        assert!(
+            source.contains("Network is unreachable"),
+            "the probe must branch on ENETUNREACH (no transport) versus a              refused connection (nothing listening) — conflating them is how it              failed a healthy system"
         );
         // The connect address must be socat's FIRST argument. With /dev/null
         // first, socat hits EOF and exits 0 before the connection can fail --
