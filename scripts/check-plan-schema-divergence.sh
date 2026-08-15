@@ -26,7 +26,26 @@
 # ----------------------------
 # Rewritten from ruby to yq (the forge container has no ruby, but documents yq
 # present; python3 is forbidden under tlatoani_hard_no_python).
-
+#
+# ORDER 746-* (2026-08-15, same day): THAT REWRITE MOVED THE BREAKAGE, IT DID
+# NOT REMOVE IT. Measured across the three environments this gate actually runs
+# in:
+#
+#                     yq        ruby      jq
+#   forge             present   ABSENT    present
+#   host (Silverblue) ABSENT    ABSENT    present
+#   builder toolbox   ABSENT    present   present
+#
+# Ruby broke the forge. yq then broke the host AND the builder toolbox, where
+# `./build.sh --check` runs on every Linux cycle — the pre-push gate started
+# refusing with `blocked:index-load-failed: … yq: commande introuvable`, so a
+# green tree could not be pushed at all. Neither interpreter is universal, and
+# picking one and hoping is what produced two outages in one day.
+#
+# So: TRY EACH IN TURN, and fail with a verdict that names what is missing
+# instead of a parser error that reads like a corrupt ledger. jq is the only
+# tool present everywhere but cannot read YAML, so it is not a candidate here —
+# a universal reader is the real fix and is filed separately.
 set -eu
 
 INDEX="${1:-plan/index.yaml}"
@@ -37,15 +56,35 @@ if [ ! -f "$INDEX" ] || [ ! -f "$SCHEMA" ]; then
   exit 1
 fi
 
+# read_seq <file> <yq-path> <ruby-expr> -> space-joined sequence on stdout.
+# Returns non-zero and leaves the reader's message on stdout when the file will
+# not load, so the caller can report it verbatim.
+read_seq() {
+  _rs_file="$1"; _rs_yq="$2"; _rs_rb="$3"
+  if command -v yq >/dev/null 2>&1; then
+    yq eval "$_rs_yq" "$_rs_file" 2>&1
+    return $?
+  fi
+  if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -e "$_rs_rb" "$_rs_file" 2>&1
+    return $?
+  fi
+  echo "no YAML reader on PATH (tried yq, ruby)"
+  return 2
+}
+
+RB_INDEX='d=YAML.safe_load_file(ARGV[0], permitted_classes: [Time, Date]); puts((d.dig("plan_index","default_status_values") || []).join(" "))'
+RB_SCHEMA='d=YAML.safe_load_file(ARGV[0], permitted_classes: [Time, Date]); puts((d["statuses"] || []).join(" "))'
+
 # Load index
-if ! idx_raw=$(yq eval '.plan_index.default_status_values // [] | join(" ")' "$INDEX" 2>&1); then
+if ! idx_raw=$(read_seq "$INDEX" '.plan_index.default_status_values // [] | join(" ")' "$RB_INDEX"); then
   first_err=$(printf '%s\n' "$idx_raw" | head -n 1)
   echo "blocked:index-load-failed: $INDEX: $first_err"
   exit 1
 fi
 
 # Load schema
-if ! sch_raw=$(yq eval '.statuses // [] | join(" ")' "$SCHEMA" 2>&1); then
+if ! sch_raw=$(read_seq "$SCHEMA" '.statuses // [] | join(" ")' "$RB_SCHEMA"); then
   first_err=$(printf '%s\n' "$sch_raw" | head -n 1)
   echo "blocked:index-load-failed: $SCHEMA: $first_err"
   exit 1
