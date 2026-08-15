@@ -234,7 +234,18 @@ critical_path:
     # path now answers with a well-formed `unsupported` envelope — which is
     # correct behaviour and MUST STILL FAIL THE GRADE, because a server that
     # refuses every question is not a server that returns the correct packets.
-    command: "PB=$(cat /tmp/.litmus-394d-bin); d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'degraded\\n' > \"$d/state/state\"; printf 'not-built\\n' > \"$d/state/reason\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"burndown of forge-local-experts-milestone\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394d-doa.json; rm -rf \"$d\"; \"$PB\" grade --root . --case plan-active-release-experts-milestone --envelope /tmp/.litmus-394d-doa.json > /tmp/.litmus-394d-doa.txt 2>&1 && { echo 'FAIL: a dead-on-arrival MCP server was graded GREEN'; exit 1; }; grep -q '^FAIL  plan-active-release-experts-milestone' /tmp/.litmus-394d-doa.txt && grep -q 'confidence: expected Exact, got Unsupported' /tmp/.litmus-394d-doa.txt && echo 'ok: dead-on-arrival-server-is-red'"
+    #
+    # DEAD-ON-ARRIVAL MUST BE A CHECKOUT WITH NO BUILT ARTIFACT, not just a
+    # scratch HOME. Since 682-z5h8 ($PWD-first index resolution) and the
+    # 721-nyev resolve-by-execution direction, the wrapper legitimately falls
+    # back to <index-root>/target/release/tillandsias-plan — the binary this
+    # litmus builds in its first step — so a scratch HOME alone left the server
+    # alive and the grade GREEN, which read as "DOA was graded green".
+    # TILLANDSIAS_PLAN_INDEX is pinned to a scratch COPY of the ledger whose
+    # root has no target/: the server is genuinely dead, and if the wrapper
+    # ever resurrects it here the exact cited answer makes the grade pass and
+    # this step goes red, not vacuously green.
+    command: "PB=$(cat /tmp/.litmus-394d-bin); d=$(mktemp -d); mkdir -p \"$d/state\" \"$d/plan\"; cp plan/index.yaml \"$d/plan/index.yaml\"; printf 'degraded\\n' > \"$d/state/state\"; printf 'not-built\\n' > \"$d/state/reason\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"burndown of forge-local-experts-milestone\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" TILLANDSIAS_PLAN_INDEX=\"$d/plan/index.yaml\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > /tmp/.litmus-394d-doa.json; rm -rf \"$d\"; \"$PB\" grade --root . --case plan-active-release-experts-milestone --envelope /tmp/.litmus-394d-doa.json > /tmp/.litmus-394d-doa.txt 2>&1 && { echo 'FAIL: a dead-on-arrival MCP server was graded GREEN'; exit 1; }; grep -q '^FAIL  plan-active-release-experts-milestone' /tmp/.litmus-394d-doa.txt && grep -q 'confidence: expected Exact, got Unsupported' /tmp/.litmus-394d-doa.txt && echo 'ok: dead-on-arrival-server-is-red'"
     timeout_ms: 180000
     expected_behavior: "ok: dead-on-arrival-server-is-red"
 

@@ -24,7 +24,8 @@
 #   - Four JSON schema-pin tests (diagnose_report_json_keys_locked,
 #     diagnose_report_none_pin_serialises_as_null,
 #     diagnose_report_none_bytes_serialise_as_null,
-#     exit_code_provisioned_zero_degraded_two).
+#     exit_code_separates_healthy_converging_and_degraded — renamed
+#     from exit_code_provisioned_zero_degraded_two by order 735-2g5i).
 #   - install-macos.sh uses bash `set +e` instead of cmd.exe redirect
 #     (Windows pwsh-pipe stdio-drop issue is windows-specific).
 
@@ -59,8 +60,11 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
+  # Order 735-2g5i renamed the test from exit_code_provisioned_zero_degraded_two
+  # to exit_code_separates_healthy_converging_and_degraded (exit 3 CONVERGING is
+  # now its own verdict); the symmetric litmus accepts either name by design.
   - step: "exit-code contract test attached"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-macos-tray/src/diagnose.rs"
+    command: "grep -F 'fn exit_code_separates_healthy_converging_and_degraded' crates/tillandsias-macos-tray/src/diagnose.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

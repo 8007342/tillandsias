@@ -105,10 +105,13 @@ critical_path:
   # constraint), so it must at least SAY it. The fixture proves the report can
   # go stale on a windows-only edit, stays quiet on a portable one, and names
   # the file rather than picking a culprit.
+  # (6/6) → (7/7): windows commit 0d24c11a2 (orders 664-frz0, 716-f5kc) added
+  # fixture case 7 — the stamp REFUSES without a transcript and refuses an
+  # undeclared red — a negative control, so the count moved by getting stronger.
   - step: "the gate reports whether Windows-only sources were actually compiled"
     command: "bash scripts/test-windows-only-sources-verified.sh"
     timeout_ms: 60000
-    expected_behavior: "PASS: windows-only source verification report (6/6)"
+    expected_behavior: "PASS: windows-only source verification report (7/7)"
 
   - step: "build.sh --check carries that report rather than staying silent"
     command: "grep -F 'check-windows-only-sources-verified.sh' build.sh && grep -F 'this gate did NOT read them' build.sh && echo 'ok: the gate reports the stub substitution'"
