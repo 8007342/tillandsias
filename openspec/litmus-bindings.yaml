@@ -454,6 +454,7 @@ specs:
   - litmus:forge-gitdir-staging-chown
   - litmus:git-mirror-relay-token-expiry
   - litmus:mirror-sshd-posture-shape
+  - litmus:forge-upstream-auth-gate
   coverage_ratio: 83
   last_verified: '2026-07-23'
 - spec_id: github-credential-health
@@ -587,6 +588,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:methodology-accountability-shape
+  - litmus:agent-identity-canonical-source-shape
   - litmus:no-duplicate-rust-item-defs
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
