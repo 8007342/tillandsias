@@ -41,6 +41,11 @@ scenario() {
     git -C "$repo" config user.email f@example.invalid
     git -C "$repo" config user.name fixture
     cp "$CHECK" "$repo/scripts/check-script-exec-bits.sh"
+    # The checker gained a helper file (758-jw6v). A fixture that copies the
+    # script but not its dependency exercises the missing-dependency path and
+    # calls it a pass — which is how 752-8hqx wasted a diagnosis.
+    mkdir -p "$repo/scripts/lib"
+    cp "$ROOT/scripts/lib/exec-bits-filter.awk" "$repo/scripts/lib/"
     printf '#!/usr/bin/env bash\necho target\n' > "$repo/scripts/target.sh"
     printf '#!/usr/bin/env bash\n%s\n' "$caller_body" > "$repo/scripts/caller.sh"
     git -C "$repo" add -A >/dev/null 2>&1
@@ -87,9 +92,35 @@ scenario "command-substitution-refused" 1 "violation:script-not-executable:1" \
 scenario "after-pipe-refused" 1 "violation:script-not-executable:1" \
     'echo hi | scripts/target.sh'
 
+# 7. The checker must REFUSE when its filter helper is absent, not report a
+# clean tree it never examined. Without this the perf split could regress into
+# a checker that always passes.
+repo="$work/missing-helper"
+rm -rf "$repo"; mkdir -p "$repo/scripts"
+git -C "$repo" init -q -b main
+git -C "$repo" config user.email f@example.invalid
+git -C "$repo" config user.name fixture
+cp "$CHECK" "$repo/scripts/check-script-exec-bits.sh"
+printf '#!/usr/bin/env bash
+echo target
+' > "$repo/scripts/target.sh"
+printf '#!/usr/bin/env bash
+scripts/target.sh
+' > "$repo/scripts/caller.sh"
+git -C "$repo" add -A >/dev/null 2>&1
+git -C "$repo" update-index --chmod=-x scripts/target.sh
+rc=0
+out="$(cd "$repo" && bash scripts/check-script-exec-bits.sh 2>/dev/null)" || rc=$?
+if [ "$rc" = 2 ] && printf '%s' "$out" | grep -q "violation:script-not-executable:0"; then
+    echo "PASS  missing-helper-refuses"
+else
+    echo "FAIL  missing-helper-refuses: want rc=2 with a violation line, got rc=$rc [$out]"
+    failures+=("missing-helper-refuses")
+fi
+
 if [ "${#failures[@]}" -gt 0 ]; then
     echo "FAIL: ${#failures[@]} scenario(s): ${failures[*]}"
     exit 1
 fi
-echo "ok:script-exec-bits-fixture:6"
+echo "ok:script-exec-bits-fixture:7"
 exit 0

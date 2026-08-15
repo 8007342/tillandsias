@@ -47,7 +47,7 @@ critical_path:
     # must stay non-executable, so ")" is permitted only after "$(".
     command: "scripts/test-script-exec-bits.sh 2>&1 | tail -1"
     timeout_ms: 60000
-    expected_behavior: "ok:script-exec-bits-fixture:6"
+    expected_behavior: "ok:script-exec-bits-fixture:7"
 
 observability:
   traces:
