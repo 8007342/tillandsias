@@ -17174,6 +17174,19 @@ plan_index:
       exit_criteria:
         - "with a stubbed /api/tags serving 3 models, the machine line is exactly ONE line with inference_models=3 and inference_warm a comma-separated csv; the extended litmus case is committed and was demonstrated red against the pre-fix code"
 
+      events:
+        - type: completed
+          ts: "2026-08-15T02:01:51Z"
+          agent_id: "bigpickle-forge-20260815"
+          host: forge
+          summary: |
+            completed: litmus:inference-model-preload-policy extended with the 3-model step (commit 06f6330f). Evidence: seeded-RED vs pre-fix quoted loop (reproduced 'READY (models=1, warm=<m1>\n<m2>\n<m3>)', machine line broken across 6 lines); GREEN vs current code (lines=2, inference_models=3, comma csv); full instant inference-container suite 7/7 PASS incl. STEP 15/23
+        - type: claim
+          ts: "2026-08-15T02:06:00Z"
+          agent_id: "bigpickle-forge-20260815"
+          host: forge
+          summary: |
+            claim: extend litmus:inference-model-preload-policy with the 3-model case + seeded-red demo (order 532)
     - packet_id: forge-help-symlink-self-source-segfault
       order: 533
       desired_release: v0.5
