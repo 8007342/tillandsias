@@ -36884,6 +36884,12 @@ plan_index:
       notes: |
         Do NOT fix this by relaxing the VERSION guard. The guard is load-bearing: it exists because main's VERSION is the release identity and a platform branch must not move it. The defect is that a routine local build writes to a file under that guard's protection.
       events:
+        - type: note
+          ts: "2026-08-15T17:17:31Z"
+          agent_id: "linux-mutable-20260815-recovery"
+          host: linux_mutable
+          summary: |
+            Hit again 2026-08-15 on linux_mutable: ./build.sh --install bumped VERSION .1->.2 plus 4 crate manifests + Cargo.lock in the worktree mid-cycle; reverted as cycle-created build artifacts because committing a VERSION bump on linux-next is guardrail-forbidden and pushing it is hook-forbidden. The installed binary self-labels .2 while the tree says .1 — harmless under 702-griq content addressing, but the packet's design tension is unchanged.
         - ts: "2026-08-10T01:05:00Z"
           event: filed
           summary: |
