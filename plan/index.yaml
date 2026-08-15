@@ -38433,6 +38433,12 @@ plan_index:
       notes: |
         Assigned to linux because that lane is actively editing this script — it changed four times in six hours (--claimable-by, release scoping, entropy floor, order-645 urgent override). Landing a pool change from Windows in the same window invites a merge conflict or a double fix.
       events:
+        - type: note
+          ts: "2026-08-15T17:13:55Z"
+          agent_id: "linux-mutable-20260815-recovery"
+          host: linux_mutable
+          summary: |
+            Audit during the 2026-08-15 capability-filter work: this packet's stated cause is stale — since 632-retq the pool comes from select-rows, whose Rust implementation applies dependencies_are_clear() (unresolvable ids count as blocking) and inspect_lease() in-binary. Remaining open scope is essentially the second exit criterion: the two-sided litmus (no batch packet with unmet depends_on; none under another host's live lease). Host-capability filtering was implemented separately in the same script (2026-08-15) and only SUBTRACTS from the pool, preserving this packet's batch-subset-of-next closure.
         - ts: "2026-08-10T11:55:00Z"
           event: filed
           summary: |
