@@ -1,5 +1,5 @@
 #!/bin/sh
-# @trace spec:git-mirror-service, spec:meta-orchestration
+# @trace spec:git-mirror-service
 # probe-upstream-auth <bare-mirror-dir>
 #
 # Order 756-2jnj (child of order 424): NON-MUTATING upstream WRITE-authorization

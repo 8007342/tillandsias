@@ -63,7 +63,7 @@ fi
 # regardless of the host's ambient gh keyring state (used by
 # litmus:credential-channel-check-shape).
 
-# @trace spec:git-mirror-service, spec:meta-orchestration
+# @trace spec:git-mirror-service
 # Order 756-2jnj: consume the mirror-published upstream write-authorization
 # verdict. The mirror's probe (images/git/probe-upstream-auth.sh) runs a
 # non-mutating `git push --dry-run` against the upstream with the mirror's

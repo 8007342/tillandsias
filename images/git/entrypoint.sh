@@ -285,7 +285,7 @@ RECONCILE_HEADS="${RECONCILE_HEADS:-/usr/local/share/git-service/reconcile-expor
 MIRROR_RECONCILE_INTERVAL="${MIRROR_RECONCILE_INTERVAL:-120}"
 MIRROR_RECONCILER_PID=""
 
-# @trace spec:git-mirror-service, spec:meta-orchestration
+# @trace spec:git-mirror-service
 # Order 756-2jnj: non-mutating upstream WRITE-authorization probe. Publishes
 # refs/tillandsias/upstream-auth/<state>/<epoch> in each mirror so the forge
 # credential guard (scripts/check-credential-channel.sh) can require BOTH
@@ -516,7 +516,7 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     fi
 done
 
-# @trace spec:git-mirror-service, spec:meta-orchestration
+# @trace spec:git-mirror-service
 # Order 756-2jnj: publish the FIRST upstream write-authorization verdict now,
 # so a forge that launches right after this mirror does not read an absent
 # (= blocked) verdict for a whole reconcile interval. This loop runs for EVERY
