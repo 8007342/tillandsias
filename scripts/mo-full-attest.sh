@@ -105,7 +105,18 @@ mo_full_host() {
         printf '%s' 'forge'
         return 0
     fi
-    printf '%s' "$(hostname -s 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)"
+    # `hostname -s` is a GNU/BSD spelling. MSYS/Git Bash on Windows ships a
+    # hostname that REJECTS -s ("unknown option -- s") and there is no
+    # /etc/hostname, so the -s form returned empty and `record` refused with
+    # "cannot determine host label" on every Windows host — locking this host
+    # out of the attestation ledger entirely (measured 2026-08-15).
+    #
+    # Fall back to bare `hostname` and strip any domain ourselves, which is all
+    # -s does. Lowercased for a stable filename either way.
+    local h
+    h="$(hostname -s 2>/dev/null || true)"
+    [ -n "$h" ] || h="$(hostname 2>/dev/null || true)"
+    printf '%s' "$(printf '%s' "$h" | cut -d. -f1 | tr '[:upper:]' '[:lower:]')"
     return 0
 }
 
