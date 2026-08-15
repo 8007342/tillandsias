@@ -48055,6 +48055,23 @@ plan_index:
         both harder to see. The only reason they appear together here is that both
         were measured in the same hour.
       events:
+        - type: note
+          ts: "2026-08-15T06:40:24Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            OUTAGE OBSERVED, recorded per the operator's standing instruction that an MCP failure is a project event and not ignorable infrastructure.
+
+            WHEN: 2026-08-15T06:40Z, mid-cycle, on windows.
+            WHAT: both servers dropped at once. The harness reported all 14 forge-plan tools and all 13 project-info tools as no longer available -- expert_capability, methodology_ask, methodology_path, plan_answer, plan_blocked_by, plan_blocked_on, plan_burndown, plan_check, plan_closure, plan_next, plan_query, plan_ready, plan_status, spec_answer, and the whole project-info set.
+
+            WHAT IT COST THIS CYCLE: nothing measurable, and the reason is worth recording because it is the useful part. Every plan read and write in this cycle went through ./target/release/tillandsias-plan.exe directly -- status, next-order, append-event, check. The BINARY is unaffected by the MCP wrapper's health; only the tool-call surface went away. So the fallback was free here.
+
+            That is not a general reassurance. It held because this cycle's ledger work was deterministic-tier (status lookups, order minting, event appends) which the CLI serves identically. A cycle needing the semantic tier would have had no fallback at all, since that tier only exists behind the wrapper.
+
+            BOTH SERVERS AT ONCE points at a shared cause -- the wrapper host or the harness connection, not two independent expert crashes. This packet is already `verified` for making outages visible; what this occurrence adds is a data point about the shape: simultaneous, total, and silent from the plan's point of view until an agent happens to notice a tool list shrink. Nothing in the loop detected it. I noticed because the harness told me, not because any check did.
+
+            NOT re-opening the packet on this evidence. The recording mechanism worked -- this event exists. If a later cycle finds the same simultaneous-total shape again, that repetition is the argument for a health probe that runs per cycle rather than relying on an agent reading a tool list.
         - type: filed
           ts: "2026-08-14T21:22:00Z"
           host: windows

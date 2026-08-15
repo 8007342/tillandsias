@@ -1,0 +1,110 @@
+packets:
+  - packet_id: guest-readiness-probe-kills-the-healthy-daemon-on-a-cold-first-boot
+    order: 757-4hdt
+    status: in_progress
+    desired_release: v0.5
+    priority: p0
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "The vsock readiness ExecStartPost has a 15s deadline; on a clean-room first boot the daemon needs MINUTES to bind, so systemd stops a healthy daemon and provisioning never completes"
+    deliverable: "a readiness assertion that cannot stop the process it is measuring"
+    pickup_role: windows
+    capability_tags: [windows, wsl, systemd, release, fail-loud]
+    estimated_hours: 3
+    context: |
+      MEASURED on windows 2026-08-15 by the published-release smoke of
+      v0.4.260815.1 — a clean-room install after `wsl --unregister tillandsias`.
+      This is a REGRESSION I SHIPPED: commit 9138147b4, order 735-ewzp, and it is
+      in the published tag.
+
+      THE INSTALL ITSELF PASSED. Pinned to the tag, fetched SHA256SUMS-windows,
+      verified the zip's sha256, reported
+      `tillandsias-tray 0.4.260815.1 (0548ee1f2)` — the tagged commit exactly.
+      Then provisioning failed:
+
+        ERROR WSL recipe provisioning failed err=wsl root sh exited exit code: 1
+        for: systemctl daemon-reload && systemctl enable --now podman.socket
+        tillandsias-headless-fetch.service tillandsias-headless.service
+
+      Enabling each unit separately isolates it:
+
+        OK      podman.socket
+        OK      tillandsias-headless-fetch.service
+        FAILED  tillandsias-headless.service
+
+      And `systemctl status` names the exact control process:
+
+        Process: 738 ExecStartPre=.../headless-preflight.sh (code=exited, status=0/SUCCESS)
+        Process: 742 ExecStartPost=.../headless-ready.sh 42420 (code=exited, status=1/FAILURE)
+        Main PID: 740 (tillandsias-hea)
+        Active: deactivating (stop-sigterm) (Result: exit-code)
+
+      THE DAEMON WAS FINE. Main PID 740 was alive and working the whole time —
+      the journal shows it bootstrapping Vault (twelve policies loaded, approle,
+      kv2, audit, SSH CAs) and then:
+
+        [tillandsias] building image proxy (localhost/tillandsias-proxy:v0.4.260815.1,
+        digest_missing); this may take several minutes
+
+      headless-ready.sh gives it FIFTEEN SECONDS:
+
+        DEADLINE=$(( $(date +%s) + 15 ))
+
+      so it reports NOT-BOUND, exits 1, and because it is an ExecStartPost —
+      a control process — systemd stops the unit, killing the image build
+      mid-flight. Restart=on-failure brings it back, it starts the same
+      minutes-long work again, and the probe kills it again. Measured five
+      NOT-BOUND failures with the unit still `activating` and never converging.
+      A clean-room install of the published release cannot provision.
+
+      WHY MY OWN VERIFICATION MISSED IT, which is the part worth keeping. I
+      verified 735-ewzp against an ALREADY-PROVISIONED guest, where the images
+      were built and Vault was bootstrapped, so the daemon bound 42420 within a
+      second and a 15s deadline looked generous. The probe is only wrong on a
+      cold boot — the one state my testing never entered, and the exact state a
+      release smoke creates. "Verified where it was written" is a class this
+      milestone keeps filing; this is my own instance of it.
+
+      THE DESIGN ERROR UNDERNEATH THE NUMBER. Raising 15s to 600s would paper
+      over it: ExecStartPost BLOCKS activation for its whole duration, so a
+      generous deadline just means `systemctl enable --now` hangs for ten minutes
+      instead of failing in fifteen seconds. The real fault is that an assertion
+      about readiness was placed where FAILING IT STOPS THE SUBJECT. A probe that
+      can kill the healthy process it measures is not a check, it is a hazard —
+      and it is the mirror image of 735-ewzp's original complaint, which was a
+      probe that always passed. I replaced a check that could not fail with one
+      that could not be survived.
+    outcome: |
+      A cold-boot provision completes, and a genuinely unbound control wire is
+      still reported loudly rather than being assumed healthy.
+    exit_criteria:
+      - "A clean-room provision (wsl --unregister, then install from a published tag) reaches a reachable control wire, evidenced by the tray's --diagnose --json showing reachable=true, and by the run NOT containing a NOT-BOUND line."
+      - "The readiness assertion survives as a real, falsifiable signal: with the daemon running but nothing bound to 42420, something reports it. Demonstrate by pointing the probe at an unbound port and showing the failure surfaces."
+      - "Failing that assertion does NOT stop, restart, or otherwise disturb tillandsias-headless.service — proved by leaving it failing and showing the daemon's PID unchanged and its work still progressing."
+      - "735-ewzp's original defect stays fixed: the probe must still discriminate a bound port from an unbound one (that packet's whole point was a probe that exited 0 for both)."
+      - "NEGATIVE CONTROL for the warm path: a restart on an already-provisioned guest still comes up, and does not regress to the pre-735-ewzp behaviour of asserting only that /dev/vsock exists."
+    notes: |
+      Do NOT fix this by prefixing the ExecStartPost with `-`. That makes the
+      failure advisory and unobserved, which recreates 735-ewzp exactly — a
+      readiness check whose result nothing consumes.
+
+      The deeper option, and probably the right one eventually, is for the daemon
+      to bind the vsock listener BEFORE its long provisioning work rather than
+      after. Then a short deadline is both correct and meaningful. That is a
+      headless change with its own blast radius and should be measured, not
+      assumed, so it is not folded in here.
+
+      RELEASE IMPACT: v0.4.260815.1 is published as a prerelease. Promotion to
+      stable requires curl-install e2e PASS evidence naming the exact tag
+      (README, scripts/promote-stable.sh). This smoke is that evidence and it is
+      a FAIL, so the tag must not be promoted until this is fixed and the smoke
+      re-run.
+    events:
+      - type: filed
+        ts: "2026-08-15T07:10:00Z"
+        host: windows
+        summary: |
+          Filed and claimed in the same cycle that found it, from the published
+          release smoke the linux host queued as 738-yw6p item 3. The item was
+          waiting on the tag; the tag arrived this morning and the first
+          clean-room run of it failed on my own change.
