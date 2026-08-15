@@ -33,8 +33,18 @@
 #                       running endpoint costs one HTTP round trip.
 #
 # GRAMMAR (exactly one line on stdout)
-#   ok:cycle-preflight:<plan-verdict>:<inference-verdict>
+#   ok:cycle-preflight:<plan-verdict>:<inference-report>
 #   blocked:preflight:<component>:<detail>
+#
+# <inference-report> is ok:*, skip:*, degraded:<reason>, or unknown — never
+# blocked:*. Inference is advisory (see below), and on 2026-08-15 a failed
+# forge saw the ensure script's own gating verdict pass through verbatim:
+# `ok:cycle-preflight:rebuilt:blocked:install-failed:runtime-download`.
+# Embedding `blocked` inside an `ok` line is contradictory to every caller
+# that greps verdict grammars — it scares a grep for blocked:* and lies to a
+# grep asserting ok lines carry no gate words — so an advisory fault is
+# re-spelled `degraded:<reason>` here. The gating blocked:preflight:* verdicts
+# below are untouched.
 #
 # Exit 0 on ok, 1 on blocked. A blocked preflight means the cycle must not
 # start: it would be selecting work with an instrument it has not verified.
@@ -89,8 +99,17 @@ fi
 # keeps the windows-only source report advisory.
 inference_verdict="$(bash "$ROOT/scripts/dev-inference-ensure.sh" 2>/dev/null | tail -1)"
 case "$inference_verdict" in
-    ok:*) inference_verdict="${inference_verdict%%:*}:${inference_verdict#*:}" ;;
+    ok:* | skip:*) : ;;
+    # An advisory fault must not wear a gate word. dev-inference-ensure.sh
+    # speaks blocked:* for ITS callers; inside this ok line it is a report, so
+    # it is re-spelled degraded:<reason> (2026-08-15 failed-forge finding; the
+    # exit-0 semantics are unchanged).
+    blocked:*) inference_verdict="degraded:${inference_verdict#blocked:}" ;;
     "") inference_verdict="unknown" ;;
+    # Anything unrecognized is still only a report — carry it under degraded
+    # rather than letting arbitrary output shape the ok grammar. Whitespace is
+    # squashed to '-' so the verdict stays one greppable token.
+    *) inference_verdict="degraded:$(printf '%s' "$inference_verdict" | tr -s '[:space:]' '-' | cut -c1-80)" ;;
 esac
 
 echo "ok:cycle-preflight:${plan_verdict}:${inference_verdict}"
