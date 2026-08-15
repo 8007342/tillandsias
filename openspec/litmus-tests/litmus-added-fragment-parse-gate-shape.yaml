@@ -55,7 +55,7 @@ critical_path:
   - step: "NEGATIVE CONTROL: an unloadable index reports index-load-failed, NOT a vocabulary divergence (720-24u6)"
     # The two lists in this fixture are identical, so a gate that blamed
     # divergence would be naming a fault that provably is not there.
-    command: "d=$(mktemp -d); mkdir -p \"$d/plan\"; printf 'plan_index:\\n  default_status_values: [ready]\\nevents:\\n  - ts: 2026-08-12T15:31:54Z\\n' > \"$d/plan/index.yaml\"; printf 'statuses: [ready]\\n' > \"$d/plan/schema.yaml\"; out=$( cd \"$d\" && bash \"$OLDPWD/scripts/check-plan-schema-divergence.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^blocked:index-load-failed: ' && ! printf '%s' \"$out\" | grep -q 'status-vocab-diverges' && echo 'ok: load failure named honestly'"
+    command: "d=$(mktemp -d); mkdir -p \"$d/plan\"; printf 'plan_index:\\n  default_status_values: [ready\\n' > \"$d/plan/index.yaml\"; printf 'statuses: [ready]\\n' > \"$d/plan/schema.yaml\"; out=$( cd \"$d\" && bash \"$OLDPWD/scripts/check-plan-schema-divergence.sh\" 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" -ne 0 ] && printf '%s' \"$out\" | grep -q '^blocked:index-load-failed: ' && ! printf '%s' \"$out\" | grep -q 'status-vocab-diverges' && echo 'ok: load failure named honestly'"
     timeout_ms: 15000
     expected_behavior: "ok: load failure named honestly"
 

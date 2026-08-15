@@ -1,5 +1,6 @@
 #!/bin/sh
-# Plan/schema status vocabulary divergence check (order 440).
+# @trace order:744-agyy (order 440, order 720-24u6)
+# Plan/schema status vocabulary divergence check (order 440, 744-agyy).
 # Exits 0 if plan/index.yaml default_status_values and plan/schema.yaml statuses
 # are identical. Emits a one-line verdict:
 #   ok:status-vocab-in-sync
@@ -20,35 +21,39 @@
 # A failing gate that names the wrong cause is worse than a silent one: it sends
 # the reader to diff two lists that already match. Load failure and divergence
 # are different facts and now get different verdicts.
+#
+# ORDER 744-agyy (2026-08-15):
+# ----------------------------
+# Rewritten from ruby to yq (the forge container has no ruby, but documents yq
+# present; python3 is forbidden under tlatoani_hard_no_python).
 
 set -eu
 
-INDEX="plan/index.yaml"
-SCHEMA="plan/schema.yaml"
+INDEX="${1:-plan/index.yaml}"
+SCHEMA="${2:-plan/schema.yaml}"
 
 if [ ! -f "$INDEX" ] || [ ! -f "$SCHEMA" ]; then
   echo "blocked:status-vocab-diverges: could not read $INDEX or $SCHEMA"
   exit 1
 fi
 
-# Rewritten from python3 (tlatoani_hard_no_python). Ruby is the methodology's
-# sanctioned YAML fallback and this script runs HOST-side, where ruby exists.
-ruby -ryaml -e '
-  def load_or_report(path)
-    YAML.load_file(path)
-  rescue => e
-    # One line, first line of the parser message only: a 20-line Psych backtrace
-    # buries the verdict the caller greps for.
-    puts "blocked:index-load-failed: #{path}: #{e.message.to_s.lines.first.to_s.strip}"
-    exit 1
-  end
-  idx = load_or_report(ARGV[0])
-  sch = load_or_report(ARGV[1])
-  idx_list = (idx["plan_index"] || {})["default_status_values"] || []
-  sch_list = sch["statuses"] || []
-  if idx_list != sch_list
-    puts "blocked:status-vocab-diverges: plan/index.yaml=(#{idx_list.join(" ")}) vs plan/schema.yaml=(#{sch_list.join(" ")})"
-    exit 1
-  end
-  puts "ok:status-vocab-in-sync"
-' "$INDEX" "$SCHEMA"
+# Load index
+if ! idx_raw=$(yq eval '.plan_index.default_status_values // [] | join(" ")' "$INDEX" 2>&1); then
+  first_err=$(printf '%s\n' "$idx_raw" | head -n 1)
+  echo "blocked:index-load-failed: $INDEX: $first_err"
+  exit 1
+fi
+
+# Load schema
+if ! sch_raw=$(yq eval '.statuses // [] | join(" ")' "$SCHEMA" 2>&1); then
+  first_err=$(printf '%s\n' "$sch_raw" | head -n 1)
+  echo "blocked:index-load-failed: $SCHEMA: $first_err"
+  exit 1
+fi
+
+if [ "$idx_raw" != "$sch_raw" ]; then
+  echo "blocked:status-vocab-diverges: $INDEX=($idx_raw) vs $SCHEMA=($sch_raw)"
+  exit 1
+fi
+
+echo "ok:status-vocab-in-sync"

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-check-hard-depends-on-ruby-that-the-forge-documents-absent
+    field: status
+    value: completed
+    ts: "2026-08-15T01:03:29Z"
+    host: forge
+
+events:
+  - packet_id: build-check-hard-depends-on-ruby-that-the-forge-documents-absent
+    event:
+      type: completed
+      ts: "2026-08-15T01:03:29Z"
+      host: forge
+      summary: >
+        status 'completed' with evidence_refs: litmus:added-fragment-parse-gate-shape 8/8 PASS; ./build.sh --check exit 0
+  - packet_id: build-check-hard-depends-on-ruby-that-the-forge-documents-absent
+    event:
+      type: note
+      ts: "2026-08-15T01:03:29Z"
+      host: forge
+      summary: >
+        check-plan-schema-divergence.sh rewritten from ruby to yq
