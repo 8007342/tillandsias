@@ -71,6 +71,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "compact",
     "dependencies-of",
     "expire-claims",
+    "fragment-terminal-events",
     "fragments",
     "grade",
     "loop-status",
@@ -128,6 +129,14 @@ const USAGE: &str = concat!(
     "           closure-evidence-check <fragment.yaml>\n",
     "                                     exit 1 if the fragment sets a closure rung\n",
     "                                     (completed/verified/done) with no evidence event (686-7qcm)\n",
+    "           fragment-terminal-events <fragment.yaml>\n",
+    "                                     ORDER 752-pst5. Print the packet_ids whose events block\n",
+    "                                     DECLARES a terminal `completed` event (inline packet\n",
+    "                                     `events:` or the top-level `events:` form), one per\n",
+    "                                     line, exit 0. A YAML parse bounds attribution to the\n",
+    "                                     events block, so PROSE that quotes the marker inside a\n",
+    "                                     block scalar is never read as a declaration. Backs the\n",
+    "                                     closure-event pass of check-fragment-status-loss.sh.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
@@ -2322,6 +2331,90 @@ fn main() {
                     "  A closure (completed/verified/done) must carry an event with evidence_refs (or type completed/verified/falsified). Use set-field --evidence, or add the event (686-7qcm)."
                 );
                 std::process::exit(1);
+            }
+        }
+        "fragment-terminal-events" => {
+            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.sh
+            // reads every fragment in plan/index.d and asks, per packet: does its
+            // events block DECLARE a terminal `completed` event? The shell's old
+            // answer was a line-grep with ad-hoc resets, and it could not tell an
+            // event declaration from PROSE that quotes the marker inside a block
+            // scalar — it invented a completion for packet 751-i9mb whose real
+            // event was `type: filed` (752-pst5). A YAML parse bounds attribution
+            // to the actual events block, so no indent heuristic can silently
+            // disable or widen the check.
+            //
+            // Prints one packet_id per line (sorted, deduplicated), nothing else
+            // on stdout, exit 0. An unparseable fragment is the sibling
+            // added-fragments-parse gate's job, so here it is a pass-through
+            // exactly as in closure-evidence-check.
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(_) => {
+                    eprintln!(
+                        "note: {path} did not parse — status-loss event pass skipped (see added-fragments-parse)"
+                    );
+                    return;
+                }
+            };
+            // A `declares` entry: the event carries `type: completed`, or nests
+            // `event: completed` / `event: {type: completed}` (the shapes the old
+            // awk reached via `/type: completed/ || /event: completed/`).
+            let declares_terminal = |event: &serde_yaml::Value| -> bool {
+                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
+                    return true;
+                }
+                if let Some(inner) = event.get("event")
+                    && (inner.as_str() == Some("completed")
+                        || inner.get("type").and_then(serde_yaml::Value::as_str)
+                            == Some("completed"))
+                {
+                    return true;
+                }
+                false
+            };
+            let mut ids: Vec<String> = Vec::new();
+            // Inline: packets: [{packet_id, events: [{type: completed, ...}]}]
+            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                for p in pkts {
+                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    let declares = p
+                        .get("events")
+                        .and_then(serde_yaml::Value::as_sequence)
+                        .is_some_and(|evs| evs.iter().any(declares_terminal));
+                    if declares {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if e.get("event").is_some_and(declares_terminal) {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
             }
         }
         "status" => {
