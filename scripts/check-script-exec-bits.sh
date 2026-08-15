@@ -61,8 +61,24 @@ while IFS= read -r entry; do
 
     # A BARE invocation: the path at the start of a command, not preceded by an
     # interpreter (`bash`/`sh`) and not sourced (`source` / `.`).
+    #
+    # TWO alternatives, not one, and the split is load-bearing (order 758-jw6v).
+    # The single pattern ended `([[:space:]"]|$)`, which cannot match
+    # `$(scripts/x.sh)` because the next character is `)`. So this checker could
+    # not see the invocation form that MOTIVATED it — its own header quotes
+    # `run_id="$(scripts/resolve-release-run.sh "${new_tag}")"` as the defect.
+    # Found by scripts/test-script-exec-bits.sh, which was written because a
+    # perf rewrite produced byte-identical output on a tree with zero
+    # violations, and identical-on-empty proves nothing.
+    #
+    # Simply adding `)` to the trailing class fixes the substitution case and
+    # breaks three others: `(` is already in the LEADING class, so `(path)`
+    # anywhere in PROSE starts matching. Measured — it flagged three comments,
+    # one of them naming plan-binary-probe.sh, a SOURCED library that must stay
+    # non-executable. That is the "gate that greps its own comment" shape
+    # 601-462g names. So `)` is allowed only after `$(`.
     hit="$(printf '%s\n' "$caller_files" \
-        | xargs -r grep -nE "(^|[;&|(]|\\\$\\()[[:space:]]*\"?${path}([[:space:]\"]|$)" 2>/dev/null \
+        | xargs -r grep -nE "((^|[;&|(])[[:space:]]*\"?${path}([[:space:]\"]|$))|(\\\$\\([[:space:]]*\"?${path}([[:space:]\")]|$))" 2>/dev/null \
         | grep -vE "(bash|sh|source|\.)[[:space:]]+\"?${path}" \
         | grep -v "^${path}:" \
         | head -1)"

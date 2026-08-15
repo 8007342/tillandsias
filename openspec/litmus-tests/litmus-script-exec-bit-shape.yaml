@@ -38,6 +38,17 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: tree clean"
 
+  - step: "the checker sees a command-substitution invocation, and does not flag prose"
+    # Order 758-jw6v. The single-pattern form ended ([[:space:]\"]|$), which
+    # cannot match $(scripts/x.sh) because the next character is ")" — so this
+    # checker could not see the invocation form named in its OWN header as the
+    # defect it exists for. Widening the class naively then flagged three
+    # COMMENTS containing "(scripts/x.sh)", one of them a sourced library that
+    # must stay non-executable, so ")" is permitted only after "$(".
+    command: "scripts/test-script-exec-bits.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:script-exec-bits-fixture:6"
+
 observability:
   traces:
     - "@trace spec:ci-release"
