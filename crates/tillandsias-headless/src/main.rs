@@ -13452,12 +13452,74 @@ pub(crate) fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, Stri
 }
 
 async fn wait_for_shutdown_signal(terminated: Arc<AtomicBool>) -> Result<(), String> {
-    let mut poll_delay_ms = 25_u64;
-    while !terminated.load(Ordering::SeqCst) {
-        tokio::time::sleep(std::time::Duration::from_millis(poll_delay_ms)).await;
-        poll_delay_ms = next_shutdown_poll_delay_ms(poll_delay_ms);
+    // ORDER 690-xeda, second pass: this is now EVENT-DRIVEN, not a poll.
+    //
+    // The previous form backed off to a cap and sat there re-reading an atomic
+    // — measured as the dominant idle wakeup source in the guest, 4/s at the
+    // old 250 ms cap and still 1/s after raising it. tokio already carries the
+    // `signal` feature (workspace tokio uses features = ["full"]), so real
+    // async signal delivery needs no new dependency; the earlier note that this
+    // required signal-hook-tokio was wrong.
+    //
+    // signal_hook's flag registration STAYS: several other readers (the tray
+    // phase watcher, the vsock waiters) consume that AtomicBool, and this
+    // function is not the only thing that must observe termination. But this
+    // path also sets the flag itself, so the flag is set even if tokio's
+    // sigaction handler displaces signal_hook's — two registrations for one
+    // signal is exactly the situation where assuming the other one still runs
+    // would be a silent correctness bet.
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm = signal(SignalKind::terminate())
+            .map_err(|e| format!("Failed to install SIGTERM listener: {e}"))?;
+        let mut sigint = signal(SignalKind::interrupt())
+            .map_err(|e| format!("Failed to install SIGINT listener: {e}"))?;
+        while !terminated.load(Ordering::SeqCst) {
+            // The backstop covers the window between the flag check and the
+            // select, and any path that sets the flag without a signal (a
+            // programmatic shutdown). It is long because the signal edge — not
+            // the timer — is what normally wakes this now.
+            // Set the flag ONLY on a real signal. The backstop arm must fall
+            // through and re-read it instead.
+            //
+            // The first version of this stored `true` after ANY arm, backstop
+            // included, so the guest decided it had been terminated 30 seconds
+            // after boot and shut down cleanly -- every 30 seconds, forever,
+            // with exit code 0 so `Restart=on-failure` would not even bring it
+            // back. The journal read "Consumed 2.808s CPU time over 30.085s
+            // wall clock" and then "Graceful shutdown completed".
+            //
+            // It was caught only because an idle measurement that reported a
+            // beautiful ZERO wakeups was actually reading a dead process, and
+            // the measurement script refused with MEASUREMENT-INVALID when the
+            // pid came back 0. A number that flatters the change is exactly
+            // when to check what produced it.
+            let signalled = tokio::select! {
+                _ = sigterm.recv() => true,
+                _ = sigint.recv() => true,
+                _ = tokio::time::sleep(std::time::Duration::from_millis(
+                        SHUTDOWN_POLL_CAP_MS * 30)) => false,
+            };
+            if signalled {
+                terminated.store(true, Ordering::SeqCst);
+            }
+        }
+        // Wake the vsock waiters on the same edge so they exit promptly rather
+        // than on their own 30 s backstop.
+        #[cfg(feature = "listen-vsock")]
+        vsock_server::wake_shutdown_waiters();
+        Ok(())
     }
-    Ok(())
+    #[cfg(not(unix))]
+    {
+        let mut poll_delay_ms = 25_u64;
+        while !terminated.load(Ordering::SeqCst) {
+            tokio::time::sleep(std::time::Duration::from_millis(poll_delay_ms)).await;
+            poll_delay_ms = next_shutdown_poll_delay_ms(poll_delay_ms);
+        }
+        Ok(())
+    }
 }
 
 /// Conservative shutdown polling backoff. This only governs the wait loop
@@ -13498,6 +13560,11 @@ const _: () = assert!(
     "shutdown latency is bounded by this cap; keep it human-prompt"
 );
 
+/// Only reachable on non-unix hosts since order 690-xeda made the unix wait
+/// event-driven. Kept rather than deleted: the doubling behaviour is still the
+/// fallback contract on any platform without `tokio::signal::unix`, and its
+/// test still pins it there.
+#[cfg_attr(unix, allow(dead_code))]
 fn next_shutdown_poll_delay_ms(current_ms: u64) -> u64 {
     current_ms.saturating_mul(2).min(SHUTDOWN_POLL_CAP_MS)
 }

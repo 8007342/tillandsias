@@ -589,8 +589,21 @@ fn shutdown_notify() -> &'static tokio::sync::Notify {
     NOTIFY.get_or_init(tokio::sync::Notify::new)
 }
 
-// NOTE, and it is the honest description of what this achieves: there is
-// currently NO caller that wakes `shutdown_notify()`. The shutdown flag is set
+/// Wake every task parked on the shutdown signal (order 690-xeda).
+///
+/// This exists because there IS now a caller: `wait_for_shutdown_signal` awaits
+/// SIGTERM/SIGINT through `tokio::signal::unix` and calls this on the edge, so
+/// the waiters below are woken by the signal itself rather than by their
+/// backstop. An earlier attempt shipped this helper with no caller and it was
+/// deleted as decorative; it is back only because the event source is real.
+///
+/// The `AtomicBool` remains the source of truth and every waiter re-reads it
+/// on wake, so a missed or spurious wake is never a correctness problem.
+pub fn wake_shutdown_waiters() {
+    shutdown_notify().notify_waiters();
+}
+
+// HISTORY worth keeping: for one cycle there was NO caller that woke The shutdown flag is set
 // by `signal_hook::flag::register`, a C signal handler that writes the atomic
 // directly, and no Rust code path runs on that edge. So today the waiters below
 // are woken by SHUTDOWN_BACKSTOP, not by an event — this is a 250 ms -> 30 s

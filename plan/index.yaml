@@ -41391,6 +41391,39 @@ plan_index:
         - the tray's fallback timer stops firing while the push subscription is healthy, and resumes on drop
         - a measurement records idle wakeups/second before and after for both guest and tray — the claim 'near-zero at idle' must be evidenced, not asserted
       events:
+        - type: verified
+          ts: "2026-08-15T02:48:33Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            GUEST HALF DONE, event-driven, measured at ~0.03 wakeups/s. And this cycle nearly shipped a guest that killed itself every 30 seconds — caught by the measurement refusing to report, not by review.
+
+            FINAL MEASUREMENTS on a live idle guest, no client attached:
+              baseline (as filed)                          79 ctx / 20s   ~4    wakeups/s
+              after both sites 690-xeda NAMES              80 ctx / 20s   ~4    wakeups/s  (no change)
+              after the unnamed shutdown-wait cap 250ms->1s 20 ctx / 20s   ~1    wakeups/s
+              after making the shutdown wait EVENT-DRIVEN   3 ctx / 90s   ~0.03 wakeups/s
+            That is ~120x off the baseline, and it satisfies this packet's outcome — an idle VM with no attached client approaching zero periodic wakeups.
+
+            NO NEW DEPENDENCY WAS NEEDED. My previous event said a truly event-driven wait required signal-hook-tokio and was therefore a dependency decision. That was WRONG: the workspace already sets tokio features = ["full"], so tokio::signal::unix was available the whole time. Correcting it here because the earlier note would have parked this work behind a decision that did not exist.
+
+            signal_hook's flag registration STAYS. Other readers (the tray phase watcher, the vsock waiters) consume that AtomicBool, and two registrations for one signal is exactly the situation where assuming the other handler still runs would be a silent correctness bet — so the tokio path sets the flag itself.
+
+            wake_shutdown_waiters() is BACK, and this time it has a real caller: the signal edge wakes the vsock waiters, so those two sites are now genuinely event-driven rather than 30s-backstopped. Last cycle I deleted the same helper as decorative because nothing could call it. That was right then and it is right that it returns now — the difference is an event source that exists.
+
+            THE NEAR-MISS, recorded because the shape matters more than the fix:
+            The first version stored terminated=true after ANY select arm, backstop included. The guest therefore decided it had been terminated 30 seconds after boot and shut down — cleanly, exit code 0, so Restart=on-failure would not even bring it back. The journal says it plainly: "Consumed 2.808s CPU time over 30.085s wall clock time" followed by "Graceful shutdown completed".
+
+            It was caught because an idle measurement reported a BEAUTIFUL ZERO — 0 context switches in 20s — and the follow-up measurement script refused with MEASUREMENT-INVALID when systemctl returned MainPID=0. The zero was real; it was the wakeup count of a dead process. A number that flatters the change is exactly when to check what produced it. I had already written that guard into the script for unrelated reasons and it is the only reason this did not ship.
+
+            VERIFICATION NOW, all measured after the fix:
+              same pid after 90s (spans the 30s backstop three times) -> the self-termination is gone
+              3 context switches in that 90s window, service active throughout
+              vsock listener accepts (socat VSOCK-CONNECT:1:42420 -> 0)
+              SIGTERM stop latency 0 ms — the event path is prompt, which was the whole risk of rewiring it
+              host --diagnose exit 0, reachable=True phase=Ready podman_ready=True
+
+            REMAINING on this packet: the 30s podman shell-out and the 2s/15s/500ms ticks in main.rs (now the largest guest items, though the measurement says what is left is already ~0.03/s), and ALL macOS/host sites (vz.rs, transport_macos.rs, action_host.rs) plus criterion 4's tray half — none verifiable from this host.
         - type: progress
           ts: "2026-08-15T01:49:14Z"
           agent_id: "unknown"
