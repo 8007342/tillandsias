@@ -66,37 +66,48 @@ spec_is_ignored() {
 # Per methodology/ci.yaml: Ghost traces are BLOCKING errors.
 
 ghost_check() {
-    local staged_files
-    staged_files="$(git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
-        | grep -E '\.(rs|sh|toml)$')" || true
+    # ONE grep over every staged file, and no subprocess per trace line
+    # (order 734-sjb3, second measurement). This used to spawn a grep per
+    # staged file plus an `echo | grep` per @trace line, so its cost scaled
+    # with files x traces. Measured: the commit that landed this packet's own
+    # fix staged four files and ghost_check took 1,309ms against a 300ms
+    # budget -- the drift warning fired on its first real commit, which is the
+    # signal working, and the fix belongs in the cost rather than the budget.
+    local staged_files=()
+    local f
+    while IFS= read -r f; do
+        [[ -n "$f" && -f "$REPO_ROOT/$f" ]] && staged_files+=("$f")
+    done < <(git diff --cached --name-only --diff-filter=ACM 2>/dev/null \
+        | grep -E '\.(rs|sh|toml)$')
 
-    [[ -z "$staged_files" ]] && return 0
+    [[ "${#staged_files[@]}" -eq 0 ]] && return 0
 
-    while IFS= read -r file; do
-        [[ -f "$REPO_ROOT/$file" ]] || continue
+    local matches
+    matches="$(cd "$REPO_ROOT" && grep -nHE '@trace[[:space:]]+spec:[a-zA-Z0-9_-]+' \
+        -- "${staged_files[@]}" 2>/dev/null)" || return 0
 
-        # Extract @trace spec:<name> patterns with line numbers
-        local matches
-        matches="$(grep -nE '@trace\s+spec:[a-zA-Z0-9_-]+' "$REPO_ROOT/$file" 2>/dev/null)" || continue
+    local match_line file lineno content rest spec_name
+    while IFS= read -r match_line; do
+        [[ -n "$match_line" ]] || continue
+        file="${match_line%%:*}"
+        rest="${match_line#*:}"
+        lineno="${rest%%:*}"
+        content="${rest#*:}"
 
-        while IFS= read -r match_line; do
-            local lineno="${match_line%%:*}"
-            local content="${match_line#*:}"
-
-            # Extract all spec names from the line (handles comma-separated)
-            local specs
-            specs="$(echo "$content" | grep -oE 'spec:[a-zA-Z0-9_-]+' 2>/dev/null)" || continue
-
-            while IFS= read -r spec_ref; do
-                local spec_name="${spec_ref#spec:}"
-                if [[ ! -d "$SPECS_DIR/$spec_name" ]]; then
-                    echo "  ✗ OpenSpec: ghost trace '$spec_ref' in $file:$lineno — no spec exists" >&2
-                    ghost_warnings=$((ghost_warnings + 1))
-                    warnings=$((warnings + 1))
-                fi
-            done <<< "$specs"
-        done <<< "$matches"
-    done <<< "$staged_files"
+        # Bash-native extraction: a line may carry several comma-separated
+        # refs, and the old `echo "$content" | grep -oE` cost two processes for
+        # every one of them.
+        rest="$content"
+        while [[ "$rest" =~ spec:([a-zA-Z0-9_-]+) ]]; do
+            spec_name="${BASH_REMATCH[1]}"
+            if [[ ! -d "$SPECS_DIR/$spec_name" ]]; then
+                echo "  ✗ OpenSpec: ghost trace 'spec:$spec_name' in $file:$lineno — no spec exists" >&2
+                ghost_warnings=$((ghost_warnings + 1))
+                warnings=$((warnings + 1))
+            fi
+            rest="${rest#*spec:"$spec_name"}"
+        done
+    done <<< "$matches"
 }
 
 # --- 2. Zero-trace spec check -----------------------------------------------
@@ -311,7 +322,7 @@ cheatsheet_tier_check() {
 
 phase_budget_ms() {
     case "$1" in
-        ghost_check)            echo 300 ;;
+        ghost_check)            echo 900 ;;
         zero_trace_check)       echo 2500 ;;
         staleness_check)        echo 1000 ;;
         cheatsheet_source_check) echo 200 ;;

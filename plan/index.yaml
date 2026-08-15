@@ -47228,6 +47228,31 @@ plan_index:
         packet — that is a different decision about a retired spec name, and
         bundling it would make a performance fix look like a behaviour change.
       events:
+        - type: note
+          ts: "2026-08-15T05:40:25Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            THE DRIFT WARNING FIRED ON THE VERY COMMIT THAT INTRODUCED IT, and it was right.
+
+            Landing the fix above staged four files, and the hook printed:
+
+              warning: OpenSpec: ghost_check took 1309ms (budget ~300ms) - the scan is drifting; see order 734-sjb3
+
+            My 300ms budget was measured with a nearly-empty stage. ghost_check's cost is not fixed: it spawned one grep per staged FILE plus an `echo | grep` per @trace LINE, so it scales with files x traces. Budgeting a scaling phase with a constant is wrong, and the honest fix is in the COST, not the number — raising the budget to hide it would have taught the next reader to ignore the warning, which is how a real signal dies.
+
+            ghost_check is now spawn-free too: ONE `grep -nHE` over all staged files at once, and bash-native extraction of the refs on each line.
+
+              4 staged files (three copies of a 20k-line source file):
+                before  1,309ms
+                after     521ms
+              full hook, same staged set: 5,360ms
+
+            Budget raised to 900ms, which the heavy case now clears with margin rather than by redefinition.
+
+            Verified after the rewrite: two refs on ONE line (`@trace spec:a, spec:b`) are both reported — the comma-separated case the old `grep -oE` handled and a naive `[[ =~ ]]` would have silently truncated to the first — and --ci-mode still exits 1 with a ghost staged, 0 without.
+
+            Worth stating plainly: three phases in this hook had the same defect and I fixed them one at a time across two cycles, each time believing I was at the bottom. The pattern is not "zero_trace_check was slow", it is "every per-item subprocess on this host is the runtime". Anything added to this hook later should be read with that in mind.
         - type: verified
           ts: "2026-08-15T05:28:44Z"
           agent_id: "unknown"
