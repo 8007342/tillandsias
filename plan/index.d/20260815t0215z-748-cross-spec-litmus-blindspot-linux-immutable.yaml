@@ -1,0 +1,87 @@
+packets:
+  - packet_id: editing-a-shared-file-breaks-litmus-in-specs-you-never-ran
+    order: 748-tkjx
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "Nothing tells an editor which litmus specs cover the file they touched — a green ./build.sh --check plus the spec you did run can both pass while another spec's litmus is broken"
+    deliverable: "a file -> covering-specs answer an editor can get before pushing"
+    pickup_role: any
+    capability_tags: [litmus, coverage, fail-loud, traceability, cross-spec]
+    estimated_hours: 3
+    context: |
+      OBSERVED 2026-08-15, twice in one hour, on the same file.
+
+      An in-forge agent fixed 747-hws2 by editing `images/default/lib-common.sh`
+      (adding a boundary header inside `inject_startup_context`). It then did
+      everything the contract asks:
+
+        ./build.sh --check                                    -> rc=0
+        run-litmus-test.sh --spec inference-container …       -> PASS 7/7
+        check-mcp-expert-health / findings-persisted / …      -> ok
+        pushed, ledger updated with evidence
+
+      All true, and `litmus:startup-context-addendum-shape` — which pins the very
+      block it edited — was RED the whole time. The host found it on the next
+      cycle by running the `meta-orchestration` spec.
+
+      TWO SEPARATE CAUSES, and only one is the agent's:
+
+      1. `./build.sh --check` does not run litmus at all (deliberate — cost), so
+         the pre-push gate cannot see a broken pin. The only way to learn is to
+         run the covering spec, and nothing says which spec that is.
+      2. `openspec/litmus-bindings.yaml` maps spec -> tests. There is no reverse
+         map from FILE -> specs, even though every litmus already names its
+         artifacts (`observability.log_fields.artifact`,
+         `preconditions: workspace contains <path>`). The information exists and
+         is not queryable.
+
+      So an editor of a shared file — `lib-common.sh` is touched by the forge,
+      startup-context, git-mirror and inference lanes — has no way to ask "what
+      do I need to re-run?" and reasonably runs only the spec they were working
+      in.
+
+      SECOND-ORDER, worth keeping with it: both failures were in HOST-authored
+      pins that grepped a fixed line window (`-A16`, then `-A8`) around an
+      anchor. Inserted comments and the new header pushed the target outside the
+      window, so the pins failed on CORRECT code. That is a self-inflicted
+      variant of the same blind spot — a pin whose verdict depends on how many
+      comment lines sit above the code is measuring formatting. Those are fixed
+      (assert over the file, never a window), but the pattern will recur: grep
+      -A<N> against a source file is a latent false failure.
+    outcome: |
+      Before pushing, an editor can ask which litmus specs cover the files they
+      changed, and a cross-spec break stops being discovered by whoever happens
+      to run the other spec next.
+    exit_criteria:
+      - "An executable answers `which litmus specs cover <path>` from committed data (litmus-bindings + each test's declared artifacts/preconditions), with no hand-maintained second list to drift."
+      - "The meta-orchestration/advance-work-from-plan finalization names it, so an agent that edited a shared file learns what to re-run BEFORE pushing rather than after."
+      - "Demonstrated on the real case: asking for `images/default/lib-common.sh` must return the meta-orchestration spec (which pins inject_startup_context) — verify by running it, not by reading the map."
+      - "NEGATIVE CONTROL: a path no litmus references returns an empty set and no warning; an editor of an uncovered file must not be nagged."
+      - "Cheap enough to run per-cycle — if it costs more than the litmus run it replaces, it will be skipped."
+    notes: |
+      Do NOT fix this by making ./build.sh --check run the whole litmus suite.
+      The suite is minutes of wall clock and the gate is already the slowest step
+      in a cycle (see the `timing:` metrics line); making every push pay for full
+      coverage is how gates get bypassed with --no-verify.
+
+      The cheap version is a query, not an enforcement: tell the editor which
+      specs to run and let the cycle decide. Enforcement can come later if the
+      query shows people ignore it.
+
+      While here: audit existing litmus steps for `grep -A<N>`/`-B<N>` windows
+      against source files. Each is a false-failure waiting for the next comment
+      to be added. Two were found and fixed in litmus-startup-context-addendum-shape
+      on 2026-08-15; there are likely more.
+    events:
+      - type: filed
+        ts: "2026-08-15T02:15:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Filed after an in-forge fix to lib-common.sh left
+          litmus:startup-context-addendum-shape red while build.sh --check and
+          the spec the agent did run were both green. The agent followed the
+          contract; the contract cannot point at the covering spec.
