@@ -1,0 +1,232 @@
+packets:
+  # ── Findings from the in-forge adversarial review (BigPickle, 2026-08-15) ────
+  # RE-FILED ON THE HOST. BigPickle minted these three orders and wrote them as
+  # fragments inside the forge's own checkout, validated them (`tillandsias-plan
+  # check` -> ok, 857 packets), and reported them. The forge then tore down and
+  # took the fragments with it: none reached origin/linux-next. The order tokens
+  # are reused verbatim so the review's report and the ledger agree. See 741-3y48
+  # below for the mechanism defect that lost them.
+  - packet_id: mcp-health-probe-reports-false-healthy
+    order: 741-t66e
+    status: implemented
+    desired_release: v0.5
+    priority: p1
+    release_target: forge-local-experts-milestone
+    kind: bug
+    title: "The MCP health probe accepted the SUBSTRING \"result\" as a successful handshake, so a server REJECTING initialize read as healthy"
+    deliverable: "structural InitializeResult validation, with the counterexamples kept as fixtures"
+    pickup_role: any
+    capability_tags: [mcp, experts, fail-loud, adversarial-review]
+    estimated_hours: 2
+    context: |
+      Found by an in-forge adversarial review of 737-zcj5 (commit 4d180e3f),
+      run the same night the probe landed. `probe_server` matched
+      `grep -q '"result"'` over the first 8KB of the server's stdout, which is
+      not a test that the MCP handshake SUCCEEDED — it is a test that the byte
+      sequence appeared. Four demonstrated vectors all printed
+      `ok:experts-healthy` rc=0:
+
+        1. a server REJECTING initialize with an error frame whose `error.data`
+           embedded the word "result" — i.e. precisely the registered-but-broken
+           expert the probe exists to catch;
+        2. `"result":null`;
+        3. `"result":{}` — schema-invalid as an InitializeResult;
+        4. an ordinary log line merely containing the literal `"result"`.
+
+      Secondary: an expected-expert name containing a space was word-split by an
+      unquoted `for` expansion, silently recorded `absent`, and the verdict
+      stayed `ok`.
+
+      THE FIXTURE HAD PINNED THE DEFECT. The stand-in server in the original
+      fixture emitted `{"jsonrpc":"2.0","id":1,"result":{}}` — vector 3 — so the
+      litmus passed BECAUSE the definition was wrong. A test that encodes the
+      defect is worse than no test: it converts an unexamined assumption into a
+      defended one, and it is why the probe shipped green.
+    outcome: |
+      A verdict of healthy means the server returned a spec-valid
+      InitializeResult, and every counterexample above is a permanent fixture.
+    exit_criteria:
+      - "probe_server validates structurally with jq: jsonrpc 2.0, matching id, NO error member, result an object, result.protocolVersion a string, result.serverInfo.name a string."
+      - "All four false-healthy vectors are fixtures that must report down."
+      - "The fixture's healthy stand-in emits a SPEC-VALID InitializeResult, not a bare result object."
+      - "Expected-expert names are split on commas only, so a name containing a space cannot be silently dropped."
+    events:
+      - type: filed
+        ts: "2026-08-15T00:02:52Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
+        summary: "Filed in-forge against 737-zcj5 with four working false-healthy vectors."
+      - type: implemented
+        ts: "2026-08-15T00:20:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Fixed on the host in the same night. probe_server now applies a jq
+          predicate over the required InitializeResult fields; scanning is
+          line-oriented (500 lines) instead of byte-truncated; expected names
+          split on commas via `eval set --`. All four vectors are fixtures and
+          are additionally pinned as litmus STEPS 7-9, plus STEP 10 guarding the
+          jq predicate itself. Fixture 14/14, litmus 15/15, suite 12/12 PASS.
+
+  - packet_id: mcp-health-probe-reports-false-outage-env-and-truncation
+    order: 741-2izr
+    status: implemented
+    desired_release: v0.5
+    priority: p2
+    release_target: forge-local-experts-milestone
+    kind: bug
+    title: "The MCP health probe reported DOWN against genuinely healthy experts: registration `env` was dropped, and an 8KB byte cut buried the frame"
+    deliverable: "env-honouring launch and line-oriented frame scanning"
+    pickup_role: any
+    capability_tags: [mcp, experts, fail-loud, adversarial-review]
+    estimated_hours: 1
+    context: |
+      Same in-forge review. Two false-outage vectors:
+
+        env dropped   — a registration carrying `env` launched without it, so a
+                        server that needs its environment could not start and was
+                        reported `down` while being perfectly healthy under a
+                        real MCP client.
+        8KB cut       — `head -c 8192` truncated a chatty-but-healthy server's
+                        stdout before its initialize frame, reporting `down`.
+
+      A false outage is as damaging as a missed one, in a specific way: it trains
+      every reader to discount the signal, and this probe's whole value is that
+      someone believes it at 3am. Positive controls that already worked and must
+      keep working: spaces in paths, args arrays, and slow-but-answering servers.
+    outcome: "A healthy expert is never reported down for a reason that is about the probe rather than the expert."
+    exit_criteria:
+      - "Registration `env` reaches the launched server; a fixture proves a server gated on an env var is reported healthy."
+      - "Frame scanning is line-oriented with a generous line budget, not a byte truncation; a fixture with 120 banner lines before the frame reports healthy."
+      - "Positive controls retained: spaces in paths, args arrays, slow-but-answering."
+    events:
+      - type: filed
+        ts: "2026-08-15T00:02:52Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
+        summary: "Filed in-forge: env dropped and 8KB truncation both produce false outages."
+      - type: implemented
+        ts: "2026-08-15T00:20:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          server_env() extracts `env` and probe_server applies it via
+          `eval set -- <@sh pairs>` then `env "$@"`. The first attempt expanded
+          the @sh output unquoted, which handed `env` a literal quote character
+          and set a variable named `'FIXTURE_TOKEN` — caught by the new fixture,
+          which is the argument for having written it. Byte truncation replaced
+          by `head -n 500`. Both are fixtures.
+
+  - packet_id: mcp-health-probe-absent-verdict-lies-for-malformed-registrations
+    order: 741-na2c
+    status: implemented
+    desired_release: v0.5
+    priority: p2
+    release_target: forge-local-experts-milestone
+    kind: bug
+    title: "A registration that NAMED an expert but garbled its command reported absent:not-registered — an outage disguised as an empty environment"
+    deliverable: "an absent/down boundary that means what it says"
+    pickup_role: any
+    capability_tags: [mcp, experts, fail-loud, adversarial-review]
+    estimated_hours: 1
+    context: |
+      Same in-forge review. `args` as a string instead of an array, or a
+      non-string `command`, made command extraction return empty, which the
+      probe read as "this environment has no such expert" and reported
+      `absent:not-registered`.
+
+      The two states carry opposite operational meanings. `absent` says there is
+      nothing here to lose and no alarm is warranted — the correct reading for a
+      host that never had experts. A malformed registration is the opposite: an
+      expert is supposed to be here and is unusable, which is an outage, and it
+      is the case where the REGISTRATION is the thing that broke. Collapsing them
+      suppresses the alarm exactly when a config change caused it.
+    outcome: "`absent` means no expert is named here; anything named and unusable is `down`."
+    exit_criteria:
+      - "Registration presence is tested independently of command extraction; a named-but-malformed server is reported down, never absent."
+      - "Fixtures cover `args` as a string and a non-string `command`."
+      - "`absent:not-registered` still holds for a registration that names no expected expert at all."
+    events:
+      - type: filed
+        ts: "2026-08-15T00:02:52Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
+        summary: "Filed in-forge: malformed registrations reported as absent rather than down."
+      - type: implemented
+        ts: "2026-08-15T00:20:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Added server_is_registered() as a presence test separate from
+          server_command() extraction. Named-but-unextractable now records
+          `down` and joins the verdict's csv. Both malformed shapes are fixtures
+          and litmus STEP 9.
+
+  # ── The mechanism defect that nearly ate all three of the above ─────────────
+  - packet_id: in-forge-findings-die-with-the-container
+    order: 741-3y48
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: forge-local-experts-milestone
+    kind: bug
+    title: "An in-forge agent files packets into the forge's ephemeral checkout, and teardown destroys them — the findings never reach any host"
+    deliverable: "a durable path out of the forge for findings (and a check that notices when there isn't one)"
+    pickup_role: linux
+    capability_tags: [forge, plan, fail-loud, observability, ephemerality]
+    estimated_hours: 3
+    context: |
+      MEASURED 2026-08-15. A forge cycle was launched from tlatoani to
+      adversarially validate 737-zcj5. It did excellent work: it broke the probe
+      in both directions, minted three order tokens, wrote three well-formed
+      fragments, and confirmed `tillandsias-plan check` accepted them (857
+      packets, ids unique).
+
+      Then the forge tore down, and every one of those fragments went with it.
+      Measured on the host immediately after:
+
+        git status --porcelain              -> clean (nothing written to the host)
+        git ls-tree origin/linux-next plan/index.d/ | grep 741  -> nothing
+
+      The findings survived only because the agent ALSO summarised them in its
+      stdout, which the launching host happened to be reading and re-filed by
+      hand. Had the launcher been unattended — which is the normal case for
+      `./repeat --agent opencode` and every litmus-launched forge cycle — the
+      review would have run, found four real defects, filed them correctly, and
+      left no trace anywhere.
+
+      THIS IS 737-zcj5'S OWN SHAPE, one level up. That packet was about an
+      outage that leaves no ledger artifact because recording depends on an agent
+      choosing to. This is about a finding that leaves no ledger artifact because
+      the FILESYSTEM IT WAS WRITTEN TO IS EPHEMERAL BY DESIGN — the agent did
+      choose to, correctly, and it still vanished. Ephemerality is a project
+      value ("everything should be safe to destroy and relaunch at any moment,
+      Erlang style"); the defect is that the value was applied to the substrate
+      without giving the durable output a separate path off it.
+
+      Related but NOT the same: the forge has a git mirror service and can push.
+      Whether the fix is "the cycle must push before exit", "teardown drains
+      plan/index.d/ to the host mount", or "the launcher harvests fragments from
+      the container before removing it" is the packet's decision, and it should
+      be made once for all in-forge agents rather than per skill.
+    outcome: |
+      A finding filed inside a forge reaches the host ledger without depending on
+      anyone reading the container's stdout.
+    exit_criteria:
+      - "A packet filed by an in-forge agent is present on the host checkout (or origin) after the forge tears down — demonstrated end to end, not argued."
+      - "A forge cycle that produces fragments and CANNOT persist them fails loud, rather than exiting zero with the work discarded. Silent loss is the defect; a refusal is acceptable."
+      - "NEGATIVE CONTROL: a forge cycle that legitimately files nothing must not emit a warning or create an empty artifact."
+      - "The path is chosen once and documented where in-forge agents will find it (forge startup context or the diagnose-forge/meta-orchestration skills), not re-derived per skill."
+    notes: |
+      Check whether the same hole applies to plan/loop_status.d/ fragments and to
+      plan/issues/ markdown written in-forge — the launch instructions routinely
+      tell in-forge agents to file issues, and if those land in the same
+      ephemeral checkout the loss is much wider than this one review.
+    events:
+      - type: filed
+        ts: "2026-08-15T00:20:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Filed after re-filing 741-t66e/2izr/na2c by hand off the forge's
+          stdout, having confirmed the originals never left the container.

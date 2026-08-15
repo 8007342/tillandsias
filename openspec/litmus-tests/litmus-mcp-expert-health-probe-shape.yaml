@@ -53,7 +53,12 @@ critical_path:
     expected_behavior: "ok: existing-but-mute-is-down"
 
   - step: "registration args are honoured (regression: reading .command alone reported healthy experts as down)"
-    command: "d=$(mktemp -d); printf '%s\\n' '{\"mcpServers\":{\"forge-plan\":{\"command\":\"echo\",\"args\":[\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1,\\\"result\\\":{}}\"]},\"project-info\":{\"command\":\"echo\",\"args\":[\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1,\\\"result\\\":{}}\"]}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:experts-healthy' ] && echo 'ok: args-honoured' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    # The frame here MUST be a spec-valid InitializeResult. This step originally
+    # used `\"result\":{}`, which the hardened probe correctly rejects — the step
+    # had encoded the very weak definition 741-t66e was filed against, and it
+    # started failing the moment the definition was strengthened. That is the
+    # test doing its job; do not weaken the probe to make a stale fixture pass.
+    command: "d=$(mktemp -d); f='{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"serverInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}'; jq -cn --arg f \"$f\" '{mcpServers:{\"forge-plan\":{command:\"echo\",args:[$f]},\"project-info\":{command:\"echo\",args:[$f]}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:experts-healthy' ] && echo 'ok: args-honoured' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 8000
     expected_behavior: "ok: args-honoured"
 
@@ -61,6 +66,40 @@ critical_path:
     command: "d=$(mktemp -d); printf '%s\\n' '{\"mcpServers\":{\"forge-plan\":{\"command\":\"false\"},\"project-info\":{\"command\":\"false\"}}}' > \"$d/r.json\"; TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" TILLANDSIAS_MCP_PROBE_TIMEOUT=5 bash scripts/check-mcp-expert-health.sh >/dev/null; n=$(grep -c '\"state\":\"down\"' \"$d/h.jsonl\"); rm -rf \"$d\"; [ \"$n\" = \"2\" ] && echo 'ok: outage-trace-durable' || { echo \"FAIL: down records=$n\"; exit 1; }"
     timeout_ms: 15000
     expected_behavior: "ok: outage-trace-durable"
+
+  - step: "ADVERSARIAL: an error frame whose data embeds the word result is DOWN, not healthy"
+    # 741-t66e, the most serious defect the in-forge review found: the first
+    # draft accepted `grep -q '\"result\"'`, so a server REJECTING initialize
+    # with an error frame containing that substring read as healthy — i.e. the
+    # canonical registered-but-broken outage this probe exists to catch.
+    command: "d=$(mktemp -d); f='{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32603,\"message\":\"init failed\",\"data\":\"no \\\"result\\\" available\"}}'; jq -cn --arg f \"$f\" '{mcpServers:{\"forge-plan\":{command:\"echo\",args:[$f]},\"project-info\":{command:\"echo\",args:[$f]}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'down:forge-plan,project-info' ] && echo 'ok: error-frame-is-down' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: error-frame-is-down"
+
+  - step: "ADVERSARIAL: a result missing the required InitializeResult fields is DOWN"
+    command: "d=$(mktemp -d); jq -cn '{mcpServers:{\"forge-plan\":{command:\"echo\",args:[\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1,\\\"result\\\":{}}\"]},\"project-info\":{command:\"echo\",args:[\"{\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":1,\\\"result\\\":null}\"]}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'down:forge-plan,project-info' ] && echo 'ok: schema-invalid-result-is-down' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: schema-invalid-result-is-down"
+
+  - step: "ADVERSARIAL: a registration that NAMES a server but garbles it is DOWN, never absent"
+    # 741-na2c: `absent` must mean the environment has no such expert to lose.
+    # Reporting it for a broken registration suppresses the alarm for exactly
+    # the case where the registration is the thing that broke.
+    command: "d=$(mktemp -d); jq -cn '{mcpServers:{\"forge-plan\":{command:\"echo\",args:\"not-an-array\"},\"project-info\":{command:42}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'down:forge-plan,project-info' ] && echo 'ok: malformed-is-down-not-absent' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: malformed-is-down-not-absent"
+
+  - step: "the probe validates the InitializeResult STRUCTURALLY (jq predicate over the required fields)"
+    # Guards the DEFINITION, not just the behaviour. Deliberately a positive
+    # assertion: an earlier draft of this step also asserted the absence of the
+    # old `grep '\"result\"'` expression and failed, because the probe's own
+    # header QUOTES that expression while explaining why it was wrong. A pin
+    # that cannot distinguish code from the comment documenting its history is
+    # not a pin. The adversarial steps above are the real behavioural guard;
+    # this one keeps the jq predicate itself from being quietly hollowed out.
+    command: "grep -q 'result.protocolVersion' scripts/check-mcp-expert-health.sh && grep -q 'result.serverInfo.name' scripts/check-mcp-expert-health.sh && grep -q 'jq -e --argjson id' scripts/check-mcp-expert-health.sh && echo 'ok: structural-validation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: structural-validation"
 
   - step: "cycle-metrics reports health= on the mcp: line"
     command: "grep -q 'health=%s' scripts/cycle-metrics.sh && grep -q 'TILLANDSIAS_EXPERT_HEALTH_LOG' scripts/cycle-metrics.sh && echo 'ok: metrics-carries-health'"
