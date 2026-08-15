@@ -113,10 +113,20 @@ mo_full_host() {
     #
     # Fall back to bare `hostname` and strip any domain ourselves, which is all
     # -s does. Lowercased for a stable filename either way.
-    local h
+    local h=""
     h="$(hostname -s 2>/dev/null || true)"
     [ -n "$h" ] || h="$(hostname 2>/dev/null || true)"
-    printf '%s' "$(printf '%s' "$h" | cut -d. -f1 | tr '[:upper:]' '[:lower:]')"
+    # Last resort before giving up: the kernel's own view. Some environments
+    # ship no hostname(1) at all.
+    [ -n "$h" ] || h="$(uname -n 2>/dev/null || true)"
+    [ -n "$h" ] || { [ -r /etc/hostname ] && read -r h < /etc/hostname; }
+    # Strip the domain and lowercase with BASH BUILTINS, not cut/tr. The
+    # external form resolved correctly when run by hand and returned EMPTY
+    # under ./build.sh --check, which is the difference between a helper that
+    # works and one that works where you tested it. Builtins have no PATH
+    # sensitivity, so this cannot depend on the caller's environment.
+    h="${h%%.*}"
+    printf '%s' "${h,,}"
     return 0
 }
 

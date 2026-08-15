@@ -41347,6 +41347,64 @@ plan_index:
         - the tray's fallback timer stops firing while the push subscription is healthy, and resumes on drop
         - a measurement records idle wakeups/second before and after for both guest and tray — the claim 'near-zero at idle' must be evidenced, not asserted
       events:
+        - type: progress
+          ts: "2026-08-15T01:49:14Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            GUEST HALF MEASURED AND REDUCED 4x. And the measurement overturned the packet: the two sites this packet NAMES cost essentially nothing, while an unnamed one accounted for almost all of it.
+
+            MEASURED ON A LIVE IDLE GUEST, no client attached, 20s windows of
+            voluntary+nonvoluntary context switches from /proc/<pid>/status:
+
+              baseline (as filed)                          79 / 20s  -> ~4 wakeups/s
+              after fixing BOTH named vsock sites          80 / 20s  -> ~4 wakeups/s   (NO CHANGE)
+              after fixing the unnamed shutdown-wait cap   20 / 20s  -> ~1 wakeup/s    (4x)
+
+            THE UNNAMED SITE: wait_for_shutdown_signal in main.rs backs off to a 250 ms cap
+            and then stays there. Its own doc comment says "This loop is only reached during
+            shutdown. It is not on the hot path" — the opposite of what it does. It is what
+            AWAITS shutdown, so it runs from startup to termination, at 4 Hz, for the life
+            of every VM. Raised the cap to 1 s: a 4x reduction that keeps termination
+            prompt.
+
+            WHY NOT 30 s THERE: that cap IS the SIGTERM response latency.
+            signal_hook::flag::register writes the atomic from a C signal handler, so no
+            Rust code path can wake a waiter — the delay between the signal arriving and
+            this loop noticing is exactly the cap. 30 s would trade wakeups for a shutdown
+            that looks hung.
+
+            CRITERION 1 (the two named sites) IS DONE, and they were real even though they
+            were not the cost:
+              * vsock_server.rs watch_shutdown_and_mark_stopping — 250 ms sleep loop, now
+                parked on a Notify.
+              * vsock_server.rs serve_listener — the accept() call raced a 250 ms timer
+                purely to re-read the flag; now it parks in accept() and is woken by the
+                shutdown signal.
+            Both keep a 30 s backstop and re-read the AtomicBool on every wake, so the flag
+            stays the source of truth. That backstop is REQUIRED, not cautious: the same
+            signal_hook fact above means a pure `notified().await` would hang shutdown
+            forever on SIGTERM. I designed the backstop before finding that out and the
+            evidence arrived afterwards.
+
+            NO REGRESSION: guest service active, vsock listener still accepts
+            (socat VSOCK-CONNECT:1:42420 -> exit 0), and the host's --diagnose returns
+            exit 0 with reachable=True phase=Ready podman_ready=True guest=0.4.260812.1.
+
+            REMAINING on this packet, untouched:
+              * the 30 s podman shell-out (main.rs:12237) and the 2 s / 15 s / 500 ms ticks
+                — the next-largest guest items now that the 4 Hz source is gone;
+              * ALL macOS/host sites (vz.rs:1494, transport_macos.rs:383,
+                action_host.rs:2835) — not verifiable from this host;
+              * criterion 4's TRAY half of the before/after measurement.
+            A truly event-driven shutdown wait needs async signal delivery
+            (signal-hook-tokio), which is a dependency decision rather than a tuning one.
+
+            THE LESSON WORTH KEEPING: this packet's criterion 4 — "the claim near-zero at
+            idle must be evidenced, not asserted" — is the only reason the real cost was
+            found. Fixing the named sites and stopping would have produced a plausible
+            commit, a true claim that two polls were removed, and no change whatsoever to
+            idle wakeups.
         - type: filed
           ts: "2026-08-11T23:45:20Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260811t234520z

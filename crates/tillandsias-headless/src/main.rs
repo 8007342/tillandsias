@@ -13463,8 +13463,43 @@ async fn wait_for_shutdown_signal(terminated: Arc<AtomicBool>) -> Result<(), Str
 /// Conservative shutdown polling backoff. This only governs the wait loop
 /// after shutdown has already been requested, so it cannot affect user-facing
 /// launch or tray responsiveness.
+/// Backoff cap for the shutdown wait (order 690-xeda).
+///
+/// MEASURED, and it overturned the comment above: this loop is NOT "only
+/// reached during shutdown". It is what AWAITS shutdown, so it runs from
+/// startup to termination, and at the old 250 ms cap it was the DOMINANT idle
+/// wakeup source in the guest -- 4 wakeups/second for the life of every VM.
+///
+/// It was found only because converting the two sites 690-xeda actually names
+/// (the vsock AtomicBool poll and the accept-loop timeout) moved the measured
+/// idle rate by nothing at all: 79 context switches/20s before, 80 after. The
+/// named sites were real, and they were not what was costing the wakeups.
+///
+/// WHY 1 s AND NOT THE 30 s BACKSTOP the vsock waiters use: this interval is
+/// the SIGTERM response latency. signal_hook::flag::register writes the atomic
+/// from a C signal handler, so there is no Rust path that could notify a
+/// waiter -- the delay between the signal and this loop noticing is exactly
+/// this cap. 30 s would trade a 120x wakeup reduction for a shutdown that
+/// looks hung. 1 s is a 4x reduction that keeps termination prompt.
+///
+/// A genuinely event-driven fix needs async signal delivery
+/// (signal-hook-tokio), which is a dependency decision rather than a tuning
+/// one and is left to 690-xeda's remaining scope.
+const SHUTDOWN_POLL_CAP_MS: u64 = 1_000;
+
+/// The cap IS the SIGTERM response latency, so guard it at COMPILE time rather
+/// than in a test: signal_hook writes the flag from a C handler with no path to
+/// wake a waiter, and nothing can shorten the gap between the signal and this
+/// loop noticing it. A future pass chasing idle wakeups must not be able to
+/// trade a prompt shutdown for a number it cannot measure — this refuses to
+/// build instead of refusing at test time.
+const _: () = assert!(
+    SHUTDOWN_POLL_CAP_MS <= 1_000,
+    "shutdown latency is bounded by this cap; keep it human-prompt"
+);
+
 fn next_shutdown_poll_delay_ms(current_ms: u64) -> u64 {
-    current_ms.saturating_mul(2).min(250)
+    current_ms.saturating_mul(2).min(SHUTDOWN_POLL_CAP_MS)
 }
 
 /// Load headless configuration from TOML file.
@@ -16071,8 +16106,14 @@ mod tests {
         assert_eq!(next_shutdown_poll_delay_ms(25), 50);
         assert_eq!(next_shutdown_poll_delay_ms(50), 100);
         assert_eq!(next_shutdown_poll_delay_ms(125), 250);
-        assert_eq!(next_shutdown_poll_delay_ms(250), 250);
-        assert_eq!(next_shutdown_poll_delay_ms(u64::MAX), 250);
+        // Order 690-xeda: the cap moved 250ms -> 1s. This loop AWAITS
+        // shutdown, so it runs for the life of the process and was the
+        // dominant idle wakeup source in the guest -- not the sites the packet
+        // named. Updated rather than deleted: the doubling behaviour it pins
+        // still matters, only the ceiling changed.
+        assert_eq!(next_shutdown_poll_delay_ms(250), 500);
+        assert_eq!(next_shutdown_poll_delay_ms(500), SHUTDOWN_POLL_CAP_MS);
+        assert_eq!(next_shutdown_poll_delay_ms(u64::MAX), SHUTDOWN_POLL_CAP_MS);
     }
 
     #[test]
