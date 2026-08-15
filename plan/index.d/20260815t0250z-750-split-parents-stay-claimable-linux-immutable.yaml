@@ -1,0 +1,81 @@
+packets:
+  - packet_id: split-parents-stay-ready-and-keep-being-offered-as-claimable-work
+    order: 750-zrt4
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "A packet whose work has been split into children stays `ready`, so the selector keeps offering it — 722-ecne was ranked urgent= on four consecutive cycles and claimed by nobody"
+    deliverable: "selection that can tell a delegated parent from claimable work"
+    pickup_role: any
+    capability_tags: [plan, selection, convergence, fail-loud]
+    estimated_hours: 2
+    context: |
+      MEASURED across 2026-08-14/15 on tlatoani, over four cycles and two seeds.
+
+      `scripts/select-work-batch.sh linux` reported
+      `urgent=mirror-identity-lane-sidecar-and-sshd` (722-ecne, p0) on every one
+      of four consecutive cycles. No host claimed it. It was not neglect: the
+      packet's body is design rungs T3-T13 — eleven rungs across the git image,
+      host certs, sshd_config, a receive wrapper, repository hardening, an agent
+      sidecar, a Vault audit volume, forge wiring, staged migration and spec
+      amendments — against a 3-hour estimate. It does not fit a cycle, and the
+      selector has no way to say so.
+
+      The same shape sits one level up. 606-bvnp was split into four slices long
+      ago (722-hthz implemented, 722-ft6g implemented, 722-ecne, 722-uern). It
+      still carried `status: ready`, so `tillandsias-plan next linux` ranked it
+      **#1 claimable** with all four slices already spoken for. A host following
+      the selector would have spent a cycle discovering there was nothing left in
+      it.
+
+      The convention is the cause: a split parent keeps `ready` and gains a
+      `split_into` list. Only `ready` is claimable
+      (`status_transition_protocol.canonical_statuses`), so a fully-delegated
+      parent stays in the claimable pool forever. `split_into` is prose and is
+      ALREADY reported as debt by the integrity gate:
+
+        warning (organic reference debt): git-mirror-cross-project-service-identity:
+          split_into carries a prose annotation '722-ecne — mirror-identity-lane-…'
+
+      so nothing machine-readable connects a parent to its children.
+
+      MITIGATED BY HAND THIS CYCLE, for both packets: set to `blocked` with an
+      event naming the children. `blocked` is the accurate word — cannot progress
+      without a named dependency — and, unlike `obsoleted`, it does NOT satisfy
+      dependents, which matters because `obsoleted` would have falsely unblocked
+      722-uern's §4a negative matrix before a single rung existed. After the
+      change the selector's urgent= became 749-wv4d (T3, one rung, fits a cycle)
+      and eligible dropped 147 -> 146.
+
+      That mitigation is per-packet and depends on an agent noticing a
+      four-cycle stall. Nothing detects it.
+    outcome: |
+      A parent whose residual work lives entirely in children stops competing
+      with its own children for a cycle, without an agent having to notice.
+    exit_criteria:
+      - "An executable detects a packet that has children (declared machine-readably, not in split_into prose) and is still in a claimable status, and reports it — verify against the real ledger, which had two such packets on 2026-08-15."
+      - "split_into becomes machine-readable (child packet_ids as a list), so parent->child is queryable and the existing 'organic reference debt' warning for it clears."
+      - "NEGATIVE CONTROL: a parent that legitimately retains direct work of its own alongside children is NOT flagged — splitting off one slice must not make the remainder unclaimable."
+      - "The selector or the check names the children when it excludes a parent, so a host reading the output knows where the work went rather than seeing a packet vanish."
+    notes: |
+      Do NOT fix this by auto-setting split parents to `obsoleted`. That status
+      satisfies dependents, and the whole reason 722-ecne stayed `blocked` rather
+      than obsoleted is that 722-uern's matrix must stay blocked until the rungs
+      land. Getting this wrong turns a selection nuisance into a false green.
+
+      Related but distinct: `estimated_hours` said 3 for eleven rungs. If a
+      fits-in-a-cycle signal is wanted, it needs to come from something better
+      than that field — every child filed in the split carries an estimate too,
+      and they already sum past the parent's.
+    events:
+      - type: filed
+        ts: "2026-08-15T02:50:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Filed after splitting 722-ecne into six rungs. The split fixed one
+          packet; the selection defect that let it stall four times, and that
+          still had 606-bvnp ranked #1 claimable with nothing left in it, is
+          general.
