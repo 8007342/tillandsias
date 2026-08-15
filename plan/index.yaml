@@ -47470,6 +47470,12 @@ plan_index:
         pass: the two sibling gates are the release's cross-platform evidence and
         neither host has reported yet.
       events:
+        - type: progress
+          ts: "2026-08-15T05:07:37Z"
+          agent_id: "linux-mutable-20260814-release"
+          host: linux_mutable
+          summary: |
+            Operator gave explicit go in attended session; resuming linux-owned promotion (merge linux-next to main via PR, tag, dispatch release workflow). Coordinator pre-merge done: osx-next (dedc40802) and windows-next (29e9dec1b) merged into linux-next first, per 735-6iki handoff requirement.
         - type: note
           ts: "2026-08-14T21:11:19Z"
           host: linux-mutable
@@ -48036,6 +48042,12 @@ plan_index:
         you tested is an ancestor of the candidate. Re-running it would cost you a
         cycle and tell me nothing new.
       events:
+        - type: note
+          ts: "2026-08-15T05:07:37Z"
+          agent_id: "linux-mutable-20260815-cycle"
+          host: linux_mutable
+          summary: |
+            Queue item 1 fail-loud half (735-ewzp) closed by windows commit 9138147b4 (WSL unit proves a bound listener); coordinator verified during recon. Remaining queue items unchanged; the operator-owned reg-add experiment half is still open.
         - type: filed
           ts: "2026-08-14T22:45:00Z"
           agent_id: linux-mutable-20260814-release

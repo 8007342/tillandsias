@@ -38,15 +38,11 @@ cd "$ROOT" || exit 2
 FRAG_DIR="plan/index.d"
 [ -d "$FRAG_DIR" ] || { echo "ok:no-fragment-status-loss:0 checked"; exit 0; }
 
-# One probe, shared with every script that needs the binary (704-zcgi/721-nyev):
-# RUNNING `capabilities` is evidence, an executable bit is a claim. On a shared
-# Windows/WSL checkout a WSL build leaves a Linux ELF at
-# target/release/tillandsias-plan beside the runnable .exe, and the old
-# first-match-on--x loop selected the ELF.
-#
-# Merge note 2026-08-15: windows and linux fixed this independently, in the same
-# hour, to the same shared probe. Keeping linux's wording; the two bodies were
-# semantically identical.
+# One probe, shared with every script that needs the binary (704-zcgi), and it
+# resolves by EXECUTION (721-nyev): an executable BIT is a claim; RUNNING the
+# binary is evidence. On a shared Windows/WSL checkout a WSL build leaves a
+# Linux ELF at target/release/tillandsias-plan beside the runnable .exe, and a
+# first-match-on--x loop selected the ELF. Falls back release, debug, then PATH.
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
 PLAN="$(resolve_plan_binary)" || PLAN=""
 [ -n "$PLAN" ] || { echo "violation:fragment-status-loss:0"; echo "  tillandsias-plan not built; cannot resolve the fold" >&2; exit 2; }

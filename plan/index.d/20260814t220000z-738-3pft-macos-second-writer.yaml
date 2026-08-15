@@ -1,0 +1,91 @@
+events:
+  - packet_id: cross-host-verification-attestation-is-shareable
+    order: 738-3pft
+    type: progress
+    ts: "2026-08-14T22:00:00Z"
+    agent_id: macos-tlatoanis-macbook-air-fable5-20260814t192504z
+    host: macos
+    summary: |
+      SECOND-WRITER ANSWER (739-dgk4 queue item 2). Asked: can a macOS native
+      test run produce the attestation in ONE command? Answer: YES, but only
+      with four decisions the windows writer currently leaves implicit. All four
+      are measured on this host, not inferred.
+
+      FIRST, A CORRECTION TO THE QUEUE'S PREMISE: there is no windows proposal to
+      read yet. `git grep -l 738-3pft origin/windows-next -- plan/` returns
+      nothing and their newest fragment (20260814t213221z) predates this packet.
+      So this is not a review of their format; it is the constraint set the
+      format has to satisfy to have a second writer at all. Cheaper to state
+      now, which is what the queue asked for.
+
+      1. TAKE THE TRANSCRIPT ON STDIN, NOT AS A FILE PATH — this is what decides
+         the one-command question.
+         The windows writer is `stamp --from <path>`, reading it with
+         `cat "${3:-/dev/null}"`. A path argument forces two commands and a temp
+         file. Measured here: both `cat -` and `cat /dev/stdin` capture a piped
+         transcript correctly, so accepting `--from -` costs one line and makes
+         the whole thing a single pipeline:
+
+           cargo test -p tillandsias-macos-tray --bins 2>&1 \
+             | scripts/check-macos-only-sources-verified.sh stamp --from -
+
+         That is the one command. Without it the honest answer to the queue's
+         question is "no".
+
+      2. THE VERIFICATION COMMAND MUST BE A RECORDED FIELD, NOT AN ASSUMPTION.
+         macOS's differs from windows' in a way that silently produces a
+         true-looking attestation for a run that tested nothing:
+         crates/tillandsias-macos-tray has NO `[lib]` section (measured: zero
+         matches), so the repo's deterministic pass — `cargo test --workspace
+         --lib` — skips all 85 of its tests. The correct macOS command is
+         `-p tillandsias-macos-tray --bins`, and it yields 85 result lines.
+
+         This is not hypothetical. It is 731-vaqx, found and fixed on this host
+         earlier today: every test in that crate ran in NO gate for exactly this
+         reason. An attestation format that infers the command from the crate
+         name would have recorded "verified" for a run that executed nothing.
+         Record the command; let the reader see what was actually run.
+
+      3. SCOPE IS A FIELD; THE GRAMMAR IS SHARED.
+         The windows verdict vocabulary is `stale:windows-sources-never-verified:N`
+         — platform baked into the token. If macOS mirrors that we get two
+         grammars for one concept, which is the second format 739-6r6n's notes
+         explicitly refuse. Needs `scope: windows-only | macos-only` (extensible)
+         with ONE verdict grammar, so a reader that understands one understands
+         both, and `./build.sh --check` can report N scopes with one parser.
+
+      4. bash 3.2, AND THIS IS THE ONE MOST LIKELY TO BITE SILENTLY.
+         If the shared writer is derived from the windows script, it must stay
+         bash-3.2-clean. Measured today: that script's `mapfile -t SOURCES` fails
+         on this host with "mapfile: command not found" (bash 3.2.57 is what
+         Apple ships and what `/usr/bin/env bash` resolves to), left SOURCES
+         unbound on three further lines, and STILL EXITED 0 — so `./build.sh`
+         printed "Windows-only sources: " with an empty list and the reader saw
+         a verdict rather than a broken guard. Fixed under 723-b9cn. A shared
+         writer inherits that hazard by construction.
+
+         Related, and worth deciding rather than discovering: the digest should
+         go through the mf_* stdlib dialect layer rather than calling
+         `sha256sum` directly. This mac happens to have /sbin/sha256sum, so it
+         works HERE, but the portable macOS spelling is `shasum -a 256`. A format
+         that works on my machine and fails on the next mac is the same class of
+         bug one layer down.
+
+      NOT A BLOCKER, stated so nobody designs around a phantom: the windows
+      writer's transcript-shape gate,
+      `grep -qE '^test .* \.\.\. (ok|FAILED|ignored)'`, works correctly under
+      this host's grep (ugrep 7.5.0 standing in for BSD grep), verified against a
+      real 115-line macOS transcript. The failure-extraction pipeline
+      (grep | awk | sed) also behaves. The 716-f5kc requirement that a stamp
+      carry a transcript survives crossing to macOS unchanged, and should be kept
+      — it is the property that makes this evidence rather than a promise.
+
+      ONE CONSEQUENCE OF "TRACKED" WORTH PUTTING IN THE EXIT CRITERIA: a tracked
+      attestation means the writing command DIRTIES the working tree. Writing is
+      one command; SHARING is inherently write + commit + push, and on this fleet
+      that also means passing the pre-push gate. Worth saying plainly so "one
+      command" is not over-claimed — the packet's second exit criterion is about
+      what the LINUX GATE reads, and that file only exists for it after a push.
+
+      I am not implementing 739-6r6n until this format is agreed, per the queue's
+      instruction that it must consume this format rather than invent a second.
