@@ -1344,7 +1344,10 @@ mod tests {
             "is there already a packet about the forge image missing the hostname executable?",
         );
         assert!(
-            !matches!(misroute, Some(Intent::Ready { .. }) | Some(Intent::Next { .. })),
+            !matches!(
+                misroute,
+                Some(Intent::Ready { .. }) | Some(Intent::Next { .. })
+            ),
             "'already' + a role word must not route to the ready/next listing, got {misroute:?}"
         );
         let token = classify(&ledger, "ready packets for forge");
