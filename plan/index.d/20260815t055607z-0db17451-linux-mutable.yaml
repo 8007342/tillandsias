@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mirror-identity-sshd-in-the-image
+    field: status
+    value: completed
+    ts: "2026-08-15T05:56:07Z"
+    host: linux_mutable
+
+events:
+  - packet_id: mirror-identity-sshd-in-the-image
+    event:
+      type: completed
+      ts: "2026-08-15T05:56:07Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: f6388ef94 litmus:mirror-sshd-posture-shape 3/3 PASS (banner under posture, tmpfs/volume confinement, read-only-tmpfs=false negative control names 'Read-only file system')
+  - packet_id: mirror-identity-sshd-in-the-image
+    event:
+      type: note
+      ts: "2026-08-15T05:56:07Z"
+      host: linux_mutable
+      summary: >
+        R1 retired by demonstration on the real image; T4 (749-54pv) unblocked.
