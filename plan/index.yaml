@@ -20457,6 +20457,12 @@ plan_index:
         - "mirror Vault auth survives past max_ttl without operator action"
         - "a litmus proves a relay push succeeds after the original AppRole token would have expired"
       events:
+        - type: note
+          ts: "2026-08-15T16:48:11Z"
+          agent_id: "linux-mutable-20260815-recovery"
+          host: linux_mutable
+          summary: |
+            LIVE FAILURE 2026-08-15 (windows fresh-install forge, codex lane): check-credential-channel.sh returned ok:forge-git-mirror, but the first lease-only push of bc11044fea79d2c54f6df34034ab302f1cf91a3d was rejected by the mirror pre-receive relay after GitHub identified user 8007342: 'Permission to 8007342/tillandsias.git denied to 8007342' / HTTP 403. Second commit 358903fc (findings) also lost locally; check-forge-findings-persisted.sh correctly reported unpersisted:unpushed. Local mirror reachability is NOT proof the upstream credential currently authorizes writes; the verified-ack behavior worked as designed (mirror refused to claim durability it could not prove). Readiness-guard fix scoped to child 756-2jnj; operator confirms work was lost to the late detection.
         - type: filed
           ts: "2026-07-19T01:30:00Z"
           agent_id: "linux-tillandsias-opus48-20260719T0000Z"
