@@ -4,6 +4,15 @@ set -uo pipefail
 
 # Fixture for scripts/check-script-exec-bits.sh.
 #
+# This ABSORBS the four-scenario fixture order 731-d89b wrote here. A rewrite
+# under 758-jw6v replaced the file wholesale instead of extending it, which
+# broke litmus:script-exec-bit-shape step 2 (it matches the pinned
+# "PASS: script-exec-bits fixture" line) and would have dropped the original
+# scenario names from the record. Coverage was never lost -- all four are
+# below under clearer names -- but the pinned grammar was, and a fixture that
+# silently stops satisfying its own litmus is the failure this repo keeps
+# filing.
+#
 # WHY IT EXISTS NOW (order 758-jw6v). The checker was rewritten for speed —
 # 16.3s to 1.3s, by replacing 26 sweeps over 612 caller files with one sweep,
 # and a four-process filter chain per candidate with one awk pass. Its output on
@@ -122,5 +131,15 @@ if [ "${#failures[@]}" -gt 0 ]; then
     echo "FAIL: ${#failures[@]} scenario(s): ${failures[*]}"
     exit 1
 fi
+# The pinned line litmus:script-exec-bit-shape step 2 matches. It predates this
+# file being rewritten and must survive: order 731-d89b wrote the original
+# four-scenario fixture, and a later edit here replaced it wholesale, silently
+# breaking that step. All four of the original scenarios are still covered,
+# under clearer names:
+#   bare-invocation-non-executable      -> bare-invocation-refused
+#   bare-invocation-executable          -> executable-bare-ok
+#   interpreter-prefixed-non-executable -> interpreter-prefixed-ok
+#   sourced-library-non-executable      -> sourced-ok
+echo "PASS: script-exec-bits fixture 7/7 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses)"
 echo "ok:script-exec-bits-fixture:7"
 exit 0
