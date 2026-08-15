@@ -1,0 +1,85 @@
+packets:
+  - packet_id: e2e-eligibility-grammar-step-inherits-podman-latency
+    order: 740-88hz
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: bug
+    title: "litmus:e2e-eligibility-probe-shape STEP 4 times out intermittently — a GRAMMAR assertion is paying for an unbounded `podman info` call"
+    deliverable: "a deterministic grammar step (and a named budget for whatever still needs live podman)"
+    pickup_role: linux
+    capability_tags: [litmus, flake, podman, fail-loud, meta-orchestration]
+    estimated_hours: 1
+    context: |
+      MEASURED 2026-08-14 on tlatoani (linux_immutable, Fedora Silverblue) while
+      running the meta-orchestration pre-build instant suite for an unrelated
+      packet (737-zcj5). The suite reported PASS:11 FAIL:1, and the failure was:
+
+        litmus:e2e-eligibility-probe-shape
+        STEP 4/7 "the probe emits exactly one well-formed verdict line"
+        -> [TIMEOUT] after 5s
+
+      NOT caused by that cycle's changes: the diff touched
+      scripts/check-mcp-expert-health.sh (new), scripts/cycle-metrics.sh,
+      skills/meta-orchestration/SKILL.md, methodology/distributed-work.yaml and
+      two openspec files. It never touched scripts/e2e-preflight.sh or that
+      litmus.
+
+      NOT REPRODUCIBLE ON DEMAND, which is the point. Measured immediately after,
+      on the same tree:
+
+        bash scripts/e2e-preflight.sh eligibility   -> `eligible` in 0.118s
+        10 consecutive runs                          -> 0.10-0.12s every time
+
+      So the step has a 5000ms budget and the work measures ~110ms warm — a 45x
+      margin that still ran out once. That gap is the finding.
+
+      THE STRUCTURAL CAUSE, and why this is a defect rather than a bad day:
+      STEP 4 is the ONLY step in this litmus that reaches live podman. STEPS 2
+      and 3 both neutralise it — STEP 2 by pointing at a missing rootless runtime
+      dir, STEP 3 by setting XDG_RUNTIME_DIR to a temp dir it created — so they
+      exercise the verdict branches without touching the host runtime. STEP 4
+      runs in the ambient environment, so `e2e_eligibility_verdict` falls through
+      to `podman ps` (line 65) and `podman info` (line 154), whose latency is
+      unbounded and depends on storage-lock contention and page-cache state, not
+      on anything the step is asserting.
+
+      The step's own stated purpose is "emits exactly one well-formed verdict
+      line" — a GRAMMAR assertion, satisfiable by any branch of the probe. It
+      does not need live podman at all. It is currently paying full price for a
+      dependency its assertion does not use, and that is what makes the timeout
+      possible.
+
+      An intermittent failure is a defect with a schedule, not noise (the
+      skill's own words, earned from 638-ehzi). Filing it so the next host that
+      sees FAIL:1 here finds the measurement instead of re-deriving it — or,
+      worse, re-running until it passes and calling it green.
+    outcome: |
+      The grammar assertion is deterministic, and any step that genuinely needs
+      live podman says so and carries a budget justified by measurement.
+    exit_criteria:
+      - "STEP 4 asserts the verdict grammar without depending on live podman latency — e.g. by pinning XDG_RUNTIME_DIR to a fixture the way STEPS 2 and 3 already do, so the assertion is satisfied by a deterministic branch."
+      - "If any step in this litmus must reach live podman, it is named as such and its timeout_ms is justified by a measured cold-start figure, not by the warm 110ms."
+      - "NEGATIVE CONTROL: the fixed step must still FAIL when the probe emits zero lines or two — verify by mutating the probe, not by inspection. A step made deterministic by removing its assertion is worse than a flaky one."
+      - "The suite runs green repeatedly on a linux_immutable host (>= 5 consecutive pre-build instant runs of spec meta-orchestration)."
+    notes: |
+      Do NOT 'fix' this by raising timeout_ms alone. That converts a fast
+      deterministic assertion into a slow probabilistic one and leaves the real
+      coupling — a grammar check gated on container-runtime latency — in place
+      for the next host to trip over.
+
+      Whoever picks this up: `podman.socket` and `podman.service` are INACTIVE on
+      this host (rootless direct invocation, no socket activation), so a cold
+      `podman info` here is storage/page-cache cold rather than service start.
+      Do not assume a systemd unit is warming it.
+    events:
+      - type: filed
+        ts: "2026-08-14T23:32:00Z"
+        host: linux_immutable
+        agent_id: tlatoani-linux-immutable-20260814
+        summary: |
+          Filed from a meta-orchestration cycle whose own packet (737-zcj5)
+          passed 11/11; this was the suite's other failure. Captured with the
+          warm-timing measurement and the STEP 2/3-vs-STEP 4 asymmetry so the
+          next host does not re-derive it.
