@@ -1696,9 +1696,13 @@ Description=Tillandsias headless (in-VM vsock control wire)
 After=network-online.target podman.socket tillandsias-headless-fetch.service
 Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
-# Bound the restart loop the ExecStartPost readiness probe can create (order
-# 735-ewzp). A guest that can never bind should end in `failed`, loudly and
-# once, not restart every two seconds forever. These are [Unit] directives on
+# Bound the restart loop (order 735-ewzp). A daemon that can never start
+# should end in `failed`, loudly and once, not restart every two seconds
+# forever. This used to say "the restart loop the ExecStartPost readiness
+# probe can create"; that probe is no longer on this unit (757-4hdt) and the
+# stale wording briefly made a `grep -c ExecStartPost` on the generated file
+# report 1 during verification -- a comment answering a check about
+# directives, which is the shape 601-462g names. These are [Unit] directives on
 # modern systemd -- placing them under [Service], where they read more
 # naturally, gets them silently ignored, which would be the same
 # looks-configured-does-nothing shape this packet exists to remove.
