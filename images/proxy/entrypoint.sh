@@ -38,6 +38,17 @@ else
     exit 1
 fi
 
+# DETERMINATION (order 657-vqxz, 2026-08-15): the branches below are named
+# backwards relative to what production does. No launcher creates the
+# tillandsias-ca-key podman secret, so the SECRET branch is currently
+# UNREACHABLE and the "bind-mount fallback" is the only product path
+# (build_proxy_run_args mounts the key with -v). Squid can read the
+# bind-mounted key only because ensure_ca_bundle deliberately leaves it
+# 0644 on the host — a world-readable CA private key in /tmp, filed as
+# security packet 755-qcxh. That packet either makes the secret branch
+# reachable (preferred: it already handles ownership correctly) or removes
+# it in the same change. Do not "fix" ownership here in the fallback: the
+# defect is the host-side mode, not the container-side chown.
 if [ -f /run/secrets/tillandsias-ca-key ]; then
     cp /run/secrets/tillandsias-ca-key /etc/squid/certs/intermediate.key
     chmod 600 /etc/squid/certs/intermediate.key
