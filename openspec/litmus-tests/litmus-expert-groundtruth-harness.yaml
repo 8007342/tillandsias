@@ -354,4 +354,4 @@ rollback:
     dead-on-arrival regression order 456 shipped with.
     If the HARNESS BUDGET step failed, the grading gate no longer fits a forge
     cycle and will be skipped by the people it exists to protect.
-  command: "PB=$(cat /tmp/.litmus-394d-bin 2>/dev/null || echo ./target/release/tillandsias-plan); \"$PB\" grade --root . ; \"$PB\" grade --list-engines"
+  command: "PB=$(cat /tmp/.litmus-394d-bin 2>/dev/null || mf_plan_binary); \"$PB\" grade --root . ; \"$PB\" grade --list-engines"

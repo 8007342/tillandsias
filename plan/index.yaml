@@ -42362,6 +42362,45 @@ plan_index:
         - that signal does NOT block the push of a host that did not author the fragment, and a test proves an inherited malformed fragment still lets an unrelated change through
         - the rationale for choosing report-vs-gate is recorded where the next reader will find it, not just in a commit message
       events:
+        - type: note
+          ts: "2026-08-15T05:00:29Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            EVIDENCE FOR THIS PACKET, found from the other end — and a filing I RETRACTED because this packet already owns the question.
+
+            I had drafted 753-ed7i ("check skips an unparseable fragment and still reports ok") from a windows measurement, then found this packet and deleted the fragment before committing it. 699-dycj already states the problem AND warns against the fix I was scoping: "do not simply make `check` exit non-zero and call it done — re-read why 698 scoped itself first." Recording the measurement here instead.
+
+            MEASURED on windows 2026-08-15, throwaway ledger, by hand:
+
+              plan/index.yaml                -> packets: []
+              plan/index.d/...-lane-d-x.yaml -> packets: [unclosed
+
+              $ tillandsias-plan check
+              warning: ledger fragment plan\index.d\...-lane-d-x.yaml does not parse and was
+                       SKIPPED - its contents are not in the answers below
+              ok: 0 packets, ids unique, live references sound (0 parked-block edges)
+              CHECK_RC=0
+
+            THE GAP THIS PACKET DOES NOT YET NAME, and it is on the AUTHOR side that 698-7n6q was supposed to have covered. scripts/check-added-fragments-parse.sh is wired into build.sh and nowhere else. The plan-only push lane (668-2xeh) exists precisely to accept a fragments-only push WITHOUT running build.sh. So the one gate written to stop a malformed fragment at its author is bypassed by the only path that skips the build — which is the path fragments actually take. 698 is diff-scoped, deliberately and rightly; it simply is not consulted where it matters most.
+
+            The lane's own fallback made it worse rather than catching it. With no yq it says:
+
+              plan-only lane: note: yq absent - YAML parse of <fragment> delegated to
+              tillandsias-plan check, which folds every fragment
+
+            and `check` exits 0. So on windows the lane printed "validated <path>" beside an unparseable fragment and then "plan-only lane clean". That is the file's own stated worst case: a gate vouching for evidence it did not gather.
+
+            FIXED THIS CYCLE, in the lane only, both verified by litmus:plan-only-push-lane-shape step 6 (the negative control that had been silently passing on linux and could only fail on a yq-less host):
+              1. the lane now calls check-added-fragments-parse.sh when present, refusing on
+                 violation — closing the 698-bypass for every host, yq or not
+              2. the lane reads `does not parse and was SKIPPED` in check's output as the
+                 refusal check declines to make — defence in depth for a checkout where the
+                 added-fragments gate is absent
+
+            WHAT REMAINS FOR THIS PACKET IS UNTOUCHED. Both fixes are author-side and diff-scoped, the same shape 698 chose. Neither makes an ALREADY-LANDED malformed fragment loud fleet-wide, and neither should — the constraint recorded here (one host's typo must not red-gate every other host) still stands and still has no implementation.
+
+            Also worth knowing for whoever claims this: litmus:added-fragment-parse-gate-shape, the test that pins 698's gate, is currently RED on windows for unrelated reasons and is listed in 751-vega's residue. The gate protecting fragments has an unverified test on this host.
         - type: filed
           ts: "2026-08-12T03:33:14Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260812t033314z

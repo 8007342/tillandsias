@@ -17,17 +17,17 @@ preconditions:
 
 critical_path:
   - step: "NEGATIVE CONTROL: a closure rung with no evidence event is REFUSED"
-    command: "T=$(mktemp -d); printf 'status:\\n  - packet_id: bar\\n    field: status\\n    value: verified\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\n' > \"$T/f.yaml\"; if ./target/release/tillandsias-plan closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1; then echo 'FAIL: closure without evidence admitted'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: closure without evidence refused'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); printf 'status:\\n  - packet_id: bar\\n    field: status\\n    value: verified\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\n' > \"$T/f.yaml\"; if \"$MFPLAN\" closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1; then echo 'FAIL: closure without evidence admitted'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: closure without evidence refused'"
     timeout_ms: 15000
     expected_behavior: "ok: closure without evidence refused"
 
   - step: "POSITIVE CONTROL: a closure WITH an evidence event is admitted"
-    command: "T=$(mktemp -d); printf 'status:\\n  - packet_id: foo\\n    field: status\\n    value: completed\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\nevents:\\n  - packet_id: foo\\n    event:\\n      type: completed\\n      summary: \"status completed with evidence_refs: commit abc + litmus 5/5\"\\n' > \"$T/f.yaml\"; ./target/release/tillandsias-plan closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1 && echo 'ok: closure with evidence admitted'; rm -rf \"$T\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); printf 'status:\\n  - packet_id: foo\\n    field: status\\n    value: completed\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\nevents:\\n  - packet_id: foo\\n    event:\\n      type: completed\\n      summary: \"status completed with evidence_refs: commit abc + litmus 5/5\"\\n' > \"$T/f.yaml\"; \"$MFPLAN\" closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1 && echo 'ok: closure with evidence admitted'; rm -rf \"$T\""
     timeout_ms: 15000
     expected_behavior: "ok: closure with evidence admitted"
 
   - step: "NEGATIVE CONTROL: a lateral terminal (obsoleted) needs no evidence event"
-    command: "T=$(mktemp -d); printf 'status:\\n  - packet_id: baz\\n    field: status\\n    value: obsoleted\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\n' > \"$T/f.yaml\"; ./target/release/tillandsias-plan closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1 && echo 'ok: lateral terminal admitted without evidence'; rm -rf \"$T\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); printf 'status:\\n  - packet_id: baz\\n    field: status\\n    value: obsoleted\\n    ts: \"2026-08-12T00:00:00Z\"\\n    host: h\\n' > \"$T/f.yaml\"; \"$MFPLAN\" closure-evidence-check \"$T/f.yaml\" >/dev/null 2>&1 && echo 'ok: lateral terminal admitted without evidence'; rm -rf \"$T\""
     timeout_ms: 15000
     expected_behavior: "ok: lateral terminal admitted without evidence"
 

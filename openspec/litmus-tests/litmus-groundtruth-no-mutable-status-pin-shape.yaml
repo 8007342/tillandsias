@@ -37,7 +37,7 @@ critical_path:
     # pinned at 19; the query set grew to 20 and this step went red while the
     # harness was perfectly green (2026-08-14). A pin on the SIZE of the corpus
     # punishes adding coverage, which is the opposite of what this test wants.
-    command: "g=$(./target/release/tillandsias-plan grade 2>/dev/null); t=$(printf '%s' \"$g\" | grep -o 'total=[0-9]*' | head -1 | cut -d= -f2); p=$(printf '%s' \"$g\" | grep -o 'pass=[0-9]*' | head -1 | cut -d= -f2); f=$(printf '%s' \"$g\" | grep -o 'fail=[0-9]*' | head -1 | cut -d= -f2); [ -n \"$t\" ] && [ \"$t\" -gt 0 ] && [ \"$f\" = 0 ] && [ \"$p\" = \"$t\" ] && echo 'ok: harness all cases pass'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; g=$(\"$MFPLAN\" grade 2>/dev/null); t=$(printf '%s' \"$g\" | grep -o 'total=[0-9]*' | head -1 | cut -d= -f2); p=$(printf '%s' \"$g\" | grep -o 'pass=[0-9]*' | head -1 | cut -d= -f2); f=$(printf '%s' \"$g\" | grep -o 'fail=[0-9]*' | head -1 | cut -d= -f2); [ -n \"$t\" ] && [ \"$t\" -gt 0 ] && [ \"$f\" = 0 ] && [ \"$p\" = \"$t\" ] && echo 'ok: harness all cases pass'"
     timeout_ms: 30000
     expected_behavior: "ok: harness all cases pass"
 
