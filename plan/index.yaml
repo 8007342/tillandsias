@@ -47228,6 +47228,47 @@ plan_index:
         packet — that is a different decision about a retired spec name, and
         bundling it would make a performance fix look like a behaviour change.
       events:
+        - type: verified
+          ts: "2026-08-15T05:28:44Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            CLOSED. The hook now runs in 4.9 SECONDS. It was ~13 minutes when this packet was filed and ~69 seconds when this cycle started.
+
+            THE SECOND MEASUREMENT, which is the whole point — the previous cycle's fix was real but stopped at the first bottleneck and declared victory at "50s". Re-measuring per phase on this host today:
+
+              phase                     before    after
+              ghost_check                 243ms    236ms
+              zero_trace_check          64,197ms  1,715ms
+              staleness_check            3,586ms    600ms
+              cheatsheet_source_check       61ms     59ms
+              cheatsheet_tier_check        605ms    593ms
+              TOTAL                     ~68,700ms  4,910ms
+
+            Note the "before" total: 68.7s, not the 50s recorded last time. Either the tree grew or that number was taken differently; I am recording what I measured rather than the difference I would have preferred to report.
+
+            ROOT CAUSE, AGAIN, ONE LAYER DOWN. Inverting the 170-greps loop was correct and left the real cost untouched. Splitting zero_trace_check:
+
+              the repo-wide sweep .......  1.6s
+              the per-spec loop ......... 62.0s
+
+            The sweep was never the problem after the inversion. The LOOP was spawning three subprocesses per spec — a sed for the Status block, a grep to read it, a grep for set membership — 510 processes at ~107ms each. Identical root cause to the original defect: on Windows a process spawn costs two orders of magnitude more than the work it does, so ANY per-item subprocess is the entire runtime. staleness_check had the same shape (dirname + two basenames + a four-stage grep|head|sed|tr per change, eight spawns each).
+
+            Both are now spawn-free: retired specs come from ONE awk pass over every spec.md, membership is a bash associative array, and the change loop uses parameter expansion and a read loop. 510 spawns -> 2.
+
+            EQUIVALENCE CHECKED, NOT ASSUMED — and checked in the direction that could actually catch something. Diffing the zero-trace verdict old-vs-new gives "old=0 new=0, identical", which proves almost nothing since both are empty. So I diffed the underlying RETIRED SET instead, which is where the logic actually changed: 28 specs both ways, sets identical. Same for staleness: 6 warnings both ways, byte-identical output.
+
+            NEGATIVE CONTROL (exit criterion 4) — falsified in four directions, because a speed-up that quietly retires a check is the failure this criterion exists to prevent:
+              * an ACTIVE spec with no traces (fixture spec dir, status: active) -> still flagged
+              * the SAME fixture marked obsolete -> correctly not flagged
+              * a genuinely NEW ghost trace (@trace spec:zzz-definitely-no-such-spec-xyz in a staged .rs) -> caught
+              * --ci-mode with that ghost staged -> exit 1; with it removed -> exit 0
+
+            EXIT CRITERION 3, the one left open last cycle: every phase now announces itself before running, with the MEASURED budget beside it, and a phase that exceeds 4x its budget prints a drift warning that survives into scripted commits. Verified by lowering zero_trace_check's budget to 1ms and confirming the warning fires. The progress line itself is terminal-only — spamming it into every unattended cycle's log would make the loop noisier for no reader.
+
+            The budgets are deliberately the measured windows numbers rather than round figures. This cost scales with spec count and repo size, both of which only grow, so the next thirteen-minute scan announces itself instead of looking like a hang. That ambiguity, not the duration, is what cost two commits and left work staged twice.
+
+            UNTOUCHED, as this packet's notes require: the 16 pre-existing spec:mcp-tool-socket ghost traces. They are a separate decision about a retired spec name and folding them in would make a performance fix look like a behaviour change.
         - type: filed
           ts: "2026-08-14T12:05:00Z"
           host: windows

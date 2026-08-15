@@ -123,6 +123,23 @@ zero_trace_check() {
     # Inverting it is exact, not an approximation: collect every `spec:<name>`
     # token the codebase actually references in a single sweep, then ask which
     # specs are absent from that set. Same answer, one traversal.
+    # THE SECOND MEASUREMENT (order 734-sjb3, exit criterion 1 again). Inverting
+    # the loop took the hook from ~13min to ~69s, and then the remaining cost was
+    # measured rather than assumed:
+    #
+    #   the repo-wide sweep below ................  1.6s
+    #   the per-spec loop (170 specs) ............ 62.0s
+    #
+    # The sweep was never the problem after the inversion. The loop was spawning
+    # THREE subprocesses per spec -- a sed for the Status block, a grep to read
+    # it, a grep to test set membership -- 510 processes at ~107ms each on
+    # Windows. Same root cause as the original defect, one layer down: on this
+    # host a process spawn costs two orders of magnitude more than the work it
+    # does, so any per-item subprocess is the whole runtime.
+    #
+    # Both remaining per-spec spawns are removed. Retired specs come from ONE
+    # awk pass over every spec.md, and membership is a bash associative array.
+    # 510 spawns -> 2.
     local referenced
     referenced="$(grep -rhoE 'spec:[a-zA-Z0-9._-]+' \
         --include='*.rs' --include='*.sh' --include='*.toml' --include='Containerfile*' \
@@ -130,27 +147,43 @@ zero_trace_check() {
         | sed 's/^spec://' \
         | sort -u)" || true
 
+    local -A is_referenced=()
+    local tok
+    while IFS= read -r tok; do
+        [[ -n "$tok" ]] && is_referenced["$tok"]=1
+    done <<<"$referenced"
+
+    # Deferred or obsolete specs are retired contracts. They remain in the tree
+    # for traceability but are excluded from active zero-trace scoring. The
+    # Status block runs from `## Status` to the next `## ` heading; this is the
+    # same window the two-sed pipeline read, expressed once over all files.
+    local -A is_retired=()
+    local retired
+    retired="$(awk '
+        FNR == 1 { inblock = 0 }
+        /^## Status$/ { inblock = 1; next }
+        inblock && /^## / { inblock = 0 }
+        inblock && /^(status:[ \t]*(deferred|obsolete)|deferred|obsolete)[ \t]*$/ {
+            n = split(FILENAME, parts, "/")
+            print parts[n - 1]
+            inblock = 0
+        }
+    ' "$SPECS_DIR"/*/spec.md 2>/dev/null)" || true
+    while IFS= read -r tok; do
+        [[ -n "$tok" ]] && is_retired["$tok"]=1
+    done <<<"$retired"
+
     for spec_dir in "$SPECS_DIR"/*/; do
         [[ -d "$spec_dir" ]] || continue
-        local spec_name
-        spec_name="$(basename "$spec_dir")"
-        local spec_file="$spec_dir/spec.md"
+        local spec_name="${spec_dir%/}"
+        spec_name="${spec_name##*/}"
 
-        # Deferred or obsolete specs are retired contracts. They remain in the
-        # tree for traceability but are excluded from active zero-trace scoring.
-        if [[ -f "$spec_file" ]]; then
-            local status_block
-            status_block="$(sed -n '/^## Status$/,/^## /p' "$spec_file" 2>/dev/null | sed '1d;$d')"
-            if grep -Eq '(^status:[[:space:]]*(deferred|obsolete)$)|(^deferred$)|(^obsolete$)' <<<"$status_block"; then
-                continue
-            fi
-        fi
+        [[ -n "${is_retired[$spec_name]:-}" ]] && continue
+        [[ -n "${is_referenced[$spec_name]:-}" ]] && continue
 
-        if ! grep -qxF "$spec_name" <<<"$referenced"; then
-            echo "  ◌ OpenSpec: spec '$spec_name' has no @trace annotations in code" >&2
-            zero_trace_warnings=$((zero_trace_warnings + 1))
-            warnings=$((warnings + 1))
-        fi
+        echo "  ◌ OpenSpec: spec '$spec_name' has no @trace annotations in code" >&2
+        zero_trace_warnings=$((zero_trace_warnings + 1))
+        warnings=$((warnings + 1))
     done
 }
 
@@ -163,25 +196,35 @@ staleness_check() {
     local today_epoch
     today_epoch="$(date +%s 2>/dev/null)" || return 0
 
+    # Spawn-free per change (order 734-sjb3, second measurement). This loop ran
+    # dirname + two basenames + a four-stage grep|head|sed|tr pipeline for every
+    # change directory -- eight processes each, and on Windows a spawn costs far
+    # more than the work. Parameter expansion and a read loop do the same job
+    # with none. Only `date -d` remains, once per surviving change, because
+    # parsing YYYY-MM-DD to epoch in bash is not worth the subtlety.
+    # Measured: 3.6s -> 0.6s.
     for yaml_file in "$CHANGES_DIR"/*/.openspec.yaml; do
         [[ -f "$yaml_file" ]] || continue
 
-        # Skip the archive directory
-        local change_dir
-        change_dir="$(dirname "$yaml_file")"
-        [[ "$(basename "$change_dir")" == "archive" ]] && continue
+        local change_dir="${yaml_file%/.openspec.yaml}"
+        local change_name="${change_dir##*/}"
 
-        local change_name
-        change_name="$(basename "$change_dir")"
+        # Skip the archive directory
+        [[ "$change_name" == "archive" ]] && continue
 
         if spec_is_ignored "$change_name"; then
             continue
         fi
 
-        # Extract created: date (YYYY-MM-DD format)
-        local created_date
-        created_date="$(grep -E '^created:\s*' "$yaml_file" 2>/dev/null \
-            | head -1 | sed 's/^created:\s*//' | tr -d ' ')" || continue
+        # Extract created: date (YYYY-MM-DD format) — first match wins, exactly
+        # as the old `| head -1` did.
+        local created_date="" line
+        while IFS= read -r line || [[ -n "$line" ]]; do
+            if [[ "$line" =~ ^created:[[:space:]]*(.*)$ ]]; then
+                created_date="${BASH_REMATCH[1]//[[:space:]]/}"
+                break
+            fi
+        done < "$yaml_file"
 
         [[ -z "$created_date" ]] && continue
 
@@ -249,14 +292,61 @@ cheatsheet_tier_check() {
 }
 
 # --- Run all checks ---------------------------------------------------------
+#
+# EVERY PHASE ANNOUNCES ITSELF (order 734-sjb3, exit criterion 3). The original
+# defect was not only that the scan took thirteen minutes -- it was that the
+# hook went SILENT for thirteen minutes while printing nothing but pre-existing
+# ghost-trace debt, so an operator could not tell a slow scan from a hung one.
+# Two commits were killed on that ambiguity with the work left staged.
+#
+# A hook that is fast today can be slow tomorrow: the cost here scales with spec
+# count and repo size, both of which only grow. The budget printed beside each
+# phase is the MEASURED time on the slowest host (windows, 2026-08-15), so a
+# phase that has drifted past its budget is visible to whoever is watching
+# rather than only in a profiler someone thinks to run.
+#
+# Written to stderr and only when attached to a terminal: a hook that spams
+# progress lines into scripted commits makes every cycle's log noisier, and the
+# unattended case is the one that can least afford the churn.
+
+phase_budget_ms() {
+    case "$1" in
+        ghost_check)            echo 300 ;;
+        zero_trace_check)       echo 2500 ;;
+        staleness_check)        echo 1000 ;;
+        cheatsheet_source_check) echo 200 ;;
+        cheatsheet_tier_check)  echo 900 ;;
+        *)                      echo 0 ;;
+    esac
+}
+
+run_phase() {
+    local fn="$1" budget started ended elapsed
+    budget="$(phase_budget_ms "$fn")"
+    if [[ -t 2 ]]; then
+        printf '  … OpenSpec: %s (expected ~%sms)\r' "$fn" "$budget" >&2
+    fi
+    started="$(date +%s%N 2>/dev/null || echo 0)"
+    "$fn"
+    ended="$(date +%s%N 2>/dev/null || echo 0)"
+    elapsed=$(( (ended - started) / 1000000 ))
+    if [[ -t 2 ]]; then
+        printf '\033[2K\r' >&2
+    fi
+    # Over budget is worth saying out loud even in a scripted commit -- that is
+    # the signal that would have named the original thirteen-minute scan.
+    if [[ "$budget" -gt 0 && "$elapsed" -gt $((budget * 4)) ]]; then
+        echo "  ⚠ OpenSpec: ${fn} took ${elapsed}ms (budget ~${budget}ms) — the scan is drifting; see order 734-sjb3" >&2
+    fi
+}
 
 echo "" >&2  # Visual separator from git's own output
 
-ghost_check
-zero_trace_check
-staleness_check
-cheatsheet_source_check
-cheatsheet_tier_check
+run_phase ghost_check
+run_phase zero_trace_check
+run_phase staleness_check
+run_phase cheatsheet_source_check
+run_phase cheatsheet_tier_check
 
 if [[ "$warnings" -gt 0 ]]; then
     echo "" >&2

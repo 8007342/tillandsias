@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    field: status
+    value: verified
+    ts: "2026-08-15T05:28:53Z"
+    host: host
+
+events:
+  - packet_id: precommit-openspec-scan-exceeds-ten-minutes-on-large-files
+    event:
+      type: completed
+      ts: "2026-08-15T05:28:53Z"
+      host: host
+      summary: >
+        status 'verified' with evidence_refs: hook 68.7s -> 4.9s measured per phase on windows 2026-08-15; zero_trace_check 64,197ms -> 1,715ms and staleness_check 3,586ms -> 600ms by removing 510 per-item process spawns; retired-set and staleness output diffed old-vs-new and identical; negative control falsified four ways (active untraced spec flagged, same spec obsolete not flagged, new ghost trace caught, --ci-mode exit 1 with it and 0 without); exit criterion 3 closed with per-phase announcement plus a 4x-budget drift warning verified by lowering a budget to 1ms
