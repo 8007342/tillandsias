@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mirror-identity-lane-sidecar-and-sshd
+    field: status
+    value: blocked
+    ts: "2026-08-15T02:21:51Z"
+    host: linux_immutable
+
+events:
+  - packet_id: mirror-identity-lane-sidecar-and-sshd
+    event:
+      type: note
+      ts: "2026-08-15T02:21:51Z"
+      host: linux_immutable
+      summary: >
+        Superseded by six children (749-wv4d/54pv/2fqj/6uby/8iw4/y8xx). NOT obsoleted: obsoleted satisfies dependents, which would falsely unblock 722-uern's §4a matrix before any rung lands. NOT left ready: only ready is claimable, and four consecutive cycles offered it as urgent= without a claim because eleven rungs do not fit a cycle.

@@ -24,6 +24,39 @@ features:
     macos: "done"
     windows: "done"
     parity: "required"
+  # Order 598-kibt M5. Added 2026-08-14 for the same reason 626-r7kq added the
+  # sign-in row above: the matrix had NO row for the loading-vs-confirmed-empty
+  # distinction, so `cloud_projects_loaded` landing on Windows only left macOS
+  # showing "(loading repos…)" forever with every gate green and the umbrella
+  # "Cloud submenu" row still reading done/done/done. A capability that exists
+  # on one platform and not another, with no row naming it, is invisible to
+  # exactly the gate meant to catch it — the hole 628-r2vk exists to close.
+  #
+  # All three implement it, by two different mechanisms: macOS and Windows hold
+  # a `cloud_projects_loaded` bool on the shared MenuState, Linux infers it from
+  # `TrayUiState::last_fetched: Option<Instant>` (tray/mod.rs:3040). Different
+  # storage, same observable rule, so this is genuine parity rather than three
+  # separate features sharing a row. Linux's copy is "(loading…)" against the
+  # host-shell trays' "(loading repos…)" — a wording difference, not a
+  # capability one; the terminology gate (629-t6bx) owns that, not this row.
+  - capability: "Cloud submenu distinguishes an unfinished fetch from a confirmed-empty account (renders a loading placeholder until the first confirmed reply, '(no repos)' only after — never claims emptiness mid-fetch)"
+    linux: "done"
+    macos: "done"
+    windows: "done"
+    parity: "required"
+  # DELIBERATELY A SEPARATE ROW, and deliberately not `required`. Resetting to
+  # the loading state on a fresh logout is macOS + Windows only: Linux never
+  # returns `last_fetched` to None outside initialisation, so a logout there
+  # leaves the previous verdict standing. Folding this into the row above would
+  # have forced a choice between marking Linux done for something it does not
+  # do, or failing the Linux host's own gate on a capability nobody has agreed
+  # it owes — which is how a matrix starts lying. Promote to `required` if and
+  # when Linux implements it; see the Linux-side packet filed with 598-kibt M5.
+  - capability: "A fresh GitHub logout resets the cloud submenu to the loading state, so the next session cannot show a stale '(no repos)' for an account that has repositories"
+    linux: "todo"
+    macos: "done"
+    windows: "done"
+    parity: "platform-specific"
   - capability: "Local (🏠 ~/src) project submenu"
     linux: "done"
     macos: "done"

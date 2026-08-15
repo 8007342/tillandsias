@@ -5,6 +5,38 @@ philosophy:
   core_principle: >
     Monotonic reduction of uncertainty under verifiable constraints.
 
+  convergence_via_velocity:
+    authority: "The Tlatoāni, 2026-08-13 (fleet-restart directive)"
+    principle: >
+      Convergence is won by ITERATION VELOCITY, not per-iteration accuracy. We
+      favor the STRONG law of large numbers over smaller overall loops: instead
+      of one huge model looping for hours, combine MANY tiny, super-fast models
+      whose fast iterations converge to the same result quality orders of
+      magnitude faster.
+    weak_vs_strong: >
+      A single prompt is one finite sample: it converges to the answer with a
+      SKEW (WEAK LLN — convergence in probability, biased at finite N). Do NOT
+      fight to make one prompt maximally accurate; that fights its own weak-LLN
+      skew. Instead make each prompt SMALL and FAST with a CONTROLLED, BOUNDED
+      skew, then iterate — the STRONG LLN (almost-sure convergence) makes the
+      stream of iterations converge hard. The hazard is uncontrolled skew
+      sneaking in at the END of every individual prompt: if a prompt's skew is
+      not bounded, infinite iterations do NOT converge hard. So the one thing to
+      wrangle carefully is per-prompt controlled skew (its weak-LLN form); the
+      iteration loop then supplies the strong-LLN convergence.
+    design_implications:
+      - "Make each loop as SMALL as possible; raise iteration velocity, not individual-prompt accuracy."
+      - "Split large work into small ASYNCHRONOUS work (cheap). Monolith -> async microservices: one huge slow model -> many tiny fast RAG experts an agent COMPOSES."
+      - "Prefer lots of little composable RAG models over few big ones (on_demand_experts, order 707-t3mz)."
+    rag_as_cache_commits_as_lamport_clock: >
+      RAG is the CACHE for the async work: it caches the converged knowledge so
+      an agent does not re-derive it. That cache is updated on COMMITS — a commit
+      hitting the relevant bits retrains the RAG. Commits are therefore the
+      LAMPORT CLOCK of the RAG models: they causally order and version the cached
+      knowledge against the code, in-forge and (order 719+) on bare-metal dev
+      checkouts alike. A RAG answer is valid for its source_commit; a newer
+      commit advances the clock and invalidates/refreshes the relevant corpus.
+
   system_model: >
     A closed-loop system where specs define intent, cheatsheets provide compressed knowledge,
     code implements behavior, traces provide evidence, litmus tests define decision boundaries,
@@ -356,3 +388,29 @@ capability_ladder:
     one laptop to a distributed cluster serving millions. Exposure is
     progressive; capability is not. A rung we cannot implement is a rung we must
     not imply.
+
+# ── The identity plane converges toward SPIFFE/SPIRE (2026-08-11) ─────────────
+identity_plane_aspiration:
+  decided_by: "The Tlatoāni, 2026-08-11 (long-horizon aspiration, not near-term)"
+  status: "aspiration — v0.6 talk shapes v0.7+; tracked by packet spiffe-spire-identity-plane-aspiration (692-zjzg)"
+  rule: >
+    Workload identity in Tillandsias should converge toward the SPIFFE/SPIRE
+    model, which the ephemeral epoch-scoped CA design (order 322) is already
+    halfway to: short-lived automatically-rotated cryptographic identities
+    (SVIDs ~ the 30-min per-lane certs), a workload that receives identity
+    WITHOUT ever holding key material (the SPIRE agent ~ the per-lane
+    ssh-agent signing-oracle sidecar), and attestation-based issuance (the
+    launcher attesting a lane before minting ~ SPIRE node/workload
+    attestation).
+  where_it_becomes_load_bearing: >
+    Cross-node trust — the mesh (order 563) — is the case the single-machine
+    epoch-CA design explicitly punts, and it is exactly where SPIFFE's trust
+    domains and SPIRE's federation are the honest, well-documented answer
+    rather than a homegrown invention. Per capability_ladder, the interface
+    must not change as topology grows; the identity plane getting more robust
+    as nodes are added is the same "we decide for them, reversibly" obligation.
+  the_open_question: >
+    Adopt SPIRE proper, or keep a homegrown SPIFFE-SHAPED plane — the same
+    build-vs-adopt axis as the OpenTelemetry decision (682-x8df), under the
+    same enclave-egress / no-python / CRDT-fit constraints. The v0.6 operator
+    talk decides the direction; v0.7+ packets implement it.

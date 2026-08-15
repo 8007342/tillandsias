@@ -36,6 +36,13 @@ tracing-subscriber = { workspace = true }
 tempfile = "3"
 reqwest = { workspace = true }
 tillandsias-secure-channel = { workspace = true }
+# @trace plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md (D13) —
+# the opaque per-project mirror-id is 12 bytes from the host CSPRNG, minted
+# RANDOM, never derived from the guessable project name. getrandom 0.4 is
+# already in the dependency graph (uuid v4 uses it), so this adds no new
+# lockfile entry; it is unconditional (not vault-gated) because the id
+# grammar and its tests must build without the vault feature.
+getrandom = "0.4"
 
 # @trace spec:tillandsias-vault — Phase 6: Vault is now the default secrets
 # backend for Linux. The `vault` feature is enabled by default.

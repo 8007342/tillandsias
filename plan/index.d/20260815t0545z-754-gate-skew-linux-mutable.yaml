@@ -1,0 +1,55 @@
+# Filed by linux_mutable during the attended 2026-08-15 coordinator cycle:
+# the first --ci-full on the merged union (osx-next + windows-next + overnight
+# linux-next) failed 10 checks; 9 deterministic cross-branch skew, 1 contention.
+# Findings: plan/issues/cross-branch-litmus-skew-no-gate-2026-08-15.md
+#           plan/issues/podman-budget-test-parallel-contention-2026-08-15.md
+packets:
+  - packet_id: cross-branch-litmus-skew-gate
+    order: 754-kptj
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    release_target: fail-loud-diagnosis-milestone
+    kind: enhancement
+    title: "Litmus never runs on the merged union until the release path; and script-exec-bits does not scan litmus command: fields"
+    deliverable: "coordinator post-merge litmus (full or changed-pin subset) + 731-d89b checker extended to litmus YAML bare-path invocations"
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [ci, litmus, coordination]
+    estimated_hours: 3
+    context: |
+      2026-08-15: coordinator merged both sibling branches; each was green on
+      its own --check gate (which runs no litmus, 748-tkjx); the union failed
+      9 litmus steps, discovered only inside merge-to-main-and-release STEP 3
+      while the operator waited on the v0.4 promotion. Includes the concrete
+      checker gap: scripts/test-cycle-flow-emit-idempotency.sh (windows-authored,
+      mode 100644) is invoked by bare path from litmus YAML and
+      script-exec-bits (731-d89b) reported ok:26-checked on the same tree.
+      Full skew table in the dated issue.
+    exit_criteria:
+      - "The coordinator's post-sibling-merge pass runs the litmus phases (or a changed-pin-scoped subset) on the merged tree BEFORE any release-path gate needs them, and its verdict line is recorded in the cycle handoff."
+      - "scripts/check-script-exec-bits inventory includes bare-path scripts/<name>.sh invocations inside openspec/litmus-tests/*.yaml command: fields; a fixture with a 100644 bare-path litmus script turns the check red (negative control)."
+
+  - packet_id: podman-budget-test-contention
+    order: 754-3jht
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    release_target: fail-loud-diagnosis-milestone
+    kind: optimization
+    title: "a_prompt_podman_still_succeeds_under_the_same_budget is killed by parallel litmus load on the shared podman store, not by podman"
+    deliverable: "the budget test cannot be starved by sibling gate phases (schedule or isolate; do not just raise the budget)"
+    pickup_role: linux
+    depends_on: []
+    capability_tags: [ci, testing, podman]
+    estimated_hours: 2
+    context: |
+      638-ehzi class. Real `podman ps` under the 30s budget killed at 30.001s
+      during --ci-full run local-ci-20260815T051005Z while litmus-pre-build
+      saturated the same podman store; 0.018s idle on the same tree. Fails
+      exactly on full-gate cycles — an intermittent failure with a schedule.
+      Fix directions ranked in the dated issue (serialize the two podman-heavy
+      phases, or isolate the test's podman state; raising the budget alone is
+      the weakest option and dilutes a real runtime contract).
+    exit_criteria:
+      - "Ten consecutive ./build.sh --ci-full runs on a loaded host pass rust-tests with the podman budget test enabled, or the test provably runs against isolated podman state (its own --root/--runroot)."

@@ -2176,11 +2176,42 @@ fn apply_login_state(
     if guard.login == login {
         return false;
     }
-    if matches!(login, GithubLoginState::LoggedOut) {
-        // Fresh logout: the next login must re-fetch cloud projects, so the
-        // submenu shows "(loading repos…)" rather than a stale
-        // "(no repos)" / repo list from the previous session (mirrors the
-        // Windows wiring in notify_icon::apply_github_login).
+    if matches!(
+        login,
+        GithubLoginState::LoggedOut | GithubLoginState::LoggedIn { .. }
+    ) {
+        // A login TRANSITION invalidates the previous session's cloud verdict,
+        // in BOTH directions. We are past the equality early-return above, so
+        // reaching here means the state actually changed.
+        //
+        // Logout is the obvious half: the next login must re-fetch, so the
+        // submenu shows "(loading repos…)" rather than a stale "(no repos)" or
+        // a previous user's repo list.
+        //
+        // LOGIN IS THE HALF THAT WAS MISSING, and it inverted the flag's whole
+        // purpose. The push listener primes an UNCONDITIONAL CloudRefreshRequest
+        // at subscription setup, before any login answer exists. With no token
+        // the guest's gh call fails, and cloud_projects.rs collapses every
+        // failure into an empty list — "CloudRefreshReply is always
+        // well-formed". So apply_cloud_projects latches cloud_projects_loaded =
+        // true seconds after every cold start, from a reply that confirmed
+        // nothing.
+        //
+        // The reset then fired only when the NEW state was LoggedOut, so a
+        // LoggedOut -> LoggedIn transition kept that latched flag. The cloud
+        // submenu is rendered ONLY in the LoggedIn arm, so the very first time
+        // the user could see it, it said "(no repos)" — with the post-login
+        // fetch still in flight, to an account that may have hundreds.
+        //
+        // That is the exact falsehood the flag was introduced to prevent
+        // (operator report 2026-07-28), pointing the other way. Linux avoids it
+        // structurally by stamping last_fetched only on a SUCCESSFUL fetch and
+        // keeping the old list on failure, "so the menu doesn't flicker into
+        // (no repos)" (tillandsias-headless/src/tray/cloud.rs).
+        //
+        // Windows carries the identical LoggedOut-only condition in
+        // notify_icon::apply_github_login and needs the same change; filed
+        // separately, since this crate cannot fix it.
         guard.cloud_projects_loaded = false;
         guard.cloud_projects = Vec::new();
     }
@@ -3064,6 +3095,197 @@ mod tests {
         );
     }
 
+    /// M5 CLOSURE EVIDENCE (598-kibt). Operator ruling 2026-08-14: a GitHub
+    /// account with zero visible repositories cannot be provisioned, so the
+    /// runtime check this criterion originally demanded is unobtainable and
+    /// these tests ARE the closure standard.
+    ///
+    /// That ruling raises the bar on them, because until now the two halves of
+    /// M5 were pinned SEPARATELY and nothing crossed the seam between them:
+    ///
+    ///   half 1  `apply_cloud_projects` flips `cloud_projects_loaded`
+    ///           (pinned here, in this module)
+    ///   half 2  `build()` renders "(no repos)" once that flag is set
+    ///           (pinned in tillandsias-host-shell::menu_state)
+    ///
+    /// That seam is exactly where M5's defect lived. The flag was correct on
+    /// Windows and macOS never set it, and the workspace still compiled and
+    /// still passed because the macOS TEST literal had been patched to `true`
+    /// while the runtime was never wired — two green halves either side of a
+    /// broken join. A test per half cannot detect that; only one that composes
+    /// the real macOS entry point with the real shared renderer can.
+    ///
+    /// Looks up the submenu by ID rather than by position, so a reordering of
+    /// the menu retires this pin honestly instead of silently asserting about
+    /// some other row.
+    #[test]
+    fn empty_cloud_reply_renders_no_repos_through_the_real_build() {
+        use tillandsias_host_shell::menu_state::{
+            GithubLoginState, MenuStructure, TargetSurface, build, ids,
+        };
+
+        fn cloud_children(
+            menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+        ) -> Vec<(String, String)> {
+            let snapshot = menu_state.lock().unwrap().clone();
+            let items = match build(&snapshot) {
+                MenuStructure::Ready { items } => items,
+                other => panic!("expected a Ready menu, got {other:?}"),
+            };
+            let cloud = items
+                .iter()
+                .find(|i| i.id == ids::CLOUD_PROJECTS)
+                .expect("the Ready menu must carry a cloud-projects submenu");
+            cloud
+                .children
+                .iter()
+                .map(|c| (c.id.clone(), c.label.clone()))
+                .collect()
+        }
+
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        // MenuState::initial() is WindowsTray; the macOS runtime sets MacosTray
+        // in both places it builds this state (see set_menu_target callers).
+        // build() genuinely branches on target, so without this line the test
+        // would assert the WINDOWS rendering of a macOS claim — passing today
+        // only because build_cloud_projects' empty branch happens not to
+        // consult target, which is a coincidence, not a contract.
+        menu_state.lock().unwrap().target = TargetSurface::MacosTray;
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+
+        // NEGATIVE CONTROL, and the load-bearing half of this test: BEFORE any
+        // confirmed reply the submenu must say "(loading repos…)". Without it a
+        // renderer that always emitted "(no repos)" would satisfy the assertion
+        // below — and claiming emptiness mid-fetch is the exact failure the
+        // loaded flag exists to prevent. A zero-repo account and a slow fetch
+        // look identical on screen without this distinction.
+        assert_eq!(
+            cloud_children(&menu_state),
+            vec![(
+                ids::CLOUD_PROJECTS_LOADING.to_string(),
+                "(loading repos\u{2026})".to_string()
+            )],
+            "before any confirmed reply the submenu must show the loading row"
+        );
+
+        // THE M5 EVENT: a confirmed reply that happens to be empty — what a
+        // zero-repo account produces.
+        assert!(
+            apply_cloud_projects(Vec::new(), &menu_state),
+            "the first confirmed reply must request a rebuild even when empty"
+        );
+        assert_eq!(
+            cloud_children(&menu_state),
+            vec![(
+                ids::CLOUD_PROJECTS_EMPTY.to_string(),
+                "(no repos)".to_string()
+            )],
+            "a confirmed empty reply must render (no repos), not (loading repos…) forever"
+        );
+
+        // A fresh logout must return the submenu to the loading state, so the
+        // next login cannot show a stale "(no repos)" for an account that has
+        // repositories.
+        apply_login_state(GithubLoginState::LoggedOut, &menu_state);
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+        assert_eq!(
+            cloud_children(&menu_state),
+            vec![(
+                ids::CLOUD_PROJECTS_LOADING.to_string(),
+                "(loading repos\u{2026})".to_string()
+            )],
+            "after logout the next session must re-show loading, never a stale (no repos)"
+        );
+    }
+
+    /// M5, THE INVERSE DEFECT (598-kibt). Found by adversarially attacking the
+    /// M5 closure rather than by the criterion itself, which is why it is worth
+    /// a separate test: the criterion asks "does a confirmed-empty account
+    /// render (no repos)?" and the answer became yes — while the SAME flag
+    /// started rendering "(no repos)" to accounts that have repositories.
+    ///
+    /// This reproduces the real production ordering, which the other M5 test
+    /// does not: the push listener primes an UNCONDITIONAL CloudRefreshRequest
+    /// at subscription setup, BEFORE any login answer exists. With no token the
+    /// guest's gh call fails and returns an empty list — every failure mode
+    /// collapses to `Vec::new()` there — so the flag gets latched by a reply
+    /// that confirmed nothing. The reset then fired only on a transition TO
+    /// LoggedOut, so signing in kept the latch, and the cloud submenu (rendered
+    /// only in the LoggedIn arm) said "(no repos)" the first moment it was
+    /// visible.
+    ///
+    /// The other test starts from LoggedIn and so encodes the returning-user
+    /// ordering, where the bug is invisible. Order matters here, and that is
+    /// the whole point of this one.
+    #[test]
+    fn cloud_reply_received_while_logged_out_does_not_survive_the_next_sign_in() {
+        use tillandsias_host_shell::menu_state::{
+            GithubLoginState, MenuStructure, TargetSurface, build, ids,
+        };
+
+        let menu_state = Arc::new(Mutex::new(
+            tillandsias_host_shell::menu_state::MenuState::initial(),
+        ));
+        menu_state.lock().unwrap().target = TargetSurface::MacosTray;
+
+        // Production ordering, step 1: the login probe resolves LoggedOut.
+        apply_login_state(GithubLoginState::LoggedOut, &menu_state);
+
+        // Step 2: the unconditional cloud prime's reply lands. It is EMPTY —
+        // not because the account has no repos, but because gh had no token.
+        // Nothing on the wire distinguishes those two, which is exactly why
+        // this reply must not be treated as a confirmed answer for the session
+        // that has not started yet.
+        apply_cloud_projects(Vec::new(), &menu_state);
+
+        // Step 3: the user signs in. The submenu becomes visible for the first
+        // time and MUST show the loading row, because the post-login fetch has
+        // not returned.
+        apply_login_state(
+            GithubLoginState::LoggedIn {
+                handle: "octocat".into(),
+            },
+            &menu_state,
+        );
+
+        let snapshot = menu_state.lock().unwrap().clone();
+        let items = match build(&snapshot) {
+            MenuStructure::Ready { items } => items,
+            other => panic!("expected a Ready menu, got {other:?}"),
+        };
+        let cloud = items
+            .iter()
+            .find(|i| i.id == ids::CLOUD_PROJECTS)
+            .expect("a LoggedIn menu must carry the cloud-projects submenu");
+        let rows: Vec<(&str, &str)> = cloud
+            .children
+            .iter()
+            .map(|c| (c.id.as_str(), c.label.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            vec![(ids::CLOUD_PROJECTS_LOADING, "(loading repos\u{2026})")],
+            "a pre-login empty reply must not make the first post-login render \
+             claim (no repos) — that tells a user with repositories they have none"
+        );
+        assert!(
+            !menu_state.lock().unwrap().cloud_projects_loaded,
+            "signing in must clear a loaded flag latched before the session began"
+        );
+    }
+
     /// `map_login_state` mapping pin: logged_in with a handle, logged_in
     /// with a missing handle (defaults empty), and logged_out — identical
     /// to the poll path's historical mapping.
@@ -3095,7 +3317,11 @@ mod tests {
         let menu_state = Arc::new(Mutex::new(
             tillandsias_host_shell::menu_state::MenuState::initial(),
         ));
-        // initial() starts LoggedOut — reapplying it is a no-op.
+        // initial() starts Unknown (626-r7kq): the FIRST confirmed
+        // LoggedOut observation resolves the "Checking your account…" row
+        // into the actionable login leaf — that IS a change and must
+        // rebuild. Only a repeat of the same confirmed state is a no-op.
+        assert!(apply_login_state(GithubLoginState::LoggedOut, &menu_state));
         assert!(!apply_login_state(GithubLoginState::LoggedOut, &menu_state));
         let logged_in = GithubLoginState::LoggedIn {
             handle: "octocat".into(),

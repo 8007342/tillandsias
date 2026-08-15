@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:default-image
+# freshness: auditor=linux-mutable-20260814t0517z date=2026-08-14 verdict=updated scope=standing FRESHNESS audit — six checks re-validated against their current verdict grammars (credential ok:*, service-health ok:/skip:/failed:, eligibility eligible/skip:*) and the PASS/SKIP/FAIL classification is sound; UPDATED because the push-route check alone could not report SKIP: on a detached HEAD it printed FAIL exit:1 for a push that never ran, naming an exit code nothing produced (order 732-z8ef)
 set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,7 +16,10 @@ push_cmd=()
 
 if [ -n "${FORGE_VALIDATE_CHECK_DIR:-}" ]; then
     credential_cmd=("$FORGE_VALIDATE_CHECK_DIR/credential")
-    push_cmd=("$FORGE_VALIDATE_CHECK_DIR/push")
+    # An ABSENT push stub models the real detached-HEAD state, where no push
+    # route exists at all. Without this the fixture could only model a push that
+    # RAN and failed — the one case that was already correct.
+    [ -x "$FORGE_VALIDATE_CHECK_DIR/push" ] && push_cmd=("$FORGE_VALIDATE_CHECK_DIR/push")
     workspace_cmd=("$FORGE_VALIDATE_CHECK_DIR/workspace")
     headless_cmd=("$FORGE_VALIDATE_CHECK_DIR/headless")
     services_cmd=("$FORGE_VALIDATE_CHECK_DIR/services")
@@ -63,8 +67,16 @@ if [ -z "${FORGE_VALIDATE_CHECK_DIR:-}" ]; then
         push_cmd=(timeout 30 git push --dry-run origin "HEAD:refs/heads/$branch")
     fi
 fi
-if [ "${#push_cmd[@]}" -gt 0 ] \
-    && "${push_cmd[@]}" >"$tmp/push.stdout" 2>"$tmp/push.stderr"; then
+# A push route that does not EXIST is a different fact from one that fails, and
+# this check used to collapse them: on a detached HEAD `push_cmd` stays empty,
+# the `&&` short-circuits, and the script printed `FAIL push-route-dry-run
+# exit:1` naming an exit code no push ever produced — with empty failure logs,
+# because nothing ran. Every other check here already distinguishes SKIP from
+# FAIL (service-health, e2e-eligibility); this one did not.
+if [ "${#push_cmd[@]}" -eq 0 ]; then
+    printf 'SKIP push-route-dry-run skip:no-branch-to-push\n'
+    skip=$((skip + 1))
+elif "${push_cmd[@]}" >"$tmp/push.stdout" 2>"$tmp/push.stderr"; then
     printf 'PASS push-route-dry-run\n'
     pass=$((pass + 1))
 else

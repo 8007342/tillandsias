@@ -244,6 +244,31 @@ pub struct DiagnoseReport {
     pub release_tag: &'static str,
     pub manifest_pin_aarch64_qcow2: Option<String>,
     pub provisioned: bool,
+    /// 701-kgvk. Which guest binary this bundle carries, versus the one actually
+    /// staged for the guest to install on its next boot. The staging path is
+    /// keyed only on `$HOME` and the guest reinstalls from it unconditionally,
+    /// so an older `.app` started later silently downgrades the guest — stickily,
+    /// across reboots and guest resets. Nothing surfaced that before: the only
+    /// integrity gate compares a VERSION string that does not roll between
+    /// builds. A real skew on this host had to be found by hashing by hand.
+    pub guest_binary_bundle_sha256: Option<String>,
+    pub guest_binary_staged_sha256: Option<String>,
+    /// `Some(false)` means the guest will boot a DIFFERENT binary than this
+    /// bundle carries. `None` means undecidable (no bundle, or nothing staged
+    /// yet) and must never be read as "fine".
+    pub guest_binary_staged_matches_bundle: Option<bool>,
+    /// Order 735-2g5i. Whether a live tray process owns the VM right now,
+    /// established by probing the tray's own singleton lock.
+    ///
+    /// This is macOS's answer to the question Windows answers with
+    /// `wire.reachable`: is somebody actively working on this? macOS cannot ask
+    /// the guest directly — its vsock is per-VM-handle with no AF_VSOCK, so the
+    /// live phase is reachable ONLY from inside the tray process (see the
+    /// "Control wire status" note in `print_human`). Singleton ownership is the
+    /// strongest FACT a separate `--diagnose` process can establish, and like
+    /// the Windows probe it is an observation rather than an inference from
+    /// timing.
+    pub vm_owner_live: bool,
 }
 
 /// Entry point invoked from `main` when `--diagnose` is on argv.
@@ -274,6 +299,7 @@ fn collect_report() -> DiagnoseReport {
     let provisioned = rootfs_present;
 
     let manifest_pin_aarch64_qcow2 = parse_aarch64_qcow2_sha(BUNDLED_MANIFEST_TOML);
+    let provenance = crate::guest_binary::guest_binary_provenance();
 
     DiagnoseReport {
         version: env!("CARGO_PKG_VERSION"),
@@ -290,7 +316,26 @@ fn collect_report() -> DiagnoseReport {
         release_tag: crate::action_host::FEDORA_BASELINE,
         manifest_pin_aarch64_qcow2,
         provisioned,
+        guest_binary_bundle_sha256: provenance.bundle_sha256,
+        guest_binary_staged_sha256: provenance.staged_sha256,
+        guest_binary_staged_matches_bundle: provenance.staged_matches_bundle,
+        vm_owner_live: live_tray_owns_vm(),
     }
+}
+
+/// Is a live tray holding the VM singleton right now? (order 735-2g5i)
+///
+/// `Ok(None)` is WouldBlock — the lock is held, i.e. a running tray owns the
+/// VM. Acquiring and immediately dropping the guard is side-effect free when
+/// the lock is free, which is what makes this safe to call from a read-only
+/// report. A probe infrastructure error returns false: an unknown owner must
+/// never be reported as a live one, because that is the direction that tells
+/// automation to keep waiting.
+fn live_tray_owns_vm() -> bool {
+    matches!(
+        tillandsias_core::singleton::SingletonGuard::try_acquire("tillandsias-macos-tray"),
+        Ok(None)
+    )
 }
 
 fn stat_file(path: &std::path::Path) -> (bool, Option<u64>) {
@@ -342,8 +387,62 @@ fn print_human(r: &DiagnoseReport) {
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
     println!("Guest health: {}", guest_health_verdict());
     println!();
+    // 701-kgvk. The guest reinstalls its headless binary from the staged copy on
+    // EVERY boot, and that path is keyed only on $HOME — so an older .app
+    // started later silently downgrades the guest, and stays downgraded. Print
+    // it here because a skew is otherwise invisible: the only integrity gate
+    // compares a VERSION string that does not roll between builds.
+    println!("Guest binary:");
+    match (
+        &r.guest_binary_bundle_sha256,
+        &r.guest_binary_staged_sha256,
+        r.guest_binary_staged_matches_bundle,
+    ) {
+        (Some(b), Some(_), Some(true)) => {
+            println!(
+                "  in sync — staged copy matches this bundle ({}…)",
+                &b[..12]
+            );
+        }
+        (Some(b), Some(s), Some(false)) => {
+            println!(
+                "  *** SKEW *** the guest will install a DIFFERENT binary than this bundle carries."
+            );
+            println!("      this bundle : {}…", &b[..12]);
+            println!("      staged copy : {}…", &s[..12]);
+            println!("      The staged copy wins on the guest's next boot. Another (likely older)");
+            println!("      Tillandsias.app staged it. Re-stage from the build you intend to run.");
+        }
+        (None, _, _) => {
+            println!("  unknown — no bundled guest binary found (running outside .app?);");
+            println!("      a run like this stages NOTHING, so the guest keeps whatever it has.");
+        }
+        (_, None, _) => {
+            println!("  not staged yet — the guest has never been given a binary from this host.");
+        }
+        // Both hashes present but no verdict is structurally impossible today;
+        // report it as unknown rather than silently implying agreement.
+        (Some(_), Some(_), None) => {
+            println!("  unknown — both binaries readable but comparison unavailable.");
+        }
+    }
+    println!();
     if r.provisioned {
         println!("Status: PROVISIONED — first-launch materialization complete.");
+    } else if r.vm_owner_live {
+        // Order 735-2g5i. Distinct from the line below, and distinctly EXITED:
+        // a running tray owns the VM and the boot artifacts are not there yet,
+        // which is what provisioning-in-progress looks like from outside the
+        // tray process. Telling the operator to "launch the tray once" here
+        // would be advice to do the thing they are already doing.
+        println!(
+            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) — a running tray owns the VM \
+             and is still materializing it."
+        );
+        println!(
+            "        Not an error. Re-run --diagnose in a few moments; the tray's \
+             menubar chip shows live progress."
+        );
     } else {
         println!(
             "Status: NOT PROVISIONED — launch the tray once (or `open \
@@ -373,8 +472,45 @@ fn print_json(r: &DiagnoseReport) {
     }
 }
 
+/// Exit code for a converging VM: not ready yet, and not broken (order
+/// 735-2g5i, matching windows-tray's `DIAGNOSE_EXIT_CONVERGING` from 647-i98k).
+///
+/// THE DEFECT this closes: a converging state and a broken state shared exit 2,
+/// so any scripted post-install check that runs `--diagnose` once and branches
+/// on the code declares a still-provisioning host broken. Windows hit exactly
+/// that in the 644-a3wj curl smoke and separated the two; macOS still collapsed
+/// them, which is the asymmetry
+/// `litmus:exit-code-provisioned-zero-degraded-two-symmetric` was reporting.
+///
+/// macOS reaches the same verdict from a DIFFERENT fact, because it cannot
+/// reach the same one. Windows asks the guest and believes the phase it names.
+/// macOS has no AF_VSOCK — the live phase is readable only from inside the tray
+/// process — so a separate `--diagnose` cannot ask. What it CAN establish is
+/// whether a live tray owns the VM, and that is an observation of the same
+/// kind: somebody is working on this right now.
+pub(crate) const DIAGNOSE_EXIT_CONVERGING: i32 = 3;
+
 fn exit_code_from(r: &DiagnoseReport) -> i32 {
-    if r.provisioned { 0 } else { 2 }
+    if r.provisioned {
+        return 0;
+    }
+    // Boot artifacts absent WHILE a live tray owns the VM is the unambiguous
+    // converging case: provisioning is the first thing the tray does, so the
+    // artifacts are missing BECAUSE the work is still underway. Automation
+    // should keep waiting.
+    //
+    // No live owner stays exit 2 deliberately, mirroring the Windows reasoning
+    // for an unreachable wire: with nothing holding the VM, an incomplete image
+    // root is indistinguishable from a failed provision, and inventing a third
+    // verdict from leftover staging files would trade a false "broken" for a
+    // false "converging" — the worse error, because it tells automation to wait
+    // for something that will never arrive. Staging residue (`rootfs.qcow2`,
+    // `rootfs.img.xz.partial`, `*.part`) survives a crashed provision, so its
+    // mere presence is not evidence that anything is still running.
+    if r.vm_owner_live {
+        return DIAGNOSE_EXIT_CONVERGING;
+    }
+    2
 }
 
 /// Entry point invoked from `main` when `--provision` is on argv.
@@ -470,6 +606,58 @@ pub fn provision_main() -> i32 {
     }
 }
 
+/// How long `--exec-guest` waits for piped stdin to reach EOF before giving up
+/// on it and booting anyway. Generous enough for a real producer
+/// (`gh auth token | …`), short enough that an inherited-but-idle stdin costs
+/// seconds instead of forever. A full boot + guest exec measures ~9s on this
+/// host, so this is the same order as the work it precedes.
+const STDIN_FORWARD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Read piped stdin to EOF, but never block the caller past `timeout`.
+///
+/// 663-69kp ROOT CAUSE. The previous shape was `if !stdin().is_terminal() {
+/// read_to_end() }` — treating "not a TTY" as "a pipe that will EOF". That
+/// holds for `printf … | tray --exec-guest`, and fails for every stdin
+/// inherited from a parent that keeps the write end open: an agent harness, a
+/// launchd job, a background shell. There `read_to_end` blocks forever, on the
+/// main thread, BEFORE the first `eprintln!` and before the VM is created —
+/// which is exactly the reported symptom ("hangs before printing even
+/// '[exec-guest] starting VM…', nothing reaches stderr"). Measured live
+/// 2026-08-11: identical invocations, 12+ minutes silent with inherited stdin
+/// vs 9s to completion with `</dev/null`. The packet's standing hypothesis was
+/// a VZ storage/disk lock; it is not — no VM process is ever created.
+///
+/// The read happens on a detached helper thread so the timeout is real: a
+/// thread parked in `read(2)` cannot be cancelled, and this is a one-shot
+/// process, so the thread is left to die with it.
+fn read_piped_stdin_bounded(timeout: std::time::Duration) -> Vec<u8> {
+    use std::io::{IsTerminal, Read};
+
+    if std::io::stdin().is_terminal() {
+        return Vec::new();
+    }
+    let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = std::io::stdin().read_to_end(&mut buf);
+        let _ = tx.send(buf);
+    });
+    match rx.recv_timeout(timeout) {
+        Ok(buf) => buf,
+        Err(_) => {
+            eprintln!(
+                "[exec-guest] warning: stdin is not a terminal but sent no EOF within {}s — \
+                 continuing with NO forwarded stdin.\n\
+                 If you meant to pipe input, make sure the producer closes its end \
+                 (e.g. `printf '…' | tillandsias-tray --exec-guest …`).\n\
+                 If you did not, pass `</dev/null` to say so explicitly.",
+                timeout.as_secs()
+            );
+            Vec::new()
+        }
+    }
+}
+
 /// `--exec-guest <argv...>`: boot the provisioned VM, run `argv` in the guest
 /// over the control wire (the same `vsock_exec` path `VzRuntime::exec` uses),
 /// print the guest's output + exit, then stop the VM. The real-path proof for
@@ -514,18 +702,8 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
     let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
 
     // Forward piped host stdin to the guest (delivered on the child's stdin +
-    // /dev/tty), so e.g. `printf 'tok\n' | --exec-guest <login-cmd>` works. Skip
-    // when stdin is a TTY (no piped input) to avoid blocking on read_to_end.
-    let stdin_bytes: Vec<u8> = {
-        use std::io::{IsTerminal, Read};
-        if std::io::stdin().is_terminal() {
-            Vec::new()
-        } else {
-            let mut buf = Vec::new();
-            let _ = std::io::stdin().read_to_end(&mut buf);
-            buf
-        }
-    };
+    // /dev/tty), so e.g. `printf 'tok\n' | --exec-guest <login-cmd>` works.
+    let stdin_bytes: Vec<u8> = read_piped_stdin_bounded(STDIN_FORWARD_TIMEOUT);
 
     rt.block_on(async move {
         use std::time::Duration;
@@ -817,7 +995,32 @@ pub fn github_login_main() -> i32 {
         eprintln!(
             "[github-login] control wire ready; guest auth preflight runs before credential prompts"
         );
+        // ORDER IS LOAD-BEARING and must track the GUEST, which prompts
+        // CREDENTIAL FIRST, identity second — see the operator directive of
+        // 2026-07-29 quoted at crates/tillandsias-headless/src/main.rs:7647
+        // ("Prompting for name/email before the token led operators to believe
+        // those fields WERE their GitHub credentials").
+        //
+        // This list said name -> email -> token, i.e. the pre-07-29 guest, and
+        // `DynamicExpect` is strictly sequential: the host scanned for "author
+        // name" while the guest sat blocked on its token prompt, and neither
+        // side could move. That deadlock is silent and, because the guest's 30s
+        // PTY heartbeat keeps resetting the exec idle deadline (689-y2my), it
+        // is also unbounded — the 70-minute wedges of 2026-08-10/11. The
+        // attended login of 2026-07-24 worked precisely because it predates the
+        // guest's reorder.
         let expects = vec![
+            DynamicExpect {
+                needle: b"authentication token".to_vec(),
+                label: "github token".to_string(),
+                response: Box::new(|| {
+                    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
+                    if pat.is_empty() {
+                        return Err("--github-login: a GitHub token is required".to_string());
+                    }
+                    Ok(format!("{pat}\n").into_bytes())
+                }),
+            },
             DynamicExpect {
                 needle: b"author name".to_vec(),
                 label: "git author name".to_string(),
@@ -846,19 +1049,8 @@ pub fn github_login_main() -> i32 {
                     Ok(format!("{email}\n").into_bytes())
                 }),
             },
-            DynamicExpect {
-                needle: b"authentication token".to_vec(),
-                label: "github token".to_string(),
-                response: Box::new(|| {
-                    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
-                    if pat.is_empty() {
-                        return Err("--github-login: a GitHub token is required".to_string());
-                    }
-                    Ok(format!("{pat}\n").into_bytes())
-                }),
-            },
         ];
-        eprintln!("[github-login] driving guest login (git name -> email -> token)…");
+        eprintln!("[github-login] driving guest login (token -> git name -> email)…");
         let result = exec_over_stream_expect_dynamic(
             stream,
             &[
@@ -906,6 +1098,86 @@ pub fn github_login_main() -> i32 {
             |ev| eprintln!("[github-login] {ev}"),
         )
         .await;
+
+        // 701-g98y: capture the NEW epoch's handover into the host Keychain
+        // BEFORE stopping the VM.
+        //
+        // A successful login initializes a fresh Vault inside the guest, so the
+        // guest now holds a share and root token the host has never seen — the
+        // Keychain still holds the PREVIOUS epoch. Until this call existed, that
+        // divergence was permanent for a CLI login: the capture half runs only
+        // from the GUI tray's paths (action_host.rs), and when the tray next
+        // connected it would DELIVER its stale Keychain values into the guest
+        // first — overwriting the epoch this command had just created — and only
+        // then ask for a handover that was no longer pending. Seeding from the
+        // CLI and then opening the tray could therefore destroy the credential
+        // the CLI had just proven durable.
+        //
+        // Capture only, never deliver: this process is the one that CAUSED the
+        // new epoch, so anything it holds is older by construction.
+        //
+        // Best-effort by design — the login itself has already succeeded and its
+        // exit code must not change here. A failure is reported loudly because
+        // the consequence (a later tray launch clobbering a good credential) is
+        // silent and expensive.
+        if matches!(&result, Ok(out) if out.exit.code == 0) {
+            match open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                .await
+            {
+                Ok(hstream) => {
+                    use tillandsias_control_wire::transport::Transport;
+                    use tillandsias_host_shell::vsock_client::Client;
+                    let mut client = Client::from_stream(
+                        Box::new(hstream),
+                        Transport::Vsock {
+                            // Same guest CID the VzRuntime was constructed with
+                            // at the top of this function.
+                            cid: 3,
+                            port: CONTROL_WIRE_VSOCK_PORT,
+                        },
+                    );
+                    match client.handshake().await {
+                        Ok(_) => {
+                            match crate::installation_uuid::capture_vault_handover(&mut client).await
+                            {
+                                Ok(true) => eprintln!(
+                                    "[github-login] host Keychain updated with this login's vault handover"
+                                ),
+                                // Say what actually happened. A guest holds a
+                                // pending handover ONLY after a FRESH Vault init;
+                                // a login that reused an already-initialized
+                                // Vault has nothing to hand over, and claiming
+                                // "updated" there is a success message with no
+                                // evidence behind it. IMPORTANT for the operator:
+                                // this branch means the Keychain still holds
+                                // whatever epoch it held before, which may be
+                                // OLDER than the guest's — 701-g98y's hazard is
+                                // NOT cleared by this path.
+                                Ok(false) => eprintln!(
+                                    "[github-login] no pending vault handover to capture — the guest reused an \
+                                     already-initialized Vault, so the host Keychain is UNCHANGED. If it was \
+                                     already older than the guest's epoch it still is; re-verify with \
+                                     --list-cloud-projects after the first tray start (701-g98y)."
+                                ),
+                                Err(e) => eprintln!(
+                                    "[github-login] WARNING: could not capture the vault handover ({e}). \
+                                     The login succeeded, but the host Keychain still holds an OLDER epoch — \
+                                     opening the tray may overwrite this credential. Re-verify with \
+                                     --list-cloud-projects after the first tray start (701-g98y)."
+                                ),
+                            }
+                        }
+                        Err(e) => eprintln!(
+                            "[github-login] WARNING: handover capture handshake failed ({e}); host Keychain not updated (701-g98y)"
+                        ),
+                    }
+                }
+                Err(e) => eprintln!(
+                    "[github-login] WARNING: handover capture could not connect ({e}); host Keychain not updated (701-g98y)"
+                ),
+            }
+        }
+
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
@@ -1440,7 +1712,7 @@ mod tests {
     //  here must break the build, not silently break the consumer.
     // ────────────────────────────────────────────────────────────────
 
-    use super::{DiagnoseReport, exit_code_from};
+    use super::{DIAGNOSE_EXIT_CONVERGING, DiagnoseReport, exit_code_from};
 
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
@@ -1460,6 +1732,12 @@ mod tests {
             release_tag: "fedora-44",
             manifest_pin_aarch64_qcow2: Some("55c60a3b80d3".to_string()),
             provisioned: true,
+            // 701-kgvk: the healthy shape — bundle and staged agree.
+            guest_binary_bundle_sha256: Some("26f120b6b1ef".to_string()),
+            guest_binary_staged_sha256: Some("26f120b6b1ef".to_string()),
+            guest_binary_staged_matches_bundle: Some(true),
+            // A provisioned host at rest: nothing is mid-materialization.
+            vm_owner_live: false,
         }
     }
 
@@ -1526,17 +1804,53 @@ mod tests {
         assert_eq!(value["initrd_bytes"], serde_json::Value::Null);
     }
 
-    /// `exit_code_from` is the public contract `tray-diagnose.sh`
-    /// (and `--diagnose --json`'s own `main`) rely on for the
-    /// 0/2/1 exit contract. Pin the mapping so accidental flips
-    /// (e.g. returning the wrong code for provisioned=true) break
-    /// the build.
+    /// `exit_code_from` is the public contract `tray-diagnose.sh` (and
+    /// `--diagnose --json`'s own `main`) rely on. Pin the mapping so accidental
+    /// flips break the build.
+    ///
+    /// Order 735-2g5i renamed this from `exit_code_provisioned_zero_degraded_two`
+    /// to match windows-tray's `exit_code_separates_healthy_converging_and_degraded`,
+    /// because the two-state name had become a lie: converging is now its own
+    /// verdict. `litmus:exit-code-provisioned-zero-degraded-two-symmetric`
+    /// accepts either name on either side precisely so this rename is legal.
     #[test]
-    fn exit_code_provisioned_zero_degraded_two() {
+    fn exit_code_separates_healthy_converging_and_degraded() {
         let mut report = baseline_diagnose_report();
-        assert_eq!(exit_code_from(&report), 0);
+        assert_eq!(exit_code_from(&report), 0, "provisioned is healthy");
+
+        // NOT provisioned with a live tray owning the VM: converging, not
+        // broken. This is the case that used to collapse into 2 and made a
+        // scripted post-install check call a still-materializing host broken.
         report.provisioned = false;
-        assert_eq!(exit_code_from(&report), 2);
+        report.vm_owner_live = true;
+        assert_eq!(
+            exit_code_from(&report),
+            DIAGNOSE_EXIT_CONVERGING,
+            "a live tray owning an unmaterialized VM is converging, not broken"
+        );
+
+        // NEGATIVE CONTROL, load-bearing: with no live owner the same missing
+        // artifacts stay exit 2. Without this, "always report converging when
+        // unprovisioned" would satisfy the assertion above — and that is the
+        // worse failure, because it tells automation to keep waiting on a host
+        // where nothing is running.
+        report.vm_owner_live = false;
+        assert_eq!(
+            exit_code_from(&report),
+            2,
+            "unprovisioned with no live owner is indistinguishable from broken"
+        );
+
+        // And converging must never mask a healthy host: provisioned wins
+        // regardless of who holds the VM (the steady state — the tray is
+        // normally running).
+        report.provisioned = true;
+        report.vm_owner_live = true;
+        assert_eq!(
+            exit_code_from(&report),
+            0,
+            "provisioned is healthy even while the tray owns the VM"
+        );
     }
 
     /// Order 331 pin: the pure host→guest project-path translation.

@@ -1,5 +1,11 @@
 //! Order 398 — deterministic query/validation engine for the plan ledger.
 //!
+//! Freshness note (order 685-yidq): on hosts that carry expert infrastructure
+//! (`TILLANDSIAS_HOST_EXPERTS` set), a commit touching this crate triggers the
+//! installed post-commit hook to rebuild and reinstall this binary from the
+//! committed revision, so a host expert never answers from a stale artifact —
+//! the same refresh the forge already performs at launch.
+//!
 //! Design constraints (The Tlatoāni, 2026-07-17, recorded in the packet):
 //!
 //! * **Open-world**: the corpus grew organically; packets are kept as raw
@@ -38,6 +44,8 @@ pub mod groundtruth;
 /// justification and the fail-closed guards.
 pub mod loop_status;
 pub mod methodology;
+/// ORDER 706-f7mq — modular semantic explanation and fallback for documentation & plan corpora.
+pub mod semantic_expert;
 /// ORDER 547 — network-free RAG index over the whole-spec corpus (chunking,
 /// cosine retrieval, verifiable envelope construction). Embedding and synthesis
 /// happen outside the crate; see `spec.rs`.
@@ -157,11 +165,97 @@ pub fn count_release(ledger: &Ledger, release: &str) -> (u64, u64) {
         }
         total += 1;
         let status = str_field(packet, "status").unwrap_or("");
-        if !matches!(status, "completed" | "obsoleted") {
+        if !is_terminal_status(status) {
             open += 1;
         }
     }
     (open, total)
+}
+
+/// Is this status terminal — i.e. does it satisfy a dependency and count as
+/// closed for burndown?
+///
+/// ORDER 650-dq6u — THE OPERATOR RULING (2026-08-11), superseding the
+/// 649-b2e4 interim union. `completed` and `done` are NOT synonyms and are
+/// never collapsed: statuses on the closure ladder record different evidence
+/// grades (see `closure_rank`), merged by semantic distillation — the higher
+/// rung wins, and only an explicit `falsified` event moves down.
+///
+///   implemented  — artifact landed, local checks pass, field verification
+///                  outstanding. NOT terminal: dependents wait, visibly.
+///   completed    — claimant-asserted closure with evidence refs. Terminal:
+///                  releases dependents (ruled: matches all 386 historical
+///                  rows; the `falsified` event is the correction path).
+///   verified     — a named falsifiable check passed AS WIRED (litmus counts,
+///                  first-fire e2e, in-target run). Terminal.
+///   done         — validated/accepted against the packet's stated closure.
+///                  Terminal. Historical `done` rows are grandfathered.
+///
+/// The canonical vocabulary lives in plan/schema.yaml and
+/// methodology/distributed-work.yaml -> status_transition_protocol; the
+/// set-field write gate refuses values outside it and refuses ladder
+/// downgrades without falsification evidence.
+pub fn is_terminal_status(status: &str) -> bool {
+    matches!(status, "completed" | "verified" | "done" | "obsoleted")
+}
+
+/// Position on the closure ladder (650-dq6u evidence lattice), or None for
+/// statuses outside it. The single comparator every surface must share:
+/// higher rank = more verification evidence; merges take the max; a
+/// rank-lowering write requires an explicit `falsified` event.
+pub fn closure_rank(status: &str) -> Option<u8> {
+    match status {
+        "implemented" => Some(0),
+        "completed" => Some(1),
+        "verified" => Some(2),
+        "done" => Some(3),
+        _ => None,
+    }
+}
+
+/// A PARKED status is non-terminal but not actively progressing: a dependent
+/// waiting on it is stuck with no work happening behind it, and the fold
+/// leaves it silently blocked unless tooling surfaces it (686-7qcm). `ready`,
+/// `pending` and `in_progress` are NOT parked — they advance on their own.
+/// `implemented` parks pending field verification; `needs_clarification` on an
+/// operator answer; `blocked` on a named external dependency; `failed` on a
+/// re-attempt.
+pub fn is_parked_status(status: &str) -> bool {
+    matches!(
+        status,
+        "implemented" | "needs_clarification" | "blocked" | "failed"
+    )
+}
+
+/// One "invisibly blocked" edge: `dependent` waits on `dependency`, which sits
+/// in a parked `status` with `outstanding` naming the action that would free
+/// it (its `next_action`, first line). Ordered for deterministic reporting.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ParkedBlock {
+    pub dependency: String,
+    pub status: String,
+    pub dependent: String,
+    pub outstanding: String,
+}
+
+impl ParkedBlock {
+    fn new(dependent: &str, dependency: &str, status: &str, dep_packet: &Value) -> Self {
+        let outstanding = str_field(dep_packet, "next_action")
+            .map(|s| {
+                s.lines()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("")
+                    .trim()
+            })
+            .unwrap_or("")
+            .to_string();
+        ParkedBlock {
+            dependency: dependency.to_string(),
+            status: status.to_string(),
+            dependent: dependent.to_string(),
+            outstanding,
+        }
+    }
 }
 
 impl Ledger {
@@ -493,13 +587,76 @@ impl Ledger {
                 // fabricate a row when a malformed live ledger slips through.
                 continue;
             };
-            if matches!(str_field(packet, "status"), Some("completed" | "obsoleted")) {
+            if str_field(packet, "status").is_some_and(is_terminal_status) {
                 continue;
             }
             result.push(packet);
         }
 
         Some(result)
+    }
+
+    /// Direct dependencies of `reference` that are in a PARKED status —
+    /// non-terminal but not actively progressing (implemented / blocked /
+    /// needs_clarification / failed). A dependent waiting on one of these is
+    /// stuck with no work happening behind it (686-7qcm).
+    pub fn parked_dependencies_of(&self, reference: &str) -> Vec<ParkedBlock> {
+        let Some(target) = self.resolve(reference) else {
+            return Vec::new();
+        };
+        let dependent = self.id_of(target);
+        let mut out = Vec::new();
+        for dependency in str_list(target, "depends_on") {
+            if self.archived_ids.contains(&dependency) {
+                continue;
+            }
+            let Some(dep) = self.resolve(&dependency) else {
+                continue;
+            };
+            let status = str_field(dep, "status").unwrap_or("");
+            if is_parked_status(status) {
+                out.push(ParkedBlock::new(
+                    &dependent,
+                    self.id_of(dep).as_str(),
+                    status,
+                    dep,
+                ));
+            }
+        }
+        out.sort();
+        out
+    }
+
+    /// Every (dependent → parked-dependency) edge in the whole ledger, so the
+    /// gate and status readers can SURFACE work invisibly blocked behind a
+    /// parked packet instead of leaving it silently stuck (686-7qcm / 650-dq6u:
+    /// "implemented and needs_clarification are visible parking states —
+    /// tooling reports every dependent waiting on them").
+    pub fn parked_blocks(&self) -> Vec<ParkedBlock> {
+        let mut out = Vec::new();
+        for packet in &self.packets {
+            let dependent = self.id_of(packet);
+            for dependency in str_list(packet, "depends_on") {
+                if self.archived_ids.contains(&dependency) {
+                    continue;
+                }
+                let Some(dep) = self.resolve(&dependency) else {
+                    continue;
+                };
+                let status = str_field(dep, "status").unwrap_or("");
+                if is_parked_status(status) {
+                    out.push(ParkedBlock::new(
+                        &dependent,
+                        self.id_of(dep).as_str(),
+                        status,
+                        dep,
+                    ));
+                }
+            }
+        }
+        out.sort();
+        out.dedup();
+        out
     }
 
     /// Transitive closure of blocked_by (everything downstream of X).
@@ -628,21 +785,45 @@ impl Ledger {
                     _ => Vec::new(),
                 };
                 for r in refs {
-                    if self.reference_resolves(&r) {
+                    if !self.reference_resolves(&r) {
+                        if !is_id_shaped(&r) {
+                            report
+                                .warnings
+                                .push(format!("{id}: {field} carries a prose annotation '{r}'"));
+                        } else if live {
+                            report
+                                .violations
+                                .push(format!("{id}: {field} -> unresolved reference '{r}'"));
+                        } else {
+                            report.warnings.push(format!(
+                                "{id} (retired): {field} -> unresolved reference '{r}'"
+                            ));
+                        }
                         continue;
                     }
-                    if !is_id_shaped(&r) {
-                        report
-                            .warnings
-                            .push(format!("{id}: {field} carries a prose annotation '{r}'"));
-                    } else if live {
-                        report
-                            .violations
-                            .push(format!("{id}: {field} -> unresolved reference '{r}'"));
-                    } else {
-                        report.warnings.push(format!(
-                            "{id} (retired): {field} -> unresolved reference '{r}'"
-                        ));
+                    if field == "blocks" {
+                        let target_packet = self.resolve(&r);
+                        let target_id = target_packet
+                            .map(|tp| self.id_of(tp))
+                            .unwrap_or_else(|| r.clone());
+                        let has_reciprocal = target_packet.is_some_and(|tp| {
+                            str_list(tp, "depends_on").iter().any(|dep| {
+                                dep == &id
+                                    || self.resolve(dep).map(|dp| self.id_of(dp))
+                                        == Some(id.clone())
+                            })
+                        });
+                        if !has_reciprocal {
+                            if live {
+                                report.violations.push(format!(
+                                    "{id}: blocks '{target_id}' without reciprocal depends_on"
+                                ));
+                            } else {
+                                report.warnings.push(format!(
+                                    "{id} (retired): blocks '{target_id}' without reciprocal depends_on"
+                                ));
+                            }
+                        }
                     }
                 }
             }
@@ -842,6 +1023,7 @@ impl Schema {
                 "depends_on".into(),
                 "release_target".into(),
                 "split_into".into(),
+                "blocks".into(),
             ],
         }
     }
@@ -1075,6 +1257,18 @@ pub mod edit {
     /// (see [`event_block`]). Creates the `events:` block if the packet has
     /// none. Does NOT validate — the caller flushes only after
     /// [`validate_candidate`] returns no violations.
+    /// True when the BASE ledger text actually contains a block for `target_id`
+    /// — i.e. when a text-level append can find somewhere to insert (699-usxc).
+    ///
+    /// A packet declared only in an uncompacted `plan/index.d/` fragment folds
+    /// into every READ but has no item span in the base, so `append_event`
+    /// below cannot place anything. Callers use this to decide between editing
+    /// the base and writing a new fragment, instead of surfacing the miss as
+    /// "packet_id not found" for a packet the reader can plainly see.
+    pub fn base_hosts_packet(raw: &str, target_id: &str) -> bool {
+        item_span(raw, target_id).is_some()
+    }
+
     pub fn append_event(raw: &str, target_id: &str, event_block: &str) -> Result<String, String> {
         let mut lines: Vec<String> = raw.lines().map(String::from).collect();
         let (start, end) = item_span(raw, target_id)
@@ -1158,10 +1352,58 @@ pub mod edit {
     }
 
     /// Build a well-formed 8-space-indented event list entry.
+    ///
+    /// The summary is emitted as a LITERAL block scalar with every line
+    /// indented to the block's column (order 728-n456). It used to be
+    /// interpolated raw onto a single folded line:
+    ///
+    /// ```text
+    ///           summary: >
+    ///             {summary}
+    /// ```
+    ///
+    /// which is correct only while the summary has no newline in it. A real
+    /// progress note has several — a code sample, a bullet list — and every
+    /// line after the first landed at ITS OWN indentation, usually column 0,
+    /// terminating the scalar early and producing a candidate that did not
+    /// parse. Measured: `"indented code:\n  run_id=$(...)"` produced
+    /// `parse: could not find expected ':'` and `"star bullet\n  * one"`
+    /// produced `parse: did not find expected alpha`.
+    ///
+    /// Nothing was ever corrupted, because `validate_candidate` rejects the
+    /// candidate before it is written — that guard is why this was a refusal
+    /// rather than a broken ledger. But a writer that depends on the validator
+    /// to catch its own malformed output is a writer that cannot be used, and
+    /// the base path was effectively unusable for any note worth writing.
+    ///
+    /// `|` rather than `>`: a folded scalar would join the note's lines and
+    /// silently destroy the structure the author wrote, which is a quieter
+    /// version of the same disrespect for the content.
     pub fn event_block(etype: &str, ts: &str, agent_id: &str, host: &str, summary: &str) -> String {
-        format!(
-            "        - type: {etype}\n          ts: \"{ts}\"\n          agent_id: \"{agent_id}\"\n          host: {host}\n          summary: >\n            {summary}\n"
-        )
+        let head = format!(
+            "        - type: {etype}\n          ts: \"{ts}\"\n          agent_id: \"{agent_id}\"\n          host: {host}\n"
+        );
+        // An empty summary has no valid literal-block form (a block scalar with
+        // no content followed by a dedented key is ambiguous), so use a plain
+        // empty string for it.
+        if summary.trim().is_empty() {
+            return format!("{head}          summary: \"\"\n");
+        }
+        let body: String = summary
+            .trim_end_matches('\n')
+            .lines()
+            .map(|line| {
+                if line.trim().is_empty() {
+                    // A truly empty line, not twelve spaces of trailing
+                    // whitespace: blank lines are legal inside a literal block
+                    // and paragraph breaks are part of what the author wrote.
+                    "\n".to_string()
+                } else {
+                    format!("            {line}\n")
+                }
+            })
+            .collect();
+        format!("{head}          summary: |\n{body}")
     }
 }
 
@@ -1631,6 +1873,87 @@ steps:
     }
 
     #[test]
+    fn parked_blocks_surface_dependents_stuck_behind_parked_packets() {
+        // 686-7qcm: a dependent of a PARKED packet (implemented / blocked /
+        // needs_clarification / failed) is invisibly stuck and must be
+        // reported; a dependent of a terminal or actively-progressing packet
+        // must NOT be — the negative control that keeps the report meaningful.
+        let raw = r#"
+steps:
+  - packet_id: impl-dep
+    order: 920
+    status: implemented
+    next_action: |
+      rebuild the tray and re-verify on a clean guest
+      (second line ignored)
+  - packet_id: ready-dep
+    order: 921
+    status: ready
+  - packet_id: done-dep
+    order: 922
+    status: done
+  - packet_id: waits-on-parked
+    order: 923
+    status: pending
+    depends_on: [impl-dep]
+  - packet_id: waits-on-ready
+    order: 924
+    status: pending
+    depends_on: [ready-dep]
+  - packet_id: waits-on-done
+    order: 925
+    status: pending
+    depends_on: [done-dep]
+"#;
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+
+        let blocks = ledger.parked_blocks();
+        assert_eq!(blocks.len(), 1, "exactly one parked-block edge expected");
+        let b = &blocks[0];
+        assert_eq!(b.dependent, "waits-on-parked");
+        assert_eq!(b.dependency, "impl-dep");
+        assert_eq!(b.status, "implemented");
+        assert_eq!(
+            b.outstanding, "rebuild the tray and re-verify on a clean guest",
+            "the outstanding action is the first non-empty next_action line"
+        );
+
+        // ready and done dependencies never surface — they progress or are
+        // finished, not parked.
+        assert!(
+            !blocks.iter().any(|b| b.dependency == "ready-dep"),
+            "a ready dependency is not a parked block"
+        );
+        assert!(
+            !blocks.iter().any(|b| b.dependency == "done-dep"),
+            "a terminal dependency is not a parked block"
+        );
+
+        // The per-packet view agrees with the whole-ledger view.
+        let one = ledger.parked_dependencies_of("waits-on-parked");
+        assert_eq!(one, blocks);
+        assert!(ledger.parked_dependencies_of("waits-on-ready").is_empty());
+    }
+
+    #[test]
+    fn parked_status_classification_matches_the_ladder() {
+        for s in ["implemented", "needs_clarification", "blocked", "failed"] {
+            assert!(is_parked_status(s), "{s} must be parked");
+        }
+        for s in [
+            "ready",
+            "pending",
+            "in_progress",
+            "completed",
+            "verified",
+            "done",
+            "obsoleted",
+        ] {
+            assert!(!is_parked_status(s), "{s} must NOT be parked");
+        }
+    }
+
+    #[test]
     fn unknown_fields_survive_load() {
         // Open-world: fields this engine never declared must survive a
         // load/inspect round trip.
@@ -1647,6 +1970,72 @@ steps:
                 .iter()
                 .any(|p| p.get("provisional_id").is_some()),
             "organically-grown fields must be visible on raw packets"
+        );
+    }
+
+    /// Order 728-n456. A real progress note is not one line: it has a code
+    /// sample, a bullet list, paragraph breaks. The writer used to interpolate
+    /// the summary raw onto a single folded-scalar line, so every line after
+    /// the first landed at its own indentation and the candidate did not parse.
+    ///
+    /// The two shapes here are the exact ones that were measured failing:
+    /// `parse: could not find expected ':'` for the indented code, and
+    /// `parse: did not find expected alpha` for the bullets.
+    #[test]
+    fn event_block_survives_multiline_summaries_on_the_real_ledger() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plan/index.yaml");
+        let raw = std::fs::read_to_string(&path).expect("read live ledger");
+        let ledger = live_ledger();
+
+        let summaries = [
+            "indented code:\n  run_id=$(gh run list --json databaseId)\nand prose after it",
+            "star bullet\n  * one\n  * two",
+            "paragraph one\n\nparagraph two after a blank line",
+            "trailing newline is tolerated\n",
+            "a line with a colon: and a # hash and a - dash",
+        ];
+
+        for summary in summaries {
+            let block = edit::event_block(
+                "progress",
+                "2026-08-13T00:00:00Z",
+                "test-agent",
+                "windows",
+                summary,
+            );
+            let out = edit::append_event(&raw, "plan-yaml-compiled-editor", &block)
+                .expect("append to a real packet");
+            let violations = edit::validate_candidate(
+                &out,
+                ledger.archived_ids(),
+                &Schema::minimal().reference_fields,
+            );
+            assert!(
+                violations.is_empty(),
+                "multi-line summary must produce a parseable candidate.\nsummary: {summary:?}\nviolations: {violations:?}"
+            );
+
+            // NEGATIVE CONTROL on the CONTENT, not just on parseability: a
+            // block that parses but silently dropped or joined the author's
+            // lines would satisfy the assertion above while destroying the
+            // note. Assert the last line survived as its own line.
+            let last = summary.trim_end().lines().last().unwrap();
+            assert!(
+                out.contains(&format!("            {last}\n")),
+                "the summary's final line must survive at block indentation: {last:?}"
+            );
+        }
+    }
+
+    /// Order 728-n456, second half: an EMPTY summary has no valid literal-block
+    /// form, so it must take the plain-scalar path rather than emitting a
+    /// dangling `summary: |`.
+    #[test]
+    fn event_block_handles_an_empty_summary() {
+        let block = edit::event_block("note", "2026-08-13T00:00:00Z", "a", "windows", "   ");
+        assert!(
+            block.contains("summary: \"\""),
+            "an empty summary must not open a literal block: {block}"
         );
     }
 
@@ -1722,6 +2111,84 @@ steps:
         assert!(
             violations.iter().any(|s| s.contains("does-not-exist")),
             "a dangling live reference must be a violation: {violations:?}"
+        );
+    }
+
+    #[test]
+    fn blocks_only_asymmetrical_edge_fails_integrity_and_reciprocal_passes() {
+        // ORDER 609-az85: `blocks: [B]` requires packet B to exist and declare
+        // reciprocal `depends_on: [A]`. A blocks-only edge without reciprocal
+        // depends_on is a hard violation on live packets.
+        let broken = "steps:
+  - packet_id: blocker-packet
+    order: 100
+    status: ready
+    blocks: [target-packet]
+  - packet_id: target-packet
+    order: 101
+    status: ready
+    depends_on: []
+";
+        let ledger = Ledger::parse(broken, Default::default()).expect("ledger parses");
+        let report = ledger.check_integrity(&Schema::minimal().reference_fields);
+        assert!(
+            !report.violations.is_empty(),
+            "asymmetric blocks edge must fail integrity"
+        );
+        let violation = &report.violations[0];
+        assert!(
+            violation.contains("blocker-packet")
+                && violation.contains("target-packet")
+                && violation.contains("reciprocal depends_on"),
+            "violation must name both packet IDs and missing reciprocal depends_on: {violation}"
+        );
+
+        // Reciprocal edge passes cleanly and drives blocked_by
+        let fixed = "steps:
+  - packet_id: blocker-packet
+    order: 100
+    status: ready
+    blocks: [target-packet]
+  - packet_id: target-packet
+    order: 101
+    status: ready
+    depends_on: [blocker-packet]
+";
+        let fixed_ledger = Ledger::parse(fixed, Default::default()).expect("ledger parses");
+        let fixed_report = fixed_ledger.check_integrity(&Schema::minimal().reference_fields);
+        assert!(
+            fixed_report.violations.is_empty(),
+            "reciprocal edge must pass integrity: {:?}",
+            fixed_report.violations
+        );
+        let blocked = fixed_ledger.blocked_by("blocker-packet");
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(fixed_ledger.id_of(blocked[0]), "target-packet");
+
+        // Retired packet with asymmetric blocks emits warning, not violation
+        let retired = "steps:
+  - packet_id: retired-blocker
+    order: 102
+    status: completed
+    blocks: [target-packet]
+  - packet_id: target-packet
+    order: 101
+    status: ready
+    depends_on: []
+";
+        let retired_ledger = Ledger::parse(retired, Default::default()).expect("ledger parses");
+        let retired_report = retired_ledger.check_integrity(&Schema::minimal().reference_fields);
+        assert!(
+            retired_report.violations.is_empty(),
+            "retired packet asymmetric blocks must not be a hard violation"
+        );
+        assert!(
+            retired_report
+                .warnings
+                .iter()
+                .any(|w| w.contains("retired-blocker") && w.contains("target-packet")),
+            "retired packet asymmetric blocks must be reported as a warning: {:?}",
+            retired_report.warnings
         );
     }
 }

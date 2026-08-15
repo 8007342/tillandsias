@@ -1,5 +1,6 @@
 #!/bin/bash
 # @trace spec:spec-traceability
+# freshness: auditor=linux-macuahuitl-fable5-20260810t2240z date=2026-08-10 verdict=refreshed scope=spec-traceability suite (runner self-tests incl. name-filter fail-loud, backslash escaping, stdlib portability) 7/7 executed PASS; heavy incidental live exercise same day (5 host suites + a 195-test in-forge run via v0.4.260810.x); spec-name-only filter grammar confirmed fail-loud by design when handed a litmus: test name
 # freshness: auditor=linux-macuahuitl-opencode-20260801T0611Z date=2026-08-01 verdict=refreshed scope=live executor, filters, cleanup, and stdlib remain meaningful; focused self-tests 6/6 green
 #
 # Tillandsias Litmus Test Execution Runner
@@ -63,6 +64,11 @@ fi
 # ============================================================================
 
 readonly PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
+# times the litmus suite; a timing failure must NEVER change the runner's exit.
+. "$(dirname "${BASH_SOURCE[0]}")/timing-log.sh" 2>/dev/null || true
+command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
 readonly LITMUS_BINDINGS="${PROJECT_ROOT}/openspec/litmus-bindings.yaml"
 readonly LITMUS_TESTS_DIR="${PROJECT_ROOT}/openspec/litmus-tests"
 readonly METHODOLOGY_LITMUS="${PROJECT_ROOT}/methodology/litmus.yaml"
@@ -353,6 +359,53 @@ get_test_phase() {
     fi
 }
 
+# Order 661-emqi. A test may declare the host kind it requires; anywhere else it
+# SKIPS instead of failing. Defaults to `any`, so every existing test is
+# unaffected — an absent field must never start gating anything.
+#
+# The motivating case: litmus:forge-policy-binary-discoverability hardcodes
+# /home/forge/.cache, which exists only inside the forge container. Bound and run
+# on a Linux host it failed with `mktemp: ... No such file or directory` — a red
+# that says nothing about the product. Left unbound it was silent instead, which
+# is the condition 660-ryhn is about. Neither is acceptable; SKIP is the honest
+# third answer, and the runner already skips for phase and size.
+get_test_host_kind() {
+    local file="$1"
+
+    if command -v yq &>/dev/null; then
+        yq eval '.host_kind // "any"' "$file" 2>/dev/null || echo "any"
+    else
+        awk '
+            /^host_kind: / {
+                gsub(/^host_kind: /, "");
+                print
+                found=1
+                exit
+            }
+            END {
+                if (!found) print "any"
+            }
+        ' "$file"
+    fi
+}
+
+# The kind of host this runner is on. TILLANDSIAS_HOST_KIND is authoritative when
+# set (the forge sets it; check-credential-channel.sh:66 already trusts it);
+# otherwise fall back to uname. Deliberately coarse — this gate exists to keep a
+# forge-only test off a laptop, not to model the full host taxonomy.
+current_host_kind() {
+    if [[ -n "${TILLANDSIAS_HOST_KIND:-}" ]]; then
+        printf '%s' "$TILLANDSIAS_HOST_KIND"
+        return
+    fi
+    case "$(uname -s 2>/dev/null)" in
+        Darwin)                      printf 'macos' ;;
+        Linux)                       printf 'linux' ;;
+        MINGW*|MSYS*|CYGWIN*)        printf 'windows' ;;
+        *)                           printf 'unknown' ;;
+    esac
+}
+
 get_test_size() {
     local file="$1"
 
@@ -437,6 +490,10 @@ check_signal() {
 behavior_matches_output() {
     local output="$1"
     local expected="$2"
+    # Order 661-nm73. The step's EXIT CODE, so a step can succeed by producing
+    # nothing. Optional and defaulting to 0: callers that do not pass it keep the
+    # previous output-only semantics rather than silently changing verdict.
+    local exit_code="${3:-0}"
     # tr, not bash-4+ ${var,,}, so this runs on stock macOS bash 3.2 too.
     local expected_lc
     expected_lc="$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')"
@@ -494,8 +551,40 @@ behavior_matches_output() {
             grep -Eqi 'failed to connect|connection refused|network unreachable|timeout|could not resolve|curl_exit=[1-9]' <<<"$output"
             return $?
             ;;
-        *"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*|*"succeeds"*)
+        # These name a SPECIFIC artefact the step must print, so silence really is
+        # a failure for them. Listed first: `case` takes the first match, and
+        # "shutdown command succeeds" would otherwise fall into the generic
+        # exit-code branch below and stop requiring its output.
+        # "grep succeeds" is a claim about a MATCH, so it means output, not exit
+        # status — a step may chain several greps and end on a non-zero one while
+        # the match it cares about was printed. Listed before the generic
+        # "succeeds" branch, which honours the exit code instead.
+        *"grep succeeds"*|*"container id returned"*|*"launches without error"*|*"shutdown command succeeds"*)
             [[ -n "$output" ]]
+            return $?
+            ;;
+        # Order 661-nm73. A bare "succeeds" is a claim about the step's OUTCOME,
+        # not about it printing something. Requiring non-empty output made ABSENCE
+        # assertions unpassable by construction: the canonical form is a negated
+        # grep (`! grep -E '<forbidden>' file`), which — when the property HOLDS —
+        # matches nothing, prints nothing, and exits 0. Correct behaviour, empty
+        # output, and the runner called it FAIL.
+        #
+        # That punished exactly the tests that check something is NOT there, which
+        # are the negative controls this project relies on. litmus:no-raw-error-in-
+        # status-chip failed this way while the property it asserts was true.
+        #
+        # It honours the EXIT CODE ONLY — deliberately, and `output || exit_code`
+        # was tried first and is wrong. With `! grep`, a VIOLATION prints the
+        # offending lines and exits 1, so any condition that accepts non-empty
+        # output passes the very case the step exists to catch. That is how
+        # litmus:no-raw-error-in-status-chip came to be inverted in BOTH
+        # directions: silent-and-correct read as FAIL, loud-and-violating read as
+        # PASS. Caught by injecting a violation and watching the step stay green.
+        #
+        # "succeeds" is a claim about the outcome. The exit code IS the outcome.
+        *"succeeds"*)
+            [[ "$exit_code" -eq 0 ]]
             return $?
             ;;
         *"path is correctly set"*|*"cargo"*)
@@ -864,7 +953,7 @@ run_litmus_test_file() {
                 printf '%s\n' "         output=${step_output}" >&2
                 return 1
             fi
-        elif ! behavior_matches_output "$step_output" "$step_expected"; then
+        elif ! behavior_matches_output "$step_output" "$step_expected" "$exit_code"; then
             printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
             printf '%s\n' "         expected=${step_expected}" >&2
             printf '%s\n' "         output=${step_output}" >&2
@@ -959,6 +1048,17 @@ run_tests_for_spec() {
         test_phase="$(get_test_phase "$test_file")"
         if [[ "$FILTER_PHASE" != "all" && "$test_phase" != "$FILTER_PHASE" ]]; then
             log_test_result "$spec_id" "$test_name" "SKIP" "Phase mismatch: $test_phase"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
+
+        # Order 661-emqi. Host-kind gate, before size so a forge-only test on a
+        # laptop reports WHY it did not run rather than looking like a size miss.
+        local test_host_kind
+        test_host_kind="$(get_test_host_kind "$test_file")"
+        if [[ "$test_host_kind" != "any" && "$test_host_kind" != "$(current_host_kind)" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Host-kind mismatch: needs ${test_host_kind}, this host is $(current_host_kind)"
             spec_skipped=1
             test_count=$((test_count+1))
             continue
@@ -1314,6 +1414,15 @@ main() {
         exit 1
     fi
 
+    # Time the whole suite run as a telemetry side-channel (packet 682-emvg).
+    # The trap fires on every exit past this point — normal completion AND the
+    # early strict/empty-filter failure exits below — recording the real exit
+    # code without altering it. Named `litmus-suite` so cycle-metrics' timing:
+    # line folds it into litmus_ms_avg.
+    local _suite_t0
+    _suite_t0="$(timing_now_ms)"
+    trap 'timing_emit litmus-suite "$FILTER_PHASE" "$_suite_t0" $?' EXIT
+
     # Execute tests for each spec
     while IFS= read -r spec_id; do
         [[ -z "$spec_id" ]] && continue
@@ -1333,6 +1442,23 @@ main() {
     # are counted as skips, so this guard preserves those pass semantics.
     if [[ -n "$FILTER_SPEC" && $TESTS_RUN -eq 0 ]]; then
         log_fail "no litmus tests matched filter '$FILTER_SPEC'"
+        # @trace spec:spec-traceability
+        # A litmus:*/litmus-* filter is a TEST NAME, not a spec id. The runner
+        # selects tests by spec binding, so a name-shaped filter always matches
+        # zero tests. When the name resolves to a real litmus file, name its
+        # owning spec so the user can run the intended suite. The failure and
+        # its non-zero exit are unchanged: an unmatched explicit filter must
+        # still fail (642 semantics).
+        if [[ "$FILTER_SPEC" == litmus:* || "$FILTER_SPEC" == litmus-* ]]; then
+            local name_file owner_spec
+            name_file="$(grep -rlF "name: ${FILTER_SPEC}" "${LITMUS_TESTS_DIR}" 2>/dev/null | head -n 1)"
+            if [[ -n "$name_file" ]]; then
+                owner_spec="$(grep -m1 -F 'spec: ' "$name_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
+                if [[ -n "$owner_spec" ]]; then
+                    log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+                fi
+            fi
+        fi
         exit 1
     fi
 

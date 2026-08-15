@@ -1,0 +1,94 @@
+# @trace spec:windows-native-tray
+#
+# Order 620-duta, criterion 3: make the "zero dependencies ephemeral portable
+# tool" promise falsifiable for the Windows tray. The claim is that an operator
+# can drop the exe on a clean Windows machine and run it; the way that claim
+# dies is a single import from a redistributable nobody installed.
+#
+# It had already died. Rust's MSVC targets link the C runtime dynamically by
+# default, so the tray imported `vcruntime140.dll` — a Visual C++
+# Redistributable component, not an OS component. Every developer machine has
+# the redist, so nothing failed anywhere the binary was tested. This test reads
+# the built binary's actual PE import table instead of trusting the promise.
+name: litmus:tray-import-surface-os-only
+spec: windows-native-tray
+phase: pre-build
+description: >
+  Pin scripts/check-tray-import-surface.sh: the falsifiable verdict grammar
+  ^(ok:import-surface-os-only|non-os:...|skip:(no-tray-binary|no-import-reader))$,
+  the UCRT-vs-redist distinction that keeps api-ms-win-crt-* allowed while
+  vcruntime140.dll is refused, the clean skip on hosts with no tray binary, and
+  the static-CRT rustflags that removed the dependency in the first place.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-tray-import-surface.sh
+  - workspace contains .cargo/config.toml
+  - shell utilities (grep, bash, awk, sort) are available in PATH
+
+critical_path:
+  - step: "the checker is executable and emits exactly one well-formed verdict line"
+    command: "test -x scripts/check-tray-import-surface.sh && n=$(TILLANDSIAS_IMPORT_FIXTURE='kernel32.dll' bash scripts/check-tray-import-surface.sh | grep -cE '^(ok:import-surface-os-only|non-os:[a-z0-9.,_+-]+|skip:(no-tray-binary|no-import-reader))$'); [ \"$n\" = 1 ] && echo 'ok: well-formed verdict' || { echo \"FAIL: $n lines\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: well-formed verdict"
+
+  - step: "an all-OS import surface passes"
+    command: "out=$(TILLANDSIAS_IMPORT_FIXTURE='kernel32.dll ntdll.dll user32.dll ws2_32.dll' bash scripts/check-tray-import-surface.sh); rc=$?; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:import-surface-os-only' ] && echo 'ok: os-only-passes' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: os-only-passes"
+
+  # NEGATIVE CONTROL. Without it every assertion here would pass for a checker
+  # that returned ok unconditionally — which is precisely the shape that let
+  # the dependency ship in the first place.
+  - step: "the redist import that actually shipped is REFUSED"
+    command: "out=$(TILLANDSIAS_IMPORT_FIXTURE='kernel32.dll vcruntime140.dll' bash scripts/check-tray-import-surface.sh); rc=$?; [ \"$rc\" = 1 ] && [ \"$out\" = 'non-os:vcruntime140.dll' ] && echo 'ok: redist-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: redist-refused"
+
+  - step: "the UCRT api-set is allowed while the redist is not (the distinction is the point)"
+    command: "ucrt=$(TILLANDSIAS_IMPORT_FIXTURE='api-ms-win-crt-heap-l1-1-0.dll api-ms-win-crt-stdio-l1-1-0.dll' bash scripts/check-tray-import-surface.sh); redist=$(TILLANDSIAS_IMPORT_FIXTURE='msvcp140.dll' bash scripts/check-tray-import-surface.sh); [ \"$ucrt\" = 'ok:import-surface-os-only' ] && [ \"$redist\" = 'non-os:msvcp140.dll' ] && echo 'ok: ucrt-in-redist-out' || { echo \"FAIL: ucrt=$ucrt redist=$redist\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: ucrt-in-redist-out"
+
+  - step: "every offender is named, not just the first"
+    command: "out=$(TILLANDSIAS_IMPORT_FIXTURE='msvcp140.dll kernel32.dll libssl-3-x64.dll' bash scripts/check-tray-import-surface.sh); echo \"$out\" | grep -q 'msvcp140.dll' && echo \"$out\" | grep -q 'libssl-3-x64.dll' && echo 'ok: all-offenders-named' || { echo \"FAIL: $out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: all-offenders-named"
+
+  - step: "a host with no tray binary skips cleanly instead of failing"
+    command: "out=$(TILLANDSIAS_TRAY_EXE=/nonexistent/tillandsias-tray.exe bash scripts/check-tray-import-surface.sh); rc=$?; [ \"$rc\" = 0 ] && [ \"$out\" = 'skip:no-tray-binary' ] && echo 'ok: skips-without-binary' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: skips-without-binary"
+
+  - step: "the static-CRT rustflags that removed vcruntime140 are still configured for MSVC targets"
+    # Not an expression pin on program logic: this asserts a build CONFIGURATION
+    # value, and the step below is its negative control.
+    command: "grep -A1 'target.x86_64-pc-windows-msvc' .cargo/config.toml | grep -q 'crt-static' && echo 'ok: static-crt-configured'"
+    timeout_ms: 3000
+    expected_behavior: "ok: static-crt-configured"
+
+  - step: "negative control for the grep above: it does not match an absent target section"
+    command: "grep -A1 'target.riscv64-pc-windows-msvc' .cargo/config.toml 2>/dev/null | grep -q 'crt-static' && { echo 'FAIL: matched a target section that does not exist'; exit 1; } || echo 'ok: grep-discriminates'"
+    timeout_ms: 3000
+    expected_behavior: "ok: grep-discriminates"
+
+observability:
+  traces:
+    - "@trace spec:windows-native-tray"
+  expected_log: "tray import surface pinned to OS-shipped DLLs (grammar + redist refusal + clean skip)"
+  log_fields:
+    spec: "windows-native-tray"
+    test: "tray-import-surface-os-only"
+    artifact: "scripts/check-tray-import-surface.sh + .cargo/config.toml"
+
+rollback:
+  on_failure: >
+    A non-OS DLL entered the tray's import table, or the checker drifted. If the
+    verdict is non-os:vcruntime140.dll, the static-CRT rustflags for
+    x86_64-pc-windows-msvc in .cargo/config.toml were lost — restore
+    `rustflags = ["-C", "target-feature=+crt-static"]` and rebuild. For any other
+    offender, the new dependency is the defect: a portable tray may only import
+    DLLs Windows ships in-box (api-ms-win-* api-sets including the UCRT, plus the
+    named system DLLs in is_os_shipped).
+  command: "bash scripts/check-tray-import-surface.sh; grep -A1 'windows-msvc' .cargo/config.toml"

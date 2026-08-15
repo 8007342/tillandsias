@@ -50,12 +50,13 @@ clone-fresh() {
         return 1
     fi
 
-    # Order 436: canonical host is `tillandsias-git` — it is what the launcher
-    # injects as url.insteadOf (git://tillandsias-git/<project>) and what the
-    # container is named. `git-service` remains a NETWORK ALIAS for one release
-    # so an explicit GIT_SERVICE_HOST=git-service keeps working; it is scheduled
-    # for removal once no consumer names it.
-    local git_service="${GIT_SERVICE_HOST:-tillandsias-git}"
+    # Order 659-8faj (supersedes the order-436 shared-alias deprecation): each
+    # project's mirror answers ONLY at its per-project DNS name
+    # `git-<project>` — the shared `tillandsias-git` / `git-service` aliases
+    # are retired and no longer resolve. Cloning project X therefore addresses
+    # X's own mirror, never this project's TILLANDSIAS_GIT_SERVICE.
+    # GIT_SERVICE_HOST stays as an explicit operator override.
+    local git_service="${GIT_SERVICE_HOST:-git-${project}}"
     local git_port="${GIT_SERVICE_PORT:-9418}"
 
     echo "Cloning $project from git://$git_service/$project ..."

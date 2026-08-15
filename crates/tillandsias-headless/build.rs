@@ -101,6 +101,34 @@ fn main() {
     ];
     for rel in required {
         if !repo_root.join(rel).is_file() {
+            // Every other entry in `required` is a tracked file: if it is gone,
+            // the checkout is broken and the path alone says so. The router
+            // sidecar is the one BUILD ARTIFACT in the list (order 710-w9kc
+            // un-committed it), so its absence is the normal state of a fresh
+            // clone and means "a build step has not run yet", not "your tree is
+            // corrupt". Naming the remedy here is what separates those two.
+            //
+            // This message is the whole reason the gap survived: three
+            // entrypoints compiled this crate without staging the sidecar
+            // first, and each failed with a bare path to a file the reader had
+            // never heard of and could not restore from git (723-wd8i).
+            if rel == "images/router/tillandsias-router-sidecar" {
+                panic!(
+                    "required runtime asset missing: {}\n\
+                     \n\
+                     This is a BUILD ARTIFACT, not a tracked file — it is built \
+                     from crates/tillandsias-router-sidecar, never committed \
+                     (order 710-w9kc). A fresh clone will not have it.\n\
+                     \n\
+                     Produce it, then rebuild:\n    \
+                     bash scripts/build-sidecar.sh\n\
+                     \n\
+                     If you hit this from a build script, that script is missing \
+                     the staging call that build.sh and scripts/build-image.sh \
+                     already make.",
+                    repo_root.join(rel).display()
+                );
+            }
             panic!(
                 "required runtime asset missing: {}",
                 repo_root.join(rel).display()

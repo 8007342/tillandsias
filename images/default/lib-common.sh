@@ -458,13 +458,13 @@ REFRESH
 # rule in `~/.gitconfig` (NOT the bind-mounted `.git/config`, which must stay
 # pristine so the host's normal workflow keeps working). The rule redirects
 # any push or fetch against the GitHub URL onto the enclave-local git mirror
-# reachable at `git://git-service/<project>`. The mirror owns the GitHub token
-# (fetched from Vault at push time by the post-receive hook via vault-cli) and
-# post-receive hook.
+# reachable at its per-project name `git://git-<project>/<project>`
+# (order 659-8faj). The mirror owns the GitHub token (fetched from Vault at
+# push time by the post-receive hook via vault-cli) and post-receive hook.
 #
 # Net effect inside the forge:
 #   - `git remote -v` still shows the GitHub URL (matches user expectation).
-#   - `git push origin <branch>` silently routes to `git://git-service/<project>`.
+#   - `git push origin <branch>` silently routes to `git://git-<project>/<project>`.
 #   - The host's `.git/config` is never modified.
 #
 # Diagnostic forensics: the original origin URL is preserved under
@@ -473,6 +473,79 @@ REFRESH
 #
 # Idempotent — re-running on each forge attach overwrites the same global
 # config keys.
+
+# @trace spec:git-mirror-service
+# Order 659-8faj: the mirror's DNS identity is PER-PROJECT — the shared
+# `tillandsias-git` / `git-service` aliases are retired and no longer resolve.
+# The launcher injects the authoritative name (git_mirror_service_identity in
+# tillandsias-headless, `git-{sanitized-project}`) as TILLANDSIAS_GIT_SERVICE.
+# The fallback mirrors that derivation for simple project names and exists
+# only for lanes where the launcher does not inject the variable (host-mount).
+# Every mirror URL in this file MUST derive its host here — never a constant.
+git_mirror_host() {
+    printf '%s' "${TILLANDSIAS_GIT_SERVICE:-git-${TILLANDSIAS_PROJECT}}"
+}
+
+# Probe the git mirror for reachability BEFORE the clone loop, distinguishing
+# the two failure classes the old one-shot fatal conflated (order 691-ssw9):
+#
+#   - the mirror ALIAS is not DNS-resolvable ("unable to look up <host>") —
+#     a startup-order / alias-migration fault (a forge asking for a name the
+#     mirror no longer registers, e.g. the retired shared `tillandsias-git`
+#     vs the per-project `git-<project>` of order 659-8faj), NOT a seed delay;
+#   - the alias resolves but the daemon is not yet SERVING (connection refused
+#     / no refs) — the mirror is still coming up or seeding.
+#
+# Uses `git ls-remote` only (git is always present — it does the clone), so it
+# needs no getent/nslookup that a minimal forge image may lack.
+#
+# CONSERVATIVE BY DESIGN: it fast-fails ONLY on the `alias-unresolvable` class —
+# a name fault (the operator's DOA: a forge asking for a DNS alias no mirror
+# registers) that will NEVER self-heal, so burning the full seed-retry budget on
+# it is pure latency and a misleading "still initialising" verdict. For every
+# OTHER outcome — resolvable-but-not-serving, serving-but-no-refs (genuinely
+# seeding), or a probe that simply times out without ever seeing the name fault —
+# it returns 0 and defers to the existing seed-tolerant clone retry loop, so the
+# generous seed window is preserved and a slow-seeding mirror is NOT regressed.
+# Returns 0 to proceed; returns 1 ONLY for a confirmed unresolvable alias.
+probe_mirror_reachable() {
+    local host="$1" project="$2"
+    local timeout_s="${TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S:-20}"
+    local url="git://${host}/${project}"
+    local start now elapsed=0 lsout lsrc last_class="unknown"
+    start="$(date +%s 2>/dev/null || echo 0)"
+    while :; do
+        lsout="$(git ls-remote "$url" 2>&1)"; lsrc=$?
+        if [[ $lsrc -eq 0 && -n "$lsout" ]]; then
+            return 0                       # resolvable AND serving refs
+        fi
+        if echo "$lsout" | grep -qi "unable to look up\|Name or service not known\|Could not resolve"; then
+            last_class="alias-unresolvable"
+        elif [[ $lsrc -eq 0 ]]; then
+            last_class="serving-but-no-refs"   # up, still seeding
+        else
+            last_class="resolvable-not-serving"
+        fi
+        now="$(date +%s 2>/dev/null || echo 0)"
+        elapsed=$(( now - start ))
+        [[ $elapsed -ge $timeout_s ]] && break
+        sleep 2
+    done
+    # Only the unresolvable-alias class is a confirmed unrecoverable fault; every
+    # other timeout defers to the seed-tolerant clone loop rather than fail here.
+    if [[ "$last_class" == "alias-unresolvable" ]]; then
+        echo "[forge] mirror reachability probe: ALIAS UNRESOLVABLE after ${elapsed}s for ${url}." >&2
+        echo "[forge]   The forge asked for '${host}' but no mirror registers that DNS alias on the enclave —" >&2
+        echo "[forge]   a name/startup fault, NOT a seed delay. Likely a stale forge image from before the" >&2
+        echo "[forge]   per-project alias migration (order 659-8faj), or an image built from bundled assets that" >&2
+        echo "[forge]   lag the launcher (order 683-g7p6). Rebuild the forge/git images from current source so the" >&2
+        echo "[forge]   injected TILLANDSIAS_GIT_SERVICE matches the mirror's --network-alias." >&2
+        return 1
+    fi
+    trace_lifecycle "git-mirror" "reachability probe inconclusive after ${elapsed}s (last class: ${last_class}); deferring to the seed-tolerant clone loop"
+    return 0
+}
+
 rewrite_origin_for_enclave_push() {
     # Only act when host-mount mode is active. Other transports (filesystem
     # /Windows-WSL, git daemon /Linux-podman) handle their own remote setup
@@ -500,7 +573,7 @@ rewrite_origin_for_enclave_push() {
         return 0
     fi
 
-    local mirror_url="git://tillandsias-git/${TILLANDSIAS_PROJECT}"
+    local mirror_url="git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}"
 
     # Check whether the redirect is already installed (pre-injected by the
     # launcher's write_forge_gitconfig in order 224). If so, skip redundant
@@ -749,7 +822,16 @@ _clone_project_from_mirror_impl() {
 
     # Network transport (Linux/podman).
     if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
-        trace_lifecycle "git-mirror" "cloning from git://tillandsias-git/${TILLANDSIAS_PROJECT}"
+        trace_lifecycle "git-mirror" "cloning from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}"
+        # Order 691-ssw9: classify reachability BEFORE cloning so a name/alias
+        # fault fails loud with the right remedy instead of masquerading as a
+        # generic "not ready" after the retry budget burns down. A resolvable,
+        # serving mirror returns immediately; an unresolvable alias is named as
+        # such (the operator's DOA class) rather than blamed on seeding.
+        if ! probe_mirror_reachable "$(git_mirror_host)" "${TILLANDSIAS_PROJECT}"; then
+            echo "[forge] FATAL: git mirror $(git_mirror_host) is not reachable for clone (see the classified reason above)." >&2
+            exit 1
+        fi
         # Retry budget: the launcher-side wait_for_git_mirror_ready gate
         # (order 452 slice 2) blocks the launch until the mirror advertises a
         # resolvable HEAD, so this loop is the fail-loud BACKSTOP, not the
@@ -761,7 +843,7 @@ _clone_project_from_mirror_impl() {
         local backoff
         for i in $(seq 1 $max_retries); do
             if [[ $i -le 6 ]]; then backoff=2; else backoff=5; fi
-            if git clone "git://tillandsias-git/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
+            if git clone "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
                 # @trace spec:git-mirror-service
                 # A git daemon serving a mid-seed (still-empty) bare repo returns
                 # a SUCCESSFUL clone of an EMPTY repository — git only prints
@@ -780,7 +862,7 @@ _clone_project_from_mirror_impl() {
                         sleep "$backoff"
                         continue
                     fi
-                    echo "[forge] FATAL: git clone from git://tillandsias-git/${TILLANDSIAS_PROJECT} produced an EMPTY checkout (no HEAD) after $max_retries attempts." >&2
+                    echo "[forge] FATAL: git clone from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT} produced an EMPTY checkout (no HEAD) after $max_retries attempts." >&2
                     # Distinguish the two failure classes so the operator fixes
                     # the right thing (they previously shared one misleading
                     # message that blamed seeding for a mirror-side defect):
@@ -791,7 +873,7 @@ _clone_project_from_mirror_impl() {
                     #   - no refs at all -> the mirror has not finished seeding
                     #     from upstream, or upstream is genuinely empty.
                     local advertised
-                    advertised="$(git ls-remote "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
+                    advertised="$(git ls-remote "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || true)"
                     if [[ -n "$advertised" ]] && ! echo "$advertised" | grep -q $'\tHEAD$'; then
                         echo "[forge] The mirror ADVERTISES refs but its HEAD is unset (unborn-HEAD mirror defect)." >&2
                         echo "[forge] Restart/rebuild the tillandsias-git container so ensure-mirror-head repairs it (images/git/ensure-mirror-head.sh)." >&2
@@ -803,7 +885,7 @@ _clone_project_from_mirror_impl() {
                 fi
                 trace_lifecycle "git-mirror" "clone successful"
                 cd "$clone_dir" || return 1
-                git remote set-url --push origin "git://tillandsias-git/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
+                git remote set-url --push origin "git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
                     echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
                 configure_git_identity
                 rewrite_origin_for_enclave_push
@@ -820,7 +902,7 @@ _clone_project_from_mirror_impl() {
                 trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
             fi
         done
-        echo "[forge] FATAL: git clone failed from git://tillandsias-git/${TILLANDSIAS_PROJECT}" >&2
+        echo "[forge] FATAL: git clone failed from git://$(git_mirror_host)/${TILLANDSIAS_PROJECT}" >&2
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
     fi
@@ -917,6 +999,9 @@ export FORGE_EXPERTS_BIN_DIR FORGE_EXPERTS_STATE_DIR
 #   build-timeout  cargo build exceeded FORGE_EXPERTS_BUILD_TIMEOUT
 #   binary-missing cargo succeeded but produced no artifact
 #   install-failed the artifact could not be installed to FORGE_EXPERTS_BIN_DIR
+#   stale-source   the binary built + installed but its compiled `capabilities`
+#                  surface lacks `answer` (or predates the order-569 probe) — the
+#                  checkout predates the expert crate (order 531)
 #   not-built      no build was ever started in this container
 _forge_experts_set_state() {
     local state="$1" reason="${2:-}"
@@ -997,6 +1082,28 @@ _forge_experts_source_hash() {
     return 0
 }
 
+# _forge_experts_probe_answer_surface — does this freshly-installed binary
+# actually carry the expert `answer` subcommand? (order 531)
+#
+# `experts: ready` has only ever meant "the build finished". A binary built from
+# a pre-expert base (no crates/tillandsias-plan/src/answer.rs) installs cleanly
+# and reports `ready` truthfully while every plan_answer returns
+# confidence=unsupported. This asks the binary what it can do — via the order-569
+# `capabilities` subcommand, which prints one lowercase subcommand token per
+# line on stdout, exit 0, touching nothing else — and answers one yes/no: is
+# `answer` in that compiled surface?
+#
+# Returns 0 iff `answer` is present. A binary predating order 569 has no
+# `capabilities` subcommand at all, so the invocation errors / exits non-zero
+# (or emits something other than the token stream); that is ITSELF the stale
+# signal, and it reads as 1 (stale) too. Fail-safe: any doubt is stale.
+_forge_experts_probe_answer_surface() {
+    local bin="$1" caps=""
+    [ -x "$bin" ] || return 1
+    caps="$("$bin" capabilities 2>/dev/null)" || return 1
+    printf '%s\n' "$caps" | grep -qx 'answer'
+}
+
 _generic_project_set_state() {
     local state="$1" reason="${2:-}"
     mkdir -p "$FORGE_EXPERTS_STATE_DIR" 2>/dev/null || true
@@ -1068,6 +1175,31 @@ discover_generic_project() {
 
     local index_dir="$FORGE_EXPERTS_STATE_DIR/project-index"
     mkdir -p "$index_dir" 2>/dev/null || true
+
+    # ORDER 669-egjn — the index carries the FULL deterministic subset
+    # (commands/layout/actions with citable spans), derived by the baked
+    # answer engine (`project-info.sh index`, the order-569 subcommand
+    # pattern), so the document persisted here and the document
+    # project_answer serves from cannot drift apart. The engine is
+    # image-baked (order 459); when it is absent or fails, fall back to the
+    # thin pre-669-egjn path/types/meta shape rather than degrading launch.
+    local engine=""
+    local engine_candidate=""
+    for engine_candidate in \
+        "${TILLANDSIAS_PROJECT_ENGINE:-}" \
+        "/home/forge/.config-overlay/mcp/project-info.sh"; do
+        [ -n "$engine_candidate" ] && [ -r "$engine_candidate" ] || continue
+        engine="$engine_candidate"
+        break
+    done
+    if [ -n "$engine" ] \
+        && bash "$engine" index "$project_path" > "$index_dir/index.json.tmp" 2>/dev/null \
+        && [ -s "$index_dir/index.json.tmp" ]; then
+        mv -f "$index_dir/index.json.tmp" "$index_dir/index.json" 2>/dev/null || true
+        _generic_project_set_state ready
+        return 0
+    fi
+    rm -f "$index_dir/index.json.tmp" 2>/dev/null || true
 
     local types=""
     types="$(detect_project_types "$project_path" 2>/dev/null || echo "unknown")"
@@ -1190,6 +1322,21 @@ ensure_forge_experts() {
         return 0
     fi
     printf '%s\n' "$src_hash" > "$stamp" 2>/dev/null || true
+
+    # Order 531. Installing cleanly is NOT the same as being able to answer. A
+    # binary built from a pre-expert base (no src/answer.rs) installs and reports
+    # `ready` truthfully while every plan_answer returns confidence=unsupported —
+    # the milestone-blocking condition. Probe the compiled surface before
+    # claiming ready: if the freshly-installed binary lacks the `answer`
+    # subcommand (or predates the order-569 `capabilities` probe entirely), the
+    # checkout that built it predates the expert crate. Report an honest
+    # `degraded (stale-source)` — distinguishable from an engine failure — rather
+    # than a truthful-but-useless `ready`. Fail-soft like every other arm.
+    if ! _forge_experts_probe_answer_surface "$bin_dst"; then
+        trace_lifecycle "experts" "degraded (stale-source): built binary lacks the \`answer\` subcommand — checkout predates the expert crate (order 531)"
+        _forge_experts_set_state degraded stale-source
+        return 0
+    fi
 
     elapsed=$(( $(date +%s 2>/dev/null || echo 0) - started ))
     [ "$elapsed" -ge 0 ] || elapsed=0
@@ -2037,6 +2184,29 @@ find_project_dir() {
 # the bare `require_*` call propagated the return 1 through the entrypoint).
 # Entrypoints whose PRIMARY agent is missing must check `[ -x "$*_BIN" ]`
 # themselves and fail with an actionable message (see harness_missing_fatal).
+# order 559. npm stages a global install as <parent>/.<name>-<hash> then
+# atomically renames it into place. A KILLED install (podman reset mid-launch,
+# an OOM, a cancelled forge) leaves that staging dir behind, and the NEXT
+# `npm i -g <name>` fails with ENOTEMPTY trying to reuse the name — which
+# blocks the harness install and the forge launch that depends on it. Clearing
+# the stale STAGING dir (never the installed package) before install makes the
+# launch-path install idempotent. Every npm harness routes through
+# _require_harness, so calling this there covers all of them.
+_clear_stale_npm_staging() {
+    local pkg="$1" nm parent base
+    nm="$(npm root -g 2>/dev/null)"
+    [ -n "$nm" ] || nm="${NPM_CONFIG_PREFIX:-/usr/local}/lib/node_modules"
+    [ -d "$nm" ] || return 0
+    # dirname handles both unscoped (opencode-ai -> .) and scoped
+    # (@openai/codex -> @openai) package names.
+    parent="$nm/$(dirname "$pkg")"
+    base="$(basename "$pkg")"
+    [ -d "$parent" ] || return 0
+    # Only npm's atomic-staging dirs match `.<name>-<hash>`. The real package is
+    # `<name>` — no leading dot, no `-<hash>` — so it is never removed.
+    find "$parent" -maxdepth 1 -type d -name ".${base}-*" -exec rm -rf {} + 2>/dev/null || true
+}
+
 _require_harness() {
     # $1=friendly-name  $2=npm-package  $3=bin-name  → echoes resolved path
     local name="$1" pkg="$2" bin="$3" path errlog
@@ -2063,6 +2233,9 @@ _require_harness() {
     fi
     if [ ! -x "$path" ]; then
         trace_lifecycle "harness" "$name missing — install latest"
+        # order 559: clear any stale npm atomic-staging dir so a killed prior
+        # install cannot block this one with ENOTEMPTY.
+        _clear_stale_npm_staging "$pkg"
         errlog="$(mktemp /tmp/npm-install-${bin}.XXXXXX 2>/dev/null || echo /tmp/npm-install-$bin.err)"
         if ! npm install -g --no-audit --no-fund "$pkg@latest" >"$errlog" 2>&1; then
             trace_lifecycle "harness" "$name install FAILED (non-fatal): $(tail -3 "$errlog" 2>/dev/null | tr '\n' ' ' | cut -c1-300)"
@@ -3438,6 +3611,33 @@ inject_startup_context() {
         _cap_advice="The capability probe (${_cap_lib}) is not present in this image, so the fields above are placeholders — treat expert capability as UNVERIFIED and check \`tillandsias-plan capabilities\` by hand."
     fi
 
+    # Order 619-pfsj (C3): the same honesty for the GENERIC ANSWER ENGINE,
+    # REDEFINED for its packaging. project-info.sh is image-baked (order 459 —
+    # no network at image build, so the engine ships in the baked shell layer),
+    # which means its sources are never the mounted checkout and NO relaunch
+    # rebuilds it. `project-expert: ready` above describes the tmpfs INDEX;
+    # this line describes the ENGINE — whether the baked artifact carries the
+    # answer contract this checkout expects (order 531: an artifact can report
+    # ready truthfully while every answer refuses). The probe compares the
+    # engine's embedded manifest (`project-info.sh capabilities`, order 569
+    # pattern) against the checkout's copy of the engine source — versions and
+    # capabilities embedded in the artifacts, never a network probe.
+    local _pe_line _pe_advice
+    local _pe_lib="${BASH_SOURCE[0]%/*}/lib-project-engine-capability.sh"
+    if [[ -r "$_pe_lib" ]]; then
+        # shellcheck source=lib-project-engine-capability.sh
+        source "$_pe_lib"
+        tillandsias_project_engine_capability \
+            "${TILLANDSIAS_PROJECT_ENGINE:-/home/forge/.config-overlay/mcp/project-info.sh}" \
+            "$project_dir"
+        _pe_line="$TILLANDSIAS_PROJECT_ENGINE_LINE"
+        _pe_advice="$(tillandsias_project_engine_advice "$TILLANDSIAS_PROJECT_ENGINE_STATE")"
+    else
+        # A missing probe is its own named fact, not a silent "no skew".
+        _pe_line="project_engine: state=unknown baked=- expected=- missing_in_engine=- engine_only=- probe=helper-missing"
+        _pe_advice="The engine capability probe (${_pe_lib}) is not present in this image, so the fields above are placeholders — treat the answer engine's capability as UNVERIFIED and run \`project-info.sh capabilities\` by hand."
+    fi
+
     # Order 480 follow-up (accelerator envelope): the host probes its own
     # hardware and passes the verdict in; the forge cannot see PCI devices, an
     # NVIDIA driver, or /dev/accel, so it may never attempt this itself.
@@ -3552,11 +3752,15 @@ inject_startup_context() {
   - \`experts_state=ready\` only means THE BUILD FINISHED. It has never meant the binary can answer — a forge seeded from a base without the expert sources builds a pre-expert binary and reports \`ready\` truthfully while every \`plan_answer\` returns \`confidence=unsupported\` (order 531). The line above is the honest one. Read it as three answers: \`now=\` is what you can use in THIS session; \`after_relaunch=\` is what the MOUNTED CHECKOUT would give you on the next forge run (so it already includes your uncommitted edits to the expert crate); \`blocked_capabilities=\` is the direct answer to "is my current work blocked pending a relaunch".
   - \`skew\` is the field to branch on, and two of its values demand OPPOSITE actions: \`pending-build\` means the build is still running and the capability WILL appear in this session — wait and retry; \`relaunch-required\` means no build will deliver it here, so retrying is FUTILE and you must relaunch the forge (or rebuild by hand). \`relaunch-regresses\` means the running binary has MORE than the checkout and a relaunch would REMOVE capability. \`none\` means nothing is to be gained by waiting or relaunching. \`now=stale-binary\` means a binary is installed but predates the capability manifest, so its abilities are unknowable — treat everything as blocked.
   - ${_cap_advice}
-  - \`experts_state\` is \`ready\` only once \`tillandsias-plan\` is built and installed on PATH. \`building\` carries elapsed seconds and is TRANSIENT — retry the MCP tool. \`degraded\` always names a reason from a closed set: \`no-plan-crate\` (this project has no plan expert — expected off-tillandsias), \`no-checkout\`, \`no-cargo\`, \`build-failed\`, \`build-timeout\`, \`binary-missing\`, \`install-failed\`, \`not-built\`. There is no indeterminate "may still be building" state.
+  - \`experts_state\` is \`ready\` only once \`tillandsias-plan\` is built and installed on PATH. \`building\` carries elapsed seconds and is TRANSIENT — retry the MCP tool. \`degraded\` always names a reason from a closed set: \`no-plan-crate\` (this project has no plan expert — expected off-tillandsias), \`no-checkout\`, \`no-cargo\`, \`build-failed\`, \`build-timeout\`, \`binary-missing\`, \`install-failed\`, \`stale-source\` (the binary built + installed but its compiled \`capabilities\` surface lacks \`answer\` — the checkout predates the expert crate; order 531), \`not-built\`. There is no indeterminate "may still be building" state.
   - Experts are OPTIONAL: the build is backgrounded right after the project clone and never gates this session. Details: \`/tmp/forge-lifecycle.log\`.
 - **Generic Project Index** — \`project-expert: ${_project_experts_status}\`. Query via the \`project-info\` MCP server (\`project_answer\`, \`project_metadata\`, \`project_structure\`).
   - Machine-readable (branch on this, do not parse the prose): \`project_expert_state=${_project_experts_state} project_expert_reason=${_project_experts_reason} project_expert_elapsed=${_project_experts_elapsed}\`
   - \`project-expert\` is \`ready\` when the generic project index is built into tmpfs (\`$FORGE_EXPERTS_STATE_DIR/project-index/index.json\`).
+  - Machine-readable ENGINE-vs-CHECKOUT skew (order 619-pfsj — branch on this, do not parse the prose): \`${_pe_line}\`
+  - \`project-expert: ready\` above describes the tmpfs INDEX, not the engine. The answer engine (\`project-info.sh\`) is IMAGE-BAKED, so unlike the launch-built plan engine no relaunch rebuilds it: \`state=ready\` means the baked engine matches the mounted checkout's answer contract (or the checkout carries none — \`expected=-\`); \`state=skewed\` means this image's engine and the checkout disagree (\`missing_in_engine=\`/\`engine_only=\` name the difference) and only an image rebuild heals it; \`state=stale-engine\` means the engine predates the capability manifest and its abilities are unknowable; \`state=absent\` means no engine is installed.
+  - ${_pe_advice}
+  - With no local inference endpoint, \`project_answer\` still answers the deterministic subset (type, status, commands, layout, actions; plan-backed answers on Tillandsias) and refuses synthesis questions TYPED: \`unsupported: synthesis question — missing_capability=local-inference inference_state=... inference_reason=...\` — branch on \`missing_capability=\`, never parse the prose.
 - **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.
 
 You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA certs.
@@ -3568,6 +3772,39 @@ You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA
 - **Loop status**: \`plan/loop_status.md\`
 
 Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-plan\`.
+
+### THIS CHECKOUT IS EPHEMERAL — a finding you do not PUSH is a finding you destroyed
+
+This workspace is a \`git clone\` into the container. When the forge tears down it
+goes with it, and nothing warns you. Writing a fragment to \`plan/index.d/\` and
+validating it with \`tillandsias-plan check\` proves it is WELL-FORMED, not that it
+survives — those are different claims, and the second one is the only one that
+matters to the host that launched you.
+
+On 2026-08-15 a review agent here found four real defects, minted three order
+tokens, wrote three valid fragments, confirmed the ledger accepted them
+(857 packets), and exited. Every fragment was destroyed. They reached the ledger
+only because a human-readable summary happened to be on stdout and the launching
+host re-filed them BY HAND. Unattended, all four findings would have been lost
+while the launcher returned zero (order 741-3y48).
+
+So: **commit and push every finding before you exit.** Git push routes through
+the enclave mirror and needs no configuration. Then prove it:
+
+\`\`\`bash
+scripts/check-forge-findings-persisted.sh   # ok:no-findings | ok:findings-persisted | unpersisted:<why>
+\`\`\`
+
+It is a GATE, not advice — a non-zero exit means work already done is about to be
+thrown away, which is unrecoverable once this container stops. It covers
+\`plan/index.d/\`, \`plan/loop_status.d/\`, \`plan/issues/\` and
+\`plan/mo-full-attestations.d/\`, and it catches the case \`git status\` cannot: a
+COMMITTED fragment that was never pushed looks identical to a pushed one.
+A cycle that legitimately files nothing prints \`ok:no-findings\` and is silent.
+
+If you genuinely cannot push, say so loudly in your final output and reproduce
+each finding there in full, so the launching host can re-file it. Do not exit
+quietly.
 
 ## Skills
 
@@ -3625,6 +3862,70 @@ Two flows; pick by intent:
    attributes the project from your session — publishing is local-only
    today (public Cloudflare share is a planned rung).
 CONTEXT_EOF
+
+    # ── Checkout-sourced addendum (order 743-y5wh) ───────────────────────────
+    # Everything above is IMAGE content: this function is baked into
+    # /usr/local/lib/tillandsias/lib-common.sh at build time, so a change to the
+    # heredoc reaches running forges only after an image rebuild. That is fine
+    # for descriptive state and WRONG for a fail-loud guard.
+    #
+    # Measured 2026-08-15: commit 02b1482c added the "THIS CHECKOUT IS EPHEMERAL"
+    # warning to the heredoc, and the very next forge launch generated a startup
+    # context WITHOUT it, because the running image was baked 2026-08-09. The
+    # warning existed, was correct, and reached nobody — the same delivery gap as
+    # order 531 (`experts: ready` reported truthfully by a pre-expert binary).
+    #
+    # This appends a file read from the MOUNTED CHECKOUT at launch, so anything
+    # written there is live on the next launch with no rebuild. Additive and
+    # fail-soft by construction: a missing file is the normal case off
+    # Tillandsias, and an unreadable one must never take down a launch over a
+    # documentation append.
+    # "Fail-soft" has to mean the LAUNCH survives, not just that the shell does
+    # not exit (order 747-kw8u). The first version gated on `[[ -r ]]` and then
+    # ran an unbounded `cat`, wrapped in `2>/dev/null || true` — which cannot
+    # help a `cat` that never returns. `[[ -r ]]` is TRUE for FIFOs and character
+    # devices, and git stores symlinks (mode 120000), so a pushed
+    # `startup-context-addendum.md -> /dev/zero` hung every in-forge launch
+    # forever while the `|| true` hid the failure. Measured: a FIFO blocks
+    # indefinitely; a symlink to /dev/zero grew the context file 259 MB in 3s.
+    # There is no timeout around inject_startup_context to save it.
+    #
+    # `[[ -f ]]` is false for FIFOs, character devices and directories, true for
+    # the legitimate regular file, and follows symlinks so a link onto a device
+    # is rejected by what it points AT. The read is byte-bounded on top of that,
+    # because a regular file can still be enormous.
+    local addendum="$project_dir/images/default/startup-context-addendum.md"
+    local addendum_max_bytes="${TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES:-65536}"
+    if [[ -f "$addendum" && -r "$addendum" ]]; then
+        # Order 747-hws2: the append lands VERBATIM and LAST, so a checkout
+        # addendum could (a) corrupt the generated Markdown with ``` fences /
+        # backticks and (b) append machine-looking state lines that win any
+        # `grep <token> | tail -1` read over the generator's real values. The
+        # regular-file gate and the byte bound (747-kw8u) stop a hang, not
+        # content injection — the checkout is the repo under test, so the
+        # CONTENT stays trusted. What the mechanism owes the reader is a
+        # self-documenting boundary: emit an explicit header FIRST, so every
+        # generator machine-readable line provably precedes it, and a
+        # tail-grep consumer can stop there. The header is part of the baked
+        # image, so it can never be spoofed by the addendum it delimits.
+        {
+            printf '\n'
+            printf '## Checkout addendum — NOT authoritative for machine-readable lines\n'
+            printf 'The generator lines ABOVE this header (base_state, inference_state, expert_capability, project_engine) are authoritative. Tail-grep consumers stop at this header.\n\n'
+            head -c "$addendum_max_bytes" "$addendum"
+            printf '\n'
+        } >>"$ctx_file" 2>/dev/null || true
+        trace_lifecycle "startup-context" "appended checkout addendum from $addendum (<=${addendum_max_bytes}B) under boundary header"
+    elif [[ -e "$addendum" || -L "$addendum" ]]; then
+        # PRESENT BUT REJECTED is the surprising case and must not be silent
+        # (order 747-n52p): the path exists, so someone intended a warning to
+        # reach agents, and skipping it quietly delivers nothing while looking
+        # healthy. A merely ABSENT addendum stays silent — that is the normal
+        # case off Tillandsias and the negative control this file's own guidance
+        # demands.
+        trace_lifecycle "startup-context" \
+            "SKIPPED checkout addendum $addendum — not a readable regular file (FIFO, device, directory or dangling symlink); no warning was delivered"
+    fi
 
     # Ensure the file is gitignored (idempotent append).
     local gitignore="$project_dir/.gitignore"

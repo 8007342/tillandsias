@@ -28,6 +28,88 @@ use crate::wsl_probe_policy::{
     classify_nonzero_distro_exec, distro_exec_probe_decision,
 };
 
+/// What the last `reconcile_adopted_guest` actually DID to the adopted guest
+/// (order 620-duta). Recorded to disk so `--diagnose` can report it.
+///
+/// This exists because "the guest reports the same version as the tray" is not
+/// the same claim as "this tray deployed that guest", and the two are
+/// indistinguishable from the outside. `reconcile_adopted_guest` returns early
+/// on a version match, so a tray carrying a NEW binary at an UNCHANGED VERSION
+/// injects nothing and leaves a guest that looks correct by every field
+/// `--diagnose` previously exposed. That ambiguity cost this project a false
+/// "the fix is deployed" reading on 2026-08-11 (627-sgtt), and the packet's own
+/// next_action had warned about it beforehand — which is the point: a warning
+/// in a plan packet cannot be observed at runtime, and this can.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct GuestWiringRecord {
+    /// `WORKSPACE_VERSION` of the tray that performed the reconcile.
+    pub tray_version: String,
+    /// Headless version the adopted guest reported BEFORE the reconcile.
+    /// `None` means no binary was found at all.
+    pub guest_version_before: Option<String>,
+    /// What the reconcile did. See [`GuestWiringOutcome`].
+    pub outcome: GuestWiringOutcome,
+    /// UTC RFC3339 timestamp of the reconcile.
+    pub ts: String,
+    /// Failure detail when `outcome` is `Failed`; `None` otherwise.
+    pub error: Option<String>,
+}
+
+/// The three things a reconcile can conclude, kept distinct on purpose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GuestWiringOutcome {
+    /// Versions matched, so nothing was injected. The guest's binary is
+    /// whatever some EARLIER tray put there — this run did not touch it.
+    /// Distinguishing this from `Reinjected` is the entire reason the record
+    /// exists.
+    SkippedVersionMatch,
+    /// The guest was stale or absent and the bootstrap injection ran to
+    /// completion: binary, systemd units, and modules-load entry are this
+    /// tray's.
+    Reinjected,
+    /// Injection was attempted and failed; the guest's wiring is in an
+    /// unknown state.
+    Failed,
+}
+
+/// UTC RFC3339 stamp for the reconcile record, seconds precision.
+fn now_rfc3339_utc() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+/// Serialize the outcome of a reconcile so `--diagnose` can report it.
+/// Best-effort by design: a tray must never fail to provision because a
+/// diagnostic breadcrumb could not be written.
+pub fn write_guest_wiring_record(record: &GuestWiringRecord) {
+    let path = WslLifecycle::guest_wiring_record_path();
+    if let Some(dir) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(dir)
+    {
+        tracing::debug!(%e, "could not create guest wiring state dir");
+        return;
+    }
+    match serde_json::to_vec_pretty(record) {
+        Ok(bytes) => {
+            if let Err(e) = std::fs::write(&path, bytes) {
+                tracing::debug!(%e, "could not write guest wiring record");
+            }
+        }
+        Err(e) => tracing::debug!(%e, "could not serialize guest wiring record"),
+    }
+}
+
+/// Read back the last recorded reconcile outcome, or `None` when the file is
+/// absent or unreadable/corrupt. A missing record is the honest answer for a
+/// tray that has not reconciled since the feature landed — it is NOT reported
+/// as a version match, which would be the very conflation this record exists
+/// to remove.
+pub fn read_guest_wiring_record() -> Option<GuestWiringRecord> {
+    let path = WslLifecycle::guest_wiring_record_path();
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
 /// Committed per-release pins (rootfs + headless binary URLs and checksums).
 /// Embedded so an installed, checkout-free tray still provisions correctly.
 ///
@@ -295,6 +377,22 @@ impl WslLifecycle {
         base.join("tillandsias").join("wsl")
     }
 
+    /// Where the last reconcile outcome is recorded for `--diagnose`
+    /// (order 620-duta): `%LOCALAPPDATA%\tillandsias\state\guest-wiring.json`.
+    ///
+    /// It has to be a FILE rather than a process-global. `--diagnose` runs as
+    /// its own short-lived process and never performs a reconcile, so an
+    /// in-memory record would be empty in exactly the invocation that wants to
+    /// report it.
+    pub fn guest_wiring_record_path() -> PathBuf {
+        let base = std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public\\AppData\\Local"));
+        base.join("tillandsias")
+            .join("state")
+            .join("guest-wiring.json")
+    }
+
     pub fn cache_root() -> PathBuf {
         let base = std::env::var_os("LOCALAPPDATA")
             .map(PathBuf::from)
@@ -484,18 +582,46 @@ impl WslLifecycle {
                     // order-282 class) and stale units/modules (pre-312 guests
                     // lack the vsock_loopback modules-load the socat bridge
                     // needs). Reconcile before spending the connect budget.
-                    if let Err(e) = self.reconcile_adopted_guest(&progress).await {
-                        tracing::warn!(
-                            error = %e,
-                            "adopted-guest reconciliation failed; connecting \
-                             with existing guest wiring"
-                        );
-                    }
+                    let wiring = match self.reconcile_adopted_guest(&progress).await {
+                        Ok(outcome) => outcome,
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                "adopted-guest reconciliation failed; connecting \
+                                 with existing guest wiring"
+                            );
+                            GuestWiringOutcome::Failed
+                        }
+                    };
                     progress.report_phase(ProvisionPhase::Connecting);
                     const CW_PORT: u32 =
                         tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-                    let _keepalive = self.spawn_keepalive(false).ok();
-                    return self.connect_with_backoff(CW_PORT).await;
+                    let connect = {
+                        let _keepalive = self.spawn_keepalive(false).ok();
+                        self.connect_with_backoff(CW_PORT).await
+                    };
+                    match connect {
+                        Ok(()) => return Ok(()),
+                        Err(e) if Self::handshake_failure_warrants_reprovision(wiring) => {
+                            // Order 648-772y. Exhausting the budget WAS the
+                            // defect: the fix for a guest whose wiring this run
+                            // just rewrote is known, and nothing tried it.
+                            tracing::error!(
+                                error = %e,
+                                ?wiring,
+                                "control wire unreachable after this run rewrote the \
+                                 guest wiring — discarding the guest and reprovisioning"
+                            );
+                            progress.report_message(
+                                "\u{267B}\u{FE0F} Guest unreachable after a version-skew rewrite \u{2014} reprovisioning from scratch\u{2026}",
+                            );
+                            self.unregister_distro().await?;
+                            let _ =
+                                tokio::fs::remove_file(&Self::import_complete_marker_path()).await;
+                            // Fall through to the full download + import path.
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
                 RegisteredDistroDisposition::ReprovisionDamaged => {
                     let marker = Self::import_complete_marker_path();
@@ -595,10 +721,53 @@ impl WslLifecycle {
         progress.report_phase(ProvisionPhase::Connecting);
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
 
-        // Hold a keepalive across the connect loop so the VM doesn't idle out mid-wait.
-        let _keepalive = self.spawn_keepalive(false).ok();
+        // Hold a keepalive across the connect loop so the VM doesn't idle out
+        // mid-wait — and DROP it before any recovery below, or the keepalive is
+        // the thing keeping the wedged VM alive.
+        let connect = {
+            let _keepalive = self.spawn_keepalive(false).ok();
+            self.connect_with_backoff(CW_PORT).await
+        };
 
-        self.connect_with_backoff(CW_PORT).await
+        if let Err(error) = &connect {
+            // Order 664-frz0. A FRESH start whose wire never came up leaves a
+            // utility VM that has never been reachable and has no value alive.
+            // On 2026-08-10 one sat wedged for ~15 minutes while the host
+            // progressively froze around it (forensics:
+            // plan/issues/host-freeze-during-vm-start-forensics-2026-08-10.md —
+            // the freeze was a Hyper-V/WSL2 platform hang, not ours, but our
+            // unreachable VM was the context and we left it running).
+            //
+            // The bounded recovery already exists and is already used by the
+            // exec-probe path; this is one more caller, not new machinery.
+            //
+            // Exactly once, and only here: this is the fresh-provision tail, so
+            // by construction the wire has never been healthy in this run. A
+            // handshake that fails AFTER a previously-healthy wire belongs to
+            // the keepalive supervisor, which is separately bounded — see
+            // `keepalive_supervisor_gives_up_after_cap_with_backoff`. Recovering
+            // there would fight the supervisor for the same VM.
+            tracing::error!(
+                %error,
+                "control wire never came up on a fresh VM start — running one \
+                 bounded WSL shutdown recovery so the wedged VM does not linger"
+            );
+            match WslRuntime::perform_wsl_shutdown_recovery().await {
+                Ok(()) => tracing::info!(
+                    "bounded WSL shutdown recovery completed after a wedged fresh start"
+                ),
+                // The recovery failing does not change the provisioning verdict:
+                // the original handshake error is what the operator needs, and
+                // replacing it with a recovery error would hide the actual
+                // failure behind its cleanup.
+                Err(recovery_error) => tracing::warn!(
+                    %recovery_error,
+                    "bounded WSL shutdown recovery failed after a wedged fresh start"
+                ),
+            }
+        }
+
+        connect
     }
 
     /// Marker written at the end of a COMPLETE provision (import + packages +
@@ -655,18 +824,91 @@ impl WslLifecycle {
     async fn reconcile_adopted_guest(
         &self,
         progress: &Arc<dyn ProvisionProgress>,
-    ) -> Result<(), String> {
+    ) -> Result<GuestWiringOutcome, String> {
         let workspace = env!("WORKSPACE_VERSION");
         let guest = self.adopted_guest_headless_version().await;
+        // Order 620-duta: record what this reconcile concluded, on EVERY exit
+        // path including the early return. The early return is the one that
+        // most needs recording — it is invisible from the outside and looks
+        // identical to a successful injection in every other diagnose field.
+        let record = |outcome: GuestWiringOutcome, error: Option<String>| {
+            write_guest_wiring_record(&GuestWiringRecord {
+                tray_version: workspace.to_string(),
+                guest_version_before: guest.clone(),
+                outcome,
+                ts: now_rfc3339_utc(),
+                error,
+            });
+        };
         if guest.as_deref() == Some(workspace) {
-            return Ok(());
+            record(GuestWiringOutcome::SkippedVersionMatch, None);
+            return Ok(GuestWiringOutcome::SkippedVersionMatch);
         }
         tracing::info!(
             guest_version = guest.as_deref().unwrap_or("<absent>"),
             tray_version = %workspace,
             "adopted guest wiring is stale — re-injecting bootstrap logic"
         );
-        progress.report_message("\u{1F504} Updating Tillandsias guest components…");
+        // Order 648-772y criterion 2: the skew and the rewrite go to the
+        // OPERATOR, not only to the log. The 648-jv69 incident was diagnosed
+        // afterwards from a preserved diagnostics bundle; the person watching
+        // the tray at the time saw a generic "updating components" and then a
+        // three-minute stall. Naming both versions is what lets "I just rolled
+        // back to stable" connect to what they are seeing.
+        progress.report_message(&format!(
+            "\u{1F504} Guest wiring is {} (guest {}, this build {}) \u{2014} re-injecting\u{2026}",
+            if guest.is_some() {
+                "version-skewed"
+            } else {
+                "absent"
+            },
+            guest.as_deref().unwrap_or("<absent>"),
+            workspace
+        ));
+        let injected = self.inject_stale_guest_wiring(progress).await;
+        match &injected {
+            Ok(()) => record(GuestWiringOutcome::Reinjected, None),
+            Err(e) => record(GuestWiringOutcome::Failed, Some(e.clone())),
+        }
+        injected.map(|()| GuestWiringOutcome::Reinjected)
+    }
+
+    /// Order 648-772y. Does a failed control-wire handshake justify discarding
+    /// the guest and re-provisioning?
+    ///
+    /// Only when THIS run rewrote the guest's wiring. That is the 648-jv69
+    /// shape: a 0.4.260809.2 tray adopted a guest provisioned by 0.4.260810.1,
+    /// correctly judged the wiring skewed, re-injected OLDER bootstrap logic,
+    /// and the next tray's handshake then never completed — ten 30s timeouts
+    /// and a hard failure, with nothing trying the one thing that fixes it.
+    /// Rewriting the wiring and then failing to reach the guest is strong
+    /// evidence that the rewrite is what broke it.
+    ///
+    /// `SkippedVersionMatch` deliberately does NOT qualify. A handshake failing
+    /// against wiring this run did not touch is failing for some other reason,
+    /// and discarding the guest on that evidence is a guess with a re-download
+    /// attached. The recovery is one-shot by construction: it lives on the
+    /// adopted path and falls through to a fresh provision, which cannot
+    /// re-enter it.
+    fn handshake_failure_warrants_reprovision(wiring: GuestWiringOutcome) -> bool {
+        match wiring {
+            // The rewrite landed, or landed partially and failed — either way
+            // the wiring is this run's doing and is the prime suspect.
+            GuestWiringOutcome::Reinjected | GuestWiringOutcome::Failed => true,
+            // Untouched wiring: something else is wrong; do not destroy a guest
+            // to find out.
+            GuestWiringOutcome::SkippedVersionMatch => false,
+        }
+    }
+
+    /// The injection half of [`Self::reconcile_adopted_guest`], split out so
+    /// every `?` inside it lands on ONE result the caller records. Folding the
+    /// record into each early return by hand is how a later edit adds a fourth
+    /// `?` and silently stops recording failures.
+    async fn inject_stale_guest_wiring(
+        &self,
+        _progress: &Arc<dyn ProvisionProgress>,
+    ) -> Result<(), String> {
         self.ensure_base_packages().await?;
         // A provision interrupted between ensure_base_packages and
         // configure_recipe_distro leaves an adopted guest that boots WITHOUT
@@ -1293,6 +1535,60 @@ fi
         )
         .await?;
 
+        // 2b. headless-ready.sh — ASSERT A BOUND LISTENER (order 735-ewzp).
+        //
+        // The preflight above cannot do this and never could: it is an
+        // ExecStartPre, so it runs BEFORE the binary and by construction has
+        // nothing to observe. Its `vsock_device=present` test only proves
+        // /dev/vsock exists, and vsock_loopback alone provides that node —
+        // this image loads that module deliberately.
+        //
+        // The gap that motivates it: a guest binary built without the
+        // listen-vsock feature started, logged `app.started`, satisfied the
+        // preflight, and systemd held the unit `active (running)` with
+        // `--listen-vsock 42420` on its command line — while nothing was bound
+        // and no host could ever connect. Every readiness signal was green.
+        // The host saw only a seven-and-a-half minute timeout.
+        //
+        // This proves the property instead of a proxy for it: connect to the
+        // port and see whether something accepts. CID 1 is VMADDR_CID_LOCAL,
+        // so the probe stays inside the guest and needs no host involvement —
+        // measured working in a live guest before this was written. socat
+        // ships in the image built WITH_VSOCK, so no new dependency.
+        //
+        // It retries because ExecStartPost races a Type=simple ExecStart: the
+        // process is forked but may not have bound yet. The window is bounded
+        // so a genuinely dead listener still fails rather than hanging.
+        let ready_script = r#"#!/usr/bin/env bash
+set -uo pipefail
+PORT="${1:-42420}"
+DEADLINE=$(( $(date +%s) + 15 ))
+while :; do
+  # The CONNECT address must come FIRST. Written the other way round --
+  # `socat -u /dev/null VSOCK-CONNECT:1:$PORT` -- socat reaches EOF on
+  # /dev/null and exits 0 BEFORE the connection can fail, so the probe passes
+  # against a dead port. That form was measured returning 0 for both a live
+  # and a dead port: a readiness check that always succeeds, which is worse
+  # than the signal it replaces. Verified discriminating: exit 0 on a bound
+  # 42420, exit 1 on an unbound 42999.
+  if timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>/dev/null; then
+    echo "[tillandsias-ready] vsock_listener=bound port=${PORT}"
+    exit 0
+  fi
+  if [ "$(date +%s)" -ge "$DEADLINE" ]; then
+    echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the process is running but nothing accepts on the control-wire port; the host cannot reach this guest" >&2
+    exit 1
+  fi
+  sleep 1
+done
+"#;
+        self.wsl_root_write(
+            "/usr/local/lib/tillandsias/headless-ready.sh",
+            ready_script,
+            true,
+        )
+        .await?;
+
         // 3. tillandsias-headless-fetch.service
         let fetch_unit = r#"[Unit]
 Description=Ensure tillandsias-headless is present
@@ -1349,6 +1645,14 @@ Description=Tillandsias headless (in-VM vsock control wire)
 After=network-online.target podman.socket tillandsias-headless-fetch.service
 Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
+# Bound the restart loop the ExecStartPost readiness probe can create (order
+# 735-ewzp). A guest that can never bind should end in `failed`, loudly and
+# once, not restart every two seconds forever. These are [Unit] directives on
+# modern systemd -- placing them under [Service], where they read more
+# naturally, gets them silently ignored, which would be the same
+# looks-configured-does-nothing shape this packet exists to remove.
+StartLimitIntervalSec=120
+StartLimitBurst=3
 [Service]
 Type=exec
 ExecStartPre=/usr/bin/mkdir -p /run/user/0
@@ -1358,6 +1662,7 @@ Environment=HOME=/root
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 {low_power_env}ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
+ExecStartPost=/usr/local/lib/tillandsias/headless-ready.sh 42420
 Restart=on-failure
 RestartSec=2s
 StandardOutput=journal+console
@@ -1770,6 +2075,194 @@ mod tests {
         assert_eq!(damage.class(), DistroExecProbeClass::DistroFailure);
     }
 
+    /// Order 664-frz0. A fresh VM start whose wire never came up must not leave
+    /// the utility VM running.
+    ///
+    /// Source-shape, for the same reason as the 648-772y pin below: the defect
+    /// is a MISSING CALL on a specific path, and no behavioural test of
+    /// `perform_wsl_shutdown_recovery` — which already works and is already
+    /// used elsewhere — can observe that a path fails to call it.
+    #[test]
+    fn a_wedged_fresh_start_runs_one_bounded_shutdown_recovery() {
+        // Read the PRODUCT half only. `include_str!` of this file also contains
+        // this test, which names the recovery call three times — the first
+        // version of this test scanned itself and counted them. A window that
+        // can accidentally include the test module is not a window at all.
+        let source = include_str!("wsl_lifecycle.rs");
+        let product = source
+            .split(
+                "
+#[cfg(test)]",
+            )
+            .next()
+            .expect("the product half precedes the test module");
+        // The fresh-provision tail: everything after the LAST
+        // write_import_complete_marker in the product half, which is where a
+        // never-reachable VM is left behind.
+        let fresh_tail = product
+            .rsplit("self.write_import_complete_marker().await;")
+            .next()
+            .expect("the fresh-provision tail must exist");
+        // …and stop at the end of the provisioning function. Without this the
+        // window runs on into `registered_distro_disposition`, which has its own
+        // (pre-existing, correct) call to the same recovery — and the
+        // exactly-once assertion would count that one too.
+        let fresh_tail = fresh_tail
+            .split(
+                "
+    /// ",
+            )
+            .next()
+            .expect("the function is followed by the next item's docs");
+        assert!(
+            fresh_tail.contains("WslRuntime::perform_wsl_shutdown_recovery().await"),
+            "a wedged fresh start must run the bounded recovery"
+        );
+        assert_eq!(
+            fresh_tail
+                .matches("WslRuntime::perform_wsl_shutdown_recovery().await")
+                .count(),
+            1,
+            "exactly once — a retry loop here would fight the platform hang, not clear it"
+        );
+        // The keepalive must be released before the recovery, or the thing
+        // holding the wedged VM alive is us.
+        let keepalive = fresh_tail
+            .find("let _keepalive = self.spawn_keepalive(false).ok();")
+            .expect("the connect loop still holds a keepalive");
+        let recovery = fresh_tail
+            .find("WslRuntime::perform_wsl_shutdown_recovery().await")
+            .expect("recovery is present");
+        let scope_end = fresh_tail[keepalive..recovery]
+            .find("\n        };")
+            .expect("the keepalive must live in a scope that closes before recovery");
+        assert!(
+            keepalive + scope_end < recovery,
+            "the keepalive scope must close before the shutdown recovery runs"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the criterion the packet states second: recovery is
+    /// for a wire that NEVER came up. A handshake failing after a previously
+    /// healthy wire belongs to the keepalive supervisor, which is separately
+    /// bounded, and recovering there would leave two mechanisms fighting over
+    /// one VM. The supervisor lives inside `spawn_keepalive`'s respawn loop.
+    #[test]
+    fn the_keepalive_supervisor_does_not_also_shut_the_vm_down() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let source = source
+            .split(
+                "
+#[cfg(test)]",
+            )
+            .next()
+            .expect("the product half precedes the test module");
+        let supervisor = source
+            .split("pub fn spawn_keepalive(&self, debug: bool)")
+            .nth(1)
+            .expect("spawn_keepalive must exist");
+        let supervisor = supervisor
+            .split(
+                "
+    pub ",
+            )
+            .next()
+            .unwrap_or(supervisor);
+        assert!(
+            supervisor.contains("keepalive gave up after repeated rapid failures"),
+            "this window must actually contain the supervisor's give-up path"
+        );
+        assert!(
+            !supervisor.contains("perform_wsl_shutdown_recovery"),
+            "the supervisor must not also trigger shutdown recovery"
+        );
+    }
+
+    /// Order 648-772y. The recovery decision, isolated so it can be tested
+    /// without a WSL host: the live closure needs an actual downgrade-then-
+    /// upgrade cycle, and this is the part that can be pinned everywhere.
+    #[test]
+    fn only_a_wiring_rewrite_authorizes_discarding_the_guest() {
+        // The 648-jv69 shape: this run rewrote the wiring, then could not talk
+        // to the guest. Terminate + reprovision is the known fix and nothing
+        // was trying it — the budget just ran out.
+        assert!(WslLifecycle::handshake_failure_warrants_reprovision(
+            GuestWiringOutcome::Reinjected
+        ));
+        // A partial rewrite is at least as suspect as a complete one.
+        assert!(WslLifecycle::handshake_failure_warrants_reprovision(
+            GuestWiringOutcome::Failed
+        ));
+        // NEGATIVE CONTROL, and the reason this is a function rather than an
+        // `if err`: wiring this run did not touch is failing for some OTHER
+        // reason. Reprovisioning there would destroy a healthy guest and
+        // re-download a rootfs to chase a fault that has nothing to do with
+        // version skew — a destructive guess dressed as a fix.
+        assert!(!WslLifecycle::handshake_failure_warrants_reprovision(
+            GuestWiringOutcome::SkippedVersionMatch
+        ));
+    }
+
+    /// The decision above only matters if the adopted path actually consults
+    /// it. Before 648-772y that path ended in `return self.connect_with_backoff(...)`,
+    /// so a failure was terminal by construction — no call site to notice was
+    /// missing. This pins that the recovery is wired in, and that the guest is
+    /// discarded (unregister + marker removal) rather than merely retried.
+    #[test]
+    fn adopted_path_recovers_instead_of_exhausting_the_connect_budget() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let adopted = source
+            .split("RegisteredDistroDisposition::UseRegistered =>")
+            .nth(1)
+            .expect("adopted-guest arm must exist")
+            .split("RegisteredDistroDisposition::ReprovisionDamaged")
+            .next()
+            .expect("adopted arm is bounded by the damaged arm");
+        assert!(
+            !adopted.contains("return self.connect_with_backoff"),
+            "a failed handshake on the adopted path must not be terminal"
+        );
+        assert!(
+            adopted.contains("handshake_failure_warrants_reprovision(wiring)"),
+            "the adopted path must consult the recovery decision"
+        );
+        assert!(
+            adopted.contains("self.unregister_distro().await?"),
+            "recovery must discard the guest, not just retry the handshake"
+        );
+        assert!(
+            adopted.contains("import_complete_marker_path"),
+            "recovery must clear the marker so the fresh provision is not skipped"
+        );
+    }
+
+    /// Criterion 2. The 648-jv69 incident was diagnosed after the fact from a
+    /// preserved diagnostics bundle; the operator watching at the time saw a
+    /// generic message and a stall. Both versions must reach them.
+    #[test]
+    fn version_skew_is_reported_to_the_operator_with_both_versions() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let reconcile = source
+            .split("async fn reconcile_adopted_guest")
+            .nth(1)
+            .expect("reconcile must exist")
+            .split("async fn inject_stale_guest_wiring")
+            .next()
+            .expect("reconcile is bounded by the injection half");
+        assert!(
+            reconcile.contains("report_message(&format!("),
+            "the operator message must carry the versions, not a fixed string"
+        );
+        assert!(
+            reconcile.contains("guest {}, this build {}"),
+            "both the guest and tray versions must be named to the operator"
+        );
+        assert!(
+            reconcile.contains("tray_version = %workspace"),
+            "the structured log line stays — the bundle is still the record"
+        );
+    }
+
     #[test]
     fn import_complete_marker_lives_under_install_root() {
         // SAFETY: single-process test env mutation, matching sibling tests.
@@ -1984,6 +2477,62 @@ mod tests {
         assert!(
             headless_unit.contains("ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh")
         );
+
+        // ORDER 735-ewzp: the unit must ASSERT A BOUND LISTENER after start,
+        // not merely reach `active`. A guest binary built without the
+        // listen-vsock feature satisfied every existing signal here — the
+        // preflight passed, the process logged app.started, systemd held the
+        // unit active — while nothing accepted on 42420 and the host saw a
+        // seven-and-a-half minute timeout.
+        assert!(
+            headless_unit
+                .contains("ExecStartPost=/usr/local/lib/tillandsias/headless-ready.sh 42420"),
+            "the unit must probe the port after start: {headless_unit}"
+        );
+        // The script it names must actually be installed, or the unit fails on
+        // a missing file and the diagnosis is about the wrong thing.
+        assert!(
+            source.contains("/usr/local/lib/tillandsias/headless-ready.sh"),
+            "the readiness script the unit references must be written to the guest"
+        );
+        assert!(
+            source.contains("VSOCK-CONNECT:1:"),
+            "readiness must connect to the port (CID 1 = VMADDR_CID_LOCAL), not test /dev/vsock"
+        );
+        // The connect address must be socat's FIRST argument. With /dev/null
+        // first, socat hits EOF and exits 0 before the connection can fail --
+        // measured returning 0 against BOTH a live and a dead port, i.e. a
+        // check that always passes. This assertion pins the discriminating
+        // form, not merely the presence of the address.
+        assert!(
+            source.contains("socat -T1 \"VSOCK-CONNECT:1:${PORT}\" /dev/null"),
+            "the connect address must precede the sink, or the probe passes against a dead port"
+        );
+        assert!(
+            source.contains("vsock_listener=NOT-BOUND"),
+            "the failure must name the property that is false, not a generic error"
+        );
+        // The restart bound belongs to [Unit]; under [Service] systemd ignores
+        // it silently, which would leave a permanently-broken guest restarting
+        // every two seconds forever.
+        // Positional, not a split: this test slices raw SOURCE between two
+        // comment markers, so the window contains prose that mentions
+        // [Service] and a naive split lands in a comment.
+        let burst = headless_unit
+            .find("StartLimitBurst=3")
+            .expect("start-limit burst is declared");
+        let interval = headless_unit
+            .find("StartLimitIntervalSec=120")
+            .expect("start-limit interval is declared");
+        let service_block = headless_unit
+            .find("Type=exec")
+            .expect("the [Service] block starts at Type=exec");
+        assert!(
+            burst < service_block && interval < service_block,
+            "start-limit directives must precede the [Service] block, i.e. sit in [Unit], \
+             where systemd actually reads them"
+        );
+
         assert!(headless_unit.contains("Environment=HOME=/root"));
         assert!(headless_unit.contains("Environment=XDG_RUNTIME_DIR=/run/user/0"));
         assert!(

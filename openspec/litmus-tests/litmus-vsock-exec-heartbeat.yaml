@@ -30,7 +30,7 @@ critical_path:
     expected_behavior: "open_write_resize_close_roundtrip ... ok"
 
   - step: "one timeout constant and negotiated heartbeat capability remain wired"
-    command: "test \"$(rg -c '^const IDLE_TIMEOUT_SECS:' crates/tillandsias-vm-layer/src/vsock_exec.rs)\" -eq 1 && rg -q 'TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS' crates/tillandsias-vm-layer/src/vsock_exec.rs && rg -q 'CAP_PTY_HEARTBEAT_V1' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: heartbeat policy shape'"
+    command: "test \"$(grep -cE '^const IDLE_TIMEOUT_SECS:' crates/tillandsias-vm-layer/src/vsock_exec.rs)\" -eq 1 && grep -qE 'TILLANDSIAS_VSOCK_EXEC_IDLE_TIMEOUT_SECS' crates/tillandsias-vm-layer/src/vsock_exec.rs && grep -qE 'CAP_PTY_HEARTBEAT_V1' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: heartbeat policy shape'"
     timeout_ms: 5000
     expected_behavior: "ok: heartbeat policy shape"
 

@@ -41,7 +41,10 @@
 #   scripts/select-work-batch.sh <role> [--budget N] [--release V]
 #
 # GRAMMAR — a batch header, then one line per packet, then a triage line:
-#   ^batch: epic=<id|UNGROUPED> role=<r> release=<v> size=<n> budget=<n>$
+#   ^batch: epic=<id|UNGROUPED> role=<r> release=<v> size=<n> budget=<n>
+#            score=<f> seed=<s> pick=<i>/<k>[ urgent=<packet_id>]$
+#          `urgent=` appears ONLY when the order-645 override displaced a slot
+#          with a strictly-higher-priority packet from outside the chosen epic.
 #   ^packet\t<order>\t<packet_id>\t<priority>$
 #   ^triage: eligible=<n> grouped=<n> ungrouped=<n> epics=<n>$
 # or exactly one refusal line:
@@ -140,15 +143,23 @@ cd "$ROOT" || exit 1
 # refused with `missing-tool`, so the same bad invocation produced different
 # diagnoses on different hosts and the litmus's bad-budget control passed only
 # where jq happened to be installed.
-#
-# DEFAULT BUDGET. Forge cycles take at most ONE packet — decided by The Tlatoani
-# 2026-07-10 (order 264) because a litmus-launched forge lives inside a 600s
-# step budget. That rule predates this script and is not relaxed by it.
+# DEFAULT BUDGET. Order 707-3x9d & Order 682-yiz7 (2026-08-12):
+# - Litmus-launched forge runs (TILLANDSIAS_LITMUS_STEP) take at most ONE packet
+#   to strictly respect the 600s unattended step budget (order 264).
+# - Autonomous / pairing forge cycles scale to an adaptive budget (default 4,
+#   or TILLANDSIAS_CYCLE_BUDGET) to maximize the work-to-orchestration ratio.
+# - Non-forge hosts scale default 6 -> 10 per 682-yiz7 evidence-backed tuning.
 if [ -z "$BUDGET" ]; then
-    if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
-        BUDGET=1
+    if [ -n "${TILLANDSIAS_CYCLE_BUDGET:-}" ]; then
+        BUDGET="$TILLANDSIAS_CYCLE_BUDGET"
+    elif [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+        if [ -n "${TILLANDSIAS_LITMUS_STEP:-}" ]; then
+            BUDGET=1
+        else
+            BUDGET=4
+        fi
     else
-        BUDGET=3
+        BUDGET=10
     fi
 fi
 case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive integer"; exit 1 ;; esac
@@ -159,31 +170,38 @@ case "$BUDGET" in ''|*[!0-9]*) echo "refused:bad-role:budget must be a positive 
 # query-failed refusals are untestable on exactly the hosts CI runs on — the ones
 # whose binary is current — which is how the hole they close survived in the first
 # place.
-PLAN=""
-if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
-    [ -x "${TILLANDSIAS_PLAN_BIN}" ] || {
-        echo "refused:no-plan-binary:TILLANDSIAS_PLAN_BIN=${TILLANDSIAS_PLAN_BIN} is not executable"
-        exit 1
-    }
-    PLAN="${TILLANDSIAS_PLAN_BIN}"
-else
-    for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
-        [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
-    done
-fi
-[ -n "$PLAN" ] || { echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"; exit 1; }
-
-# jq is load-bearing for every projection below. Absence is an environment
-# fault, never a statement about the ledger — refuse with its own token.
+# Order 704-zcgi: one shared probe, because this script's own copy of the
+# `[ -x ... ]` first-match probe refused on a Windows host whose `.exe` was
+# sitting right there — the third script to write that same bug. An executable
+# BIT is a claim; RUNNING the binary is evidence.
 #
-# TILLANDSIAS_JQ exists so the litmus can exercise the absent-jq path without
-# emptying PATH (which kills the shebang before the script ever runs). It names
-# the binary only; the script never invokes it by that variable, so it cannot be
-# used to smuggle in a different projector.
-command -v "${TILLANDSIAS_JQ:-jq}" >/dev/null 2>&1 || {
-    echo "refused:missing-tool:jq is not on PATH (required to project tillandsias-plan --json); this is NOT a drained ledger"
+# TILLANDSIAS_PLAN_BIN still overrides (the shared probe tries it first), so the
+# litmus can point this script at a stub that fails the way a stale binary
+# fails. Without it the stale-binary and query-failed refusals are untestable on
+# exactly the hosts CI runs on — the ones whose binary is current — which is how
+# the hole they close survived in the first place.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary)" || {
+    if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ]; then
+        echo "refused:no-plan-binary:TILLANDSIAS_PLAN_BIN=${TILLANDSIAS_PLAN_BIN} did not run"
+    else
+        echo "refused:no-plan-binary:build with cargo build --release -p tillandsias-plan"
+    fi
     exit 1
 }
+
+# ORDER 632-retq (rung 2). The jq preflight that stood here is gone WITH the jq
+# calls it guarded. Every projection below now comes from `tillandsias-plan
+# select-rows` / `blocking-counts`, which do the filtering and ranking inside the
+# binary that already owns the folded ledger.
+#
+# The preflight was correct for its time: it made an absent jq a loud
+# `refused:missing-tool` instead of a counterfeit "drained ledger". But it left
+# the host still unable to select work, and satisfying the dependency per host
+# repeats the yq/ruby exposure recorded 2026-08-03. Removing the dependency
+# deletes the class. TILLANDSIAS_JQ is still read by the litmus to prove the
+# selector no longer cares.
+
 
 # ${arr[@]+"${arr[@]}"} guards the expansions below: under set -u, bash < 4.4
 # (stock macOS ships 3.2) treats "${arr[@]}" on an empty array as an unbound
@@ -251,44 +269,57 @@ fi
 # stderr is captured rather than discarded so the refusal can quote the real
 # reason instead of guessing at it.
 query_err="$(mktemp)"
-raw="$("$PLAN" query --status ready --claimable-by "$ROLE" "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>"$query_err")"
+rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
+    "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 2>"$query_err")"
 query_rc=$?
 if [ "$query_rc" -ne 0 ]; then
     reason="$(tr -d '\r' < "$query_err" | grep -m1 . || true)"
     rm -f "$query_err"
-    # Match `unknown query` loosely: the wording is version-dependent — an older
-    # binary here says "unknown query flag: --claimable-by" while a newer one says
-    # "unknown query constraint: --claimable-by". Pinning either exact phrase
-    # would make the diagnosis silently degrade to the generic branch on half the
-    # binaries in the fleet, which is the failure this whole guard is about.
+    # Match loosely: the wording is version-dependent, and pinning an exact
+    # phrase would silently degrade the diagnosis to the generic branch on half
+    # the binaries in the fleet — the failure this guard is about.
     case "$reason" in
-        *"unknown query"*)
-            echo "refused:stale-plan-binary:${PLAN} does not support a constraint this script requires (${reason}); rebuild with cargo build --release -p tillandsias-plan"
+        *"unknown query"* | *"unknown"*"select-rows"* | *"usage:"*)
+            echo "refused:stale-plan-binary:${PLAN} does not support select-rows, which this script requires (${reason}); rebuild with cargo build --release -p tillandsias-plan"
             ;;
         *)
-            echo "refused:query-failed:${PLAN} query exited ${query_rc}: ${reason:-<no stderr>}"
+            echo "refused:query-failed:${PLAN} select-rows exited ${query_rc}: ${reason:-<no stderr>}"
             ;;
     esac
     exit 1
 fi
 rm -f "$query_err"
-[ -n "$raw" ] && [ "$raw" != "[]" ] || { echo "refused:no-eligible-work:query returned nothing for role ${ROLE}"; exit 1; }
+
+# select-rows already applied: status ready, role claimability, release,
+# dependency-clearance (unresolvable ids count as BLOCKING, matching the
+# resolver) and lease exclusion. The three separate refusals that used to
+# distinguish those filters collapse into one, because the projection no longer
+# reports which of them emptied the pool — and inventing a distinction there
+# would be guessing.
+#
+# But EMPTY-BECAUSE-DRAINED and EMPTY-BECAUSE-BROKEN must stay distinguishable,
+# and output volume cannot tell them apart: a binary that exits 0 and prints
+# nothing looks exactly like a drained ledger. That is the counterfeit-completion
+# defect this whole packet exists to remove, and the first draft of this rewrite
+# reintroduced it — caught by this file's own negative control, which fed the
+# selector a stand-in binary and got `refused:no-eligible-work`.
+#
+# So ask a different question instead of inferring from volume: does this binary
+# DECLARE the subcommand? `capabilities` is the compile-time capability set
+# (order 569), so a binary too old to project rows says so about itself.
+if [ -z "$rows" ]; then
+    if ! "$PLAN" capabilities 2>/dev/null | grep -qx "select-rows"; then
+        echo "refused:stale-plan-binary:${PLAN} does not declare select-rows; rebuild with cargo build --release -p tillandsias-plan"
+        exit 1
+    fi
+    echo "refused:no-eligible-work:no ready packet for role ${ROLE} is claimable, dependency-clear, and unleased"
+    exit 1
+fi
 
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
 # packet can be the thing a macos packet is waiting on, and that downstream
 # weight is exactly the "residual it is holding up" minimax asks us to maximise.
-allraw="$("$PLAN" query --status ready "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 --json 2>/dev/null)"
-depcounts="$(printf '%s' "$allraw" | jq -r '.[] | .depends_on[]?' 2>/dev/null | sort | uniq -c | awk '{print $2"\t"$1}')"
-
-# Flatten to: priority_rank \t epic \t order \t packet_id \t priority
-rows="$(printf '%s' "$raw" | jq -r '
-  .[]
-  | [ (.priority // "p3"), (.release_target // "UNGROUPED"), (.order|tostring), .packet_id, (.desired_release // "?") ]
-  | @tsv' 2>/dev/null \
-  | awk -F'\t' '{
-        rank = ($1=="p0"?0:($1=="p1"?1:($1=="p2"?2:3)));
-        print rank "\t" $2 "\t" $3 "\t" $4 "\t" $1 "\t" $5;
-    }')"
+depcounts="$("$PLAN" blocking-counts "${REL_ARG[@]+"${REL_ARG[@]}"}" --limit 400 2>/dev/null)"
 
 if [ -z "$rows" ]; then
     # Distinguish "the query returned an empty array" (a real terminal state)
@@ -333,14 +364,27 @@ scored="$({ printf '%s\n' "$depcounts"; printf '==ROWS==\n'; printf '%s\n' "$row
       {
           e = $2; rank = $1 + 0; pid = $4;
           ord = $3; gsub(/[^0-9].*$/, "", ord); ord = ord + 0;
-          if (!(e in best) || rank < best[e]) best[e] = rank;
+          # rank 99 = UNSCORED (630-6hyc): excluded from the urgency term so an
+          # unknown urgency never scores as a plausible 0; counted instead.
+          if (rank < 99) {
+              if (!(e in best) || rank < best[e]) best[e] = rank;
+              scored[e]++;
+          } else {
+              unscored[e]++;
+          }
           if (!(e in oldest) || ord < oldest[e]) oldest[e] = ord;
           block[e] += (pid in dep) ? dep[pid] : 0;
           cnt[e]++;
+          seen[e] = 1;
       }
       END {
-          for (e in best) {
-              urgency  = 3 - best[e];
+          # urgency by best (most urgent) tier: explicit priority p0-p3 (ranks
+          # 0-3) dominates every kind-derived tier (ranks 4-6). An epic with NO
+          # scored packet contributes 0 urgency but is reported via unscored[].
+          u[0]=3.0; u[1]=2.0; u[2]=1.0; u[3]=0.5;
+          u[4]=0.4; u[5]=0.25; u[6]=0.1;
+          for (e in seen) {
+              urgency  = (e in best) ? u[best[e]] : 0;
               blocking = block[e] > 10 ? 10 : block[e];
               neglect  = maxo > 0 ? (10.0 * (maxo - oldest[e]) / maxo) : 0;
               score    = (2.0 * urgency) + (1.5 * blocking) + neglect;
@@ -426,16 +470,55 @@ batch="$(printf '%s\n' "$rows" \
     | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 \
     | head -n "$BUDGET")"
 
+# URGENCY OVERRIDE (order 645-n3h6). Reserve slot 1 for the globally
+# highest-priority eligible packet when it strictly beats everything the chosen
+# epic offers.
+#
+# Epic selection happens BEFORE priority, and UNGROUPED is demoted whenever any
+# real epic is eligible. Those two together made an ungrouped packet unreachable
+# at ANY priority: a p0 and a p3 were equally invisible without a
+# release_target. It was not theoretical — this host filed three p0 sibling
+# smoke packets, the batches offered p3 work instead, and the p0s only surfaced
+# after being hand-grouped. 107 of 160 eligible linux packets are ungrouped, so
+# the same hole is open under all of them.
+#
+# ONE slot, and only on a STRICT priority win. That keeps the rest of the batch
+# cohesive — one urgent outsider plus a cohesive remainder is still worth
+# working, whereas three unrelated p0s is the scatter this selector exists to
+# end. A tie does NOT displace: equal priority means the cohesive pick is
+# better, because it shares context with the rest of the batch.
+top_urgent="$(printf '%s\n' "$rows" \
+    | sort -t"$(printf '\t')" -k1,1n -k3,3 -k4,4 \
+    | head -1)"
+if [ -n "$top_urgent" ] && [ -n "$batch" ]; then
+    urgent_rank="$(printf '%s' "$top_urgent" | cut -f1)"
+    batch_rank="$(printf '%s\n' "$batch" | cut -f1 | sort -n | head -1)"
+    urgent_pid="$(printf '%s' "$top_urgent" | cut -f4)"
+    if [ "${urgent_rank:-9}" -lt "${batch_rank:-9}" ] \
+       && ! printf '%s\n' "$batch" | cut -f4 | grep -qxF "$urgent_pid"; then
+        # Prepend it and drop the batch's LAST entry, so the budget still holds.
+        batch="$({ printf '%s\n' "$top_urgent"
+                   printf '%s\n' "$batch" | head -n $((BUDGET - 1)); })"
+        URGENT_NOTE="$urgent_pid"
+    fi
+fi
+
 size="$(printf '%s\n' "$batch" | grep -c .)"
 
-printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s\n' \
-    "$chosen" "$ROLE" "$release" "$size" "$BUDGET" "$chosen_score" "$SEED" "$pick" "$k"
+printf 'batch: epic=%s role=%s release=%s size=%s budget=%s score=%s seed=%s pick=%s/%s%s\n' \
+    "$chosen" "$ROLE" "$release" "$size" "$BUDGET" "$chosen_score" "$SEED" "$pick" "$k" \
+    "$( [ -n "${URGENT_NOTE:-}" ] && printf ' urgent=%s' "$URGENT_NOTE" )"
 printf '%s\n' "$batch" | while IFS=$'\t' read -r rank epic order pid prio rel; do
     [ -n "$pid" ] || continue
     printf 'packet\t%s\t%s\t%s\n' "$order" "$pid" "$prio"
 done
-printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s\n' \
-    "$eligible" "$grouped" "$ungrouped" "$epics"
+# urgency_unscored (630-6hyc): ready packets with NEITHER an explicit priority
+# NOR a kind that maps to an urgency tier — rank 99. Reported so a missing
+# urgency signal is VISIBLE and gets fixed (backfill priority/kind), never
+# absorbed as a silent zero the way the old `// "p3"` default hid it.
+urgency_unscored="$(printf '%s\n' "$rows" | awk -F'\t' '$1==99' | grep -c .)"
+printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s\n' \
+    "$eligible" "$grouped" "$ungrouped" "$epics" "$urgency_unscored"
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do

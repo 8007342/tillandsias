@@ -73,6 +73,12 @@ COPY lib-inference-state.sh /usr/local/lib/tillandsias/lib-inference-state.sh
 # degraded path and every forge reports `probe=helper-missing` instead of a
 # capability verdict.
 COPY lib-expert-capability.sh /usr/local/lib/tillandsias/lib-expert-capability.sh
+# @trace order:619-pfsj — generic answer ENGINE capability skew (image-baked
+# engine vs the mounted checkout's contract). Sourced by lib-common.sh from its
+# own directory; directly runnable for litmus/operator diagnostics. If this
+# COPY is dropped, forge discovery reports `project_engine: state=unknown ...
+# probe=helper-missing` instead of a verdict — named, never silent.
+COPY lib-project-engine-capability.sh /usr/local/lib/tillandsias/lib-project-engine-capability.sh
 
 # ── Entrypoints ────────────────────────────────────────────────
 COPY entrypoint.sh /usr/local/bin/tillandsias-entrypoint.sh

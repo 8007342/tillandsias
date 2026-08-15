@@ -1,0 +1,93 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:531 (forge-expert-fresh-launch-source-gap, criterion 2)
+#
+# THE DEFECT THIS EXISTS TO PREVENT
+#
+# ensure_forge_experts builds + installs tillandsias-plan and then declared
+# `experts: ready` the instant the install succeeded — WITHOUT ever asking the
+# freshly-built binary whether it can actually answer. A binary built from a
+# pre-expert base (a checkout lacking crates/tillandsias-plan/src/answer.rs, e.g.
+# `main`) installs cleanly and reports `ready` truthfully while EVERY plan_answer
+# returns confidence=unsupported. That is order 531, the milestone-blocking
+# condition: a truthful-but-useless `ready` indistinguishable, from the launch
+# state, from a working expert.
+#
+# THE FIX, pinned here. After install, before the final `ready`, the builder
+# probes the compiled surface via the order-569 `capabilities` subcommand
+# (one lowercase token per line, exit 0). If `answer` is absent — or the binary
+# predates `capabilities` entirely and the invocation errors — the state becomes
+# `degraded (stale-source)`, an HONEST reason that names the stale source and is
+# distinguishable from an engine failure. Only a binary that advertises `answer`
+# keeps `ready`.
+#
+# This is pure-shell + instant: it points the EXTRACTED probe helper
+# (_forge_experts_probe_answer_surface) at fake tillandsias-plan stubs whose
+# `capabilities` output is controlled, and asserts ready vs degraded stale-source
+# vs degraded stale-source. It also pins that the probe is wired AHEAD of the
+# `ready` state in ensure_forge_experts, and that the state renders honestly as
+# `degraded(stale-source)` through the pinned grammar.
+name: litmus:forge-experts-stale-source-honesty
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin order 531 criterion 2: a forge whose checkout builds a pre-expert
+  tillandsias-plan (no `answer` subcommand) reports an honest
+  `experts: degraded(stale-source)` — distinguishable from engine failure —
+  instead of a truthful-but-useless `ready`. The probe helper is exercised
+  against fake capability surfaces, its wiring ahead of `ready` is pinned, and
+  the degraded state's rendering is verified end-to-end.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - shell utilities (sed, grep, printf) are available in PATH
+
+critical_path:
+  - step: "the extracted probe returns ready ONLY when capabilities advertises answer; a pre-expert binary and a pre-569 binary both read stale"
+    # The core unit test. Three fake tillandsias-plan stubs: one whose
+    # `capabilities` prints `answer` (expert-capable), one that omits it
+    # (built-but-pre-expert), one that lacks the `capabilities` subcommand
+    # entirely and exits non-zero (predates order 569). Only the first is ready.
+    command: "d=$(mktemp -d); sed -n '/^_forge_experts_probe_answer_surface() {/,/^}/p' images/default/lib-common.sh > \"$d/probe.sh\"; printf '%s\\n' '#!/bin/sh' 'if [ \"$1\" = capabilities ]; then echo answer; echo check; echo query; fi' > \"$d/with\"; printf '%s\\n' '#!/bin/sh' 'if [ \"$1\" = capabilities ]; then echo check; echo query; fi' > \"$d/without\"; printf '%s\\n' '#!/bin/sh' 'echo \"unknown subcommand: $1\" >&2; exit 2' > \"$d/pre569\"; chmod +x \"$d/with\" \"$d/without\" \"$d/pre569\"; . \"$d/probe.sh\"; _forge_experts_probe_answer_surface \"$d/with\" && a=ready || a=stale; _forge_experts_probe_answer_surface \"$d/without\" && b=ready || b=stale; _forge_experts_probe_answer_surface \"$d/pre569\" && c=ready || c=stale; rm -rf \"$d\"; echo \"with=$a without=$b pre569=$c\"; test \"$a\" = ready && test \"$b\" = stale && test \"$c\" = stale && echo 'ok: probe-honours-answer-surface'"
+    timeout_ms: 10000
+    expected_behavior: "ok: probe-honours-answer-surface"
+
+  - step: "INTEGRATION: ensure_forge_experts runs the probe and sets degraded stale-source BEFORE it can claim ready"
+    # The probe is worthless if the builder claims `ready` without consulting it.
+    # Assert the probe call and the stale-source arm both exist inside
+    # ensure_forge_experts, and that the probe precedes the final `ready`.
+    command: "body=$(sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh); printf '%s\\n' \"$body\" | grep -q '_forge_experts_probe_answer_surface' && printf '%s\\n' \"$body\" | grep -q '_forge_experts_set_state degraded stale-source' && p=$(printf '%s\\n' \"$body\" | grep -n '_forge_experts_probe_answer_surface' | head -1 | cut -d: -f1) && r=$(printf '%s\\n' \"$body\" | grep -n '_forge_experts_set_state ready' | tail -1 | cut -d: -f1) && [ \"$p\" -lt \"$r\" ] && echo 'ok: probe-gates-ready'"
+    timeout_ms: 5000
+    expected_behavior: "ok: probe-gates-ready"
+
+  - step: "the stale-source state renders honestly through the pinned grammar as degraded(stale-source)"
+    # A degraded reason the renderer did not know would surface as
+    # `degraded(unknown)`. Feed the state file `degraded:stale-source` to the
+    # real renderer and assert it emits `degraded(stale-source)`.
+    command: "d=$(mktemp -d); mkdir -p \"$d/s\"; printf 'degraded:stale-source\\n' > \"$d/s/state\"; sed -n '/^forge_experts_state_line() {/,/^}/p' images/default/lib-common.sh > \"$d/r.sh\"; export FORGE_EXPERTS_STATE_DIR=\"$d/s\"; . \"$d/r.sh\"; out=$(forge_experts_state_line); rm -rf \"$d\"; echo \"got=$out\"; test \"$out\" = 'degraded(stale-source)' && echo 'ok: renders-degraded-stale-source'"
+    timeout_ms: 5000
+    expected_behavior: "ok: renders-degraded-stale-source"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:531"
+  expected_log: "Forge expert stale-source honesty pinned: a pre-expert binary reports degraded(stale-source), not a false ready"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-experts-stale-source-honesty"
+    builder_artifact: "images/default/lib-common.sh"
+    order: "531"
+
+rollback:
+  on_failure: >
+    The order-531 stale-source guard drifted. If the probe unit step failed,
+    _forge_experts_probe_answer_surface no longer distinguishes an
+    answer-capable binary from a pre-expert one — a forge seeded from a
+    pre-expert base will again report `experts: ready` while every plan_answer
+    returns confidence=unsupported. If the integration step failed, the probe
+    is no longer wired ahead of the `ready` state in ensure_forge_experts. If
+    the renderer step failed, `stale-source` no longer renders through the
+    pinned grammar and would surface as an ambiguous state.
+  command: "sed -n '/^_forge_experts_probe_answer_surface() {/,/^}/p' images/default/lib-common.sh && sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -n 'stale-source\\|_forge_experts_probe_answer_surface\\|_forge_experts_set_state ready'"

@@ -66,7 +66,12 @@ critical_path:
     # Deliberate: its sibling scripts/select-work-batch.sh cannot run on Windows
     # at all for want of jq (packet 632-retq). A cross-host routing report that
     # only runs on one host would be self-defeating.
-    command: "grep -nE '(^|[^a-z-])(jq|yq|python3?|ruby)([^a-z-]|$)' scripts/check-pickup-role-grammar.sh | grep -v '^[0-9]*:#' && { echo 'FAIL: checker acquired a non-portable dependency'; exit 1; }; echo 'ok: portable toolchain only'"
+    # The comment exclusion must allow LEADING WHITESPACE. `^[0-9]*:#` only
+    # matches a comment in column 0, so an indented comment — including the one
+    # at check-pickup-role-grammar.sh:129 that says "No jq — see …", i.e. a
+    # comment asserting the very property under test — was read as a violation.
+    # The test failed on its own subject matter explaining that it complies.
+    command: "grep -nE '(^|[^a-z-])(jq|yq|python3?|ruby)([^a-z-]|$)' scripts/check-pickup-role-grammar.sh | grep -v '^[0-9]*:[[:space:]]*#' && { echo 'FAIL: checker acquired a non-portable dependency'; exit 1; }; echo 'ok: portable toolchain only'"
     timeout_ms: 15000
     expected_behavior: "ok: portable toolchain only"
 

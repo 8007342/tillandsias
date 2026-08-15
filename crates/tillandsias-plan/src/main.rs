@@ -63,11 +63,15 @@ const DISPATCH_ARMS: &[&str] = &[
     "answer",
     "blocked-by",
     "blocked-closure",
+    "blocking-counts",
     "burndown",
     "capabilities",
     "check",
+    "closure-evidence-check",
     "compact",
     "dependencies-of",
+    "expire-claims",
+    "fragment-terminal-events",
     "fragments",
     "grade",
     "loop-status",
@@ -80,8 +84,10 @@ const DISPATCH_ARMS: &[&str] = &[
     "methodology-index",
     "next",
     "next-order",
+    "parked-blocks",
     "query",
     "ready",
+    "select-rows",
     "spec-envelope",
     "spec-index",
     "spec-retrieve",
@@ -120,6 +126,17 @@ const USAGE: &str = concat!(
     "                                     that absence is itself the stale-binary signal the forge\n",
     "                                     wrapper branches on.\n",
     "           check                     integrity + schema validation (exit 1 on violations)\n",
+    "           closure-evidence-check <fragment.yaml>\n",
+    "                                     exit 1 if the fragment sets a closure rung\n",
+    "                                     (completed/verified/done) with no evidence event (686-7qcm)\n",
+    "           fragment-terminal-events <fragment.yaml>\n",
+    "                                     ORDER 752-pst5. Print the packet_ids whose events block\n",
+    "                                     DECLARES a terminal `completed` event (inline packet\n",
+    "                                     `events:` or the top-level `events:` form), one per\n",
+    "                                     line, exit 0. A YAML parse bounds attribution to the\n",
+    "                                     events block, so PROSE that quotes the marker inside a\n",
+    "                                     block scalar is never read as a declaration. Backs the\n",
+    "                                     closure-event pass of check-fragment-status-loss.sh.\n",
     "           next-order [prefix]       mint a COLLISION-FREE order token for a new packet\n",
     "                                     (<seq>-<suffix>, e.g. 581-k3f9). Never compute the\n",
     "                                     'next free order' yourself: that reads a ledger snapshot\n",
@@ -128,10 +145,21 @@ const USAGE: &str = concat!(
     "                                     is PERMANENT — never renumber it. A prefix shared by two\n",
     "                                     packets is normal. See methodology/distributed-work.yaml\n",
     "                                     -> order_id_allocation.\n",
+    "           expire-claims [--ttl-hours N] [--dry-run] [--now-epoch S] [--host H]\n",
+    "                                     ORDER 672-bz7u. Return stranded in_progress claims to\n",
+    "                                     ready: any packet whose LAST recorded event activity is\n",
+    "                                     older than the TTL (default 24h) gets a status fragment\n",
+    "                                     flipping it back to ready with a progress event naming\n",
+    "                                     the expiry. --dry-run lists without writing. A packet\n",
+    "                                     with NO parseable activity timestamp is reported as\n",
+    "                                     unknown-age and NEVER expired (fail conservative).\n",
     "           status <id|order>         one packet's status line\n",
     "           blocked-by <id|order>     packets directly blocked by X\n",
     "           dependencies-of <id|order> X's direct unsatisfied depends_on prerequisites\n",
     "           blocked-closure <id|order> everything transitively downstream of X\n",
+    "           parked-blocks [id|order]  dependents invisibly blocked behind a PARKED\n",
+    "                                     packet (implemented/needs_clarification/blocked/\n",
+    "                                     failed); no arg = whole ledger (order 686-7qcm)\n",
     "           ready [role]              ready packets (optionally for a pickup role)\n",
     "           next [role] [--release V] [--limit N]\n",
     "                                     ORDER 606-xu52. The cold-start selector: at most FIVE\n",
@@ -143,6 +171,21 @@ const USAGE: &str = concat!(
     "                                     criteria holders are never offered as claims. Natural\n",
     "                                     aliases via `answer`: \"what's next?\" and\n",
     "                                     \"what v0.5 work can I do on linux?\".\n",
+    "           blocking-counts [--release V] [--limit N]\n",
+    "                                     ORDER 632-retq. `<packet_id>\\t<count>` — how many READY\n",
+    "                                     packets each id blocks, counted over EVERY ready packet\n",
+    "                                     rather than one role's, because a packet in another column\n",
+    "                                     is frequently the thing this one waits on.\n",
+    "           select-rows [--claimable-by R] [--release V] [--limit N]\n",
+    "                                     ORDER 632-retq. The batch selector's projection, as TSV:\n",
+    "                                     rank, release_target, order, packet_id, urgency, release.\n",
+    "                                     Already filtered to ready + claimable + release +\n",
+    "                                     dependency-clear + unleased, so the caller needs no jq.\n",
+    "                                     scripts/select-work-batch.sh needed NINETEEN jq calls to\n",
+    "                                     build this, which is why it could not run on a host without\n",
+    "                                     jq; satisfying that dependency per host repeats the yq/ruby\n",
+    "                                     exposure, so the projection moves to the binary that already\n",
+    "                                     owns the ledger.\n",
     "           query [--status S] [--role R] [--release V] [--tag T]... [--limit N] [--json]\n",
     "                                     ORDER 582-26mm. THE generic filtered reader over the\n",
     "                                     FOLDED ledger (base ⊕ plan/index.d/ fragments): the only\n",
@@ -379,6 +422,83 @@ fn emit(text: &str) {
     }
 }
 
+/// How far a hand-supplied `--ts` may sit from the host clock, in seconds.
+/// Fifteen minutes: generous enough for a slow cycle that read the clock at its
+/// start and writes at its end, tight enough to catch a fabricated hour.
+const TS_SKEW_LIMIT_SECS: i64 = 900;
+
+fn now_epoch() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// Resolve the `--ts` for a ledger write (order 719-kgr5).
+///
+/// THE DEFECT THIS CLOSES. Every writer took `--ts` on trust, which made
+/// ordering a property of agent discipline rather than of the tool. Across the
+/// 2026-08-13 windows overnight run the values were hand-authored — incremented
+/// by roughly an hour per cycle from an early guess — and drifted to +8.6h
+/// against the real commit times, while the sibling linux host, reading its
+/// clock, stayed within 17 seconds. The ledger is an append-only CRDT whose
+/// fragments fold in NAME order, whose claim expiry is decided from event
+/// timestamps, and whose rolling metrics window over them, so a host writing
+/// hours ahead sorts its work after later work and can make a stale claim
+/// outlive its TTL. It also cost a sibling a night diagnosing a clock fault
+/// that did not exist: the machine clock was correct to the second.
+///
+/// Three properties, in the order they matter:
+///
+///   * ABSENT `--ts` now means the host clock, so the correct thing is the easy
+///     thing. The old interface made inventing a value exactly as convenient as
+///     reading one, and `append-event` went further and REQUIRED the flag —
+///     "the tool does not invent timestamps" — which read as rigour but simply
+///     moved the invention to the caller.
+///   * A supplied value must agree with the clock within the skew limit, and a
+///     refusal names BOTH values, because the symptom ("your clock is 7 hours
+///     ahead") was misdiagnosed once already.
+///   * `--backfill` is the escape hatch for recording something that genuinely
+///     happened earlier. Explicit, typed by a person, never implicit silence.
+fn resolve_ts(supplied: Option<String>, backfill: bool, subcommand: &str) -> String {
+    let now = now_epoch();
+    let Some(ts) = supplied else {
+        return answer::epoch_to_iso8601(now);
+    };
+    let Some(given) = answer::iso8601_to_epoch(&ts) else {
+        eprintln!(
+            "error: --ts '{ts}' is not a ledger timestamp (want YYYY-MM-DDTHH:MM:SSZ, UTC) — {subcommand} refused the write"
+        );
+        std::process::exit(2);
+    };
+    let skew = given - now;
+    if backfill {
+        // A backfill may only reach BACKWARD. "Recording something that
+        // happened earlier" is the whole justification, and a flag that also
+        // waived future timestamps would hand the original defect a one-word
+        // bypass.
+        if skew > TS_SKEW_LIMIT_SECS {
+            eprintln!(
+                "error: --backfill records something that already happened, but --ts {ts} is {skew}s AHEAD of this host's clock ({}) — {subcommand} refused the write",
+                answer::epoch_to_iso8601(now)
+            );
+            std::process::exit(2);
+        }
+        return ts;
+    }
+    if skew.abs() > TS_SKEW_LIMIT_SECS {
+        eprintln!(
+            "error: --ts {ts} disagrees with this host's clock {} by {}s (limit {TS_SKEW_LIMIT_SECS}s) — \
+             omit --ts to use the clock, or pass --backfill if the event genuinely happened earlier; \
+             {subcommand} refused the write",
+            answer::epoch_to_iso8601(now),
+            skew.abs()
+        );
+        std::process::exit(2);
+    }
+    ts
+}
+
 fn line(ledger: &Ledger, p: &serde_yaml::Value) -> String {
     let id = ledger.id_of(p);
     let order = p
@@ -517,6 +637,105 @@ fn known_releases(ledger: &Ledger) -> Vec<String> {
     releases
 }
 
+/// ORDER 706-ddw6. Active claim lease state, parsed from the claim-ledger-node
+/// filesystem contract (${TILLANDSIAS_LEDGER_LEASE_ROOT} or
+/// ${XDG_RUNTIME_DIR}/tillandsias-locks/ledger-nodes or /tmp/tillandsias-locks/ledger-nodes).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct PacketLease {
+    holder: String,
+    host: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    acquired_at: Option<String>,
+    expires_epoch: u64,
+    is_active: bool,
+}
+
+fn inspect_lease(packet_id: &str) -> Option<PacketLease> {
+    let lease_root = std::env::var("TILLANDSIAS_LEDGER_LEASE_ROOT")
+        .map(PathBuf::from)
+        .or_else(|_| {
+            std::env::var("XDG_RUNTIME_DIR")
+                .map(|r| PathBuf::from(r).join("tillandsias-locks/ledger-nodes"))
+        })
+        .unwrap_or_else(|_| PathBuf::from("/tmp/tillandsias-locks/ledger-nodes"));
+    let safe = packet_id.replace('/', "__");
+    let holder_file = lease_root.join(format!("{safe}.lease")).join("holder");
+    if !holder_file.is_file() {
+        return None;
+    }
+    let content = std::fs::read_to_string(&holder_file).ok()?;
+    let mut holder = String::new();
+    let mut host = String::new();
+    let mut acquired_at = None;
+    let mut expires_epoch: u64 = 0;
+    for line in content.lines() {
+        if let Some(val) = line.strip_prefix("lease_id=") {
+            holder = val.trim().to_string();
+        } else if let Some(val) = line.strip_prefix("host=") {
+            host = val.trim().to_string();
+        } else if let Some(val) = line.strip_prefix("acquired_at=") {
+            acquired_at = Some(val.trim().to_string());
+        } else if let Some(val) = line.strip_prefix("expires_epoch=") {
+            expires_epoch = val.trim().parse().unwrap_or(0);
+        }
+    }
+    let now_epoch = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let is_active = expires_epoch > now_epoch;
+    Some(PacketLease {
+        holder,
+        host,
+        acquired_at,
+        expires_epoch,
+        is_active,
+    })
+}
+
+/// Order 632-retq. The urgency rank + display a batch selector needs, derived
+/// once, HERE, instead of in an awk block that only a host with jq ever reaches.
+///
+/// Three tiers, and the last is the point (order 630-6hyc): an EXPLICIT
+/// priority dominates because the operator said so; otherwise urgency is
+/// DERIVED from `kind`, since 202 ready packets carry a kind and only 38 carry
+/// a priority; otherwise the packet is UNSCORED — rank 99, excluded from the
+/// urgency term rather than coerced to a plausible p3, which is the shape that
+/// made the term a constant 0 for ~82% of the pool without anyone noticing.
+pub fn urgency_rank_and_display(priority: Option<&str>, kind: Option<&str>) -> (u32, String) {
+    match priority.unwrap_or("") {
+        "p0" => return (0, "p0".to_string()),
+        "p1" => return (1, "p1".to_string()),
+        "p2" => return (2, "p2".to_string()),
+        "p3" => return (3, "p3".to_string()),
+        _ => {}
+    }
+    let kind = kind.unwrap_or("");
+    let rank = match kind {
+        "security" | "bug" | "fix" => 4,
+        "feat" | "enhancement" | "infra" | "ux" | "optimization" | "perf" | "dx" => 5,
+        "research" | "exploration" | "docs" | "discussion" | "decision" | "chore" => 6,
+        _ => 99,
+    };
+    if rank == 99 {
+        (99, "unscored".to_string())
+    } else {
+        (rank, format!("kind:{kind}"))
+    }
+}
+
+/// Order 632-retq. Is every dependency of `packet` terminal?
+///
+/// An id that resolves to nothing counts as BLOCKING, matching the resolver's
+/// conservatism: an unresolvable dependency is an unanswered question, not an
+/// absent constraint.
+pub fn dependencies_are_clear(
+    deps: &[String],
+    terminal: &std::collections::BTreeSet<String>,
+) -> bool {
+    deps.iter().all(|d| terminal.contains(d))
+}
+
 fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     for key in [
@@ -551,6 +770,19 @@ fn query_json_projection(packet: &serde_yaml::Value) -> serde_json::Value {
                 serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
             );
         }
+    }
+    // ORDER 706-ddw6. Project active lease information directly.
+    if let Some(packet_id) = packet.get("packet_id").and_then(serde_yaml::Value::as_str) {
+        if let Some(lease) = inspect_lease(packet_id) {
+            obj.insert(
+                "lease".to_string(),
+                serde_json::to_value(&lease).unwrap_or(serde_json::Value::Null),
+            );
+        } else {
+            obj.insert("lease".to_string(), serde_json::Value::Null);
+        }
+    } else {
+        obj.insert("lease".to_string(), serde_json::Value::Null);
     }
     // These are the release-query contract, not opportunistic metadata.
     // A missing field is explicit JSON null so consumers can distinguish
@@ -968,7 +1200,7 @@ fn run_loop_status(args: &[String], base: &Path) {
                 }
             };
             let active = loop_status::active_release(base).unwrap_or_default();
-            let mut problems = loop_status::verify_active_release(&folded, &active);
+            let problems = loop_status::verify_active_release(&folded, &active);
 
             let (open, total) = match Ledger::load_with_fragments(&ledger_path) {
                 Ok(l) => count_release(&l, &active),
@@ -988,6 +1220,17 @@ fn run_loop_status(args: &[String], base: &Path) {
                 .filter(|b| b.active)
                 .count();
             let mut count_ok = true;
+            // ORDER 668-9z9h. The committed `(N open / M total)` count is a
+            // point-in-time snapshot: EVERY subsequently filed release-tagged
+            // packet changes the live count, so an exact-match gate went red
+            // within half an hour of every green — a treadmill, not a control.
+            // The count is now DERIVED live (`canonical` below) and reported as
+            // an ADVISORY (`count_ok` in the verdict line + the canonical
+            // splice), NOT a gate: count drift alone never fails verify. The
+            // STRUCTURAL truths that CAN be wrong — the active-release name, a
+            // single `## ACTIVE RELEASE:` heading, a single `— ACTIVE` bullet
+            // on the right release — stay hard failures via `verify_active_release`.
+            let mut count_advisories: Vec<String> = Vec::new();
             if render_only {
                 // `--render` is not a gate: emit the canonical line so a
                 // coordinator can splice it, and leave consistency checking to a
@@ -1003,14 +1246,14 @@ fn run_loop_status(args: &[String], base: &Path) {
                     (Some(o), Some(t)) if o == open && t == total => {}
                     (Some(o), Some(t)) => {
                         count_ok = false;
-                        problems.push(format!(
-                            "active release {active} count is stale — committed ({o} open / {t} total tagged) should be {canonical}"
+                        count_advisories.push(format!(
+                            "active release {active} count drifted — committed ({o} open / {t} total tagged), live is {canonical} (advisory, not a gate — 668-9z9h)"
                         ));
                     }
                     _ => {
                         count_ok = false;
-                        problems.push(format!(
-                            "active release {active} bullet has no parseable count — should be {canonical}"
+                        count_advisories.push(format!(
+                            "active release {active} bullet has no parseable count — live is {canonical} (advisory)"
                         ));
                     }
                 }
@@ -1028,6 +1271,12 @@ fn run_loop_status(args: &[String], base: &Path) {
             );
             for p in &problems {
                 eprintln!("problem: {p}");
+            }
+            // Count drift is surfaced but never gates (668-9z9h): a coordinator
+            // splices `canonical` when convenient, and filing a packet in the
+            // meantime does not turn a green control red.
+            for a in &count_advisories {
+                eprintln!("advisory: {a}");
             }
             if !problems.is_empty() {
                 std::process::exit(1);
@@ -1113,12 +1362,20 @@ fn run_loop_status(args: &[String], base: &Path) {
                 eprintln!("error: read stdin: {e}");
                 std::process::exit(1);
             }
-            let mut ts = loop_status::utc_compact_now();
-            if let Some(i) = args.iter().position(|a| a == "--ts")
-                && let Some(v) = args.get(i + 1)
-            {
-                ts = loop_status::iso_to_compact(v);
-            }
+            // 719-kgr5: the fragment NAME carries this stamp and fragments fold
+            // in name order, so an invented value here reorders the folded
+            // status view itself. Validate before compacting.
+            let supplied_ts = args
+                .iter()
+                .position(|a| a == "--ts")
+                .and_then(|i| args.get(i + 1))
+                .cloned();
+            let backfill = args.iter().any(|a| a == "--backfill");
+            let ts = loop_status::iso_to_compact(&resolve_ts(
+                supplied_ts,
+                backfill,
+                "loop-status-append",
+            ));
             let host = args
                 .iter()
                 .position(|a| a == "--host")
@@ -1230,7 +1487,104 @@ fn read_query_vec(path: &Path) -> Vec<f32> {
     })
 }
 
+/// Event type and summary prefix for a `set-field --evidence` write (696-6byc).
+///
+/// The type must follow the STATUS being written. It was hardcoded to
+/// `completed`, harmless while every status worth attaching evidence to was
+/// terminal — until the 650-dq6u ladder added the non-terminal `implemented`
+/// rung. From then on an honest non-terminal write emitted a fragment claiming
+/// completion in the event stream while the status channel said otherwise, and
+/// `check-fragment-status-loss.sh` refused it AFTER the write and AFTER a
+/// commit. It cost two cycles on this host inside one hour.
+fn evidence_event_shape(status: &str) -> (&'static str, String) {
+    if tillandsias_plan::is_terminal_status(status) {
+        ("completed", format!("status '{status}' with evidence_refs"))
+    } else {
+        (
+            "progress",
+            format!("status '{status}' (not terminal) with evidence_refs"),
+        )
+    }
+}
+
+/// ORDER 706-jmi7. Lightweight UTC ISO-8601 timestamp generator without external crate deps.
+fn utc_now_iso() -> String {
+    let now = std::time::SystemTime::now();
+    match now.duration_since(std::time::UNIX_EPOCH) {
+        Ok(dur) => {
+            let secs = dur.as_secs();
+            let s = secs % 60;
+            let m = (secs / 60) % 60;
+            let h = (secs / 3600) % 24;
+            let mut days = (secs / 86400) as i64;
+
+            let mut year = 1970;
+            loop {
+                let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+                let ydays = if leap { 366 } else { 365 };
+                if days < ydays {
+                    break;
+                }
+                days -= ydays;
+                year += 1;
+            }
+            let leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+            let mdays = [
+                31,
+                if leap { 29 } else { 28 },
+                31,
+                30,
+                31,
+                30,
+                31,
+                31,
+                30,
+                31,
+                30,
+                31,
+            ];
+            let mut month = 1;
+            for &dim in &mdays {
+                if days < dim {
+                    break;
+                }
+                days -= dim;
+                month += 1;
+            }
+            let day = days + 1;
+            format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
+        }
+        Err(_) => "unknown".to_string(),
+    }
+}
+
+/// ORDER 706-jmi7. Record direct CLI invocations to the shared telemetry channel
+/// (${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}).
+pub fn log_cli_usage(tool: &str, outcome: &str, latency_ms: u128) {
+    if std::env::var_os("TILLANDSIAS_NO_TELEMETRY").is_some() {
+        return;
+    }
+    let log_path = std::env::var("TILLANDSIAS_EXPERT_USAGE_LOG")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/tmp/forge-expert-usage.jsonl"));
+
+    let ts = utc_now_iso();
+    let line = format!(
+        "{{\"ts\":\"{}\",\"server\":\"cli\",\"tool\":\"{}\",\"outcome\":\"{}\",\"latency_ms\":{}}}\n",
+        ts, tool, outcome, latency_ms
+    );
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+    {
+        use std::io::Write;
+        let _ = file.write_all(line.as_bytes());
+    }
+}
+
 fn main() {
+    let start_time = std::time::Instant::now();
     let mut args: Vec<String> = std::env::args().skip(1).collect();
     let mut index = PathBuf::from("plan/index.yaml");
     let mut index_explicit = false;
@@ -1245,6 +1599,7 @@ fn main() {
     if args.is_empty() {
         usage();
     }
+    let subcommand = args.first().cloned().unwrap_or_else(|| "none".to_string());
 
     // ORDER 569. `capabilities` runs FIRST and touches nothing — no ledger, no
     // methodology corpus, no filesystem at all beyond the embedded manifest.
@@ -1794,10 +2149,31 @@ fn main() {
             for s in ledger.validate_against_schema(&schema) {
                 eprintln!("advisory (schema drift): {s}");
             }
+            // 686-7qcm — the invisible-block report. A dependent waiting on a
+            // PARKED packet (implemented / needs_clarification / blocked /
+            // failed) is otherwise silently stuck: `ready` skips it and
+            // burndown does not count the block. Surface every such edge as an
+            // advisory so parked work with waiting dependents is visible.
+            let parked = ledger.parked_blocks();
+            for pb in &parked {
+                eprintln!(
+                    "parked-block: {} waits on {} [{}]{}",
+                    pb.dependent,
+                    pb.dependency,
+                    pb.status,
+                    if pb.outstanding.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" — {}", pb.outstanding)
+                    }
+                );
+            }
             if report.violations.is_empty() {
                 println!(
-                    "ok: {} packets, ids unique, live references sound",
-                    ledger.packets.len()
+                    "ok: {} packets, ids unique, live references sound ({} parked-block edge{})",
+                    ledger.packets.len(),
+                    parked.len(),
+                    if parked.len() == 1 { "" } else { "s" }
                 );
             } else {
                 for v in &report.violations {
@@ -1806,12 +2182,264 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        "parked-blocks" => {
+            // 686-7qcm. List every dependent invisibly blocked behind a parked
+            // packet. With a reference argument, only that packet's parked
+            // dependencies; with none, the whole ledger. One TSV row per edge:
+            // dependent<TAB>dependency<TAB>status<TAB>outstanding.
+            let edges = match args.get(1) {
+                Some(reference) => {
+                    warn_if_unresolved(&ledger, reference);
+                    ledger.parked_dependencies_of(reference)
+                }
+                None => ledger.parked_blocks(),
+            };
+            for pb in &edges {
+                emit(&format!(
+                    "{}\t{}\t{}\t{}",
+                    pb.dependent, pb.dependency, pb.status, pb.outstanding
+                ));
+            }
+        }
+        "closure-evidence-check" => {
+            // 686-7qcm criterion 3. A single-FILE gate: a fragment that sets a
+            // closure-ladder terminal (completed/verified/done) — via the
+            // `status:` LWW channel OR an inline `packets:` status — must carry
+            // an evidence-bearing event for that packet, so a closure can never
+            // be recorded without a trace of what justified it. This is the
+            // gate-time backstop to the set-field write-time --evidence
+            // requirement; a shell wrapper diff-scopes it to newly ADDED
+            // fragments so the base ledger's history is exempt. Exit 1 on a
+            // closure with no evidence event, naming the packet.
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan closure-evidence-check <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                // A parse failure is the sibling gate's job (added-fragments-parse);
+                // here it is a pass-through, not this check's violation.
+                Err(_) => {
+                    println!(
+                        "ok:closure-evidence:0 checked (unparseable — see added-fragments-parse)"
+                    );
+                    return;
+                }
+            };
+            let is_closure = |s: &str| matches!(s, "completed" | "verified" | "done");
+            // packet_id -> does the fragment carry an evidence-bearing event?
+            let evidence_event_for = |pid: &str| -> bool {
+                let has_marker = |ev: &serde_yaml::Value| -> bool {
+                    let ty = ev
+                        .get("type")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if matches!(ty, "completed" | "verified" | "falsified") {
+                        return true;
+                    }
+                    // evidence_refs field, or the word in the summary text.
+                    ev.get("evidence_refs").is_some()
+                        || ev
+                            .get("summary")
+                            .and_then(serde_yaml::Value::as_str)
+                            .is_some_and(|s| s.to_lowercase().contains("evidence"))
+                };
+                // top-level events: [{packet_id, event: {...}}]
+                if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                    for e in evs {
+                        if e.get("packet_id").and_then(serde_yaml::Value::as_str) == Some(pid)
+                            && e.get("event").is_some_and(has_marker)
+                        {
+                            return true;
+                        }
+                    }
+                }
+                // inline packet events: packets:[{packet_id, events:[{type,...}]}]
+                if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                    for p in pkts {
+                        if p.get("packet_id").and_then(serde_yaml::Value::as_str) == Some(pid)
+                            && p.get("events")
+                                .and_then(serde_yaml::Value::as_sequence)
+                                .is_some_and(|evs| evs.iter().any(has_marker))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                false
+            };
+            let mut offenders: Vec<String> = Vec::new();
+            let mut checked = 0u32;
+            // status: LWW closures
+            if let Some(us) = doc.get("status").and_then(serde_yaml::Value::as_sequence) {
+                for u in us {
+                    let field = u
+                        .get("field")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    let value = u
+                        .get("value")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    let pid = u
+                        .get("packet_id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if field == "status" && is_closure(value) && !pid.is_empty() {
+                        checked += 1;
+                        if !evidence_event_for(pid) {
+                            offenders.push(format!("{pid} (status:{value})"));
+                        }
+                    }
+                }
+            }
+            // inline packets: closures
+            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                for p in pkts {
+                    let value = p
+                        .get("status")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    let pid = p
+                        .get("packet_id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("");
+                    if is_closure(value) && !pid.is_empty() {
+                        checked += 1;
+                        if !evidence_event_for(pid) {
+                            offenders.push(format!("{pid} (packets:{value})"));
+                        }
+                    }
+                }
+            }
+            if offenders.is_empty() {
+                println!("ok:closure-evidence:{checked} checked");
+            } else {
+                for o in &offenders {
+                    eprintln!(
+                        "violation:closure-without-evidence: {o} sets a closure rung with no evidence-bearing event in the same fragment"
+                    );
+                }
+                eprintln!(
+                    "  A closure (completed/verified/done) must carry an event with evidence_refs (or type completed/verified/falsified). Use set-field --evidence, or add the event (686-7qcm)."
+                );
+                std::process::exit(1);
+            }
+        }
+        "fragment-terminal-events" => {
+            // ORDER 752-pst5. The closure-event pass of check-fragment-status-loss.sh
+            // reads every fragment in plan/index.d and asks, per packet: does its
+            // events block DECLARE a terminal `completed` event? The shell's old
+            // answer was a line-grep with ad-hoc resets, and it could not tell an
+            // event declaration from PROSE that quotes the marker inside a block
+            // scalar — it invented a completion for packet 751-i9mb whose real
+            // event was `type: filed` (752-pst5). A YAML parse bounds attribution
+            // to the actual events block, so no indent heuristic can silently
+            // disable or widen the check.
+            //
+            // Prints one packet_id per line (sorted, deduplicated), nothing else
+            // on stdout, exit 0. An unparseable fragment is the sibling
+            // added-fragments-parse gate's job, so here it is a pass-through
+            // exactly as in closure-evidence-check.
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(_) => {
+                    eprintln!(
+                        "note: {path} did not parse — status-loss event pass skipped (see added-fragments-parse)"
+                    );
+                    return;
+                }
+            };
+            // A `declares` entry: the event carries `type: completed`, or nests
+            // `event: completed` / `event: {type: completed}` (the shapes the old
+            // awk reached via `/type: completed/ || /event: completed/`).
+            let declares_terminal = |event: &serde_yaml::Value| -> bool {
+                if event.get("type").and_then(serde_yaml::Value::as_str) == Some("completed") {
+                    return true;
+                }
+                if let Some(inner) = event.get("event")
+                    && (inner.as_str() == Some("completed")
+                        || inner.get("type").and_then(serde_yaml::Value::as_str)
+                            == Some("completed"))
+                {
+                    return true;
+                }
+                false
+            };
+            let mut ids: Vec<String> = Vec::new();
+            // Inline: packets: [{packet_id, events: [{type: completed, ...}]}]
+            if let Some(pkts) = doc.get("packets").and_then(serde_yaml::Value::as_sequence) {
+                for p in pkts {
+                    let Some(pid) = p.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    let declares = p
+                        .get("events")
+                        .and_then(serde_yaml::Value::as_sequence)
+                        .is_some_and(|evs| evs.iter().any(declares_terminal));
+                    if declares {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            // Top-level: events: [{packet_id, event: {type: completed, ...}}]
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    let Some(pid) = e.get("packet_id").and_then(serde_yaml::Value::as_str) else {
+                        continue;
+                    };
+                    if e.get("event").is_some_and(declares_terminal) {
+                        ids.push(pid.to_string());
+                    }
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
+            }
+        }
         "status" => {
             let Some(reference) = args.get(1) else {
                 usage()
             };
             match ledger.resolve(reference) {
-                Some(p) => println!("{}", line(&ledger, p)),
+                Some(p) => {
+                    println!("{}", line(&ledger, p));
+                    // 686-7qcm: name any parked dependency so a single-packet
+                    // status read shows WHY the packet cannot progress and what
+                    // would free it, instead of an unexplained blocked/pending.
+                    for pb in ledger.parked_dependencies_of(reference) {
+                        eprintln!(
+                            "  blocked-on-parked: {} [{}]{}",
+                            pb.dependency,
+                            pb.status,
+                            if pb.outstanding.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" — {}", pb.outstanding)
+                            }
+                        );
+                    }
+                }
                 None => {
                     eprintln!("error: {}", unresolved_reason(&ledger, reference));
                     std::process::exit(1);
@@ -1853,6 +2481,203 @@ fn main() {
             };
             for p in packets {
                 emit(&line(&ledger, p));
+            }
+        }
+        "blocking-counts" => {
+            // ORDER 632-retq (rung 2). How many READY packets each id blocks.
+            //
+            // Deliberately NOT folded into `select-rows`: that one answers "what
+            // may I pick", filtered to dependency-clear and unleased, while this
+            // one must count edges from EVERY ready packet — including the ones
+            // select-rows excludes. A linux packet is frequently the thing a
+            // windows packet is waiting on, and that downstream weight is
+            // exactly the residual minimax asks us to maximise. Folding them
+            // would silently score the graph against a filtered subset.
+            let options = match parse_query_options(&args[1..]) {
+                Ok(options) => options,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let mut counts: std::collections::BTreeMap<String, usize> =
+                std::collections::BTreeMap::new();
+            for p in query_packets(
+                &ledger,
+                Some("ready"),
+                None,
+                None,
+                options.release.as_deref(),
+                &[],
+                options.limit,
+            ) {
+                if let Some(deps) = p.get("depends_on").and_then(serde_yaml::Value::as_sequence) {
+                    for d in deps {
+                        let key = match d {
+                            serde_yaml::Value::String(s) => s.clone(),
+                            serde_yaml::Value::Number(n) => n.to_string(),
+                            _ => continue,
+                        };
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                }
+            }
+            for (id, n) in counts {
+                emit(&format!("{id}	{n}"));
+            }
+        }
+        "select-rows" => {
+            // ORDER 632-retq. Emit the batch selector's projection directly.
+            //
+            // scripts/select-work-batch.sh built this with nineteen jq calls, so
+            // the selector — the thing that decides what a cycle WORKS ON —
+            // could not run on a host without jq. Order 632-retq made that fail
+            // loud rather than counterfeit a drained ledger, which was right and
+            // still left the host unable to select work. Satisfying the
+            // dependency per host repeats the yq/ruby exposure recorded on
+            // 2026-08-03; emitting the projection from the binary that already
+            // owns the ledger deletes the class.
+            //
+            // Output: rank \t release_target \t order \t packet_id \t urgency \t release
+            // Already filtered to ready + role + release + dependency-clear +
+            // unleased, so the caller needs no further projection.
+            let options = match parse_query_options(&args[1..]) {
+                Ok(options) => options,
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    std::process::exit(2);
+                }
+            };
+            if let Some(release) = options.release.as_deref() {
+                let releases = known_releases(&ledger);
+                if !releases.iter().any(|known| known == release) {
+                    eprintln!(
+                        "error: unknown release constraint '{release}' (known desired_release values: {})",
+                        releases.join(",")
+                    );
+                    std::process::exit(2);
+                }
+            }
+
+            // The terminal set is computed over the WHOLE ledger, not the
+            // role-filtered pool: a linux packet is frequently the thing a
+            // windows packet waits on.
+            let mut terminal: std::collections::BTreeSet<String> =
+                std::collections::BTreeSet::new();
+            for p in query_packets(&ledger, None, None, None, None, &[], usize::MAX) {
+                let status = p
+                    .get("status")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("");
+                if matches!(status, "done" | "completed" | "obsoleted") {
+                    terminal.insert(ledger.id_of(p).to_string());
+                }
+            }
+
+            // ORDER 726-cjb8. A packet that has been SPLIT is a criteria holder,
+            // not work — its slices are the claimable things. It stays `ready`
+            // so it can hold the criteria until the children close, and until
+            // this filter existed the selector kept offering the parent as the
+            // urgent pick forever. 606-bvnp was split into four ready children
+            // and was immediately re-offered as `urgent=` on the very next
+            // cycle, outranking its own slices because it is older and p0. Two
+            // other split parents sit `ready` in the ledger with the same
+            // latent behaviour.
+            //
+            // The parent is skipped only while a child is still OPEN. Once
+            // every named slice is terminal the parent becomes visible again,
+            // which is exactly when someone should look at it — to close it.
+            //
+            // split_into entries are prose ("722-hthz — name (slice a: ...)"),
+            // so child identity is tested by substring against the ids and
+            // order tokens of packets that are NOT terminal. A prose entry that
+            // names nothing open cannot hold the parent back.
+            let open_tokens: Vec<String> =
+                query_packets(&ledger, None, None, None, None, &[], usize::MAX)
+                    .into_iter()
+                    .filter(|p| !terminal.contains(&ledger.id_of(p).to_string()))
+                    .flat_map(|p| {
+                        let mut toks = vec![ledger.id_of(p).to_string()];
+                        if let Some(o) = p.get("order") {
+                            match o {
+                                serde_yaml::Value::Number(n) => toks.push(n.to_string()),
+                                serde_yaml::Value::String(s) => toks.push(s.clone()),
+                                _ => {}
+                            }
+                        }
+                        toks
+                    })
+                    .filter(|t| !t.is_empty())
+                    .collect();
+
+            let matched = query_packets(
+                &ledger,
+                Some("ready"),
+                options.role.as_deref(),
+                options.claimable_by.as_deref(),
+                options.release.as_deref(),
+                &options.tags,
+                options.limit,
+            );
+
+            for p in matched {
+                let id = ledger.id_of(p).to_string();
+                let deps: Vec<String> = p
+                    .get("depends_on")
+                    .and_then(serde_yaml::Value::as_sequence)
+                    .map(|s| {
+                        s.iter()
+                            .filter_map(|v| match v {
+                                serde_yaml::Value::String(s) => Some(s.clone()),
+                                serde_yaml::Value::Number(n) => Some(n.to_string()),
+                                _ => None,
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !dependencies_are_clear(&deps, &terminal) {
+                    continue;
+                }
+                if inspect_lease(&id).map(|l| l.is_active).unwrap_or(false) {
+                    continue;
+                }
+                // Split parent with at least one open slice — see above.
+                if let Some(entries) = p.get("split_into").and_then(serde_yaml::Value::as_sequence)
+                {
+                    let has_open_child = entries.iter().any(|e| {
+                        e.as_str().is_some_and(|s| {
+                            open_tokens
+                                .iter()
+                                .any(|t| t != &id && s.contains(t.as_str()))
+                        })
+                    });
+                    if has_open_child {
+                        continue;
+                    }
+                }
+                let (rank, display) = urgency_rank_and_display(
+                    p.get("priority").and_then(serde_yaml::Value::as_str),
+                    p.get("kind").and_then(serde_yaml::Value::as_str),
+                );
+                let epic = p
+                    .get("release_target")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("UNGROUPED");
+                let order = p
+                    .get("order")
+                    .map(|v| match v {
+                        serde_yaml::Value::Number(n) => n.to_string(),
+                        serde_yaml::Value::String(s) => s.clone(),
+                        _ => "?".into(),
+                    })
+                    .unwrap_or_else(|| "?".into());
+                let release = p
+                    .get("desired_release")
+                    .and_then(serde_yaml::Value::as_str)
+                    .unwrap_or("?");
+                emit(&format!(
+                    "{rank}\t{epic}\t{order}\t{id}\t{display}\t{release}"
+                ));
             }
         }
         "query" => {
@@ -2027,6 +2852,9 @@ fn main() {
             let mut ts: Option<String> = None;
             let mut agent = "unknown".to_string();
             let mut host = "linux".to_string();
+            let mut flag_type: Option<String> = None;
+            let mut flag_summary: Option<String> = None;
+            let mut backfill = false;
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {
@@ -2042,20 +2870,55 @@ fn main() {
                         i += 1;
                         host = args.get(i).cloned().unwrap_or(host);
                     }
+                    // Accept --type/--summary as explicit flags. Before this
+                    // (690-2kwd fallout, 2026-08-12), passing them was silently
+                    // swallowed as POSITIONAL garbage: `--type progress` stored
+                    // type="--type", summary="progress", and the malformed event
+                    // passed every gate (698-7n6q). Now the flag form works.
+                    "--type" => {
+                        i += 1;
+                        flag_type = args.get(i).cloned();
+                    }
+                    "--summary" => {
+                        i += 1;
+                        flag_summary = args.get(i).cloned();
+                    }
+                    // 719-kgr5 escape hatch: recording an event that genuinely
+                    // happened earlier. Takes no value.
+                    "--backfill" => backfill = true,
+                    // Any OTHER --flag is rejected loudly rather than corrupting
+                    // the event by masquerading as a positional value.
+                    other if other.starts_with("--") => {
+                        eprintln!(
+                            "error: unknown flag '{other}' for append-event \
+                             (usage: <ref> <type> <summary> --ts <ISO> \
+                             [--agent A] [--host H]; --type/--summary also accepted)"
+                        );
+                        std::process::exit(2);
+                    }
                     other => positional.push(other.to_string()),
                 }
                 i += 1;
             }
-            if positional.len() < 3 {
+            // type/summary may come from flags or positionals; ref is always
+            // positional[0]. Missing any of the three -> usage (diverges).
+            if positional.is_empty() {
                 usage();
             }
-            let (reference, etype, summary) = (&positional[0], &positional[1], &positional[2]);
-            let Some(ts) = ts else {
-                eprintln!(
-                    "error: --ts <ISO8601> is required (the tool does not invent timestamps)"
-                );
-                std::process::exit(2);
-            };
+            let reference = positional[0].clone();
+            let etype = flag_type
+                .or_else(|| positional.get(1).cloned())
+                .unwrap_or_else(|| usage());
+            let summary = flag_summary
+                .or_else(|| positional.get(2).cloned())
+                .unwrap_or_else(|| usage());
+            let (reference, etype, summary) = (&reference, &etype, &summary);
+            // 719-kgr5. This used to REQUIRE --ts, on the reasoning that "the
+            // tool does not invent timestamps" — but the caller then invented
+            // them instead, for eleven consecutive cycles, drifting to +8.6h.
+            // Reading the clock is not inventing a timestamp; it is the only
+            // way to measure one. The flag stays available and is now CHECKED.
+            let ts = resolve_ts(ts, backfill, "append-event");
             let Some(target) = ledger.resolve(reference).map(|p| ledger.id_of(p)) else {
                 eprintln!("error: {}", unresolved_reason(&ledger, reference));
                 std::process::exit(1);
@@ -2068,6 +2931,66 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+
+            // 699-usxc. A packet declared only in an uncompacted fragment has no
+            // block in the BASE to append into — this arm locates packets by
+            // their item prefix in plan/index.yaml. Until now that produced
+            // "packet_id not found" for a packet `status` resolves perfectly
+            // well, so the natural workflow "file a packet, then record progress
+            // on it" failed for exactly the packets filed this cycle.
+            //
+            // Worse in practice than it sounds: the documented workaround
+            // (`set-field <same-value> --reason`) NO-OPS when the value is
+            // unchanged and writes nothing at all, so there was NO path to
+            // annotate such a packet without also changing a field. That bites
+            // hardest when someone is correcting a mistake in the record —
+            // exactly when the ledger most needs to accept a write.
+            //
+            // So: if the base cannot host the event, write it as a NEW FRAGMENT,
+            // which is what the overlay is for and what set-field already does.
+            // The fold reads events from fragments, so the result is identical
+            // to a base append from every reader's point of view.
+            if !edit::base_hosts_packet(&raw, &target) {
+                let compact = loop_status::iso_to_compact(&ts);
+                let suffix = format!(
+                    "{:08x}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.subsec_nanos())
+                        .unwrap_or(0)
+                );
+                let dir = fragments::fragment_dir(&index);
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    eprintln!("error: create {}: {e}", dir.display());
+                    std::process::exit(1);
+                }
+                let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+                let mut body = String::new();
+                body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+                body.push_str("# Written by: tillandsias-plan append-event (order 699-usxc).\n");
+                body.push_str(
+                    "#\n# The target packet is declared only in an uncompacted fragment, so the\n\
+                     # BASE ledger has no block to append into. Recording the event here keeps\n\
+                     # it visible to the fold, which is what every reader consults.\n",
+                );
+                body.push_str("events:\n");
+                body.push_str(&format!("  - packet_id: {target}\n"));
+                body.push_str("    event:\n");
+                body.push_str(&format!("      type: {etype}\n"));
+                body.push_str(&format!("      ts: \"{ts}\"\n"));
+                body.push_str(&format!("      agent_id: {agent}\n"));
+                body.push_str(&format!("      host: {host}\n"));
+                body.push_str("      summary: >\n");
+                for line in summary.replace('\n', " ").split('\n') {
+                    body.push_str(&format!("        {line}\n"));
+                }
+                if let Err(e) = std::fs::write(&path, body) {
+                    eprintln!("error: write {}: {e}", path.display());
+                    std::process::exit(1);
+                }
+                println!("appended {etype} event to {target} ({})", path.display());
+                return;
+            }
             let candidate = match edit::append_event(&raw, &target, &block) {
                 Ok(c) => c,
                 Err(e) => {
@@ -2166,18 +3089,134 @@ fn main() {
                 std::process::exit(1);
             };
             let current = str_field(packet, &field).unwrap_or("<unset>").to_string();
+            // 699-usxc, second half. A no-op on the FIELD must not silently
+            // discard a note the caller explicitly asked to record.
+            //
+            // This branch used to return here unconditionally, so
+            // `set-field <id> <field> <same-value> --reason "..."` printed `ok`
+            // and wrote NOTHING — not the row, not the reason. Combined with
+            // append-event being unable to reach fragment-only packets (the
+            // other half of this packet), that left NO way to annotate such a
+            // packet without also changing a field, and it bit hardest while
+            // trying to correct a corrupted record: the one moment the ledger
+            // most needs to accept a write. `ok` for "I discarded your text" is
+            // the same unevidenced-success shape as 700-nz4n's other members.
+            //
+            // A bare no-op stays quiet and cheap. A no-op carrying --reason or
+            // --evidence records the note and says so.
             if current == value {
-                println!("ok: no-op — {pid}.{field} is already '{value}'");
+                let note = flagged("--reason")
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| flagged("--evidence").filter(|s| !s.trim().is_empty()));
+                let Some(note) = note else {
+                    println!("ok: no-op — {pid}.{field} is already '{value}'");
+                    return;
+                };
+                // Same defaults the field-changing path below uses, so a note
+                // written here is indistinguishable from one written there.
+                let ts = resolve_ts(
+                    flagged("--ts"),
+                    args.iter().any(|a| a == "--backfill"),
+                    "set-field",
+                );
+                let host = flagged("--host").unwrap_or_else(|| {
+                    std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
+                });
+                let compact = loop_status::iso_to_compact(&ts);
+                let suffix = format!(
+                    "{:08x}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.subsec_nanos())
+                        .unwrap_or(0)
+                );
+                let dir = fragments::fragment_dir(&index);
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    eprintln!("error: create {}: {e}", dir.display());
+                    std::process::exit(1);
+                }
+                let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+                let mut body = String::new();
+                body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+                body.push_str("# Written by: tillandsias-plan set-field (order 699-usxc).\n");
+                body.push_str(&format!(
+                    "#\n# {pid}.{field} was ALREADY '{value}', so no field changed — but the caller\n\
+                     # supplied a note, and discarding it silently is what this packet is about.\n"
+                ));
+                body.push_str("events:\n");
+                body.push_str(&format!("  - packet_id: {pid}\n"));
+                body.push_str("    event:\n");
+                body.push_str("      type: note\n");
+                body.push_str(&format!("      ts: \"{ts}\"\n"));
+                body.push_str(&format!("      host: {host}\n"));
+                body.push_str("      summary: >\n");
+                body.push_str(&format!("        {}\n", note.replace('\n', " ")));
+                if let Err(e) = std::fs::write(&path, body) {
+                    eprintln!("error: write {}: {e}", path.display());
+                    std::process::exit(1);
+                }
+                println!(
+                    "ok: no-op — {pid}.{field} is already '{value}'; note recorded ({})",
+                    path.display()
+                );
                 return;
             }
 
-            let ts = flagged("--ts").unwrap_or_else(|| {
-                let secs = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map(|d| d.as_secs() as i64)
-                    .unwrap_or(0);
-                answer::epoch_to_iso8601(secs)
-            });
+            // ORDER 650-dq6u — the status write gate. Write time is the hard
+            // gate; `check` stays advisory (operator constraint 2026-07-17:
+            // schemas evolve on the fly). Three refusals:
+            //   1. a value outside plan/schema.yaml's vocabulary
+            //   2. a closure-ladder downgrade without --reopen-evidence
+            //      (which records the mandatory `falsified` event)
+            //   3. a closure rung asserted without --evidence
+            let reopen_evidence = flagged("--reopen-evidence");
+            let evidence = flagged("--evidence");
+            if field == "status" {
+                if !schema.statuses.is_empty() && !schema.statuses.iter().any(|s| s == &value) {
+                    eprintln!(
+                        "error: '{value}' is not in the status vocabulary (plan/schema.yaml): {}",
+                        schema.statuses.join(", ")
+                    );
+                    eprintln!(
+                        "       retired words (claimed, stalled, provisional, failed-retryable, parked, tested) are invalid to write — see methodology/distributed-work.yaml status_transition_protocol"
+                    );
+                    std::process::exit(1);
+                }
+                let cur_rank = tillandsias_plan::closure_rank(&current);
+                let new_rank = tillandsias_plan::closure_rank(&value);
+                let is_downgrade = match (cur_rank, new_rank) {
+                    (Some(c), Some(n)) => n < c,
+                    // Leaving the ladder for a working state is also downward;
+                    // obsoleted (supersession) and failed (attempt ended) are
+                    // lateral terminal moves, not evidence retractions.
+                    (Some(_), None) => !matches!(value.as_str(), "obsoleted" | "failed"),
+                    _ => false,
+                };
+                if is_downgrade && reopen_evidence.is_none() {
+                    eprintln!(
+                        "error: '{current}' -> '{value}' moves DOWN the closure ladder (implemented < completed < verified < done)."
+                    );
+                    eprintln!(
+                        "       The only path down is a falsified event: re-run with --reopen-evidence <ref> naming the falsifying observation (650-dq6u)."
+                    );
+                    std::process::exit(1);
+                }
+                if matches!(value.as_str(), "completed" | "verified" | "done")
+                    && evidence.is_none()
+                    && reopen_evidence.is_none()
+                {
+                    eprintln!(
+                        "error: writing status '{value}' requires --evidence <ref> (commit SHA + a named check result; as-wired check for verified; validation/acceptance for done) — 650-dq6u."
+                    );
+                    std::process::exit(1);
+                }
+            }
+
+            let ts = resolve_ts(
+                flagged("--ts"),
+                args.iter().any(|a| a == "--backfill"),
+                "set-field",
+            );
             let host = flagged("--host").unwrap_or_else(|| {
                 std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
             });
@@ -2213,17 +3252,49 @@ fn main() {
             body.push_str(&format!("    value: {value}\n"));
             body.push_str(&format!("    ts: \"{ts}\"\n"));
             body.push_str(&format!("    host: {host}\n"));
-            if !reason.is_empty() {
-                body.push_str("\nevents:\n");
-                body.push_str(&format!("  - packet_id: {pid}\n"));
-                body.push_str("    event:\n");
-                body.push_str("      type: note\n");
-                body.push_str(&format!("      ts: \"{ts}\"\n"));
-                body.push_str(&format!("      host: {host}\n"));
-                body.push_str(&format!(
-                    "      summary: >\n        {}\n",
-                    reason.replace('\n', " ")
+            let mut event_blocks: Vec<(String, String)> = Vec::new();
+            if let Some(refs) = &reopen_evidence {
+                // The mandatory record for a ladder downgrade (650-dq6u): the
+                // falsified event IS the transition; the LWW row above merely
+                // mirrors it into the header.
+                event_blocks.push((
+                    "falsified".to_string(),
+                    format!(
+                        "falsified '{current}' claim; evidence: {} — status set to '{value}', new attempt epoch",
+                        refs.replace('\n', " ")
+                    ),
                 ));
+            } else if let Some(refs) = &evidence {
+                // 696-6byc: the event TYPE must follow the status being written.
+                // This was hardcoded to `completed`, which was harmless while
+                // every status worth attaching evidence to was terminal. The
+                // 650-dq6u ladder added the non-terminal `implemented` rung, and
+                // from then on an honest `--evidence "..."` on a non-terminal
+                // rung emitted a fragment claiming completion in the event
+                // stream while the status channel said otherwise —
+                // check-fragment-status-loss.sh (correctly) refused it, AFTER
+                // the write and AFTER a commit, and its remedy text describes
+                // the other violation class. It cost two cycles on this host in
+                // one hour before being fixed here.
+                let (event_type, prefix) = evidence_event_shape(&value);
+                event_blocks.push((
+                    event_type.to_string(),
+                    format!("{prefix}: {}", refs.replace('\n', " ")),
+                ));
+            }
+            if !reason.is_empty() {
+                event_blocks.push(("note".to_string(), reason.replace('\n', " ")));
+            }
+            if !event_blocks.is_empty() {
+                body.push_str("\nevents:\n");
+                for (etype, summary) in &event_blocks {
+                    body.push_str(&format!("  - packet_id: {pid}\n"));
+                    body.push_str("    event:\n");
+                    body.push_str(&format!("      type: {etype}\n"));
+                    body.push_str(&format!("      ts: \"{ts}\"\n"));
+                    body.push_str(&format!("      host: {host}\n"));
+                    body.push_str(&format!("      summary: >\n        {summary}\n"));
+                }
             }
 
             if let Err(e) = std::fs::write(&path, body) {
@@ -2235,8 +3306,214 @@ fn main() {
                 path.display()
             );
         }
+        "expire-claims" => {
+            // ORDER 672-bz7u — 641-e2qa criterion 2: a claim that produces no
+            // event within its cycle must return the packet to ready
+            // automatically. Lives HERE and not in bash because the claim age
+            // is only knowable from the folded ledger, and grepping for it
+            // shell-side is the brittle parsing 456 eliminated.
+            let mut ttl_hours: i64 = 24;
+            let mut dry_run = false;
+            let mut now_epoch: Option<i64> = None;
+            let mut host =
+                std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string());
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--ttl-hours" => {
+                        i += 1;
+                        ttl_hours = match args.get(i).and_then(|s| s.parse().ok()) {
+                            Some(n) => n,
+                            None => {
+                                eprintln!("error: --ttl-hours needs an integer argument");
+                                std::process::exit(2);
+                            }
+                        };
+                    }
+                    "--dry-run" => dry_run = true,
+                    "--now-epoch" => {
+                        i += 1;
+                        now_epoch = match args.get(i).and_then(|s| s.parse().ok()) {
+                            Some(n) => Some(n),
+                            None => {
+                                eprintln!("error: --now-epoch needs unix seconds");
+                                std::process::exit(2);
+                            }
+                        };
+                    }
+                    "--host" => {
+                        i += 1;
+                        match args.get(i) {
+                            Some(h) => host = h.clone(),
+                            None => {
+                                eprintln!("error: --host needs a value");
+                                std::process::exit(2);
+                            }
+                        }
+                    }
+                    other => {
+                        eprintln!("error: unknown expire-claims flag '{other}'");
+                        std::process::exit(2);
+                    }
+                }
+                i += 1;
+            }
+            if ttl_hours < 1 {
+                eprintln!("error: --ttl-hours must be >= 1 (got {ttl_hours})");
+                std::process::exit(2);
+            }
+            let now = now_epoch.unwrap_or_else(|| {
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0)
+            });
+            let cutoff = answer::epoch_to_iso8601(now - ttl_hours * 3600);
+            let now_iso = answer::epoch_to_iso8601(now);
+            let (expired, unknown) = expire_claim_candidates(&ledger, &cutoff);
+            let label = if dry_run {
+                "expire-candidate"
+            } else {
+                "expired-claim"
+            };
+            for (order, pid, last) in &expired {
+                emit(&format!("{label}\t{order}\t{pid}\t{last}"));
+            }
+            for (order, pid) in &unknown {
+                emit(&format!("unknown-age\t{order}\t{pid}\tnever-expired"));
+            }
+            if !dry_run && !expired.is_empty() {
+                let compact = loop_status::iso_to_compact(&now_iso);
+                let suffix = format!(
+                    "{:08x}",
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.subsec_nanos())
+                        .unwrap_or(0)
+                );
+                let dir = fragments::fragment_dir(&index);
+                if let Err(e) = std::fs::create_dir_all(&dir) {
+                    eprintln!("error: create {}: {e}", dir.display());
+                    std::process::exit(1);
+                }
+                let path = dir.join(fragments::fragment_name(&compact, &suffix, &host));
+                let mut body = String::new();
+                body.push_str("# Ledger fragment — append-only, IMMUTABLE once written.\n");
+                body.push_str("# Written by: tillandsias-plan expire-claims (order 672-bz7u).\n");
+                body.push_str("status:\n");
+                for (_, pid, _) in &expired {
+                    body.push_str(&format!("  - packet_id: {pid}\n"));
+                    body.push_str("    field: status\n");
+                    body.push_str("    value: ready\n");
+                    body.push_str(&format!("    ts: \"{now_iso}\"\n"));
+                    body.push_str(&format!("    host: {host}\n"));
+                }
+                body.push_str("\nevents:\n");
+                for (_, pid, last) in &expired {
+                    body.push_str(&format!("  - packet_id: {pid}\n"));
+                    body.push_str("    event:\n");
+                    body.push_str("      type: progress\n");
+                    body.push_str(&format!("      ts: \"{now_iso}\"\n"));
+                    body.push_str(&format!("      host: {host}\n"));
+                    body.push_str(&format!(
+                        "      summary: >\n        Claim expired by tillandsias-plan expire-claims: in_progress \
+                         with no recorded activity since {last} (TTL {ttl_hours}h). Returned \
+                         to ready automatically per 641-e2qa criterion 2.\n"
+                    ));
+                }
+                if let Err(e) = std::fs::write(&path, body) {
+                    eprintln!("error: write {}: {e}", path.display());
+                    std::process::exit(1);
+                }
+                emit(&format!("fragment: {}", path.display()));
+            }
+            let total = query_packets(
+                &ledger,
+                Some("in_progress"),
+                None,
+                None,
+                None,
+                &[],
+                usize::MAX,
+            )
+            .len();
+            emit(&format!(
+                "summary: in_progress={total} expired={} unknown_age={} ttl_hours={ttl_hours} mode={}",
+                expired.len(),
+                unknown.len(),
+                if dry_run { "dry-run" } else { "write" }
+            ));
+        }
         other => unknown_subcommand(other),
     }
+    log_cli_usage(&subcommand, "answered", start_time.elapsed().as_millis());
+}
+
+/// ORDER 672-bz7u. The candidate selection for `expire-claims`, split out so
+/// the policy is unit-testable without a filesystem: given the folded ledger
+/// and a cutoff timestamp, partition every `in_progress` packet into
+/// (expired, unknown_age). A packet expires when its NEWEST recorded event
+/// timestamp — any event type; `filed` counts, because a claim filed
+/// in_progress with nothing after it is exactly the stranded signature — is
+/// lexicographically older than the cutoff. Lexicographic comparison is sound
+/// because every ledger timestamp is `YYYY-MM-DDTHH:MM:SSZ` (UTC, fixed
+/// width); a timestamp that does not start with four digits is treated as
+/// unparseable. A packet with NO parseable timestamp is never expired: age
+/// unknown is not age infinite, and guessing marks live work abandoned —
+/// the most expensive version of the 641-e2qa bug.
+///
+/// Expired rows are `(order, packet_id, last_activity_ts)`; unknown-age rows
+/// are `(order, packet_id)`.
+type ExpiredClaim<'a> = (String, &'a str, String);
+type UnknownAgeClaim<'a> = (String, &'a str);
+
+fn expire_claim_candidates<'a>(
+    ledger: &'a Ledger,
+    cutoff_iso: &str,
+) -> (Vec<ExpiredClaim<'a>>, Vec<UnknownAgeClaim<'a>>) {
+    let mut expired: Vec<(String, &str, String)> = Vec::new();
+    let mut unknown: Vec<(String, &str)> = Vec::new();
+    for p in query_packets(
+        ledger,
+        Some("in_progress"),
+        None,
+        None,
+        None,
+        &[],
+        usize::MAX,
+    ) {
+        let Some(pid) = str_field(p, "packet_id") else {
+            continue;
+        };
+        let order = p
+            .get("order")
+            .map(|v| match v {
+                serde_yaml::Value::Number(n) => n.to_string(),
+                serde_yaml::Value::String(s) => s.clone(),
+                _ => "?".into(),
+            })
+            .unwrap_or_else(|| "?".into());
+        let mut last_ts: Option<String> = None;
+        if let Some(seq) = p.get("events").and_then(serde_yaml::Value::as_sequence) {
+            for ev in seq {
+                let Some(ts) = ev.get("ts").and_then(serde_yaml::Value::as_str) else {
+                    continue;
+                };
+                if ts.len() < 4 || !ts.as_bytes()[..4].iter().all(u8::is_ascii_digit) {
+                    continue;
+                }
+                if last_ts.as_deref().is_none_or(|cur| ts > cur) {
+                    last_ts = Some(ts.to_string());
+                }
+            }
+        }
+        match last_ts {
+            Some(ts) if ts.as_str() < cutoff_iso => expired.push((order, pid, ts)),
+            Some(_) => {}
+            None => unknown.push((order, pid)),
+        }
+    }
+    (expired, unknown)
 }
 
 #[cfg(test)]
@@ -2244,6 +3521,43 @@ mod tests {
     use super::*;
     use answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
     use std::collections::BTreeMap;
+
+    /// 696-6byc. A non-terminal ladder rung written with `--evidence` must NOT
+    /// emit a terminal event: doing so makes the fragment claim completion in
+    /// the event stream while its status channel says otherwise, which
+    /// check-fragment-status-loss.sh refuses — after the write, after a commit.
+    #[test]
+    fn evidence_event_type_follows_the_status_being_written() {
+        let (ty, prefix) = evidence_event_shape("implemented");
+        assert_eq!(
+            ty, "progress",
+            "the non-terminal `implemented` rung must not emit a terminal event"
+        );
+        assert!(
+            prefix.contains("not terminal"),
+            "the summary must not read as a completion claim; got: {prefix}"
+        );
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik). A fix that simply stopped emitting
+    /// `completed` for everything would satisfy the test above while destroying
+    /// the signal that real closures depend on. Every genuinely terminal status
+    /// must still produce a terminal event.
+    #[test]
+    fn terminal_statuses_still_emit_a_completion_event() {
+        for status in ["completed", "verified", "done", "obsoleted"] {
+            let (ty, prefix) = evidence_event_shape(status);
+            assert_eq!(
+                ty, "completed",
+                "terminal status {status:?} must still emit a completion event — \
+                 otherwise closures stop being recorded at all"
+            );
+            assert!(
+                !prefix.contains("not terminal"),
+                "terminal status {status:?} must not be labelled non-terminal"
+            );
+        }
+    }
 
     /// ORDER 569. The manifest is read by THREE parties — this binary, the forge
     /// wrapper, and lib-common.sh — and two of them are shell. A token carrying a
@@ -2253,6 +3567,37 @@ mod tests {
     /// Sorted + unique is not cosmetic either: the shell side compares the two
     /// capability sets as sorted token lists, and a duplicate would make a set
     /// difference report a phantom missing capability.
+    /// ORDER 672-bz7u. The expiry policy's three-way partition, pinned:
+    /// stale-in_progress expires, fresh-in_progress is untouched, and a
+    /// packet with no parseable activity timestamp is reported but NEVER
+    /// expired. Completed packets are invisible to the sweep entirely.
+    #[test]
+    fn expire_claims_partitions_stale_fresh_and_unknown_age() {
+        let raw = concat!(
+            "packets:\n",
+            "  - packet_id: stale\n    order: 1\n    title: \"s\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n      - type: filed\n        ts: \"2026-08-01T00:00:00Z\"\n",
+            "  - packet_id: fresh\n    order: 2\n    title: \"f\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "    events:\n      - type: filed\n        ts: \"2026-08-01T00:00:00Z\"\n",
+            "      - type: progress\n        ts: \"2026-08-10T00:00:00Z\"\n",
+            "  - packet_id: ageless\n    order: 3\n    title: \"a\"\n    status: in_progress\n    desired_release: v0.5\n",
+            "  - packet_id: done\n    order: 4\n    title: \"d\"\n    status: completed\n    desired_release: v0.5\n",
+            "    events:\n      - type: completed\n        ts: \"2026-08-01T00:00:00Z\"\n",
+        );
+        let ledger = Ledger::parse(raw, Default::default()).expect("synthetic ledger parses");
+        let (expired, unknown) = expire_claim_candidates(&ledger, "2026-08-09T00:00:00Z");
+        assert_eq!(
+            expired,
+            vec![("1".to_string(), "stale", "2026-08-01T00:00:00Z".to_string())],
+            "only the stale in_progress claim expires; the fresh one's newest event is inside the TTL"
+        );
+        assert_eq!(
+            unknown,
+            vec![("3".to_string(), "ageless")],
+            "no-timestamp packets are reported as unknown-age, never expired"
+        );
+    }
+
     #[test]
     fn the_capability_manifest_is_a_sorted_unique_shell_safe_token_list() {
         let tokens = capability_tokens();
@@ -2526,6 +3871,80 @@ mod tests {
     /// case-insensitive substring, capability_tags all-must-match, then a
     /// limit. Release is the order-606 additive constraint; the others retain
     /// the semantics project-info's yq/jq pipeline used.
+    /// Order 632-retq. The urgency tiers the batch selector scores on, moved
+    /// out of an awk block that only a host with jq ever reached.
+    #[test]
+    fn urgency_ranks_explicit_priority_then_kind_then_unscored() {
+        // Tier 1: the operator said so.
+        assert_eq!(urgency_rank_and_display(Some("p0"), None), (0, "p0".into()));
+        assert_eq!(
+            urgency_rank_and_display(Some("p2"), Some("bug")),
+            (2, "p2".into()),
+            "an explicit priority must dominate a kind that would rank differently"
+        );
+        // Tier 2: derived from kind, correctness before forward-progress
+        // before research.
+        assert_eq!(
+            urgency_rank_and_display(None, Some("security")),
+            (4, "kind:security".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("enhancement")),
+            (5, "kind:enhancement".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("docs")),
+            (6, "kind:docs".into())
+        );
+        // Tier 3, and the point of order 630-6hyc: NEITHER signal present is
+        // reported as unscored, never coerced to a plausible p3. The coercion
+        // made the urgency term a constant 0 for ~82% of the pool, and looked
+        // exactly like a genuine p3 while doing it.
+        assert_eq!(
+            urgency_rank_and_display(None, None),
+            (99, "unscored".into())
+        );
+        assert_eq!(
+            urgency_rank_and_display(None, Some("some-new-kind")),
+            (99, "unscored".into()),
+            "an unrecognised kind is unscored, not silently ranked"
+        );
+        assert_ne!(
+            urgency_rank_and_display(None, None).0,
+            urgency_rank_and_display(Some("p3"), None).0,
+            "unscored must be distinguishable from p3 — conflating them IS the defect"
+        );
+    }
+
+    /// An unresolvable dependency counts as BLOCKING, matching the resolver's
+    /// conservatism: an id that resolves to nothing is an unanswered question,
+    /// not an absent constraint.
+    #[test]
+    fn dependency_clearance_treats_unknown_ids_as_blocking() {
+        let mut terminal = std::collections::BTreeSet::new();
+        terminal.insert("done-thing".to_string());
+        assert!(dependencies_are_clear(&[], &terminal), "no deps is clear");
+        assert!(dependencies_are_clear(
+            &["done-thing".to_string()],
+            &terminal
+        ));
+        assert!(
+            !dependencies_are_clear(&["open-thing".to_string()], &terminal),
+            "an open dependency blocks"
+        );
+        assert!(
+            !dependencies_are_clear(&["typo-or-retired".to_string()], &terminal),
+            "an id that resolves to nothing blocks — it is a question, not an absence"
+        );
+        assert!(
+            !dependencies_are_clear(
+                &["done-thing".to_string(), "open-thing".to_string()],
+                &terminal
+            ),
+            "one blocking dependency blocks the packet"
+        );
+    }
+
     #[test]
     fn query_packets_reproduces_plan_query_filter_semantics() {
         let led = Ledger::parse(
@@ -2648,5 +4067,28 @@ mod tests {
                     .to_string()
             })
             .collect()
+    }
+
+    #[test]
+    fn query_json_projection_includes_lease_field() {
+        let raw = concat!(
+            "packet_id: unleased-sample\n",
+            "order: 123\n",
+            "title: \"Unleased\"\n",
+            "status: ready\n",
+            "desired_release: v0.5\n",
+        );
+        let val: serde_yaml::Value = serde_yaml::from_str(raw).unwrap();
+        let proj = query_json_projection(&val);
+        assert!(proj.get("lease").is_some());
+        assert_eq!(proj["lease"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn utc_now_iso_produces_non_empty_utc_format() {
+        let ts = utc_now_iso();
+        assert!(ts.ends_with('Z'));
+        assert!(ts.contains('T'));
+        assert_eq!(ts.len(), 20);
     }
 }

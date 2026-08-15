@@ -1,0 +1,36 @@
+# @trace spec:macos-native-tray
+# @trace order:620-duta (macOS half of exit criterion 3)
+name: litmus:macos-tray-import-surface
+spec: macos-native-tray
+phase: pre-build
+description: The macOS tray binary links ONLY OS-shipped libraries — the zero-runtime-dependency portable promise, made measurable
+severity: high
+size: instant
+
+# Order 620-duta: "a litmus pins the installed tray's dependency/import
+# surface" — this is the macOS half. The curl+tar install path promises a
+# zero-dependency portable tool; a third-party dylib (Homebrew /opt/homebrew,
+# MacPorts /opt/local, @rpath vendored libs) would break every machine that
+# lacks it, silently, at launch. Verified baseline 2026-08-11: libSystem,
+# libiconv, libobjc + CoreFoundation/CoreServices/SystemConfiguration/
+# Virtualization/AppKit/Foundation — all /usr/lib or /System/Library.
+
+preconditions:
+  - a built or installed Tillandsias.app bundle is reachable
+
+critical_path:
+  - step: "every linked library is OS-shipped (/usr/lib or /System/Library)"
+    command: "[ \"$(uname)\" = Darwin ] || { echo 'ok: import surface (non-macOS skip)'; exit 0; }; BIN=''; for c in dist/Tillandsias.app/Contents/MacOS/tillandsias-tray /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray; do [ -x \"$c\" ] && BIN=\"$c\" && break; done; [ -n \"$BIN\" ] || { echo 'ok: import surface (no bundle present — skip)'; exit 0; }; BAD=$(otool -L \"$BIN\" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/Library/)' || true); if [ -n \"$BAD\" ]; then echo \"FAIL: non-OS import(s): $BAD\"; exit 1; fi; echo 'ok: import surface OS-only'"
+    success_pattern: "ok: import surface"
+    timeout_ms: 15000
+
+observability:
+  traces:
+    - "@trace spec:macos-native-tray"
+  expected_log: "macOS tray import surface confined to OS-shipped libraries"
+  log_fields:
+    spec: "macos-native-tray"
+    test: "macos-tray-import-surface"
+
+rollback:
+  on_failure: "identify the crate/build change that introduced the non-OS dylib; static-link or vendor it, or gate the dependency out of the tray build"

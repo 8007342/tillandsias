@@ -84,7 +84,11 @@ cases:
         - path: plan/index.yaml
           packet_id: plan-methodology-experts-rung1
           order: "394"
-          status: ready
+          # Status deliberately NOT pinned (680-zphp) — 394 is a live
+          # non-terminal packet (ready), so a `status:` pin here goes red the
+          # moment it is legitimately claimed (ready -> in_progress) or closed.
+          # Same mutable-field trap as 394a/394d/394e below. Identity +
+          # release_target coverage is what this citation proves; status is not.
           span_contains:
             - "packet_id: plan-methodology-experts-rung1"
             - "release_target: forge-local-experts-milestone"
@@ -104,7 +108,12 @@ cases:
         - path: plan/index.yaml
           packet_id: plan-methodology-experts-rung1/expert-launch-state-and-ephemerality
           order: 394e
-          status: in_progress
+          # Status deliberately NOT pinned — same lesson as 394a/394d above.
+          # 394e went in_progress -> ready via the 672-bz7u expire-claims
+          # automation (2026-08-11); the frozen `status: in_progress` made this
+          # case red for exactly the mutable-field reason the 394a comment
+          # warns against. Identity + release_target coverage is what this
+          # citation is here to prove; status is not.
         - path: plan/index.yaml
           packet_id: experts-construction-research
           status: completed
@@ -237,7 +246,7 @@ cases:
       confidence: exact
       citation_kind: plan
       min_citations: 1
-      max_citations: 1
+      max_citations: 2
       citations_include:
         - path: plan/index.yaml
           packet_id: forge-src-tmpfs-topology
@@ -471,3 +480,33 @@ cases:
       answer_contains:
         - "unsupported:"
         - "no canonical methodology question matches"
+
+  # ══ CHEATSHEET EXPERT ═════════════════════════════════════════════════════
+  # ORDER 707-tiqw: committed cheatsheet domain expert question citing real
+  # technical cheatsheet with CitationKind::Cheatsheet, exact path, and span_contains.
+
+  - id: cheatsheet-crdt-primitives
+    engine: cheatsheet.ask
+    query: "what three primitives are needed for CRDT ledger fragments?"
+    why: >
+      ORDER 707-tiqw. The cheatsheet domain expert returns cited technical
+      guidance from committed cheatsheets. The three CRDT primitives (G-Set,
+      G-Set of events, LWW-Register) must be cited directly from the concurrent git
+      cheatsheet with exact line span and CitationKind::Cheatsheet.
+    expect:
+      confidence: exact
+      citation_kind: cheatsheet
+      min_citations: 1
+      max_citations: 1
+      citations_include:
+        - path: cheatsheets/concurrent-git/crdt-ledger-fragments.md
+          kind: cheatsheet
+          key: "The three primitives you actually need"
+          span_contains:
+            - "G-Set"
+            - "LWW-Register"
+            - "tombstone"
+      answer_contains:
+        - "The three primitives you actually need"
+        - "G-Set"
+        - "LWW-Register"

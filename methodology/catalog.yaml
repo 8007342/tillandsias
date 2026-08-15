@@ -22,6 +22,9 @@ methodology_catalog:
     verification:
       file: methodology/verification.yaml
       provides: "S-levels, L-levels, evidence bundles."
+    mo_full_attestation:
+      file: methodology/mo-full-attestation.yaml
+      provides: "Durable full-mode terminal attestation record and its gate."
     provenance:
       file: methodology/provenance.yaml
       provides: "Claim provenance, sources, limits, falsification signals."

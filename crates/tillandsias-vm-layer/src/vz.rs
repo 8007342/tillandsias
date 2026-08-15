@@ -144,6 +144,40 @@ impl VzRuntime {
         self.image_root.join("initramfs.img")
     }
 
+    /// Largest `console.log` we keep before rotating (690-cb62).
+    ///
+    /// Chosen against the measured growth rate — ~680 bytes per VM start on
+    /// this host — so a cap of 4 MiB holds on the order of six thousand boots
+    /// of history before anything is displaced. Generous enough that the log
+    /// stays useful for debugging a boot problem, bounded enough that it can
+    /// never grow without limit on a long-lived install.
+    const CONSOLE_LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
+
+    /// RETENTION POLICY, stated where the file is opened (690-cb62): at most
+    /// TWO generations — `console.log` and `console.log.prev` — each bounded by
+    /// [`Self::CONSOLE_LOG_MAX_BYTES`], so total on-disk is bounded by twice
+    /// that.
+    ///
+    /// Rotation rather than truncation: a boot problem is usually diagnosed
+    /// from the boot BEFORE the one that failed to come up, and truncating in
+    /// place would discard exactly that. Rotating keeps a full previous
+    /// generation intact.
+    ///
+    /// Best-effort by construction — this runs on the VM start path, and a
+    /// logging-hygiene failure must never prevent a VM from booting. Every
+    /// error is swallowed deliberately; the worst case is the pre-690-cb62
+    /// behaviour of an unbounded file.
+    fn rotate_console_log_if_oversized(path: &std::path::Path) {
+        let Ok(md) = std::fs::metadata(path) else {
+            return; // absent (first boot) — nothing to rotate
+        };
+        if md.len() <= Self::CONSOLE_LOG_MAX_BYTES {
+            return;
+        }
+        let prev = path.with_extension("log.prev");
+        let _ = std::fs::rename(path, &prev);
+    }
+
     /// Path of the early-boot serial console log.
     pub fn console_log_path(&self) -> PathBuf {
         self.image_root.join("console.log")
@@ -1365,6 +1399,13 @@ impl VmRuntime for VzRuntime {
             .load(std::sync::atomic::Ordering::Relaxed)
         {
             use std::os::fd::IntoRawFd;
+            // 690-cb62: bound the log before opening it append. Every VM start
+            // appends a boot banner plus the getty's terminal-probe escapes, and
+            // nothing pruned it — the only code that removed console.log was the
+            // destructive reset. Measured on this host: 43 KB / 62 boots, then
+            // 54 KB / 78 boots ~22 hours later, i.e. ~680 bytes per start and
+            // strictly monotonic. Not urgent by volume; unbounded by design.
+            Self::rotate_console_log_if_oversized(&self.console_log_path());
             std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -2100,6 +2141,85 @@ mod tests {
         assert!(rt.kernel_path().starts_with(tmp.path()));
         assert!(rt.initrd_path().starts_with(tmp.path()));
         assert!(rt.console_log_path().starts_with(tmp.path()));
+    }
+
+    /// 690-cb62. An oversized console.log must be ROTATED, not left to grow —
+    /// nothing pruned this file before, and the only code that ever removed it
+    /// was the destructive reset. Rotation rather than in-place truncation
+    /// because a boot problem is usually diagnosed from the boot BEFORE the one
+    /// that failed, which truncation would discard.
+    #[test]
+    fn oversized_console_log_is_rotated_to_a_previous_generation() {
+        let tmp = std::env::temp_dir().join(format!(
+            "tillandsias-690cb62-rotate-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&tmp).expect("temp dir");
+        let log = tmp.join("console.log");
+        let oversized = vec![b'x'; (VzRuntime::CONSOLE_LOG_MAX_BYTES + 1) as usize];
+        std::fs::write(&log, &oversized).expect("write oversized");
+
+        VzRuntime::rotate_console_log_if_oversized(&log);
+
+        assert!(
+            !log.exists(),
+            "the oversized log must be moved aside so the next open starts fresh"
+        );
+        assert!(
+            log.with_extension("log.prev").exists(),
+            "the previous generation must be PRESERVED, not deleted — it holds the \
+             boot before the one being debugged"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the rotation above. A rotator
+    /// that fired unconditionally would satisfy that test while destroying the
+    /// log on every single boot — leaving an operator with one boot of history
+    /// exactly when they need several. An under-cap log must be untouched.
+    #[test]
+    fn console_log_under_the_cap_is_left_alone() {
+        let tmp = std::env::temp_dir().join(format!(
+            "tillandsias-690cb62-keep-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&tmp).expect("temp dir");
+        let log = tmp.join("console.log");
+        std::fs::write(&log, b"a few boots worth of serial output").expect("write small");
+
+        VzRuntime::rotate_console_log_if_oversized(&log);
+
+        assert!(
+            log.exists(),
+            "a log under the cap must NOT be rotated — otherwise every boot discards history"
+        );
+        assert!(
+            !log.with_extension("log.prev").exists(),
+            "no previous generation should be created for an under-cap log"
+        );
+        assert_eq!(
+            std::fs::read(&log).expect("readable"),
+            b"a few boots worth of serial output",
+            "an under-cap log must be byte-identical after the check"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// An absent log (first boot ever) must be a no-op, not an error path.
+    #[test]
+    fn absent_console_log_rotates_without_error() {
+        let missing = std::env::temp_dir().join(format!(
+            "tillandsias-690cb62-absent-{}-{}/console.log",
+            std::process::id(),
+            line!()
+        ));
+        VzRuntime::rotate_console_log_if_oversized(&missing);
+        assert!(
+            !missing.exists(),
+            "nothing should be created for an absent log"
+        );
     }
 
     /// `VzRuntime` must be `Send + Sync` to satisfy the `VmRuntime` trait

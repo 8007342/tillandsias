@@ -67,22 +67,89 @@ compute() {
     # failed every real checkout with "Is a directory" and never wrote a stamp.
     # Hash the link target text instead. Refuse any other non-file entry rather
     # than silently claiming that an unmeasured tree was validated.
-    git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
-        | LC_ALL=C sort -z \
-        | while IFS= read -r -d '' path; do
-            absolute="$REPO_ROOT/$path"
-            if [[ -L "$absolute" ]]; then
-                digest="$(readlink "$absolute" | sha256sum | cut -d' ' -f1)" || exit 1
-                printf 'symlink\0%s\0%s\0' "$path" "$digest"
-            elif [[ -f "$absolute" ]]; then
-                digest="$(sha256sum "$absolute" | cut -d' ' -f1)" || exit 1
-                printf 'file\0%s\0%s\0' "$path" "$digest"
-            else
-                echo "gate-stamp: unsupported worktree entry: $path" >&2
-                exit 1
-            fi
-        done \
-        | sha256sum | cut -d' ' -f1
+    # PROCESS COUNT IS THE BUDGET (order 675-dkif, 2026-08-10). The original loop
+    # spawned sha256sum once (twice, with the $() subshell) PER FILE. On Linux
+    # that is the advertised ~60ms; on a Windows/MSYS host a process spawn
+    # costs ~100-150ms, so ~4000 files became a ~20-MINUTE pre-push hook —
+    # which is precisely the "multi-minute hook gets --no-verify'd" failure
+    # this stamp exists to avoid. Classification uses bash builtins (no
+    # forks), regular files are batch-hashed by xargs in a handful of
+    # sha256sum invocations, and only symlinks (rare) pay a per-entry spawn.
+    # The emitted frames are BYTE-IDENTICAL to the per-file implementation,
+    # so existing stamps stay valid across this change.
+    local -a paths=() kinds=() file_digests=() symlink_digests=()
+    local path absolute digest line i
+    while IFS= read -r -d '' path; do
+        absolute="$REPO_ROOT/$path"
+        if [[ -L "$absolute" ]]; then
+            kinds+=(symlink) paths+=("$path")
+        elif [[ -f "$absolute" ]]; then
+            kinds+=(file) paths+=("$path")
+        elif [[ ! -e "$absolute" ]]; then
+            # DELETED tracked entry (order 695-nvnd). `ls-files --cached` reads the
+            # INDEX, so a file deleted from the worktree is still listed here and
+            # used to hit the refusal below — on a tree where every gate check had
+            # just passed. `tillandsias-plan compact` deletes the fragments it
+            # folded, which IS compaction, so every compacting cycle paid the
+            # slowest step in the cycle twice: once green-but-unstamped, once
+            # green-and-stamped.
+            #
+            # The entry is DROPPED from the hashed list, not recorded as deleted.
+            # That is what keeps the stamp commit-invariant, which is the property
+            # the whole design rests on ("staging is invisible, committing is
+            # invisible, editing is not"): committing a deletion removes the path
+            # from the index, so a `deleted` frame would vanish at commit time and
+            # go stale at exactly the moment the hook checks it. Dropping it makes
+            # the two enumerations agree.
+            #
+            # This does not weaken the stamp. The deleted path's frame — its name
+            # AND its content digest — disappears from the hash, so a deletion
+            # still changes the stamp exactly as an edit does; it cannot ride an
+            # older stamp to the trunk. And it stays distinct from an unreadable
+            # file: an unreadable file EXISTS, so it falls through to the refusal
+            # below. Absent is not the same as unmeasured.
+            continue
+        else
+            echo "gate-stamp: unsupported worktree entry: $path" >&2
+            return 1
+        fi
+    done < <(git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard 2>/dev/null \
+        | LC_ALL=C sort -z)
+
+    local nfiles=0
+    while IFS= read -r line; do
+        file_digests+=("${line%% *}")
+    done < <(
+        for ((i = 0; i < ${#paths[@]}; i++)); do
+            [[ "${kinds[i]}" == file ]] && printf '%s\0' "$REPO_ROOT/${paths[i]}"
+        done | xargs -0 -r sha256sum
+    )
+    for ((i = 0; i < ${#paths[@]}; i++)); do
+        [[ "${kinds[i]}" == file ]] && nfiles=$((nfiles + 1))
+    done
+    if [[ "${#file_digests[@]}" -ne "$nfiles" ]]; then
+        # A missing digest means an unreadable file; claiming an unmeasured
+        # tree was validated is the one thing this stamp must never do.
+        echo "gate-stamp: hashed ${#file_digests[@]} of $nfiles regular files" >&2
+        return 1
+    fi
+    for ((i = 0; i < ${#paths[@]}; i++)); do
+        if [[ "${kinds[i]}" == symlink ]]; then
+            digest="$(readlink "$REPO_ROOT/${paths[i]}" | sha256sum | cut -d' ' -f1)" || return 1
+            symlink_digests+=("$digest")
+        fi
+    done
+
+    local fidx=0 sidx=0
+    for ((i = 0; i < ${#paths[@]}; i++)); do
+        if [[ "${kinds[i]}" == symlink ]]; then
+            printf 'symlink\0%s\0%s\0' "${paths[i]}" "${symlink_digests[sidx]}"
+            sidx=$((sidx + 1))
+        else
+            printf 'file\0%s\0%s\0' "${paths[i]}" "${file_digests[fidx]}"
+            fidx=$((fidx + 1))
+        fi
+    done | sha256sum | cut -d' ' -f1
 }
 
 case "${1:-verify}" in

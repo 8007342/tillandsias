@@ -3116,6 +3116,7 @@ dependencies = [
  "chrono",
  "dirs",
  "futures",
+ "getrandom 0.4.2",
  "hyper 1.9.0",
  "image",
  "keyring",
@@ -3210,6 +3211,7 @@ dependencies = [
  "objc2-virtualization",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "tillandsias-control-wire",
  "tillandsias-core",
@@ -3394,6 +3396,7 @@ dependencies = [
 name = "tillandsias-windows-tray"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "embed-resource",
  "serde",
  "serde_json",

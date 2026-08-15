@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
@@ -84,6 +84,7 @@ pub fn set_in_vm_credentials(
         return;
     }
 
+    let share_for_disk = unseal_share_b64.clone();
     let cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
         *guard = Some(InVmCredentials {
@@ -93,11 +94,17 @@ pub fn set_in_vm_credentials(
         });
     }
 
-    if let Some(token) = root_token
-        && let Ok(cache_dir) = crate::init_cache_dir()
-    {
-        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
-        let _ = std::fs::write(&fallback_file, token);
+    // 701-se6x: persist BOTH, not just the token. This function used to write
+    // `fallback_vault-root-token-v1` and drop the delivered share on the floor —
+    // the identical asymmetry 694-mhz8 fixed at the fresh-init site, surviving
+    // here. It matters because `has_shamir_share_in_keyring` (the predicate the
+    // partial-init WIPE turns on) consults an OS keychain, absent in this guest,
+    // and then this file. So a guest that had lost only its share file would be
+    // handed a perfectly good share by the host, use it in memory, still fail
+    // the predicate, and have its intact Vault wiped on the next launch — the
+    // host had the evidence and the guest threw it away.
+    if let Ok(cache_dir) = crate::init_cache_dir() {
+        write_vm_credential_fallbacks(&cache_dir, root_token.as_deref(), share_for_disk.as_deref());
     }
 }
 
@@ -773,7 +780,10 @@ const VAULT_EXEC_ADDR: &str = "https://127.0.0.1:8200";
 /// read after the move from the HTTP Vault client to `podman exec`.
 ///
 /// @trace spec:tillandsias-vault, plan/issues/vault-exec-env-regression-2026-06-27.md
-fn vault_exec_command(root_token: &str, vault_args: &[&str]) -> std::process::Command {
+fn vault_exec_command(
+    root_token: &str,
+    vault_args: &[&str],
+) -> tillandsias_podman::SyncPodmanCommand {
     let mut cmd = podman_cmd_sync();
     // Token in the podman process env → forwarded by name-only `-e VAULT_TOKEN`,
     // so it stays out of argv.
@@ -838,7 +848,7 @@ pub(crate) fn is_github_key_present() -> bool {
     )
     .stdout(std::process::Stdio::null())
     .stderr(std::process::Stdio::null())
-    .status()
+    .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
     .map(|s| s.success())
     .unwrap_or(false)
 }
@@ -866,7 +876,7 @@ pub(crate) fn vault_kv_get_via_exec(
     let root_token = read_and_handover_root_token(debug)?;
     let field_arg = format!("-field={field}");
     let output = vault_exec_command(&root_token, &["kv", "get", &field_arg, secret_path])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("podman exec {VAULT_CONTAINER_NAME} vault kv get: {e}"))?;
     if output.status.success() {
         let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -912,7 +922,7 @@ pub(crate) fn opencode_auth_content_available(debug: bool) -> Result<bool, Strin
     // never enters launcher memory. The scoped forge reads it later.
     command.stdout(Stdio::null());
     let output = command
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|error| format!("OpenCode Vault auth availability command failed: {error}"))?;
     if output.status.success() {
         return Ok(true);
@@ -1105,7 +1115,7 @@ pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
         ])
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .status()
+        .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map(|s| s.success())
         .unwrap_or(false)
 }
@@ -1121,6 +1131,32 @@ fn vault_data_volume_exists() -> bool {
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("vault-data");
     dir.exists()
+}
+
+/// Persist the in-VM credential fallback files.
+///
+/// Inside the VM there is no OS keychain, so these files are the only durable
+/// record that `operator init` completed and the host-visible handover was
+/// produced. Each value is written only when present: a caller that has the
+/// token but not the share writes only the token, which keeps a genuine
+/// partial init detectable (694-mhz8).
+///
+/// Best-effort by design — a failure here must not abort a successful init;
+/// the worst case is the pre-694 behavior.
+fn write_vm_credential_fallbacks(
+    cache_dir: &std::path::Path,
+    token: Option<&str>,
+    share_b64: Option<&str>,
+) {
+    if let Some(token) = token {
+        let _ = fs::write(cache_dir.join("fallback_vault-root-token-v1"), token);
+    }
+    if let Some(share_b64) = share_b64 {
+        let _ = fs::write(
+            cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")),
+            share_b64,
+        );
+    }
 }
 
 /// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
@@ -1259,7 +1295,7 @@ pub async fn mint_approle_auto_auth_for_container(
                 .args(["secret", "rm", &secret_name])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
-                .status();
+                .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
             return Err("AppRole auto-auth revocation registry is poisoned".into());
         }
     }
@@ -1289,7 +1325,7 @@ impl Drop for AppRoleSecretLease {
             .args(["secret", "rm", &self.secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
     }
 }
 
@@ -1371,7 +1407,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
             .args(["secret", "rm", &secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
     }
 
     for (secret_name, registration) in auto_auth_entries {
@@ -1390,7 +1426,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
             .args(["secret", "rm", &secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget());
     }
 }
 
@@ -1690,7 +1726,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
             "[tillandsias-vault] creating podman secret {VAULT_UNSEAL_SECRET} (32 bytes from HKDF)"
         );
     }
-    let mut child = podman_cmd_sync()
+    let out = podman_cmd_sync()
         .args([
             "secret",
             "create",
@@ -1699,20 +1735,10 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
             VAULT_UNSEAL_SECRET,
             "-",
         ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("spawn podman secret create: {e}"))?;
-    child
-        .stdin
-        .as_mut()
-        .ok_or("no stdin")?
-        .write_all(key)
-        .map_err(|e| format!("write key bytes: {e}"))?;
-    drop(child.stdin.take());
-    let out = child
-        .wait_with_output()
+        .output_bounded_with_stdin(
+            key,
+            tillandsias_podman::OperationKind::Secret.default_budget(),
+        )
         .map_err(|e| format!("wait podman secret create: {e}"))?;
     if !out.status.success() {
         return Err(format!(
@@ -1735,7 +1761,7 @@ fn unseal_secret_exists() -> bool {
         .args(["secret", "inspect", VAULT_UNSEAL_SECRET])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()
+        .status_bounded(tillandsias_podman::OperationKind::Secret.default_budget())
         .map(|s| s.success())
         .unwrap_or(false)
 }
@@ -1757,7 +1783,7 @@ fn read_unseal_secret_bytes() -> Option<Vec<u8>> {
             "{{.SecretData}}",
             VAULT_UNSEAL_SECRET,
         ])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Secret.default_budget())
         .ok()?;
     if !out.status.success() {
         return None;
@@ -1784,22 +1810,12 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
             token.len()
         );
     }
-    let mut child = podman_cmd_sync()
+    let out = podman_cmd_sync()
         .args(["secret", "create", "--replace", "--driver=file", name, "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("spawn podman secret create: {e}"))?;
-    child
-        .stdin
-        .as_mut()
-        .ok_or("no stdin")?
-        .write_all(token.as_bytes())
-        .map_err(|e| format!("write token bytes: {e}"))?;
-    drop(child.stdin.take());
-    let out = child
-        .wait_with_output()
+        .output_bounded_with_stdin(
+            token.as_bytes(),
+            tillandsias_podman::OperationKind::Secret.default_budget(),
+        )
         .map_err(|e| format!("wait podman secret create: {e}"))?;
     if !out.status.success() {
         return Err(format!(
@@ -1825,22 +1841,12 @@ fn create_file_podman_secret(
             path.display()
         );
     }
-    let mut child = podman_cmd_sync()
+    let out = podman_cmd_sync()
         .args(["secret", "create", "--replace", "--driver=file", name, "-"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| format!("spawn podman secret create {name}: {e}"))?;
-    child
-        .stdin
-        .as_mut()
-        .ok_or("no stdin")?
-        .write_all(&contents)
-        .map_err(|e| format!("write podman secret {name}: {e}"))?;
-    drop(child.stdin.take());
-    let out = child
-        .wait_with_output()
+        .output_bounded_with_stdin(
+            &contents,
+            tillandsias_podman::OperationKind::Secret.default_budget(),
+        )
         .map_err(|e| format!("wait podman secret create {name}: {e}"))?;
     if !out.status.success() {
         return Err(format!(
@@ -1859,6 +1865,31 @@ fn refresh_vault_tls_secrets(certs_dir: &std::path::Path, debug: bool) -> Result
         &certs_dir.join("intermediate.crt"),
         debug,
     )
+}
+
+/// The `--volume` argument that persists Vault's file audit device (order
+/// 749-8iw4, design T9).
+///
+/// Extracted so the CONTRACT is testable without podman (order 753-ii5f). The
+/// first pin for this fix was five greps over the source, and an in-forge review
+/// pointed out the obvious hole: a refactor can keep every grep green while
+/// persistence breaks — most plausibly by moving the host directory somewhere
+/// the container's `vault` user cannot write, since `vault audit list` reports a
+/// healthy device either way. That blindness IS the original defect (V12); a
+/// gate that cannot see it is not pinning the fix.
+///
+/// Three things are load-bearing and each has a test below:
+///   * the destination is exactly `/vault/audit` — where
+///     `images/vault/entrypoint.sh` enables the file device;
+///   * the mount carries `:U`, because a userns mapping shift would otherwise
+///     leave it owned by a uid `vault` cannot write, and an audit device that
+///     cannot write is FATAL to Vault (every request fails once nothing can
+///     record it);
+///   * the host side is the caller's directory verbatim, so a change to
+///     `init_cache_dir()` shows up as a changed argument rather than silently
+///     relocating the records.
+fn vault_audit_volume_arg(host_dir: &std::path::Path) -> String {
+    format!("{}:/vault/audit:U", host_dir.display())
 }
 
 fn canonical_vault_launch_tag(image_tag: &str) -> Result<&str, String> {
@@ -1998,7 +2029,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
 
     // Only wipe the data volume in the partial-init scenario: the volume
     // exists but the host keychain has no Shamir unseal share, meaning a
@@ -2077,6 +2108,28 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     std::fs::create_dir_all(&vault_dir)
         .map_err(|e| format!("failed to create vault data dir: {}", e))?;
     let volume_arg = format!("{}:/vault/data:U", vault_dir.display());
+    // Order 749-8iw4 (design T9). `images/vault/entrypoint.sh` enables a FILE
+    // audit device at /vault/audit/audit.json, but nothing mounted /vault/audit
+    // — so it was a container-layer directory (V12) and every audit record died
+    // with the container. D11's third attribution channel therefore did not
+    // exist in practice, and §4a row M6 ("the audit records carry project, lane,
+    // principal, fingerprint, serial and refs AND survive a mirror/Vault
+    // container recreation") could not pass however well the other rungs landed.
+    //
+    // The device was enabled and writing the whole time, which is what made this
+    // easy to miss: `vault audit list` shows a healthy file device, and the
+    // records are really there — until the container is recreated.
+    //
+    // `:U` for the same reason as /vault/data above: a userns mapping shift
+    // between launches would otherwise leave the directory owned by a uid the
+    // `vault` user cannot write, and an audit device that cannot write is FATAL
+    // to Vault — every request fails once no audit device can record it.
+    let vault_audit_dir = crate::init_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("vault-audit");
+    std::fs::create_dir_all(&vault_audit_dir)
+        .map_err(|e| format!("failed to create vault audit dir: {}", e))?;
+    let audit_volume_arg = vault_audit_volume_arg(&vault_audit_dir);
     let mut run_args: Vec<String> = vec![
         "run".into(),
         "-d".into(),
@@ -2104,6 +2157,8 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         tls_ca_arg,
         "--volume".into(),
         volume_arg,
+        "--volume".into(),
+        audit_volume_arg,
         "--tmpfs".into(),
         "/run/vault-handover:size=1m,mode=0777".into(),
         // NOTE: intentionally NO `--rm`. If vault crashes on boot (e.g. an
@@ -2134,7 +2189,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         .args(&run_args)
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
-        .status()
+        .status_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .map_err(|e| format!("spawn podman run: {e}"))?;
     if !status.success() {
         return Err(format!("podman run vault failed: {}", status));
@@ -2156,7 +2211,7 @@ fn dump_vault_failure_diagnostics() {
             "--format",
             "{{.Names}} status={{.Status}} exit={{.ExitCode}}",
         ])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
     if let Ok(out) = ps {
         let s = String::from_utf8_lossy(&out.stdout);
         let s = s.trim();
@@ -2166,7 +2221,7 @@ fn dump_vault_failure_diagnostics() {
     }
     let logs = podman_cmd_sync()
         .args(["logs", "--tail", "40", VAULT_CONTAINER_NAME])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Logs.default_budget());
     if let Ok(out) = logs {
         let combined = format!(
             "{}{}",
@@ -2279,7 +2334,7 @@ const UNSEAL_LOG_ALREADY: &str = "vault already unsealed";
 fn vault_container_logs_tail() -> String {
     match podman_cmd_sync()
         .args(["logs", "--tail", "80", VAULT_CONTAINER_NAME])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Logs.default_budget())
     {
         Ok(out) => format!(
             "{}{}",
@@ -2532,7 +2587,7 @@ fn update_etc_hosts_vault(debug: bool) {
             "--format",
             "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}",
         ])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
     {
         Ok(o) => o,
         Err(e) => {
@@ -2590,7 +2645,7 @@ fn read_handover_file(name: &str) -> Option<String> {
             "cat",
             &format!("/run/vault-handover/{name}"),
         ])
-        .output()
+        .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
         .ok()?;
     if !out.status.success() {
         return None;
@@ -3094,11 +3149,28 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 });
             }
 
-            // Also proactively update the fallback file so child processes (like GithubLogin)
-            // running right after init can use the fresh token before the host re-delivers it.
+            // Also proactively update the fallback files so child processes (like
+            // GithubLogin) running right after init can use the fresh credentials
+            // before the host re-delivers them.
+            //
+            // 694-mhz8: the SHARE write is not a convenience — it is what keeps the
+            // next bootstrap from destroying this Vault. `has_shamir_share_in_keyring`
+            // decides `is_partial_init` (see the wipe branch below) by looking for an
+            // OS keychain entry and then this file. Inside the VM there is no OS
+            // keychain, so this file is the ONLY evidence that the share was ever
+            // captured. Writing only the token — as this block did until now — left
+            // the predicate permanently false, so every subsequent bootstrap
+            // classified a healthy initialized Vault as a crashed partial init and
+            // wiped it, taking the stored GitHub token with it. Observed live on
+            // macOS 2026-08-11: `--github-login` succeeded and verified its own
+            // Vault write, and the secret was 404 on the next boot.
+            //
+            // Writing it here (rather than relaxing the predicate) preserves the
+            // genuine partial-init case: if init crashes before reaching this line,
+            // the file is absent, the predicate is false, and the wipe still fires —
+            // which is exactly what it is for.
             if let Ok(cache_dir) = crate::init_cache_dir() {
-                let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
-                let _ = std::fs::write(&fallback_file, &token);
+                write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64));
             }
 
             // Update in-memory credentials so the current process has the new token.
@@ -3141,7 +3213,7 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                  done; \
                  rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key",
             ])
-            .status();
+            .status_bounded(tillandsias_podman::OperationKind::Container.default_budget());
 
         if debug {
             eprintln!(
@@ -3231,7 +3303,7 @@ fn read_and_handover_root_token(_debug: bool) -> Result<String, String> {
 pub(crate) fn container_running(name: &str) -> bool {
     let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])
-        .output();
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget());
     match out {
         Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim() == "true",
         _ => false,
@@ -3340,11 +3412,563 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Per-project mirror service identity (order 606-bvnp)
+//
+// Design: plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md — D13
+// (opaque mirror-id), §2.3 (exact per-project SSH signer roles), D12/§4 T2
+// (policies MINTED at provision, never a static wildcard file). Every
+// per-project artifact — certificate principal, client/host signer role,
+// minted policy, opaque hostname — is keyed by one opaque token minted here.
+// ---------------------------------------------------------------------------
+
+/// Vault mount of the client (user-cert) SSH CA. Two mounts, not one with two
+/// roles: independent signing keys are independent blast radii (design D1).
+pub const SSH_CLIENT_SIGNER_MOUNT: &str = "ssh-client-signer";
+/// Vault mount of the host-cert SSH CA (design D1).
+pub const SSH_HOST_SIGNER_MOUNT: &str = "ssh-host-signer";
+/// KV-v2 prefix persisting each project's opaque mirror identity (D13).
+/// Written ONCE at first mirror provision, read on every later launch.
+/// No forge-reachable policy may read `secret/data/mirror-identity/*`.
+pub const MIRROR_IDENTITY_KV_PREFIX: &str = "secret/mirror-identity";
+/// Raw entropy of a mirror-id: 12 bytes from the host CSPRNG (D13).
+const MIRROR_ID_BYTES: usize = 12;
+/// Encoded length: 12 bytes → ceil(96/5) = 20 base32hex characters.
+pub const MIRROR_ID_LEN: usize = 20;
+
+/// RFC 4648 base32hex, lowercase, no padding.
+///
+/// Chosen over base32 because base32hex sorts like the bytes it encodes, and
+/// over base64/hex because the output must be a valid DNS label fragment
+/// (`git-<mirror-id>` is assigned as a podman `--network-alias`): lowercase
+/// alphanumeric only, no `+/=` and no case-sensitivity hazards. Hand-rolled
+/// (~15 lines) rather than a new crate dependency.
+fn base32hex_lowercase_nopad(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 32] = b"0123456789abcdefghijklmnopqrstuv";
+    let mut out = String::with_capacity(bytes.len().div_ceil(5) * 8);
+    let mut acc: u32 = 0;
+    let mut acc_bits: u32 = 0;
+    for &byte in bytes {
+        acc = (acc << 8) | u32::from(byte);
+        acc_bits += 8;
+        while acc_bits >= 5 {
+            acc_bits -= 5;
+            out.push(ALPHABET[((acc >> acc_bits) & 0x1f) as usize] as char);
+        }
+    }
+    if acc_bits > 0 {
+        out.push(ALPHABET[((acc << (5 - acc_bits)) & 0x1f) as usize] as char);
+    }
+    out
+}
+
+/// Mint a fresh opaque mirror-id: 12 CSPRNG bytes, base32hex lowercase, no
+/// padding — 20 chars (design D13).
+///
+/// Minted RANDOM, never derived: a hash of the project name (salted or not,
+/// if the salt is shared) is enumerable by any tenant that can guess project
+/// names, and project names are chosen by humans to be guessable. Randomness
+/// is the only derivation with nothing to guess from.
+pub fn mint_mirror_id() -> Result<String, String> {
+    let mut bytes = [0u8; MIRROR_ID_BYTES];
+    getrandom::fill(&mut bytes)
+        .map_err(|e| format!("host CSPRNG unavailable for mirror-id mint: {e}"))?;
+    Ok(base32hex_lowercase_nopad(&bytes))
+}
+
+/// Grammar check for a stored mirror-id: exactly 20 base32hex-lowercase
+/// chars. A stored identity that fails this was not written by the mint path
+/// and must be treated as corruption, never silently re-minted over —
+/// existing roles, policies, and certificates may reference it.
+pub fn mirror_id_is_valid(mirror_id: &str) -> bool {
+    mirror_id.len() == MIRROR_ID_LEN
+        && mirror_id
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'v'))
+}
+
+/// KV-v2 path persisting one project's mirror identity (D13).
+pub fn mirror_identity_kv_path(project: &str) -> String {
+    format!("{MIRROR_IDENTITY_KV_PREFIX}/{project}")
+}
+
+/// The one certificate principal a project's lane certs may carry (D3):
+/// authorization lives in the principal, identity lives in the key. Opaque —
+/// never the plaintext project name, which would leak cross-tenant into the
+/// other project's sshd log on a rejected cert.
+pub fn mirror_push_principal(mirror_id: &str) -> String {
+    format!("til:forge-push:{mirror_id}")
+}
+
+/// Opaque per-project mirror hostname `git-<mirror-id>` (24 chars, a single
+/// valid DNS label). The DNS swap point itself is
+/// `git_mirror_service_identity` (main.rs, order 659-8faj); this derivation
+/// exists so the Vault-side artifacts (host role `allowed_domains`, host-cert
+/// principal) name exactly the hostname that function will emit once the
+/// opaque identity is wired through it.
+pub fn mirror_service_hostname(mirror_id: &str) -> String {
+    format!("git-{mirror_id}")
+}
+
+/// Client-signer role name on [`SSH_CLIENT_SIGNER_MOUNT`]: the bare
+/// mirror-id (§2.3 — `roles/<mirror-id>`).
+pub fn mirror_client_signer_role(mirror_id: &str) -> String {
+    mirror_id.to_string()
+}
+
+/// Host-signer role name on [`SSH_HOST_SIGNER_MOUNT`]: `host-<mirror-id>`
+/// (§2.3 — the shared `roles/mirror-host` with alias domains is withdrawn).
+pub fn mirror_host_signer_role(mirror_id: &str) -> String {
+    format!("host-{mirror_id}")
+}
+
+/// Name of the minted per-project lane-signer policy (D12).
+pub fn mirror_lane_signer_policy_name(mirror_id: &str) -> String {
+    format!("ssh-lane-signer-{mirror_id}")
+}
+
+/// Name of the minted per-project host-signer policy (D12).
+pub fn mirror_host_signer_policy_name(mirror_id: &str) -> String {
+    format!("ssh-host-signer-{mirror_id}")
+}
+
+/// Render the lane-signer policy for ONE project: `update` on the exact
+/// `ssh-client-signer/sign/<mirror-id>` path and nothing else (D12).
+///
+/// This template lives HERE, in Rust next to `provision_approle_roles`, and
+/// not under `images/vault/policies/`, precisely so the static-file lanes
+/// (`Containerfile` COPY list, entrypoint `load_policy`, `Policy::all()`,
+/// the embedded-HCL parity test) are not in play — no wildcard policy file
+/// ever ships, so there is no wildcard to forget to remove (§4 T2).
+pub fn render_lane_signer_policy_hcl(mirror_id: &str) -> String {
+    format!(
+        "# Minted at mirror provision (order 606-bvnp). The per-lane ssh-agent\n\
+         # sidecar of ONE project: sign-only, exact path, wildcards refused.\n\
+         path \"{SSH_CLIENT_SIGNER_MOUNT}/sign/{mirror_id}\" {{\n  capabilities = [\"update\"]\n}}\n"
+    )
+}
+
+/// Render the host-signer policy for ONE project's mirror: `update` on the
+/// exact `ssh-host-signer/sign/host-<mirror-id>` path and nothing else (D12).
+pub fn render_host_signer_policy_hcl(mirror_id: &str) -> String {
+    format!(
+        "# Minted at mirror provision (order 606-bvnp). The mirror of ONE\n\
+         # project: sign-only, exact path, wildcards refused.\n\
+         path \"{SSH_HOST_SIGNER_MOUNT}/sign/host-{mirror_id}\" {{\n  capabilities = [\"update\"]\n}}\n"
+    )
+}
+
+/// Refuse to write any policy containing a `sign/*` wildcard to the server.
+///
+/// The earlier design draft shipped a static policy with
+/// `path "ssh-client-signer/sign/*"` — cross-project signing authority: a
+/// project-A sidecar could request a project-B certificate. That wildcard is
+/// withdrawn (amendment 2026-08-10, 606-bvnp), and this guard is the
+/// server-side enforcement: no policy body containing `sign/*` may ever
+/// reach `sys/policies/acl`, whatever future template produces it.
+fn reject_sign_wildcard(policy_name: &str, hcl: &str) -> Result<(), String> {
+    if hcl.contains("sign/*") {
+        return Err(format!(
+            "refusing to write policy {policy_name}: body contains a sign/* wildcard, \
+             which is cross-project signing authority (606-bvnp, design D12)"
+        ));
+    }
+    Ok(())
+}
+
+/// Client-signer role config (§2.3): exact principal, no extensions, two
+/// critical options, 30m/1h TTLs (D3/D4/D7).
+///
+/// `enclave_subnet` must be the EFFECTIVE enclave subnet
+/// (`TILLANDSIAS_ENCLAVE_SUBNET` override honored), or `source-address`
+/// locks every lane out. The subnet is enclave-WIDE: it contributes nothing
+/// to inter-project separation (both projects' forges sit inside it) and
+/// stays in the certificate purely as defense-in-depth against use from
+/// outside the enclave.
+pub fn build_client_signer_role_config(mirror_id: &str, enclave_subnet: &str) -> serde_json::Value {
+    serde_json::json!({
+        "key_type": "ca",
+        "allow_user_certificates": true,
+        // V3: allowed_users is an exact list with no globbing — one opaque
+        // principal, never the project name (D3).
+        "allowed_users": mirror_push_principal(mirror_id),
+        "default_user": "git",
+        // V4: an empty allowed_extensions makes Vault REFUSE a permit-pty
+        // request — a stolen key+cert cannot open a shell, forward a port,
+        // or forward an agent (D4).
+        "allowed_extensions": "",
+        "default_extensions": {},
+        "default_critical_options": {
+            "force-command": "/usr/local/bin/tillandsias-receive",
+            "source-address": enclave_subnet,
+        },
+        "ttl": "30m",
+        "max_ttl": "1h",
+        // V5: no per-request key_id; only {{role_name}} and
+        // {{token_display_name}} substitute.
+        "key_id_format": "{{role_name}}|{{token_display_name}}",
+    })
+}
+
+/// Host-signer role config (§2.3): exactly one allowed domain — the opaque
+/// per-project hostname. The legacy shared aliases are never certified (D9).
+pub fn build_host_signer_role_config(mirror_id: &str) -> serde_json::Value {
+    serde_json::json!({
+        "key_type": "ca",
+        "allow_host_certificates": true,
+        "allowed_domains": mirror_service_hostname(mirror_id),
+        "allow_bare_domains": true,
+        "allow_subdomains": false,
+        "ttl": "24h",
+        "max_ttl": "48h",
+    })
+}
+
+/// Ensure the two SSH CA mounts + both roles + both minted policies for one
+/// project's mirror-id. Idempotent throughout: mounts/CAs squash the
+/// already-exists 400, role and policy writes are overwrites.
+///
+/// Mount/CA ensure duplicates the vault image entrypoint's T1 boot-time work
+/// on purpose: the entrypoint provisions on FIRST boot only (subsequent
+/// boots exit before the token-authenticated section), so a vault volume
+/// initialized before these engines existed would never gain them —
+/// D13's migration story ("first launch after upgrade: kv path absent →
+/// mint, store, proceed") requires the host-side ensure.
+///
+/// Deliberately NOT provisioned here: the `ssh-lane-signer-<mirror-id>`
+/// AppRole (D6) — that is sidecar wiring (§4 T8), a later rung.
+pub async fn provision_mirror_ssh_roles(
+    client: &VaultClient,
+    mirror_id: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<(), String> {
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] ensuring SSH signer mounts + per-project roles for mirror-id {mirror_id}"
+        );
+    }
+    for mount in [SSH_CLIENT_SIGNER_MOUNT, SSH_HOST_SIGNER_MOUNT] {
+        client
+            .enable_secrets_engine(mount, "ssh")
+            .await
+            .map_err(|e| format!("enable ssh secrets engine {mount}: {e}"))?;
+        client
+            .configure_ssh_ca_generate(mount)
+            .await
+            .map_err(|e| format!("generate in-vault CA for {mount}: {e}"))?;
+    }
+    client
+        .write_ssh_role(
+            SSH_CLIENT_SIGNER_MOUNT,
+            &mirror_client_signer_role(mirror_id),
+            build_client_signer_role_config(mirror_id, enclave_subnet),
+        )
+        .await
+        .map_err(|e| format!("write client-signer role {mirror_id}: {e}"))?;
+    client
+        .write_ssh_role(
+            SSH_HOST_SIGNER_MOUNT,
+            &mirror_host_signer_role(mirror_id),
+            build_host_signer_role_config(mirror_id),
+        )
+        .await
+        .map_err(|e| format!("write host-signer role host-{mirror_id}: {e}"))?;
+    for (name, hcl) in [
+        (
+            mirror_lane_signer_policy_name(mirror_id),
+            render_lane_signer_policy_hcl(mirror_id),
+        ),
+        (
+            mirror_host_signer_policy_name(mirror_id),
+            render_host_signer_policy_hcl(mirror_id),
+        ),
+    ] {
+        reject_sign_wildcard(&name, &hcl)?;
+        client
+            .write_policy(&name, &hcl)
+            .await
+            .map_err(|e| format!("mint policy {name}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Mint-or-read a project's opaque mirror identity (D13) and ensure its
+/// Vault-side SSH substrate (roles + minted policies, §2.3/T2).
+///
+/// The kv entry at `secret/mirror-identity/<project>` is the COMMIT MARKER:
+/// it is written last, only after roles and policies landed, so its presence
+/// implies a completed provision and the read path can return without any
+/// further Vault writes. Two concurrent first-provisions are resolved by the
+/// kv-v2 `cas=0` create-only write: the loser re-reads and adopts the
+/// winner's identity (its own freshly written roles/policies are unreferenced
+/// orphans keyed by an id nothing will ever use — harmless, and cleaned up
+/// by the same `--reset-guest` that wipes Vault).
+pub async fn provision_mirror_identity(
+    client: &VaultClient,
+    project: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<String, String> {
+    let kv_path = mirror_identity_kv_path(project);
+    let read_stored_id = |data: serde_json::Value| -> Result<String, String> {
+        let id = data
+            .get("mirror_id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| {
+                format!("stored mirror identity at {kv_path} has no mirror_id field: corrupt entry")
+            })?
+            .to_string();
+        if !mirror_id_is_valid(&id) {
+            // Fail loud: certificates/roles may already reference this id;
+            // silently re-minting would orphan them (D13 — identity is
+            // written once and stable across mirror-volume recreation).
+            return Err(format!(
+                "stored mirror identity at {kv_path} fails the id grammar \
+                 (want {MIRROR_ID_LEN} base32hex chars): corrupt entry, refusing to re-mint over it"
+            ));
+        }
+        Ok(id)
+    };
+    match client.read_secret(&kv_path).await {
+        Ok(data) => {
+            let id = read_stored_id(data)?;
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] mirror identity for {project} already provisioned ({id})"
+                );
+            }
+            return Ok(id);
+        }
+        Err(VaultError::NotFound(_)) => {}
+        Err(e) => return Err(format!("read mirror identity {kv_path}: {e}")),
+    }
+
+    let minted = mint_mirror_id()?;
+    if debug {
+        eprintln!("[tillandsias-vault] minting mirror identity for {project}: {minted}");
+    }
+    provision_mirror_ssh_roles(client, &minted, enclave_subnet, debug).await?;
+    let created = client
+        .write_secret_if_absent(
+            &kv_path,
+            serde_json::json!({
+                "mirror_id": minted,
+                // The project ⇄ mirror-id join (D3/D13): the kv entry is keyed
+                // by project; recording it in the body too keeps the mapping
+                // self-describing when the entry is read by path listing.
+                "project": project,
+                "minted_at": chrono::Utc::now().to_rfc3339(),
+            }),
+        )
+        .await
+        .map_err(|e| format!("persist mirror identity {kv_path}: {e}"))?;
+    if created {
+        return Ok(minted);
+    }
+    // A concurrent first-provision won the cas=0 race. Adopt its identity —
+    // kv presence implies its roles/policies are already in place.
+    let winner = client
+        .read_secret(&kv_path)
+        .await
+        .map_err(|e| format!("re-read mirror identity {kv_path} after cas conflict: {e}"))?;
+    let id = read_stored_id(winner)?;
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] concurrent provision won the identity race for {project}; \
+             adopting {id} (locally minted {minted} is an unreferenced orphan)"
+        );
+    }
+    Ok(id)
+}
+
+/// Launcher entry point: resolve (mint-or-read) a project's mirror identity
+/// against the running Vault using the root bootstrap token.
+///
+/// Called from the mirror CREATE path only — the running-mirror reuse path
+/// never touches Vault for this, and when the kv entry exists this is a
+/// single kv read (cheap by construction, order 606-bvnp scope rule).
+pub async fn ensure_mirror_identity_provisioned(
+    project: &str,
+    enclave_subnet: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    provision_mirror_identity(&client, project, enclave_subnet, debug).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    /// 701-se6x. The HOST-DELIVERED share must be persisted too, not just the
+    /// host-delivered root token.
+    ///
+    /// `set_in_vm_credentials` is the tray's delivery path into a running guest.
+    /// It wrote `fallback_vault-root-token-v1` and dropped the share — the exact
+    /// asymmetry 694-mhz8 fixed at the fresh-init site, surviving at this one.
+    /// The consequence is not cosmetic: a guest that has lost only its share
+    /// file gets handed a good share by the host, uses it in memory, still fails
+    /// `has_shamir_share_in_keyring`, and has its intact Vault WIPED on the next
+    /// launch. The host held the evidence and the guest discarded it.
+    ///
+    /// Exercised through `set_in_vm_credentials` ITSELF, not through the shared
+    /// writer. An earlier version of this test called the writer directly and
+    /// was VACUOUS: reverting the call site to pass `None` for the share left it
+    /// passing, because it never touched the code being fixed. That is this
+    /// project's named recurring failure — "verified where it was written is not
+    /// verified where it runs" — reproduced in the test for the fix against it.
+    #[test]
+    fn host_delivered_share_is_persisted_not_only_the_token() {
+        let _serialized = ENV_LOCK.get_or_init(|| Mutex::new(())).lock();
+
+        let cache_root = std::env::temp_dir().join(format!(
+            "tillandsias-701-delivered-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&cache_root).expect("temp cache root");
+        // SAFETY: env mutation is serialized by ENV_LOCK for the whole test.
+        unsafe { std::env::set_var("XDG_CACHE_HOME", &cache_root) };
+
+        set_in_vm_credentials(
+            Some("ZGVsaXZlcmVk".to_string()),
+            "test-installation".to_string(),
+            Some("s.delivered-token".to_string()),
+        );
+
+        let dir = cache_root.join("tillandsias");
+        let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "the token half must still be delivered (pre-701 behavior preserved)"
+        );
+        assert!(
+            share.is_file(),
+            "the DELIVERED share must be recorded where the wipe predicate reads, or \
+             the next launch destroys an intact Vault the host could have saved. \
+             This assertion must fail if set_in_vm_credentials stops passing the share."
+        );
+        assert_eq!(
+            std::fs::read_to_string(&share)
+                .expect("share readable")
+                .trim(),
+            "ZGVsaXZlcmVk",
+            "a corrupted share cannot unseal, so it must round-trip verbatim"
+        );
+
+        unsafe { std::env::remove_var("XDG_CACHE_HOME") };
+        let _ = std::fs::remove_dir_all(&cache_root);
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above, and the reason
+    /// this fix is not "always write a share file". The partial-init wipe must
+    /// still fire when NO share was ever captured — a Vault initialized with an
+    /// unknown key can never unseal, and preserving it strands the guest
+    /// permanently. A delivery carrying only a token must therefore leave the
+    /// share file absent.
+    #[test]
+    fn delivery_without_a_share_leaves_the_wipe_predicate_able_to_fire() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701-tokenonly-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        write_vm_credential_fallbacks(&dir, Some("s.delivered-token"), None);
+
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "the token half of the delivery is still recorded"
+        );
+        assert!(
+            !dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+                .is_file(),
+            "a share that was never delivered must NOT be recorded as captured — \
+             otherwise a genuine partial init is preserved and Vault can never unseal"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 694-mhz8. In-VM init must persist BOTH credential fallbacks. The share
+    /// file is the only evidence, inside a VM, that `operator init` completed:
+    /// `has_shamir_share_in_keyring` consults an OS keychain (absent in the
+    /// guest) and then this file, and its answer decides whether the next
+    /// bootstrap treats the data volume as a crashed partial init and WIPES it.
+    /// Writing only the token — the pre-694 behavior — made that predicate
+    /// permanently false in the guest, so every boot destroyed a healthy Vault
+    /// and the stored GitHub token with it.
+    #[test]
+    fn in_vm_init_persists_both_credential_fallbacks() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-694-both-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        let token = dir.join("fallback_vault-root-token-v1");
+        assert!(
+            token.is_file(),
+            "root-token fallback must still be written (pre-694 behavior preserved)"
+        );
+        assert!(
+            share.is_file(),
+            "SHAMIR SHARE fallback must be written — without it the next bootstrap \
+             classifies this initialized Vault as a partial init and wipes it (694-mhz8)"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&share)
+                .expect("share readable")
+                .trim(),
+            "c2hhcmU=",
+            "the share must round-trip verbatim; a corrupted share cannot unseal"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik) for the test above. The wipe branch
+    /// this fix protects must still fire on a GENUINE partial init — an init that
+    /// crashed before the share was ever captured. If the fix had instead relaxed
+    /// the predicate (or if this helper wrote a share unconditionally), a Vault
+    /// initialized with an unknown key would be preserved and could never unseal.
+    /// So: no share in hand => no share file => partial init stays detectable.
+    #[test]
+    fn absent_share_writes_no_share_file_so_partial_init_stays_detectable() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-694-partial-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        // Init got far enough to mint a root token, then crashed before the
+        // Shamir handover — exactly the case the wipe exists to recover.
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), None);
+
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "token was captured in this scenario"
+        );
+        assert!(
+            !dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+                .is_file(),
+            "a share that was never captured must NOT be recorded as captured — \
+             otherwise a genuine partial init is preserved and Vault can never unseal"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn empty_handover_reply_does_not_close_first_boot_retry_window() {
@@ -4108,6 +4732,53 @@ mod tests {
         assert_eq!(APPROLE_TOKEN_MAX_TTL_SECS, 86_400);
     }
 
+    // -----------------------------------------------------------------------
+    // Order 749-8iw4 / 753-ii5f — the audit volume contract, testable without podman
+    // -----------------------------------------------------------------------
+    #[test]
+    fn audit_volume_targets_the_path_the_entrypoint_writes_to() {
+        // images/vault/entrypoint.sh enables a file audit device at
+        // /vault/audit/audit.json. If the destination here drifts, the device
+        // writes to a container layer again and dies on recreate — while
+        // `vault audit list` keeps reporting it healthy. That is V12 exactly.
+        let arg = vault_audit_volume_arg(std::path::Path::new(
+            "/home/u/.cache/tillandsias/vault-audit",
+        ));
+        assert!(
+            arg.contains(":/vault/audit:"),
+            "audit volume must target /vault/audit, got {arg}"
+        );
+    }
+
+    #[test]
+    fn audit_volume_is_relabelled_for_userns_drift() {
+        // Without :U a userns mapping shift leaves the directory owned by a uid
+        // `vault` cannot write. An audit device that cannot write is fatal to
+        // Vault: every request fails once nothing can record it.
+        let arg = vault_audit_volume_arg(std::path::Path::new("/tmp/x"));
+        assert!(arg.ends_with(":U"), "audit volume must carry :U, got {arg}");
+    }
+
+    #[test]
+    fn audit_volume_uses_the_supplied_host_dir_verbatim() {
+        // Pins the host side to the caller's directory, so a change to
+        // init_cache_dir() surfaces as a changed argument instead of silently
+        // relocating the audit records somewhere unwritable.
+        let arg = vault_audit_volume_arg(std::path::Path::new("/some/where/vault-audit"));
+        assert_eq!(arg, "/some/where/vault-audit:/vault/audit:U");
+    }
+
+    #[test]
+    fn audit_volume_is_distinct_from_the_data_volume() {
+        // A single mount cannot serve both: /vault/data holds Vault's storage
+        // and /vault/audit holds the audit log. Collapsing them would make the
+        // grep-level pins pass while persistence semantics changed.
+        let audit = vault_audit_volume_arg(std::path::Path::new("/c/vault-audit"));
+        let data = format!("{}:/vault/data:U", "/c/vault-data");
+        assert_ne!(audit, data);
+        assert!(!audit.contains("/vault/data"));
+    }
+
     #[test]
     fn vault_launch_requires_the_content_addressed_image_tag() {
         let digest = "a".repeat(64);
@@ -4118,5 +4789,441 @@ mod tests {
         );
         assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:latest").is_err());
         assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:sha256-short").is_err());
+    }
+
+    // -----------------------------------------------------------------------
+    // Order 606-bvnp — opaque mirror identity + exact SSH signer substrate
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn base32hex_encoder_matches_rfc4648_vectors() {
+        // RFC 4648 §10 base32hex vectors, lowercased and unpadded.
+        for (input, expected) in [
+            (&b""[..], ""),
+            (&b"f"[..], "co"),
+            (&b"fo"[..], "cpng"),
+            (&b"foo"[..], "cpnmu"),
+            (&b"foob"[..], "cpnmuog"),
+            (&b"fooba"[..], "cpnmuoj1"),
+            (&b"foobar"[..], "cpnmuoj1e8"),
+        ] {
+            assert_eq!(base32hex_lowercase_nopad(input), expected);
+        }
+    }
+
+    #[test]
+    fn minted_mirror_ids_are_20_char_base32hex_unique_and_dns_safe() {
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..64 {
+            let id = mint_mirror_id().expect("host CSPRNG");
+            assert_eq!(id.len(), MIRROR_ID_LEN, "12 bytes must encode to 20 chars");
+            assert!(
+                mirror_id_is_valid(&id),
+                "grammar rejects its own mint: {id}"
+            );
+            assert!(
+                id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'v')),
+                "outside the base32hex lowercase alphabet: {id}"
+            );
+            assert!(seen.insert(id), "96 random bits collided within 64 mints");
+        }
+        // The derived hostname must be one valid DNS label (24 chars),
+        // assignable as a podman --network-alias (D13).
+        let hostname = mirror_service_hostname("0123456789abcdefghij");
+        assert_eq!(hostname, "git-0123456789abcdefghij");
+        assert_eq!(hostname.len(), 24);
+        assert!(hostname.len() <= 63, "must stay a single DNS label");
+        assert!(
+            hostname
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-'),
+            "hostname must be lowercase alphanumeric/hyphen: {hostname}"
+        );
+
+        // Grammar rejects everything that is not the mint output.
+        assert!(!mirror_id_is_valid("0123456789abcdefghi")); // 19 chars
+        assert!(!mirror_id_is_valid("0123456789abcdefghijk")); // 21 chars
+        assert!(!mirror_id_is_valid("0123456789ABCDEFGHIJ")); // uppercase
+        assert!(!mirror_id_is_valid("0123456789abcdefghiw")); // 'w' > 'v'
+        assert!(!mirror_id_is_valid("myproject-mirror-idx")); // guessable name shape
+    }
+
+    #[test]
+    fn mirror_identity_derivations_are_exact() {
+        let id = "0123456789abcdefghij";
+        assert_eq!(
+            mirror_push_principal(id),
+            "til:forge-push:0123456789abcdefghij"
+        );
+        assert_eq!(mirror_client_signer_role(id), id);
+        assert_eq!(mirror_host_signer_role(id), "host-0123456789abcdefghij");
+        assert_eq!(
+            mirror_lane_signer_policy_name(id),
+            "ssh-lane-signer-0123456789abcdefghij"
+        );
+        assert_eq!(
+            mirror_host_signer_policy_name(id),
+            "ssh-host-signer-0123456789abcdefghij"
+        );
+        assert_eq!(
+            mirror_identity_kv_path("alpha"),
+            "secret/mirror-identity/alpha"
+        );
+        assert_eq!(SSH_CLIENT_SIGNER_MOUNT, "ssh-client-signer");
+        assert_eq!(SSH_HOST_SIGNER_MOUNT, "ssh-host-signer");
+    }
+
+    #[test]
+    fn minted_policies_grant_exact_sign_paths_and_never_a_wildcard() {
+        let id = "0123456789abcdefghij";
+        let lane = render_lane_signer_policy_hcl(id);
+        let host = render_host_signer_policy_hcl(id);
+        // The exact per-project paths, capabilities update-only (D12).
+        assert!(
+            lane.contains("path \"ssh-client-signer/sign/0123456789abcdefghij\""),
+            "lane policy must name the exact client sign path:\n{lane}"
+        );
+        assert!(
+            host.contains("path \"ssh-host-signer/sign/host-0123456789abcdefghij\""),
+            "host policy must name the exact host sign path:\n{host}"
+        );
+        for hcl in [&lane, &host] {
+            assert!(
+                hcl.contains("capabilities = [\"update\"]"),
+                "sign policies are update-only:\n{hcl}"
+            );
+            // THE guard of the 2026-08-10 amendment: no rendered policy may
+            // ever contain the withdrawn cross-project wildcard.
+            assert!(
+                !hcl.contains("sign/*"),
+                "sign/* wildcard is cross-project signing authority (D12):\n{hcl}"
+            );
+            // Neither policy may touch the CA config or role enumeration
+            // (verified enforced, V6 — but never granted in the first place).
+            assert!(!hcl.contains("config/ca"));
+            assert!(!hcl.contains("roles/"));
+        }
+        // The runtime write-guard refuses a wildcard body outright.
+        assert!(
+            reject_sign_wildcard("bad", "path \"ssh-client-signer/sign/*\" {}").is_err(),
+            "a sign/* body must be refused before it reaches sys/policies/acl"
+        );
+        assert!(reject_sign_wildcard("good", &lane).is_ok());
+    }
+
+    #[test]
+    fn every_minted_policy_write_passes_the_sign_wildcard_guard() {
+        // Source guard (§4 T2): the ONLY path that writes these minted
+        // policies must run every body through reject_sign_wildcard before
+        // write_policy. A future template edit cannot skip the guard without
+        // failing here.
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("pub async fn provision_mirror_ssh_roles(")
+            .nth(1)
+            .expect("provision_mirror_ssh_roles source")
+            .split("\npub async fn ")
+            .next()
+            .unwrap();
+        let guard_idx = window
+            .find("reject_sign_wildcard(&name, &hcl)?")
+            .expect("minted policy writes must call reject_sign_wildcard");
+        let write_idx = window
+            .find(".write_policy(&name, &hcl)")
+            .expect("provision_mirror_ssh_roles must write the minted policies");
+        assert!(
+            guard_idx < write_idx,
+            "the sign/* guard must run before the policy reaches the server"
+        );
+    }
+
+    #[test]
+    fn client_signer_role_config_matches_design() {
+        let cfg = build_client_signer_role_config("0123456789abcdefghij", "10.0.42.0/24");
+        assert_eq!(cfg["key_type"], "ca");
+        assert_eq!(cfg["allow_user_certificates"], true);
+        // V3: exact principal list, no glob, never the project name (D3).
+        assert_eq!(cfg["allowed_users"], "til:forge-push:0123456789abcdefghij");
+        assert_eq!(cfg["default_user"], "git");
+        // V4/D4: no extensions may be requested; two critical options ride
+        // in every issued certificate.
+        assert_eq!(cfg["allowed_extensions"], "");
+        assert_eq!(cfg["default_extensions"], serde_json::json!({}));
+        assert_eq!(
+            cfg["default_critical_options"]["force-command"],
+            "/usr/local/bin/tillandsias-receive"
+        );
+        assert_eq!(
+            cfg["default_critical_options"]["source-address"],
+            "10.0.42.0/24"
+        );
+        // D7 TTLs: 30-minute lane certs, 1h ceiling.
+        assert_eq!(cfg["ttl"], "30m");
+        assert_eq!(cfg["max_ttl"], "1h");
+        assert_eq!(cfg["key_id_format"], "{{role_name}}|{{token_display_name}}");
+        // The effective subnet flows through — an operator override must not
+        // be silently replaced by the default (§2.3 lockout hazard).
+        let overridden = build_client_signer_role_config("0123456789abcdefghij", "10.9.0.0/16");
+        assert_eq!(
+            overridden["default_critical_options"]["source-address"],
+            "10.9.0.0/16"
+        );
+    }
+
+    #[test]
+    fn host_signer_role_config_certifies_exactly_one_opaque_hostname() {
+        let cfg = build_host_signer_role_config("0123456789abcdefghij");
+        assert_eq!(cfg["key_type"], "ca");
+        assert_eq!(cfg["allow_host_certificates"], true);
+        // D9: exactly the opaque per-project hostname; the retired shared
+        // aliases are never certified.
+        assert_eq!(cfg["allowed_domains"], "git-0123456789abcdefghij");
+        assert_eq!(cfg["allow_bare_domains"], true);
+        assert_eq!(cfg["allow_subdomains"], false);
+        assert_eq!(cfg["ttl"], "24h");
+        assert_eq!(cfg["max_ttl"], "48h");
+        for retired in ["tillandsias-git", "git-service"] {
+            assert_ne!(
+                cfg["allowed_domains"], *retired,
+                "shared alias {retired} must never re-enter the host CA"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn provision_mirror_identity_reads_existing_id_without_any_write() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        // Only the kv read is mounted. Any write attempt hits wiremock's
+        // default 404 and would fail the call — the passing test IS the
+        // proof that the already-provisioned path performs exactly one read
+        // (the hot-path cheapness rule of the 606-bvnp scope).
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": {
+                    "data": { "mirror_id": "0123456789abcdefghij", "project": "alpha" },
+                    "metadata": { "version": 1 }
+                }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+        let client = VaultClient::new(server.uri(), "root");
+        let id = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect("stored identity must be returned as-is");
+        assert_eq!(id, "0123456789abcdefghij", "re-reads must be stable");
+    }
+
+    #[tokio::test]
+    async fn provision_mirror_identity_refuses_a_corrupt_stored_id() {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": {
+                    "data": { "mirror_id": "NOT-A-VALID-MIRROR-ID" },
+                    "metadata": { "version": 1 }
+                }
+            })))
+            .mount(&server)
+            .await;
+        let client = VaultClient::new(server.uri(), "root");
+        let err = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect_err("a corrupt stored identity must fail loud, never re-mint");
+        assert!(err.contains("refusing to re-mint"), "got: {err}");
+    }
+
+    #[tokio::test]
+    async fn first_provision_mints_roles_policies_and_persists_with_cas() {
+        use wiremock::matchers::{body_partial_json, method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        // kv absent → the mint path runs.
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "errors": []
+            })))
+            .mount(&server)
+            .await;
+        // T1 migration ensure: both mounts; the 400 exercises the
+        // already-mounted squash.
+        for mount in ["ssh-client-signer", "ssh-host-signer"] {
+            Mock::given(method("POST"))
+                .and(path(format!("/v1/sys/mounts/{mount}")))
+                .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                    "errors": ["path is already in use at ssh-client-signer/"]
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+            Mock::given(method("POST"))
+                .and(path(format!("/v1/{mount}/config/ca")))
+                .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    "data": { "public_key": "ssh-ed25519 AAAA..." }
+                })))
+                .expect(1)
+                .mount(&server)
+                .await;
+        }
+        // Exact per-project roles, named by the (random) minted id.
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/v1/ssh-client-signer/roles/[0-9a-v]{20}$"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path_regex(r"^/v1/ssh-host-signer/roles/host-[0-9a-v]{20}$"))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // Both minted policies via sys/policies/acl (T2 — never a static file).
+        Mock::given(method("POST"))
+            .and(path_regex(
+                r"^/v1/sys/policies/acl/ssh-lane-signer-[0-9a-v]{20}$",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path_regex(
+                r"^/v1/sys/policies/acl/ssh-host-signer-[0-9a-v]{20}$",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .expect(1)
+            .mount(&server)
+            .await;
+        // The commit marker is create-only: options.cas = 0 (D13 — written
+        // ONCE), and it must be the LAST write.
+        Mock::given(method("POST"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .and(body_partial_json(
+                serde_json::json!({ "options": { "cas": 0 } }),
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "version": 1 }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let client = VaultClient::new(server.uri(), "root");
+        let id = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect("first provision must mint and persist");
+        assert!(
+            mirror_id_is_valid(&id),
+            "minted id fails its own grammar: {id}"
+        );
+        server.verify().await;
+    }
+
+    #[tokio::test]
+    async fn losing_the_cas_race_adopts_the_winning_identity() {
+        use wiremock::matchers::{method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        // First read: absent (this process starts a mint). Second read,
+        // after the cas conflict: the concurrent winner's identity.
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(404).set_body_json(serde_json::json!({
+                "errors": []
+            })))
+            .up_to_n_times(1)
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": {
+                    "data": { "mirror_id": "vvvvvvvvvvvvvvvvvvvv", "project": "alpha" },
+                    "metadata": { "version": 1 }
+                }
+            })))
+            .mount(&server)
+            .await;
+        for pattern in [
+            r"^/v1/sys/mounts/ssh-(client|host)-signer$",
+            r"^/v1/ssh-(client|host)-signer/config/ca$",
+            r"^/v1/ssh-client-signer/roles/[0-9a-v]{20}$",
+            r"^/v1/ssh-host-signer/roles/host-[0-9a-v]{20}$",
+            r"^/v1/sys/policies/acl/ssh-(lane|host)-signer-[0-9a-v]{20}$",
+        ] {
+            Mock::given(method("POST"))
+                .and(path_regex(pattern))
+                .respond_with(ResponseTemplate::new(204))
+                .mount(&server)
+                .await;
+        }
+        // The create-only write loses: Vault rejects a cas=0 write over an
+        // existing version with 400 + a check-and-set error.
+        Mock::given(method("POST"))
+            .and(path("/v1/secret/data/mirror-identity/alpha"))
+            .respond_with(ResponseTemplate::new(400).set_body_json(serde_json::json!({
+                "errors": ["check-and-set parameter did not match the current version"]
+            })))
+            .mount(&server)
+            .await;
+
+        let client = VaultClient::new(server.uri(), "root");
+        let id = provision_mirror_identity(&client, "alpha", "10.0.42.0/24", false)
+            .await
+            .expect("cas loser must adopt the winner, not error");
+        assert_eq!(
+            id, "vvvvvvvvvvvvvvvvvvvv",
+            "two concurrent first-provisions must converge on ONE identity"
+        );
+    }
+
+    #[test]
+    fn vault_entrypoint_mounts_both_ssh_signer_engines_and_generates_cas() {
+        // T1 boot half: the image entrypoint must ensure both SSH CA engines
+        // and generate both in-Vault CAs, in the same idempotent
+        // enable_endpoint style as approle/kv2/audit. (The host-side
+        // provision_mirror_ssh_roles covers vaults initialized before this
+        // shipped — the entrypoint only provisions on first boot.)
+        let entrypoint = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/vault/entrypoint.sh"
+        ));
+        for needle in [
+            "/v1/sys/mounts/ssh-client-signer",
+            "/v1/sys/mounts/ssh-host-signer",
+            "/v1/ssh-client-signer/config/ca",
+            "/v1/ssh-host-signer/config/ca",
+        ] {
+            assert!(
+                entrypoint.contains(needle),
+                "images/vault/entrypoint.sh must ensure {needle} (606-bvnp T1)"
+            );
+        }
+        assert!(
+            entrypoint.contains("\"generate_signing_key\":true"),
+            "the CA keypair must be generated INSIDE Vault (design D2)"
+        );
+        // The dynamic per-project artifacts must NOT be baked into the boot
+        // path — roles are provision-time (amended T1).
+        assert!(
+            !entrypoint.contains("ssh-client-signer/roles/")
+                && !entrypoint.contains("ssh-host-signer/roles/"),
+            "per-project roles are created at mirror provision, never at boot"
+        );
+        assert!(
+            !entrypoint.contains("sign/*"),
+            "no sign/* wildcard may appear anywhere in the vault entrypoint"
+        );
     }
 }

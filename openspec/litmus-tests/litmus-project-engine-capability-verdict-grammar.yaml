@@ -1,0 +1,183 @@
+# @trace spec:forge-environment-discoverability
+# @trace order:619-pfsj (project-answer-uniform-surface, exit criterion C3)
+# @trace order:669-qcsb (this grammar shipped with NO litmus guard)
+# @trace order:569 (forge-experts-capability-honesty), order:531, order:459
+#
+# THE GAP THIS CLOSES
+#
+# Order 619-pfsj added a brand-new machine surface — the generic answer
+# ENGINE's capability verdict — and shipped it ownerless: no litmus executed
+# it (the 660-ryhn lesson: bound-but-never-run is silence; unbound-and-unrun
+# is the same silence one layer earlier). Agents branch on this line to decide
+# whether to trust project_answer or demand an image rebuild, so a silent
+# grammar drift here sends every reader to the wrong remedy.
+#
+# THE PACKAGING DISTINCTION UNDER TEST: unlike the plan expert (launch-built
+# from the mounted checkout, healed by relaunch — litmus:expert-capability-
+# skew-honesty), project-info.sh is IMAGE-BAKED (order 459). Its sources are
+# never the mounted checkout and no relaunch rebuilds it, so `skewed` carries
+# the opposite advice: rebuild the image, waiting is futile.
+#
+# PINNED GRAMMAR (closed vocabulary, no indeterminate state):
+#   project_engine: state=<ready|absent|stale-engine|skewed> \
+#                   baked=<engine-contract-vN|-> expected=<engine-contract-vN|-> \
+#                   missing_in_engine=<csv|-> engine_only=<csv|->
+#
+# Every verdict is EXECUTED from a constructed fixture — the real helper, the
+# real engine script, no containers, pure shell. Anchored full-line greps, so
+# a field rename, reorder, or a fifth state turns this RED.
+name: litmus:project-engine-capability-verdict-grammar
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin order 619-pfsj C3: the image-baked generic answer engine's capability
+  verdict line. All four states (ready, ready-with-no-expectation, skewed,
+  stale-engine, absent) executed from fixtures with anchored full-line greps,
+  the per-state advice grammar (IMAGE REBUILD REQUIRED for skewed), the
+  engine's `capabilities` self-report shape, the closed state vocabulary, the
+  helper-missing fallback naming in forge discovery, and the fail-soft
+  contract.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-project-engine-capability.sh (the probe)
+  - workspace contains images/default/config-overlay/mcp/project-info.sh (the engine)
+  - sh and awk are available in PATH
+
+critical_path:
+  - step: "FIXTURE: stage engine copies and fixture checkouts"
+    # rm -rf first is load-bearing: every later step reads these files, so a
+    # stale fixture from a previous run would let them pass while testing
+    # nothing (the dead-check trap, applied to fixture state). The skew
+    # checkout is a PURE SUPERSET of the engine manifest — awk (not sed \n,
+    # which BSD sed mangles) inserts one extra token after the contract
+    # version line, so missing_in_engine names exactly that token. The
+    # pre-manifest stub prints JSON-RPC-era prose, which the shape filter must
+    # DROP rather than mistake for a capability list.
+    command: "rm -rf /tmp/.litmus-669e && mkdir -p /tmp/.litmus-669e/engine /tmp/.litmus-669e/co-skew/images/default/config-overlay/mcp /tmp/.litmus-669e/co-none && cp images/default/config-overlay/mcp/project-info.sh /tmp/.litmus-669e/engine/project-info.sh && chmod +x /tmp/.litmus-669e/engine/project-info.sh && awk '{print} /^engine-contract-v[0-9]+$/ {print \"brand-new-capability\"}' images/default/config-overlay/mcp/project-info.sh > /tmp/.litmus-669e/co-skew/images/default/config-overlay/mcp/project-info.sh && printf '#!/bin/sh\\necho \"usage: project-info reads JSON-RPC frames on stdin\"\\n' > /tmp/.litmus-669e/engine/pre-manifest && chmod +x /tmp/.litmus-669e/engine/pre-manifest && echo 'ok: fixture-ready'"
+    timeout_ms: 15000
+    expected_behavior: "ok: fixture-ready"
+
+  - step: "BEHAVIOURAL: the engine self-reports its manifest — bare tokens, a contract version, exit 0, no stdin needed"
+    # The order-569 pattern asked of the ARTIFACT: `capabilities` must answer
+    # BEFORE the JSON-RPC loop (stdin from /dev/null), print one bare
+    # [a-z][a-z0-9-]* token per line, and carry exactly one engine-contract-vN
+    # version token. A pre-manifest engine prints prose here; the shape is
+    # what rejects it, because exit codes cannot (order 531).
+    command: "/tmp/.litmus-669e/engine/project-info.sh capabilities </dev/null > /tmp/.litmus-669e/manifest.txt && test -s /tmp/.litmus-669e/manifest.txt && ! grep -v '^$' /tmp/.litmus-669e/manifest.txt | grep -qvE '^[a-z][a-z0-9-]*$' && n=$(grep -cE '^engine-contract-v[0-9]+$' /tmp/.litmus-669e/manifest.txt) && test \"$n\" = 1 && echo 'ok: manifest-self-report-shape'"
+    timeout_ms: 15000
+    expected_behavior: "ok: manifest-self-report-shape"
+
+  - step: "DRIFT PIN: the probe's checkout-source path names a file that exists, and the Containerfile bakes the probe"
+    # TILLANDSIAS_PROJECT_ENGINE_SRC_REL must stay identical to the engine's
+    # real checkout location: if the engine file moves without this constant,
+    # `expected` silently reads none on a perfectly good checkout and every
+    # skew verdict collapses to ready — a probe that cannot go red. And if the
+    # Containerfile drops the COPY, forge discovery degrades to
+    # probe=helper-missing everywhere.
+    command: "p=$(sed -n 's/^TILLANDSIAS_PROJECT_ENGINE_SRC_REL=\"\\(.*\\)\"$/\\1/p' images/default/lib-project-engine-capability.sh) && test -n \"$p\" && test -f \"$p\" && grep -q '^COPY lib-project-engine-capability.sh /usr/local/lib/tillandsias/lib-project-engine-capability.sh$' images/default/Containerfile && echo \"ok: src-rel-resolves=$p\""
+    timeout_ms: 10000
+    expected_behavior: "ok: src-rel-resolves="
+
+  - step: "BEHAVIOURAL: matching engine and checkout -> state=ready, versions agree, both diffs empty"
+    # Engine copy vs the REAL checkout. This doubles as the textual-extraction
+    # drift pin: `expected` is read out of the checkout's engine source
+    # without executing it, so a non `-` expected here proves the sed
+    # extraction still finds the manifest block where the checkout keeps it.
+    command: "L=$(sh images/default/lib-project-engine-capability.sh /tmp/.litmus-669e/engine/project-info.sh \"$PWD\" | head -1) && printf '%s\\n' \"$L\" | grep -qE '^project_engine: state=ready baked=engine-contract-v[0-9]+ expected=engine-contract-v[0-9]+ missing_in_engine=- engine_only=-$' && b=$(printf '%s' \"$L\" | sed 's/.*baked=\\([^ ]*\\).*/\\1/') && e=$(printf '%s' \"$L\" | sed 's/.*expected=\\([^ ]*\\).*/\\1/') && test \"$b\" = \"$e\" && echo 'ok: verdict-ready-match'"
+    timeout_ms: 15000
+    expected_behavior: "ok: verdict-ready-match"
+
+  - step: "BEHAVIOURAL: a checkout with NO expectation -> ready with expected=- visible, and NO cry of skew"
+    # Non-Tillandsias projects are the common case. "No expectation found" is
+    # not evidence of skew; crying skew there would be a guess. expected=-
+    # stays VISIBLE so nothing is hidden.
+    command: "O=$(sh images/default/lib-project-engine-capability.sh /tmp/.litmus-669e/engine/project-info.sh /tmp/.litmus-669e/co-none) && printf '%s\\n' \"$O\" | head -1 | grep -qE '^project_engine: state=ready baked=engine-contract-v[0-9]+ expected=- missing_in_engine=- engine_only=-$' && printf '%s\\n' \"$O\" | sed -n 2p | grep -q '^No engine skew:' && echo 'ok: verdict-ready-no-expectation'"
+    timeout_ms: 15000
+    expected_behavior: "ok: verdict-ready-no-expectation"
+
+  - step: "BEHAVIOURAL: checkout expects MORE than the engine bakes -> state=skewed, the missing token NAMED, advice says IMAGE REBUILD"
+    # The order-531 shape for this packaging. missing_in_engine must name
+    # exactly the fixture's extra token, and the advice must say the true
+    # remedy for an image-baked artifact: rebuild the image — NOT wait, NOT
+    # relaunch (the plan-expert remedy, which is futile here).
+    command: "O=$(sh images/default/lib-project-engine-capability.sh /tmp/.litmus-669e/engine/project-info.sh /tmp/.litmus-669e/co-skew) && printf '%s\\n' \"$O\" | head -1 | grep -qE '^project_engine: state=skewed baked=engine-contract-v[0-9]+ expected=engine-contract-v[0-9]+ missing_in_engine=brand-new-capability engine_only=-$' && printf '%s\\n' \"$O\" | sed -n 2p | grep -q '^IMAGE REBUILD REQUIRED:' && printf '%s\\n' \"$O\" | sed -n 2p | grep -q 'Rebuild the forge image' && echo 'ok: verdict-skewed-named'"
+    timeout_ms: 15000
+    expected_behavior: "ok: verdict-skewed-named"
+
+  - step: "BEHAVIOURAL: an engine with NO self-reported manifest -> state=stale-engine (unknowable, not assumed)"
+    # The pre-manifest stub prints prose, not tokens; the shape filter drops
+    # it and the verdict is stale-engine with baked=-. Its capabilities are
+    # UNKNOWABLE — reporting ready here would assume abilities nobody
+    # measured, the exact lie order 531 named.
+    command: "O=$(sh images/default/lib-project-engine-capability.sh /tmp/.litmus-669e/engine/pre-manifest \"$PWD\") && printf '%s\\n' \"$O\" | head -1 | grep -qE '^project_engine: state=stale-engine baked=- expected=engine-contract-v[0-9]+ missing_in_engine=- engine_only=-$' && printf '%s\\n' \"$O\" | sed -n 2p | grep -q '^UNKNOWABLE ENGINE:' && echo 'ok: verdict-stale-engine'"
+    timeout_ms: 15000
+    expected_behavior: "ok: verdict-stale-engine"
+
+  - step: "BEHAVIOURAL: no engine resolves at all -> state=absent, expectation still reported"
+    command: "O=$(sh images/default/lib-project-engine-capability.sh /tmp/.litmus-669e/no-such-engine \"$PWD\") && printf '%s\\n' \"$O\" | head -1 | grep -qE '^project_engine: state=absent baked=- expected=engine-contract-v[0-9]+ missing_in_engine=- engine_only=-$' && printf '%s\\n' \"$O\" | sed -n 2p | grep -q '^NO GENERIC ANSWER ENGINE:' && echo 'ok: verdict-absent'"
+    timeout_ms: 15000
+    expected_behavior: "ok: verdict-absent"
+
+  - step: "the state vocabulary is CLOSED — exactly four values can ever be assigned, each with advice written for it"
+    # An open-ended verdict is an unfalsifiable state. The assignment count is
+    # asserted EXACTLY so a fifth state cannot be added without the advice
+    # function growing an action for it (the advice case labels are checked by
+    # name for the three non-default states).
+    command: "n=$(grep -c 'TILLANDSIAS_PROJECT_ENGINE_STATE=\"' images/default/lib-project-engine-capability.sh) && test \"$n\" = 4 && for v in absent stale-engine skewed; do grep -q \"TILLANDSIAS_PROJECT_ENGINE_STATE=\\\"$v\\\"\" images/default/lib-project-engine-capability.sh || exit 1; grep -q \"^        $v)\" images/default/lib-project-engine-capability.sh || exit 1; done; echo \"ok: closed-state-vocabulary n=$n\""
+    timeout_ms: 10000
+    expected_behavior: "ok: closed-state-vocabulary"
+
+  - step: "forge discovery NAMES a missing probe and renders the machine line — never a silent no-skew"
+    # lib-common.sh cannot be sourced on a host, so the rendering is pinned
+    # textually: the helper-missing fallback must keep probe=helper-missing in
+    # the same grammar (an absent probe reporting a verdict would be the
+    # order-531 lie), and the startup context must carry both the
+    # ENGINE-vs-CHECKOUT machine line and the typed-refusal branching hint.
+    command: "grep -qF 'project_engine: state=unknown baked=- expected=- missing_in_engine=- engine_only=- probe=helper-missing' images/default/lib-common.sh && grep -q 'Machine-readable ENGINE-vs-CHECKOUT skew' images/default/lib-common.sh && grep -q 'missing_capability=local-inference' images/default/lib-common.sh && echo 'ok: discovery-renders-and-names-fallback'"
+    timeout_ms: 10000
+    expected_behavior: "ok: discovery-renders-and-names-fallback"
+
+  - step: "FAIL-SOFT: the probe returns 0 and stays inside the grammar for every hostile input"
+    # The engine is OPTIONAL (order 486 warn-and-continue): a capability probe
+    # that breaks a launch is strictly worse than the skew it measures — and
+    # it is sourced under `set -e`, where one failing command kills the
+    # session. A crashing engine, a nonexistent everything, and a /dev/null
+    # checkout must all yield a grammar-shaped line.
+    command: "printf '#!/bin/sh\\nexit 3\\n' > /tmp/.litmus-669e/engine/boom && chmod +x /tmp/.litmus-669e/engine/boom; for pair in '/tmp/.litmus-669e/engine/boom /tmp/.litmus-669e/co-none' '/nonexistent /nonexistent' '/tmp/.litmus-669e/engine/project-info.sh /dev/null'; do set -- $pair; out=$(bash -c \"set -euo pipefail; . images/default/lib-project-engine-capability.sh; tillandsias_project_engine_capability '$1' '$2'; printf '%s' \\\"\\$TILLANDSIAS_PROJECT_ENGINE_LINE\\\"\") || { echo \"probe FAILED for $pair\"; exit 1; }; case $out in 'project_engine: state='*' baked='*' expected='*' missing_in_engine='*' engine_only='*) ;; *) echo \"grammar broken: $out\"; exit 1 ;; esac; done; echo 'ok: probe-fail-soft'"
+    timeout_ms: 30000
+    expected_behavior: "ok: probe-fail-soft"
+
+  - step: "NO-PYTHON: the capability probe is POSIX shell + awk only"
+    # Comments are stripped before the check — a guard that cannot tell a
+    # prohibition from a violation is not a guard.
+    command: "sed 's/#.*//' images/default/lib-project-engine-capability.sh | grep -qiE '(^|[^a-z])python' && exit 1; sh -n images/default/lib-project-engine-capability.sh && echo 'ok: no-python-posix-only'"
+    timeout_ms: 10000
+    expected_behavior: "ok: no-python-posix-only"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace order:619-pfsj"
+    - "@trace order:669-qcsb"
+  expected_log: "project_engine verdict grammar pinned: four states from fixtures, advice per state, closed vocabulary, fail-soft"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "project-engine-capability-verdict-grammar"
+    probe: "images/default/lib-project-engine-capability.sh"
+    engine: "images/default/config-overlay/mcp/project-info.sh"
+
+rollback:
+  on_failure: >
+    The generic answer engine's capability verdict grammar regressed. If a
+    verdict step failed, agents branching on `project_engine: state=` are now
+    being sent to the wrong remedy — for an IMAGE-BAKED engine the only cure
+    for skew is an image rebuild, and a collapsed or renamed state turns that
+    advice into the plan-expert's wait/relaunch advice, which is futile here.
+    If the self-report step failed, `project-info.sh capabilities` no longer
+    answers in the order-569 shape and every reader of the manifest is blind.
+    If the closed-vocabulary step failed, a state exists with no action
+    written for it. If FAIL-SOFT failed, the probe can now kill a forge
+    launch to report on an optional engine.
+  command: "sh images/default/lib-project-engine-capability.sh; sed -n '30,90p' images/default/lib-project-engine-capability.sh"

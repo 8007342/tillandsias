@@ -20,9 +20,59 @@ critical_path:
     expected_behavior: "ok: freshness-inventory.sh present"
 
   - step: "Req: report emits the pinned header grammar"
-    command: "scripts/freshness-inventory.sh >/tmp/freshness-report.txt 2>&1; grep -qE '^freshness-inventory: [0-9]+ components, [0-9]+ stamped, [0-9]+ unstamped$' /tmp/freshness-report.txt && grep -qE '^freshness-coverage: [0-9]+%$' /tmp/freshness-report.txt && echo 'ok: header grammar pinned'"
+    command: "scripts/freshness-inventory.sh >/tmp/freshness-report.txt 2>&1; grep -qE '^freshness-inventory: [0-9]+ components, [0-9]+ stamped, [0-9]+ unstamped$' /tmp/freshness-report.txt && grep -qE '^freshness-coverage: [0-9]+\\.[0-9]% \\([0-9]+/[0-9]+ delta=(unknown|[+-][0-9]+)\\)$' /tmp/freshness-report.txt && echo 'ok: header grammar pinned'"
     timeout_ms: 15000
     expected_behavior: "ok: header grammar pinned"
+
+  - step: "TARGET TRUTH: the reported coverage target matches methodology.yaml (order 640-iujb)"
+    # The operator ruled the coverage target is a DEFINED SUBSET, recorded in
+    # methodology.yaml component_freshness.coverage_target.scope. If the report
+    # and the methodology can disagree, the advisory is measuring against a
+    # target nobody approved — which is the divergent implicit-100% failure the
+    # ruling replaced. Assert they are the SAME value, not merely both present.
+    command: "want=$(awk '/^    coverage_target:/{b=1;next} b&&/^    [a-z_]+:/{exit} b&&$1==\"scope:\"{print $2;exit}' methodology.yaml); got=$(scripts/freshness-inventory.sh | grep -oE '^freshness-target: scope=[^ ]+' | cut -d= -f2); [ -n \"$want\" ] && [ \"$want\" != 'unknown' ] && [ \"$want\" = \"$got\" ] && echo \"ok: reported target matches methodology ($got)\""
+    timeout_ms: 60000
+    expected_behavior: "ok: reported target matches methodology (defined-subset)"
+
+  - step: "DENOMINATOR: generated trees are excluded from coverage (order 640-iujb)"
+    # images/default/cheatsheets/ is regenerated from cheatsheets/ by
+    # scripts/stage-image-cheatsheets.sh. Auditing the copy asks a question
+    # already answered by auditing the source, and it inflated the denominator
+    # by ~233 components. If this count returns to zero, the exclusion was lost.
+    command: "out=$(scripts/freshness-inventory.sh); n=$(printf '%s' \"$out\" | grep -oE '^freshness-target: .*excluded=[0-9]+' | grep -oE '[0-9]+$'); printf '%s' \"$out\" | grep -q '^freshness-unstamped: images/default/cheatsheets/' && { echo 'FAIL: generated cheatsheet copy still counted'; exit 1; }; [ \"${n:-0}\" -gt 0 ] && echo 'ok: generated components excluded from denominator'"
+    timeout_ms: 60000
+    expected_behavior: "ok: generated components excluded from denominator"
+
+  - step: "DENOMINATOR: untracked files are not components (order 730-j26z)"
+    # The audit queue offered images/default/skills/multihost-orchestration/SKILL.md
+    # as its next target — one of 13 files in a gitignored staging tree that a
+    # script copies from the canonical skills/, several of which already DIFFER
+    # from their source. Auditing a stale copy for "is this still sound?"
+    # answers a question about the copier. Trackedness is the property; the
+    # prefix list only catches derived trees someone remembered to name.
+    command: "out=$(scripts/freshness-inventory.sh); bad=0; while read -r f; do [ -n \"$f\" ] || continue; git ls-files --error-unmatch \"$f\" >/dev/null 2>&1 || bad=$((bad+1)); done <<< \"$(printf '%s' \"$out\" | grep -E '^freshness-(unstamped|stamp): ' | sed -E 's/^freshness-(unstamped|stamp): //; s/ .*//')\"; [ \"$bad\" -eq 0 ] && echo 'ok: every component is git-tracked'"
+    timeout_ms: 120000
+    expected_behavior: "ok: every component is git-tracked"
+
+  - step: "DENOMINATOR: the ruled-in trees are actually enumerated (order 720-bmm9)"
+    # methodology.yaml names "executable/source code ... and specs
+    # (openspec/specs)" as in-scope, and for months the inventory enumerated
+    # neither — so coverage was reported against a denominator narrower than the
+    # ruled subset while looking authoritative. The exclusion guard above stops
+    # the denominator growing wrong; this stops it silently shrinking. Both
+    # trees must contribute components.
+    command: "out=$(scripts/freshness-inventory.sh); rs=$(printf '%s' \"$out\" | grep -cE '^freshness-(unstamped|stamp): crates/'); sp=$(printf '%s' \"$out\" | grep -cE '^freshness-(unstamped|stamp): openspec/specs/'); [ \"$rs\" -gt 0 ] && [ \"$sp\" -gt 0 ] && echo 'ok: source and spec trees in the denominator'"
+    timeout_ms: 60000
+    expected_behavior: "ok: source and spec trees in the denominator"
+
+  - step: "SCOPE CHANGE IS NOT DECAY: a denominator move is reported separately (order 720-bmm9)"
+    # Widening the subset dropped coverage from 1.3% to 1.0% without losing a
+    # single stamp. Without a denominator delta that reads as regression, and
+    # the honest reading — the target got bigger — is unavailable to anyone
+    # looking at the report alone.
+    command: "scripts/freshness-inventory.sh | grep -qE '^freshness-target: scope=[^ ]+ excluded=[0-9]+ denominator_delta=(unknown|[+-][0-9]+) source=methodology.yaml$' && echo 'ok: denominator delta reported'"
+    timeout_ms: 60000
+    expected_behavior: "ok: denominator delta reported"
 
   - step: "Req: local CI ranks stale audit candidates by numeric age"
     command: "sample=$(printf '%s\\n' 'freshness-stale: z.sh 3 days' 'freshness-stale: a.sh 20 days'); first=$(printf '%s\\n' \"$sample\" | sort -t' ' -k3,3nr | head -1); grep -Fq \"sort -t' ' -k3,3nr\" scripts/local-ci.sh && [ \"$first\" = 'freshness-stale: a.sh 20 days' ] && echo 'ok: advisory ranks by age'"
@@ -48,9 +98,14 @@ critical_path:
     # — nine days, +52 components, +0 stamps. The class was not slow, it was
     # closed. If this step ever fails while coverage is under 100%, the path from
     # "never audited" to "audited" has been severed again.
-    command: "out=$(scripts/freshness-inventory.sh); pct=$(printf '%s' \"$out\" | grep '^freshness-coverage:' | sed 's/[^0-9]//g'); [ \"$pct\" -ge 100 ] && { echo 'ok: coverage complete, stale fallback correct'; exit 0; }; printf '%s' \"$out\" | grep -qE '^freshness-next: .* source=unstamped ' && echo 'ok: unstamped component reachable'"
+    command: "out=$(scripts/freshness-inventory.sh); pct=$(printf '%s' \"$out\" | grep '^freshness-coverage:' | grep -oE '[0-9]+\\.[0-9]' | head -1 | cut -d. -f1); [ \"${pct:-0}\" -ge 100 ] && { echo 'ok: coverage complete, stale fallback correct'; exit 0; }; printf '%s' \"$out\" | grep -qE '^freshness-next: .* source=unstamped ' && echo 'ok: unstamped component reachable'"
     timeout_ms: 60000
     expected_behavior: "ok: unstamped component reachable"
+
+  - step: "CLASSIFICATION TRUTH: threshold, boundary, malformed, and clock-skew fixtures classify correctly (606-vaua)"
+    command: "scripts/freshness-inventory.sh --self-test"
+    success_pattern: "freshness-selftest: PASS"
+    timeout_ms: 30000
 
   - step: "REPRODUCIBLE: a fixed seed selects the same next target"
     command: "a=$(FRESHNESS_SEED=litmus-fixed scripts/freshness-inventory.sh | grep '^freshness-next:'); b=$(FRESHNESS_SEED=litmus-fixed scripts/freshness-inventory.sh | grep '^freshness-next:'); [ -n \"$a\" ] && [ \"$a\" = \"$b\" ] && echo 'ok: next target reproducible'"

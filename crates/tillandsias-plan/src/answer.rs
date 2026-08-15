@@ -125,9 +125,10 @@ impl Citation {
                 .authority
                 .get("packet_id")
                 .map(|id| format!("packet_id: {id}"))
+                .or_else(|| self.authority.get("key").cloned())
                 .ok_or_else(|| {
                     format!(
-                        "{}:{}-{}: plan citation carries no authority.packet_id, so nothing can be verified against its span",
+                        "{}:{}-{}: plan citation carries no authority.packet_id or authority.key, so nothing can be verified against its span",
                         self.path, self.line_start, self.line_end
                     )
                 }),
@@ -389,7 +390,7 @@ pub fn verify(envelope: &Envelope, root: &Path) -> Vec<String> {
         // well-formed lie. `packet_id` is already covered by `span_key` above.
         if c.kind == CitationKind::Plan {
             for (key, value) in &c.authority {
-                if key == "packet_id" {
+                if key == "packet_id" || key == "section" || key == "key" {
                     continue;
                 }
                 if !span_substantiates(&span, key, value) {
@@ -690,6 +691,18 @@ pub fn answer_question(ledger: &Ledger, question: &str, source_rel: &str) -> Env
         .unwrap_or_else(|| Freshness::new("unknown".into(), "unknown".into()));
 
     let Some(intent) = classify(ledger, question) else {
+        // ORDER 706-f7mq. Fallback to modular semantic explanation over plan documents
+        let root = ledger
+            .source_path()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            .unwrap_or_else(|| Path::new("."));
+        let provider = crate::semantic_expert::PlanSectionProvider::new(root);
+        let explainer = crate::semantic_expert::SemanticExplainer::default();
+        if let Some(env) = explainer.explain_query(&provider, question, &freshness) {
+            return env;
+        }
+
         return Envelope::unsupported(
             format!(
                 "no packet in the ledger matches any token in {:?}, and it is not a recognised ready/burndown query",
@@ -1225,6 +1238,49 @@ pub fn epoch_to_iso8601(secs: i64) -> String {
     let (y, m, d) = civil_from_days(days);
     let (hh, mm, ss) = (rem / 3600, (rem % 3600) / 60, rem % 60);
     format!("{y:04}-{m:02}-{d:02}T{hh:02}:{mm:02}:{ss:02}Z")
+}
+
+/// `YYYY-MM-DDTHH:MM:SSZ` -> Unix seconds. The inverse of
+/// [`epoch_to_iso8601`], added for order 719-kgr5: a `--ts` the tooling accepts
+/// on trust cannot be compared against the host clock, and eleven consecutive
+/// windows cycles wrote invented timestamps that drifted up to 8.6 hours ahead
+/// of their own commits before anything noticed.
+///
+/// Deliberately strict about SHAPE. It accepts only the exact form this ledger
+/// writes; a lenient parser here would let a subtly different string through
+/// and reintroduce the ordering corruption by another door. Returns None on
+/// anything it does not fully understand, and the callers refuse rather than
+/// guess.
+pub fn iso8601_to_epoch(iso: &str) -> Option<i64> {
+    let b = iso.as_bytes();
+    if b.len() != 20
+        || b[4] != b'-'
+        || b[7] != b'-'
+        || b[10] != b'T'
+        || b[13] != b':'
+        || b[16] != b':'
+        || b[19] != b'Z'
+    {
+        return None;
+    }
+    let num = |from: usize, to: usize| -> Option<i64> { iso.get(from..to)?.parse::<i64>().ok() };
+    let (y, mo, d) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    let (h, mi, s) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || s > 60 {
+        return None;
+    }
+    Some(days_from_civil(y, mo as u32, d as u32) * 86_400 + h * 3600 + mi * 60 + s)
+}
+
+/// Hinnant's days-from-civil, the exact inverse of [`civil_from_days`].
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = if y >= 0 { y } else { y - 399 }.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = if m > 2 { m - 3 } else { m + 9 } as i64;
+    let doy = (153 * mp + 2) / 5 + d as i64 - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
 }
 
 fn civil_from_days(z: i64) -> (i64, u32, u32) {
@@ -1870,5 +1926,44 @@ mod tests {
         // A leap day, because off-by-one calendars are the classic bug here.
         assert_eq!(epoch_to_iso8601(1_709_164_800), "2024-02-29T00:00:00Z");
         assert_eq!(epoch_to_iso8601(1_753_660_800), "2025-07-28T00:00:00Z");
+    }
+
+    /// Order 719-kgr5. The skew guard is only as good as this parser: a value
+    /// it silently misreads becomes a skew it silently mis-measures.
+    #[test]
+    fn iso8601_parsing_round_trips_and_refuses_what_it_does_not_understand() {
+        for secs in [
+            0_i64,
+            1_000_000_000,
+            1_709_164_800,
+            1_753_660_800,
+            1_786_000_000,
+        ] {
+            let iso = epoch_to_iso8601(secs);
+            assert_eq!(iso8601_to_epoch(&iso), Some(secs), "round trip for {iso}");
+        }
+
+        // The real values from the drift report, so the guard is anchored to
+        // the measurement that produced it: a claimed 22:05:00Z against a
+        // commit at 13:28:29Z is 8h36m31s, not a rounding difference.
+        let claimed = iso8601_to_epoch("2026-08-13T22:05:00Z").expect("claimed parses");
+        let actual = iso8601_to_epoch("2026-08-13T13:28:29Z").expect("actual parses");
+        assert_eq!(claimed - actual, 8 * 3600 + 36 * 60 + 31);
+
+        // NEGATIVE CONTROL: shapes the ledger never writes are refused rather
+        // than half-read. A lenient parser here would reintroduce the ordering
+        // corruption through a door the guard does not watch.
+        for bad in [
+            "",
+            "2026-08-13",
+            "2026-08-13T22:05:00",       // no zone
+            "2026-08-13T22:05:00+00:00", // right instant, wrong shape
+            "2026-08-13t22:05:00z",      // the compact-name casing
+            "2026-13-01T00:00:00Z",      // month 13
+            "2026-08-13T24:05:00Z",      // hour 24
+            "not-a-timestamp-at-all",
+        ] {
+            assert_eq!(iso8601_to_epoch(bad), None, "must refuse {bad:?}");
+        }
     }
 }

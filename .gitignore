@@ -86,8 +86,11 @@ images/default/cheatsheet-sources/
 # Generated per-image build logs (build-image.sh writes build-<IMAGE>.log)
 build-*.log
 
-# Generated diagnostic dumps (forge diagnostics, etc.)
-/plan/diagnostics/
+# Generated diagnostic raw logs and dumps (summaries in plan/diagnostics/ are durable and committed; see plan/diagnostics/README.md; 745-48q6)
+/plan/diagnostics/*.log
+/plan/diagnostics/*.raw
+/plan/diagnostics/*.dump
+/plan/diagnostics/*.tmp
 /forge-diagnostics.json
 
 # Generated headless binaries for Windows tray embed
@@ -97,3 +100,22 @@ crates/tillandsias-windows-tray/assets/tillandsias-headless-*
 # launch; tracking them dirties the checkout on every forge start (order 444).
 .opencode/package-lock.json
 .opencode/node_modules
+
+# @trace order:707-t3mz — On-Demand-Subject-Experts. Pulled external docs are
+# EPHEMERAL and NEVER committed (pull-on-demand, re-pulled per forge launch by
+# design). Canonical location is OUTSIDE the repo (~/.cache/tillandsias/), but
+# guard against any repo-relative pull polluting the project on a dev machine.
+**/experts-pulled/
+**/cheatsheets-pulled/
+**/docs-pulled/
+.cache/
+
+# Leaked/launch log shapes not caught by the build-*/diag*/out*/smoke*/err* prefixes
+# (audit 2026-08-12: init-debug*.log, tray_output.log were tracked before any pattern existed)
+/init-*.log
+/tray_output.log
+# Defense-in-depth against the artifact-leak class that put target-musl/** in history:
+# catch Rust/obj artifacts and node_modules even if they ever land OUTSIDE a target*/ dir.
+node_modules/
+*.rlib
+*.o

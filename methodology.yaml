@@ -289,3 +289,222 @@ methodology:
       (refreshed|updated|obsoleted), one-line scope note. Detailed schema and
       rollout ladder: plan/issues/component-freshness-lifecycle-2026-07-15.md
       (flag -> soak -> default, per migration_discipline).
+    canonical_threshold:
+      authority: "order 606-vaua (2026-08-11); threshold ownership lives HERE, not in any script"
+      age_days: 30
+      clock_semantics: >
+        Age is computed in UTC, date-only: age_days = (today_utc -
+        stamp_date_utc) in whole days, ignoring time-of-day and host
+        timezone. A stamp is STALE iff age_days > age_days threshold
+        (strictly greater: a stamp exactly at the threshold is still
+        fresh). A stamp dated in the FUTURE (host clock skew or a typo)
+        clamps to age 0 — fresh — but MUST be surfaced on its own
+        `freshness-clock-skew:` line so the anomaly is visible rather than
+        silently absorbed. A stamp whose date field does not parse as
+        ISO-8601 date MUST be surfaced on a `freshness-malformed:` line
+        and counts as stamped-but-unassessable (never silently fresh,
+        never silently stale). Tools MUST read the threshold from this key
+        (env override FRESHNESS_THRESHOLD_DAYS permitted for tests) so a
+        future retuning happens in one place.
+    coverage_target:
+      authority: "The Tlatoāni, 2026-08-12 (order 640-iujb ruling)"
+      scope: defined-subset
+      rule: >
+        Coverage is NOT measured against every file. Only components that
+        ENCODE DESIGN INTENT are in scope — executable/source code, scripts,
+        litmus tests, specs (openspec/specs), and methodology docs — because
+        only those can go stale in the sense the audit asks about ("is this
+        still meaningful, sound, complete?"). EXCLUDED from the denominator:
+        generated files (regenerated from source), vendored/third-party trees,
+        and append-only event logs / ledgers / loop-status history. The
+        freshness advisory MUST report coverage against THIS subset, not an
+        implicit 100% of all files — an implicit-100% target was divergent
+        (~1013 files, +52 in nine days) and mostly meaningless.
+      rationale: >
+        A defined subset makes coverage both CONVERGENT and HONEST. Auditing a
+        generated or vendored or log file for "still meaningful?" is busywork
+        that inflates the denominator and never retires. bar_raise_governance
+        routed this scope choice to the operator; the loop's job was to make
+        the queue reachable and report the rate honestly (both done, 640-iujb).
+    audit_rate:
+      authority: "The Tlatoāni, 2026-08-12 (order 640-iujb ruling)"
+      rule: >
+        A cycle MAY BATCH the re-stamp of an UNCHANGED component — one whose
+        current content-hash matches the hash recorded at its last audit needs
+        no re-review, only a stamp refresh. "Unchanged since last stamp" is
+        script-checkable (compare content-hash), so what counts as a trivial
+        batchable audit is defined, not a judgment call. Components that
+        CHANGED since their last stamp, or were NEVER audited, still get the
+        careful ONE-per-cycle review that ends in refreshed | updated |
+        obsoleted. This retires the unchanged bulk cheaply while keeping real
+        review where content actually moved.
+      future_work: >
+        A richer design is filed for later (freshness-buckets, see the ledger):
+        criticality BUCKETS — a frequent, close-eye audit for critical-path
+        components and a batched "quick look" for the globally-unimportant
+        bulk — plus telemetry that flags UNTRACKED components as freshness
+        candidates and size/kind heuristics for batchability. This key records
+        the operator's near-term ruling; the bucketed model supersedes the
+        flat rate when that work lands.
+
+# ── On-Demand-Subject-Experts (2026-08-12, operator rulings) ──────────────────
+# Order 707-t3mz. When a project depends on a technology or best-practice domain,
+# the forge stands up a small RAG expert giving CITED, QUOTABLE answers to the
+# official docs — the "hard quote to a real span" that IS a verifiable litmus.
+on_demand_experts:
+  authority: "The Tlatoāni, 2026-08-12 (order 707-t3mz rulings)"
+  doc_lifecycle:
+    rule: >
+      External docs are PULL-ON-DEMAND, NEVER BUNDLED into images, NEVER
+      committed to the project. This dissolves all license/attribution
+      complexity by honoring ephemerality + idempotency: nothing is
+      redistributed; an ephemeral forge that loses the pulled docs simply
+      re-pulls them next launch, by design. No license-allowlist / bundle tier
+      is needed because nothing is baked or shipped.
+    three_zones_in_forge: >
+      All Tillandsias-owned state lives INSIDE /home (never /var, /etc, /opt —
+      it must be easy for an entry-level Linux user to find) and OUTSIDE the
+      project checkout at /home/<user>/src/<project>. Three zones with distinct
+      lifecycles: (1) HARD FORGE — the Linux/image components (dnf-installed,
+      rarely change); (2) EPHEMERAL FORGE — cached-but-not-committed state under
+      ~/.cache/tillandsias/ (build artifacts, warm nix cache, cheatsheets,
+      PULLED EXPERT DOCS); dies with the container, re-materialized on launch;
+      (3) PROJECT — the GitHub-backed checkout at ~/src/<project>, the only zone
+      that is version-controlled. Pulled docs and expert corpora live in zone 2,
+      never zone 3.
+    development_machine: >
+      On a bare-metal DEVELOPMENT host the same pull lands OUTSIDE the repo
+      (~/.cache/tillandsias/) and is additionally .gitignore-guarded against any
+      repo-relative pull, so on-demand docs never pollute the committed project.
+      Dev-machine and in-forge share the pull mechanism but differ in lifecycle:
+      the forge's cache dies with the container; the dev host's persists until
+      cleared.
+    cache_buckets: >
+      Some doc sets are hundreds of MB. They ride the cache-overlay volatility
+      buckets (order 687 + the 691-raj8 slow layer): LARGE, SLOW, STABLE
+      (rarely-changing, cache-friendly heavy corpora) and ON-DEMAND (pulled per
+      launch because their license forbids baking). Never the per-cycle VOLATILE
+      layer for the heavy ones — they would re-download every rebuild.
+  authority_labeling:
+    rule: >
+      Every expert corpus and every cited answer carries an authority label:
+      AUTHORITATIVE (the tech provider or a standards body — e.g. the A+ Promises
+      spec, ECMAScript, Reactive Streams) or COMMUNITY (widely-used patterns
+      whose source is essays/books/consensus — e.g. Fowler-style IoC/Factories/
+      DI). COMMUNITY patterns are NOT first-class but MUST be included: they are
+      often about to converge into authoritative ones (everything is a CRDT; we
+      love convergence). They may CONTRADICT each other, so the label lets an
+      in-forge agent decide when the AUTHORITATIVE approach suffices and when a
+      COMMUNITY approach has acceptable tradeoffs for a specific case. If an
+      authoritative source later supersedes a community pattern, the record
+      notes the supersession (CRDT convergence, not deletion).
+  technique:
+    rule: >
+      ALWAYS full chunk+embed RAG — one path for every corpus, small or large.
+      No summarize/Modelfile-stuffing branch: a single simple path is the most
+      trustworthy and consistent, and query latency is already near-instant. Do
+      NOT add a low-compute mode — the fleet is efficient enough to be GREEDY
+      with compute. On fatter hardware, INCREASE the synthesis model size where
+      it helps (measured per corpus) rather than shrinking the technique.
+  detection_and_pull_granularity:
+    authority: "The Tlatoāni, 2026-08-12 (order 707-t3mz Q5 ruling)"
+    rule: >
+      Pulls are DEMAND-DRIVEN, not manifest-bulk. Do NOT parse a manifest and
+      pull docs for every declared dependency. On a forge for a Rust project the
+      launcher seeds the PRIMARY tech (Rust + its basic related stuff) up front;
+      thereafter the AGENT pulls each additional topic on demand AS IT WORKS
+      (needs tokio -> pull tokio; needs something else -> pull that). Most doc
+      sets are a few pages (cheap); only a handful (Flutter, Java, ...) run to
+      hundreds of MB. Pull-on-demand for whatever is relevant to the current,
+      highly-targeted work — quick, idempotent, ephemeral. NO threshold or
+      eviction policy yet: adding "only N topics at a time" / eviction is a
+      LATER optimization to make only if this becomes unruly (do not
+      pre-optimize). This resolves the 707-t3mz P4 auto-detect open question:
+      P4 seeds the primary tech + enables agent-driven incremental pulls, it
+      does NOT bulk-pull the dependency graph.
+
+  build_cache_hygiene:
+    authority: "The Tlatoāni, 2026-08-12"
+    rule: >
+      LONG-DURABLE hosts (bare-metal dev machines / out-of-forge coordinators —
+      NOT ephemeral forges, which discard their whole substrate on teardown)
+      accumulate a large disposable build cache (target/ measured at 63G on the
+      linux dev host 2026-08-12). At the END of a meta-orchestration cycle a
+      durable host SHOULD reclaim it when it is genuinely bloated OR stale, and
+      NOT on every cycle (a full `cargo clean` forces a full rebuild next cycle,
+      so it must be rare). Trigger (whichever first): target/ exceeds 40 GiB, OR
+      a `.last-build-cache-sweep` marker under the cache dir is older than 14
+      days. Action: `cargo clean` (+ `nix-collect-garbage --delete-older-than
+      14d` / `nix store gc` when nix is present), then stamp the marker. END of
+      cycle, not beginning, so the reclaim happens after the cycle's work and
+      the cost (a fuller next-build) is paid during the idle gap. Ephemeral
+      forges are EXEMPT — their target/ dies with the container. Implemented +
+      litmus-pinned by the ledger packet build-cache-sweep-on-durable-hosts.
+
+  development_environment_lifecycle:
+    authority: "The Tlatoāni, 2026-08-13 (fleet-restart directive)"
+    primary_methodology: >
+      Our PRIMARY development methodology is Fedora Silverblue (immutable OS) with
+      toolbox/distrobox containers for the mutable dev toolchain. This host is
+      linux-MUTABLE (a variant), but scripts and tooling MUST favor the
+      Silverblue+toolbox path: idempotent scripts, ephemeral toolboxes, nothing
+      that assumes a mutable base OS. build.sh already re-execs into the
+      tillandsias-builder toolbox on Silverblue; keep that discipline.
+    two_lifetimes: >
+      Distinguish the LONG-LIVED bare-metal DEVELOPMENT ENVIRONMENT (a durable
+      checkout on a dev machine / coordinator) from the EPHEMERAL in-forge
+      container (discarded whole on teardown). The forge needs no GC — it dies.
+      The DEVELOPMENT ENVIRONMENT accumulates cruft and MUST run its own periodic
+      garbage collection and maintenance. See on_demand_experts doc_lifecycle for
+      the three zones (HARD FORGE / EPHEMERAL FORGE / PROJECT).
+    start_of_day_maintenance:
+      when: >
+        Run once per local day (and on the first cycle after a restart), gated by
+        a `.last-daily-maintenance` marker under the cache dir so it is idempotent
+        and not repeated every cycle. Bare-metal durable hosts only; forges exempt.
+      steps:
+        - "Build-cache GC per build_cache_hygiene (cargo clean + nix gc when bloated/stale)."
+        - "nix store gc / nix-collect-garbage on Silverblue+toolbox hosts; podman image prune of superseded versioned images."
+        - "Reap defunct delegate/opencode handles; delegate-outcome.sh sweep any stale registered delegate."
+        - "Verify the dev-environment expert containers are up + fresh (see dev_environment_experts)."
+    post_restart_verification: >
+      After a fleet restart (system upgrades + stack restart + MCP rebuild), a
+      resuming host MUST run the durable checklist BEFORE trusting its tools or
+      launching a forge: plan/issues/fleet-restart-post-restart-checklist-2026-08-13.md
+      (order 718-nuvm). Highest-signal: (1) MCP experts serve source_commit==HEAD
+      (stale-expert trap); (2) clock/NTP synced (a skewed clock breaks SSH-CA 30m
+      cert TTLs + freshness stamps); (3) forge images rebuilt at the installed
+      VERSION (avoid the ~2s version-skew DOA); (4) per-checkout git hooks
+      reinstalled; (5) router sidecar staged as a build artifact (710-w9kc).
+      Because every host restarts with the prompt "Use the ./skills/meta-orchestration
+      skill", the skill's Start-Of-Day / Post-Restart gate runs this — the
+      checklist must stay discoverable from there.
+    dev_environment_experts:
+      authority: "The Tlatoāni, 2026-08-13"
+      rule: >
+        Bare-metal DEVELOPMENT ENVIRONMENTS must run the SAME idempotent,
+        ephemeral expert systems the forge runs — RAG+semantic experts in
+        containers (never on the sacred host base) — WITH the same checkout hooks
+        that RETRAIN the RAG on commits hitting the relevant bits (the forge's
+        unconditional order-396 post-commit hook; on dev hosts the env-gated v4
+        hook, TILLANDSIAS_HOST_EXPERTS=1, order 685-yidq). This mirrors in-forge
+        discipline: commits are the Lamport clock for the RAG cache
+        (philosophy.yaml convergence_via_velocity). The expert containers are
+        ephemeral (rebuildable from the checkout) and idempotent to start.
+
+  expert_first_work:
+    authority: "The Tlatoāni, 2026-08-13 (fleet-restart directive)"
+    rule: >
+      FAVOR THE EXPERT SYSTEM when pulling work, triaging, debugging, and
+      researching — ask the experts first (extends bootstrap.mcp_first_read_path
+      from reads to the whole work loop). Each expert answer is cited + quotable
+      (a verifiable litmus), which is exactly the small fast RAG iteration
+      convergence_via_velocity wants.
+    warned_fallback_ratchet: >
+      Where the expert system has a GAP, fall back to whatever the loop does today
+      (grep, direct file reads, ad-hoc analysis) BUT emit a WARNING naming the gap
+      and, where cheap, file/annotate the packet that would close it. As the
+      expert systems improve and a gap closes, REMOVE its fallback — first
+      degrading the fallback to a loud warning, then deleting it. The direction is
+      one-way: fallbacks are temporary scaffolding retired with warnings as the
+      experts mature, never a permanent parallel path.

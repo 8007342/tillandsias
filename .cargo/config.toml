@@ -7,6 +7,24 @@ rustflags = [
     "-C", "relocation-model=static",
 ]
 
+# Order 620-duta: the same static-CRT posture as the musl launcher above, for
+# the same reason. Rust's MSVC targets link the C runtime dynamically by
+# default, which puts `vcruntime140.dll` in the tray's import table — the ONE
+# import in that table Windows does not ship. It comes from the Visual C++
+# Redistributable, so a "zero dependencies ephemeral portable tool" quietly
+# required an installed redist on a clean machine. Statically linking the CRT
+# removes it; everything else the tray imports is in-box (kernel32, ntdll,
+# user32, shell32, advapi32, combase, oleaut32, ws2_32, bcrypt, and the
+# api-ms-win-* UCRT/apiset stubs, all shipped with Windows 10+).
+#
+# Pinned by litmus:tray-import-surface-os-only, which reads the built binary's
+# actual import table rather than trusting this comment.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
 [build]
 # Use musl target by default in development for portable launcher checks
 # target = "x86_64-unknown-linux-musl"

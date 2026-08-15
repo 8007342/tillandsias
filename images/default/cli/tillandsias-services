@@ -21,9 +21,13 @@ case "${1:-}" in
 esac
 
 # Service catalogue — name|host|port|protocol|description|hint
+# Order 659-8faj: the git mirror answers only at its per-project DNS name
+# (`git-<project>`), injected by the launcher as TILLANDSIAS_GIT_SERVICE; the
+# shared `git-service` / `tillandsias-git` aliases are retired.
+GIT_HOST="${TILLANDSIAS_GIT_SERVICE:-git-${TILLANDSIAS_PROJECT:-}}"
 SERVICES=(
     "proxy|proxy|3128|http-connect|caching HTTP/S proxy (Squid, allowlisted domains)|set HTTP_PROXY=http://proxy:3128"
-    "git-service|git-service|9418|git|bare mirror + auto-push to remote|git clone git://git-service/<project>"
+    "git-mirror|${GIT_HOST}|9418|git|bare mirror + auto-push to remote|git clone git://${GIT_HOST}/<project>"
     "inference|inference|11434|http|local ollama API|curl http://inference:11434/api/tags"
 )
 

@@ -343,16 +343,35 @@ keepalive lost) SHALL be byte-identical to the windows tray's
 U+1F534 LARGE RED CIRCLE). Operators on either OS SHALL see the same
 text for the same failure class.
 
-### Invariant: `--diagnose` exit codes are limited to {0, 2, 1}
+### Invariant: `--diagnose` exit codes are limited to {0, 3, 2, 1}
 - **ID**: macos-native-tray.invariant.diagnose-exit-codes
 - **Expression**: `crates/tillandsias-macos-tray/src/diagnose.rs::exit_code_from
-  RETURNS one of {0, 2, 1}`
+  RETURNS one of {0, 3, 2, 1}`
 - **Measurable**: true via the unit test
-  `exit_code_provisioned_zero_degraded_two`
+  `exit_code_separates_healthy_converging_and_degraded`
 
   Tooling consumers (`scripts/tray-diagnose.sh`, `scripts/install-macos.sh`
   post-install verify, future support dashboards) branch on these exit codes.
   Adding new values would silently break consumers.
+
+  - `0` — provisioned and healthy.
+  - `3` — CONVERGING: not materialized yet, and not broken (order 735-2g5i,
+    matching windows-tray's 647-i98k). A converging VM and a broken VM used to
+    share exit 2, so a scripted post-install check that runs `--diagnose` once
+    and branches on the code declared a still-provisioning host broken.
+  - `2` — degraded.
+  - `1` — hard failure.
+
+  macOS reaches the converging verdict from a different FACT than Windows,
+  because it cannot reach the same one: Windows asks the guest over the control
+  wire and believes the phase it names, while macOS has no AF_VSOCK — the live
+  phase is readable only from inside the tray process — so `--diagnose` instead
+  establishes whether a live tray owns the VM singleton. Both are observations
+  of a live owner rather than inferences from timing, which is the property that
+  matters. With NO live owner, an unmaterialized image root stays `2`
+  deliberately: it is indistinguishable from a failed provision, and a false
+  "converging" is worse than a false "broken" because it tells automation to
+  wait for something that will never arrive.
 
 ### Invariant: No display passthrough in v1
 - **ID**: macos-native-tray.invariant.no-display-passthrough-in-v1

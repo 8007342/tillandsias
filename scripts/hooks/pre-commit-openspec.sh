@@ -107,6 +107,29 @@ ghost_check() {
 zero_trace_check() {
     [[ -d "$SPECS_DIR" ]] || return 0
 
+    # ONE pass over the repo, not one per spec (order 734-sjb3).
+    #
+    # This loop used to run a full recursive `grep -rl` across every source
+    # file FOR EACH SPEC. Measured on the Windows host: 170 spec directories x
+    # 4.5s per repo-wide grep = ~12.7 minutes, which matched the observed
+    # 10-11 minute commits exactly. Two commits died to a 10-minute tool
+    # timeout with the work left staged before this was measured.
+    #
+    # The cost was almost entirely SYSCALL time (sys 3.79s vs user 0.93s on a
+    # single grep) — process spawn plus filesystem traversal — which is why it
+    # is brutal on Windows and barely noticeable on Linux, and why it was never
+    # caught by the host that authored it.
+    #
+    # Inverting it is exact, not an approximation: collect every `spec:<name>`
+    # token the codebase actually references in a single sweep, then ask which
+    # specs are absent from that set. Same answer, one traversal.
+    local referenced
+    referenced="$(grep -rhoE 'spec:[a-zA-Z0-9._-]+' \
+        --include='*.rs' --include='*.sh' --include='*.toml' --include='Containerfile*' \
+        "$REPO_ROOT" 2>/dev/null \
+        | sed 's/^spec://' \
+        | sort -u)" || true
+
     for spec_dir in "$SPECS_DIR"/*/; do
         [[ -d "$spec_dir" ]] || continue
         local spec_name
@@ -123,16 +146,7 @@ zero_trace_check() {
             fi
         fi
 
-        # Search the codebase for any @trace referencing this spec
-        # Exclude openspec/ directory and target/ build artifacts
-        local found
-        found="$(grep -rl --include='*.rs' --include='*.sh' --include='*.toml' --include='Containerfile*' \
-            "spec:${spec_name}" "$REPO_ROOT" 2>/dev/null \
-            | grep -v '/openspec/' \
-            | grep -v '/target/' \
-            | head -1)" || true
-
-        if [[ -z "$found" ]]; then
+        if ! grep -qxF "$spec_name" <<<"$referenced"; then
             echo "  ◌ OpenSpec: spec '$spec_name' has no @trace annotations in code" >&2
             zero_trace_warnings=$((zero_trace_warnings + 1))
             warnings=$((warnings + 1))

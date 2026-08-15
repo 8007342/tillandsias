@@ -201,7 +201,17 @@ critical_path:
     # The order-456 dead-on-arrival lesson applied to a JSON tool: the degraded
     # path must stay parseable and must carry the truthful experts state, so an
     # agent can tell 'retry shortly' from 'never, this session'.
-    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"methodology_ask\",\"arguments\":{\"question\":\"is Python allowed in a committed script?\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -e '.confidence == \"unsupported\" and (.citations | length) == 0' >/dev/null && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'building(' && echo 'ok: degraded-methodology-path-is-an-envelope'"
+    #
+    # ABSENCE MUST BE A CHECKOUT WITH NO BUILT ARTIFACT, not just a scratch
+    # HOME. Since 682-z5h8 ($PWD-first index resolution) and the 721-nyev
+    # resolve-by-execution direction, the wrapper legitimately falls back to
+    # <index-root>/target/release/tillandsias-plan — the binary this litmus
+    # itself builds in its first step — so a scratch HOME alone no longer
+    # removes it. TILLANDSIAS_PLAN_INDEX is pinned to a scratch COPY of the
+    # ledger whose root has no target/: the binary stays genuinely
+    # unresolvable, and if the wrapper ever finds one here again it answers
+    # exact off the real ledger and this step goes red, not vacuously green.
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\" \"$d/plan\"; cp plan/index.yaml \"$d/plan/index.yaml\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"methodology_ask\",\"arguments\":{\"question\":\"is Python allowed in a committed script?\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" TILLANDSIAS_PLAN_INDEX=\"$d/plan/index.yaml\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -e '.confidence == \"unsupported\" and (.citations | length) == 0' >/dev/null && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'building(' && echo 'ok: degraded-methodology-path-is-an-envelope'"
     timeout_ms: 60000
     expected_behavior: "ok: degraded-methodology-path-is-an-envelope"
 

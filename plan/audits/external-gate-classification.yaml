@@ -1,0 +1,164 @@
+# External-command gate classification (order 727-kmks, from 601-462g)
+#
+# THE QUESTION each row answers: when the thing this step consults is ABSENT
+# rather than failing, does the step still report success? That is the class
+# 601-462g was filed for -- "the dangerous caller is not the one that breaks
+# when a dependency is deleted, it is the one that keeps returning success
+# because the dependency was consulted rather than required."
+#
+# WHY THIS IS DATA AND NOT PROSE: 727-kmks requires the classification be
+# committed as data so a later cycle can DIFF it rather than re-read nine
+# runbooks. A new gate site added later shows up as an absent row.
+#
+# WHY IT IS HAND-CLASSIFIED: 727-kmks explicitly forbids turning this into a
+# grep-based gate, because 601-462g's own problem statement names "a freshness
+# gate that greps its own comment" as a sibling defect. A pattern-matcher over
+# runbook TEXT would be the same mistake one level up. Measured: grepping
+# meta-orchestration for command substitutions returns mostly PROSE -- doc
+# lines about `git rev-parse`, not steps that run it.
+#
+# classification:
+#   safe     - absent and healthy already produce DIFFERENT exit codes or a
+#              typed verdict the caller branches on
+#   advisory - always exits 0 by design; the runbook must not gate on it, and
+#              says so
+#   rewritten- was conflating the two; now asserts a positive fact
+#   suspect  - needs measurement before it can be classified
+#
+# status: 1 of 9 runbooks complete. The remaining eight are listed at the
+# bottom with their site counts, unexamined.
+
+runbook: skills/meta-orchestration/SKILL.md
+audited_by: windows
+audited_at: "2026-08-14T23:50:00Z"
+audited_commit: "9138147b"
+method: |
+  Every step below was EXECUTED on this host, most of them ~20 times across a
+  night of hourly cycles, and its exit code observed directly. This is not a
+  reading of the scripts.
+
+sites:
+  - step: scripts/cycle-preflight.sh
+    classification: safe
+    absent_behaviour: |
+      Prints blocked:preflight:<component>:<detail> and exits 1. A missing
+      cargo, a refused capabilities probe and a build failure are three
+      distinct typed verdicts.
+    evidence: "observed exit 1 with blocked:preflight:plan:capabilities-refused on 2026-08-13; exit 0 with ok:cycle-preflight:rebuilt:skip:not-wsl since"
+
+  - step: scripts/check-credential-channel.sh
+    classification: safe
+    absent_behaviour: "missing:no-credential-channel, exit non-zero. Grammar pinned by litmus:credential-channel-check-shape."
+    evidence: "ok:gh-keyring, exit 0, every cycle"
+
+  - step: scripts/check-committable-branch.sh
+    classification: safe
+    absent_behaviour: "blocked:{committable-cycle-on-main,detached-head,not-a-git-repo}, non-zero; fails closed."
+    evidence: "ok:branch-windows-next, exit 0, every cycle"
+
+  - step: scripts/check-opsx-generated-dirt.sh
+    classification: safe
+    absent_behaviour: |
+      Exit 4 for ok:clean-tree is a DISTINCT code from exit 0 (ok:opsx-only)
+      and exit 3 (non-opsx). Documented in the script header. Initially looked
+      like a bug from the caller's side -- ok: with a non-zero exit -- and is
+      not.
+    evidence: "measured exit=4 with ok:clean-tree on 2026-08-13"
+
+  - step: scripts/meta-orchestration-worktree-guard.sh verify
+    classification: rewritten
+    absent_behaviour: |
+      Was: an errno message about a missing directory, which read as a stale
+      temp path from the previous cycle and let a skipped snapshot pass
+      unnoticed. Now: blocked:no-snapshot-taken (exit 3), distinct from
+      blocked:boundary-state-missing.
+    evidence: "order 717-3bvv; fixture scripts/test-worktree-boundary-guard.sh 9/9, scenario 1 reproduces the original breach path"
+
+  - step: scripts/mo-full-attest.sh self
+    classification: safe
+    absent_behaviour: |
+      Refuses to print a marker and exits non-zero when local HEAD is not the
+      converged remote head, or when no boundary was verified at that HEAD.
+      The missing marker IS the failure signal.
+    evidence: "order 614-2gqx + 717-3bvv; observed refusing on 2026-08-14 with 'startup boundary was verified at <old> but HEAD is now <new>'"
+
+  - step: scripts/claim-ledger-node.sh claim
+    classification: safe
+    absent_behaviour: "in-flight:<node> and non-zero when a live lease is held elsewhere; claimed:/reclaimed: and 0 when owned."
+    evidence: "claimed:external-gate-audit-remaining-skills, exit 0, this cycle"
+
+  - step: scripts/e2e-preflight.sh eligibility
+    classification: safe
+    absent_behaviour: |
+      Always exits 0, but the VERDICT is the gate: `eligible` or `skip:<reason>`
+      on stdout, and the runbook branches on the string, not the code. The
+      skill says so explicitly. Recorded because exit 0 alone would look unsafe
+      to a reader auditing exit codes.
+    evidence: "measured exit=0 with `eligible` this cycle"
+
+  - step: ./build.sh --check
+    classification: safe
+    absent_behaviour: "Non-zero on any red check, and records a gate stamp the pre-push hook independently re-checks. Push CI no longer exists, so this is the only trunk protection."
+    evidence: "observed refusing a push with 'the tree changed since ./build.sh --check last passed' on 2026-08-13"
+
+  - step: tillandsias-plan check
+    classification: safe
+    absent_behaviour: "ok: line with counts on success; violation:/parse errors and non-zero on a broken ledger. Observed refusing a fragment status-loss write."
+    evidence: "violation:fragment-status-loss:2 on 2026-08-13, exit non-zero"
+
+  - step: scripts/check-stranded-in-progress.sh
+    classification: advisory
+    absent_behaviour: |
+      Always exit 0. Advisory BY DESIGN and documented as such: a packet
+      legitimately in flight is indistinguishable from one abandoned an hour
+      ago, so the skill forbids bulk-closing what it reports.
+    evidence: "measured exit=0 with summary: in_progress=1 stranded=0"
+
+  - step: scripts/select-work-batch.sh
+    classification: advisory
+    absent_behaviour: "Always exit 0; prints a batch. Not a gate -- it selects work, it does not authorise anything."
+    evidence: "measured exit=0"
+
+  - step: scripts/cycle-metrics.sh
+    classification: advisory
+    absent_behaviour: |
+      Always exit 0. Reports `source=absent` for a metric it cannot compute and
+      `unknown` for one it cannot measure, rather than inventing a number --
+      which is the honest shape for a reporting step. Its `verdict:` line names
+      the weakest point rather than passing judgement.
+    evidence: "measured exit=0 with verdict: attention:worktree-dirty"
+
+  - step: scripts/check-windows-only-sources-verified.sh
+    classification: rewritten
+    absent_behaviour: |
+      Typed verdicts locally and refuses a stamp without a transcript
+      ("a stamp with no transcript is an assertion, not a verification").
+      BUT its stamp lives under $GIT_DIR and cannot cross a host boundary, so
+      OFF-HOST it reports never-verified regardless of any verification. That
+      half is open as 736-28m7 / 738-3pft and is the only site in this runbook
+      that still misreports.
+    evidence: "736-28m7; a release was held on the false verdict on 2026-08-14"
+
+summary:
+  sites_classified: 14
+  safe: 9
+  advisory: 4
+  rewritten: 2
+  suspect: 0
+  note: |
+    meta-orchestration scores well because it has been hardened continuously --
+    most of its typed verdicts were added by packets in this same milestone.
+    The one site that still misreports off-host (windows-only-sources) is
+    already filed. That is the useful result: the runbook the loop executes
+    hourly is not where the remaining risk is.
+
+remaining_unaudited:
+  - {runbook: skills/merge-to-main-and-release/SKILL.md, sites: 24, note: "one instance already fixed under 601-462g (resolve-release-run.sh) and one by linux (resolve-open-pr.sh); the rest unexamined"}
+  - {runbook: skills/smoke-curl-install-and-test-e2e/SKILL.md, sites: 14}
+  - {runbook: skills/build-install-and-smoke-test-e2e/SKILL.md, sites: 11}
+  - {runbook: skills/advance-work-from-plan/SKILL.md, sites: 8}
+  - {runbook: skills/build-macos-tray/SKILL.md, sites: 3}
+  - {runbook: skills/probe-macos-tray-on-windows/SKILL.md, sites: 3}
+  - {runbook: skills/build-windows-tray/SKILL.md, sites: 1}
+  - {runbook: skills/diagnose-forge/SKILL.md, sites: 1}
+  - {runbook: skills/forge-quick-intro/SKILL.md, sites: 1}

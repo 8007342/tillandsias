@@ -94,13 +94,45 @@ jobs:
           # Hermetic crane + pkgsCross builds (flake.nix). Replaces the prior
           # cargo+musl-tools (x86_64) and cross/musl.cc (aarch64) paths — both
           # failed in CI (musl.cc network timeout; cross 0.2.5's ancient-glibc
-          # container choked on build.rs). The router sidecar + runtime assets
-          # are git-tracked, so nix embeds them from the checked-out tree.
+          # container choked on build.rs).
           #
           # The secure-channel key is SHA-256 of the binary itself (computed at
           # runtime, not compile time). No env injection or --impure needed.
           # All binaries from identical source produce identical content →
           # identical hash → matching PSK. See release_root_secret().
+
+          # THE SIDECAR IS BUILT FIRST AND STAGED INTO THE SOURCE TREE (723-sazx).
+          #
+          # order 710-w9kc un-committed images/router/tillandsias-router-sidecar
+          # and made it a build artifact — correct, and the reason this step used
+          # to read "the router sidecar + runtime assets are git-tracked, so nix
+          # embeds them from the checked-out tree". That sentence stopped being
+          # true the moment the blob was removed, and nothing here noticed:
+          # crates/tillandsias-headless/build.rs:93 still lists the file among
+          # its REQUIRED runtime assets and panics at build.rs:104 without it,
+          # so the two headless builds below would fail on a clean CI checkout.
+          # It has never been exercised — the last release predates the removal.
+          #
+          # Staging it here keeps the artifact version-matched (same tree, same
+          # VERSION) and is what makes the shipped bytes and the separately
+          # published, cosign-signed asset the SAME binary rather than two
+          # independent builds that merely share a name.
+          # CORRECTION (order 723-sazx, 2026-08-14): the comment above described
+          # this staging as what makes the three builds below work. It never
+          # could. `nix build .#…` resolves the flake against the GIT TREE, and
+          # .gitignore:79 ignores the sidecar — so an untracked file installed
+          # into the working tree does not reach craneSrc, and build.rs panics
+          # exactly as it would without this step. The real fix is a preBuild in
+          # flake.nix making the sidecar derivation a dependency edge; see
+          # `stageRouterSidecar` there and litmus:sidecar-is-a-build-graph-input.
+          #
+          # The install is KEPT because the image build later in this workflow
+          # reads the working tree, not the flake source. It is no longer what
+          # the binaries depend on.
+          nix build -L .#tillandsias-router-sidecar-x86_64-musl --out-link result-sidecar
+          install -Dm0755 result-sidecar/bin/tillandsias-router-sidecar \
+            images/router/tillandsias-router-sidecar
+
           nix build -L .#tillandsias-x86_64-musl              --out-link result-host
           nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
           nix build -L .#tillandsias-headless-aarch64-musl  --out-link result-ha
@@ -168,6 +200,7 @@ jobs:
           install -m 0755 result-host/bin/tillandsias           release-artifacts/tillandsias-linux-x86_64
           install -m 0755 result-hx/bin/tillandsias             release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
           install -m 0755 result-ha/bin/tillandsias             release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
+          install -m 0755 result-sidecar/bin/tillandsias-router-sidecar release-artifacts/tillandsias-router-sidecar-x86_64-unknown-linux-musl
           install -m 0755 scripts/install.sh   release-artifacts/install.sh
           install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
           install -m 0755 scripts/verify.sh    release-artifacts/verify.sh
@@ -178,6 +211,7 @@ jobs:
           grep -F "x86-64" /tmp/f.txt
           file release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl | grep -F "x86-64"
           file release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl | grep -F "aarch64"
+          file release-artifacts/tillandsias-router-sidecar-x86_64-unknown-linux-musl | grep -F "x86-64"
 
           # Smoke the host binary's headless mode (runs on this x86_64 runner).
           release-artifacts/tillandsias-linux-x86_64 --version
@@ -521,8 +555,43 @@ jobs:
           ls -la target-guest
           test -s target-guest/tillandsias-headless-x86_64-unknown-linux-musl
 
+      # ── Authenticode signing identity (orders 722-w7a2 / 724-rpna) ────────
+      # Gated on the repo variable rather than unconditional, so the Windows
+      # release lane keeps working before the Azure identity exists. Once
+      # TILLANDSIAS_SIGNING_ACCOUNT is set, every release signs; until then
+      # every release says out loud that it is unsigned (the build script
+      # prints it, and 722-f86z's gate check is what makes the absence fatal).
+      #
+      # These three values are NOT secrets — an account name, a profile name
+      # and a regional URI — so they are repo VARIABLES. The credential is the
+      # thing that must never be long-lived, and it comes from federated OIDC
+      # below (id-token: write is already granted on this job).
+      - name: Azure login (federated OIDC — no stored signing credential)
+        if: vars.TILLANDSIAS_SIGNING_ACCOUNT != ''
+        uses: azure/login@a65d910e8af852a8061c627c456678983e180302 # v2
+        with:
+          client-id: ${{ vars.TILLANDSIAS_SIGNING_CLIENT_ID }}
+          tenant-id: ${{ vars.TILLANDSIAS_SIGNING_TENANT_ID }}
+          subscription-id: ${{ vars.TILLANDSIAS_SIGNING_SUBSCRIPTION_ID }}
+
+      - name: Install Artifact Signing Client Tools
+        if: vars.TILLANDSIAS_SIGNING_ACCOUNT != ''
+        shell: pwsh
+        run: |
+          # The documented MSI install. Preferred over winget on a runner
+          # because it is a pinned URL and a silent install, not a package
+          # manager resolving "latest" mid-release.
+          $ProgressPreference = 'SilentlyContinue'
+          Invoke-WebRequest -Uri "https://download.microsoft.com/download/70ad2c3b-761f-4aa9-a9de-e7405aa2b4c1/ArtifactSigningClientTools.msi" -OutFile .\ArtifactSigningClientTools.msi
+          Start-Process msiexec.exe -Wait -ArgumentList '/I ArtifactSigningClientTools.msi /quiet'
+          Remove-Item .\ArtifactSigningClientTools.msi
+
       - name: Build + package the Windows tray (windows-owned build script)
         shell: pwsh
+        env:
+          TILLANDSIAS_SIGNING_ENDPOINT: ${{ vars.TILLANDSIAS_SIGNING_ENDPOINT }}
+          TILLANDSIAS_SIGNING_ACCOUNT: ${{ vars.TILLANDSIAS_SIGNING_ACCOUNT }}
+          TILLANDSIAS_SIGNING_PROFILE: ${{ vars.TILLANDSIAS_SIGNING_PROFILE }}
         run: |
           # The windows-owned build script now builds AND packages under -Release
           # (tray-convergence-coordination.md ask, done windows-next): produces
@@ -530,7 +599,19 @@ jobs:
           # install-windows.ps1) + a distinct SHA256SUMS-windows. This replaces
           # the prior inline packaging stopgap; the signing step below consumes
           # those exact paths.
-          scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
+          #
+          # -Sign signs the STAGED exe before the zip and the checksums are
+          # made, which is the whole reason signing lives inside this script
+          # rather than as a later workflow step: signing after hashing would
+          # publish checksums for a file nobody downloads. Same seam the dev
+          # lane uses, so a developer can reproduce what CI produced.
+          $sign = "${{ vars.TILLANDSIAS_SIGNING_ACCOUNT }}" -ne ''
+          if ($sign) {
+            scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}" -Sign
+          } else {
+            Write-Host "::warning::TILLANDSIAS_SIGNING_ACCOUNT is unset — publishing UNSIGNED Windows artifacts (plan packet 722-w7a2)"
+            scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
+          }
           Get-ChildItem release-artifacts
 
       - name: Stage version-stable portable aliases

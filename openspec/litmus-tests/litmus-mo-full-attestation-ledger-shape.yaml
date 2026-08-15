@@ -1,0 +1,80 @@
+# @trace spec:meta-orchestration
+# @trace order:742-ye7w, order:651-2x5s, order:614-2gqx
+#
+# Pins the durable MO-FULL attestation ledger gate. NOTHING pinned this checker
+# when it landed, and it shipped with an inverted pairing condition that refused
+# any ledger holding more than ONE attestation — so every host's SECOND
+# full-mode cycle would fail ./build.sh --check and be unable to push. The
+# multi-entry scenario below is that regression; the negative controls keep the
+# pairing rule from being relaxed into uselessness while fixing it.
+name: litmus:mo-full-attestation-ledger-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/check-mo-full-attestations.sh: a ledger accumulates MANY
+  attestations across cycles (the 742-ye7w regression), while unpaired headings,
+  doubled markers, headerless markers, and LOCAL_SHA != REMOTE_SHA claims are all
+  still refused. Also pins that the gate is wired into ./build.sh --check.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-mo-full-attestations.sh
+  - workspace contains build.sh
+  - shell utilities (git, grep, bash, mktemp) are available in PATH
+
+critical_path:
+  - step: "gate is executable, parses, and exposes its fixture mode"
+    command: "test -x scripts/check-mo-full-attestations.sh && bash -n scripts/check-mo-full-attestations.sh && grep -q 'fixture' scripts/check-mo-full-attestations.sh && echo 'ok: gate-defined'"
+    timeout_ms: 5000
+    expected_behavior: "ok: gate-defined"
+
+  - step: "all hermetic scenarios pass (multi-entry regression + five negative controls)"
+    command: "scripts/check-mo-full-attestations.sh fixture >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/check-mo-full-attestations.sh fixture; exit 1; }"
+    timeout_ms: 60000
+    expected_behavior: "ok: scenarios-pass"
+
+  - step: "REGRESSION 742-ye7w: a ledger with THREE paired attestations is accepted"
+    # The whole point of a durable per-host ledger is that it accumulates. A gate
+    # that only accepts the first entry silently converts every host's second
+    # cycle into an unpushable one.
+    command: "d=$(mktemp -d); mkdir -p \"$d/repo/plan/mo-full-attestations.d\" \"$d/repo/scripts\"; ( cd \"$d/repo\" && git init -q . ) >/dev/null 2>&1; cp scripts/check-mo-full-attestations.sh \"$d/repo/scripts/\"; printf '#!/bin/sh\\necho fixture-nonledger-host\\n' > \"$d/repo/scripts/mo-full-attest.sh\"; chmod +x \"$d/repo/scripts/mo-full-attest.sh\"; a=$(printf '%040d' 1); b=$(printf '%040d' 2); printf '# hdr\\n\\n## 2026-08-15T00:00:00Z fh\\nMO-FULL: COMPLETE %s linux-next %s\\n\\n## 2026-08-15T01:00:00Z fh\\nMO-FULL: COMPLETE %s linux-next %s\\n\\n## 2026-08-15T02:00:00Z fh\\nMO-FULL: BLOCKED %s linux-next %s\\n' \"$a\" \"$a\" \"$b\" \"$b\" \"$a\" \"$a\" > \"$d/repo/plan/mo-full-attestations.d/fh.md\"; out=$( cd \"$d/repo\" && bash scripts/check-mo-full-attestations.sh 2>&1 ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && echo 'ok: multi-entry-accepted' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: multi-entry-accepted"
+
+  - step: "NEGATIVE CONTROL: a trailing heading with no marker is still refused"
+    # Guards the fix from being 'fixed' by deleting the pairing rule outright.
+    command: "d=$(mktemp -d); mkdir -p \"$d/repo/plan/mo-full-attestations.d\" \"$d/repo/scripts\"; ( cd \"$d/repo\" && git init -q . ) >/dev/null 2>&1; cp scripts/check-mo-full-attestations.sh \"$d/repo/scripts/\"; printf '#!/bin/sh\\necho fixture-nonledger-host\\n' > \"$d/repo/scripts/mo-full-attest.sh\"; chmod +x \"$d/repo/scripts/mo-full-attest.sh\"; a=$(printf '%040d' 1); printf '# hdr\\n\\n## 2026-08-15T00:00:00Z fh\\nMO-FULL: COMPLETE %s linux-next %s\\n\\n## 2026-08-15T01:00:00Z fh\\n' \"$a\" \"$a\" > \"$d/repo/plan/mo-full-attestations.d/fh.md\"; out=$( cd \"$d/repo\" && bash scripts/check-mo-full-attestations.sh 2>&1 ); rc=$?; rm -rf \"$d\"; [ \"$rc\" != 0 ] && echo 'ok: unpaired-heading-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: unpaired-heading-refused"
+
+  - step: "NEGATIVE CONTROL: an unpushed claim (LOCAL_SHA != REMOTE_SHA) is still refused"
+    command: "d=$(mktemp -d); mkdir -p \"$d/repo/plan/mo-full-attestations.d\" \"$d/repo/scripts\"; ( cd \"$d/repo\" && git init -q . ) >/dev/null 2>&1; cp scripts/check-mo-full-attestations.sh \"$d/repo/scripts/\"; printf '#!/bin/sh\\necho fixture-nonledger-host\\n' > \"$d/repo/scripts/mo-full-attest.sh\"; chmod +x \"$d/repo/scripts/mo-full-attest.sh\"; a=$(printf '%040d' 1); b=$(printf '%040d' 2); printf '# hdr\\n\\n## 2026-08-15T00:00:00Z fh\\nMO-FULL: COMPLETE %s linux-next %s\\n' \"$a\" \"$b\" > \"$d/repo/plan/mo-full-attestations.d/fh.md\"; out=$( cd \"$d/repo\" && bash scripts/check-mo-full-attestations.sh 2>&1 ); rc=$?; rm -rf \"$d\"; [ \"$rc\" != 0 ] && echo 'ok: unpushed-claim-refused' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: unpushed-claim-refused"
+
+  - step: "the gate is wired into the local pre-push gate"
+    command: "grep -q 'check-mo-full-attestations.sh' build.sh && echo 'ok: wired-into-build-check'"
+    timeout_ms: 3000
+    expected_behavior: "ok: wired-into-build-check"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+    - "@trace order:742-ye7w"
+  expected_log: "mo-full attestation ledger gate pinned (multi-entry regression + pairing negative controls + build wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "mo-full-attestation-ledger-shape"
+    artifact: "scripts/check-mo-full-attestations.sh + build.sh"
+
+rollback:
+  on_failure: >
+    The MO-FULL attestation ledger gate drifted. In the heading branch of
+    verify_file(), refuse only when the PREVIOUS heading got no marker
+    (`seen_heading -ne 0 && heading_marker -eq 0`) — testing `heading_marker
+    -ne 0` there is the 742-ye7w inversion and rejects every ledger with more
+    than one attestation, making each host's second cycle unpushable. Keep the
+    EOF pairing check, the doubled-marker check, the marker-before-heading
+    check, and the LOCAL_SHA == REMOTE_SHA check intact; keep the fixture mode.
+  command: "scripts/check-mo-full-attestations.sh fixture; grep -n 'seen_heading\\|heading_marker' scripts/check-mo-full-attestations.sh | head -20"

@@ -36,6 +36,34 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 source "$REPO_ROOT/scripts/common.sh"
 
+# RE-ASSERT THIS SCRIPT'S DECLARED OPTIONS (order 731-pc5r).
+#
+# Line 27 says `set -uo pipefail` and deliberately omits `-e`: this suite is
+# built to run EVERY check and report all failures at the end
+# (`if cmd; then log_pass else log_fail_tracked fi`, then the "Failed checks:"
+# block). `errexit` is not merely unnecessary here, it is contrary to the
+# design — it aborts at the first red check and hides the rest.
+#
+# But `source` runs in the CURRENT shell, and scripts/with-tillandsias-builder.sh
+# does `set -euo pipefail` at its own line 27, so errexit leaked in above and
+# this script had never actually been running with the options it declares.
+#
+# What that cost, measured on macOS 2026-08-14: the suite died at the FRESHNESS
+# ADVISORY step — the one whose own comment reads "Advisory ONLY ... NEVER fails
+# the suite". Its `grep -E '^freshness-stale:'` finds nothing on a host with no
+# stale components (this one: 13/1242 stamped, all `freshness-unstamped`), grep
+# exits 1, `pipefail` promotes it through the pipeline, and leaked errexit killed
+# the run. Four lines of output, exit 1, no failure named — and every Rust check
+# below it (fmt, clippy, the entire test suite) silently never ran.
+#
+# A non-gating step was gating, and the gate it killed was the deterministic one.
+set +e
+
+# Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel that
+# times each litmus phase; a timing failure must NEVER change local-ci's exit.
+. "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
+command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+
 # Parse flags
 FAST_MODE=0
 VERBOSE=0
@@ -411,11 +439,18 @@ run_litmus_phase() {
         args+=("$arg")
     done < <(litmus_args_for_phase "$phase")
 
+    # Time the phase as a telemetry side-channel (packet 682-emvg). Capturing the
+    # rc first and emitting after preserves the exact return contract below —
+    # 0 on success, the runner's PIPESTATUS[0] on failure — untouched.
+    local _t0 _rc
+    _t0="$(timing_now_ms)"
     if bash scripts/run-litmus-test.sh "${args[@]}" 2>&1 | tee "$log_file"; then
-        return 0
+        _rc=0
+    else
+        _rc="${PIPESTATUS[0]}"
     fi
-
-    return "${PIPESTATUS[0]}"
+    timing_emit "local-ci-phase-$phase" "$phase" "$_t0" "$_rc"
+    return "$_rc"
 }
 
 write_convergence_artifacts() {
@@ -775,14 +810,18 @@ if [[ -x "scripts/freshness-inventory.sh" ]]; then
     _fresh_report="$(scripts/freshness-inventory.sh 2>/dev/null || true)"
     _fresh_total="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-inventory:' | grep -oE '[0-9]+ components' | grep -oE '[0-9]+')"
     _fresh_stamped="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-inventory:' | grep -oE '[0-9]+ stamped' | grep -oE '[0-9]+')"
-    _fresh_cov="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-coverage:' | grep -oE '[0-9]+%')"
+    _fresh_cov="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-coverage:' | grep -oE '[0-9]+(\.[0-9]+)?%')"
     if [[ -n "$_fresh_cov" ]]; then
         log_info "FRESHNESS coverage: ${_fresh_cov} (${_fresh_stamped:-0}/${_fresh_total:-?} components stamped)"
     fi
     # Grammar is `freshness-stale: <path> <age-days> ...`; age is field 3.
     # Sorting field 2 ranked paths lexically and advertised the wrong audit
     # source as "top stalest" with total confidence.
-    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k3,3nr | head -5)"
+    # `|| true`: belt to the `set +e` brace above (731-pc5r). grep exits 1 when a
+    # host has no stale components at all, and under `pipefail` that is the
+    # pipeline's status — an advisory step must not hand a failure upward on the
+    # HAPPY path, whatever the caller's errexit state happens to be.
+    _fresh_flagged="$(printf '%s\n' "$_fresh_report" | grep -E '^freshness-stale:' | sort -t' ' -k3,3nr | head -5 || true)"
     if [[ -n "$_fresh_flagged" ]]; then
         log_info "Top stalest components (audit candidates — advisory only):"
         while IFS= read -r line; do
@@ -885,6 +924,18 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     log_section "Rust Code Quality (fmt, clippy, tests)"
 
+    # Stage the router sidecar before the first cargo invocation (723-wd8i).
+    # crates/tillandsias-headless/build.rs:93 lists
+    # images/router/tillandsias-router-sidecar among its REQUIRED runtime assets
+    # and panics at build.rs:104 when it is absent. Order 710-w9kc un-committed
+    # that file and taught build.sh and scripts/build-image.sh to produce it,
+    # but not this script, so the clippy gate below dies on any fresh clone.
+    # Cheap no-op when the staged binary is already current.
+    if [ -x "$REPO_ROOT/scripts/build-sidecar.sh" ]; then
+        run_rust_on_host bash "$REPO_ROOT/scripts/build-sidecar.sh" >/dev/null 2>&1 \
+            || log_info "build-sidecar.sh could not stage the router sidecar; cargo gates may fail"
+    fi
+
     # @trace spec:dev-build, spec:ci-release
     # Run cargo commands directly on the host workstation.
 
@@ -951,6 +1002,36 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "tray-contract" "fail" /tmp/tray-check.log
     fi
 
+    # macOS tray contract — BIN target, so `--workspace --lib` above cannot see it.
+    #
+    # tillandsias-macos-tray declares only `[[bin]]` and has no src/lib.rs, and
+    # `cargo test --workspace --lib` selects LIBRARY targets only. Every test in
+    # action_host.rs was therefore skipped by the deterministic pass even when it
+    # ran on a Mac; `build.sh --check` runs no tests at all, and the macOS
+    # release job runs only build-macos-tray.sh. The single command that
+    # executed them was a hand-typed `./build.sh --test`.
+    #
+    # That matters more than it looks. Operator ruling 2026-08-14 made test
+    # evidence the closure standard for 598-kibt M5, whose entire macOS half —
+    # the cloud submenu's loading-vs-confirmed-empty behaviour — is pinned in
+    # this crate. Closing a criterion on assertions no gate evaluates rebuilds
+    # the original defect's shape: the macOS half rots while every gate stays
+    # green. Adversarial review of that closure is what surfaced this.
+    #
+    # Darwin-only: the crate is cfg-gated to macOS (main.rs), so on Linux and
+    # Windows it compiles to a stub with nothing to assert.
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        # @trace spec:macos-native-tray, spec:tray-ux
+        if run_rust_on_host cargo test -p tillandsias-macos-tray --bins 2>&1 | tee /tmp/macos-tray-check.log; then
+            log_pass "macOS tray tests pass"
+            archive_check_log "macos-tray-tests" "pass" /tmp/macos-tray-check.log
+        else
+            log_fail_tracked "macos-tray-tests" "macOS tray tests failed (see /tmp/macos-tray-check.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/macos-tray-check.log >&2
+            archive_check_log "macos-tray-tests" "fail" /tmp/macos-tray-check.log
+        fi
+    fi
+
     # Headless signal shutdown contract
     # @trace spec:headless-mode, spec:graceful-shutdown
     if TILLANDSIAS_NO_TRAY=1 run_rust_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
@@ -979,6 +1060,36 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "container-base-policy" "scripts/check-container-bases.sh"
         archive_check_log "container-base-policy" "skipped"
+    fi
+
+    # ============================================================================
+    # Guard activation audit (order 599-4wzr) — a guard nobody can prove is
+    # running is not a guard. Fails loud if any check-*.sh has no invoker.
+    # ============================================================================
+    log_section "Guard Activation Audit (599-4wzr)"
+    if [[ -f "scripts/audit-guard-activation.sh" ]]; then
+        if bash scripts/audit-guard-activation.sh 2>&1 | tee /tmp/guard-activation.log; then
+            log_pass "Every shipped guard is invoked by an activation surface"
+            archive_check_log "guard-activation" "pass" /tmp/guard-activation.log
+        else
+            log_fail_tracked "guard-activation" "Orphaned guard(s) found — shipped but never invoked (see /tmp/guard-activation.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/guard-activation.log >&2
+            archive_check_log "guard-activation" "fail" /tmp/guard-activation.log
+        fi
+    else
+        log_fail_missing_guard "guard-activation" "scripts/audit-guard-activation.sh"
+        archive_check_log "guard-activation" "skipped"
+    fi
+
+    # Markdown distillation policy (order 599-4wzr activation): was orphaned.
+    log_section "Markdown Distillation Policy"
+    if [[ -f "scripts/check-markdown-distillation.sh" ]]; then
+        bash scripts/check-markdown-distillation.sh 2>&1 | tee /tmp/markdown-distillation.log
+        log_pass "Markdown distillation policy checked (advisory)"
+        archive_check_log "markdown-distillation" "pass" /tmp/markdown-distillation.log
+    else
+        log_fail_missing_guard "markdown-distillation" "scripts/check-markdown-distillation.sh"
+        archive_check_log "markdown-distillation" "skipped"
     fi
 
     # ============================================================================

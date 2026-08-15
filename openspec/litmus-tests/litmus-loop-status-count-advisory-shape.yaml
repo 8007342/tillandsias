@@ -1,0 +1,46 @@
+# @trace spec:methodology-accountability
+name: litmus:loop-status-count-advisory-shape
+spec: methodology-accountability
+phase: pre-build
+description: loop-status-verify treats the committed release count as an advisory (drift never fails), while a wrong active-release structure still fails hard
+severity: high
+size: instant
+
+# Order 668-9z9h. The committed `(N open / M total tagged)` count is a
+# point-in-time snapshot; every subsequently filed release-tagged packet
+# invalidated it, so an exact-match gate went red within half an hour of every
+# green — a treadmill. The count is now derived live and reported as an advisory
+# (count_ok in the verdict line), never a gate. Structural truths — the active
+# release name, one heading, one `— ACTIVE` bullet on the right release — stay
+# hard failures. Fixture-driven via --index (loop_status) + --ledger, so it
+# never depends on the live corpora.
+
+preconditions:
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "DRIFT IS ADVISORY: a committed count far from the live count still verifies green"
+    command: "T=$(mktemp -d); printf 'plan_index:\\n  version: v1\\n  default_status_values: [ready, done]\\npackets:\\n  - {packet_id: a, order: 9001, status: ready, desired_release: v0.5}\\n  - {packet_id: b, order: 9002, status: ready, desired_release: v0.5}\\n  - {packet_id: c, order: 9003, status: done, desired_release: v0.5}\\n' > \"$T/l.yaml\"; printf '# Loop Status\\n\\n## ACTIVE RELEASE: v0.5\\n\\n## Roadmap\\n\\n- **v0.5 — ACTIVE (5 open / 9 total tagged): \"drifted\"**\\n' > \"$T/s.md\"; ./target/release/tillandsias-plan --index \"$T/s.md\" loop-status-verify --ledger \"$T/l.yaml\" >\"$T/out\" 2>\"$T/err\"; rc=$?; ok=0; grep -q 'verdict=ok' \"$T/out\" && [ \"$rc\" = 0 ] && grep -q 'advisory:' \"$T/err\" && grep -q 'count_ok=no' \"$T/out\" && ok=1; rm -rf \"$T\"; [ \"$ok\" = 1 ] && echo 'ok: count drift is advisory, verify stays green' || { echo \"FAIL: rc=$rc\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: count drift is advisory, verify stays green"
+
+  - step: "STRUCTURAL FAULT STILL FAILS: a bullet labeling the wrong release ACTIVE fails hard"
+    command: "T=$(mktemp -d); printf 'plan_index:\\n  version: v1\\n  default_status_values: [ready, done]\\npackets:\\n  - {packet_id: a, order: 9001, status: ready, desired_release: v0.5}\\n' > \"$T/l.yaml\"; printf '# Loop Status\\n\\n## ACTIVE RELEASE: v0.5\\n\\n## Roadmap\\n\\n- **v0.4 — ACTIVE (0 open / 1 total tagged): \"wrong\"**\\n- **v0.5 (1 open / 1 total tagged): \"x\"**\\n' > \"$T/s.md\"; if ./target/release/tillandsias-plan --index \"$T/s.md\" loop-status-verify --ledger \"$T/l.yaml\" >/dev/null 2>&1; then echo 'FAIL: a wrong-active-release structure verified green'; rm -rf \"$T\"; exit 1; fi; rm -rf \"$T\"; echo 'ok: structural fault fails hard'"
+    timeout_ms: 20000
+    expected_behavior: "ok: structural fault fails hard"
+
+  - step: "NEGATIVE CONTROL: an EXACT-count committed line still verifies green (no false advisory when in sync)"
+    command: "T=$(mktemp -d); printf 'plan_index:\\n  version: v1\\n  default_status_values: [ready, done]\\npackets:\\n  - {packet_id: a, order: 9001, status: ready, desired_release: v0.5}\\n  - {packet_id: c, order: 9003, status: done, desired_release: v0.5}\\n' > \"$T/l.yaml\"; printf '# Loop Status\\n\\n## ACTIVE RELEASE: v0.5\\n\\n## Roadmap\\n\\n- **v0.5 — ACTIVE (1 open / 2 total tagged): \"in-sync\"**\\n' > \"$T/s.md\"; out=$(./target/release/tillandsias-plan --index \"$T/s.md\" loop-status-verify --ledger \"$T/l.yaml\" 2>/dev/null); rm -rf \"$T\"; echo \"$out\" | grep -q 'count_ok=yes' && echo \"$out\" | grep -q 'verdict=ok' && echo 'ok: in-sync count reports count_ok=yes' || { echo \"FAIL: $out\"; exit 1; }"
+    timeout_ms: 20000
+    expected_behavior: "ok: in-sync count reports count_ok=yes"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "loop-status-verify: count drift advisory, structural faults hard, in-sync count reports yes"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "loop-status-count-advisory-shape"
+
+rollback:
+  on_failure: "restore crates/tillandsias-plan/src/main.rs loop-status-verify count handling from git history"

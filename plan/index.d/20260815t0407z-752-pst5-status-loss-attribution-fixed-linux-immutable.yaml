@@ -1,0 +1,66 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: forge-tillandsias-opencode-20260815T0347Z (order 752-pst5 closure).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: status-loss-detector-attributes-closure-markers-found-in-prose
+    field: status
+    value: completed
+    ts: "2026-08-15T04:07:00Z"
+    host: linux_immutable
+
+events:
+  - packet_id: status-loss-detector-attributes-closure-markers-found-in-prose
+    event:
+      type: completed
+      ts: "2026-08-15T04:07:00Z"
+      host: linux_immutable
+      agent_id: forge-tillandsias-opencode-20260815T0347Z
+      evidence_refs: [litmus:fragment-status-loss-attribution-shape]
+      summary: >
+        Fixed by replacing the line-grep scanner with structural attribution.
+        New tillandsias-plan subcommand `fragment-terminal-events <fragment.yaml>`
+        parses the fragment as YAML and prints, one per line, the packet_ids whose
+        events block DECLARES a terminal `completed` event (inline
+        `packets:[].events[]` or the top-level `events:[].packet_id` form).
+        Attribution is bounded by the YAML events block, so PROSE that quotes the
+        marker inside a block scalar is never read as a declaration.
+        check-fragment-status-loss.sh now probes the plan binary via
+        plan-binary-probe.sh (704-zcgi) and per-file `fragment-terminal-events`;
+        a binary predating the subcommand skips the closure-event pass LOUDLY
+        (stderr note, exit 0) rather than inventing a violation (702-68zj ruling).
+        MUTATION-PROVEN, not inspection-only: (1) a fixture built from
+        751-i9mb's real body — context quotes the closure marker inside a
+        literal block scalar, only event `type: filed` — is NOT flagged
+        (empty output, exit 0); (2) a genuine closure event in the same shape
+        IS flagged, naming the REAL packet
+        (mirror-identity-persist-vault-audit-device), not 751-i9mb;
+        (3) the top-level events form with nested `event: {type: completed}`
+        is seen (matches 220b5e29/532 shape); (4) the 598-kibt file-boundary
+        negative is retained — a packet_id last in one fragment does not
+        inherit the first closure marker in the next (per-file parse by
+        construction); (5) the stale-binary path (tillandsias-plan predating
+        the subcommand) skips loudly with exit 0 while the current binary does
+        not skip — both verified against a real stale binary. Gates:
+        litmus:fragment-status-loss-attribution-shape 7/7 PASS; ci-release
+        pre-build suite 20/20 PASS; build.sh --check PASS (VERSION-bump
+        isolation, podman-sync-bounded, skills-single-source,
+        litmus-pin-claims 39, script-exec-bits 24).
+  - packet_id: status-loss-detector-attributes-closure-markers-found-in-prose
+    event:
+      type: note
+      ts: "2026-08-15T04:07:00Z"
+      host: linux_immutable
+      agent_id: forge-tillandsias-opencode-20260815T0347Z
+      summary: >
+        The fix honors the packet's own exit_criteria: prose-quote negative
+        verified from 751-i9mb's real body (not a synthetic marker);
+        genuine-declaration positive still flagged via mutation; attribution
+        bounded by the events block (YAML parse, no indent heuristic); 598-kibt
+        file-boundary negative retained. Sibling drift noted while closing:
+        `blocking-counts` and `select-rows` dispatch arms are absent from
+        crates/tillandsias-plan/capabilities.txt (two warnings per
+        `capabilities` call, pre-existing on a clean tree) — out of scope
+        here, filed separately.

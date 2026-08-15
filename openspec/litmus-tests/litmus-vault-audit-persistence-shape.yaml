@@ -1,0 +1,116 @@
+# @trace spec:tillandsias-vault
+# @trace order:749-8iw4, order:722-ecne, order:606-bvnp
+#
+# Pins the persisted Vault audit device (design T9). images/vault/entrypoint.sh
+# enables a FILE audit device at /vault/audit/audit.json, but nothing mounted
+# /vault/audit — so it was a container-layer directory (V12) and every audit
+# record died with the container. Measured on tlatoani 2026-08-15: the running
+# vault held 6,182,307 bytes of real audit records on a doomed layer, while
+# `vault audit list` reported a perfectly healthy device. That combination is
+# what made it survivable for months and is what this test exists to prevent.
+name: litmus:vault-audit-persistence-shape
+spec: tillandsias-vault
+phase: pre-build
+description: >
+  Pin that the Vault launch mounts a host volume at /vault/audit with :U, that
+  the audit device the image enables writes there, and that the mount is
+  constructed alongside /vault/data rather than left to the container layer —
+  the precondition for §4a row M6 (audit records survive container recreation).
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
+  - workspace contains images/vault/entrypoint.sh
+  - shell utilities (grep, bash) are available in PATH
+
+critical_path:
+  - step: "the image enables a file audit device at /vault/audit/audit.json"
+    # If this moves, the mount below is pointed at nothing and the whole
+    # attribution channel silently stops persisting again.
+    command: "grep -q 'sys/audit/file' images/vault/entrypoint.sh && grep -q '/vault/audit/audit.json' images/vault/entrypoint.sh && echo 'ok: audit-device-enabled'"
+    timeout_ms: 3000
+    expected_behavior: "ok: audit-device-enabled"
+
+  - step: "the launch constructs a host volume for /vault/audit"
+    command: "grep -q 'vault-audit' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -qE ':/vault/audit:U' crates/tillandsias-headless/src/vault_bootstrap.rs && echo 'ok: audit-volume-constructed'"
+    timeout_ms: 3000
+    expected_behavior: "ok: audit-volume-constructed"
+
+  - step: "the audit volume is actually PASSED to podman run, not merely built"
+    # A constructed-but-unused arg is the failure this step exists for: the
+    # string would grep green while /vault/audit stayed on the container layer.
+    command: "grep -q 'audit_volume_arg' crates/tillandsias-headless/src/vault_bootstrap.rs && n=$(grep -c 'audit_volume_arg' crates/tillandsias-headless/src/vault_bootstrap.rs); [ \"$n\" -ge 2 ] && echo \"ok: audit-volume-passed ($n references)\" || { echo \"FAIL: audit_volume_arg referenced $n time(s) — constructed but never passed\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: audit-volume-passed"
+
+  - step: "the audit mount carries :U for the same userns reason as /vault/data"
+    # An audit device that cannot write is FATAL to Vault — every request fails
+    # once nothing can record it — so a userns mapping shift must self-repair
+    # exactly as it does for the data volume.
+    command: "grep -qE '\\{\\}:/vault/audit:U' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -qE '\\{\\}:/vault/data:U' crates/tillandsias-headless/src/vault_bootstrap.rs && echo 'ok: both-volumes-relabelled'"
+    timeout_ms: 3000
+    expected_behavior: "ok: both-volumes-relabelled"
+
+  - step: "BEHAVIOUR: the volume-arg contract is unit-tested, not merely grepped (753-ii5f)"
+    # An in-forge review of the first version of this litmus made the right
+    # objection: five greps over the source cannot fail when a refactor moves the
+    # HOST directory somewhere the container's vault user cannot write. Records
+    # stop persisting, every grep stays green, and `vault audit list` still
+    # reports healthy — which is V12's exact blindness. The contract is now
+    # behind vault_audit_volume_arg() with tests that assert the destination,
+    # the :U relabel and the host path verbatim, so init_cache_dir() drift shows
+    # up as a changed argument instead of silently relocating the records.
+    command: "grep -q 'fn vault_audit_volume_arg' crates/tillandsias-headless/src/vault_bootstrap.rs && for t in audit_volume_targets_the_path_the_entrypoint_writes_to audit_volume_is_relabelled_for_userns_drift audit_volume_uses_the_supplied_host_dir_verbatim audit_volume_is_distinct_from_the_data_volume; do grep -q \"fn $t\" crates/tillandsias-headless/src/vault_bootstrap.rs || { echo \"FAIL: missing test $t\"; exit 1; }; done; echo 'ok: contract-unit-tested'"
+    timeout_ms: 5000
+    expected_behavior: "ok: contract-unit-tested"
+
+  - step: "EXACTLY ONE mount targets /vault/audit (a later --volume must not shadow it)"
+    # 753-ii5f: counting audit_volume_arg references cannot notice a SECOND
+    # --volume on the same container destination, where podman's last-wins would
+    # silently override the persisted mount.
+    # Counted over NON-TEST code only. The first draft of this step grepped the
+    # whole file and reported 3, because the unit tests added in the same change
+    # assert on the very string it counts — a pin that cannot tell code from text
+    # about code, which is the class 752-pst5 was filed for. Third instance
+    # tonight; the awk stops at the test module rather than pattern-matching
+    # around it.
+    command: "n=$(awk '/^#\\[cfg\\(test\\)\\]/{exit} {print}' crates/tillandsias-headless/src/vault_bootstrap.rs | grep -c ':/vault/audit:'); [ \"$n\" = \"1\" ] && echo \"ok: single-audit-destination ($n)\" || { echo \"FAIL: $n mounts target /vault/audit in non-test code — a later one shadows the persisted mount\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: single-audit-destination"
+
+  - step: "EXACTLY ONE file audit device is enabled (a second device may write to a layer path)"
+    # 753-ii5f: step 1 only proves the expected path is PRESENT. A second file
+    # device pointed at an unmounted path would keep step 1 green while sending
+    # records back onto the container layer.
+    command: "n=$(grep -c 'sys/audit/' images/vault/entrypoint.sh); [ \"$n\" = \"1\" ] && echo \"ok: single-audit-device ($n)\" || { echo \"FAIL: $n audit devices enabled — a second may write to an unmounted path\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok: single-audit-device"
+
+  - step: "the reason is recorded next to the code, naming V12 and M6"
+    # Without the rationale the next editor drops the mount as redundant — the
+    # device looks healthy without it, which is exactly how this survived.
+    command: "grep -q '749-8iw4' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -qE 'M6|container-layer' crates/tillandsias-headless/src/vault_bootstrap.rs && echo 'ok: rationale-recorded'"
+    timeout_ms: 3000
+    expected_behavior: "ok: rationale-recorded"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+    - "@trace order:749-8iw4"
+  expected_log: "vault audit device persistence pinned (device enabled + host volume mounted + :U + passed to podman run)"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "vault-audit-persistence-shape"
+    artifact: "crates/tillandsias-headless/src/vault_bootstrap.rs + images/vault/entrypoint.sh"
+
+rollback:
+  on_failure: >
+    The persisted Vault audit device drifted. Restore the host volume for
+    /vault/audit in launch_vault_container (built alongside the /vault/data
+    volume, with :U, and PASSED in run_args), and keep the file audit device at
+    /vault/audit/audit.json in images/vault/entrypoint.sh. Without the mount the
+    device still reports healthy and still writes — onto a container layer that
+    dies on recreate (V12), which is why the check is on the mount and not on
+    `vault audit list`.
+  command: "grep -n 'vault-audit\\|audit_volume_arg\\|/vault/audit' crates/tillandsias-headless/src/vault_bootstrap.rs images/vault/entrypoint.sh | head -20"

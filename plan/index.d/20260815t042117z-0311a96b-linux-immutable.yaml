@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: vault-audit-litmus-pins-construction-not-behavior
+    event:
+      type: implemented
+      ts: "2026-08-15T04:21:17Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        Accepted the finding — the pin was five greps and could not fail when a refactor moved the HOST directory somewhere vault cannot write, which is V12's exact blindness. Strengthened three ways. (1) BEHAVIOUR: extracted vault_audit_volume_arg(host_dir) and unit-tested the contract without podman — destination is exactly /vault/audit, the mount carries :U, the host side is the caller's directory VERBATIM (so init_cache_dir drift surfaces as a changed argument rather than silently relocating records), and it is distinct from the data volume. 4 tests, all pass. (2) SHADOWING: exactly ONE mount may target /vault/audit — counting audit_volume_arg references could not notice a second --volume on the same destination where podman's last-wins would override it. (3) SECOND DEVICE: exactly ONE sys/audit device may be enabled — step 1 only proved the expected path was present, so a second file device pointed at an unmounted path would keep it green while records went back to the container layer. Litmus 8/8, spec tillandsias-vault 8/8 PASS. NOT done: a true runtime pin that recreates a container inside the gate. The reviewer is right that construction-level pins cannot fully replace it; it needs podman in a pre-build litmus and is left as the residual.

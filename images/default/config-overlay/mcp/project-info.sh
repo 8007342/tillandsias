@@ -5,9 +5,22 @@
 #
 # Tools: project_structure, file_summary, search_code, project_list, project_info,
 #        project_type, project_metadata, find_files, grep_code, git_status,
-#        read_file, plan_query
+#        read_file, plan_query, project_answer
+#
+# Run with the single argument `capabilities` to print this engine's embedded
+# capability manifest and exit (order 569 pattern; see the manifest block below
+# and images/default/lib-project-engine-capability.sh for the skew probe).
 
 set -euo pipefail
+
+# Shared MCP usage telemetry (packet 682-m8ek). Best-effort, guarded; a no-op
+# fallback guarantees the symbol exists under `set -e` even if sourcing fails.
+for _mcp_log_cand in \
+    "${BASH_SOURCE[0]%/*}/mcp-usage-log.sh" \
+    "/home/forge/.config-overlay/mcp/mcp-usage-log.sh"; do
+    if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
+done
+command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
 
 # ── Project type detection ──────────────────────────────────────
 # @trace spec:forge-environment-discoverability
@@ -84,6 +97,209 @@ get_project_metadata() {
 EOF
 }
 
+# ── Generic index enrichment: the deterministic subset (order 669-egjn) ─────
+# @trace spec:forge-environment-discoverability, order:669-egjn
+#
+# The design's deterministic subset (C2/C5) is type, status, commands, layout,
+# actions. Before this order the generic index carried only path/types/meta,
+# so commands/layout/actions had NOTHING to answer from off-Tillandsias — the
+# C2 refusal copy advertised an index richer than the one that existed.
+#
+# Each derivation below returns one JSON document
+#   { "answer": <prose|null>, "citations": [Citation...], "reason": <string?> }
+# where every citation is the RATIFIED struct {path, line_start, line_end,
+# kind, authority} and authority.key is text that appears BOTH in the cited
+# span and in the answer — verify-answer's rule that a citation may never be
+# decorative. When nothing citable exists, citations stay [] and `reason`
+# carries the typed-refusal text; this lane never guesses.
+
+# commands — derived from marker files; the marker file:line is the citable
+# span. package.json's "scripts" block, Cargo.toml's [package]/[workspace]
+# header, and Makefile target lines.
+_gi_commands_json() {
+    _gic_dir="${1:-.}"
+    _gic_parts=""
+    _gic_cits='[]'
+    if [ -f "$_gic_dir/package.json" ]; then
+        _gic_s=$(grep -nF '"scripts"' "$_gic_dir/package.json" 2>/dev/null | head -1 | cut -d: -f1 || true)
+        if [ -n "$_gic_s" ]; then
+            _gic_e=$(awk -v s="$_gic_s" 'NR>=s && index($0,"}") {print NR; exit}' "$_gic_dir/package.json" 2>/dev/null || true)
+            [ -n "$_gic_e" ] || _gic_e="$_gic_s"
+            _gic_scripts=$(jq -r '[(.scripts // {}) | to_entries[] | "npm run \(.key) -> \(.value)"] | join("; ")' "$_gic_dir/package.json" 2>/dev/null || true)
+            if [ -n "$_gic_scripts" ]; then
+                _gic_parts="${_gic_parts}package.json \"scripts\": ${_gic_scripts}. "
+                _gic_cits=$(printf '%s' "$_gic_cits" | jq \
+                    --argjson s "$_gic_s" --argjson e "$_gic_e" \
+                    '. + [{path: "package.json", line_start: $s, line_end: $e, kind: "code",
+                           authority: {key: "\"scripts\"", source: "package.json"}}]')
+            fi
+        fi
+    fi
+    if [ -f "$_gic_dir/Cargo.toml" ]; then
+        _gic_hdr=""
+        _gic_hn=""
+        for _gic_h in '[package]' '[workspace]'; do
+            _gic_hn=$(grep -nF "$_gic_h" "$_gic_dir/Cargo.toml" 2>/dev/null | head -1 | cut -d: -f1 || true)
+            if [ -n "$_gic_hn" ]; then
+                _gic_hdr="$_gic_h"
+                break
+            fi
+        done
+        if [ -n "$_gic_hdr" ]; then
+            _gic_parts="${_gic_parts}Cargo.toml ${_gic_hdr}: cargo build; cargo test; cargo run. "
+            _gic_cits=$(printf '%s' "$_gic_cits" | jq \
+                --argjson n "$_gic_hn" --arg k "$_gic_hdr" \
+                '. + [{path: "Cargo.toml", line_start: $n, line_end: $n, kind: "code",
+                       authority: {key: $k, source: "Cargo.toml"}}]')
+        fi
+    fi
+    if [ -f "$_gic_dir/Makefile" ]; then
+        # Target lines: name at column 0 followed by ':'. Excludes special
+        # targets (leading '.'), pattern rules (leading '%'), and ':='
+        # variable assignments.
+        _gic_tgt=$(grep -nE '^[A-Za-z0-9][A-Za-z0-9_./-]*[[:space:]]*:' "$_gic_dir/Makefile" 2>/dev/null | grep -v ':=' || true)
+        if [ -n "$_gic_tgt" ]; then
+            _gic_f=$(printf '%s\n' "$_gic_tgt" | head -1 | cut -d: -f1)
+            _gic_l=$(printf '%s\n' "$_gic_tgt" | tail -1 | cut -d: -f1)
+            _gic_first=$(printf '%s\n' "$_gic_tgt" | head -1 | cut -d: -f2 | sed 's/[[:space:]]*$//')
+            _gic_names=$(printf '%s\n' "$_gic_tgt" | cut -d: -f2 | sed 's/[[:space:]]*$//' | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g')
+            _gic_parts="${_gic_parts}Makefile targets: make {${_gic_names}}. "
+            _gic_cits=$(printf '%s' "$_gic_cits" | jq \
+                --argjson s "$_gic_f" --argjson e "$_gic_l" --arg k "$_gic_first" \
+                '. + [{path: "Makefile", line_start: $s, line_end: $e, kind: "code",
+                       authority: {key: $k, source: "Makefile"}}]')
+        fi
+    fi
+    if [ "$(printf '%s' "$_gic_cits" | jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+        jq -cn --arg a "Commands (from marker files): ${_gic_parts% }" --argjson c "$_gic_cits" \
+            '{answer: $a, citations: $c}'
+    else
+        jq -cn '{answer: null, citations: [],
+                 reason: "commands question — the generic index found no citable command markers (no package.json \"scripts\", no Cargo.toml [package]/[workspace], no Makefile targets)"}'
+    fi
+}
+
+# layout — the top-level tree walk, anchored to a real span: the first line of
+# a recognizable top-level file. The claim the citation supports is explicit
+# in the answer ("<file>:1 reads: <text>"), so the citation is evidence for
+# the walk's anchor, never decoration.
+_gi_layout_json() {
+    _gil_dir="${1:-.}"
+    _gil_entries=$(cd "$_gil_dir" 2>/dev/null && LC_ALL=C ls -A 2>/dev/null | head -40 | while IFS= read -r _gil_e; do
+        if [ -d "$_gil_e" ]; then printf '%s/\n' "$_gil_e"; else printf '%s\n' "$_gil_e"; fi
+    done | tr '\n' ',' | sed 's/,$//' | sed 's/,/, /g' || true)
+    _gil_anchor=""
+    _gil_first=""
+    for _gil_c in README.md readme.md README package.json Cargo.toml Makefile; do
+        [ -f "$_gil_dir/$_gil_c" ] || continue
+        _gil_first=$(head -1 "$_gil_dir/$_gil_c" 2>/dev/null | tr -d '\r' || true)
+        if [ -n "$_gil_first" ] && [ "${#_gil_first}" -le 120 ]; then
+            _gil_anchor="$_gil_c"
+            break
+        fi
+        _gil_first=""
+    done
+    if [ -n "$_gil_entries" ] && [ -n "$_gil_anchor" ]; then
+        jq -cn --arg e "$_gil_entries" --arg f "$_gil_anchor" --arg k "$_gil_first" \
+            '{answer: ("Layout (top-level): " + $e + ". Anchor: " + $f + ":1 reads: " + $k),
+              citations: [{path: $f, line_start: 1, line_end: 1, kind: "code",
+                           authority: {key: $k, source: "tree-walk"}}]}'
+    else
+        jq -cn '{answer: null, citations: [],
+                 reason: "layout question — the tree walk found no citable anchor (no readable top-level README/package.json/Cargo.toml/Makefile with a non-empty first line)"}'
+    fi
+}
+
+# actions — what an agent can DO next, derived from the DETECTED project type.
+# Type detection is by marker-file EXISTENCE and has no span of its own (the
+# 619-pfsj C1 lesson); each action is therefore anchored to a citable line
+# INSIDE the marker file the detection keyed on.
+_gi_actions_json() {
+    _gia_dir="${1:-.}"
+    _gia_types=$(detect_project_types "$_gia_dir" 2>/dev/null || true)
+    _gia_parts=""
+    _gia_cits='[]'
+    if [ -f "$_gia_dir/package.json" ]; then
+        _gia_key=""
+        _gia_n=""
+        for _gia_t in '"name"' '"scripts"' '"version"'; do
+            _gia_n=$(grep -nF "$_gia_t" "$_gia_dir/package.json" 2>/dev/null | head -1 | cut -d: -f1 || true)
+            if [ -n "$_gia_n" ]; then
+                _gia_key="$_gia_t"
+                break
+            fi
+        done
+        if [ -n "$_gia_key" ]; then
+            _gia_parts="${_gia_parts}node (package.json ${_gia_key} line ${_gia_n}): npm install, then npm test / npm run <script>. "
+            _gia_cits=$(printf '%s' "$_gia_cits" | jq \
+                --argjson n "$_gia_n" --arg k "$_gia_key" \
+                '. + [{path: "package.json", line_start: $n, line_end: $n, kind: "code",
+                       authority: {key: $k, source: "package.json"}}]')
+        fi
+    fi
+    if [ -f "$_gia_dir/Cargo.toml" ]; then
+        _gia_hdr=""
+        _gia_hn=""
+        for _gia_h in '[package]' '[workspace]'; do
+            _gia_hn=$(grep -nF "$_gia_h" "$_gia_dir/Cargo.toml" 2>/dev/null | head -1 | cut -d: -f1 || true)
+            if [ -n "$_gia_hn" ]; then
+                _gia_hdr="$_gia_h"
+                break
+            fi
+        done
+        if [ -n "$_gia_hdr" ]; then
+            _gia_parts="${_gia_parts}rust (Cargo.toml ${_gia_hdr} line ${_gia_hn}): cargo build, cargo test. "
+            _gia_cits=$(printf '%s' "$_gia_cits" | jq \
+                --argjson n "$_gia_hn" --arg k "$_gia_hdr" \
+                '. + [{path: "Cargo.toml", line_start: $n, line_end: $n, kind: "code",
+                       authority: {key: $k, source: "Cargo.toml"}}]')
+        fi
+    fi
+    if [ -f "$_gia_dir/Makefile" ]; then
+        _gia_tgt=$(grep -nE '^[A-Za-z0-9][A-Za-z0-9_./-]*[[:space:]]*:' "$_gia_dir/Makefile" 2>/dev/null | grep -v ':=' | head -1 || true)
+        if [ -n "$_gia_tgt" ]; then
+            _gia_f=$(printf '%s\n' "$_gia_tgt" | cut -d: -f1)
+            _gia_first=$(printf '%s\n' "$_gia_tgt" | cut -d: -f2 | sed 's/[[:space:]]*$//')
+            _gia_parts="${_gia_parts}make (Makefile target ${_gia_first} line ${_gia_f}): make ${_gia_first}. "
+            _gia_cits=$(printf '%s' "$_gia_cits" | jq \
+                --argjson n "$_gia_f" --arg k "$_gia_first" \
+                '. + [{path: "Makefile", line_start: $n, line_end: $n, kind: "code",
+                       authority: {key: $k, source: "Makefile"}}]')
+        fi
+    fi
+    if [ "$(printf '%s' "$_gia_cits" | jq 'length' 2>/dev/null || echo 0)" -gt 0 ]; then
+        jq -cn --arg t "${_gia_types:-none}" --arg a "${_gia_parts% }" --argjson c "$_gia_cits" \
+            '{answer: ("Actions (detected types: " + $t + "): " + $a), citations: $c}'
+    else
+        jq -cn --arg t "${_gia_types:-none}" \
+            '{answer: null, citations: [],
+              reason: ("actions question — detected types (" + $t + ") carry no citable action span (no package.json, Cargo.toml, or Makefile with an anchorable line)")}'
+    fi
+}
+
+# build_generic_index — the ENRICHED generic project index (order 669-egjn).
+# One JSON document: path/types/meta (the pre-669-egjn subset, unchanged for
+# existing readers) plus the commands/layout/actions deterministic classes,
+# each carrying its own answer text and ratified Citation structs.
+# `project-info.sh index [dir]` prints it and exits before the JSON-RPC loop
+# (the order-569 subcommand pattern), so the tmpfs index builder
+# (lib-common.sh discover_generic_project) and any litmus obtain the exact
+# document the answer lane serves from.
+build_generic_index() {
+    _bgi_dir="${1:-.}"
+    _bgi_types=$(detect_project_types "$_bgi_dir" 2>/dev/null || true)
+    _bgi_meta=$(get_project_metadata "$_bgi_dir" 2>/dev/null || true)
+    printf '%s' "$_bgi_meta" | jq -e . >/dev/null 2>&1 || _bgi_meta='{}'
+    _bgi_cmds=$(_gi_commands_json "$_bgi_dir")
+    _bgi_lay=$(_gi_layout_json "$_bgi_dir")
+    _bgi_act=$(_gi_actions_json "$_bgi_dir")
+    jq -n --arg path "$_bgi_dir" --arg types "$_bgi_types" \
+        --argjson meta "$_bgi_meta" --argjson commands "$_bgi_cmds" \
+        --argjson layout "$_bgi_lay" --argjson actions "$_bgi_act" \
+        '{path: $path, types: $types, meta: $meta,
+          commands: $commands, layout: $layout, actions: $actions}'
+}
+
 # ── Workspace discovery (sibling projects) ───────────────────
 # @trace gap:ON-006
 # Discovers sibling git projects in the parent directory of the current project.
@@ -154,6 +370,7 @@ resolve_plan_index() {
         return 0
     fi
     for candidate in \
+        "$PWD/plan/index.yaml" \
         "$HOME/src/tillandsias/plan/index.yaml" \
         "$HOME/tillandsias/plan/index.yaml" \
         "/opt/cheatsheets/plan-index.yaml"; do
@@ -191,6 +408,236 @@ resolve_plan_bin() {
     printf '\n'
 }
 
+# ── Engine identity + capability manifest (orders 569, 619-pfsj C3) ─────────
+# @trace spec:forge-environment-discoverability, order:619-pfsj
+#
+# THE PACKAGING DECISION, made explicitly against the order-459 constraint
+# (image builds have no network): this generic answer engine is THIS SCRIPT,
+# baked into the forge image at /home/forge/.config-overlay/mcp/project-info.sh.
+# Zero build, zero vendoring, zero launch-time compilation. That choice has a
+# consequence order 531 already taught us to name: the running engine's sources
+# are NOT the mounted checkout, so "the launch finished" can never mean "the
+# engine behaves as this checkout's contract promises". A forge whose image was
+# baked from an older tree runs an older engine while every health signal reads
+# green.
+#
+# So the engine carries its own capability manifest, embedded in the artifact
+# itself — the `capabilities` subcommand pattern of order 569, adapted for a
+# shell engine where "embedded at compile time" means "literal text in the
+# baked script". Two readers, one manifest:
+#
+#   1. the RUNNING ARTIFACT self-reports: `project-info.sh capabilities`
+#      prints this block and exits before the JSON-RPC loop — asked of the
+#      artifact, never inferred from the checkout;
+#   2. the MOUNTED CHECKOUT's expectation is read TEXTUALLY out of its copy of
+#      this file by lib-project-engine-capability.sh (no execution of checkout
+#      code, the same discipline as reading capabilities.txt).
+#
+# Tokens are `[a-z][a-z0-9-]*`, one per line, sorted; `engine-contract-vN` is
+# the contract version and MUST be bumped whenever the answer contract changes
+# behaviour. v2 = 619-pfsj: typed synthesis refusals + no-inference fallback.
+# v3 = 669-h987: project_answer lane routing keyed on the mounted project's
+# identity (own plan/index.yaml at the root), not on tool reachability — a
+# non-Tillandsias mount always answers from the generic lane.
+# v4 = 669-egjn: enriched deterministic subset — commands/layout/actions
+# answer CITED from the generic index (`index` subcommand + question classes),
+# and the overview README citation is clamped to the file's real line count.
+PROJECT_INFO_ENGINE_MANIFEST='
+actions-cited
+commands-cited
+engine-contract-v4
+file-summary
+find-files
+generic-index
+generic-lane
+git-status
+grep-code
+layout-cited
+no-inference-fallback
+plan-lane
+plan-query
+project-answer
+project-info
+project-list
+project-metadata
+project-structure
+project-type
+read-file
+search-code
+sibling-projects
+synthesis-refusal-typed
+typed-refusal
+'
+
+if [ "${1:-}" = "capabilities" ]; then
+    printf '%s\n' "$PROJECT_INFO_ENGINE_MANIFEST"
+    exit 0
+fi
+
+# Run with `index [dir]` to print the ENRICHED generic project index (order
+# 669-egjn) and exit before the JSON-RPC loop — the document the generic
+# answer lane serves the deterministic subset from, and the payload
+# lib-common.sh's discover_generic_project persists to tmpfs as index.json.
+if [ "${1:-}" = "index" ]; then
+    build_generic_index "${2:-.}"
+    exit 0
+fi
+
+# ── project_answer C2/C5 helpers (order 619-pfsj) ───────────────────────────
+# @trace spec:forge-environment-discoverability, order:619-pfsj
+#
+# _pa_is_synthesis — deterministic question classification, mirroring the
+# no-fuzzy discipline of answer.rs::classify: a CLOSED marker vocabulary, no
+# model, no scoring. A question is SYNTHESIS-shaped when answering it requires
+# composing an explanation rather than looking a fact up — the class C5 says
+# must refuse typed when it cannot be served, never be answered with a guess
+# or with a deterministic fact dressed up as the asked-for explanation.
+#
+# Deliberately NOT synthesis: "how do I ..." (a commands question — the
+# deterministic subset), "describe ..." (the cited README description IS the
+# deterministic answer), and any question the deterministic layer can cite an
+# answer for — the plan lane runs FIRST and a cited deterministic answer always
+# wins (inference adds recall, never authority).
+_pa_is_synthesis() {
+    _pas_q=" $(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '?!.,;:()' ' ') "
+    case "$_pas_q" in
+        *" why "* | *" explain "* | *" summarize "* | *" summarise "* | \
+            *" architecture "* | *" compare "* | *" review "* | \
+            *" analyze "* | *" analyse "* | *" recommend "* | \
+            *" rationale "* | *" refactor "* | *" redesign "* | \
+            *" tradeoff "* | *" tradeoffs "* | *" trade-off "* | *" trade-offs "* | \
+            *" how does "* | *" how it works "* | *" should i "* | *" should we "*)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+# _pa_deterministic_class — closed keyword routing for the generic lane's
+# deterministic question classes (order 669-egjn). Same no-fuzzy discipline as
+# _pa_is_synthesis: a CLOSED vocabulary, first match wins, anything unmatched
+# falls through to the overview (type/name/description) answer the 619-pfsj
+# C1 slice pinned. Synthesis classification runs BEFORE this, so a question
+# like "how does the build work" never reaches here. "what's next?" lands on
+# the actions class — the C4 promise for the generic lane.
+_pa_deterministic_class() {
+    _pdc_q=" $(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr '?!.,;:()' ' ') "
+    case "$_pdc_q" in
+        *" command "* | *" commands "* | *" build "* | *" builds "* | \
+            *" compile "* | *" run "* | *" test "* | *" tests "* | *" install "*)
+            printf 'commands\n'
+            return 0
+            ;;
+    esac
+    case "$_pdc_q" in
+        *" layout "* | *" structure "* | *" tree "* | *" directories "* | \
+            *" folders "* | *" organized "* | *" organised "*)
+            printf 'layout\n'
+            return 0
+            ;;
+    esac
+    case "$_pdc_q" in
+        *" action "* | *" actions "* | *" next "*)
+            printf 'actions\n'
+            return 0
+            ;;
+    esac
+    printf 'overview\n'
+}
+
+# _pa_generic_class_envelope <commands|layout|actions> — wrap one enriched
+# index class in the ratified envelope. Citations present -> confidence=exact
+# (a deterministic index lookup); none -> the one pinned refusal constructor
+# with the derivation's own reason. Freshness and citation_root follow the
+# same discipline as the overview answer below.
+_pa_generic_class_envelope() {
+    _pgc_json=$(build_generic_index "." | jq -c --arg k "$1" '.[$k] // {}' 2>/dev/null || echo '{}')
+    _pgc_n=$(printf '%s' "$_pgc_json" | jq -r '.citations | length' 2>/dev/null || echo 0)
+    case "$_pgc_n" in
+        '' | *[!0-9]*) _pgc_n=0 ;;
+    esac
+    if [ "$_pgc_n" -gt 0 ]; then
+        _pgc_commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+        _pgc_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        _pgc_root=$(pwd -P)
+        printf '%s' "$_pgc_json" | jq \
+            --arg commit "$_pgc_commit" --arg now "$_pgc_now" --arg root "$_pgc_root" \
+            '{answer: .answer, citations: .citations,
+              freshness: {source_commit: $commit, indexed_at: $now},
+              confidence: "exact", citation_root: $root}'
+    else
+        _pa_refusal "$(printf '%s' "$_pgc_json" | jq -r '.reason // "no citable evidence in the generic index for this question class"' 2>/dev/null || printf 'no citable evidence in the generic index for this question class')"
+    fi
+}
+
+# _pa_refusal <reason> — the typed refusal in the ratified envelope. The
+# rendering is pinned by answer.rs (`unsupported: <reason>`, zero citations,
+# confidence=unsupported, a real freshness struct) so verify-answer accepts it
+# and an agent can branch on it without parsing prose. Never an error string,
+# never a silent degrade.
+_pa_refusal() {
+    _par_commit=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+    _par_now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    _par_root=$(pwd -P)
+    jq -n \
+        --arg reason "$1" \
+        --arg commit "$_par_commit" \
+        --arg now "$_par_now" \
+        --arg root "$_par_root" \
+        '{
+            answer: ("unsupported: " + $reason),
+            citations: [],
+            freshness: {source_commit: $commit, indexed_at: $now},
+            confidence: "unsupported",
+            citation_root: $root
+        }'
+}
+
+# _pa_probe_inference — is a local inference endpoint available? Asked through
+# the EXISTING probe (lib-inference-state.sh, orders 392/392a): same endpoint
+# resolution (TILLANDSIAS_INFERENCE_ENDPOINT, default http://inference:11434),
+# same 1s budget, same closed reason vocabulary. No new config surface. A
+# missing helper is its own named fact (probe-helper-missing), never a silent
+# "unavailable" — an absent probe reporting a verdict would be the same lie
+# `experts: ready` told in order 531.
+_pa_probe_inference() {
+    TILLANDSIAS_INFERENCE_STATE="unknown"
+    TILLANDSIAS_INFERENCE_REASON="probe-helper-missing"
+    for _pai_lib in \
+        "${TILLANDSIAS_INFERENCE_STATE_LIB:-}" \
+        "${BASH_SOURCE[0]%/*}/../../lib-inference-state.sh" \
+        "/usr/local/lib/tillandsias/lib-inference-state.sh"; do
+        if [ -n "$_pai_lib" ] && [ -r "$_pai_lib" ]; then
+            # shellcheck source=/dev/null
+            . "$_pai_lib"
+            tillandsias_inference_state || true
+            return 0
+        fi
+    done
+    return 0
+}
+
+# _pa_synthesis_refusal — C2/C5: the typed refusal for a synthesis question the
+# deterministic layer could not cite an answer for. It NAMES the missing
+# capability as a machine token, and the two branches are deliberately
+# distinct: blaming the endpoint when the endpoint is fine (or vice versa)
+# would send an agent to fix the wrong thing.
+#
+#   missing_capability=local-inference  no endpoint is available; the reason is
+#                                       the probe's closed vocabulary
+#                                       (endpoint-unreachable, no-models, ...)
+#   missing_capability=synthesis-tier   the endpoint IS ready but no synthesis
+#                                       tier is wired into this surface yet
+#                                       (the 397+ family owns the tiers)
+_pa_synthesis_refusal() {
+    _pa_probe_inference
+    if [ "${TILLANDSIAS_INFERENCE_STATE:-unknown}" = "ready" ]; then
+        _pa_refusal "synthesis question — missing_capability=synthesis-tier inference_state=ready inference_reason=-; the deterministic layer holds no citable answer for it, and no synthesis tier is wired into project_answer yet (inference adds recall, never authority — citations stay deterministic-layer products). Deterministic questions (type, status, commands, layout, actions) still answer."
+    else
+        _pa_refusal "synthesis question — missing_capability=local-inference inference_state=${TILLANDSIAS_INFERENCE_STATE:-unknown} inference_reason=${TILLANDSIAS_INFERENCE_REASON:--}; the deterministic layer holds no citable answer for it and no local inference endpoint is available to add recall. Deterministic questions (type, status, commands, layout, actions) still answer from the index alone."
+    fi
+}
+
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -209,6 +656,7 @@ while IFS= read -r line; do
             args=$(echo "$line" | jq -c '.params.arguments // {}')
             error_code=""
             error_msg=""
+            _mcp_t0=$(date +%s%3N 2>/dev/null || echo "")
             case "$tool" in
                 "project_structure")
                     depth=$(echo "$args" | jq -r '.depth // 3')
@@ -462,16 +910,80 @@ ${preview}"
                         error_code=-32602
                         error_msg="Invalid params for tool 'project_answer': missing required 'question'"
                     else
-                        # Two-lane routing (C4): specialized plan expert lane if available, else generic project index lane
-                        _pbin="$(resolve_plan_bin)"
-                        _pidx="$(resolve_plan_index)"
-                        if [ -n "$_pbin" ] && [ -n "$_pidx" ]; then
-                            _ans=$("$_pbin" --index "$_pidx" answer "$_q" 2>/dev/null || true)
-                            if [ -n "$_ans" ]; then
-                                result="$_ans"
+                        # Two-lane routing (C4), ORDER 669-h987. The lane is
+                        # chosen on evidence about the MOUNTED project — its own
+                        # plan/index.yaml at the project root — never on tool
+                        # reachability. The pre-669-h987 gate
+                        # (resolve_plan_bin && resolve_plan_index) resolved the
+                        # $HOME/src/tillandsias fallbacks too, so on a dev host
+                        # with a Tillandsias checkout lying around a
+                        # NON-Tillandsias project's question misrouted into that
+                        # checkout's plan ledger and answered from the wrong
+                        # project. Only a Tillandsias-shaped mounted project
+                        # (own plan/index.yaml at the root) enters the plan
+                        # lane, and it answers from ITS OWN ledger
+                        # (TILLANDSIAS_PLAN_INDEX stays an explicit override for
+                        # operator pins and test stubs); everything else answers
+                        # from the generic lane, whatever the tooling resolves.
+                        _pa_plan_lane=0
+                        if [ -f "./plan/index.yaml" ]; then
+                            _pa_plan_lane=1
+                            _pbin="$(resolve_plan_bin)"
+                            if [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ] && [ -f "${TILLANDSIAS_PLAN_INDEX}" ]; then
+                                _pidx="${TILLANDSIAS_PLAN_INDEX}"
                             else
-                                result='{"answer":"the project expert cannot answer this question","citations":[],"freshness":"now","confidence":"unsupported"}'
+                                _pidx="${PWD}/plan/index.yaml"
                             fi
+                            [ -n "$_pbin" ] || _pa_plan_lane=0
+                        fi
+                        if [ "$_pa_plan_lane" = "1" ]; then
+                            # DETERMINISTIC FIRST (C5): the plan engine runs
+                            # before any synthesis consideration, so a question
+                            # it can cite an answer for is answered — with no
+                            # inference endpoint, with a dead one, always.
+                            # Inference adds recall, never authority.
+                            _ans=$("$_pbin" --index "$_pidx" answer "$_q" 2>/dev/null || true)
+                            _conf=$(printf '%s' "$_ans" | jq -r '.confidence // empty' 2>/dev/null || true)
+                            if [ -z "$_ans" ] || [ -z "$_conf" ]; then
+                                # The engine produced no envelope at all. This
+                                # used to emit a hand-rolled approximation
+                                # (freshness: "now", no `unsupported:` prefix)
+                                # that verify-answer REFUSED — the exact class
+                                # of defect the C1 slice removed from the
+                                # generic lane. Route through the one pinned
+                                # refusal constructor instead.
+                                result=$(_pa_refusal "the plan engine produced no answer envelope for this question (engine=${_pbin})")
+                            elif [ "$_conf" = "unsupported" ] && _pa_is_synthesis "$_q"; then
+                                # C2: the deterministic layer refused AND the
+                                # question needs synthesis — refuse TYPED,
+                                # naming the missing capability, instead of
+                                # forwarding a refusal that talks about ledger
+                                # tokens for a question that was never about
+                                # the ledger.
+                                result=$(_pa_synthesis_refusal)
+                            else
+                                result="$_ans"
+                            fi
+                        elif _pa_is_synthesis "$_q"; then
+                            # Generic lane, synthesis question (C2/C5). The
+                            # generic deterministic answer below is
+                            # question-blind (it reports type/name/description
+                            # whatever was asked), so classification must gate
+                            # it: answering "why is the parser slow?" with
+                            # "Project type: node" would be a wrong answer
+                            # dressed as confidence=exact. Refuse typed,
+                            # naming what is actually missing.
+                            result=$(_pa_synthesis_refusal)
+                        elif _pa_gclass=$(_pa_deterministic_class "$_q") && [ "$_pa_gclass" != "overview" ]; then
+                            # ORDER 669-egjn — the enriched deterministic
+                            # subset: commands, layout, and actions answer
+                            # CITED from the generic index (marker-file spans,
+                            # tree-walk anchor, detected-type actions), or
+                            # refuse typed when the index holds nothing
+                            # citable for the class. Questions outside the
+                            # closed class vocabulary keep the overview
+                            # answer below.
+                            result=$(_pa_generic_class_envelope "$_pa_gclass")
                         else
                             # Generic project index lane.
                             #
@@ -512,6 +1024,21 @@ ${preview}"
                             case "$_desc" in
                                 '```'*|'~~~'*|'') _desc="" ;;
                             esac
+                            # ORDER 669-egjn — clamp the README citation to
+                            # the file's REAL line count. The pre-669-egjn
+                            # lane cited lines 1-5 unconditionally, so a
+                            # README shorter than 5 lines made verify-answer
+                            # refuse a truthful confidence=exact answer
+                            # ("citation line range runs past end of file").
+                            # awk counts a final unterminated line, which
+                            # `wc -l` would miss.
+                            _rlines=1
+                            if [ -n "$_readme" ]; then
+                                _rlines=$(awk 'END { print NR }' "./$_readme" 2>/dev/null || echo 1)
+                                case "$_rlines" in
+                                    '' | *[!0-9]* | 0) _rlines=1 ;;
+                                esac
+                            fi
                             # The canonical envelope: citations are structs with an
                             # `authority` map, `freshness` is a struct (NOT the string
                             # "now"), `confidence` is a lowercase enum, and `citation_root`
@@ -527,6 +1054,7 @@ ${preview}"
                                 --arg root "$_root" \
                                 --arg commit "$_commit" \
                                 --arg now "$_now" \
+                                --argjson rlines "$_rlines" \
                                 --argjson meta "$_p_meta" \
                                 '{
                                     # A TYPED REFUSAL when nothing citable was found
@@ -563,7 +1091,9 @@ ${preview}"
                                     citations: (if ($readme == "" or $desc == "") then [] else [{
                                         path: $readme,
                                         line_start: 1,
-                                        line_end: 5,
+                                        # ORDER 669-egjn: never past EOF — a
+                                        # 3-line README cites 1-3.
+                                        line_end: (if $rlines < 5 then $rlines else 5 end),
                                         kind: "code",
                                         authority: {
                                             key: $desc,
@@ -587,6 +1117,19 @@ ${preview}"
                     error_msg="Unknown tool: $tool"
                     ;;
             esac
+
+            # Packet 682-m8ek: record this call in the shared usage log, tagged
+            # with THIS server's name. Best-effort; never fails the call.
+            _mcp_lat=""
+            if [ -n "$_mcp_t0" ]; then
+                _mcp_t1=$(date +%s%3N 2>/dev/null || echo "")
+                [ -n "$_mcp_t1" ] && _mcp_lat=$((_mcp_t1 - _mcp_t0))
+            fi
+            if [ -n "$error_code" ]; then
+                mcp_log_usage "project-info" "$tool" "error" "$_mcp_lat"
+            else
+                mcp_log_usage "project-info" "$tool" "answered" "$_mcp_lat"
+            fi
 
             if [ -n "$error_code" ]; then
                 _err_escaped=$(printf '%s' "$error_msg" | jq -Rs .)

@@ -46,8 +46,47 @@
 #   experts: calls=<n> answered=<n> unsupported=<n> degraded=<n> errors=<n> \
 #            answer_rate=<pct|-> tools=<csv|-> source=<path|absent>
 #   plan:    packets=<n> ready=<n> blocked=<n> pending=<n>
+#   flow:    cycles=<n> avg_completed_per_cycle=<x> avg_commits_per_cycle=<y> \
+#            overhead_ratio=<commits-per-completed|-> source=<path|absent>
 #   repo:    commits_this_cycle=<n|-> worktree=<clean|dirty> traces=<current|stale|unknown>
 #   verdict: <ok|attention>:<reason>
+#
+# THE `flow:` LINE and its emitter (packet 682-epud). The greedier-batching
+# hypothesis (682-yiz7) asks whether LARGER batches per cycle amortize the fixed
+# meta-orchestration overhead. That is a MEASUREMENT question and cannot be
+# answered from a single cycle: you need packets-consumed vs cycle overhead
+# across MANY cycles. So each cycle APPENDS one packet-flow record to a per-host
+# JSONL log (${TILLANDSIAS_CYCLE_FLOW_LOG}) via the `--emit-flow` subcommand, and
+# this reporter reports the ROLLING view over that log. `overhead_ratio` is the
+# number the 682-yiz7 decision consumes: commits (the per-cycle cost) per
+# completed packet (the work done). If greedier batches amortize overhead, this
+# ratio FALLS as batch size rises. The emit is best-effort by construction (a
+# metric may never fail the cycle it measures), exactly like mcp-usage-log.sh.
+#
+# EMIT GRAMMAR (one record per cycle; never fails):
+#   cycle-metrics.sh --emit-flow host=<h> cycle=<id> batch_epic=<id> \
+#       batch_seed=<s> batch_size=<n> budget=<n> claimed=<n> completed=<n> \
+#       filed=<n> commits=<n> plan_open=<n> plan_total=<n>
+#   → {"ts":<utc>,"host":<h>,"cycle":<id>,"batch_epic":<id>,"batch_seed":<s>,
+#      "batch_size":<n>,"budget":<n>,"claimed":<n>,"completed":<n>,"filed":<n>,
+#      "commits":<n>,"plan_open":<n>,"plan_total":<n>}
+#
+# `cycle=` MAKES THE EMIT IDEMPOTENT and it is not optional in practice. A cycle
+# that re-runs the emit -- because the gate failed and the finalization was
+# retried, which is the normal shape of a bad cycle -- used to append a SECOND
+# record. Measured: one cycle wrote three, and `cycles=8 overhead_ratio=2.25`
+# was reporting six real cycles. The corruption is directional, not noise: the
+# retried cycles are precisely the expensive ones, so duplicates inflate the
+# cycle count with the worst cases while diluting avg_completed_per_cycle. The
+# metric that the greedier-batching decision (682-yiz7) consumes was being
+# skewed by the act of measuring it badly.
+#
+# With `cycle=<id>`, a second emit for the same host+cycle REPLACES the first.
+# Replace rather than skip: a retry happens after MORE work, so its counts are
+# the truthful ones. Without `cycle=`, behaviour is the old append and a warning
+# goes to stderr naming the risk -- a silent heuristic (bucket by hour, say)
+# would drop genuine records to hide a caller's omission, which is the same
+# class of lie this file exists to avoid.
 #
 # Exit status is 0 whenever the report was produced. A metrics reporter that
 # fails the cycle it is measuring is a metric that can take down what it
@@ -59,6 +98,105 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
+FLOW_LOG="${TILLANDSIAS_CYCLE_FLOW_LOG:-/tmp/tillandsias-cycle-flow.jsonl}"
+TIMING_LOG="${TILLANDSIAS_TIMING_LOG:-/tmp/tillandsias-timing.jsonl}"
+
+# ── --emit-timing: append one build/test/litmus DURATION record (packet 682-emvg)
+# Best-effort by construction, mirroring --emit-flow above and mcp-usage-log.sh:
+# the whole append is wrapped so a full disk, a read-only path, or a missing
+# `date` cannot take down the build/test/litmus step being measured. Always exits
+# 0. Accepts key=value tokens in any order; absent numeric fields default to 0,
+# absent strings to "-". "time spent building, testing" is the most likely
+# bottleneck and was invisible until this rung existed.
+if [ "${1:-}" = "--emit-timing" ]; then
+    shift
+    et_host="-"; et_step="-"; et_phase="-"
+    et_duration_ms=0; et_exit=0
+    for tok in "$@"; do
+        case "$tok" in
+            host=*)         et_host="${tok#host=}" ;;
+            step=*)         et_step="${tok#step=}" ;;
+            phase=*)        et_phase="${tok#phase=}" ;;
+            duration_ms=*)  et_duration_ms="${tok#duration_ms=}" ;;
+            exit=*)         et_exit="${tok#exit=}" ;;
+        esac
+    done
+    # Numeric fields must be integers or the rolling arithmetic downstream breaks;
+    # coerce any non-numeric to 0 rather than write a poisoned record.
+    for v in et_duration_ms et_exit; do
+        eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
+    done
+    {
+        et_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        printf '{"ts":"%s","host":"%s","step":"%s","phase":"%s","duration_ms":%s,"exit":%s}\n' \
+            "$et_ts" "$et_host" "$et_step" "$et_phase" \
+            "$et_duration_ms" "$et_exit" \
+            >>"$TIMING_LOG"
+    } 2>/dev/null || true
+    exit 0
+fi
+
+# ── --emit-flow: append one per-cycle packet-flow record (packet 682-epud) ────
+# Best-effort by construction, mirroring images/.../mcp-usage-log.sh: the whole
+# append is wrapped so a full disk, a read-only path, or a missing `date` cannot
+# take down the cycle being measured. Always exits 0. Accepts key=value tokens in
+# any order; absent numeric fields default to 0, absent strings to "-".
+if [ "${1:-}" = "--emit-flow" ]; then
+    shift
+    ef_host="-"; ef_epic="-"; ef_seed="-"; ef_cycle=""
+    ef_batch_size=0; ef_budget=0; ef_claimed=0; ef_completed=0; ef_filed=0
+    ef_commits=0; ef_plan_open=0; ef_plan_total=0
+    for tok in "$@"; do
+        case "$tok" in
+            host=*)        ef_host="${tok#host=}" ;;
+            cycle=*)       ef_cycle="${tok#cycle=}" ;;
+            batch_epic=*)  ef_epic="${tok#batch_epic=}" ;;
+            batch_seed=*)  ef_seed="${tok#batch_seed=}" ;;
+            batch_size=*)  ef_batch_size="${tok#batch_size=}" ;;
+            budget=*)      ef_budget="${tok#budget=}" ;;
+            claimed=*)     ef_claimed="${tok#claimed=}" ;;
+            completed=*)   ef_completed="${tok#completed=}" ;;
+            filed=*)       ef_filed="${tok#filed=}" ;;
+            commits=*)     ef_commits="${tok#commits=}" ;;
+            plan_open=*)   ef_plan_open="${tok#plan_open=}" ;;
+            plan_total=*)  ef_plan_total="${tok#plan_total=}" ;;
+        esac
+    done
+    # Numeric fields must be integers or the rolling arithmetic downstream breaks;
+    # coerce any non-numeric to 0 rather than write a poisoned record.
+    for v in ef_batch_size ef_budget ef_claimed ef_completed ef_filed \
+             ef_commits ef_plan_open ef_plan_total; do
+        eval "case \"\$$v\" in ''|*[!0-9]*) $v=0 ;; esac"
+    done
+    if [ -z "$ef_cycle" ]; then
+        ef_cycle="-"
+        echo "warn: --emit-flow without cycle=<id>; a retried finalization will append a SECOND record for this cycle and skew overhead_ratio (682-epud)" >&2
+    fi
+    {
+        ef_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        record="$(printf '{"ts":"%s","host":"%s","cycle":"%s","batch_epic":"%s","batch_seed":"%s","batch_size":%s,"budget":%s,"claimed":%s,"completed":%s,"filed":%s,"commits":%s,"plan_open":%s,"plan_total":%s}' \
+            "$ef_ts" "$ef_host" "$ef_cycle" "$ef_epic" "$ef_seed" \
+            "$ef_batch_size" "$ef_budget" "$ef_claimed" "$ef_completed" \
+            "$ef_filed" "$ef_commits" "$ef_plan_open" "$ef_plan_total")"
+        # Replace-if-present, keyed on host+cycle. Rewrite via a temp file and
+        # mv so an interrupted emit cannot truncate the log it is correcting.
+        if [ "$ef_cycle" != "-" ] && [ -f "$FLOW_LOG" ] \
+           && grep -q "\"host\":\"${ef_host}\",\"cycle\":\"${ef_cycle}\"" "$FLOW_LOG"; then
+            tmp="${FLOW_LOG}.$$"
+            # `|| true` is load-bearing: when the log holds ONLY the record
+            # being replaced, grep -v emits nothing and exits 1, which used to
+            # abandon the && chain and leave the stale record in place -- the
+            # emit reporting success while replacing nothing. The fixture's
+            # scenario 2 is that exact case.
+            { grep -v "\"host\":\"${ef_host}\",\"cycle\":\"${ef_cycle}\"" "$FLOW_LOG" || true; } > "$tmp"
+            printf '%s\n' "$record" >> "$tmp" && mv -f "$tmp" "$FLOW_LOG"
+            rm -f "$tmp"
+        else
+            printf '%s\n' "$record" >> "$FLOW_LOG"
+        fi
+    } 2>/dev/null || true
+    exit 0
+fi
 
 # --experts-only prints just the expert blocks and skips the plan/repo/verdict
 # work. Those blocks shell out to `tillandsias-plan check` and
@@ -87,6 +225,15 @@ source_state="absent"
 
 if [ -r "$USAGE_LOG" ]; then
     source_state="$USAGE_LOG"
+    # The `experts:` block measures the PLAN/METHODOLOGY EXPERT specifically —
+    # its answer-rate is a property of that one server. Packet 682-m8ek made the
+    # OTHER MCP servers (project-info, git-tools) write to this same log, tagged
+    # with a `server` field. Counting their rows here would inflate the expert's
+    # call/answer counts with non-expert traffic, so scope to the expert's rows:
+    # legacy rows (written before the field existed — all plan-expert) plus rows
+    # explicitly tagged `server":"forge-plan`. On a legacy-only log this is the
+    # whole file, so the reported numbers are byte-identical to before.
+    PLAN_STREAM="$( { grep -v '"server":"' "$USAGE_LOG"; grep '"server":"forge-plan"' "$USAGE_LOG"; grep '"server":"cli"' "$USAGE_LOG"; } 2>/dev/null )"
     # jq is the only parser used anywhere in the expert path (no python —
     # methodology tlatoani_hard_no_python). A malformed line must not abort the
     # report, so every read tolerates failure.
@@ -94,14 +241,14 @@ if [ -r "$USAGE_LOG" ]; then
     # `$(grep -c ... || echo 0)` captures BOTH grep's zero and echo's zero and
     # yields the two-line value "0\n0" — which then corrupts every subsequent
     # field of a space-separated grammar line. Assign first, default after.
-    calls=$(grep -c . "$USAGE_LOG" 2>/dev/null) || calls=0
-    answered=$(grep -c '"outcome":"answered"' "$USAGE_LOG" 2>/dev/null) || answered=0
-    unsupported=$(grep -c '"outcome":"unsupported"' "$USAGE_LOG" 2>/dev/null) || unsupported=0
-    degraded=$(grep -c '"outcome":"degraded"' "$USAGE_LOG" 2>/dev/null) || degraded=0
-    errors=$(grep -c '"outcome":"error"' "$USAGE_LOG" 2>/dev/null) || errors=0
+    calls=$(printf '%s\n' "$PLAN_STREAM" | grep -c . 2>/dev/null) || calls=0
+    answered=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"answered"' 2>/dev/null) || answered=0
+    unsupported=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"unsupported"' 2>/dev/null) || unsupported=0
+    degraded=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"degraded"' 2>/dev/null) || degraded=0
+    errors=$(printf '%s\n' "$PLAN_STREAM" | grep -c '"outcome":"error"' 2>/dev/null) || errors=0
     # `jq -r` renders a missing key as the literal string "null", which would be
     # reported as a tool name. Drop those rather than print a word no tool has.
-    t=$(jq -r '.tool // empty' "$USAGE_LOG" 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
+    t=$(printf '%s\n' "$PLAN_STREAM" | jq -r '.tool // empty' 2>/dev/null | sort -u | paste -sd, - 2>/dev/null || true)
     [ -n "$t" ] && tools="$t"
 fi
 
@@ -120,6 +267,203 @@ printf 'experts: calls=%s answered=%s unsupported=%s degraded=%s errors=%s answe
     "$calls" "$answered" "$unsupported" "$degraded" "$errors" "$answer_rate" "$tools" "$source_state"
 printf 'experts_substitution: unknown (needs the agent harness tool log; not derivable in-repo)\n'
 
+# ── mcp usage (packets 682-ym68, 682-m8ek) ───────────────────────────────────
+# "Are the servers used?" — per-server call volume, distinct from answer_rate's
+# "are they right?". Packet 682-m8ek added a `server` field to the usage JSONL
+# and instrumented every MCP server (forge-plan, project-info, git-tools), so
+# this line now reports REAL per-server counts by grouping on that field.
+#
+# LEGACY FALLBACK: rows written before 682-m8ek carry no `server` field. When
+# the log contains no tagged rows at all, keep the exact pre-682-m8ek line
+# (distinct tools as a server proxy, the rest NAMED uninstrumented) rather than
+# fabricating zeros — this is what keeps the shape byte-identical on old logs.
+# ── expert health (packet 737-zcj5) ──────────────────────────────────────────
+# CALL VOLUME CANNOT SEE AN OUTAGE. A server that is DOWN writes no usage rows,
+# and neither does a server nobody called — both render as absence in every
+# count above. `health=` is the field that separates them, sourced from
+# scripts/check-mcp-expert-health.sh's JSONL rather than from usage at all.
+#   health=ok         every expected expert answered its last probe
+#   health=down:<csv> named experts failed their last probe (the outage)
+#   health=absent     no expected expert is registered in this environment
+#   health=unprobed   the probe has not run here; NOT the same as healthy
+# Keeping `unprobed` distinct from `ok` matters: reporting an unmeasured expert
+# as healthy is the order-531 shape (truthful `experts: ready`, every answer
+# unsupported) this line exists to prevent.
+HEALTH_LOG="${TILLANDSIAS_EXPERT_HEALTH_LOG:-/tmp/forge-expert-health.jsonl}"
+mcp_health="unprobed"
+mcp_outages=0
+if [ -s "$HEALTH_LOG" ]; then
+    # Last state wins per server; count every non-up record for the outage line.
+    mcp_health="$(awk -F'"' '
+        /"server":/ {
+            srv=""; st="";
+            for (i = 1; i <= NF; i++) {
+                if ($i == "server") srv = $(i + 2);
+                if ($i == "state")  st  = $(i + 2);
+            }
+            if (srv != "" && st != "") last[srv] = st;
+        }
+        END {
+            down = ""; absent = 0; total = 0;
+            for (s in last) {
+                total++;
+                if (last[s] == "down") down = down (down == "" ? "" : ",") s;
+                else if (last[s] == "absent") absent++;
+            }
+            if (total == 0) { print "unprobed" }
+            else if (down != "") { print "down:" down }
+            else if (absent == total) { print "absent" }
+            else { print "ok" }
+        }' "$HEALTH_LOG" 2>/dev/null)"
+    [ -n "$mcp_health" ] || mcp_health="unprobed"
+    mcp_outages="$(grep -c '"state":"\(down\|absent\)"' "$HEALTH_LOG" 2>/dev/null)" || mcp_outages=0
+fi
+
+if grep -q '"server":"' "$USAGE_LOG" 2>/dev/null; then
+    # Real per-server counts. grep|sed|sort|uniq (no python); tolerant of
+    # malformed lines. `legacy_untagged` counts any pre-682-m8ek rows still in
+    # the same log so the total is not silently under-reported.
+    per_server="$(grep -o '"server":"[^"]*"' "$USAGE_LOG" 2>/dev/null \
+        | sed 's/.*:"//; s/"$//' | sort | uniq -c \
+        | awk '{printf "%s%s=%s", (NR>1?";":""), $2, $1}')"
+    [ -n "$per_server" ] || per_server="-"
+    mcp_servers=$(grep -o '"server":"[^"]*"' "$USAGE_LOG" 2>/dev/null \
+        | sed 's/.*:"//; s/"$//' | sort -u | grep -c .) || mcp_servers=0
+    legacy_untagged=$(grep -vc '"server":"' "$USAGE_LOG" 2>/dev/null) || legacy_untagged=0
+    printf 'mcp: servers=%s per_server=%s legacy_untagged=%s health=%s source=%s\n' \
+        "$mcp_servers" "$per_server" "$legacy_untagged" "$mcp_health" "$source_state"
+else
+    mcp_servers=0
+    if [ "$tools" != "-" ]; then
+        mcp_servers=$(printf '%s' "$tools" | tr ',' '\n' | grep -c .)
+    fi
+    printf 'mcp: servers=%s plan-expert-calls=%s other-servers=uninstrumented-see-682-m8ek health=%s source=%s\n' \
+        "$mcp_servers" "$calls" "$mcp_health" "$source_state"
+fi
+
+# NEGATIVE CONTROL (packet 737-zcj5, exit criterion 3). This line is emitted
+# ONLY when a probe actually recorded a non-up state. A healthy cycle prints
+# nothing here, because a signal that fires every cycle is one nobody reads —
+# this milestone's own recurring failure. When it does fire it carries the
+# ledger trace: the handoff pastes cycle-metrics verbatim, and the loop-status
+# entry is built from the handoff, so the outage reaches the plan without any
+# agent choosing to write it down.
+if [ "${mcp_outages:-0}" -gt 0 ] 2>/dev/null; then
+    printf 'mcp_outage: records=%s health=%s log=%s action=record-and-continue-see-737-zcj5\n' \
+        "$mcp_outages" "$mcp_health" "$HEALTH_LOG"
+fi
+
+# ── expert accuracy (packet 682-ym68) ────────────────────────────────────────
+# The groundtruth PASS-RATE — "are the experts RIGHT?" — graded against the
+# committed rung-1 query set (openspec/litmus-tests/groundtruth/). This is
+# distinct from answer_rate: an expert can answer every question (high
+# answer_rate) while citing spans that do not support the answer (low accuracy).
+# Accuracy is pass/total of graded cases, never call volume. The grader is cheap
+# (~0.4s over 19 cases) so it runs every cycle; if no binary can grade, the line
+# defers to the litmus gate rather than reporting a number the tooling did not
+# produce.
+GRADE_BIN=""
+# Order 721-nyev: resolve by EXECUTION. The old loop trusted the executable
+# bit, which on a shared Windows/WSL checkout picks the Linux ELF over the
+# runnable .exe -- this line reported plan_bin=absent on a host where the
+# binary was present and working.
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
+GRADE_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
+accuracy_line='expert_accuracy: deferred source=litmus:expert-groundtruth-harness'
+if [ -n "$GRADE_BIN" ]; then
+    gr="$(cd "$REPO_ROOT" && ( command -v timeout >/dev/null 2>&1 && timeout 30 "$GRADE_BIN" grade --root . || "$GRADE_BIN" grade --root . ) 2>/dev/null | grep '^groundtruth-result:' | tail -1)"
+    if [ -n "$gr" ]; then
+        gp="$(printf '%s' "$gr" | sed -n 's/.*pass=\([0-9]*\).*/\1/p')"
+        gt="$(printf '%s' "$gr" | sed -n 's/.*total=\([0-9]*\).*/\1/p')"
+        if [ -n "$gp" ] && [ -n "$gt" ] && [ "$gt" -gt 0 ]; then
+            accuracy_line="expert_accuracy: pass=${gp} total=${gt} rate=$(( gp * 100 / gt ))% source=groundtruth-rung1"
+        fi
+    fi
+fi
+printf '%s\n' "$accuracy_line"
+
+# ── flow (packet 682-epud) ───────────────────────────────────────────────────
+# The ROLLING packets-per-cycle view over the flow log, answering the
+# greedier-batching question (682-yiz7): does work-done-per-cycle rise faster
+# than the fixed per-cycle cost as batches grow? overhead_ratio = total commits
+# per total completed packet — the per-cycle overhead amortized across the work
+# it produced. jq is the only parser (no python — tlatoani_hard_no_python); each
+# line is parsed with `fromjson?` so a malformed row is dropped, never fatal.
+flow_cycles=0
+flow_avg_completed="-"; flow_avg_commits="-"; flow_overhead="-"
+flow_source="absent"
+if [ -r "$FLOW_LOG" ]; then
+    flow_source="$FLOW_LOG"
+    flow_stats="$(jq -R 'fromjson?' "$FLOW_LOG" 2>/dev/null | jq -s -r '
+        map(select(type=="object")) as $r
+        | ($r | length) as $n
+        | if $n == 0 then "0 - - -"
+          else
+            ($r | map(.completed // 0) | add) as $c
+          | ($r | map(.commits   // 0) | add) as $m
+          | "\($n) " +
+            "\(((($c/$n)*100)|round)/100) " +
+            "\(((($m/$n)*100)|round)/100) " +
+            "\(if $c > 0 then ((($m/$c)*100)|round)/100 else "-" end)"
+          end' 2>/dev/null)"
+    if [ -n "$flow_stats" ]; then
+        read -r flow_cycles flow_avg_completed flow_avg_commits flow_overhead <<EOF
+$flow_stats
+EOF
+    fi
+fi
+printf 'flow: cycles=%s avg_completed_per_cycle=%s avg_commits_per_cycle=%s overhead_ratio=%s source=%s\n' \
+    "${flow_cycles:-0}" "${flow_avg_completed:--}" "${flow_avg_commits:--}" "${flow_overhead:--}" "$flow_source"
+
+# ── timing (packet 682-emvg) ─────────────────────────────────────────────────
+# WHERE does a cycle's wall-clock go? "time spent building, testing" is the most
+# likely bottleneck and was invisible until the build/test/litmus entry points
+# began appending one duration record per heavy step (via --emit-timing). This
+# line reports the ROLLING view over that per-host log so a cycle can see which
+# step to attack. jq is the only parser (no python — tlatoani_hard_no_python);
+# each line is parsed with `fromjson?` so a malformed row is dropped, never fatal
+# — fail-soft exactly like the flow: block above. The two named averages scope to
+# distinct step namespaces so nested emitters cannot double-count:
+#   build_check_ms_avg — step == "build-check"     (build.sh --check, the pre-push gate)
+#   litmus_ms_avg      — step matches ^litmus       (run-litmus-test.sh suite)
+# `slowest` is the single step:ms with the largest duration across ALL records —
+# the one fact to look at first, in the spirit of the verdict line.
+timing_steps=0
+timing_build_check_avg="-"; timing_litmus_avg="-"; timing_slowest="-:-"
+timing_source="absent"
+if [ -r "$TIMING_LOG" ]; then
+    timing_source="$TIMING_LOG"
+    timing_stats="$(jq -R 'fromjson?' "$TIMING_LOG" 2>/dev/null | jq -s -r '
+        # 693-tf79: reject implausible durations (negative, or >= 24h in ms).
+        # A record whose duration_ms is really an absolute epoch (~1.78e12,
+        # from a zero start time) must never enter the averages or the slowest
+        # pick. This is defense-in-depth for logs written before the source
+        # guard in timing-log.sh; the source now skips such records entirely.
+        map(select(type=="object"
+              and (.duration_ms | type)=="number"
+              and .duration_ms >= 0
+              and .duration_ms < 86400000)) as $r
+        | ($r | length) as $n
+        | if $n == 0 then "0 - - -:-"
+          else
+            ($r | map(select(.step=="build-check") | .duration_ms // 0)) as $bc
+          | ($r | map(select((.step|tostring)|test("^litmus")) | .duration_ms // 0)) as $lm
+          | ($r | max_by(.duration_ms // 0)) as $slow
+          | "\($n) " +
+            "\(if ($bc|length)>0 then (($bc|add)/($bc|length)|round) else "-" end) " +
+            "\(if ($lm|length)>0 then (($lm|add)/($lm|length)|round) else "-" end) " +
+            "\($slow.step // "-"):\($slow.duration_ms // 0)"
+          end' 2>/dev/null)"
+    if [ -n "$timing_stats" ]; then
+        read -r timing_steps timing_build_check_avg timing_litmus_avg timing_slowest <<EOF
+$timing_stats
+EOF
+    fi
+fi
+printf 'timing: steps=%s build_check_ms_avg=%s litmus_ms_avg=%s slowest=%s source=%s\n' \
+    "${timing_steps:-0}" "${timing_build_check_avg:--}" "${timing_litmus_avg:--}" \
+    "${timing_slowest:--:-}" "$timing_source"
+
 if [ "$EXPERTS_ONLY" = true ]; then
     exit 0
 fi
@@ -127,11 +471,12 @@ fi
 # ── plan ────────────────────────────────────────────────────────────────────
 packets="-"; ready="-"; blocked="-"; pending="-"
 PLAN_BIN=""
-for cand in "$REPO_ROOT/target/release/tillandsias-plan" \
-            "$HOME/.local/bin/tillandsias-plan" \
-            "$(command -v tillandsias-plan 2>/dev/null || true)"; do
-    if [ -n "$cand" ] && [ -x "$cand" ]; then PLAN_BIN="$cand"; break; fi
-done
+# Order 721-nyev: resolve by EXECUTION. The old loop trusted the executable
+# bit, which on a shared Windows/WSL checkout picks the Linux ELF over the
+# runnable .exe -- this line reported plan_bin=absent on a host where the
+# binary was present and working.
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
+PLAN_BIN="$(cd "$REPO_ROOT" && resolve_plan_binary || true)"
 if [ -n "$PLAN_BIN" ]; then
     chk="$("$PLAN_BIN" check 2>/dev/null | tail -1 || true)"
     case "$chk" in

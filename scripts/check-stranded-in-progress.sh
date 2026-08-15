@@ -27,7 +27,12 @@
 #
 # GRAMMAR — one line per stranded packet, then one summary line:
 #   ^stranded\t<order>\t<role>\t<packet_id>$
-#   ^summary: in_progress=<n> stranded=<n> threshold_events=<n>$
+#   ^summary: (in_progress=<n> stranded=<n> threshold_events=<n>|unavailable:<reason>)$
+#
+# `unavailable:<reason>` (702-68zj) is a THIRD verdict for "this sweep could not
+# be computed" — no runnable plan binary, no jq, a failed or unparseable query.
+# It is deliberately not an all-zero summary: reporting zero because the sweep
+# could not look is how a stranded packet became invisible in a third way.
 # Exit 0 always: this is an advisory report, not a gate. A packet legitimately
 # in flight right now is indistinguishable from one abandoned an hour ago, so
 # failing a build on it would block work for a state that is often correct.
@@ -37,19 +42,46 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT" || exit 2
 
-PLAN=""
-for c in ./target/release/tillandsias-plan ./target/debug/tillandsias-plan "$(command -v tillandsias-plan 2>/dev/null)"; do
-    [ -n "$c" ] && [ -x "$c" ] && { PLAN="$c"; break; }
-done
-[ -n "$PLAN" ] || { echo "summary: in_progress=0 stranded=0 threshold_events=0"; exit 0; }
+# ORDER 702-68zj / 704-zcgi. The binary probe lives in one shared file, because
+# three scripts independently wrote the same wrong version of it. Its rule: an
+# executable BIT is a claim, RUNNING the binary is evidence. Testing the bit
+# picked a Linux ELF sitting at ./target/release/tillandsias-plan on a shared
+# Windows/WSL checkout, every query died with `Exec format error`, stderr was
+# discarded, and empty output was counted as zero stranded packets — a clean
+# all-clear while a stranded packet sat in the ledger.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
+PLAN="$(resolve_plan_binary)" || PLAN=""
 
-command -v jq >/dev/null 2>&1 || {
-    echo "summary: in_progress=0 stranded=0 threshold_events=0"
+# UNAVAILABLE is a THIRD verdict, not a quiet zero (702-68zj). This sweep exists
+# to catch work that is invisible in both directions — `ready` queries skip an
+# in_progress packet and burndown does not count it. Reporting zero because the
+# sweep could not look makes that work invisible in a third way, and does it
+# while printing the exact line an operator reads as "checked, nothing there".
+# Same convention as verify:skip-stale-staging (447) and skip:no-tray-binary
+# (620-duta). Exit stays 0: this is advisory, and an unavailable sweep is not a
+# build failure.
+[ -n "$PLAN" ] || {
+    echo "summary: unavailable:no-runnable-plan-binary"
     exit 0
 }
 
-rows="$("$PLAN" query --status in_progress --limit 200 --json 2>/dev/null \
-    | jq -r '.[] | [(.order|tostring), (.pickup_role // "unassigned"), .packet_id] | @tsv' 2>/dev/null)"
+command -v jq >/dev/null 2>&1 || {
+    echo "summary: unavailable:no-jq"
+    exit 0
+}
+
+# Keep the query's own failure distinguishable from "the query found nothing"
+# (702-68zj). Piping straight into jq collapses both into an empty string, which
+# is how the original false all-clear was produced.
+if ! raw="$("$PLAN" query --status in_progress --limit 200 --json 2>/dev/null)"; then
+    echo "summary: unavailable:plan-query-failed"
+    exit 0
+fi
+if ! rows="$(printf '%s' "$raw" \
+    | jq -r '.[] | [(.order|tostring), (.pickup_role // "unassigned"), .packet_id] | @tsv' 2>/dev/null)"; then
+    echo "summary: unavailable:plan-query-unparseable"
+    exit 0
+fi
 
 total=0
 [ -n "$rows" ] && total="$(printf '%s\n' "$rows" | grep -c .)"
@@ -74,4 +106,17 @@ if [ -n "$rows" ]; then
 fi
 
 [ -n "$out" ] && printf '%s' "$out"
-printf 'summary: in_progress=%s stranded=%s threshold_events=0\n' "$total" "$stranded"
+
+# ORDER 672-bz7u: when the binary carries expire-claims, threshold_events
+# reports how many stranded claims a `tillandsias-plan expire-claims` run
+# would return to ready right now (24h TTL). Advisory only — this script
+# still closes nothing; the expiry is an explicit, separate invocation.
+threshold=0
+if "$PLAN" capabilities 2>/dev/null | grep -qx 'expire-claims'; then
+    threshold=$("$PLAN" expire-claims --dry-run 2>/dev/null \
+        | grep -c '^expire-candidate' || true)
+    if [ "${threshold:-0}" -gt 0 ]; then
+        echo "hint: ${threshold} claim(s) past the 24h TTL — run 'tillandsias-plan expire-claims' to return them to ready (641-e2qa criterion 2)"
+    fi
+fi
+printf 'summary: in_progress=%s stranded=%s threshold_events=%s\n' "$total" "$stranded" "${threshold:-0}"

@@ -26,8 +26,9 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CloudProjectEntry, ControlEnvelope, ControlMessage,
-    ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
+    ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase,
+    WIRE_VERSION, decode, encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -42,7 +43,20 @@ const SERVER_NAME: &str = "tillandsias-in-vm";
 fn client_supports_pty_heartbeat(capabilities: &[String]) -> bool {
     capabilities
         .iter()
-        .any(|capability| capability == CAP_PTY_HEARTBEAT_V1)
+        .any(|capability| capability == CAP_PTY_HEARTBEAT_V1 || capability == CAP_PTY_HEARTBEAT_V2)
+}
+
+/// Order 723-2yb3. A v2 client gets `PtyHeartbeat` frames carrying the input
+/// state; everyone else keeps the v1 empty-`PtyData` heartbeat.
+///
+/// Checked SEPARATELY from v1 rather than as a version ladder: a client may
+/// advertise v2 alone, and treating v2 as implying v1 (or the reverse) is how
+/// a negotiation grows a case nobody tests. Both tokens are independent facts
+/// about what the peer can decode.
+fn client_supports_pty_heartbeat_v2(capabilities: &[String]) -> bool {
+    capabilities
+        .iter()
+        .any(|capability| capability == CAP_PTY_HEARTBEAT_V2)
 }
 
 /// Guard so vault bootstrap runs at most once per process even if multiple
@@ -491,7 +505,24 @@ impl VmStateHandle {
     /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
     pub async fn watch_shutdown_and_mark_stopping(&self, shutdown: Arc<AtomicBool>) {
         while !shutdown.load(Ordering::SeqCst) {
-            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+            // ORDER 690-xeda. This was a 250 ms sleep loop: 4 wakeups/second
+            // for the entire life of every VM, attached or not. Measured on a
+            // fully idle guest before the change: ~4 wakeups/s (79 context
+            // switches in 20 s).
+            //
+            // The flag stays the source of truth and is re-read on every wake,
+            // so this cannot observe a stale value. SHUTDOWN_BACKSTOP is a
+            // deliberate, justified timer rather than a bare `notified().await`:
+            // the setter is an atomic store reachable from signal handlers and
+            // several call sites, and if any one of them ever forgets to notify,
+            // a pure event wait would hang shutdown forever. A missed notify
+            // here costs at most one backstop interval instead of a wedged VM.
+            // 250 ms -> 30 s is a 120x reduction in idle wakeups while keeping
+            // the failure mode bounded.
+            tokio::select! {
+                _ = shutdown_notify().notified() => {}
+                _ = tokio::time::sleep(SHUTDOWN_BACKSTOP) => {}
+            }
         }
         // Don't clobber a terminal `Failed` if the advancer beat us to it.
         if self.current_phase() != VmPhase::Failed {
@@ -539,6 +570,53 @@ pub async fn run_vsock_listener(
 #[allow(dead_code)]
 pub const DEFAULT_LISTEN_PORT: u32 = CONTROL_WIRE_VSOCK_PORT;
 
+/// How long an idle waiter parks before re-reading the shutdown flag anyway
+/// (order 690-xeda).
+///
+/// A bare `notified().await` would be the pure event form, and it is
+/// deliberately NOT what this uses. The flag is an `AtomicBool` written from
+/// signal handlers and several call sites; if any one of them ever stores
+/// without notifying, a pure wait hangs shutdown forever. This bounds that
+/// failure to one interval while still removing 99%+ of the idle wakeups:
+/// 250 ms -> 30 s is 120x fewer.
+const SHUTDOWN_BACKSTOP: Duration = Duration::from_secs(30);
+
+/// Process-wide shutdown wakeup. Paired with the existing `AtomicBool`, which
+/// stays the source of truth — this only says "go look again", so a spurious
+/// or missed notification is never a correctness problem.
+fn shutdown_notify() -> &'static tokio::sync::Notify {
+    static NOTIFY: std::sync::OnceLock<tokio::sync::Notify> = std::sync::OnceLock::new();
+    NOTIFY.get_or_init(tokio::sync::Notify::new)
+}
+
+/// Wake every task parked on the shutdown signal (order 690-xeda).
+///
+/// This exists because there IS now a caller: `wait_for_shutdown_signal` awaits
+/// SIGTERM/SIGINT through `tokio::signal::unix` and calls this on the edge, so
+/// the waiters below are woken by the signal itself rather than by their
+/// backstop. An earlier attempt shipped this helper with no caller and it was
+/// deleted as decorative; it is back only because the event source is real.
+///
+/// The `AtomicBool` remains the source of truth and every waiter re-reads it
+/// on wake, so a missed or spurious wake is never a correctness problem.
+pub fn wake_shutdown_waiters() {
+    shutdown_notify().notify_waiters();
+}
+
+// HISTORY worth keeping: for one cycle there was NO caller that woke The shutdown flag is set
+// by `signal_hook::flag::register`, a C signal handler that writes the atomic
+// directly, and no Rust code path runs on that edge. So today the waiters below
+// are woken by SHUTDOWN_BACKSTOP, not by an event — this is a 250 ms -> 30 s
+// reduction in idle wakeups, NOT the event-driven form the doctrine asks for.
+//
+// A `signal_shutdown()` helper that stored-and-notified was written here and
+// then deleted: nothing could call it, and an API whose only property is
+// looking event-driven is worse than an honest timer. The Notify stays because
+// the waiters already select on it, so the day a Rust-side setter exists (or
+// signal-hook-tokio delivers signals asynchronously) it becomes event-driven
+// by adding one call — but until then, no comment in this file should claim it
+// already is.
+
 fn vmaddr_cid_any() -> u32 {
     // `VMADDR_CID_ANY` is `-1` cast to `u32` in the vsock crate's public API.
     // We don't re-import the crate here because tests should remain feature-gated.
@@ -556,23 +634,31 @@ async fn serve_listener(listener: &mut Listener, shutdown: Arc<AtomicBool>, stat
             );
             return;
         }
-        // accept() borrows listener mutably; race against a short timer so we
-        // can re-check the shutdown flag without an extra wake mechanism.
-        let accept = tokio::time::timeout(Duration::from_millis(250), listener.accept()).await;
-        match accept {
-            Ok(Ok(stream)) => {
+        // ORDER 690-xeda. This raced accept() against a 250 ms timer purely to
+        // re-read the shutdown flag — a second 4-wakeups/second source on an
+        // idle guest. Now the loop parks in accept() and is woken by the
+        // shutdown signal itself, with the same justified backstop as the
+        // watcher above so a missed notify cannot strand the listener.
+        let accepted = tokio::select! {
+            r = listener.accept() => Some(r),
+            _ = shutdown_notify().notified() => None,
+            _ = tokio::time::sleep(SHUTDOWN_BACKSTOP) => None,
+        };
+        match accepted {
+            Some(Ok(stream)) => {
                 tokio::spawn(handle_connection(
                     stream,
                     state.clone(),
                     connection_shutdown_rx.clone(),
                 ));
             }
-            Ok(Err(err)) => {
+            Some(Err(err)) => {
                 warn!(spec = "vsock-transport", error = %err, "vsock accept failed");
                 tokio::time::sleep(Duration::from_millis(100)).await;
             }
-            Err(_) => {
-                // Timeout: loop and re-check shutdown.
+            None => {
+                // Woken by the shutdown signal (or the backstop): loop and
+                // re-read the flag, which remains the source of truth.
             }
         }
     }
@@ -674,7 +760,10 @@ async fn handle_connection(
     let (pty_tx, mut pty_rx) = mpsc::channel::<ControlEnvelope>(PTY_OUTBOUND_CAPACITY);
     #[cfg(unix)]
     let mut pty_store = if client_supports_pty_heartbeat(&client_capabilities) {
-        PtySessionStore::new_with_heartbeat(pty_tx.clone())
+        PtySessionStore::new_with_heartbeat(
+            pty_tx.clone(),
+            client_supports_pty_heartbeat_v2(&client_capabilities),
+        )
     } else {
         PtySessionStore::new(pty_tx.clone())
     };

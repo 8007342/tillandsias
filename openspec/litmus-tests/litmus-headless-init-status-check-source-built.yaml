@@ -25,44 +25,53 @@ critical_path:
     command: "RUSTUP_HOME=\"${RUSTUP_HOME:-$HOME/.rustup}\" CARGO_HOME=\"${CARGO_HOME:-$HOME/.cargo}\" HOME=\"${TMPDIR:-/tmp}/tillandsias-headless-init-status-check-home\" PATH=\"$(pwd)/target/litmus-runtime/bin:$PATH\" LITMUS_PODMAN_MODE=fake LITMUS_PODMAN_CALLS_FILE=\"$(pwd)/target/litmus-podman/headless-init-status-check.calls.log\" TILLANDSIAS_ROOT=\"$(pwd)\" cargo test -p tillandsias-headless --bin tillandsias tests::source_built_init_and_status_check_smoke_uses_fake_podman -- --exact --nocapture > target/litmus-podman/headless-init-status-check.log 2>&1"
     timeout_ms: 180000
 
+  # NOTE (order 702-griq): ensure_image_exists decides freshness by CONTENT
+  # identity, not by the VERSION tag existing — implemented convergently on
+  # linux-next (e5470e284) and macOS (b39ddb151, via osx-next; reconciled in
+  # 3154caa5c). The lookup is now `image exists <family>:sha256-<digest>` and
+  # the VERSION tag is an alias applied afterwards with `podman tag`. These
+  # steps pin BOTH markers, so a lane that stops consulting content OR stops
+  # repointing the :v alias at that content still fails here. The old
+  # `image exists <family>:v…` argv no longer exists anywhere — do not
+  # restore it; that probe was the 702-griq stale-image defect.
   - step: "assert proxy image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-proxy:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-proxy:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-proxy:sha256-[0-9a-f]{64} (localhost/)?tillandsias-proxy:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert git image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-git:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-git:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-git:sha256-[0-9a-f]{64} (localhost/)?tillandsias-git:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert inference image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-inference:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-inference:sha256-[0-9a-f]{64} (localhost/)?tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert router image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-router:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-router:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-router:sha256-[0-9a-f]{64} (localhost/)?tillandsias-router:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert chromium core image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-chromium-core:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-chromium-core:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-chromium-core:sha256-[0-9a-f]{64} (localhost/)?tillandsias-chromium-core:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert chromium framework image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-chromium-framework:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-chromium-framework:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-chromium-framework:sha256-[0-9a-f]{64} (localhost/)?tillandsias-chromium-framework:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert forge image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-forge:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-forge:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-forge:sha256-[0-9a-f]{64} (localhost/)?tillandsias-forge:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert web image lookup happened"
-    command: "grep -E 'image exists (localhost/)?tillandsias-web:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-web:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-web:sha256-[0-9a-f]{64} (localhost/)?tillandsias-web:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert vault image lookup happened (order 253 canon)"
-    command: "grep -E 'image exists (localhost/)?tillandsias-vault:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-vault:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-vault:sha256-[0-9a-f]{64} (localhost/)?tillandsias-vault:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert forge-base image lookup happened (dependency expansion)"
-    command: "grep -E 'image exists (localhost/)?tillandsias-forge-base:v' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -E 'image exists (localhost/)?tillandsias-forge-base:sha256-[0-9a-f]{64}' target/litmus-podman/headless-init-status-check.calls.log && grep -E 'podman tag (localhost/)?tillandsias-forge-base:sha256-[0-9a-f]{64} (localhost/)?tillandsias-forge-base:v' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert enclave network lookup happened"

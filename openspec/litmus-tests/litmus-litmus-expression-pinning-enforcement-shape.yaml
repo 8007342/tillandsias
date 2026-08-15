@@ -1,0 +1,59 @@
+# @trace spec:ci-release
+name: litmus:litmus-expression-pinning-enforcement-shape
+spec: ci-release
+phase: pre-build
+description: The added-step expression-pinning enforcer refuses a literal source pin without a negative control, and only added steps — never the existing corpus
+severity: high
+size: instant
+
+# Order 634-39ik — the Tlatoāni-approved enforcement rung (2026-08-11) over
+# scan-litmus-expression-pinning.sh's ranking (622-rmit). This litmus DOGFOODS
+# the enforcer with the negative + positive controls the ruling itself requires
+# of every new step. It exercises the git-free --check-line seam so the checks
+# are deterministic and do not depend on the branch's diff.
+#
+# NOTE FOR THE ENFORCER READING THIS FILE: this test carries a NEGATIVE CONTROL
+# (below), which is precisely the exemption that keeps the enforcer from
+# flagging this file's own steps — the intended design, demonstrated on itself.
+
+preconditions:
+  - the enforcer script scripts/check-litmus-expression-pinning-added.sh is present and executable
+
+critical_path:
+  - step: "NEGATIVE CONTROL: a literal source-file pin with no negative control is REFUSED"
+    # The failure direction. If this ever exits 0, the enforcer has stopped
+    # enforcing — the guard would be decorative.
+    command: "if scripts/check-litmus-expression-pinning-added.sh --check-line \"grep -qF 'let x = 5' crates/foo/src/lib.rs\" 0; then echo 'FAIL: a literal source pin was ADMITTED'; exit 1; fi; echo 'ok: literal source pin refused'"
+    timeout_ms: 10000
+    expected_behavior: "ok: literal source pin refused"
+
+  - step: "POSITIVE CONTROL: the same pin WITH a negative control in the test is admitted"
+    command: "scripts/check-litmus-expression-pinning-added.sh --check-line \"grep -qF 'let x = 5' crates/foo/src/lib.rs\" 1 && echo 'ok: pin admitted when a negative control exists'"
+    timeout_ms: 10000
+    expected_behavior: "ok: pin admitted when a negative control exists"
+
+  - step: "POSITIVE CONTROL: a property check that runs a binary and greps its OUTPUT is admitted"
+    # The compliant shape the operator wants steps to take: assert behavior, not
+    # source text. Must not be false-red'd just because the executed script
+    # carries a source extension.
+    command: "scripts/check-litmus-expression-pinning-added.sh --check-line \"./build.sh --check 2>&1 | grep -qF 'Gate stamp recorded'\" 0 && echo 'ok: output-grep of an executed script admitted'"
+    timeout_ms: 10000
+    expected_behavior: "ok: output-grep of an executed script admitted"
+
+  - step: "DIFF-SCOPED: full git-mode run over this branch reports ok (added steps are compliant, corpus untouched)"
+    # Proves the enforcer cannot red the existing 643-step corpus — it examines
+    # only steps added vs the base ref and passes when those are compliant.
+    command: "scripts/check-litmus-expression-pinning-added.sh | grep -q '^ok:' && echo 'ok: diff-scoped run clean'"
+    timeout_ms: 30000
+    expected_behavior: "ok: diff-scoped run clean"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "Expression-pinning enforcement: added literal source pins refused, negative-control exemption honored, corpus untouched"
+  log_fields:
+    spec: "ci-release"
+    test: "litmus-expression-pinning-enforcement-shape"
+
+rollback:
+  on_failure: "restore scripts/check-litmus-expression-pinning-added.sh and the build.sh gate wiring from git history"

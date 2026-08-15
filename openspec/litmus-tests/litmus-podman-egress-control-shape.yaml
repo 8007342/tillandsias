@@ -1,0 +1,64 @@
+# @trace spec:proxy-container
+name: litmus:podman-egress-control-shape
+spec: proxy-container
+phase: pre-build
+description: The default-network egress control works, so egress measurements on this host are admissible
+severity: high
+size: instant
+
+# Order 653-zzkb. This litmus exists because an instrument failure, not a code
+# defect, nearly closed a p0 security packet as theoretical.
+#
+# The global containers.conf injects http_proxy=http://proxy:3128 into every
+# container on every network. `proxy` resolves only inside the enclave, so
+# everywhere else egress dies. When 606-9wqd's runtime reproduction ran without
+# neutralizing it, the proxy poisoned the TEST arm and the CONTROL arm
+# identically: the control read as "this host has no container egress", the
+# reproduction was filed INCONCLUSIVE, and the comfortable reading available at
+# that moment was "the spec divergence is harmless".
+#
+# The finding was reproducible the whole time. What was broken was the ruler.
+#
+# So this does not test the product. It tests whether this host can MEASURE
+# container egress at all. If it fails, no egress result gathered here is
+# admissible evidence for anything.
+
+preconditions:
+  - podman is on PATH
+
+critical_path:
+  - step: "the neutralizer exists and is sourceable"
+    # The variable must end up DECLARED AND EMPTY — that exact state is what
+    # overrides containers.conf `[engine] env`. Test declaredness with ${x+…},
+    # never ${x:-…}: the latter treats empty as unset, so it reports a correctly
+    # neutralized variable as a failure. (It did, on this test's first run.)
+    command: "test -r scripts/podman-neutralize-proxy.sh && bash -c 'set -e; source scripts/podman-neutralize-proxy.sh; [ -n \"${http_proxy+declared}\" ] || { echo \"FAIL: http_proxy not declared\"; exit 1; }; [ -z \"$http_proxy\" ] || { echo \"FAIL: http_proxy not empty: [$http_proxy]\"; exit 1; }; echo ok:neutralizer-sourceable'"
+    timeout_ms: 10000
+    expected_behavior: "ok:neutralizer-sourceable"
+
+  - step: "NEGATIVE CONTROL: the neutralizer does not clobber an operator-set proxy"
+    # The loop must only fill UNSET variables. If it overwrote a real one, every
+    # host behind a corporate proxy would silently lose egress, and the fix would
+    # be worse than the class it prevents.
+    command: "bash -c 'set -e; export http_proxy=http://operator-set:9999; source scripts/podman-neutralize-proxy.sh; [ \"$http_proxy\" = \"http://operator-set:9999\" ] || { echo \"FAIL: clobbered operator proxy: [$http_proxy]\"; exit 1; }; echo ok:operator-proxy-preserved'"
+    timeout_ms: 10000
+    expected_behavior: "ok:operator-proxy-preserved"
+
+  - step: "the containers.conf proxy trap is still present (else this litmus is moot)"
+    # If a future host stops writing the enclave-only proxy globally, this check
+    # should say so rather than silently passing forever on a machine where the
+    # hazard no longer exists.
+    command: "conf=\"${HOME}/.config/containers/containers.conf\"; if [ -f \"$conf\" ] && grep -q 'http_proxy=http://proxy:3128' \"$conf\"; then echo 'ok:trap-present — neutralizer is load-bearing on this host'; else echo 'ok:trap-absent — containers.conf no longer injects the enclave proxy; re-evaluate 653-zzkb'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok:trap-"
+
+observability:
+  traces:
+    - "@trace spec:proxy-container"
+  expected_log: "Podman egress control: the host can measure container egress, and the neutralizer preserves an operator-set proxy"
+  log_fields:
+    spec: "proxy-container"
+    test: "podman-egress-control-shape"
+
+rollback:
+  on_failure: "no product rollback — a failure here means the measuring instrument is broken, not the product. Do not trust egress results from this host until it passes."

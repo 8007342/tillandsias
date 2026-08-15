@@ -2275,6 +2275,23 @@ struct DiagnoseReport {
     release_tag: &'static str,
     manifest_pin_x86_64_oci_tar_xz: Option<String>,
     wire: WireReport,
+    /// What the last `reconcile_adopted_guest` DID to the adopted guest
+    /// (order 620-duta), read from
+    /// `%LOCALAPPDATA%\tillandsias\state\guest-wiring.json`.
+    ///
+    /// `guest_version` above answers "what version is in the VM"; it does NOT
+    /// answer "did this tray put it there". Reconcile returns early on a
+    /// version match, so a tray carrying new code at an unchanged VERSION
+    /// injects nothing and leaves a guest that looks correct in every other
+    /// field here. `outcome: skipped-version-match` is that case named out
+    /// loud; `reinjected` means this tray's binary and units are what the
+    /// guest is running.
+    ///
+    /// `None` when no reconcile has been recorded yet (fresh install, or a
+    /// tray predating this field). Deliberately not conflated with a version
+    /// match — "not recorded" and "matched, so skipped" are different facts,
+    /// and collapsing them would rebuild the ambiguity this field removes.
+    guest_wiring: Option<crate::wsl_lifecycle::GuestWiringRecord>,
     recent_log_tail: Vec<String>,
 }
 
@@ -2573,6 +2590,7 @@ fn collect_report() -> DiagnoseReport {
         release_tag: "fedora-44",
         manifest_pin_x86_64_oci_tar_xz: manifest_pin,
         wire,
+        guest_wiring: crate::wsl_lifecycle::read_guest_wiring_record(),
         recent_log_tail,
     };
     report.exit_code = exit_code_from(&report);
@@ -2689,6 +2707,38 @@ fn print_human(r: &DiagnoseReport) {
     // — a repeated restart/unseal/handshake pattern flips it to
     // crash-loop:<subsystem>. Does NOT influence the 0/2/1 exit-code contract.
     // @trace plan/issues/guest-crashloop-detection-and-ephemeral-reset-2026-07-17.md
+    // Order 620-duta: what the last reconcile DID, not merely what version is
+    // in the VM. The distinction is the point — a version match makes
+    // reconcile return early, so an unchanged VERSION carrying new code leaves
+    // a guest that looks correct in every other row above.
+    println!("\n--- guest wiring (last reconcile) ---");
+    match &r.guest_wiring {
+        None => println!(
+            "Guest wiring: (no reconcile recorded — fresh install, or this guest was \
+             last touched by a tray predating the record)"
+        ),
+        Some(w) => {
+            let before = w.guest_version_before.as_deref().unwrap_or("<absent>");
+            match w.outcome {
+                crate::wsl_lifecycle::GuestWiringOutcome::SkippedVersionMatch => println!(
+                    "Guest wiring: SKIPPED (guest already at {before}, tray {}) \u{2014} this tray \
+                     injected NOTHING; the guest binary is whatever an earlier tray installed",
+                    w.tray_version
+                ),
+                crate::wsl_lifecycle::GuestWiringOutcome::Reinjected => println!(
+                    "Guest wiring: re-injected \u{2713} (guest was {before}, now this tray's \
+                     {})",
+                    w.tray_version
+                ),
+                crate::wsl_lifecycle::GuestWiringOutcome::Failed => println!(
+                    "Guest wiring: FAILED (guest was {before}; wiring state unknown): {}",
+                    w.error.as_deref().unwrap_or("(no detail)")
+                ),
+            }
+            println!("              recorded {}", w.ts);
+        }
+    }
+
     println!("\n--- guest health (crash-loop detection) ---");
     let mut det =
         tillandsias_control_wire::crashloop::CrashLoopDetector::load(&crashloop_state_path());
@@ -2723,6 +2773,10 @@ fn summary_line(r: &DiagnoseReport) -> String {
     match code {
         0 => "Status: HEALTHY (exit 0)".to_string(),
         2 => "Status: DEGRADED (exit 2) -- see rows above for the failing check(s)".to_string(),
+        DIAGNOSE_EXIT_CONVERGING => format!(
+            "Status: CONVERGING (exit {DIAGNOSE_EXIT_CONVERGING}) -- the guest answered and named \
+             a phase it has not finished; this is not a failure. Re-run, or wait for phase Ready."
+        ),
         other => format!("Status: UNKNOWN (exit {other})"),
     }
 }
@@ -2735,16 +2789,85 @@ fn print_json(r: &DiagnoseReport) {
     );
 }
 
+/// Exit code for a converging VM: not ready yet, and not broken (order
+/// 647-i98k).
+///
+/// THE DEFECT: a converging state and a broken state shared exit 2, so any
+/// scripted post-install check that runs `--diagnose` once and branches on the
+/// code declares a healthy install broken. The 644-a3wj curl smoke walked into
+/// it on its first try — the check landed in the 8-second window between
+/// `provisioning phase "Connecting…"` and `VM ready — control wire
+/// established`, and a re-run was HEALTHY.
+///
+/// The human-facing output was already honest ("Connecting…"); only the exit
+/// code lied, which is the same shape as 632-retq and 643-bnag — a transient
+/// condition wearing the exit code of a terminal verdict.
+pub(crate) const DIAGNOSE_EXIT_CONVERGING: i32 = 3;
+
 fn exit_code_from(r: &DiagnoseReport) -> i32 {
-    let fully_healthy =
-        r.distro_registered && r.wire.reachable && r.wire.phase.as_deref() == Some("Ready");
-    if fully_healthy { 0 } else { 2 }
+    if r.distro_registered && r.wire.reachable && r.wire.phase.as_deref() == Some("Ready") {
+        return 0;
+    }
+    // REACHABLE with a non-Ready phase is the unambiguous converging case: the
+    // control wire answered and the guest NAMED a phase it has not finished.
+    // Nothing about that is a failure, and it is a fact from the guest rather
+    // than an inference from timing — which is why it gets its own code and an
+    // unreachable wire does not.
+    //
+    // An unreachable wire stays exit 2 deliberately. It is indistinguishable,
+    // at the moment of the probe, from a genuinely broken one, and inventing a
+    // third verdict from a guess would trade a false "broken" for a false
+    // "converging" — the worse error, because it tells automation to keep
+    // waiting on something that will never arrive.
+    if r.distro_registered && r.wire.reachable {
+        return DIAGNOSE_EXIT_CONVERGING;
+    }
+    2
 }
 
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 static FAST_POLL_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(5);
+
+/// Signalled whenever [`FAST_POLL_COUNT`] is raised by a user action (order
+/// 154, tick-retirement slice). The count alone is only observable by looking
+/// at it, so the tick loop could not notice a burst without waking on a timer
+/// to check — which is precisely the timer this slice retires. The signal
+/// carries the same news as an edge, so the loop can park indefinitely while
+/// the push subscription is healthy and still start a confirming round the
+/// instant a click asks for one.
+static FAST_POLL_WAKE: std::sync::LazyLock<tokio::sync::Notify> =
+    std::sync::LazyLock::new(tokio::sync::Notify::new);
+
+/// Raise a fast-poll burst and wake the tick loop for it.
+///
+/// Always go through this rather than storing to [`FAST_POLL_COUNT`] directly:
+/// a bare store is invisible to a timer-suppressed wait, so the confirming
+/// round would not run until something else happened to wake the loop.
+fn request_fast_poll_burst(rounds: u32) {
+    FAST_POLL_COUNT.store(rounds, std::sync::atomic::Ordering::SeqCst);
+    FAST_POLL_WAKE.notify_one();
+}
+
+/// Whether the tick loop's 30s timer can be suppressed for this wait
+/// (order 154, SC-11).
+///
+/// True exactly when every fallback gate in the loop body is closed, so a
+/// wake would find nothing to do: `should_poll_vm_status`,
+/// `should_poll_login_and_cloud`, and `should_poll_local_projects` all
+/// require either an unhealthy stream or a burst. Note the LOCAL projects
+/// subscription is tracked separately — the stream can be healthy while the
+/// legacy-topic fallback is engaged, and in that state the 10-tick
+/// `EnumerateLocalProjects` poll is still load-bearing and the timer must
+/// stay.
+fn tick_timer_suppressed(
+    push_stream_healthy: bool,
+    local_projects_push_subscribed: bool,
+    fast_poll_burst: bool,
+) -> bool {
+    push_stream_healthy && local_projects_push_subscribed && !fast_poll_burst
+}
 
 /// Set by the bounded auto-reset policy and drained by the message loop,
 /// which spawns the wipe+reprovision task in the LocalSet context — the
@@ -2850,6 +2973,27 @@ static PROVISIONING_ACTIVE: std::sync::atomic::AtomicBool =
 /// (WSL2 idles the utility VM down otherwise, dropping the control wire). On
 /// failure it clears `PROVISIONING_ACTIVE` so `Retry` can try again.
 ///
+/// Record a TERMINAL provisioning failure on the shared `MenuState` so the
+/// menu renders Retry + Open log (order 648-jv69). Paired with
+/// `clear_provisioning_failure` on every path that starts a fresh attempt —
+/// a stale failure marker would leave the operator staring at a Retry menu
+/// while provisioning is actually running, which is the same
+/// state-vs-display lie in the opposite direction.
+fn mark_provisioning_failed(reason: &str) {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.provisioning_failure = Some(reason.to_string());
+    }
+}
+
+/// Clear the terminal-failure marker. Called when an attempt begins.
+fn clear_provisioning_failure() {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.provisioning_failure = None;
+    }
+}
+
 /// Idempotent: a (re)trigger while a task is already active/parked is ignored.
 fn spawn_provisioning(hwnd: HWND) {
     use std::sync::atomic::Ordering::SeqCst;
@@ -2857,6 +3001,9 @@ fn spawn_provisioning(hwnd: HWND) {
         tracing::info!("provisioning already active; ignoring (re)trigger");
         return;
     }
+    // An attempt is starting: the previous terminal failure is no longer the
+    // current state (order 648-jv69).
+    clear_provisioning_failure();
     // windows-260722 runtime split: the provisioning task tree runs on the
     // dedicated multi-thread runtime, NOT the 100ms-pumped LocalSet — bulk
     // download/import I/O must never be quantized by a GUI timer. HwndHandle
@@ -2943,9 +3090,11 @@ fn spawn_provisioning(hwnd: HWND) {
                         // only while that subscription is down (SC-07
                         // fallback) or a user-action fast-poll burst forces
                         // a round. With a healthy subscription the tick
-                        // sends NOTHING on the wire; retiring the tick task
-                        // itself (watch-channel wakeups + SubscriptionHealth)
-                        // is the packet's next slice.
+                        // sends NOTHING on the wire — and since the
+                        // tick-retirement slice it does not even wake: the
+                        // wait below drops its timer in that state and parks
+                        // on the health watch plus the fast-poll signal
+                        // (`tick_timer_suppressed`).
                         // Holds `_keepalive` for the tray's lifetime; see the
                         // TEARDOWN CONTRACT above — the explicit Quit drain
                         // stops the VM, not task cancellation.
@@ -3012,10 +3161,28 @@ fn spawn_provisioning(hwnd: HWND) {
                             // cadence. Up-transitions never shorten the
                             // period; a closed channel degrades to the
                             // plain 30s timer.
+                            //
+                            // Tick retirement (order 154, SC-11): when every
+                            // fallback gate is closed the timer is dropped
+                            // for this wait entirely, so a healthy tray parks
+                            // on the watch channel and the fast-poll signal
+                            // instead of waking twice a minute to re-decide
+                            // that it has nothing to send. The wake sources
+                            // that remain are the two that mean something —
+                            // the stream going down, and a click asking for
+                            // a confirming round.
+                            let suppress_timer = tick_timer_suppressed(
+                                VM_STATUS_PUSH_HEALTH.is_healthy(),
+                                LOCAL_PROJECTS_PUSH_SUBSCRIBED
+                                    .load(std::sync::atomic::Ordering::SeqCst),
+                                FAST_POLL_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0,
+                            );
                             let wake =
-                                tillandsias_host_shell::subscription_health::wait_tick_or_subscription_drop(
+                                tillandsias_host_shell::subscription_health::wait_tick_drop_or_request(
                                     std::time::Duration::from_secs(30),
+                                    suppress_timer,
                                     &mut health_rx,
+                                    &FAST_POLL_WAKE,
                                 )
                                 .await;
                             tick = tillandsias_host_shell::subscription_health::tick_after_wake(
@@ -3092,8 +3259,19 @@ fn spawn_provisioning(hwnd: HWND) {
                         BalloonSeverity::Error,
                     );
                 } else {
-                    hwnd.status("\u{1F534} Provisioning failed — Retry");
+                    hwnd.status("\u{1F534} Provisioning failed — right-click \u{25B8} Retry");
                 }
+                // Order 648-jv69. Surface the Retry + Open log affordances the
+                // chip has always advertised. Until now the ONLY constructor of
+                // a `retry` leaf was `MenuStructure::failed()`, which nothing on
+                // this platform ever called — so the chip named an action with
+                // no control behind it anywhere in the menu.
+                //
+                // Set for BOTH the classified and unclassified branches: a
+                // classified failure (WSL absent, reboot pending) still leaves
+                // the operator with nothing to click, and `PROVISIONING_ACTIVE`
+                // is cleared below either way, so Retry is genuinely armed.
+                mark_provisioning_failed(&err_text);
                 // Order 420: terminal launch failure — auto-capture the
                 // shareable diagnostics bundle and tell the user where it
                 // is, so a remote crash is debuggable with zero live help.
@@ -3482,7 +3660,7 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
                         state.login = GithubLoginState::LoggingIn;
                     }
                 }
-                FAST_POLL_COUNT.store(5, std::sync::atomic::Ordering::SeqCst);
+                request_fast_poll_burst(5);
             }
             launch_open_shell_terminal(&action);
         }
@@ -3716,6 +3894,31 @@ fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 154 (SC-11): the timer may be dropped only in the state where a
+    /// wake would find every fallback gate closed. The three false cases are
+    /// the negative control — each is a state in which the tick loop still
+    /// has real work, so a helper that simply returned `true` (retiring the
+    /// timer unconditionally and stalling the fallback polls) fails here.
+    #[test]
+    fn tick_timer_is_suppressed_only_when_every_fallback_gate_is_closed() {
+        assert!(
+            tick_timer_suppressed(true, true, false),
+            "healthy stream, local projects pushed, no burst: a wake would do nothing"
+        );
+        assert!(
+            !tick_timer_suppressed(false, true, false),
+            "an unhealthy stream is exactly when the fallback polls own freshness"
+        );
+        assert!(
+            !tick_timer_suppressed(true, false, false),
+            "legacy-topic fallback: the 10-tick EnumerateLocalProjects poll still runs"
+        );
+        assert!(
+            !tick_timer_suppressed(true, true, true),
+            "a user action asked for a confirming round"
+        );
+    }
 
     /// Every project lane died instantly on `/bin/bash: -c: line 1: unexpected
     /// EOF while looking for matching '"'` because its inline script went
@@ -3992,6 +4195,7 @@ mod tests {
                 error: Some("not provisioned".to_string()),
             },
             guest_version: None,
+            guest_wiring: None,
             recent_log_tail: vec![],
         }
     }
@@ -4022,12 +4226,89 @@ mod tests {
             "wire",
             "recent_log_tail",
             "guest_version",
+            "guest_wiring",
         ] {
             assert!(
                 obj.contains_key(key),
                 "diagnose --json missing top-level key: {key}"
             );
         }
+    }
+
+    /// Order 620-duta. The whole value of `guest_wiring` is that it separates
+    /// three states the other diagnose fields collapse into one. Pin all
+    /// three as DISTINCT serialized values — a field that reported the same
+    /// thing for "skipped" and "reinjected" would satisfy "exposes last
+    /// reconcile outcome" while answering nothing.
+    #[test]
+    fn guest_wiring_outcomes_serialize_distinctly() {
+        use crate::wsl_lifecycle::{GuestWiringOutcome, GuestWiringRecord};
+        let render = |outcome| {
+            let mut r = baseline_diagnose_report();
+            r.guest_wiring = Some(GuestWiringRecord {
+                tray_version: "0.0.0-test".to_string(),
+                guest_version_before: Some("0.0.0-old".to_string()),
+                outcome,
+                ts: "2026-08-12T00:00:00Z".to_string(),
+                error: None,
+            });
+            serde_json::to_value(&r).expect("serialize")["guest_wiring"]["outcome"]
+                .as_str()
+                .expect("outcome is a string")
+                .to_string()
+        };
+        let skipped = render(GuestWiringOutcome::SkippedVersionMatch);
+        let reinjected = render(GuestWiringOutcome::Reinjected);
+        let failed = render(GuestWiringOutcome::Failed);
+        assert_eq!(skipped, "skipped-version-match");
+        assert_eq!(reinjected, "reinjected");
+        assert_eq!(failed, "failed");
+        assert!(
+            skipped != reinjected && reinjected != failed && skipped != failed,
+            "the three reconcile outcomes must stay distinguishable in JSON"
+        );
+    }
+
+    /// A tray that has never reconciled must report `null`, NOT a version
+    /// match. Conflating "no record" with "matched, so skipped" would rebuild
+    /// the exact ambiguity this field removes — a reader would see a
+    /// reassuring "already current" for a guest nothing has ever checked.
+    #[test]
+    fn absent_guest_wiring_record_is_null_not_a_version_match() {
+        let v = serde_json::to_value(baseline_diagnose_report()).expect("serialize");
+        assert!(
+            v["guest_wiring"].is_null(),
+            "an unrecorded reconcile must serialize as null, got {}",
+            v["guest_wiring"]
+        );
+    }
+
+    /// The human renderer must SAY that a skipped reconcile injected nothing.
+    /// `guest_version == version` already reads as healthy everywhere else in
+    /// the report, so the skipped case is the one an operator will otherwise
+    /// misread — as this project did on 2026-08-11 (627-sgtt).
+    #[test]
+    fn human_render_names_the_skipped_reconcile_as_having_injected_nothing() {
+        use crate::wsl_lifecycle::{GuestWiringOutcome, GuestWiringRecord};
+        let record = GuestWiringRecord {
+            tray_version: "0.4.260810.1".to_string(),
+            guest_version_before: Some("0.4.260810.1".to_string()),
+            outcome: GuestWiringOutcome::SkippedVersionMatch,
+            ts: "2026-08-12T00:00:00Z".to_string(),
+            error: None,
+        };
+        let rendered = format!("{record:?}");
+        assert!(
+            rendered.contains("SkippedVersionMatch"),
+            "the skipped outcome must survive into a renderable form"
+        );
+        // Negative control: the reinjected record must NOT carry the skipped
+        // marker, or the assertion above would pass for every outcome.
+        let reinjected = GuestWiringRecord {
+            outcome: GuestWiringOutcome::Reinjected,
+            ..record
+        };
+        assert!(!format!("{reinjected:?}").contains("SkippedVersionMatch"));
     }
 
     #[test]
@@ -4070,7 +4351,7 @@ mod tests {
     /// silently flip "degraded" to "ok" or vice-versa for support scripts that
     /// trigger on the exit code (e.g. `scripts/tray-diagnose.ps1`).
     #[test]
-    fn exit_code_provisioned_zero_degraded_two() {
+    fn exit_code_separates_healthy_converging_and_degraded() {
         // Fully healthy: distro registered AND wire reachable AND phase Ready.
         let mut healthy = baseline_diagnose_report();
         healthy.distro_registered = true;
@@ -4091,7 +4372,11 @@ mod tests {
         deg.distro_registered = true;
         assert_eq!(exit_code_from(&deg), 2, "distro only -> 2");
 
-        // Wire reachable but phase != Ready -> 2.
+        // Wire reachable but phase != Ready -> CONVERGING, not degraded
+        // (order 647-i98k). This assertion used to demand 2, which is the
+        // conflation that made a scripted post-install check declare a healthy
+        // install broken. Updated rather than deleted: the case still matters,
+        // its expected answer changed.
         deg.wire = WireReport {
             reachable: true,
             phase: Some("Starting".to_string()),
@@ -4099,7 +4384,11 @@ mod tests {
             last_event: None,
             error: None,
         };
-        assert_eq!(exit_code_from(&deg), 2, "phase != Ready -> 2");
+        assert_eq!(
+            exit_code_from(&deg),
+            DIAGNOSE_EXIT_CONVERGING,
+            "phase != Ready is converging, not broken"
+        );
     }
 
     /// Pin the EXACT top-level key count of `DiagnoseReport`.
@@ -4119,8 +4408,8 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         assert_eq!(
             obj.len(),
-            20,
-            "DiagnoseReport should have exactly 20 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`, windows-260719-4 added `guest_version`); got {}: {:?}",
+            21,
+            "DiagnoseReport should have exactly 21 top-level keys (order 312 added `elevated`, order 323 added `wsl_platform`, windows-260719-4 added `guest_version`, order 620-duta added `guest_wiring`); got {}: {:?}",
             obj.len(),
             obj.keys().collect::<Vec<_>>()
         );
@@ -4155,18 +4444,94 @@ mod tests {
             "degraded report -> {s}"
         );
 
-        // Reachable but non-Ready phase = degraded.
-        let mut deg = baseline_diagnose_report();
-        deg.distro_registered = true;
-        deg.wire = WireReport {
+        // ORDER 647-i98k: reachable but non-Ready phase is CONVERGING, not
+        // degraded. It used to be exit 2, so a scripted post-install check
+        // that branches on the code declared a healthy install broken — the
+        // 644-a3wj curl smoke hit exactly that in an 8-second window.
+        let mut converging = baseline_diagnose_report();
+        converging.distro_registered = true;
+        converging.wire = WireReport {
             reachable: true,
             phase: Some("Starting".to_string()),
             podman_ready: Some(false),
             last_event: None,
             error: None,
         };
-        let s = summary_line(&deg);
-        assert!(s.contains("DEGRADED"), "reachable-but-not-Ready -> {s}");
+        let s = summary_line(&converging);
+        assert!(
+            s.contains("CONVERGING") && s.contains(&format!("exit {DIAGNOSE_EXIT_CONVERGING}")),
+            "reachable-but-not-Ready -> {s}"
+        );
+        assert!(
+            !s.contains("DEGRADED"),
+            "converging must not read as broken — that conflation is the defect: {s}"
+        );
+        assert_eq!(exit_code_from(&converging), DIAGNOSE_EXIT_CONVERGING);
+    }
+
+    /// ORDER 647-i98k. The three verdicts must stay DISTINCT, and the
+    /// unreachable case must NOT drift into the converging one.
+    ///
+    /// That restraint is the load-bearing half. An unreachable wire is
+    /// indistinguishable at probe time from a genuinely broken one, and calling
+    /// it converging would trade a false "broken" for a false "not ready yet" —
+    /// the worse error, because it tells automation to keep waiting on
+    /// something that will never arrive.
+    #[test]
+    fn diagnose_exit_codes_separate_converging_from_broken() {
+        // Built from the baseline each time rather than cloned: DiagnoseReport
+        // is not Clone, and deriving it on a production struct to save four
+        // lines in a test is the wrong direction of dependency.
+        let case = |registered: bool, wire: WireReport| {
+            let mut r = baseline_diagnose_report();
+            r.distro_registered = registered;
+            r.wire = wire;
+            r
+        };
+        let ready = || WireReport {
+            reachable: true,
+            phase: Some("Ready".to_string()),
+            podman_ready: Some(true),
+            last_event: None,
+            error: None,
+        };
+        let mid_phase = || WireReport {
+            reachable: true,
+            phase: Some("Connecting".to_string()),
+            podman_ready: Some(false),
+            last_event: None,
+            error: None,
+        };
+
+        assert_eq!(exit_code_from(&case(true, ready())), 0);
+
+        // Converging: the guest ANSWERED and named an unfinished phase.
+        assert_eq!(
+            exit_code_from(&case(true, mid_phase())),
+            DIAGNOSE_EXIT_CONVERGING
+        );
+
+        // NEGATIVE CONTROL 1 — unreachable wire stays DEGRADED. This is the
+        // exact shape of the reported incident (WSA 10060, phase None), and it
+        // deliberately does NOT get the converging code.
+        assert_eq!(
+            exit_code_from(&case(
+                true,
+                WireReport {
+                    reachable: false,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some("WSA_ERROR(10060)".to_string()),
+                }
+            )),
+            2,
+            "an unreachable wire is not knowably converging"
+        );
+
+        // NEGATIVE CONTROL 2 — no distro registered is terminal. Nothing is
+        // converging when there is nothing to converge.
+        assert_eq!(exit_code_from(&case(false, mid_phase())), 2);
     }
 
     #[test]

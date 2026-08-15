@@ -14,16 +14,23 @@ append-event
 # `[a-z][a-z0-9-]*` only. Comments (`#`) and blank lines are ignored by every
 blocked-by
 blocked-closure
+# blocking-counts + select-rows: dispatched since order 632-retq (windows-next)
+# but never declared here — the 583-dv9n clean-tree warning surfaced the drift
+# when the windows/linux branches merged (linux side: 752-pst5). Declared now.
+blocking-counts
 # built a PRE-EXPERT binary from it, and stamped `experts: ready` — because
 burndown
 capabilities
 #      capabilities` prints this file, embedded at compile time via
 check
 # close: order 531 ran a forge whose checkout was a pre-expert `main` snapshot,
+closure-evidence-check
 compact
 dependencies-of
+expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
+fragment-terminal-events
 fragments
 grade
 # IF YOU ADD A SUBCOMMAND: add it here in the same commit. The dispatch and this
@@ -41,11 +48,13 @@ next
 next-order
 # One filename, two readers, so the "available now" and "available after a
 # ONE token per line: the subcommands this expert can answer. Sorted, unique,
+parked-blocks
 query
 # reader.
 ready
 # "ready" only ever meant "the build finished", never "the binary can answer".
 # relaunch" sets can never drift apart the way a hardcoded list in the wrapper
+select-rows
 set-field
 spec-envelope
 spec-index

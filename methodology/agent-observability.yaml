@@ -248,6 +248,70 @@ agent_observability_protocol:
         branch carrying no expert sources, while the launch state truthfully
         reported `experts: ready` and every health signal read green. A call
         counter would have shown healthy adoption throughout the incident.
+    # ── packet 682-ym68: the handoff surfaces usage AND accuracy every cycle ──
+    surfaced_every_cycle:
+      rule: >
+        Every meta-orchestration handoff MUST carry two lines beyond the
+        experts/answer_rate block, because "used" and "right" are different
+        questions and neither substitutes for the other. Measure before optimize.
+      mcp_usage:
+        line: "mcp: servers=<n> plan-expert-calls=<n> other-servers=uninstrumented-see-682-m8ek source=<path|absent>"
+        question: "Are the MCP servers used?"
+        honest_limit: >
+          The usage JSONL carries no server dimension yet: only the plan expert
+          (forge-plan.sh) writes rows. project-info and the other servers are
+          NAMED uninstrumented (packet 682-m8ek), never faked as zero. When
+          682-m8ek adds a server field, this line grows to real per-server counts.
+      expert_accuracy:
+        line: "expert_accuracy: pass=<P> total=<T> rate=<pct> source=groundtruth-rung1"
+        question: "Are the experts RIGHT?"
+        source: "litmus:expert-groundtruth-harness graded against openspec/litmus-tests/groundtruth/expert-groundtruth-rung1.yaml"
+        rule: >
+          The groundtruth pass-rate, distinct from answer_rate: an expert can
+          answer every question yet cite spans that do not support the answer.
+          Accuracy is pass/total of graded cases, NEVER call volume. The grader
+          is cheap (~0.4s over 19 cases) so it runs every cycle; when no binary
+          can grade in-cycle the line reads `deferred
+          source=litmus:expert-groundtruth-harness` and the quick-tier gate
+          carries it, rather than reporting a number the tooling did not produce.
+      cycle_flow:
+        line: "flow: cycles=<n> avg_completed_per_cycle=<x> avg_commits_per_cycle=<y> overhead_ratio=<commits-per-completed|-> source=<path|absent>"
+        question: "Does work-done-per-cycle outrun the fixed per-cycle overhead as batches grow?"
+        source: "per-host JSONL at ${TILLANDSIAS_CYCLE_FLOW_LOG:-/tmp/tillandsias-cycle-flow.jsonl}, one record per cycle"
+        emitter: "scripts/cycle-metrics.sh --emit-flow host=<h> batch_epic=<id> batch_seed=<s> batch_size=<n> budget=<n> claimed=<n> completed=<n> filed=<n> commits=<n> plan_open=<n> plan_total=<n>"
+        rule: >
+          Packet 682-epud. The greedier-batching decision (682-yiz7) asks whether
+          LARGER batches per cycle amortize the fixed meta-orchestration overhead;
+          that is a MEASUREMENT question a single cycle cannot answer. Each cycle
+          APPENDS one packet-flow record and this line reports the ROLLING view.
+          overhead_ratio = total commits per total completed packet — the
+          per-cycle cost amortized across the work it produced. If greedier
+          batches amortize overhead, the ratio FALLS as batch_size rises. The emit
+          is best-effort by construction (like mcp-usage-log.sh): an unwritable
+          log path never fails the cycle it measures.
+      build_test_timing:
+        line: "timing: steps=<n> build_check_ms_avg=<x> litmus_ms_avg=<y> slowest=<step>:<ms> source=<path|absent>"
+        question: "Where does the cycle's wall-clock go — what is the bottleneck?"
+        source: "per-host JSONL at ${TILLANDSIAS_TIMING_LOG:-/tmp/tillandsias-timing.jsonl}, one record per timed heavy step"
+        emitter: "scripts/cycle-metrics.sh --emit-timing step=<name> phase=<name> duration_ms=<n> exit=<n> host=<h>"
+        record_grammar: '{"ts":<utc>,"host":<h>,"step":<name>,"phase":<name>,"duration_ms":<n>,"exit":<n>}'
+        rule: >
+          Packet 682-emvg. "Time spent building, testing" is the most likely
+          bottleneck and was invisible until the build/test/litmus entry points
+          began appending one duration record per heavy step. build.sh --check
+          (the pre-push gate, run every cycle), each scripts/local-ci.sh litmus
+          phase, and each scripts/run-litmus-test.sh suite self-instrument via a
+          shared best-effort helper (scripts/timing-log.sh). The two named
+          averages scope to distinct step namespaces so nested emitters never
+          double-count: build_check_ms_avg is step=="build-check";
+          litmus_ms_avg is step matching ^litmus. `slowest` is the single
+          step:ms with the largest duration across all records — the one fact to
+          attack first. The emit is best-effort by construction (like
+          mcp-usage-log.sh and --emit-flow): a timing failure NEVER changes the
+          wrapped step's exit code or output, and an unwritable log path never
+          fails the cycle it measures. The reporter parses each row with jq
+          `fromjson?`, so a malformed row is dropped, never fatal.
+
     headline_metric:
       name: answer_rate
       formula: "answered / (answered + unsupported)"

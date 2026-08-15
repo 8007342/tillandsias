@@ -46,14 +46,44 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "windows-tray exit-code pin test exists"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "exit_code_provisioned_zero_degraded_two"
+  # Both trays must PIN their --diagnose exit-code contract in a unit test. The
+  # test NAME is not the contract, and pinning it here made this suite red on
+  # 2026-08-14 for the wrong reason: order 647-i98k legitimately renamed the
+  # windows test to `exit_code_separates_healthy_converging_and_degraded` when
+  # it added exit 3 for a converging VM. Assert that each side has an
+  # exit-code pin test, and assert the CONTRACT separately below.
+  - step: "windows-tray pins its diagnose exit-code contract in a test"
+    command: "grep -qE 'fn exit_code_(provisioned_zero_degraded_two|separates_healthy_converging_and_degraded)' crates/tillandsias-windows-tray/src/notify_icon.rs && echo 'ok: windows exit-code pin present'"
+    expected_behavior: "ok: windows exit-code pin present"
     timeout_ms: 3000
 
-  - step: "macos-tray exit-code pin test exists"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-macos-tray/src/diagnose.rs"
-    expected_behavior: "exit_code_provisioned_zero_degraded_two"
+  - step: "macos-tray pins its diagnose exit-code contract in a test"
+    command: "grep -qE 'fn exit_code_(provisioned_zero_degraded_two|separates_healthy_converging_and_degraded)' crates/tillandsias-macos-tray/src/diagnose.rs && echo 'ok: macos exit-code pin present'"
+    expected_behavior: "ok: macos exit-code pin present"
+    timeout_ms: 3000
+
+  - step: "both trays separate CONVERGING (exit 3) from degraded"
+    # PROMOTED FROM REPORT TO ENFORCEMENT (order 735-2g5i, 2026-08-14).
+    #
+    # This step used to only REPORT, and said so: windows separated converging
+    # (exit 3, order 647-i98k) while macOS still collapsed it into degraded, and
+    # enforcing that here "would turn one host's pending work into every host's
+    # red gate, which the fleet cannot act on". macOS has now landed its half,
+    # so that reason is spent and the suite can enforce the symmetry its name
+    # claims.
+    #
+    # It also stopped counting the WORD "converging". A word count is satisfied
+    # by a comment, so it could not tell an implementation from a mention of
+    # one. Both halves of the contract are asserted instead: the exit-3 constant
+    # each tray branches on, and the test that covers the converging case.
+    #
+    # The two trays reach the verdict from different facts — windows from the
+    # phase the guest names over the control wire, macOS from whether a live
+    # tray owns the VM singleton, because macOS has no AF_VSOCK and cannot ask
+    # the guest from a separate process. The CONTRACT is what has to match here,
+    # not the mechanism.
+    command: "W=crates/tillandsias-windows-tray/src/notify_icon.rs; M=crates/tillandsias-macos-tray/src/diagnose.rs; if grep -qE 'DIAGNOSE_EXIT_CONVERGING: i32 = 3' \"$W\" && grep -qE 'DIAGNOSE_EXIT_CONVERGING: i32 = 3' \"$M\" && grep -qE 'fn exit_code_separates_healthy_converging_and_degraded' \"$W\" && grep -qE 'fn exit_code_separates_healthy_converging_and_degraded' \"$M\"; then echo 'ok: exit-3 converging parity reached'; else echo 'FAIL: exit-3 converging parity regressed'; fi"
+    expected_behavior: "ok: exit-3 converging parity reached"
     timeout_ms: 3000
 
   - step: "windows spec declares the diagnose-exit-codes invariant"

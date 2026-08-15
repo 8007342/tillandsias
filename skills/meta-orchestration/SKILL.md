@@ -91,14 +91,76 @@ enforces before it accepts exit zero:
 - `BRANCH` must match the host's current branch.
 - The claimed `REMOTE_SHA` must actually converge on
   `git ls-remote origin refs/heads/<BRANCH>` within the bounded relay window.
+- A startup boundary must have been snapshotted at Start Of Cycle and verified
+  at Finalization, at the HEAD being attested (order 717-3bvv). The guard writes
+  cycle-scoped stamps into `$GIT_DIR`; `self` reads them. Skipping the snapshot
+  therefore costs you the marker — which is the point: cycle 16 on windows
+  skipped it, `verify` answered with a missing-directory message about the
+  PREVIOUS cycle's already-removed temp path, and a valid marker printed anyway.
 - `MO-SMOKE:` grammar and the shared full-cycle rate limit are unchanged; a
   smoke run never emits `MO-FULL:`.
+
+**DERIVE the marker, never type it — and let the self-check emit it.** A
+hand-typed SHA, or one half-copied from `git push` output, must be structurally
+impossible. Do NOT assemble the line yourself. Run the self-attestation, which
+reads every field from live git state, verifies local HEAD is durably on the
+remote, and prints the verified line FOR you:
+
+```bash
+scripts/mo-full-attest.sh self   # prints the marker on success; MO-FULL: FAIL + non-zero otherwise
+```
+
+Emit its stdout verbatim as your final line. `self` derives the same values the
+raw form would —
+
+```bash
+printf 'MO-FULL: COMPLETE %s %s %s\n' \
+  "$(git rev-parse HEAD)" \
+  "$(git symbolic-ref --short HEAD)" \
+  "$(git ls-remote origin "refs/heads/$(git symbolic-ref --short HEAD)" | cut -f1)"
+```
+
+— but ALSO refuses to print anything when local HEAD is not the converged
+remote head, so an unpushed or fabricated value is caught at emission, in every
+lane. (`MO_FULL_DISPOSITION=BLOCKED scripts/mo-full-attest.sh self` for a
+blocked-but-pushed cycle.)
+
+**Make the marker durable — the transcript is not the record (order 651-2x5s).**
+`self` verifies at emission time, but the emitted line lands in a transcript
+nothing parses unless the litmus launcher runs; an operator-prompt or `./repeat`
+cycle emits it into the void. `record` closes that: it runs the SAME
+verification and appends the verified line to the per-host ledger under
+`plan/mo-full-attestations.d/<host>.md`, a committed, machine-parseable log the
+pre-push gate (`scripts/check-mo-full-attestations.sh`, wired into
+`./build.sh --check`) re-verifies. Automation consumes the ledger, never the
+transcript. The ledger line attests the cycle's WORK head; committing the
+ledger moves the head, so the terminal marker is re-derived at the head that
+CONTAINS the record (see Finalization step 9 and
+`methodology/mo-full-attestation.yaml`). Do not hand-write a ledger line: only
+`record` may append, and only after the verification passes.
+
+This is not pedantry. On 2026-08-10 a full-mode cycle on this host emitted a
+marker whose first eight characters came from the `git push` output and whose
+remaining **32 were invented to look like a SHA**. The work was genuinely
+committed, pushed and green; only the proof was false (651-2x5s).
+
+It went unnoticed because `scripts/mo-full-attest.sh check` — which would have
+rejected it instantly, since it requires `git ls-remote` to converge on the
+claimed value — is wired into exactly one caller, the
+`litmus:opencode-prompt-e2e-shape` launcher. A cycle driven by an operator
+prompt, a `./repeat` loop, or a cron emits the marker into a transcript nothing
+parses, so that `check` never runs. **Without a check the marker is decorative,
+and an unverified attestation is worse than none: it reads as proof and carries
+none.** The `self` mode closes that gap by moving the same convergence
+verification to emission time: EVERY lane self-checks, because the cycle proves
+its own marker in the one command that prints it.
 
 Any full-mode run that exits without a valid, converging `MO-FULL:` marker
 has not completed its exit contract — regardless of the process exit code.
 `scripts/mo-full-attest.sh fixture` / `scripts/test-mo-full-attest.sh`
 reproduce the breach shapes hermetically (missing marker, malformed, unpushed
-local commit, branch mismatch, remote-head mismatch, clean pass).
+local commit, branch mismatch, remote-head mismatch, a well-formed but
+fabricated SHA that matches nothing on the remote, clean pass — 7/7).
 
 ## Non-Negotiable Exit Contract
 
@@ -155,11 +217,71 @@ Canonical branches:
 
 All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `linux-next` their canonical home. However, agents working on platform branches (`windows-next`, `osx-next`) MUST commit and push all edits (including plan updates) directly to their active platform branch. The Linux coordinator will merge these branches back into `linux-next` during the `/multihost-orchestration` pass.
 
+## Start Of Day / Post-Restart Gate (run FIRST, once per day; methodology `development_environment_lifecycle`)
+
+Every host restarts with the prompt "Use the ./skills/meta-orchestration skill",
+so THIS gate is how a restart or a new day gets its maintenance and verification.
+It is idempotent and cheap when already done today — gate it on a
+`.last-daily-maintenance` marker under the cache dir; skip the body if the marker
+is from today. On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
+
+1. **Post-restart verification** (only when the stack looks freshly booted — MCP
+   experts just rebuilt, images/binary possibly toolchain-bumped): run the durable
+   checklist `plan/issues/fleet-restart-post-restart-checklist-2026-08-13.md`
+   (order 718-nuvm). Do NOT trust `plan_answer`/`project_answer` until the MCP
+   experts serve `source_commit == git rev-parse HEAD`; verify clock/NTP sync
+   (a skewed clock breaks SSH-CA cert TTLs + freshness stamps); rebuild forge
+   images at the installed VERSION before launching any forge (version-skew DOA);
+   reinstall per-checkout git hooks; ensure the router sidecar is staged as a
+   build artifact (710-w9kc).
+2. **Daily maintenance** (methodology `development_environment_lifecycle.start_of_day_maintenance`):
+   build-cache GC per `build_cache_hygiene` (cargo clean + nix gc when bloated/
+   stale), `nix store gc`/`podman image prune` of superseded versioned images,
+   reap defunct delegate handles (`delegate-outcome.sh sweep`), and verify the
+   dev-environment expert containers are up + fresh (`dev_environment_experts` —
+   the same ephemeral RAG experts + commit-hook RAG retraining the forge runs).
+3. Stamp the `.last-daily-maintenance` marker. Ephemeral forges skip this whole
+   gate (they discard their substrate on teardown).
+
+Then favor the expert system for the cycle's work-pull/triage/debug/research
+(methodology `expert_first_work`): ask the experts first; on a gap, fall back
+with a loud warning naming the gap, never silently.
+
 ## Start Of Cycle
+
+0. **Rebuild the instrument before using it** (operator directive 2026-08-13):
+
+   ```bash
+   scripts/cycle-preflight.sh   # -> ok:cycle-preflight:<plan>:<inference>
+   ```
+
+   The project believes in idempotency and ephemerality — everything should be
+   safe to destroy and relaunch at any moment, Erlang style — so a cycle never
+   inherits a component from the previous one and hopes it is current. This
+   rebuilds `tillandsias-plan` (the binary every expert call, the batch
+   selector, every ledger write and every closure check goes through) and
+   re-establishes the dev inference endpoint. Both are idempotent; the common
+   path costs a no-op `cargo build` and one HTTP round trip, measured at ~2.8s.
+
+   It rebuilds the INSTRUMENT, not the product: `./build.sh --check` already
+   compiles what it validates, and rebuilding everything on a schedule is a
+   heavier decision than this step is making.
+
+   A `blocked:preflight:*` verdict means do not start the cycle — selecting work
+   with an unverified instrument is the one failure the loop cannot reason its
+   way out of, because the tool it would reason WITH is the stale thing. That is
+   not hypothetical: a selector change on 2026-08-13 added a subcommand every
+   host's binary predated, and this checkout went on refusing until someone
+   rebuilt by hand. Inference is a REPORT inside that verdict, never a gate —
+   the deterministic expert tiers work without it, and a host with no network is
+   degraded, not broken.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the
-   Committable Branch Guard below before any committable work.
+   Committable Branch Guard below before any committable work. Run the MCP
+   Expert Health Probe here too — it is advisory and never blocks, but it must
+   run BEFORE the cycle's first expert read, or an outage during that read has
+   no recorded baseline to be visible against.
 3. Snapshot the startup boundary before classifying or changing any path:
    ```bash
    boundary_dir="$(mktemp -d "${TMPDIR:-/tmp}/meta-orchestration-boundary.XXXXXX")"
@@ -302,6 +424,44 @@ On `blocked:expert-sources-absent`, do NOT launch a forge expecting expert
 answers. Switch this checkout to a branch carrying the expert sources first. On
 `ok:no-plan-crate` the target project simply has no plan expert, which is normal
 off-Tillandsias.
+
+## MCP Expert Health Probe (advisory — record, never block)
+
+Run at Start-Of-Cycle, alongside the guards above:
+
+```bash
+scripts/check-mcp-expert-health.sh
+```
+
+It speaks the MCP `initialize` handshake to each expected expert and prints
+exactly one line matching
+`^(ok:experts-healthy|down:[a-z0-9-]+(,[a-z0-9-]+)*|absent:not-registered|skip:[a-z0-9-]+)$`,
+appending one JSONL record per server to `$TILLANDSIAS_EXPERT_HEALTH_LOG`
+(default `/tmp/forge-expert-health.jsonl`). ~40ms when healthy.
+
+**This is the concrete referent for `mcp_first_read_path`'s "fall back and keep
+going, THEN RECORD IT".** That rule named no destination, and on 2026-08-14 two
+hosts skipped the recording half on the same day: windows lost all 28 MCP tools
+mid-session and fell back to `tillandsias-plan.exe` silently; linux ran an entire
+cycle whose session had never loaded the servers at all. Both outages were
+invisible in the ledger and would have stayed invisible (order 737-zcj5).
+
+Unlike the guards above, a non-zero exit here **does not fail the cycle** — an
+unavailable expert is a degraded read path, never a blocked one. Record and
+continue:
+
+- `down:<csv>` / `absent:not-registered` — keep working through
+  `./target/release/tillandsias-plan` (the same binary the MCP wrapper wraps) and
+  let the `mcp_outage:` line carry it into the handoff. Name the fallback reason,
+  as the rule has always required.
+- `ok:experts-healthy` — say nothing further. The probe is silent by design when
+  healthy; a signal that fires every cycle is one nobody reads.
+
+Do NOT substitute `test -x` or a registration-file check for the handshake. A
+server that exists but wedges on startup is precisely the outage worth catching,
+and a file-existence test calls it healthy. (The first draft of the probe read
+`.command` while dropping `.args`, launched a bare `bash`, and reported both
+healthy experts as `down` — a false outage is as bad as a missed one.)
 
 ## Reduction Engine
 
@@ -503,7 +663,29 @@ Canonical: `methodology/distributed-work.yaml` → `mcp_first_read_path`.
 
 ## Worker Drain
 
-### Stranded-claim sweep (coordinator, every cycle)
+#### Writing a validation packet: demand the post-condition AFTER the last MUTATING step
+
+Any packet that asks a host to install, launch, switch channels, or otherwise
+mutate its runtime must require the health check at the **end of everything the
+host actually does** — not after the last step that felt like the test.
+
+Earned 2026-08-10. A sibling's smoke reported 4/4 PASS on a `HEALTHY --diagnose`
+taken at 04:32:20, then ran one more mutating step (a downgrade-to-stable /
+restore-to-unstable round trip), which wedged the control wire at 04:33:27 and
+left the host in a failed provisioning state for ~25 minutes until the operator
+found it. Every per-step result was true; the verdict was still incomplete about
+the host's end state, and a stable promotion was made on it.
+
+Their own words are the rule worth copying: *"a post-condition check belongs
+after the last MUTATING step, not after the last interesting one."*
+
+So a validation packet this loop writes should say, explicitly:
+
+> Final step, after everything above: re-run the health check. If any step after
+> your last health check mutated the host, that check is stale and the run is
+> not finished.
+
+## Stranded-claim sweep (coordinator, every cycle)
 
 ```bash
 scripts/check-stranded-in-progress.sh
@@ -532,8 +714,9 @@ scripts/select-work-batch.sh <linux|macos|windows|any>
 ```
 
 Run this once, at the top of the drain, and take the batch it prints. It selects
-ONE epic (`release_target`) and at most `budget` packets from it, so a cycle
-drains a coherent slice instead of five unrelated subsystems — the scatter that
+ONE epic (`release_target`) and at most `budget` packets from it (default 4 for
+autonomous/pairing forge cycles, 6 for non-forge hosts, 1 for unattended litmus runs;
+order 707-3x9d), so a cycle drains a coherent slice instead of five unrelated subsystems — the scatter that
 made small packets cost more in orientation than in work.
 
 It is minimax-ranked (largest residual first, per `convergence.yaml` →
@@ -684,6 +867,69 @@ Run `scripts/cycle-metrics.sh [<since-ref>]` and include its output verbatim in
 the final handoff. It emits one `key=value` line per block — branch on those,
 never on prose.
 
+Every handoff MUST carry these lines; the two questions they answer are
+distinct — measure before you optimize:
+
+- **`mcp:`** — "are the servers used?" Per-server call volume (`servers=`,
+  `plan-expert-calls=`). Today only the plan expert is instrumented; the other
+  servers are named `uninstrumented-see-682-m8ek`, not faked as zero.
+  Also carries **`health=`** (order 737-zcj5) — `ok` / `down:<csv>` / `absent` /
+  `unprobed` — sourced from the health probe, NOT from usage. Call volume cannot
+  see an outage: a server that is down writes no usage rows, and neither does one
+  nobody called, so both render as absence in every count on this line.
+  `health=unprobed` is deliberately not `health=ok`; reporting an unmeasured
+  expert as healthy is the order-531 shape.
+
+- **`mcp_outage:`** — emitted ONLY when a probe recorded a non-up state
+  (`records=`, `health=`, `log=`). Its absence on a healthy cycle is the
+  negative control, not an omission. When present, it is the ledger trace of the
+  outage: the handoff pastes these metrics verbatim and the loop-status entry is
+  built from the handoff, so the outage reaches `plan/loop_status.d/` without any
+  agent choosing to write it down.
+- **`expert_accuracy:`** — "are the experts RIGHT?" The groundtruth pass-rate
+  (`pass=/total=/rate=`), graded against the committed rung-1 query set. Distinct
+  from `answer_rate`: an expert can answer every question yet cite spans that do
+  not support the answer. Accuracy is pass/total of graded cases, never call
+  volume. It reads `deferred source=litmus:expert-groundtruth-harness` when no
+  binary can grade in-cycle (then the quick-tier gate carries it).
+
+- **`flow:`** — "does work-done-per-cycle outrun the fixed per-cycle overhead as
+  batches grow?" The ROLLING packets-per-cycle view (`cycles=`,
+  `avg_completed_per_cycle=`, `avg_commits_per_cycle=`, `overhead_ratio=`) over a
+  per-host append log. `overhead_ratio` is total commits per total completed
+  packet — the fixed per-cycle cost amortized across the work it produced — and
+  is the number the greedier-batching decision (682-yiz7) consumes: if larger
+  batches amortize overhead, this ratio FALLS as batch size rises. It reads
+  `source=absent` until this host has appended at least one flow record.
+
+  Each cycle MUST append its flow record so the rolling view stays live. Emit it
+  here, right after running `scripts/cycle-metrics.sh` for the handoff and before
+  Finalization commits — best-effort, the emit never fails the cycle:
+  ```bash
+  scripts/cycle-metrics.sh --emit-flow \
+    host=<this-host> \
+    batch_epic=<from select-work-batch `batch: epic=`> \
+    batch_seed=<from `batch: seed=`> \
+    batch_size=<from `batch: size=`> \
+    budget=<from `batch: budget=`> \
+    claimed=<packets this cycle claimed> \
+    completed=<packets this cycle completed> \
+    filed=<new packets/issues this cycle filed> \
+    commits=<from cycle-metrics `repo: commits_this_cycle=`> \
+    plan_open=<open packet count> plan_total=<total packet count>
+  ```
+
+- **`timing:`** — "where does the cycle's wall-clock go?" The ROLLING view over a
+  per-host duration log (`steps=`, `build_check_ms_avg=`, `litmus_ms_avg=`,
+  `slowest=<step>:<ms>`). "Time spent building, testing" is the most likely
+  bottleneck and was invisible until the build/test/litmus entry points began
+  appending one duration record per heavy step (packet 682-emvg). `build.sh
+  --check` (the pre-push gate), each `scripts/local-ci.sh` litmus phase, and each
+  `scripts/run-litmus-test.sh` suite now self-instrument — best-effort, the
+  timing write never changes the wrapped step's exit code or output. It reads
+  `source=absent` until this host has run one instrumented step. `slowest` names
+  the single step to attack first.
+
 The two lines worth reading first:
 
 - **`answer_rate`** — the experts' USEFULNESS. Not call count. An expert called
@@ -746,17 +992,67 @@ Before exit:
 5. Commit targeted files only.
 6. Push the relevant branch.
 7. If a startup boundary was recorded, run the guard's `verify` mode. A guard
-   failure is a blocker: do not attempt destructive Git cleanup. After a
-   successful verification, remove only the unique external `$boundary_dir`;
-   finalization never deletes, restores, or resets a worktree path.
+   failure is a blocker: do not attempt destructive Git cleanup. Finalization
+   never deletes, restores, or resets a worktree path.
+
+   **Do NOT remove `$boundary_dir` here** (order 725-bu54). Retirement belongs
+   to the NEXT cycle's `snapshot`, which retires the previous boundary before
+   taking its own. Removing it here treats this Finalization as THE end of the
+   cycle — but an operator-driven loop has no single exit, and a cycle that
+   continues after a completed Finalization then finds its own boundary gone
+   and cannot attest. That happened twice in one night and cost a valid marker.
+
+   Re-running `verify` after further commits is correct and expected: it still
+   compares against the boundary taken BEFORE any work, and re-stamps the head
+   it observed so the marker matches what was actually pushed.
 8. Confirm there are no uncommitted changes created by this cycle and the
    branch is not ahead of upstream. Pre-existing dirty paths may remain only
    when the boundary guard verifies they are byte-identical to startup.
-9. Emit the full-mode terminal marker (order 614-2gqx) as your FINAL output
-   line, computed from the post-push state:
-   ```text
-   MO-FULL: <COMPLETE|BLOCKED> <git rev-parse HEAD> <branch> <remote head>
+
+   Then prove the cycle's FINDINGS survive it (order 741-3y48):
+
+   ```bash
+   scripts/check-forge-findings-persisted.sh
    ```
-   This line is the machine attestation that finalization steps 1-8 all
-   passed; the outer launcher rejects exit zero without it. See
-   "Full-Mode Terminal Attestation" above for the grammar and invariants.
+
+   A GATE, not advisory — non-zero means work already done is about to be thrown
+   away. It covers `plan/index.d/`, `plan/loop_status.d/`, `plan/issues/` and
+   `plan/mo-full-attestations.d/`, and it catches what `git status` cannot: a
+   COMMITTED fragment that was never pushed presents as a clean tree and is one
+   teardown from gone. That is not hypothetical — on 2026-08-15 an in-forge
+   review filed three valid fragments, `tillandsias-plan check` accepted them,
+   and the container took all three with it; they survived only because a human
+   happened to be reading stdout. A cycle that files nothing prints
+   `ok:no-findings` and is silent, so a clean run stays quiet.
+
+   This matters most inside a forge, where the checkout is a clone that dies with
+   the container — but it is correct everywhere, and an unattended host that
+   commits without pushing loses the same work to the next `git reset`.
+9. Record the verified marker durably, then emit the terminal marker (orders
+   614-2gqx + 651-2x5s) as your FINAL output line. `record` derives-and-verifies
+   the marker exactly as `self` does and appends the verified line to the
+   per-host ledger (`plan/mo-full-attestations.d/<host>.md`) so automation can
+   consume a real, reachable hash without parsing a transcript. The ledger
+   line attests the WORK head; committing it advances the head, so re-run the
+   guard `verify` (permitted: further commits are expected, step 7) and
+   re-derive ONCE more — the terminal marker must name the head that CONTAINS
+   the ledger record:
+   ```bash
+   scripts/mo-full-attest.sh record                                  # verify + append + print the marker
+   git add plan/mo-full-attestations.d/ && git commit -m "record(mo-full): attest <branch> cycle"
+   git push
+   scripts/meta-orchestration-worktree-guard.sh verify "$boundary_dir"   # re-stamp the new head
+   scripts/mo-full-attest.sh self                                   # terminal marker at the head containing the record
+   ```
+   Emit the FINAL `self` line verbatim as your final line — do not retype or
+   edit it. If any step prints `MO-FULL: FAIL …` and exits non-zero, do NOT
+   emit a marker — treat it as a blocker (a missing marker is itself the loud
+   failure). The ledger line and the emitted line differ by exactly the
+   bookkeeping commit; both are real commits the pre-push gate
+   (`scripts/check-mo-full-attestations.sh`) verifies exist and are reachable.
+   This gives EVERY full-mode lane the same convergence verification the
+   litmus launcher's `check` applies to its one lane, and leaves a durable
+   record that outlives the transcript. The marker is the machine attestation
+   that finalization steps 1-8 all passed; the outer launcher rejects exit
+   zero without it. See "Full-Mode Terminal Attestation" above for the grammar
+   and invariants.

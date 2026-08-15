@@ -1,0 +1,95 @@
+# @trace spec:methodology-accountability
+#
+# Pins the plan-only fast lane in the pre-push local gate (order 668-2xeh).
+#
+# WHY: twice on 2026-08-10 an in-forge session whose ONLY changes were plan
+# ledger fragments could not push them — the gate demands a `./build.sh --check`
+# stamp, the session's build-free directive (667-se87: in-forge workspace builds
+# were crashing rustc) forbade the build, the agent correctly refused
+# --no-verify, and its correct, wanted fragments died with the container,
+# recovered only by journald archaeology. A diff that adds ONLY new fragment
+# files under plan/index.d/ and plan/loop_status.d/ has a verifiable closure
+# (YAML parse, fragment schema, forbidden patterns) that needs no compiler, so
+# the gate accepts it through an explicit, marker-recorded lane.
+#
+# WHAT MUST STAY TRUE — both halves, because a lane that only accepts is a
+# bypass and a lane that only refuses is the old strander:
+#   ACCEPT: a fragments-only push passes without the stamp, and the gate output
+#           carries a "plan-only lane: validated <path>" marker per file plus a
+#           final "plan-only lane clean" verdict.
+#   REFUSE (fail closed): any non-fragment path (a .rs file), any modification
+#           of an EXISTING fragment (fragments are immutable), and any
+#           validation failure (invalid YAML) each fall back to the full
+#           build-stamp refusal, and the remote ref does not move.
+#
+# Fixtures are throwaway git repos (mktemp) with a real bare origin and the
+# REAL gate scripts copied in, driven by a REAL `git push` through an installed
+# pre-push hook — the assertion is behavioural, not a grep of the source.
+name: litmus:plan-only-push-lane-shape
+spec: methodology-accountability
+phase: pre-build
+description: >
+  The pre-push local gate accepts a fragments-only outgoing diff through the
+  plan-only fast lane (validated, marker-recorded, no build stamp) and fails
+  closed to the full gate for any non-fragment path, any modification of an
+  existing fragment, or any validation failure.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/hooks/pre-push-local-gate.sh and scripts/gate-stamp.sh
+  - yq is available in PATH (the lane's YAML validator; without it the lane fails closed by design)
+  - shell utilities (git, mktemp, grep, bash) are available in PATH
+
+critical_path:
+  - step: "gate script parses and defines the plan-only lane"
+    command: "bash -n scripts/hooks/pre-push-local-gate.sh && grep -q 'attempt_plan_only_lane' scripts/hooks/pre-push-local-gate.sh && grep -q 'plan-only lane: validated' scripts/hooks/pre-push-local-gate.sh && echo 'ok: lane-defined'"
+    timeout_ms: 5000
+    expected_behavior: "ok: lane-defined"
+
+  - step: "ACCEPT: a fragments-only push passes the lane without a build stamp and the remote advances"
+    command: "root=$(pwd); t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; printf 'packets: []\\n' > plan/index.d/29990101t000000z-existing-x.yaml; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; printf 'packets: []\\n' > plan/index.d/29990101t000001z-lane-a-x.yaml; printf '## Cycle 2026-08-10T23:00Z (x - lane fixture)\\n\\n- note\\n' > plan/loop_status.d/29990101t000001z-lane-a-x.md; git add -A; git commit -qm frags; out=$(git push origin main 2>&1); rc=$?; if [ \"$rc\" = 0 ] && echo \"$out\" | grep -q 'plan-only lane: validated plan/index.d/29990101t000001z-lane-a-x.yaml' && echo \"$out\" | grep -q 'plan-only lane: validated plan/loop_status.d/29990101t000001z-lane-a-x.md' && echo \"$out\" | grep -q 'plan-only lane clean' && [ \"$(git ls-remote origin refs/heads/main | cut -f1)\" = \"$(git rev-parse HEAD)\" ]; then echo 'ok: lane-accepts-fragments-only'; else echo \"FAIL: rc=$rc\"; echo \"$out\"; exit 1; fi"
+    timeout_ms: 15000
+    expected_behavior: "ok: lane-accepts-fragments-only"
+
+  - step: "MARKER GRAMMAR: exactly one validated line per fragment matching the lane grammar, one final clean verdict"
+    command: "root=$(pwd); t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; printf 'packets: []\\n' > plan/index.d/29990101t000000z-existing-x.yaml; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; printf 'packets: []\\n' > plan/index.d/29990101t000001z-lane-a-x.yaml; printf '## Cycle 2026-08-10T23:00Z (x - lane fixture)\\n\\n- note\\n' > plan/loop_status.d/29990101t000001z-lane-a-x.md; git add -A; git commit -qm frags; out=$(git push origin main 2>&1); n=$(echo \"$out\" | grep -cE '^plan-only lane: validated plan/(index|loop_status)\\.d/[A-Za-z0-9._-]+$'); any=$(echo \"$out\" | grep -c '^plan-only lane: validated'); fin=$(echo \"$out\" | grep -cE 'plan-only lane clean \\(2 fragment file\\(s\\) validated'); if [ \"$n\" = 2 ] && [ \"$any\" = 2 ] && [ \"$fin\" = 1 ]; then echo 'ok: marker-grammar'; else echo \"FAIL: grammar=$n raw=$any final=$fin\"; echo \"$out\"; exit 1; fi"
+    timeout_ms: 15000
+    expected_behavior: "ok: marker-grammar"
+
+  - step: "REFUSE: a diff adding a .rs file alongside a fragment demands the full gate and the remote does not move"
+    command: "root=$(pwd); t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d src; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; printf 'packets: []\\n' > plan/index.d/29990101t000000z-existing-x.yaml; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; printf 'packets: []\\n' > plan/index.d/29990101t000002z-lane-b-x.yaml; printf 'pub fn x() {}\\n' > src/lib.rs; git add -A; git commit -qm mixed; before=$(git ls-remote origin refs/heads/main | cut -f1); out=$(git push origin main 2>&1); rc=$?; after=$(git ls-remote origin refs/heads/main | cut -f1); if [ \"$rc\" != 0 ] && echo \"$out\" | grep -q 'plan-only lane: not applicable' && echo \"$out\" | grep -q 'pre-push refused' && ! echo \"$out\" | grep -q 'plan-only lane clean' && [ \"$before\" = \"$after\" ]; then echo 'ok: mixed-diff-demands-full-gate'; else echo \"FAIL: rc=$rc before=$before after=$after\"; echo \"$out\"; exit 1; fi"
+    timeout_ms: 15000
+    expected_behavior: "ok: mixed-diff-demands-full-gate"
+
+  - step: "REFUSE: modifying an EXISTING fragment demands the full gate (fragments are immutable)"
+    command: "root=$(pwd); t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; printf 'packets: []\\n' > plan/index.d/29990101t000000z-existing-x.yaml; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; printf 'packets: []\\n# tampered\\n' > plan/index.d/29990101t000000z-existing-x.yaml; git add -A; git commit -qm tamper; out=$(git push origin main 2>&1); rc=$?; if [ \"$rc\" != 0 ] && echo \"$out\" | grep -q \"has status 'M' in the outgoing diff\" && echo \"$out\" | grep -q 'pre-push refused' && ! echo \"$out\" | grep -q 'plan-only lane clean'; then echo 'ok: fragment-modification-demands-full-gate'; else echo \"FAIL: rc=$rc\"; echo \"$out\"; exit 1; fi"
+    timeout_ms: 15000
+    expected_behavior: "ok: fragment-modification-demands-full-gate"
+
+  - step: "REFUSE: an invalid-YAML fragment fails lane validation and falls closed to the full gate"
+    command: "root=$(pwd); t=$(mktemp -d); trap 'rm -rf \"$t\"' EXIT; git init -q -b main \"$t/work\"; cd \"$t/work\"; git config user.email l@t; git config user.name l; mkdir -p scripts/hooks plan/index.d plan/loop_status.d; cp \"$root/scripts/gate-stamp.sh\" scripts/; cp \"$root/scripts/hooks/pre-push-local-gate.sh\" scripts/hooks/; printf 'packets: []\\n' > plan/index.d/29990101t000000z-existing-x.yaml; git add -A; git commit -qm base; git init -q --bare \"$t/origin.git\"; git remote add origin \"$t/origin.git\"; git push -q origin main; printf '#!/usr/bin/env bash\\nexec bash \"$(git rev-parse --show-toplevel)/scripts/hooks/pre-push-local-gate.sh\" \"$@\"\\n' > .git/hooks/pre-push; chmod +x .git/hooks/pre-push; printf 'packets: [unclosed\\n' > plan/index.d/29990101t000003z-lane-d-x.yaml; git add -A; git commit -qm bad; out=$(git push origin main 2>&1); rc=$?; if [ \"$rc\" != 0 ] && echo \"$out\" | grep -q 'plan-only lane: validation FAILED' && echo \"$out\" | grep -q 'pre-push refused'; then echo 'ok: invalid-fragment-fails-closed'; else echo \"FAIL: rc=$rc\"; echo \"$out\"; exit 1; fi"
+    timeout_ms: 15000
+    expected_behavior: "ok: invalid-fragment-fails-closed"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "plan-only lane pinned: fragments-only pushes validated and marker-recorded without a build stamp; any other diff falls closed to the full gate"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "plan-only-push-lane-shape"
+    artifact: "scripts/hooks/pre-push-local-gate.sh"
+
+rollback:
+  on_failure: >
+    The plan-only lane drifted. Restore attempt_plan_only_lane() in
+    scripts/hooks/pre-push-local-gate.sh: engage only when the gate stamp is
+    stale, qualify only outgoing diffs whose EVERY path is a NEW (status A)
+    top-level plan/index.d/*.yaml or plan/loop_status.d/*.md file, validate the
+    pushed blobs (yq parse / Cycle-only headings) plus tillandsias-plan check
+    and the fragment-applicable forbidden-pattern checks when present, emit
+    "plan-only lane: validated <path>" per file and a "plan-only lane clean"
+    verdict, and fall back to the unchanged full-gate refusal on ANY
+    disqualification or validation failure.
+  command: "grep -nE 'attempt_plan_only_lane|plan-only lane' scripts/hooks/pre-push-local-gate.sh | head -20"

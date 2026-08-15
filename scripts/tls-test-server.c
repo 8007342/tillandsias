@@ -3,6 +3,7 @@
  * Handles git smart HTTP for info/refs endpoints.
  * Usage: tls-test-server <docroot> <cert> <key> <port>
  * Prints READY to stdout when listening; serves until SIGTERM/SIGINT. */
+// freshness: auditor=linux-macuahuitl-fable5-20260810t2045z date=2026-08-10 verdict=refreshed scope=behavioral re-validation on mutable Linux: compiles clean against system OpenSSL, litmus:forge-runtime-ca-trust executed live (transparent-https-caching quick tier 2/2 PASS); sole consumer test-forge-runtime-ca-trust.sh unchanged and live; prior accepted tradeoffs (loopback bind, popen upload-pack, unchecked SSL_CTX returns) unchanged and still harmless
 // freshness: auditor=forge-opencode-metaorch-20260801 date=2026-08-01 verdict=refreshed scope=re-validated for litmus:forge-runtime-ca-trust: both branches still live-tested (file serve via curl/node fetch, git smart HTTP advertise-refs via git ls-remote); loopback-only bind + shell-built upload-pack command in popen() are accepted fixture tradeoffs; unchecked SSL_CTX cert/key return codes and OpenSSL-3.x deprecated init/cleanup APIs are harmless and link fine
 #include <arpa/inet.h>
 #include <signal.h>

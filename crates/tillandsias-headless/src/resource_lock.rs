@@ -77,15 +77,22 @@ fn try_lock(file: &File, mode: LockMode) -> Result<bool, String> {
         LockMode::Exclusive => libc::LOCK_EX,
         LockMode::Shared => libc::LOCK_SH,
     };
-    let rc = unsafe { libc::flock(file.as_raw_fd(), op | libc::LOCK_NB) };
-    if rc == 0 {
-        return Ok(true);
-    }
-    let err = std::io::Error::last_os_error();
-    if err.raw_os_error() == Some(libc::EWOULDBLOCK) {
-        Ok(false)
-    } else {
-        Err(format!("flock: {err}"))
+    // flock(2) is interruptible: a signal delivered mid-call returns EINTR,
+    // which is NOT a statement about the lock. Treating it as one is a silent
+    // misreport in the worst direction — `is_held` maps every Err to "held",
+    // so one stray SIGCHLD turns a released lock into a held one and the
+    // teardown path leaks a container. Retry instead; EINTR carries no verdict.
+    loop {
+        let rc = unsafe { libc::flock(file.as_raw_fd(), op | libc::LOCK_NB) };
+        if rc == 0 {
+            return Ok(true);
+        }
+        let err = std::io::Error::last_os_error();
+        return match err.raw_os_error() {
+            Some(libc::EWOULDBLOCK) => Ok(false),
+            Some(libc::EINTR) => continue,
+            _ => Err(format!("flock: {err}")),
+        };
     }
 }
 

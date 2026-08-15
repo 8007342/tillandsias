@@ -255,7 +255,20 @@ distributed_work:
           completed:
             fields: [ts, agent_id, host, lease_id, evidence_refs]
             idempotent: true
-            note: "Terminal. Status flips to `done`. Lease is implicitly released."
+            note: >
+              Terminal. evidence_refs REQUIRED (commit SHA + at least one named
+              check result). Sets status to `completed` (claimant-asserted
+              closure) — or directly to `verified`/`done` when the evidence
+              already meets that higher rung's bar. Lease is implicitly
+              released.
+          falsified:
+            fields: [ts, agent_id, host, evidence_refs, falsified_claim]
+            idempotent: false
+            note: >
+              The ONLY transition down the closure ladder (650-dq6u).
+              evidence_refs must name the falsifying observation. Returns
+              status to `ready` and opens a new attempt epoch (precedents:
+              396, 484, brew-attestation).
       depends_on:
         kind: optional
         type: list-of-id
@@ -274,24 +287,94 @@ distributed_work:
     purpose: >
       Keep the top-level status line, event log, and downstream blockers in
       sync so agents do not re-claim finished work or wait on stale blockers.
+    ruling: >
+      650-dq6u (The Tlatoani, 2026-08-11): `completed` and `done` are NOT
+      synonyms and are never collapsed into one winner. They record different
+      events on a monotonic evidence ladder — work completed does not mean
+      tested, and tested does not mean done. Merge is semantic distillation
+      over the event log, not last-write-wins on a scalar. `implemented` is
+      the deliberate pre-field-verification rung (windows-peke,
+      627-sgtt/627-wtrp), kept. The operator further ruled the ladder carries
+      an explicit `verified` rung (IEEE 1012 alignment): verification (built
+      right) and validation/acceptance (right thing built) are distinct.
     canonical_statuses:
+      # Working states (non-terminal; latest event wins among these).
       pending: "Known work, unclaimed, dependencies not yet all satisfied."
-      ready: "Known work, unclaimed, dependencies satisfied, eligible for claim."
-      claimed: "A lease exists, but implementation has not yet produced code or docs."
-      in_progress: "A lease exists and the claimant has started implementation."
-      blocked: "Cannot progress without a named external dependency or decision."
-      stalled: "No heartbeat before expires_at; reclaimable after a fresh read."
-      done: "Completion event exists with evidence refs; do not re-claim."
-      failed: "Attempt ended; retryability must be explicit in the failed event."
+      ready: "Known work, unclaimed, dependencies satisfied. The ONLY claimable status."
+      in_progress: >
+        A lease exists and the claimant has started implementation. Absorbs
+        the retired `claimed`; the retired `stalled` is replaced by lease TTL
+        + expire-claims (672-bz7u), which returns stranded leases to ready.
+      blocked: "Cannot progress without a named external dependency or decision; the blocked event names the blocker."
+      needs_clarification: "Awaiting an operator answer to a named question; tag operator-decision. Dependents waiting on it are reported, never silent."
+      # Closure ladder (monotone: implemented < completed < verified < done;
+      # merge = max; the only path down is a `falsified` event).
+      implemented: >
+        NON-TERMINAL. The artifact landed (commit refs recorded) and
+        local/self verification passed, but field/e2e verification is
+        explicitly outstanding. MUST carry a verification hand-off:
+        next_action names the outstanding check, where it runs, and who can
+        run it. Does not satisfy dependents; tooling MUST report any
+        dependent waiting on it.
+      completed: >
+        TERMINAL — claimant-asserted closure. A `completed` event exists
+        whose evidence_refs record what the writer ran and observed: commit
+        SHA plus at least one named check result. The writer's own assertion
+        that all exit_criteria are met; releases dependents and counts closed
+        in burndown. It does NOT claim as-wired or independent verification —
+        that is what `verified` adds.
+      verified: >
+        TERMINAL — verified closure, strictly above completed. The completion
+        evidence has been evaluated against the packet's exit_criteria via a
+        named falsifiable check that passed AS WIRED, not by proxy: litmus
+        suite counts, first-fire e2e, in-target verification, or an
+        independent verifier's recorded check (the 396 lesson: running the
+        script directly is not the hook firing). Built right.
+      done: >
+        TERMINAL — validated closure, the top rung. The work has been
+        validated against the packet's stated verifiable_closure /
+        acceptance: operator acceptance, observed working in its production
+        seat, or the packet's own acceptance criterion demonstrably satisfied
+        in the field. Right thing built. Do not re-claim. Historical rows
+        that predate the verified rung keep their labels (grandfathered);
+        new writes use `verified` for as-wired check evidence and reserve
+        `done` for validation/acceptance.
+      # Non-success terminals.
+      obsoleted: "TERMINAL. Superseded or no longer applicable; the event names the successor or reason. Satisfies dependents."
+      failed: "Attempt ended; retryable: true|false REQUIRED on the failed event. Does NOT satisfy dependents."
+    retired_statuses:
+      note: >
+        Zero live rows fold to any of these; they are retired words, invalid
+        to write: claimed (absorbed by in_progress), stalled (replaced by
+        lease expiry), provisional, failed-retryable (use failed +
+        retryable: true), parked, tested. `archived` is a mechanism
+        (archived_ids), never a status value.
+    evidence_lattice:
+      order: "implemented < completed < verified < done"
+      merge_rule: >
+        Status is a fold over the grow-only event log. Within the closure
+        ladder the HIGHER rung wins regardless of write order — a
+        less-verified claim never overwrites a more-verified one. The only
+        path DOWN the ladder is an explicit `falsified` event whose
+        evidence_refs name the falsifying observation; it returns the packet
+        to ready (or, for a partial falsification, to the highest rung the
+        surviving evidence supports) and opens a new attempt epoch.
+      terminal_set: >
+        completed | verified | done | obsoleted. ONE shared
+        is_terminal_status definition (crates/tillandsias-plan/src/lib.rs)
+        is consumed by the dependency resolver, burndown, guards, and
+        selectors; no reader defines its own.
     rules:
-      - "A `claim` event changes status from ready/pending to claimed."
-      - "The first implementation `progress` or code checkpoint changes claimed to in_progress."
+      - "A `claim` event changes status from ready to in_progress (mint lease_id; heartbeat per lease rules)."
       - "A `blocked` event must name the blocker, owner host if known, and the next ping time."
-      - "A lease with no heartbeat past expires_at folds to stalled; the next agent may reclaim after recording a fresh read."
-      - "A `completed` event changes status to done and must update dependency mirrors in every queue table that names the item."
+      - "A checkpoint that lands the artifact with field verification still outstanding sets status `implemented` and MUST name the outstanding verification in next_action."
+      - "A `completed` event REQUIRES evidence_refs and sets status to `completed` — or directly to `verified`/`done` when the evidence already meets that bar. Writers without as-wired check evidence write `completed`, never `verified`; writers without validation/acceptance evidence write `verified`, never `done`."
+      - "Promotion up the ladder appends the new-rung evidence (litmus counts, e2e first-fire, in-target check, acceptance ref); it never rewrites prior events and must update dependency mirrors."
+      - "A `falsified` event (falsifying evidence_refs REQUIRED) is the ONLY transition down the ladder; it returns status to ready and starts a new attempt epoch."
       - "A `released` event returns status to ready if dependencies are satisfied, otherwise pending or blocked with the blocker named."
       - "A `failed` event sets status to failed and must include retryable: true|false plus the smallest next diagnostic chain."
-      - "When events and the status header disagree, the latest terminal event wins; immediately patch the header before claiming new work."
+      - "When events and the status header disagree, the HIGHEST closure-ladder event (or the latest terminal event outside the ladder) wins; immediately patch the header before claiming new work."
+      - "Only `ready` is claimable. `implemented` and `needs_clarification` are visible parking states: tooling reports every dependent waiting on them and the named outstanding action."
 
   ping_and_triage_protocol:
     purpose: >
@@ -578,8 +661,11 @@ distributed_work:
           linux-next), then resume code work.
       - id: 7_terminal
         action: >
-          On success: emit `completed` event + commit_sha evidence; update
-          item status to `done`.
+          On success: emit `completed` event + commit_sha evidence; set
+          status to the highest closure-ladder rung the evidence supports —
+          `completed` (claimant-asserted), `verified` (a named as-wired
+          check passed), or `done` (validated/accepted) — per
+          status_transition_protocol.
           On voluntary stop: emit `released` event with reason; status
           returns to `pending` or `blocked`.
           On failure: emit `failed` event with `retryable: true|false` and
@@ -1050,6 +1136,37 @@ distributed_work:
         loop-status entry so a systematically-refusing expert is visible rather
         than quietly routed around (this is the order-531 failure mode: truthful
         `experts: ready` while every answer was unsupported).
+      unavailable_record_where: >
+        Order 737-zcj5. "Record it" named no destination, and on 2026-08-14 two
+        hosts skipped the recording half on the same day — windows lost all 28
+        MCP tools mid-session and fell back to tillandsias-plan.exe silently;
+        linux ran a whole cycle whose session had never loaded the servers at
+        all. Neither outage left a trace anywhere in the ledger. The destination
+        is now concrete and does not depend on an agent remembering:
+
+          scripts/check-mcp-expert-health.sh   runs at Start-Of-Cycle, speaks the
+                                               MCP initialize handshake to each
+                                               expected expert, and appends one
+                                               JSONL record per server to
+                                               $TILLANDSIAS_EXPERT_HEALTH_LOG.
+          scripts/cycle-metrics.sh             reads that log and reports
+                                               `health=` on its `mcp:` line, plus
+                                               an `mcp_outage:` line WHEN AND ONLY
+                                               WHEN a non-up state was recorded.
+          the handoff / loop-status entry       carries cycle-metrics verbatim, so
+                                               the outage reaches plan/loop_status.d
+                                               without a discretionary write.
+
+        `health=` is the field that makes an outage visible at all: call volume
+        cannot distinguish a server that is DOWN from one nobody called, because
+        both produce zero usage rows. `health=unprobed` is deliberately NOT
+        `health=ok` — an unmeasured expert reported as healthy is the order-531
+        shape again.
+
+        The probe is ADVISORY. Its non-zero exit means record and continue, never
+        block — unlike check-credential-channel.sh, whose non-zero exit does fail
+        the cycle. A missing push channel silently destroys work; a missing expert
+        only makes reads more expensive.
       verification: >
         Before an IRREVERSIBLE act that depends on an MCP answer — a commit, a
         status flip, a deletion, a release — read the CITED SPAN to confirm it.
@@ -1172,11 +1289,16 @@ distributed_work:
       the seed and the whole considered frontier are printed with every batch.
       An unexplained selection is unauditable.
     budgets:
-      forge: 1
-      default: 3
+      forge_litmus: 1
+      forge_autonomous: 4
+      default: 6
       note: >
-        The forge budget of ONE packet per cycle predates this rule (order 264,
-        2026-07-10) and is not relaxed by it.
+        ORDER 707-3x9d (2026-08-12): Forge autonomous / pairing sessions scale to
+        an adaptive budget of 4 (configurable 3-6) to maximize the
+        work-to-orchestration ratio, amortizing fixed meta-orchestration costs
+        over cohesive epic batches. The strict budget of ONE packet per cycle is
+        retained specifically for unattended litmus step runs
+        (TILLANDSIAS_LITMUS_STEP) where a 600s launch timeout is enforced.
     ungrouped_is_not_an_epic: >
       UNGROUPED scores highest whenever coverage is poor, purely on size.
       Letting it win would hand back the scattered batch this rule exists to
@@ -1247,25 +1369,17 @@ distributed_work:
           under the item's events list, update status, release the lease, and switch to a ready fallback task.
 
     forge_cycle_budget:
-      decided_by: "The Tlatoāni, 2026-07-10 (plan order 264)"
+      decided_by: "The Tlatoāni (order 264, updated order 707-3x9d 2026-08-12)"
       rule: >
         Agents running INSIDE a forge container (TILLANDSIAS_HOST_KIND=forge)
-        drain AT MOST ONE plan packet per cycle. Before implementing, estimate
-        whether the packet's full implement+verify+commit+push fits the launch
-        envelope (litmus-launched forge cycles run inside
-        litmus:opencode-prompt-e2e-shape STEP 3's 600s budget). If it does not
-        fit, do NOT start implementation: SPLIT the packet into smaller ready
-        child packets (split_into pattern), record the shaping events, commit
-        and push. The shaping commit is that cycle's completed work — a split
-        that lowers residual ambiguity is a valid reduction step.
+        drain AT MOST ONE plan packet per cycle when running in unattended litmus
+        gates (TILLANDSIAS_LITMUS_STEP) and must SPLIT the packet into smaller ready
+        child packets if it will not fit within the 600s launch budget. Autonomous
+        and pairing forge cycles scale to an ADAPTIVE BATCH BUDGET (default 4,
+        configurable up to 6 via TILLANDSIAS_CYCLE_BUDGET) drawn from a single
+        cohesive epic (release_target) to maximize the work-to-orchestration ratio.
       supersedes: >
-        The 2026-06 greedy-drain exception ("claim, implement, and complete as
-        many ready forge tasks as possible in a single session"). Greedy forge
-        cycles made duration unbounded, so a litmus step timeout was
-        indistinguishable from a hung forge (order 264 collision: one in-forge
-        cycle implemented the whole of order 263 and timed out the gate while
-        perfectly healthy). Host (non-forge) cycles keep the ordinary
-        one-coherent-commit budget rule.
+        The static 1-packet-per-cycle limitation across all forge sessions.
       interim_note: >
         Reliance on step timeouts is interim. Order 265 (forge
         heartbeat/liveness signals — we own the launch and the container

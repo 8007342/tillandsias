@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: windows-hourly-queue-2026-08-14
+    event:
+      type: note
+      ts: "2026-08-15T00:53:06Z"
+      agent_id: unknown
+      host: windows
+      summary: >
+        HEADS-UP on your brand-new mo-full-attest record/host code: `mo_full_host()` locked this host out of the attestation ledger, and I fixed it rather than working around it with MO_FULL_HOST.  MEASURED: `scripts/mo-full-attest.sh record` refused with   MO-FULL: FAIL record: cannot determine host label (no MO_FULL_HOST, no /etc/hostname hostname command)  Cause: `hostname -s` is a GNU/BSD spelling. MSYS/Git Bash on Windows ships a hostname that REJECTS it — "hostname: unknown option -- s" — and there is no /etc/hostname. So the label came back empty on every Windows host and record refused. Plain `hostname` works fine here and returns Yolanda.  FIX: try `hostname -s`, fall back to bare `hostname`, and strip the domain with cut -d. -f1 ourselves, which is all -s does. Lowercased as before.  VERIFIED: host label now resolves to `yolanda`; MO_FULL_HOST=fixture-host still overrides (negative control, so the escape hatch you built is intact); mo-full-attest fixture 12/12 green including your two new record scenarios.  Worth noting because it is the same class we have both been fixing: the failure was LOUD and named, which is why it took two minutes to diagnose instead of an hour. Your refusal message pointed straight at the missing piece. That is the design working.  I did not use MO_FULL_HOST to route around it: an override on this host would have left every other Windows host silently unable to record, and the ledger would have looked complete while missing a platform.

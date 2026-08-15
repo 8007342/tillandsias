@@ -151,9 +151,21 @@ specs:
   - litmus:stable-channel-shape
   - litmus:smoke-release-channel-shape
   - litmus:cycle-batch-triage-shape
+  - litmus:pickup-role-grammar-shape
+  - litmus:terminal-status-vocabulary-shape
   - litmus:local-ci-self-clean-evidence
+  - litmus:installer-ascii-expansion-safety
+  - litmus:litmus-expression-pinning-enforcement-shape
+  - litmus:parked-blocks-visibility-shape
+  - litmus:fragment-closure-evidence-gate-shape
+  - litmus:fragment-status-loss-attribution-shape
+  - litmus:added-fragment-parse-gate-shape
+  - litmus:release-runbook-external-preconditions-shape
+  - litmus:script-exec-bit-shape
+  - litmus:sidecar-is-a-build-graph-input
+  - litmus:selector-urgency-not-inert-shape
   coverage_ratio: 75
-  last_verified: '2026-07-15'
+  last_verified: '2026-08-12'
 - spec_id: codex-tray-launcher
   status: active
   litmus_tests:
@@ -209,6 +221,8 @@ specs:
   - litmus:opencode-vault-auth-content
   - litmus:codex-safe-state-shape
   - litmus:forge-agent-result-format
+  - litmus:forge-policy-binary-discoverability
+  - litmus:npm-harness-install-idempotent-shape
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
@@ -330,16 +344,23 @@ specs:
   - litmus:mcp-discoverability-shape
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
+  - litmus:forge-experts-stale-source-honesty
   - litmus:forge-experts-discoverability-shape
   - litmus:forge-experts-ephemerality-shape
   - litmus:plan-answer-envelope-citability
   - litmus:methodology-path-query-citability
+  - litmus:groundtruth-no-mutable-status-pin-shape
+  - litmus:host-expert-refresh-gate-shape
   - litmus:expert-groundtruth-harness
   - litmus:expert-refresh-cargo-target-shape
   - litmus:expert-capability-skew-honesty
   - litmus:capability-manifest-guard
+  - litmus:project-engine-capability-verdict-grammar
+  - litmus:project-answer-synthesis-refusal-typed
+  - litmus:generic-index-deterministic-subset
+  - litmus:mcp-usage-telemetry-shape
   coverage_ratio: 80
-  last_verified: '2026-08-04'
+  last_verified: '2026-08-10'
 - spec_id: forge-forward-compat
   status: deprecated
   litmus_tests: []
@@ -410,6 +431,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:git-mirror-fetch-reconcile
+  - litmus:git-mirror-dns-identity
+  - litmus:forge-clone-reachability-probe-shape
   - litmus:running-image-freshness
   - litmus:git-mirror-no-anonymous-http-write
   - litmus:git-mirror-no-anonymous-daemon-write
@@ -429,6 +452,7 @@ specs:
   - litmus:forge-standard-gitconfig-path
   - litmus:forge-config-trust-cross-platform-parity
   - litmus:forge-gitdir-staging-chown
+  - litmus:git-mirror-relay-token-expiry
   coverage_ratio: 83
   last_verified: '2026-07-23'
 - spec_id: github-credential-health
@@ -548,6 +572,7 @@ specs:
 - spec_id: macos-native-tray
   status: active
   litmus_tests:
+  - litmus:macos-tray-import-surface
   - litmus:wire-unreachable-chip-text-symmetric
   - litmus:macos-tray-diagnose-cli-surface
   - litmus:recipe-release-tag-symmetric
@@ -565,16 +590,24 @@ specs:
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
   - litmus:cycle-metrics-answer-rate-shape
+  - litmus:timing-telemetry-implausible-guard-shape
+  - litmus:cycle-flow-telemetry-shape
+  - litmus:build-test-timing-telemetry-shape
   - litmus:order-id-collision-free
   - litmus:ledger-fragment-convergence
   - litmus:plan-compaction-format-preservation
   - litmus:loop-status-fragment-overlay
+  - litmus:loop-status-count-advisory-shape
   - litmus:no-unprotected-plan-ledger-readers
   - litmus:idiomatic-layers-doctrine-shape
   - litmus:large-packet-eligibility-doctrine-shape
   - litmus:version-release-and-forge-selfservice-shape
   - litmus:ephemerality-invariant-shape
   - litmus:release-gates-run-locally
+  - litmus:plan-only-push-lane-shape
+  - litmus:delegate-outcome-disposition-not-silent-shape
+  - litmus:append-event-rejects-unknown-flags-shape
+  - litmus:version-bump-isolation-shape
   coverage_ratio: 100
   last_verified: '2026-08-03'
 - spec_id: meta-orchestration
@@ -592,6 +625,10 @@ specs:
   - litmus:smoke-lock-fd-isolation-shape
   - litmus:meta-orchestration-dirty-tree-safety
   - litmus:meta-orchestration-opsx-sync-merge
+  - litmus:mcp-expert-health-probe-shape
+  - litmus:forge-findings-persistence-shape
+  - litmus:mo-full-attestation-ledger-shape
+  - litmus:startup-context-addendum-shape
   coverage_ratio: 100
   last_verified: '2026-07-14'
 - spec_id: logging-levels
@@ -670,6 +707,7 @@ specs:
   - litmus:shared-containers-survive-per-project-cleanup
   - litmus:concurrent-forge-shared-stack-safety
   - litmus:drain-vs-self-heal
+  - litmus:teardown-liveness-shared-scope-agreement
   coverage_ratio: 100
   last_verified: '2026-07-09'
 - spec_id: podman-container-spec
@@ -701,6 +739,7 @@ specs:
   - litmus:headless-init-status-check-source-built
   - litmus:container-start-health
   - litmus:forge-secret-capability-contract
+  - litmus:launch-skips-prerequisite-fails
   coverage_ratio: 100
   last_verified: '2026-07-28'
 - spec_id: project-bootstrap-readme
@@ -726,6 +765,7 @@ specs:
   - litmus:brew-attestation-egress
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
+  - litmus:podman-egress-control-shape
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
@@ -758,6 +798,7 @@ specs:
   - litmus:runtime-diagnostics-typed-events-shape
   - litmus:container-start-health
   - litmus:diagnostics-envelope-shape
+  - litmus:diagnostics-filter-env-shape
   coverage_ratio: 100
   last_verified: '2026-05-31'
 - spec_id: runtime-logging
@@ -801,8 +842,10 @@ specs:
   - litmus:litmus-runner-backslash-escaping-shape
   - litmus:litmus-stdlib-portability-shape
   - litmus:litmus-name-filter-fail-loud-shape
+  - litmus:litmus-name-filter-hint-shape
   - litmus:plan-engine-invariants-shape
   - litmus:freshness-inventory-shape
+  - litmus:hook-install-portability-shape
   coverage_ratio: 83
   last_verified: '2026-07-17'
 - spec_id: subdomain-naming-flip
@@ -923,10 +966,12 @@ specs:
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:windows-tray-architectural-invariants
+  - litmus:no-raw-error-in-status-chip
   - litmus:pty-attach-project-threading-symmetric
   - litmus:installer-wsl-preflight-shape
+  - litmus:tray-import-surface-os-only
   coverage_ratio: 100
-  last_verified: '2026-07-15'
+  last_verified: '2026-08-12'
 - spec_id: wsl-daemon-orchestration
   status: active
   litmus_tests:
@@ -1001,6 +1046,7 @@ specs:
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
+  - litmus:vault-audit-persistence-shape
   - litmus:vault-auto-unseal-no-prompt
   - litmus:codex-api-key-env-var
   - litmus:vault-cli-verifies-tls

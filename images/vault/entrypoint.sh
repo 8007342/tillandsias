@@ -16,7 +16,9 @@
 #   6. Enable the `approle` auth backend if not already enabled.
 #   7. Enable the KV v2 secret engine at `secret/` if not already enabled.
 #   8. Enable the file audit device at /vault/audit/audit.json.
-#   9. Tail the server log (it is already streaming to stdout).
+#   9. Enable the two SSH CA engines (ssh-client-signer / ssh-host-signer)
+#      and generate both in-vault ed25519 CAs (order 606-bvnp, T1).
+#  10. Tail the server log (it is already streaming to stdout).
 #
 # All stderr is duplicated to /vault/audit/entrypoint.log for tray-side
 # tailing, then re-emitted on stdout so `podman logs` and the
@@ -223,7 +225,23 @@ enable_endpoint "/v1/sys/auth/approle"   '{"type":"approle"}'                   
 enable_endpoint "/v1/sys/mounts/secret"  '{"type":"kv","options":{"version":"2"}}'    "kv-v2 secret engine"
 enable_endpoint "/v1/sys/audit/file"     '{"type":"file","options":{"file_path":"/vault/audit/audit.json"}}' "file audit device"
 
-log "vault is fully configured (unsealed, policies loaded, approle+kv2+audit enabled)"
+# Order 606-bvnp (SSH-CA design §4 T1): the two SSH certificate authorities.
+# Two mounts, not one with two roles — independent signing keys are
+# independent blast radii (D1). The CA keypair is generated INSIDE Vault and
+# never exported (D2: GET config/ca returns only public_key; there is no API
+# path for the private half). Idempotent: an existing mount / an
+# already-configured CA answers 400, which enable_endpoint treats as success.
+# Per-project roles and policies are deliberately NOT created here — the
+# project set is dynamic, so the launcher mints them at mirror provision
+# (roles/<mirror-id>, roles/host-<mirror-id>, exact sign paths, wildcard
+# sign authority refused; see provision_mirror_ssh_roles in
+# vault_bootstrap.rs).
+enable_endpoint "/v1/sys/mounts/ssh-client-signer" '{"type":"ssh"}' "ssh client-signer CA engine"
+enable_endpoint "/v1/sys/mounts/ssh-host-signer"   '{"type":"ssh"}' "ssh host-signer CA engine"
+enable_endpoint "/v1/ssh-client-signer/config/ca"  '{"generate_signing_key":true,"key_type":"ed25519"}' "ssh client CA keypair (in-vault)"
+enable_endpoint "/v1/ssh-host-signer/config/ca"    '{"generate_signing_key":true,"key_type":"ed25519"}' "ssh host CA keypair (in-vault)"
+
+log "vault is fully configured (unsealed, policies loaded, approle+kv2+audit+ssh-CAs enabled)"
 
 # ---------------------------------------------------------------------------
 # Step 7: Drop the in-memory variables and hand control back to vault.

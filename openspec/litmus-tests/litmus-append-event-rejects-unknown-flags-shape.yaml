@@ -1,0 +1,46 @@
+# @trace spec:methodology-accountability
+name: litmus:append-event-rejects-unknown-flags-shape
+spec: methodology-accountability
+phase: pre-build
+description: tillandsias-plan append-event accepts --type/--summary flags and rejects any unknown --flag loudly, instead of silently swallowing it as a positional and writing a malformed event
+severity: high
+size: instant
+
+# Order 711-digd. append-event took POSITIONAL <type> <summary>; passing the
+# natural-looking --type/--summary FLAGS was silently swallowed as positionals,
+# so `--type progress` stored type="--type", summary="progress", agent_id
+# "unknown" — a malformed event that then passed every gate (698-7n6q). Two real
+# malformed events landed on 690/698 this way. Fixed: append-event now accepts
+# --type/--summary as flags AND rejects any unrecognized --flag with a non-zero
+# exit, so the corruption class cannot recur silently. Uses a bogus ref so no
+# ledger is mutated — parse success is proven by reaching the resolve error.
+
+preconditions:
+  - the tillandsias-plan binary is built (target/release/tillandsias-plan)
+
+critical_path:
+  - step: "FLAG form parses: --type/--summary are accepted (reaches resolve, not a malformed write)"
+    command: "B=target/release/tillandsias-plan; [ -x \"$B\" ] || B=\"$(command -v tillandsias-plan)\"; out=$(\"$B\" append-event NOSUCHREF_LITMUS --type progress --summary 'x y' --ts 2026-01-01T00:00:00Z --backfill 2>&1); echo \"$out\" | grep -qiE \"no packet matches|unresolved|NOSUCHREF_LITMUS\" && echo 'ok: flag form parsed' || { echo \"FAIL: [$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: flag form parsed"
+
+  - step: "POSITIONAL form still works (backward compatible)"
+    command: "B=target/release/tillandsias-plan; [ -x \"$B\" ] || B=\"$(command -v tillandsias-plan)\"; out=$(\"$B\" append-event NOSUCHREF_LITMUS progress 'x y' --ts 2026-01-01T00:00:00Z --backfill 2>&1); echo \"$out\" | grep -qiE \"no packet matches|unresolved|NOSUCHREF_LITMUS\" && echo 'ok: positional form parsed' || { echo \"FAIL: [$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: positional form parsed"
+
+  - step: "UNKNOWN flag is rejected loudly (non-zero exit, names the flag) — no silent swallow"
+    command: "B=target/release/tillandsias-plan; [ -x \"$B\" ] || B=\"$(command -v tillandsias-plan)\"; out=$(\"$B\" append-event NOSUCHREF_LITMUS --bogus z progress foo --ts 2026-01-01T00:00:00Z --backfill 2>&1); rc=$?; [ \"$rc\" != 0 ] && echo \"$out\" | grep -qi \"unknown flag '--bogus'\" && echo 'ok: unknown flag rejected' || { echo \"FAIL rc=$rc [$out]\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: unknown flag rejected"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "append-event: flag form accepted, unknown flags rejected, no malformed positional swallow"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "append-event-rejects-unknown-flags-shape"
+
+rollback:
+  on_failure: "restore the append-event arg parser (crates/tillandsias-plan/src/main.rs) --type/--summary handling + unknown-flag rejection from git history"

@@ -44,17 +44,29 @@
     Release version string (no leading 'v') used in the artifact name. Defaults
     to the contents of the repo-root VERSION file. Only used with -Release.
 
+.PARAMETER Sign
+    Authenticode-sign the staged tray exe through Azure Artifact Signing before
+    it is zipped and hashed (orders 722-qvqb / 724-rpna). Opt-in: the signing
+    plan is 5,000 signatures/month, so a developer build loop must not spend it
+    on artifacts nobody ships. A build without -Sign says plainly that it is
+    unsigned; a build WITH -Sign that cannot sign fails rather than degrading.
+
+    Locally: `az login` first -- DefaultAzureCredential resolves
+    AzureCliCredential. In CI: federated OIDC, same code path.
+
 .EXAMPLE
     scripts\build-windows-tray.ps1
     scripts\build-windows-tray.ps1 -DebugBuild
     scripts\build-windows-tray.ps1 -Release
     scripts\build-windows-tray.ps1 -Release -Version 0.2.260527.1
+    scripts\build-windows-tray.ps1 -Release -Sign
 #>
 [CmdletBinding()]
 param(
     [switch]$DebugBuild,
     [switch]$Release,
-    [string]$Version
+    [string]$Version,
+    [switch]$Sign
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,6 +96,11 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 # unchanged asset.
 $assetsDir = Join-Path $RepoRoot 'crates\tillandsias-windows-tray\assets'
 New-Item -ItemType Directory -Force $assetsDir | Out-Null
+# The version every staged guest must carry to be embeddable (order 689-gipe).
+# Read from the repo-root VERSION, the same source build.rs stamps into
+# WORKSPACE_VERSION, so the build-time refusal and the test-time assertion
+# cannot disagree about what "current" means.
+$workspaceVersion = (Get-Content (Join-Path $RepoRoot 'VERSION') -Raw).Trim()
 $hostGuestArch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
 $guestArches = @('x86_64', 'aarch64')
 foreach ($guestArch in $guestArches) {
@@ -98,6 +115,43 @@ foreach ($guestArch in $guestArches) {
         continue
     }
     if ((Test-Path $stagedGuest) -and ((Get-Item $stagedGuest).Length -gt 0)) {
+        # Order 689-gipe: a staged binary that predates the checkout is the
+        # dangerous case, and it used to be copied silently -- the hash compare
+        # below only asks "did the asset change", never "is it CURRENT". A
+        # tray built that way embeds a guest older than its own source and
+        # injects it into fresh provisions, which is the registered-distro
+        # version skew order 350's identity criterion exists to catch. Nothing
+        # caught it at build time; the only guard was
+        # `embedded_guest_headless_matches_workspace_version` in a test run
+        # that a build does not perform.
+        #
+        # Stale staging is HOST STATE, not a code defect (order 447: any
+        # --install VERSION bump leaves target-guest/ behind), so the response
+        # matches that script's posture -- refuse the STALE COPY, not the
+        # build. The asset falls back to the zero-byte placeholder, which is
+        # the sanctioned absent-asset path: a fresh guest fetches the
+        # published release instead of being handed a skewed binary.
+        $stagedVersionOk = $false
+        try {
+            $needle = [System.Text.Encoding]::ASCII.GetBytes($workspaceVersion)
+            $hay = [System.IO.File]::ReadAllBytes($stagedGuest)
+            for ($i = 0; $i -le ($hay.Length - $needle.Length); $i++) {
+                $hit = $true
+                for ($j = 0; $j -lt $needle.Length; $j++) {
+                    if ($hay[$i + $j] -ne $needle[$j]) { $hit = $false; break }
+                }
+                if ($hit) { $stagedVersionOk = $true; break }
+            }
+        } catch {
+            $stagedVersionOk = $false
+        }
+        if (-not $stagedVersionOk) {
+            Write-Host "  WARN: staged guest binary target-guest\$guestBin does not carry workspace VERSION $workspaceVersion - it predates this checkout. NOT embedding it (a stale embed injects a version-skewed guest into fresh provisions); the asset falls back to the zero-byte placeholder and fresh guests fetch the published release. Restage with scripts/build-guest-binaries.sh." -ForegroundColor Yellow
+            if ((Test-Path $assetGuest) -and ((Get-Item $assetGuest).Length -gt 0)) {
+                [System.IO.File]::WriteAllBytes($assetGuest, @())
+            }
+            continue
+        }
         $srcHash = (Get-FileHash $stagedGuest -Algorithm SHA256).Hash
         $dstHash = ''
         if ((Test-Path $assetGuest) -and ((Get-Item $assetGuest).Length -gt 0)) {
@@ -186,6 +240,35 @@ foreach ($scriptName in $bundledScripts) {
     } else {
         Write-Host "  WARN: bundled script $scriptName not found at $src" -ForegroundColor Yellow
     }
+}
+
+# -- Authenticode (orders 722-qvqb / 724-rpna) -------------------------------
+# POSITION IS LOAD-BEARING. Signing mutates the exe, so it must happen on the
+# STAGED file -- before Compress-Archive below and before the Get-FileHash that
+# writes SHA256SUMS-windows. Sign after either and every published checksum
+# describes a file nobody can download, which reaches users as a checksum
+# mismatch on a correctly signed binary: indistinguishable, from the outside,
+# from a supply-chain attack.
+#
+# The bare tillandsias-tray.exe the release workflow extracts from the zip
+# inherits this signature, which is why one signing call here covers every
+# published Windows artifact.
+$stagedExe = Join-Path $stage 'tillandsias-tray.exe'
+if ($Sign) {
+    Write-Host "Signing $stagedExe ..." -ForegroundColor Cyan
+    & (Join-Path $PSScriptRoot 'sign-windows-artifact.ps1') -Path $stagedExe
+    if ($LASTEXITCODE -ne 0) {
+        # A signing failure must never degrade into an unsigned release. The
+        # whole point of 722-f86z is that a step which quietly no-ops when a
+        # credential is absent ships unsigned binaries under a green run.
+        throw "signing refused (see the blocked:signing: verdict above); refusing to package an unsigned artifact"
+    }
+} else {
+    # SAY IT. An unsigned build that looks exactly like a signed one is the
+    # defect this milestone exists to prevent. Opt-in locally because the plan
+    # is 5,000 signatures/month and a build loop would burn it on artifacts
+    # nobody ships.
+    Write-Host "  NOTE: UNSIGNED build (pass -Sign to Authenticode-sign; requires az login or CI federated credentials)" -ForegroundColor Yellow
 }
 
 $zip = Join-Path $artifactsDir "$base.zip"

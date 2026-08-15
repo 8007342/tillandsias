@@ -1,0 +1,58 @@
+# @trace spec:git-mirror-service
+name: litmus:forge-clone-reachability-probe-shape
+spec: git-mirror-service
+phase: pre-build
+description: The forge clone reachability probe fast-fails ONLY an unresolvable mirror alias (the DOA class), names the real remedy, and defers every seed-delay case to the tolerant clone loop
+severity: high
+size: instant
+
+# Order 691-ssw9. A forge cloned git://tillandsias-git before that alias was
+# DNS-resolvable and treated it as fatal, DOA-ing the operator's window; the
+# real cause was a stale forge image requesting the retired shared alias while
+# the mirror registered the per-project one (659-8faj / 683-g7p6). The probe
+# classifies reachability BEFORE the clone loop: it fast-fails ONLY the
+# unrecoverable alias-unresolvable class with the real remedy, and DEFERS every
+# seed-delay case to the existing tolerant retry loop so a slow-seeding mirror
+# is not regressed. Exercises the REAL probe_mirror_reachable body (awk-extracted
+# from lib-common.sh, which cannot be sourced whole on the host) — no forge, no
+# network beyond a git resolution attempt.
+
+preconditions:
+  - images/default/lib-common.sh is present with probe_mirror_reachable
+
+critical_path:
+  - step: "DOA CLASS: an unresolvable alias fast-fails (return 1) and names the alias-unresolvable remedy"
+    command: "trace_lifecycle() { :; }; eval \"$(awk '/^probe_mirror_reachable\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; export TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S=3; if probe_mirror_reachable 'bogus-alias-xyz-not-real-99' 'tillandsias' 2>/tmp/pmr_e_$$; then echo 'FAIL: unresolvable alias did not fast-fail'; rm -f /tmp/pmr_e_$$; exit 1; fi; grep -q 'ALIAS UNRESOLVABLE' /tmp/pmr_e_$$ && echo 'ok: unresolvable alias fast-failed with remedy'; rm -f /tmp/pmr_e_$$"
+    timeout_ms: 20000
+    expected_behavior: "ok: unresolvable alias fast-failed with remedy"
+
+  - step: "REMEDY NAMED: the failure points at stale-image / alias migration, not seed delay"
+    command: "trace_lifecycle() { :; }; eval \"$(awk '/^probe_mirror_reachable\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; export TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S=3; probe_mirror_reachable 'bogus-alias-xyz-not-real-99' 'tillandsias' 2>/tmp/pmr_r_$$ || true; grep -qiE 'rebuild|659-8faj|683-g7p6|network-alias' /tmp/pmr_r_$$ && echo 'ok: remedy names the real fix' || { echo 'FAIL: remedy not actionable'; rm -f /tmp/pmr_r_$$; exit 1; }; rm -f /tmp/pmr_r_$$"
+    timeout_ms: 20000
+    expected_behavior: "ok: remedy names the real fix"
+
+  - step: "NEGATIVE CONTROL: a resolvable-but-not-serving mirror DEFERS (return 0), not a fast fatal"
+    # localhost resolves but nothing serves git:// on 9418 -> connection refused,
+    # NOT 'unable to look up'. The probe must NOT fast-fail this — it is the
+    # seeding/coming-up case the tolerant clone loop handles. Regressing this
+    # would shorten the seed window for a healthy mirror.
+    command: "trace_lifecycle() { :; }; eval \"$(awk '/^probe_mirror_reachable\\(\\) \\{/,/^\\}/' images/default/lib-common.sh)\"; export TILLANDSIAS_MIRROR_REACHABLE_TIMEOUT_S=2; if probe_mirror_reachable 'localhost' 'no-such-repo' 2>/dev/null; then echo 'ok: resolvable-not-serving deferred to the clone loop'; else echo 'FAIL: probe fast-failed a resolvable mirror (would regress seeding)'; exit 1; fi"
+    timeout_ms: 20000
+    expected_behavior: "ok: resolvable-not-serving deferred to the clone loop"
+
+  - step: "the probe runs BEFORE the clone loop in the launch path"
+    # Property check (call precedes the retry loop), not a literal source pin.
+    command: "probe=$(grep -n 'probe_mirror_reachable \"$(git_mirror_host)\"' images/default/lib-common.sh | head -1 | cut -d: -f1); loop=$(grep -n 'for i in $(seq 1 $max_retries)' images/default/lib-common.sh | head -1 | cut -d: -f1); if [ -n \"$probe\" ] && [ -n \"$loop\" ] && [ \"$probe\" -lt \"$loop\" ]; then echo 'ok: probe precedes the clone loop'; else echo \"FAIL: probe not before clone loop (probe=$probe loop=$loop)\"; exit 1; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: probe precedes the clone loop"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+  expected_log: "forge clone probe: unresolvable alias fast-fails with remedy, resolvable-not-serving defers, probe precedes the clone loop"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "forge-clone-reachability-probe-shape"
+
+rollback:
+  on_failure: "restore images/default/lib-common.sh probe_mirror_reachable and its call site from git history"

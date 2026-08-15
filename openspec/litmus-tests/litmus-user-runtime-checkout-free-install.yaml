@@ -22,7 +22,7 @@ critical_path:
     timeout_ms: 180000
 
   - step: "verify user runtime paths resolve the runtime asset root"
-    command: "rg 'resolve_runtime_asset_root\\(version, debug\\)\\?' crates/tillandsias-headless/src/main.rs && rg 'ensure_runtime_assets' crates/tillandsias-headless/src/runtime_assets.rs"
+    command: "grep -E 'resolve_runtime_asset_root\\(version, debug\\)\\?' crates/tillandsias-headless/src/main.rs && grep -E 'ensure_runtime_assets' crates/tillandsias-headless/src/runtime_assets.rs"
     timeout_ms: 5000
 
 observability:

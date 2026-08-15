@@ -163,7 +163,18 @@ critical_path:
     # The order-456 DOA lesson applied to a JSON tool: the degraded path must
     # stay parseable. A client that gets prose here cannot tell a refusal from
     # an answer.
-    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -e '.confidence == \"unsupported\" and (.citations | length) == 0' >/dev/null && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'building(' && echo 'ok: degraded-path-is-a-truthful-envelope'"
+    #
+    # ABSENCE MUST BE A CHECKOUT WITH NO BUILT ARTIFACT, not just a scratch
+    # HOME. Since 682-z5h8 ($PWD-first index resolution) and the 721-nyev
+    # resolve-by-execution direction, the wrapper legitimately falls back to
+    # <index-root>/target/release/tillandsias-plan — the very binary this litmus
+    # builds two steps up — so a scratch HOME alone no longer removes it. The
+    # fixture pins TILLANDSIAS_PLAN_INDEX to a scratch COPY of the ledger whose
+    # root has no target/, keeping the binary genuinely unresolvable while the
+    # index still resolves. The copy is the falsifiability half too: if the
+    # wrapper ever finds a binary here again, it answers exact off the real
+    # ledger and this step goes red instead of passing vacuously.
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\" \"$d/plan\"; cp plan/index.yaml \"$d/plan/index.yaml\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" TILLANDSIAS_PLAN_INDEX=\"$d/plan/index.yaml\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -e '.confidence == \"unsupported\" and (.citations | length) == 0' >/dev/null && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'building(' && echo 'ok: degraded-path-is-a-truthful-envelope'"
     timeout_ms: 30000
     expected_behavior: "ok: degraded-path-is-a-truthful-envelope"
 
@@ -171,14 +182,16 @@ critical_path:
     # Reuses order 456's experts_state_line grammar
     # (ready | building(<n>s) | degraded(<reason>)), so an agent can tell
     # "retry shortly" from "never, this session". Both branches asserted.
-    command: "d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'degraded:no-plan-crate\\n' > \"$d/state/state\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -r '.answer' | grep -q 'degraded(no-plan-crate)' && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'NOT APPLICABLE' && echo 'ok: truthful-degraded-state'"
+    # Same scratch-checkout absence seam as the step above (682-z5h8/721-nyev).
+    command: "d=$(mktemp -d); mkdir -p \"$d/state\" \"$d/plan\"; cp plan/index.yaml \"$d/plan/index.yaml\"; printf 'degraded:no-plan-crate\\n' > \"$d/state/state\"; out=$(printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" TILLANDSIAS_PLAN_INDEX=\"$d/plan/index.yaml\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text'); rm -rf \"$d\"; printf '%s' \"$out\" | jq -r '.answer' | grep -q 'degraded(no-plan-crate)' && printf '%s' \"$out\" | jq -r '.answer' | grep -q 'NOT APPLICABLE' && echo 'ok: truthful-degraded-state'"
     timeout_ms: 30000
     expected_behavior: "ok: truthful-degraded-state"
 
   - step: "the wrapper's degraded envelope PASSES the same verifier the engine's does"
     # One contract, both producers. If the wrapper drifted into emitting
     # citations with `unsupported`, or a confident empty envelope, this fails.
-    command: "tb=\"${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\"; d=$(mktemp -d); mkdir -p \"$d/state\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > \"$d/env.json\"; \"$tb\" --index plan/index.yaml verify-answer < \"$d/env.json\" | grep -q 'confidence=Unsupported'; rc=$?; rm -rf \"$d\"; test $rc -eq 0 && echo 'ok: one-contract-both-producers'"
+    # Same scratch-checkout absence seam as the step above (682-z5h8/721-nyev).
+    command: "tb=\"${CARGO_TARGET_DIR:-target}/release/tillandsias-plan\"; d=$(mktemp -d); mkdir -p \"$d/state\" \"$d/plan\"; cp plan/index.yaml \"$d/plan/index.yaml\"; printf 'building\\n' > \"$d/state/state\"; date +%s > \"$d/state/started_at\"; printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"plan_answer\",\"arguments\":{\"question\":\"what is blocked by 394a\"}}}' | env -u TILLANDSIAS_PLAN_BIN HOME=\"$d\" TILLANDSIAS_PLAN_INDEX=\"$d/plan/index.yaml\" FORGE_EXPERTS_STATE_DIR=\"$d/state\" bash images/default/config-overlay/mcp/forge-plan.sh | jq -r '.result.content[0].text' > \"$d/env.json\"; \"$tb\" --index plan/index.yaml verify-answer < \"$d/env.json\" | grep -q 'confidence=Unsupported'; rc=$?; rm -rf \"$d\"; test $rc -eq 0 && echo 'ok: one-contract-both-producers'"
     timeout_ms: 30000
     expected_behavior: "ok: one-contract-both-producers"
 

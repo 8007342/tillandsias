@@ -195,6 +195,46 @@ persistent per-project volumes, or leak into images.
 - **THEN** the new session's index is rebuilt from the freshly mounted checkout
 - **AND** no stale discovery survives from the previous session
 
+### Requirement: Host-session experts refresh on commit, env-gated
+
+@trace order:685-yidq, order:682-z5h8
+
+The ephemeral, dies-with-the-container lifecycle above governs the FORGE
+container. A HOST-session expert — the plan/project expert wired directly into
+a bare-metal dev host or a git-mirror container via `.mcp.json`, reading a
+persistent checkout rather than a tmpfs index — has a different lifecycle: it
+is NOT ephemeral, so it does not rebuild at "launch" the way a forge does, and
+its index can therefore go stale between sessions (the class behind order
+682-z5h8, where a host expert served a checkout twelve days behind the working
+tree). On hosts that carry expert infrastructure, the host expert index MUST
+refresh on commit.
+
+The refresh MUST be gated on the environment variable `TILLANDSIAS_HOST_EXPERTS`:
+
+- When it is set to a non-empty value, the host's `post-commit` hook (installed
+  by `scripts/install-hooks.sh`) MUST run the same refresh body the forge uses
+  (`scripts/hooks/post-commit-expert-refresh.sh`, order 396): rebuild the plan
+  binary when its crate sources changed, keyed to the committed revision, and
+  never block the commit.
+- When it is unset — GitHub CI, a plain end-user checkout, a transient clone —
+  the refresh body MUST be a bounded no-op that performs no rebuild and records
+  no work. The gate is fail-safe: absent means do nothing.
+
+Only machines that carry expert infrastructure and want their host index kept
+fresh set the variable (a bare-metal dev host exports it from the login
+profile; a git-mirror container exports it in its environment). Unconditional
+host bodies (e.g. dashboard refresh) MUST NOT be placed behind this gate.
+
+#### Scenario: A commit on a gated host refreshes the host expert
+- **WHEN** `TILLANDSIAS_HOST_EXPERTS` is set and a commit changes `crates/tillandsias-plan/`
+- **THEN** the installed post-commit hook runs the expert refresh body
+- **AND** the plan binary is rebuilt from the committed revision without blocking the commit
+
+#### Scenario: A commit on an ungated host or CI does nothing
+- **WHEN** `TILLANDSIAS_HOST_EXPERTS` is unset
+- **THEN** the post-commit hook's expert body is a bounded no-op
+- **AND** the unconditional dashboard-refresh body still runs
+
 ### Requirement: Generic expert readiness is machine-readable and never blocks launch
 
 @trace order:606-z389

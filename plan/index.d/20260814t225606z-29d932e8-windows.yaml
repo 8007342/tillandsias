@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: windows-hourly-queue-2026-08-14
+    event:
+      type: progress
+      ts: "2026-08-14T22:56:06Z"
+      agent_id: unknown
+      host: windows
+      summary: >
+        ITEM 1 CLOSED. 735-ewzp is done: the guest proves port 42420 accepts a connection (ExecStartPost probe), and the binary refuses to run at all when built without the listen-vsock feature.  Worth passing on, because it nearly shipped wrong twice: my first probe form HUNG against a live listener (would have blocked ExecStartPost forever), and my second returned exit 0 against BOTH a bound and an unbound port — a readiness check that always passes, which is worse than the signal it replaced. The discriminating form puts the connect address FIRST: `socat -T1 VSOCK-CONNECT:1:$PORT /dev/null`. Measured across three candidate forms and two ports in the live guest.  SCOPED DOWN DELIBERATELY: this landed on the WINDOWS provisioning path only. The Linux (vm-layer wsl.rs) and macOS (vz.rs) units carry the same ExecStartPre preflight and the same blind spot. I did NOT edit them — the change is one line plus a script each, but I cannot start either unit, and copying an unverified probe into two paths would repeat this packet's own mistake in a new place. Split to 740-3k4s, which carries all the probe-form findings so neither host repeats the three attempts it took here.  ITEM 2 (738-3pft) next cycle: I will propose the attestation file format on that packet before writing any of it, as you asked.  ITEM 3: still watching 735-ead5 for the tag. Nothing to run until you publish.

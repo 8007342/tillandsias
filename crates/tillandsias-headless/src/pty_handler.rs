@@ -47,7 +47,8 @@ use nix::pty::openpty;
 use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use tillandsias_control_wire::{
-    ControlEnvelope, ControlMessage, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit, WIRE_VERSION,
+    ControlEnvelope, ControlMessage, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit, PtyInputState,
+    WIRE_VERSION,
 };
 use tokio::io::Interest;
 use tokio::io::unix::AsyncFd;
@@ -129,6 +130,11 @@ pub struct PtySessionStore {
     sessions: HashMap<u32, PtySession>,
     outbound: mpsc::Sender<ControlEnvelope>,
     heartbeat_interval: Option<Duration>,
+    /// Order 723-2yb3: emit `PtyHeartbeat` (which carries the input state)
+    /// instead of the v1 empty `PtyData`. Only ever true for a peer that
+    /// advertised `pty.heartbeat@v2` — a v1 host decodes the new variant as
+    /// `Error::UnknownVariant`.
+    heartbeat_v2: bool,
 }
 
 impl PtySessionStore {
@@ -140,16 +146,22 @@ impl PtySessionStore {
             sessions: HashMap::new(),
             outbound,
             heartbeat_interval: None,
+            heartbeat_v2: false,
         }
     }
 
     /// Enable PTY liveness frames for a client that advertised
-    /// `pty.heartbeat@v1` during the control-wire handshake.
-    pub fn new_with_heartbeat(outbound: mpsc::Sender<ControlEnvelope>) -> Self {
+    /// `pty.heartbeat@v1` (or `@v2`) during the control-wire handshake.
+    ///
+    /// `v2` selects the frame SHAPE, not whether heartbeats happen at all: a
+    /// v2 peer gets `PtyHeartbeat` carrying the input state, a v1 peer keeps
+    /// the empty `PtyData{ToHost}` it already understands.
+    pub fn new_with_heartbeat(outbound: mpsc::Sender<ControlEnvelope>, v2: bool) -> Self {
         Self {
             sessions: HashMap::new(),
             outbound,
             heartbeat_interval: Some(PTY_HEARTBEAT_INTERVAL),
+            heartbeat_v2: v2,
         }
     }
 
@@ -326,6 +338,7 @@ impl PtySessionStore {
             self.outbound.clone(),
             cancel_rx,
             self.heartbeat_interval,
+            self.heartbeat_v2,
         );
 
         // 6) Spawn the writer task behind the bounded write queue (audit
@@ -635,6 +648,32 @@ fn spawn_terminator(pid: Pid, grace: Duration) {
     });
 }
 
+/// Order 723-2yb3. The v2 heartbeat: liveness AND the one fact the host cannot
+/// determine for itself.
+///
+/// Maps the guest-local probe verdict onto the wire enum. The two types are
+/// deliberately separate: the probe's is a measurement detail of this crate,
+/// the wire's is a contract other binaries decode, and collapsing them would
+/// make a probe refactor a wire-compatibility event.
+fn pty_heartbeat_v2_envelope(
+    session_id: u32,
+    state: crate::pty_input_probe::InputState,
+) -> ControlEnvelope {
+    use crate::pty_input_probe::InputState;
+    ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 0,
+        body: ControlMessage::PtyHeartbeat {
+            session_id,
+            input_state: match state {
+                InputState::BlockedOnInput => PtyInputState::BlockedOnInput,
+                InputState::NotBlocked => PtyInputState::NotBlocked,
+                InputState::Unknown => PtyInputState::Unknown,
+            },
+        },
+    }
+}
+
 fn pty_heartbeat_envelope(session_id: u32) -> ControlEnvelope {
     ControlEnvelope {
         wire_version: WIRE_VERSION,
@@ -791,6 +830,7 @@ fn spawn_pump_task(
     outbound: mpsc::Sender<ControlEnvelope>,
     mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
     heartbeat_interval: Option<Duration>,
+    heartbeat_v2: bool,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut buf = vec![0u8; MAX_PTY_FRAME_BYTES];
@@ -819,7 +859,21 @@ fn spawn_pump_task(
                         None => std::future::pending().await,
                     };
                 } => {
-                    if outbound.send(pty_heartbeat_envelope(session_id)).await.is_err() {
+                    // Order 723-2yb3: a v2 peer gets a heartbeat that says
+                    // something. The probe runs HERE, on the heartbeat tick,
+                    // rather than continuously — the question is only
+                    // interesting at the moment we are about to tell the host
+                    // "still alive", and a 30s cadence makes its cost
+                    // irrelevant.
+                    let envelope = if heartbeat_v2 {
+                        pty_heartbeat_v2_envelope(
+                            session_id,
+                            crate::pty_input_probe::probe_pty_input_state(master.as_raw_fd()),
+                        )
+                    } else {
+                        pty_heartbeat_envelope(session_id)
+                    };
+                    if outbound.send(envelope).await.is_err() {
                         return;
                     }
                     continue;
@@ -1185,6 +1239,9 @@ mod tests {
             sessions: HashMap::new(),
             outbound: tx,
             heartbeat_interval: Some(Duration::from_millis(20)),
+            // v1 shape: this test pins the pre-existing empty-PtyData
+            // heartbeat, which must keep working untouched (order 723-2yb3).
+            heartbeat_v2: false,
         };
         store
             .open(

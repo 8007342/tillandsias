@@ -174,6 +174,19 @@ capability_gap() {
 # down the surface it measures is worse than no metric.
 EXPERT_USAGE_LOG="${TILLANDSIAS_EXPERT_USAGE_LOG:-/tmp/forge-expert-usage.jsonl}"
 
+# Packet 682-m8ek: the append-writer now lives in the shared mcp-usage-log.sh so
+# EVERY server logs in the same grammar. record_expert_call keeps its richer
+# {confidence,citations} trailer by passing them through the shared writer, and
+# the record gains a `server` field ("forge-plan") — additive, so this file's
+# {ts,tool,outcome,confidence,citations} consumers (cycle-metrics `experts:`)
+# still parse. Guarded source + no-op fallback keep it `set -e`-safe.
+for _mcp_log_cand in \
+    "${BASH_SOURCE[0]%/*}/mcp-usage-log.sh" \
+    "/home/forge/.config-overlay/mcp/mcp-usage-log.sh"; do
+    if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
+done
+command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+
 # record_expert_call <tool> <result-text> <unknown-flag>
 # Outcome vocabulary (CLOSED SET):
 #   answered     — a cited envelope, or a non-envelope tool that produced output
@@ -210,25 +223,31 @@ record_expert_call() {
         esac
     fi
 
-    # Best-effort append. `|| true` on the whole chain: a full tmpfs, a
-    # read-only path, or absent jq must not fail the tool call.
-    {
-        printf '{"ts":"%s","tool":"%s","outcome":"%s","confidence":"%s","citations":%s}\n' \
-            "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
-            "$_rec_tool" "$_rec_outcome" "$_rec_conf" "${_rec_cites:-0}" \
-            >>"$EXPERT_USAGE_LOG"
-    } 2>/dev/null || true
+    # Best-effort append via the shared writer (packet 682-m8ek). The writer is
+    # itself guarded `|| true`, so a full tmpfs, a read-only path, or absent jq
+    # must not fail the tool call. `server=forge-plan` tags this row so
+    # cycle-metrics can attribute it per server; the confidence/citations
+    # trailer is preserved for this file's existing consumers.
+    mcp_log_usage "forge-plan" "$_rec_tool" "$_rec_outcome" "" "$_rec_conf" "${_rec_cites:-0}"
     return 0
 }
 
-# Detect the plan index — prefer TILLANDSIAS_PLAN_INDEX, fall back to
-# the canonical repo plan/index.yaml.
+# Detect the plan index — prefer TILLANDSIAS_PLAN_INDEX, then the checkout
+# this server is ACTUALLY running in ($PWD), then the canonical fallbacks.
+# The $PWD check (order 682-z5h8) is load-bearing for host Claude sessions:
+# without it, a host session running in /home/tlatoani/claudia/tillandsias
+# silently answered from a stale $HOME/src/tillandsias clone (indexed
+# 2026-07-30), which is worse than no expert — it reads as authoritative and
+# is weeks wrong. Forge-safe: a forge sets TILLANDSIAS_PLAN_INDEX or its cwd
+# is the mounted project (whose plan/index.yaml this then correctly finds);
+# a non-Tillandsias project has no $PWD/plan/index.yaml and falls through.
 resolve_plan_index() {
     if [ -n "${TILLANDSIAS_PLAN_INDEX:-}" ] && [ -f "${TILLANDSIAS_PLAN_INDEX}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_INDEX"
         return 0
     fi
     for candidate in \
+        "$PWD/plan/index.yaml" \
         "$HOME/src/tillandsias/plan/index.yaml" \
         "$HOME/tillandsias/plan/index.yaml" \
         "/opt/cheatsheets/plan-index.yaml"; do

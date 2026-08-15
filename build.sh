@@ -59,6 +59,13 @@ fi
 
 source "$SCRIPT_DIR/scripts/common.sh"
 
+# Build/test DURATION telemetry (packet 682-emvg). Best-effort side-channel:
+# times the pre-push gate so a cycle can see where its wall-clock goes. A timing
+# failure must NEVER change build.sh's exit code or output, so the source and its
+# no-op fallback are both `|| true`-guarded.
+. "$SCRIPT_DIR/scripts/timing-log.sh" 2>/dev/null || true
+command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+
 # Get the actual user's home directory (works with sudo)
 if [[ -n "${SUDO_USER:-}" ]]; then
     ACTUAL_HOME="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
@@ -526,9 +533,49 @@ _bump_build_version() {
     fi
     after="$(tr -d '[:space:]' < "$SCRIPT_DIR/VERSION" 2>/dev/null || echo unknown)"
     if [[ "$before" != "$after" ]]; then
+        # NEVER INSTRUCT AN ACTION THE PRE-PUSH GUARD WILL REFUSE (order 643-64bx,
+        # partial reduction — windows host 2026-08-10).
+        #
+        # This used to say, unconditionally, "Commit them with your change".
+        # On any branch except main that is advice toward a wall: the pre-push
+        # VERSION guard refuses a push whose commits change VERSION unless the
+        # result equals main's (a sync-forward catch-up) or the branch is the
+        # release bump branch. Following the advice therefore ends at one of
+        #   * `git push --no-verify`, which disables the ONLY remaining gate
+        #     (push CI was removed, 599-w5jd) in order to push the very file that
+        #     gate protects — the worst available exit; or
+        #   * a local-only commit, which the meta-orchestration exit contract
+        #     forbids outright.
+        #
+        # The deadlock itself is NOT fixed here and 643-64bx stays open: a local
+        # build still writes to a tracked file, so `./build.sh --install` followed
+        # by a normal push still needs a manual revert. Fixing that means deciding
+        # whether the local build counter should touch tracked files at all, which
+        # has release-path consequences and is the packet's own first exit
+        # criterion. What is fixed is the packet's second criterion — the
+        # instruction that actively steers toward --no-verify.
+        local branch main_version
+        branch="$(git -C "$SCRIPT_DIR" symbolic-ref --short HEAD 2>/dev/null || echo "")"
+        main_version="$(git -C "$SCRIPT_DIR" show origin/main:VERSION 2>/dev/null \
+            || git -C "$SCRIPT_DIR" show main:VERSION 2>/dev/null || echo "")"
+        main_version="$(printf '%s' "$main_version" | tr -d '[:space:]')"
+
         _warn "VERSION bumped ${before} -> ${after} (local build counter). This dirties tracked files."
-        _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
-        _warn "  Verify monotonicity before pushing: scripts/verify-version-monotonic.sh"
+        if [[ -z "$branch" || "$branch" == "main" ]]; then
+            _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
+            _warn "  Verify monotonicity before pushing: scripts/verify-version-monotonic.sh"
+        elif [[ -n "$main_version" && "$after" == "$main_version" ]]; then
+            # Sync-forward: the bump landed exactly on main's VERSION, which the
+            # guard permits as a catch-up rather than a divergent bump.
+            _warn "  This matches origin/main (${main_version}) — a sync-forward, which the pre-push guard allows."
+            _warn "  Commit them with your change: git add VERSION Cargo.toml crates/*/Cargo.toml"
+        else
+            _warn "  Do NOT commit VERSION on '${branch}': the pre-push guard refuses it (main's is ${main_version:-unknown})."
+            _warn "  Revert the bump to keep the tree clean:"
+            _warn "    git checkout -- VERSION Cargo.toml Cargo.lock crates/*/Cargo.toml"
+            _warn "  Or skip it next time: TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh …"
+            _warn "  Do NOT reach for 'git push --no-verify' — it disables the only remaining gate (643-64bx)."
+        fi
     fi
 }
 
@@ -579,6 +626,36 @@ _check_trace_coverage() {
     _info "${gate_out}"
     return 0
 }
+
+# ---------------------------------------------------------------------------
+# Router sidecar staging (order 710-w9kc). The tillandsias-headless build.rs
+# include_bytes!()s images/router/tillandsias-router-sidecar as a REQUIRED
+# runtime asset, and the router Containerfile COPYs it into the image. It is a
+# BUILD ARTIFACT and is gitignored — NEVER committed to the repo. Stage a
+# freshly-compiled sidecar before any cargo invocation so cargo build/check/test
+# finds it. build-sidecar.sh is a cheap no-op when already up to date, and a
+# build-number bump (VERSION touch) forces a fresh, version-matched recompile.
+# ---------------------------------------------------------------------------
+_stage_router_sidecar() {
+    [[ -f "$SCRIPT_DIR/scripts/build-sidecar.sh" ]] || return 0
+    _step "Staging router sidecar (build artifact — not committed)..."
+    bash "$SCRIPT_DIR/scripts/build-sidecar.sh"
+}
+
+# Stage before every dispatch that compiles Rust. Pure teardown flags
+# (--remove/--wipe/--clean-alone/--init) never invoke cargo, so they skip it and
+# stay usable without a rustup/musl toolchain.
+_stage_router_sidecar_if_compiling() {
+    local f
+    for f in FLAG_INSTALL FLAG_CI FLAG_CI_FULL FLAG_RELEASE FLAG_CHECK FLAG_TEST FLAG_OBSERVATORIUM; do
+        if [[ "${!f:-false}" == true ]]; then _stage_router_sidecar; return; fi
+    done
+    if [[ "$FLAG_REMOVE" != true && "$FLAG_WIPE" != true \
+       && "$FLAG_CLEAN" != true && "$FLAG_INIT" != true ]]; then
+        _stage_router_sidecar   # bare debug build (no standalone flag)
+    fi
+}
+_stage_router_sidecar_if_compiling
 
 # ---------------------------------------------------------------------------
 # Standalone operations
@@ -933,6 +1010,13 @@ fi
 
 # Type-check only
 if [[ "$FLAG_CHECK" == true ]]; then
+    # Time the WHOLE --check (the pre-push gate, run every cycle) as a telemetry
+    # side-channel (packet 682-emvg). The trap fires on any exit while set —
+    # including a set -e abort when a sub-step fails — recording the real exit
+    # code; it is cancelled at normal completion so a single record is emitted
+    # and combined-flag runs do not over-count. NEVER alters the gate's exit.
+    _CHECK_T0="$(timing_now_ms)"
+    trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
     _step "Checking Rust formatting..."
     if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
         _error "Rust code not formatted: run 'cargo fmt --all'"
@@ -973,6 +1057,19 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # a no-op, because `packets:` is a G-Set. 11 of 21 fragment-recorded
     # completions were being thrown away when this was found, and the batch
     # selector was handing already-completed packets back out as next work.
+    # Order 721-nyev. Every script that RUNS tillandsias-plan must resolve it
+    # through the shared probe, never a hardcoded target/ path. 704-zcgi
+    # centralised that probe on the reasoning that fixing instances is not
+    # enough, and four more instances appeared afterwards anyway — each written
+    # by someone with no reason to know the probe existed. This makes the rule
+    # enforceable rather than remembered.
+    _step "Checking plan-binary resolution goes through the shared probe (721-nyev)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-binary-probe-usage.sh" 2>&1; then
+        _error "a script runs tillandsias-plan from a hardcoded target/ path — an executable bit is a claim, running the binary is evidence"
+        exit 1
+    fi
+    _info "Plan-binary probe usage check passed"
+
     _step "Checking for fragment status transitions the fold discards..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-status-loss.sh" 2>&1; then
         _error "a fragment declares a status the fold does not apply — write a status: LWW entry instead (plan/index.d/README.md)"
@@ -980,12 +1077,184 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Fragment status-loss check passed"
 
+    # Order 698-7n6q. The sibling of the check above: that one catches a
+    # fragment whose declared status the fold DISCARDS; this one catches a
+    # fragment the fold cannot READ AT ALL. `tillandsias-plan check` warns about
+    # the latter and exits 0, so until now an unparseable fragment could be
+    # committed, gated green, and pushed — carrying packets that exist in git
+    # and in no answer. Packet 697-s3by reached origin in exactly that state on
+    # 2026-08-12. Diff-scoped like 634-39ik's enforcement, so a fragment
+    # inherited from a sibling only warns and can never red-gate this host.
+    _step "Checking that fragments added by this change parse..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-added-fragments-parse.sh" 2>&1; then
+        _error "this change adds a ledger fragment the fold cannot read — its packets would be invisible to every host (plan/index.d/README.md)"
+        exit 1
+    fi
+    _info "Added-fragment parse check passed"
+
+    # Order 634-39ik (Tlatoāni-approved bar raise 2026-08-11). Refuse any NEWLY
+    # ADDED litmus step that pins a literal source expression without a negative
+    # control. Diff-scoped by construction — it can only flag steps added on
+    # this branch, never the existing corpus (624-cf9f backlog), so raising the
+    # bar accepts standing debt rather than redding it (the operator's
+    # CRDT/Erlang posture: keep the line running, file improvement packets).
+    _step "Checking for newly-added expression-pinned litmus steps (634-39ik)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-expression-pinning-added.sh" 2>&1; then
+        _error "a newly-added litmus step pins a literal source expression without a negative control (634-39ik)"
+        exit 1
+    fi
+    _info "Expression-pinning enforcement passed"
+
+    # Order 686-7qcm criterion 3. Refuse a NEWLY ADDED fragment that records a
+    # closure rung (completed/verified/done) with no evidence-bearing event —
+    # the gate-time backstop to set-field's write-time --evidence requirement,
+    # catching hand-authored fragments that bypass set-field. Diff-scoped, so
+    # the base ledger's historical closures are never re-judged.
+    _step "Checking that added fragment closures carry evidence (686-7qcm)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-fragment-closure-evidence-added.sh" 2>&1; then
+        _error "this change adds a fragment recording a closure (completed/verified/done) with no evidence-bearing event (686-7qcm)"
+        exit 1
+    fi
+    _info "Closure-evidence enforcement passed"
+
+    # Order 614-2gqx / 651-2x5s. The durable MO-FULL attestation ledger
+    # (plan/mo-full-attestations.d/) must never carry a tampered, fabricated,
+    # or unreachable marker — the terminal marker is only as strong as the
+    # record that outlives the transcript it was emitted into.
+    _step "Checking the durable MO-FULL attestation ledger (614-2gqx)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-mo-full-attestations.sh" 2>&1; then
+        _error "the MO-FULL attestation ledger records a marker that is fabricated, tampered, or unreachable (plan/mo-full-attestations.d/)"
+        exit 1
+    fi
+    _info "MO-FULL attestation ledger check passed"
+
+    # Order 680-zphp. Fail loud if an expert-groundtruth case pins `status:` on a
+    # packet whose LIVE status is non-terminal — such a pin reds the 4-verifier
+    # ratification harness on the next legitimate ledger update (it fired 3x:
+    # 394d twice, 394e). Terminal pins and frozen-fixture pins are exempt.
+    _step "Checking groundtruth cases for mutable-status pins (680-zphp)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-groundtruth-mutable-status-pins.sh" 2>&1; then
+        _error "an expert-groundtruth case pins status on a live non-terminal packet — it will red the harness on the next ledger update (680-zphp)"
+        exit 1
+    fi
+    _info "Groundtruth status-pin guard passed"
+
+    # Order 440 / 599-4wzr: the status vocabulary in plan/index.yaml
+    # (default_status_values) and plan/schema.yaml (statuses) must not diverge —
+    # a silent divergence would let the 650-dq6u ladder and the schema disagree.
+    # This guard shipped (order 440) but was ORPHANED (invoked by nothing) until
+    # the guard-activation audit (599-4wzr) surfaced it; wiring it here activates
+    # it as a real --check gate.
+    _step "Checking plan/schema status-vocab divergence (440)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
+        # Do NOT restate the cause here: the script emits one of three verdicts
+        # (diverges / index-load-failed / unreadable) and this wrapper used to
+        # assert "vocabularies diverge" for all of them, which sent a reader to
+        # diff two identical lists while the real fault was an unloadable index
+        # (order 720-24u6). The verdict line above is the cause.
+        _error "plan/schema status-vocab gate refused (440) — see the verdict line above"
+        exit 1
+    fi
+    _info "Plan/schema status-vocab check passed"
+
+    # Order 702-eusw criterion 3: a build-number VERSION bump must never be swept
+    # into an unrelated commit. dd8fd63f bundled a VERSION bump into a security
+    # fix via `git add -A`; the mandated linux-next merge then imported a
+    # divergent VERSION the mandated pre-push gate refused, blocking the whole
+    # fleet. This guard refuses any NON-MERGE outgoing commit that changes VERSION
+    # alongside non-companion files (a merge inheriting VERSION is exempt — that
+    # is a legitimate catch-up, order 643-64bx). A clean release-bump commit
+    # (VERSION + Cargo files only) still passes.
+    _step "Checking VERSION-bump isolation on outgoing commits (702-eusw)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-version-bump-isolation.sh" 2>&1; then
+        _error "an outgoing commit sweeps a VERSION bump in with unrelated files — bump alone via a release/version-bump-* branch (702-eusw)"
+        exit 1
+    fi
+    _info "VERSION-bump isolation check passed"
+
+    # Order 714-4r6w. `SyncPodmanCommand` makes an unbounded synchronous podman
+    # call a COMPILE error, which is the real guarantee; this guards the two ways
+    # around the type — building a podman std::process::Command directly, and
+    # growing the caller-owned-spawn escape hatch past its reviewed count.
+    _step "Checking the synchronous podman surface stays bounded (714-4r6w)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-podman-sync-budgets.sh" 2>&1; then
+        _error "a synchronous podman call can wait forever — route it through podman_cmd_sync()'s bounded methods (714-4r6w)"
+        exit 1
+    fi
+    _info "Podman sync-budget check passed"
+
+    # Order 631-wpkd. Canonical skills/ is the single source of truth and every
+    # runtime reaches a skill by symlink. The layout section CLAIMED that while
+    # thirteen skills lived only under .claude/skills/ — including a macOS build
+    # skill invisible to every non-Claude harness. What a host can do must not
+    # depend on which harness launched it, and prose could not notice it had
+    # stopped being true.
+    _step "Checking skills have exactly one source of truth (631-wpkd)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-skills-single-source.sh" 2>&1; then
+        _error "a skill has drifted out of canonical skills/ — declare it in skills/HARNESS-SCOPED.txt or link it (631-wpkd)"
+        exit 1
+    fi
+    _info "Skills single-source check passed"
+
+    # Order 721-77yu. A script that says "Pinned by litmus:<name>" is making a
+    # verification claim, and until this gate existed nothing checked it: the
+    # fragment-parse gate carried such a line for weeks against a test that had
+    # never been written. Both empty shapes fail here — a name no test declares,
+    # and a test no spec binds (execution is binding-driven, so an unbound test
+    # runs in no suite and is as inert as a missing one).
+    _step "Checking litmus pin claims resolve and execute (721-77yu)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-litmus-pin-claims.sh" 2>&1; then
+        _error "a script claims a litmus pin that cannot execute (721-77yu) — see the verdict line above"
+        exit 1
+    fi
+    _info "Litmus pin-claim check passed"
+
+    # Order 731-d89b. A script a caller RUNS by path must be tracked executable.
+    # resolve-release-run.sh reached linux-next at mode 100644 from the Windows
+    # host, so the release runbook's direct invocation of it was a permission
+    # error rather than the verdict it exists to produce. Narrow by design: a
+    # `bash scripts/x.sh` caller works at any mode, and sourced libraries here
+    # are correctly non-executable.
+    _step "Checking scripts invoked by path are executable (731-d89b)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-script-exec-bits.sh" 2>&1; then
+        _error "a script is invoked by path but tracked non-executable (731-d89b) — see the verdict line above"
+        exit 1
+    fi
+    _info "Script exec-bit check passed"
+
+    # Order 716-f5kc. REPORT, not refusal. A Linux build of the Windows tray
+    # compiles src/stubs/ and goes green without ever parsing the edited file,
+    # which produced two unverified changes on 2026-08-13 alone. Refusing here
+    # would strand finished work on a host whose native toolchain is blocked —
+    # which the exit contract forbids more strongly than it forbids an
+    # unverified commit — so the cycle is TOLD, and carries the verdict into its
+    # handoff. Promotion to a refusal is an operator decision, and the moment
+    # for it is when dev binaries are signed and SAC stops being a coin flip.
+    _step "Reporting Windows-only source verification state (716-f5kc)..."
+    _windows_only_verdict="$(bash "$SCRIPT_DIR/scripts/check-windows-only-sources-verified.sh" 2>/dev/null || echo "stale:windows-sources-check-failed")"
+    case "$_windows_only_verdict" in
+        ok:* | skip:*)
+            _info "Windows-only sources: $_windows_only_verdict"
+            ;;
+        *)
+            _warn "Windows-only sources: $_windows_only_verdict"
+            _warn "  A Linux build compiles src/stubs/ for these — this gate did NOT read them."
+            _warn "  Verify natively (cargo test -p tillandsias-windows-tray), then:"
+            _warn "    scripts/check-windows-only-sources-verified.sh stamp"
+            ;;
+    esac
+
     # Record that the gate passed against THIS exact tree. The pre-push hook
     # verifies this stamp instead of re-running the whole gate: a multi-minute
     # hook gets --no-verify'd on its second use and then enforces nothing, while
     # hashing the diff costs milliseconds for the same guarantee. Push CI was
     # removed 2026-08-03, so this is the trunk's only remaining protection.
     _write_gate_stamp
+
+    # Normal completion: cancel the abort-trap and emit exactly one success
+    # record for the whole gate. (packet 682-emvg)
+    trap - EXIT
+    timing_emit build-check check "$_CHECK_T0" 0
 
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then

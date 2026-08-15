@@ -69,6 +69,10 @@ pub const ENGINES: &[(&str, &str)] = &[
         "methodology.path",
         "methodology.yaml + methodology/**/*.yaml via methodology::answer_path_query — dotted YAML path (order 394c)",
     ),
+    (
+        "cheatsheet.ask",
+        "cheatsheets/**/*.md via spec::answer_cheatsheet_query (order 707-tiqw)",
+    ),
 ];
 
 /// The one place the format version is pinned. A query set from a future
@@ -435,6 +439,7 @@ pub struct Harness {
     index_rel: String,
     ledger: Option<Ledger>,
     corpus: Option<methodology::Corpus>,
+    cheatsheets: Option<Vec<crate::spec::Chunk>>,
 }
 
 impl Harness {
@@ -445,6 +450,7 @@ impl Harness {
             index_rel,
             ledger: None,
             corpus: None,
+            cheatsheets: None,
         }
     }
 
@@ -471,6 +477,13 @@ impl Harness {
         Ok(self.corpus.as_ref().expect("just loaded"))
     }
 
+    fn cheatsheets(&mut self) -> Result<&[crate::spec::Chunk], String> {
+        if self.cheatsheets.is_none() {
+            self.cheatsheets = Some(crate::spec::chunk_corpus(&self.root));
+        }
+        Ok(self.cheatsheets.as_ref().expect("just loaded"))
+    }
+
     /// Produce the envelope a case's engine answers with.
     ///
     /// `Err` is an ENVIRONMENTAL failure (unknown engine, unreadable corpus) —
@@ -490,6 +503,15 @@ impl Harness {
             "methodology.path" => {
                 let corpus = self.corpus()?;
                 Ok(methodology::answer_path_query(corpus, &case.query, None))
+            }
+            "cheatsheet.ask" => {
+                let root = self.root.clone();
+                let chunks = self.cheatsheets()?;
+                Ok(crate::spec::answer_cheatsheet_query(
+                    &root,
+                    chunks,
+                    &case.query,
+                ))
             }
             other => Err(format!(
                 "unknown engine {other:?} in case {:?}. Registered engines: {}. \
@@ -663,6 +685,54 @@ mod tests {
         );
     }
 
+    /// ORDER 707-tiqw: cheatsheet ground-truth falsification. A wrong expected
+    /// span in a cheatsheet case must go RED.
+    #[test]
+    fn a_wrong_expected_cheatsheet_span_turns_a_passing_case_red() {
+        let mut h = harness();
+        let case: Case = serde_yaml::from_str(
+            r#"
+id: cheatsheet-falsification-probe
+engine: cheatsheet.ask
+query: "what three primitives are needed for CRDT ledger fragments?"
+expect:
+  confidence: exact
+  citation_kind: cheatsheet
+  citations_include:
+    - path: cheatsheets/concurrent-git/crdt-ledger-fragments.md
+      kind: cheatsheet
+      span_contains: ["G-Set"]
+"#,
+        )
+        .expect("probe case parses");
+        let env = h.run(&case).expect("engine registered");
+        assert!(
+            grade_envelope(&env, &case.expect, &repo_root()).is_empty(),
+            "the probe must be GREEN before it is falsified"
+        );
+
+        let wrong: Case = serde_yaml::from_str(
+            r#"
+id: cheatsheet-falsification-probe
+engine: cheatsheet.ask
+query: "what three primitives are needed for CRDT ledger fragments?"
+expect:
+  confidence: exact
+  citation_kind: cheatsheet
+  citations_include:
+    - path: cheatsheets/concurrent-git/crdt-ledger-fragments.md
+      kind: cheatsheet
+      span_contains: ["FABRICATED NONEXISTENT CRDT PRIMITIVE SPAN"]
+"#,
+        )
+        .expect("probe case parses");
+        let failures = grade_envelope(&env, &wrong.expect, &repo_root());
+        assert!(
+            !failures.is_empty(),
+            "a fabricated cheatsheet span was graded GREEN — the harness cannot fail"
+        );
+    }
+
     /// BOTH corpora are actually exercised. A query set that quietly lost all
     /// its plan cases would still be "green", and the plan expert would stop
     /// being graded without anything going red.
@@ -765,7 +835,7 @@ expect:
     #[test]
     fn an_unknown_engine_names_the_registration_site() {
         let case: Case = serde_yaml::from_str(
-            "id: future\nengine: cheatsheet.ask\nquery: x\nexpect:\n  confidence: exact\n",
+            "id: future\nengine: code.ask\nquery: x\nexpect:\n  confidence: exact\n",
         )
         .expect("parses");
         let err = harness()

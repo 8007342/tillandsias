@@ -1,0 +1,114 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: forge-tillandsias-opencode-20260815T0347Z (order 753-ii5f).
+#
+# ATTACK on 749-8iw4 (mirror-identity-persist-vault-audit-device). Verdict:
+# the fix PASSES — the audit volume is genuinely constructed and genuinely
+# passed. Static evidence re-verified in this cycle: audit_volume_arg appears
+# exactly TWICE in vault_bootstrap.rs (format! at line 2107, run_args entry at
+# line 2136, both --volume args present), :U on both mounts, entrypoint device
+# pinned at /vault/audit/audit.json, rationale recorded. The four findings
+# below are GATE-STRENGTH gaps, not fix defects — the fix landed and works;
+# the gate that pins it could let a future regression through.
+packets:
+  - packet_id: vault-audit-litmus-pins-construction-not-behavior
+    order: 753-ii5f
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    release_target: fail-loud-diagnosis-milestone
+    kind: research
+    title: "litmus:vault-audit-persistence-shape pins CONSTRUCTION (grep presence) but not BEHAVIOR — the runtime proof and the negative control live only in a commit message, so a regression that keeps every grep green can still break persistence"
+    deliverable: "one or more runtime/behavior-level pins that fail when the audit device stops persisting across recreation, not only when a string disappears from the source"
+    pickup_role: any
+    capability_tags: [plan, litmus, vault, audit, false-green]
+    estimated_hours: 3
+    context: |
+      The 749-8iw4 fix is correct: a host volume ~/.cache/tillandsias/vault-audit
+      is mounted at /vault/audit:U and passed to podman run. The litmus that pins
+      it, though, is grep-shape only — five steps, four of them pure string
+      presence checks on vault_bootstrap.rs / entrypoint.sh. The TWO strongest
+      pieces of evidence from the fixing host are NOT in the litmus:
+
+      1. RUNTIME PROOF: audit.json 92463 -> 184926 bytes across a container
+         recreate, same first record accessor. Recorded in the implementing
+         fragment (20260815t032441z-1616ee53) and the commit message, nowhere
+         executable.
+      2. NEGATIVE CONTROL: the same write WITHOUT a volume is 'No such file or
+         directory' after recreate — proving the test measures persistence, not
+         the presence of a path. Also one-shot, recorded in prose.
+
+      What a grep-green regression can look like, concretely:
+      - A refactor renames the cache dir base (init_cache_dir) so the host dir
+        moves somewhere the host's vault process cannot write — every grep still
+        passes, records stop persisting, and 'vault audit list' still reports
+        healthy (the exact blindness V12 had).
+      - An entrypoint change moves the device path or adds a SECOND file device
+        writing to a layer path — step 1 greps '/vault/audit/audit.json'
+        presence, a second device line would not fail it.
+      - A second --volume on the SAME container target that shadows the audit
+        mount — step 3 counts audit_volume_arg references (>=2) and would not
+        notice an overriding later mount.
+      - ':U' keeps the mount relabeled but if the host dir is not recreated and
+        podman rootless userns re-maps, the AUDIT FILE (not dir) ownership can
+        drift; the grep cannot see file-level mode/uid drift inside the volume.
+
+      The fixing host PROVED the behavior by hand and recorded it in prose. The
+      gate does not re-prove it; a future editor can make all five greps green
+      while persistence breaks, and M6's "survives recreation" claim is then
+      unguarded. This packet asks for a behavior-level pin the gate can execute
+      where podman exists (the litmus is pre-build, run on hosts; see how
+      litmus:ci-release steps shell out).
+    outcome: |
+      litmus:vault-audit-persistence-shape gains at least one executable,
+      behavior-shaped step (a real podman create+remove round-trip, or a
+      mount-resolution check that inspects what podman would actually mount) so
+      the persistence claim is re-proven by the gate, not asserted from a commit
+      message.
+    exit_criteria:
+      - "The litmus fails when the audit mount is built but a LATER --volume
+         shadows it (mutation: append a second /vault/audit mount), even though
+         every existing grep step passes."
+      - "The litmus fails when the host audit dir path is wrong (mutation: point
+         vault_audit_dir at a sibling dir), even though 'vault-audit' and
+         ':/vault/audit:U' strings remain present."
+      - "The litmus's new step runs without podman present and reports a
+         distinct SKIP/unknown rather than a green pass (must not invent a
+         green where it cannot compute)."
+      - "NEGATIVE CONTROL retained: the prose reproduction of the fix (file
+         survives recreate with volume, 'No such file or directory' without) is
+         either encoded in the litmus or explicitly ruled out of scope with the
+         reason recorded."
+    notes: |
+      The grep steps are still worth keeping — they are the cheap first line.
+      This is not a demand that the fix be redone; the fix is done and verified.
+      It is a demand that the CLAIM 'audit survives recreation' stop resting on
+      one human's measured afternoon and become a gate obligation again.
+    events:
+      - type: filed
+        ts: "2026-08-15T04:09:00Z"
+        host: linux_immutable
+        agent_id: forge-tillandsias-opencode-20260815T0347Z
+        summary: |
+          Filed after the in-forge attack review of 749-8iw4 passed the fix
+          itself (audit_volume_arg constructed once at vault_bootstrap.rs:2107
+          and passed once at :2136, :U on both mounts, device path pinned). The
+          four listed failure modes all keep the existing grep steps green.
+
+events:
+  - packet_id: mirror-identity-persist-vault-audit-device
+    event:
+      type: evidence
+      ts: "2026-08-15T04:09:00Z"
+      host: linux_immutable
+      agent_id: forge-tillandsias-opencode-20260815T0347Z
+      summary: >
+        ATTACK VERDICT for 749-8iw4: fix PASSES. Re-verified against the tree:
+        audit_volume_arg constructed exactly once (format! at vault_bootstrap.rs:2107)
+        and passed exactly once (run_args at :2136), both --volume args present,
+        :U on /vault/data and /vault/audit, entrypoint device pinned at
+        /vault/audit/audit.json, rationale naming V12/M6 recorded. No podman in
+        the forge, so the runtime proof is re-read from the implementing fragment
+        (audit.json 92463 -> 184926 across recreate; negative control 'No such
+        file or directory' without the volume) rather than re-run. The attack
+        surfaced four GATE-STRENGTH gaps (not fix defects) — that the litmus pins
+        construction not behavior — filed as 753-ii5f.

@@ -56,6 +56,28 @@ VERSION_SHORT="$(echo "$VERSION" | cut -d. -f1-2)"
 MIN_MACOS="14.0"
 say "version: $VERSION  short: $VERSION_SHORT  min_macos: $MIN_MACOS"
 
+# ── 3b. Stage the router sidecar ────────────────────────────────────────
+# MUST run before the first cargo invocation. tillandsias-headless/build.rs
+# lists images/router/tillandsias-router-sidecar in its `required` runtime
+# assets (build.rs:93) and panics at build.rs:104 when it is absent.
+#
+# Order 710-w9kc un-committed that binary and made it a build artifact, adding
+# the staging call to build.sh (_stage_router_sidecar_if_compiling) and to
+# scripts/build-image.sh:174 — but not here, and this script is the macOS
+# product build. Nothing caught it because the removal only deletes the file
+# from git: every host that had already built kept its copy on disk, so the
+# break is invisible locally and certain on a fresh clone.
+#
+# Reproduced on this host 2026-08-13 by moving the artifact aside:
+#   thread 'main' panicked at crates/tillandsias-headless/build.rs:104:13:
+#   required runtime asset missing: .../images/router/tillandsias-router-sidecar
+# — an error naming a runtime asset, for what is really a missing build step.
+#
+# Cheap to call unconditionally: build-sidecar.sh exits early when the staged
+# binary is newer than the sidecar crates, Cargo.lock and VERSION.
+say "staging router sidecar (build artifact — not committed) …"
+bash "$ROOT/scripts/build-sidecar.sh" >&2
+
 # ── 4. Build ────────────────────────────────────────────────────────────
 say "cargo build --release -p tillandsias-macos-tray …"
 cargo build --release -p tillandsias-macos-tray >&2

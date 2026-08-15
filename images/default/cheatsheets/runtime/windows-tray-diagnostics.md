@@ -164,9 +164,40 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   "recent_log_tail": [                     // array of string — last 20 lines of tray.log
     "2026-05-28T... INFO ..."
   ],
-  "guest_version": "0.3.260721.1"          // string | null — in-VM headless build version from the wire handshake (windows-260719-4 skew guard); null when the wire is down
+  "guest_version": "0.3.260721.1",         // string | null — in-VM headless build version from the wire handshake (windows-260719-4 skew guard); null when the wire is down
+  "guest_wiring": {                        // object | null — what the LAST reconcile_adopted_guest DID (order 620-duta); null when no reconcile has been recorded
+    "tray_version":          "0.4.260810.1", // string — WORKSPACE_VERSION of the tray that reconciled
+    "guest_version_before":  "0.4.260809.2", // string | null — version the guest reported BEFORE; null means no binary was found
+    "outcome":               "reinjected",   // string — skipped-version-match | reinjected | failed
+    "ts":                    "2026-08-12T00:31:00Z", // string — UTC RFC3339, seconds precision
+    "error":                 null            // string | null — detail when outcome = failed
+  }
 }
 ```
+
+#### Reading `guest_wiring` (the field that answers "is my fix actually in the VM?")
+
+`guest_version` says what version is in the VM. It does **not** say that this
+tray put it there, and those are different claims. `reconcile_adopted_guest`
+returns early when the guest's version equals the tray's, so a tray carrying
+NEW code at an UNCHANGED `VERSION` injects nothing and leaves a guest that looks
+correct in every other field above.
+
+- `outcome: "skipped-version-match"` — this tray injected **nothing**. The guest
+  binary is whatever an earlier tray installed. If you just rebuilt to deploy a
+  guest-side fix and the VERSION did not roll, this is the answer that means
+  your fix is *not* in the VM.
+- `outcome: "reinjected"` — the guest binary, systemd units and modules-load
+  entry are this tray's.
+- `outcome: "failed"` — injection was attempted and failed; wiring state is
+  unknown. `error` carries the cause.
+- `guest_wiring: null` — no reconcile recorded (fresh install, or a guest last
+  touched by a tray predating this field). Deliberately **not** reported as a
+  version match: "never checked" and "checked and matched" are different facts.
+
+This field exists because that ambiguity produced a false "the fix is deployed"
+reading on 2026-08-11 (627-sgtt), where a version match was mistaken for
+evidence of deployment.
 
 ### `--status-once --json` schema
 
@@ -197,6 +228,9 @@ unreachable path becomes JSON `null`).
 - **`cargo build` and PowerShell stderr-wrapping**: `cargo` writes "Compiling" / "Finished" to stderr; when a PowerShell tool consumer redirects with `2>&1` and `$ErrorActionPreference = 'Stop'`, those lines can trigger `NativeCommandError` even on success. Inspect `$LASTEXITCODE`, not the PowerShell exception.
 - **GUI-subsystem stdout capture from PowerShell is unreliable**: the release tray is a GUI-subsystem binary, and PowerShell's direct stdout capture (`$x = & exe`, `& exe > $tmp`) silently drops large writes from `println!` (small per-line writes from `--diagnose` human mode usually work; the big single `--diagnose --json` write often doesn't). The robust pattern is `cmd.exe`'s redirect: `& cmd /c "exe --diagnose --json > out.json 2>nul"`. cmd handles native stdio directly. `AttachConsole(ATTACH_PARENT_PROCESS)` is NOT a fix — it attaches the binary to the visible parent console, *bypassing* PowerShell's pipe entirely, so scripted captures see nothing. `scripts/tray-diagnose.ps1` and `scripts/install-windows.ps1`'s post-install sanity check both use the cmd-redirect pattern.
 - **Exit code 2 ≠ failure**: `--diagnose` exits 2 when the report ran end-to-end but at least one check failed (e.g. distro not registered yet). Don't `set -e` around it — use the exit code as a tri-state.
+- **`--diagnose` exit 3 = CONVERGING, and a script must not treat it as broken** (order 647-i98k): the control wire answered and the guest named a phase it has not finished. Nothing is wrong; it is not Ready *yet*. Before this existed, converging and broken shared exit 2, and the 644-a3wj curl smoke declared a healthy install broken by probing inside the ~8s window between `provisioning phase "Connecting…"` and `VM ready — control wire established`. A scripted post-install check should retry on 3 and fail only on 2.
+  An **unreachable** wire stays exit 2 deliberately, even though it is often *also* just converging: at probe time it is indistinguishable from a genuinely broken one, and calling it converging would tell automation to keep waiting on something that may never arrive.
+  Note the asymmetry with `--status-once`, which is a different and older contract on the same tray: there `0` = Ready, `2` = reachable-but-not-Ready, `1` = unreachable. That surface already separated the two states, so it was left alone; the numbers differ between the two commands.
 - **JSON schema change is a tooling break**: bumping a key in `DiagnoseReport` fails `diagnose_json_top_level_keys_pinned`. If you genuinely intend the change, update `tests::baseline_diagnose_report` AND the consumer script in the same commit, and bump the cheatsheet "Last updated" line above.
 
 ## See also
