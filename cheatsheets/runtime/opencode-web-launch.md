@@ -14,6 +14,7 @@ summary_generated_by: hand-curated
 bundled_into_image: true
 committed_for_project: false
 ---
+# freshness: auditor=linux-mutable-20260815t0610z date=2026-08-15 verdict=refreshed scope=standing FRESHNESS audit — Current Contract re-validated against source: sse-keepalive-proxy.js owns 0.0.0.0:4096 with opencode serve on loopback 4097 (images/default/entrypoint-forge-opencode-web.sh:122-136), router upstream targets 4096 (main.rs:10924), browser is tillandsias-chromium-framework:v<VERSION> via the typed launch profile (main.rs:10265), opencode.<project>.localhost URL + project-label extraction (main.rs:10496), TILLANDSIAS_PROJECT_HOST_MOUNT=1 on the launch env (main.rs:5445,11695); all claims sound and matching current runtime
 
 # OpenCode Web Launch
 

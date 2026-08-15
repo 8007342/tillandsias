@@ -24,7 +24,8 @@
 #   - Four JSON schema-pin tests (diagnose_report_json_keys_locked,
 #     diagnose_report_none_pin_serialises_as_null,
 #     diagnose_report_none_bytes_serialise_as_null,
-#     exit_code_provisioned_zero_degraded_two).
+#     exit_code_separates_healthy_converging_and_degraded — renamed
+#     from exit_code_provisioned_zero_degraded_two by order 735-2g5i).
 #   - install-macos.sh uses bash `set +e` instead of cmd.exe redirect
 #     (Windows pwsh-pipe stdio-drop issue is windows-specific).
 
@@ -59,9 +60,20 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
+  # Order 735-2g5i renamed the test from exit_code_provisioned_zero_degraded_two
+  # to exit_code_separates_healthy_converging_and_degraded (exit 3 CONVERGING is
+  # now its own verdict); the symmetric litmus accepts either name by design.
+  # The crate is cfg-gated off-macOS, so this Linux-substrate suite can only
+  # inspect source; the paired NEGATIVE CONTROL below keeps the pin falsifiable
+  # (expression-pinning enforcement, 634-39ik).
   - step: "exit-code contract test attached"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-macos-tray/src/diagnose.rs"
+    command: "grep -F 'fn exit_code_separates_healthy_converging_and_degraded' crates/tillandsias-macos-tray/src/diagnose.rs"
     expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "NEGATIVE CONTROL: the pre-735-2g5i two-state test name is gone — a half-rename (both names present) or a revert to the exit-2-only contract must FAIL here"
+    command: "! grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-macos-tray/src/diagnose.rs && echo 'ok: old two-state name absent'"
+    expected_behavior: "ok: old two-state name absent"
     timeout_ms: 3000
 
   - step: "install-macos.sh contains the post-install --diagnose sanity check"

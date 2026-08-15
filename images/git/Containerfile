@@ -25,6 +25,11 @@ FROM docker.io/library/alpine:3.20
 #   - git, git-daemon: core VCS functionality
 #   - bash: needed for entrypoint scripts (Alpine default is sh)
 #   - openssh-client: for authentication to remote repositories
+#   - openssh-server: mirror-identity ssh push endpoint (order 749-wv4d, design
+#     T3 in plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md). sshd
+#     runs as uid 1000 `git` on port 2222 under `--read-only` + `--cap-drop=ALL`
+#     with writable state confined to the /tmp tmpfs and the /srv/git volume —
+#     proven by litmus:mirror-sshd-posture-shape, never relaxed to make it start.
 #   - github-cli (gh): for authenticated GitHub operations (TRUSTED container only)
 #
 # Step 2: Create unprivileged 'git' user (UID 1000, matches host --userns=keep-id)
@@ -42,6 +47,7 @@ RUN apk add --no-cache \
         git-daemon \
         bash \
         openssh-client \
+        openssh-server \
         github-cli \
         curl \
         jq \
