@@ -46436,6 +46436,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-15T16:56:09Z"
+          agent_id: "linux-mutable-20260815-recovery"
+          host: linux_mutable
+          summary: |
+            Criterion 'NO CI RUN HAS PROVEN IT' discharged: release run 31867778950 (v0.4.260815.1, 2026-08-15, dispatched by linux_mutable) executed the FIXED workflow ordering — the osx-authored fix merged into linux-next at dedc40802 before release PR #96 — and the headless nix derivations succeeded, publishing tillandsias-headless-x86_64-unknown-linux-musl and -aarch64 as signed release assets. Remaining OPEN scope is the deeper fix only: flake.nix preBuild installing the sidecar derivation output so a clean-tree 'nix build .#tillandsias-headless-x86_64-musl' is sound outside CI step ordering.
+        - type: progress
           ts: "2026-08-14T02:11:23Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260813t223103z
           host: macos
