@@ -83,8 +83,16 @@ COPY ensure-mirror-head.sh /usr/local/share/git-service/ensure-mirror-head
 # by the entrypoint so a host direct-push to origin cannot strand forge
 # agents on a stale mirror between launches.
 COPY reconcile-exported-heads.sh /usr/local/share/git-service/reconcile-exported-heads
+
+# @trace spec:git-mirror-service, spec:meta-orchestration
+# Order 756-2jnj: non-mutating upstream WRITE-authorization probe — publishes
+# refs/tillandsias/upstream-auth/<state>/<epoch> at startup and on every
+# reconcile tick, so the forge credential guard can require BOTH mirror
+# reachability AND current upstream push authorization before worker drain.
+COPY probe-upstream-auth.sh /usr/local/share/git-service/probe-upstream-auth
 RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
-    /usr/local/share/git-service/reconcile-exported-heads
+    /usr/local/share/git-service/reconcile-exported-heads \
+    /usr/local/share/git-service/probe-upstream-auth
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli

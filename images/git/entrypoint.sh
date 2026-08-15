@@ -284,6 +284,29 @@ ensure_mirror_head() {
 RECONCILE_HEADS="${RECONCILE_HEADS:-/usr/local/share/git-service/reconcile-exported-heads}"
 MIRROR_RECONCILE_INTERVAL="${MIRROR_RECONCILE_INTERVAL:-120}"
 MIRROR_RECONCILER_PID=""
+
+# @trace spec:git-mirror-service, spec:meta-orchestration
+# Order 756-2jnj: non-mutating upstream WRITE-authorization probe. Publishes
+# refs/tillandsias/upstream-auth/<state>/<epoch> in each mirror so the forge
+# credential guard (scripts/check-credential-channel.sh) can require BOTH
+# mirror reachability AND current upstream push authorization before worker
+# drain — the 2026-08-15 forge lost two commits because a GitHub 403 surfaced
+# only at the first push, hours in. Runs once after the startup sweep and on
+# every reconciler tick, which bounds verdict staleness to
+# MIRROR_RECONCILE_INTERVAL (the guard rejects verdicts older than its
+# TILLANDSIAS_CRED_AUTH_MAX_AGE, default 900s). AUTH_PROBE is overridable so
+# offline fixtures exercise the exact same implementation (RELAY_REF pattern).
+AUTH_PROBE="${AUTH_PROBE:-/usr/local/share/git-service/probe-upstream-auth}"
+run_auth_probe() {
+    if [ ! -x "$AUTH_PROBE" ]; then
+        retry_msg "[git-mirror] upstream-auth probe NOT run: $AUTH_PROBE missing"
+        return 0
+    fi
+    OUT="$("$AUTH_PROBE" "$1" 2>&1)" || true
+    [ -n "$OUT" ] && retry_msg "[git-mirror] upstream-auth: $OUT"
+    return 0
+}
+
 start_mirror_reconciler() {
     if [ ! -x "$RECONCILE_HEADS" ]; then
         retry_msg "[git-mirror] periodic reconciler NOT started: $RECONCILE_HEADS missing"
@@ -296,6 +319,9 @@ start_mirror_reconciler() {
                 [ -d "$m" ] || continue
                 OUT="$("$RECONCILE_HEADS" "$m" 2>&1)" || true
                 [ -n "$OUT" ] && retry_msg "[git-mirror] periodic: $OUT"
+                # Refresh the upstream write-authorization verdict every tick
+                # so the forge guard's freshness bound holds (order 756-2jnj).
+                run_auth_probe "$m"
             done
         done
     ) &
@@ -488,6 +514,17 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
     if [ -n "$stranded" ]; then
         retry_msg "[git-mirror] Startup retry-push: $REF_COUNT ref(s) attempted; stranded=$stranded"
     fi
+done
+
+# @trace spec:git-mirror-service, spec:meta-orchestration
+# Order 756-2jnj: publish the FIRST upstream write-authorization verdict now,
+# so a forge that launches right after this mirror does not read an absent
+# (= blocked) verdict for a whole reconcile interval. This loop runs for EVERY
+# mirror — including local-only ones the sweep above skipped at its REMOTE
+# check, which must still publish `local-only`.
+for mirror in "$GIT_SERVICE_ROOT"/*; do
+    [ -d "$mirror" ] || continue
+    run_auth_probe "$mirror"
 done
 
 echo "$(date -Is) [git-service] startup sweep complete" >> "$SLOG"

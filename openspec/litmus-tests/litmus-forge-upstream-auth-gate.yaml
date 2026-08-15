@@ -1,0 +1,127 @@
+# @trace spec:git-mirror-service, spec:meta-orchestration
+#
+# Order 756-2jnj (child of order 424, fail-loud-diagnosis milestone). On
+# 2026-08-15 a fresh-Windows forge lost two commits: the credential guard said
+# ok:forge-git-mirror on REACHABILITY alone, and the mirror's GitHub 403
+# ("Permission to 8007342/tillandsias.git denied to 8007342") surfaced only at
+# the FIRST push — hours after worker drain began. This test pins the repair:
+# the mirror's NON-MUTATING upstream write-authorization probe
+# (images/git/probe-upstream-auth.sh, a `git push --dry-run` receive-pack
+# advertisement authenticated with the mirror's Vault credential — no canary
+# ref, nothing mutated) publishing refs/tillandsias/upstream-auth/<state>/<epoch>,
+# and the forge credential guard (scripts/check-credential-channel.sh)
+# consuming it so 'ok' means BOTH forge->mirror reachable AND mirror->upstream
+# currently write-authorized, with staleness bounded by the epoch in the ref
+# name. Every step is hermetic: local bare repos and mocks fake the upstream —
+# no real GitHub, no forge DNS.
+#
+# Negative control coverage: the 403 replay (probe), the absent-credential
+# state (probe), and the guard's denied / stale / unpublished branches all
+# prove the gate goes RED — distinguishing "property violated" from "text
+# merely drifted".
+name: litmus:forge-upstream-auth-gate
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Pin the order-756-2jnj upstream write-authorization gate: the mirror-side
+  probe images/git/probe-upstream-auth.sh determines current upstream push
+  authorization non-mutatingly, publishes a falsifiable verdict ref
+  (refs/tillandsias/upstream-auth/<state>/<epoch>) plus one stdout line
+  matching ^upstream-auth:(authorized|denied|no-credential|local-only|error):[0-9]+$,
+  and the forge branch of scripts/check-credential-channel.sh yields
+  ok:forge-git-mirror ONLY for a fresh authorized (or local-only) verdict —
+  denied, stale, and unpublished verdicts each yield a loud blocked:* verdict
+  with a non-zero exit BEFORE any worker drain.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/git/probe-upstream-auth.sh
+  - workspace contains scripts/check-credential-channel.sh
+  - shell utilities (git, sh, bash, mktemp, chmod, date) are available in PATH
+
+critical_path:
+  - step: "probe parses (sh -n) and carries its exec bit"
+    command: "sh -n images/git/probe-upstream-auth.sh && test -x images/git/probe-upstream-auth.sh && echo 'ok: probe-parses-and-executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-parses-and-executable"
+
+  - step: "authorized upstream: a real dry-run over local transport publishes authorized/<epoch> and exits 0"
+    # Local-path upstream exercises the REAL `git push --dry-run` advertisement
+    # path end to end with zero network. The verdict must land both on stdout
+    # (grammar) and as the single ref the git daemon would advertise.
+    command: "d=$(mktemp -d); git init -q --bare \"$d/up\"; git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin \"$d/up\"; t=$(git -C \"$d/m\" mktree </dev/null); c=$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git -C \"$d/m\" commit-tree -m seed \"$t\"); git -C \"$d/m\" update-ref refs/heads/main \"$c\"; out=$(images/git/probe-upstream-auth.sh \"$d/m\" 2>/dev/null); rc=$?; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$out\" in upstream-auth:authorized:*) :;; *) echo \"FAIL: out=$out\"; exit 1;; esac; case \"$ref\" in refs/tillandsias/upstream-auth/authorized/*) :;; *) echo \"FAIL: ref=$ref\"; exit 1;; esac; [ \"$rc\" = 0 ] && echo 'ok: probe-authorized-published' || { echo \"FAIL: rc=$rc\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: probe-authorized-published"
+
+  - step: "NEGATIVE CONTROL (403 replay): a mocked GitHub permission-denied advertisement publishes denied/<epoch> and exits 1"
+    # PUSH_PROBE seam (RELAY_REF pattern): the mock replays the exact
+    # 2026-08-15 GitHub output. The probe must classify it as denied, not
+    # error, and go red.
+    command: "d=$(mktemp -d); git init -q --bare \"$d/up\"; git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin \"$d/up\"; t=$(git -C \"$d/m\" mktree </dev/null); c=$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t git -C \"$d/m\" commit-tree -m seed \"$t\"); git -C \"$d/m\" update-ref refs/heads/main \"$c\"; printf '%s\\n%s\\n%s\\n' '#!/bin/sh' 'echo \"remote: Permission to 8007342/tillandsias.git denied to 8007342.\" >&2; echo \"fatal: unable to access: The requested URL returned error: 403\" >&2' 'exit 128' > \"$d/mock\"; chmod +x \"$d/mock\"; out=$(PUSH_PROBE=\"$d/mock\" images/git/probe-upstream-auth.sh \"$d/m\" 2>/dev/null); rc=$?; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$out\" in upstream-auth:denied:*) :;; *) echo \"FAIL: out=$out\"; exit 1;; esac; case \"$ref\" in refs/tillandsias/upstream-auth/denied/*) :;; *) echo \"FAIL: ref=$ref\"; exit 1;; esac; [ \"$rc\" = 1 ] && echo 'ok: probe-403-goes-denied' || { echo \"FAIL: rc=$rc\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: probe-403-goes-denied"
+
+  - step: "NEGATIVE CONTROL (absent credential): an https upstream with no readable Vault credential publishes no-credential/<epoch>, exits 1, and never touches the network"
+    # VAULT_CLI points at a nonexistent path, so the probe must refuse before
+    # any push attempt — hermetic by construction (the https branch returns
+    # before the transport is ever dialed).
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; git -C \"$d/m\" remote add origin https://github.com/8007342/tillandsias.git; out=$(VAULT_CLI=\"$d/no-such-vault-cli\" images/git/probe-upstream-auth.sh \"$d/m\" 2>/dev/null); rc=$?; ref=$(git -C \"$d/m\" for-each-ref --format='%(refname)' refs/tillandsias/upstream-auth); rm -rf \"$d\"; case \"$out\" in upstream-auth:no-credential:*) :;; *) echo \"FAIL: out=$out\"; exit 1;; esac; case \"$ref\" in refs/tillandsias/upstream-auth/no-credential/*) :;; *) echo \"FAIL: ref=$ref\"; exit 1;; esac; [ \"$rc\" = 1 ] && echo 'ok: probe-absent-credential-goes-red' || { echo \"FAIL: rc=$rc\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: probe-absent-credential-goes-red"
+
+  - step: "guard consumes a FRESH authorized verdict: ok:forge-git-mirror, exit 0"
+    # TILLANDSIAS_CRED_AUTH_PROBE_URL seam: the guard runs its REAL ls-remote
+    # consult (parsing, epoch selection, freshness) against a local mirror
+    # repo carrying the planted verdict ref.
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/authorized/$(date +%s)\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:forge-git-mirror' ] && echo 'ok: guard-fresh-authorized-passes' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-fresh-authorized-passes"
+
+  - step: "NEGATIVE CONTROL (the 2026-08-15 state): a denied verdict yields blocked:upstream-push-unauthorized, exit 1, BEFORE any worker drain"
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/denied/$(date +%s)\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-push-unauthorized' ] && echo 'ok: guard-denied-blocks-before-drain' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-denied-blocks-before-drain"
+
+  - step: "NEGATIVE CONTROL (yesterday's token epoch): an authorized verdict older than the freshness bound yields blocked:upstream-auth-stale, exit 1"
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; b=$(git -C \"$d/m\" hash-object -w --stdin </dev/null); git -C \"$d/m\" update-ref \"refs/tillandsias/upstream-auth/authorized/$(( $(date +%s) - 86400 ))\" \"$b\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-auth-stale' ] && echo 'ok: guard-stale-verdict-blocks' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-stale-verdict-blocks"
+
+  - step: "NEGATIVE CONTROL (silent mirror): a mirror publishing NO verdict yields blocked:upstream-auth-unpublished, exit 1 — authorization unproven fails closed"
+    command: "d=$(mktemp -d); git init -q --bare \"$d/m\"; git init -q \"$d/repo\"; git -C \"$d/repo\" remote add origin https://github.com/8007342/tillandsias.git; git -C \"$d/repo\" config url.git://tillandsias-git/tillandsias.insteadOf https://github.com/8007342/tillandsias.git; cp scripts/check-credential-channel.sh \"$d/repo/\"; out=$( cd \"$d/repo\" && env PATH=/usr/bin:/bin TILLANDSIAS_CRED_SKIP_GH=1 TILLANDSIAS_HOST_KIND=forge TILLANDSIAS_CRED_SKIP_MIRROR_PROBE=1 TILLANDSIAS_CRED_AUTH_PROBE_URL=\"$d/m\" bash check-credential-channel.sh 2>/dev/null ); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 1 ] && [ \"$out\" = 'blocked:upstream-auth-unpublished' ] && echo 'ok: guard-unpublished-fails-closed' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: guard-unpublished-fails-closed"
+
+  - step: "mirror entrypoint refreshes the verdict on every reconcile tick (probe wired via the AUTH_PROBE seam, RELAY_REF pattern)"
+    # Behavior would be better than a source grep, but the tick loop needs a
+    # running daemon; the negative controls above already prove the gate
+    # itself can go red, so this wiring assertion is pin-with-negative-control
+    # compliant at the file level.
+    command: "grep -q 'run_auth_probe \"$m\"' images/git/entrypoint.sh && grep -q 'AUTH_PROBE=' images/git/entrypoint.sh && grep -q 'probe-upstream-auth' images/git/Containerfile && echo 'ok: entrypoint-refreshes-verdict'"
+    timeout_ms: 3000
+    expected_behavior: "ok: entrypoint-refreshes-verdict"
+
+observability:
+  traces:
+    - "@trace spec:git-mirror-service"
+    - "@trace spec:meta-orchestration"
+  expected_log: "upstream write-authorization gate pinned (probe grammar + publication + guard consumption + freshness bound + red paths)"
+  log_fields:
+    spec: "git-mirror-service"
+    test: "forge-upstream-auth-gate"
+    artifact: "images/git/probe-upstream-auth.sh + scripts/check-credential-channel.sh"
+
+rollback:
+  on_failure: >
+    The upstream write-authorization gate drifted. Restore
+    images/git/probe-upstream-auth.sh emitting exactly one line matching
+    ^upstream-auth:(authorized|denied|no-credential|local-only|error):[0-9]+$
+    and publishing the same state as the single ref
+    refs/tillandsias/upstream-auth/<state>/<epoch>; restore
+    forge_upstream_auth_verdict() in scripts/check-credential-channel.sh
+    mapping fresh authorized/local-only to ok:forge-git-mirror and denied /
+    stale / unpublished to their blocked:* verdicts with exit 1; restore the
+    entrypoint's run_auth_probe wiring (startup + every reconcile tick) and
+    the Containerfile COPY of the probe. See order 756-2jnj.
+  command: "grep -nE 'forge_upstream_auth_verdict|blocked:upstream-(push-unauthorized|no-credential|auth-stale|auth-unpublished)' scripts/check-credential-channel.sh | head -10"

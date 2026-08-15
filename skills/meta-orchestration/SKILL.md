@@ -274,7 +274,9 @@ with a loud warning naming the gap, never silently.
    host's binary predated, and this checkout went on refusing until someone
    rebuilt by hand. Inference is a REPORT inside that verdict, never a gate —
    the deterministic expert tiers work without it, and a host with no network is
-   degraded, not broken.
+   degraded, not broken. When inference cannot be established, the report
+   segment reads `degraded:<reason>` (never `blocked:*` — the gate word is
+   reserved for `blocked:preflight:*`); continue the cycle.
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
 2. `git fetch origin --prune`, then run the Credential Channel Guard and the
@@ -337,24 +339,37 @@ scripts/check-credential-channel.sh
 ```
 
 It prints exactly one line matching the falsifiable grammar
-`^(ok:[a-z0-9-]+|missing:no-credential-channel)$` and exits `0` when a usable
-git-push credential channel is present, non-zero when it is absent. A usable
-channel is present when ANY of these holds (the script checks them in order):
+`^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$` and exits
+`0` when a usable git-push credential channel is present, non-zero when it is
+absent or blocked. A usable channel is present when ANY of these holds (the
+script checks them in order):
 
 - `<git-dir>/.gh-credentials` exists and is non-empty (repo-local store helper), or
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
 - `gh auth status` succeeds (reachable, unlocked keyring), or
-- `TILLANDSIAS_HOST_KIND=forge` is set (forge containers use a transparent git mirror service for authenticated pushes).
+- `TILLANDSIAS_HOST_KIND=forge` is set AND the enclave git mirror is reachable
+  for `origin` AND the mirror's published upstream write-authorization verdict
+  (`refs/tillandsias/upstream-auth/<state>/<epoch>`, refreshed non-mutatingly by
+  `images/git/probe-upstream-auth.sh`) is fresh and `authorized` (or
+  `local-only`). Order 756-2jnj: reachability alone said `ok` on 2026-08-15
+  while GitHub 403'd the mirror's credential, and a forge lost two commits it
+  discovered only at first push. `ok:forge-git-mirror` now means BOTH halves —
+  forge→mirror reachable AND mirror→upstream currently write-authorized.
 
-Pinned by `litmus:credential-channel-check-shape`. A non-zero exit (verdict
-`missing:no-credential-channel`) fails the cycle on its own; do NOT proceed into
-worker drain or any committable work. Instead
-fail loud: file or update a blocker in `plan/issues/` recording
-`blocked: no-credential-channel`, the owner (operator), and the smallest next
-action (re-seed `.git/.gh-credentials` via the gh token, or inject `GH_TOKEN`
-into the task environment), then stop. Accreting local-only commits that cannot
-be pushed violates the Non-Negotiable Exit Contract and is the precise
-velocity-killer this guard prevents.
+Pinned by `litmus:credential-channel-check-shape` and
+`litmus:forge-upstream-auth-gate`. A non-zero exit (verdict
+`missing:no-credential-channel`, or any `blocked:*` verdict — e.g.
+`blocked:upstream-push-unauthorized` for the 403 state,
+`blocked:upstream-no-credential`, `blocked:upstream-auth-stale`,
+`blocked:upstream-auth-unpublished`) fails the cycle on its own; do NOT proceed
+into worker drain or any committable work. Instead
+fail loud: file or update a blocker in `plan/issues/` recording the exact
+verdict, the owner (operator), and the smallest next
+action (re-seed `.git/.gh-credentials` via the gh token, inject `GH_TOKEN`
+into the task environment, or — for `blocked:*` — repair the mirror's Vault
+GitHub token / its repo push permission), then stop. Accreting local-only
+commits that cannot be pushed violates the Non-Negotiable Exit Contract and is
+the precise velocity-killer this guard prevents.
 
 Reads (`git fetch`/`git ls-remote`) succeeding is NOT evidence of a credential
 channel — public-repo reads are anonymous. Verify write capability explicitly.
