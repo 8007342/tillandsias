@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proxy-ca-key-bind-mount-fallback-does-not-chown
+    field: status
+    value: completed
+    ts: "2026-08-15T05:58:16Z"
+    host: linux_mutable
+
+events:
+  - packet_id: proxy-ca-key-bind-mount-fallback-does-not-chown
+    event:
+      type: completed
+      ts: "2026-08-15T05:58:16Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: cb3a04f41 determination comment at images/proxy/entrypoint.sh:41; mode facts main.rs:2366/1242; finding promoted to 755-qcxh (ready, p1, socket-audit-master)
+  - packet_id: proxy-ca-key-bind-mount-fallback-does-not-chown
+    event:
+      type: note
+      ts: "2026-08-15T05:58:16Z"
+      host: linux_mutable
+      summary: >
+        All three exit criteria met: mode determined (0644, deliberate, re-asserted), world-readable finding filed and outranks the startup failure (755-qcxh), unreachable-branch fate recorded at the decision point (deletion deferred to 755-qcxh which prefers making it reachable).
