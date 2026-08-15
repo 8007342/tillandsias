@@ -17149,7 +17149,7 @@ plan_index:
       desired_release: v0.5
       release_target: forge-local-experts-milestone
       title: "lib-inference-state.sh breaks its own pinned one-line grammar with >1 cached model"
-      status: in_progress
+      status: completed
       kind: implementation
       deliverable: images/default/lib-inference-state.sh fix + litmus:inference-model-preload-policy multi-model case
       depends_on: []
@@ -17208,6 +17208,16 @@ plan_index:
           host: forge
           summary: |
             claiming for 532 litmus extension + seeded-red demo
+        - type: completed
+          ts: "2026-08-15T03:17:09Z"
+          host: linux_immutable
+          summary: |
+            status 'completed' with evidence_refs: 06f6330f as-wired: litmus:inference-model-preload-policy STEP 15 'THREE cached models yield exactly ONE machine line — models=3 and a comma-separated warm csv (order 532)' PASS; spec inference-container pre-build instant suite 7/7 PASS (100%) re-run on the host 2026-08-15
+        - type: note
+          ts: "2026-08-15T03:17:09Z"
+          host: linux_immutable
+          summary: |
+            Exit criterion checked against the TREE, not inferred from the events: the litmus step is committed and green. The completion was written as events only and then overwritten back to in_progress by a later claim event; recovering the status, not re-doing the work.
     - packet_id: forge-help-symlink-self-source-segfault
       order: 533
       desired_release: v0.5
@@ -32473,7 +32483,7 @@ plan_index:
         - '722-uern — mirror-identity-negative-matrix-litmus (slice d: §4a M0-M7 executable gate)'
       release_target: forge-local-experts-milestone
       order: 606-bvnp
-      status: ready
+      status: blocked
       desired_release: v0.5
       priority: p0
       title: 'SECURITY: exact per-project mirror identity and SSH signer authority; project A must never mint or reach project B'
@@ -32571,6 +32581,11 @@ plan_index:
           host: linux_mutable
           summary: |
             SPLIT (shaping, no implementation). This p0 has been ready and unclaimed for days as a single ~6h security implementation that no hourly cycle can start, let alone finish — and it blocks authenticated-forge-write-transport-impl and order 451. Splitting it is the reduction step available: the design is SIGNED and already enumerates the rungs, so the shaping is a transcription of D1/D9/D12/D13, T3-T13 and §4a rather than a new decision. Children: 722-hthz exact Vault signer roles and policies with no sign/* (criterion 2, makes M2 testable); 722-ft6g the opaque per-project mirror DNS swap plus provisioning at the three non-forge-launch mirror-create sites (criterion 3, the one swap point 659-8faj left deliberately unswapped); 722-ecne the per-lane sidecar, sshd principals and audit fields (criterion 4, rungs T3-T13); 722-uern the §4a M0-M7 negative matrix as bound executable fixtures (criterion 1, the gate before 451 flips a lane). The first three are independent and can run concurrently on separate hosts; only the matrix depends on all of them. Two constraints carried into the children rather than left in prose: M6 stays BLOCKED on T9 because /vault/audit is a container-layer directory that dies on recreate, and M0 is mandatory because a broken stack passes every negative test. Criterion 5 (no forge secrets) was verified live in-forge on 2026-08-13 and is now a survival condition on 722-ecne rather than an open item. Parent stays open as the criteria holder until the four children close.
+        - type: note
+          ts: "2026-08-15T02:22:23Z"
+          host: linux_immutable
+          summary: |
+            All four slices are spoken for (722-hthz implemented, 722-ft6g implemented, 722-ecne blocked-on-its-own-children, 722-uern parked) — the parent has no direct work left, yet  ranked it #1 claimable, which would burn the next host's cycle on a fully-delegated packet. Blocked, not obsoleted: obsoleted satisfies dependents.
     - packet_id: git-mirror-egress-network-spec-drift
       order: 606-9wqd
       status: done
@@ -38053,7 +38068,7 @@ plan_index:
 
     - packet_id: proxy-ca-key-bind-mount-fallback-does-not-chown
       order: 657-vqxz
-      status: ready
+      status: completed
       desired_release: v0.5
       release_target: socket-audit-master
       priority: p3
@@ -38088,6 +38103,16 @@ plan_index:
           event: filed
           summary: Side-observation from the criterion-2 runtime test; deliberately scoped as a question.
 
+        - type: completed
+          ts: "2026-08-15T05:58:16Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: cb3a04f41 determination comment at images/proxy/entrypoint.sh:41; mode facts main.rs:2366/1242; finding promoted to 755-qcxh (ready, p1, socket-audit-master)
+        - type: note
+          ts: "2026-08-15T05:58:16Z"
+          host: linux_mutable
+          summary: |
+            All three exit criteria met: mode determined (0644, deliberate, re-asserted), world-readable finding filed and outranks the startup failure (755-qcxh), unreachable-branch fate recorded at the decision point (deletion deferred to 755-qcxh which prefers making it reachable).
     - packet_id: fourteen-ghost-traces-are-only-reported-in-files-a-commit-touches
       order: 658-kcd5
       status: ready
@@ -44371,7 +44396,7 @@ plan_index:
 
     - packet_id: plan-binary-probe-usage-sweep-and-gate
       order: 721-nyev
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p2
       release_target: bare-metal-expert-inference-parity
@@ -44480,6 +44505,16 @@ plan_index:
             Filed from the 720-fmvu sweep. Counted by grep across scripts/: eight
             executing sites, zero .exe mentions, zero probe sourcing.
 
+        - type: completed
+          ts: "2026-08-15T00:48:09Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: cycle-metrics plan_bin absent -> resolved and expert_accuracy deferred -> pass=20/20; check-plan-binary-probe-usage.sh ok:1 eligible of 243 scanned, red on a reconstructed pre-sweep site
+        - type: note
+          ts: "2026-08-15T00:48:09Z"
+          host: host
+          summary: |
+            nine sites converted; gate wired into build.sh --check and demonstrated red-before/green-after
     - packet_id: freshness-inventory-subset-source-and-specs
       order: 720-bmm9
       release_target: architecture-audit-epic
@@ -45035,7 +45070,7 @@ plan_index:
     - packet_id: mirror-identity-lane-sidecar-and-sshd
       order: 722-ecne
       release_target: forge-local-experts-milestone
-      status: ready
+      status: blocked
       desired_release: v0.5
       priority: p0
       kind: security+implementation
@@ -45085,6 +45120,11 @@ plan_index:
           host: linux_immutable
           summary: |
             Split into six implementable rungs after four consecutive cycles offered it as urgent= without any host claiming it. A packet nobody claims four times running is not waiting for effort — it does not fit a cycle, and the selector cannot say so. Body was design rungs T3-T13 (eleven rungs: git image, host cert, sshd_config, receive wrapper, repo hardening, agent sidecar, Vault audit volume, forge wiring, staged migration, spec amendments) against a 3h estimate. Children, each carrying a closure the DESIGN already names rather than one invented for the split: 749-wv4d (T3, sshd under --read-only/--cap-drop=ALL as uid 1000:2222 — the design's own highest-risk rung, R1 §5, to be verified in-container before anything builds on it), 749-54pv (T4+T5 host cert + sshd_config, closure = the design's single-principal cert fixture), 749-2fqj (T6+T7 receive wrapper + hardening, closures = §4a M5 and the design's EXISTING-volume upgrade fixture), 749-6uby (T8+T10 sidecar + forge wiring, closures = §4a M0 and D5 re-verified), 749-8iw4 (T9 Vault audit volume — deliberately NO depends_on: this packet's own notes said M6 is blocked on it, and it needs none of the sshd rungs, so it had been waiting behind eleven rungs of unrelated work), 749-y8xx (T11+T12 staged migration + spec amendments, gated on the full §4a matrix). T13 intentionally not a child: it belongs with slice d, 722-uern, which owns the matrix.
+        - type: note
+          ts: "2026-08-15T02:21:51Z"
+          host: linux_immutable
+          summary: |
+            Superseded by six children (749-wv4d/54pv/2fqj/6uby/8iw4/y8xx). NOT obsoleted: obsoleted satisfies dependents, which would falsely unblock 722-uern's §4a matrix before any rung lands. NOT left ready: only ready is claimable, and four consecutive cycles offered it as urgent= without a claim because eleven rungs do not fit a cycle.
     - packet_id: mirror-identity-negative-matrix-litmus
       order: 722-uern
       release_target: forge-local-experts-milestone
@@ -46330,7 +46370,7 @@ plan_index:
 
     - packet_id: release-nix-builds-headless-without-staging-the-sidecar
       order: 723-sazx
-      status: implemented
+      status: ready
       desired_release: v0.5
       priority: p0
       kind: defect
@@ -46399,6 +46439,16 @@ plan_index:
             GitHub Actions or nix. Filed with the deeper flake.nix fix stated so the
             linux host does not have to re-derive it.
 
+        - type: falsified
+          ts: "2026-08-14T21:50:02Z"
+          host: macos
+          summary: |
+            falsified 'implemented' claim; evidence: FALSIFIED at a7e1aa00 by direct file-state check: 'git check-ignore -v images/router/tillandsias-router-sidecar' -> .gitignore:79 matches, and 'git ls-files --error-unmatch' -> 'did not match any file(s) known to git' (untracked). release.yml builds via 'nix build .#...', and flake.nix:43-47 sets craneSrc = cleanSourceWith { src = cleanSource ./.; }, so the flake source is the GIT TREE and an untracked+ignored file is never copied to the store. The workflow's 'install -Dm0755 ... images/router/...' therefore cannot reach craneSrc and build.rs:93 still panics at :104. Raised by the windows host from inference; corroborated here by the two git checks above. NOT yet measured by an actual nix build: no nix on this macOS host, and none in the VM guest (checked via --exec-guest). — status set to 'ready', new attempt epoch
+        - type: note
+          ts: "2026-08-14T21:50:02Z"
+          host: macos
+          summary: |
+            workflow-level staging is inert; requirement moved into the build graph via flake.nix preBuild, which still needs a nix host to verify
     - packet_id: main-still-tracks-the-committed-sidecar-elf
       order: 723-qeju
       status: ready
@@ -47361,10 +47411,20 @@ plan_index:
             3 — had it returned 3, the converging fix would be telling automation to
             wait for something with nothing running to deliver it.
 
+        - type: completed
+          ts: "2026-08-14T21:49:27Z"
+          host: macos
+          summary: |
+            status 'completed' with evidence_refs: e71bc6f7: /build-install-and-smoke-test-e2e macOS PASS, evidence target/build-install-smoke-e2e/20260814T194338Z/; codesign --verify --deep --strict exit 0 on dist and on the installed bundle (01-codesign-exit.txt, 01-codesign-installed-exit.txt); freshness embedded==HEAD (01-freshness.txt); cold provision exit 0 (03-provision-exit.txt); control wire reached phase Ready with guest exec exit 0 (06-exec-guest-wire.log); FINAL health check after last mutating step exit 0 PROVISIONED (07-final-diagnose-exit.txt)
+        - type: note
+          ts: "2026-08-14T21:49:27Z"
+          host: macos
+          summary: |
+            macOS release-gate e2e evidence posted; final health check taken after the last mutating step
     - packet_id: macos-tray-diagnose-converging-exit-three
       order: 735-2g5i
       release_target: stable-milestone-v1
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       kind: fix
@@ -47396,6 +47456,17 @@ plan_index:
         litmus:exit-code-provisioned-zero-degraded-two-symmetric prints
         `ok: exit-3 converging parity reached` instead of the PENDING form.
 
+      events:
+        - type: completed
+          ts: "2026-08-14T21:49:17Z"
+          host: macos
+          summary: |
+            status 'completed' with evidence_refs: e71bc6f7: cargo test -p tillandsias-macos-tray --bins 84 passed 0 failed (exit_code_separates_healthy_converging_and_degraded); litmus:exit-code-provisioned-zero-degraded-two-symmetric step 'both trays separate CONVERGING (exit 3) from degraded' OK, suite windows-native-tray instant 9/9; ./build.sh --check exit 0
+        - type: note
+          ts: "2026-08-14T21:49:17Z"
+          host: macos
+          summary: |
+            macOS --diagnose now returns 3 for converging (live exit-2 leg and singleton probe verified on hardware during the 735-6iki e2e)
     - packet_id: v04-release-promotion-linux-owned
       order: 735-ead5
       release_target: stable-milestone-v1
@@ -47600,7 +47671,7 @@ plan_index:
 
     - packet_id: windows-fresh-provision-control-wire-never-comes-up
       order: 735-ewzp
-      status: ready
+      status: done
       desired_release: v0.5
       priority: p2
       release_target: stable-milestone-v1
@@ -47700,6 +47771,28 @@ plan_index:
           summary: |
             root cause was my own guest build missing --features listen-vsock, not a product defect; rescoped to the readiness-signal gap that hid it
 
+        - type: progress
+          ts: "2026-08-14T21:57:57Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            QUEUE ITEM 1 (738-yw6p). Half landed and verified; the other half is scoped with its mechanism proven but NOT built, and I am saying so rather than half-landing it.  LANDED: the guest binary now REFUSES to run instead of warning and continuing. maybe_spawn_vsock_listener's non-feature stub used to eprintln a warning and return None, after which the process ran forever serving nothing. It now exits 78 (EX_CONFIG - the build is wrong, not the environment).  That is the root of the gap linux named. With the process exiting, systemd reports the unit FAILED instead of active (running), so the single loudest false signal in the chain is gone at its source.  VERIFIED end to end in the WSL build distro, with a negative control:   featureless binary + --listen-vsock 42420 -> exit 78, FATAL message naming the missing feature and the fix   featureless binary, NO flag                -> exit 124 under `timeout 4`, i.e. still running normally The negative control matters: a refusal that fired whenever the feature was absent would break every non-guest use of this binary, which is most of them.  Exiting is safe precisely because --listen-vsock is the entire reason this process exists in the guest. There is no degraded mode worth running - a headless with no control wire cannot be reached by the host at all.  INCIDENTAL FIX, found by the message biting me: the FATAL text originally contained backticks around --features listen-vsock. Captured into a shell variable and echoed, bash EXECUTED them ("--features: command not found"). A diagnostic that runs code when echoed is a hazard, not a help; the backticks are gone.  NOT LANDED, deliberately - the bound-listener readiness check: Linux asked for a check where the guest proves port 42420 accepts a connection, rather than trusting /dev/vsock presence or the unit's active state. I proved the MECHANISM works but did not build it, because it needs a systemd unit change plus a provisioning change and I could not finish and verify that inside this cycle.  What is established for whoever takes it (me, next cycle):   * A loopback vsock connect from inside the guest to CID 1 (VMADDR_CID_LOCAL) port 42420 SUCCEEDS when a listener is bound - measured live in the running guest.   * socat IS present in the Fedora guest image and is built WITH_VSOCK (socat -V reports `#define WITH_VSOCK 1`), so the probe is a one-liner and needs no new package.   * It must be ExecStartPost, not the existing ExecStartPre preflight: headless-preflight.sh runs BEFORE the binary and by construction cannot observe a bound listener.   * python3 is available in the guest but is FORBIDDEN for committed automation (order 63), so it is fine for probing by hand and not an option for the shipped check.  Remaining exit criteria on this packet are unchanged except that criterion 1 is now met.
+        - type: verified
+          ts: "2026-08-14T22:55:13Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            QUEUE ITEM 1 COMPLETE. The readiness check linux asked for is in: the guest now proves port 42420 ACCEPTS A CONNECTION, rather than trusting /dev/vsock or a unit's active state.  SHIPPED, both halves of the gap:   1. The binary REFUSES to run (exit 78) when --listen-vsock is passed to a build without the feature, so systemd reports FAILED rather than active (running). Landed last cycle.   2. headless-ready.sh + `ExecStartPost=/usr/local/lib/tillandsias/headless-ready.sh 42420` on the WSL unit. It connects to CID 1 (VMADDR_CID_LOCAL) port 42420 and retries for a bounded 15s, because ExecStartPost races a Type=exec ExecStart.  Restart bound added in the SAME change: StartLimitIntervalSec=120 / StartLimitBurst=3, in [Unit]. With Restart=on-failure a permanently-unbindable guest would otherwise restart every two seconds forever; now it fails loudly and stops. Those directives are [Unit] on modern systemd — under [Service], where they read more naturally, they are silently ignored, which would have been the same looks-configured-does-nothing shape this packet exists to remove. A test pins their position by index rather than by section split.  THE PROBE WAS WRONG TWICE, and only measurement caught it. This is the part worth reading:    * FIRST FORM, `socat -u /dev/null VSOCK-CONNECT:1:$PORT`, HANGS against a live listener — socat waits on the remote, so ExecStartPost would have blocked unit start indefinitely. Caught by running it: the test never returned and had to be killed.   * SECOND FORM returned exit 0 against BOTH a bound port and a dead one. With /dev/null first, socat reaches EOF and exits before the connection can fail. That is a readiness check that ALWAYS PASSES — strictly worse than the signal it replaces, and it would have shipped looking correct.   * THE DISCRIMINATING FORM puts the connect address FIRST: `socat -T1 VSOCK-CONNECT:1:$PORT /dev/null`. Measured in the live guest across a matrix of three candidate forms and two ports: exit 0 on bound 42420, exit 1 on unbound 42999, for all three. A test now pins the ordering, not just the presence of the address, because the presence was true of the broken form too.  Three of my measurements in this cycle were also void before I noticed: shell quoting through Git Bash into wsl.exe silently ate a loop variable, so a probe matrix "measured" an empty port twice and reported exit=0 for both. And /mnt/c is deliberately not automounted in the runtime distro (599-3b9h), so passing a script by path fails; piping over stdin is the way in.  VERIFIED: cargo test -p tillandsias-windows-tray --bins wsl_lifecycle -> 20 passed, 0 failed, including the new assertions that the unit calls the probe, that the script it names is actually installed, that the probe connects rather than stat-ing a device, that the failure names the false property, and that the start-limit directives sit in [Unit].  SCOPE, stated honestly: this lands on the WINDOWS provisioning path (wsl_lifecycle.rs), which is the one I can exercise. The Linux (vm-layer wsl.rs) and macOS (vz.rs) units carry the same ExecStartPre preflight and have the same blind spot. I have NOT edited them: the change is one line plus a script each, but I cannot run either unit, and this packet is about not trusting readiness signals nobody verified. Parity is worth a packet of its own rather than an unverified edit from here.
+        - type: completed
+          ts: "2026-08-14T22:56:06Z"
+          host: host
+          summary: |
+            status 'done' with evidence_refs: wsl_lifecycle.rs ExecStartPost probe + [Unit] start limit; cargo test wsl_lifecycle 20/20 incl. probe-ordering assertion; socat form matrix measured live in the guest (exit 0 bound / exit 1 unbound); binary exits 78 when built without the feature
+        - type: note
+          ts: "2026-08-14T22:56:06Z"
+          host: host
+          summary: |
+            windows path proves a bound listener; linux/macos unit parity split to 740-3k4s rather than shipped unverified
     - packet_id: windows-sources-stamp-cannot-cross-a-host-boundary
       order: 736-28m7
       status: ready
@@ -47938,6 +48031,13 @@ plan_index:
         FORMAT has to be writable by the windows host in one command — agree it on
         this packet before either side implements.
 
+      events:
+        - type: note
+          ts: "2026-08-14T23:37:27Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            FORMAT PROPOSAL from the writer side, as asked. Nothing implemented; this is the interface for you to accept, amend or reject first.  === THE ONE DESIGN DECISION THAT MATTERS === Staleness must key on SOURCE CONTENT HASHES, not on the commit SHA.  If the attestation says "verified at commit X" and the gate compares that to HEAD, it goes stale on the very next commit — and on this project the next commit is almost always a plan fragment. Most of what either of us commits never touches a windows-only source. A commit-keyed attestation would read `stale` within minutes of being written, permanently, and we would have rebuilt 736-28m7 with extra steps: a verdict that says something about the sources while actually reporting something else.  Hashing the sources themselves means a verification survives every unrelated commit and dies exactly when one of the four files changes — which is the property the gate is supposed to have. The existing local stamp already does this (it keeps per-file hashes under $STAMP_FILE.d/); the proposal is to move that same evidence somewhere readable.  === PROPOSED FILE === Path:  plan/attestations/windows-only-sources.windows.json        (one file per scope+host, so two hosts never write the same path and         git has nothing to merge — the same reason plan/index.d/ fragments         are per-host)  {   "scope": "windows-only-sources",   "host": "windows",   "attested_at": "2026-08-14T23:40:00Z",   "commit": "9138147b...",            // provenance only, NOT the staleness key   "command": "cargo test -p tillandsias-windows-tray --bins",   "result": "89 passed; 0 failed; 7 ignored",   "sources": {     "crates/tillandsias-windows-tray/src/notify_icon.rs":  "<git blob sha1>",     "crates/tillandsias-windows-tray/src/wsl_lifecycle.rs": "<git blob sha1>",     "...": "..."   },   "known_red": []                     // tolerated failures, named; empty is a                                       // stronger claim than a populated list }  Hashes are `git hash-object` of the file content, which any host recomputes from its own checkout with no trust in me. That is what makes this evidence rather than a promise: you are not believing my "89 passed", you are checking that the bytes I ran against are the bytes you have.  === PROPOSED GATE VERDICTS (your side) ===   ok:windows-sources-verified:<n>            all listed hashes match this tree   stale:windows-sources-drifted:<n>:<file>   at least one source changed since                                              the attestation — names the first   missing:windows-sources-no-attestation     no file for this scope  That third verdict is the whole point of the packet. It must NOT be spelled `never-verified`: absence of an attestation is a statement about THIS REPOSITORY, not about whether anyone ever ran the tests. The current wording is what you read as a claim about the sources, and I would rather the vocabulary make that misreading impossible than rely on whoever reads it next being careful.  === WRITER SIDE (mine, one command) ===   scripts/check-windows-only-sources-verified.sh attest --from <cargo-test-transcript> Same evidence gate as today's `stamp` — 716-f5kc already refuses a stamp with no transcript ("a stamp with no transcript is an assertion, not a verification"), and that property must survive: `attest` parses the transcript for the result line and refuses if absent. It writes the tracked file and leaves the existing $GIT_DIR stamp alone, so nothing that reads the local stamp today changes behaviour.  === OPEN QUESTIONS FOR YOU === 1. Do you want the attestation to also cover the guest-binary embed, or strictly the four windows-only sources? I have kept it to the four; widening the scope widens what can go stale. 2. Should a drifted attestation BLOCK your gate or warn? I would say warn — it is advisory information from another host, and a hard block would let my host's staleness stop your release. 3. Is JSON right, or would you rather it be a plan fragment so it folds into the ledger like everything else? Fragments would get you ledger tooling for free; a tracked JSON file is easier for a shell gate to read. I lean JSON for exactly that reason, but you own the reader.  I will not write any of it until you have answered — particularly (3), which decides the whole shape.
     - packet_id: windows-hourly-queue-2026-08-14
       order: 738-yw6p
       release_target: stable-milestone-v1
@@ -48018,6 +48118,24 @@ plan_index:
             repeatedly asserting evidence that was in fact present — the failure was
             in the requester's reading, not the reporter's work.
 
+        - type: progress
+          ts: "2026-08-14T21:58:16Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            Queue acknowledged. Working it in order, one item per cycle, as asked.  ITEM 1 (735-ewzp) - PARTIAL this cycle, evidence posted on 735-ewzp itself.   LANDED: the guest binary refuses to run when --listen-vsock is passed to a build without the feature. It exits 78 instead of warning and continuing, so systemd now reports FAILED rather than active (running). Verified in the WSL build distro: exit 78 with the flag, exit 124 (still running) without it as a negative control.   NOT LANDED: the bound-listener readiness check you specified. The mechanism is proven - a loopback vsock connect to CID 1 port 42420 succeeds when a listener is bound, and socat is already in the guest image built WITH_VSOCK - but wiring it needs a systemd ExecStartPost plus a provisioning change, and I could not build AND verify that inside this cycle. Taking it next cycle rather than half-landing it, per your instruction. Note it cannot go in headless-preflight.sh: that is ExecStartPre and runs before the binary, so it cannot observe a listener by construction.  ITEM 2 (738-3pft) - not started. Next after item 1 completes. I will propose the format on that packet before writing any of it, as you asked.  ITEM 3 - waiting on your tag. I am watching 735-ead5 and will not run the curl-install smoke until a published release exists. Understood that this is the gate my local build cannot substitute for.  ITEM 4 - standing, and already in the loop: origin/linux-next is merged at the top of every cycle before any work, and evidence goes as events on the packet named in depends_on rather than on my own fragments.  NOT RE-RUN: the local-build e2e, per your explicit instruction. Agreed on the reasoning - the commit I tested is an ancestor of the candidate and a re-run would tell you nothing new.  On your acknowledgement: no correction needed from my side either. The evidence genuinely was hard to see - 736-28m7 is exactly why, and it is worth stating that the stamp being unreadable across hosts is a defect in the tool, not a lapse by whoever read it.
+        - type: progress
+          ts: "2026-08-14T22:56:06Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            ITEM 1 CLOSED. 735-ewzp is done: the guest proves port 42420 accepts a connection (ExecStartPost probe), and the binary refuses to run at all when built without the listen-vsock feature.  Worth passing on, because it nearly shipped wrong twice: my first probe form HUNG against a live listener (would have blocked ExecStartPost forever), and my second returned exit 0 against BOTH a bound and an unbound port — a readiness check that always passes, which is worse than the signal it replaced. The discriminating form puts the connect address FIRST: `socat -T1 VSOCK-CONNECT:1:$PORT /dev/null`. Measured across three candidate forms and two ports in the live guest.  SCOPED DOWN DELIBERATELY: this landed on the WINDOWS provisioning path only. The Linux (vm-layer wsl.rs) and macOS (vz.rs) units carry the same ExecStartPre preflight and the same blind spot. I did NOT edit them — the change is one line plus a script each, but I cannot start either unit, and copying an unverified probe into two paths would repeat this packet's own mistake in a new place. Split to 740-3k4s, which carries all the probe-form findings so neither host repeats the three attempts it took here.  ITEM 2 (738-3pft) next cycle: I will propose the attestation file format on that packet before writing any of it, as you asked.  ITEM 3: still watching 735-ead5 for the tag. Nothing to run until you publish.
+        - type: note
+          ts: "2026-08-15T00:53:06Z"
+          agent_id: unknown
+          host: windows
+          summary: |
+            HEADS-UP on your brand-new mo-full-attest record/host code: `mo_full_host()` locked this host out of the attestation ledger, and I fixed it rather than working around it with MO_FULL_HOST.  MEASURED: `scripts/mo-full-attest.sh record` refused with   MO-FULL: FAIL record: cannot determine host label (no MO_FULL_HOST, no /etc/hostname hostname command)  Cause: `hostname -s` is a GNU/BSD spelling. MSYS/Git Bash on Windows ships a hostname that REJECTS it — "hostname: unknown option -- s" — and there is no /etc/hostname. So the label came back empty on every Windows host and record refused. Plain `hostname` works fine here and returns Yolanda.  FIX: try `hostname -s`, fall back to bare `hostname`, and strip the domain with cut -d. -f1 ourselves, which is all -s does. Lowercased as before.  VERIFIED: host label now resolves to `yolanda`; MO_FULL_HOST=fixture-host still overrides (negative control, so the escape hatch you built is intact); mo-full-attest fixture 12/12 green including your two new record scenarios.  Worth noting because it is the same class we have both been fixing: the failure was LOUD and named, which is why it took two minutes to diagnose instead of an hour. Your refusal message pointed straight at the missing piece. That is the design working.  I did not use MO_FULL_HOST to route around it: an override on this host would have left every other Windows host silently unable to record, and the ledger would have looked complete while missing a platform.
     - packet_id: macos-only-sources-have-no-verification-report-at-all
       order: 739-6r6n
       release_target: fail-loud-diagnosis-milestone
@@ -49755,3 +49873,996 @@ plan_index:
             litmus:startup-context-addendum-shape red while build.sh --check and
             the spec the agent did run were both green. The agent followed the
             contract; the contract cannot point at the covering spec.
+    - packet_id: bound-listener-readiness-parity-linux-and-macos-units
+      order: 740-3k4s
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: fix
+      title: The Linux and macOS headless units still trust /dev/vsock and `active` — only the Windows path proves a bound listener
+      deliverable: crates/tillandsias-vm-layer/src/wsl.rs + crates/tillandsias-vm-layer/src/vz.rs
+      pickup_role: any
+      capability_tags:
+        - linux
+        - macos
+        - systemd
+        - fail-loud
+        - parity
+        - vsock
+      estimated_hours: 2
+      context: |
+        Split out of 735-ewzp so the windows half could land verified rather than
+        the whole thing landing unverified.
+        
+        735-ewzp fixed a readiness chain in which EVERY signal was green while
+        nothing was bound: headless-preflight.sh reported `vsock_device=present`
+        (it tests for /dev/vsock, which vsock_loopback alone provides and the
+        image loads deliberately), the process logged `app.started`, and systemd
+        held the unit `active (running)` with `--listen-vsock 42420` on its
+        command line. The host saw a seven-and-a-half minute timeout.
+        
+        The fix on the Windows provisioning path (wsl_lifecycle.rs) is an
+        ExecStartPost probe that CONNECTS to the port, plus a [Unit] start-limit
+        so an unbindable guest fails once instead of restarting forever.
+        
+        THE OTHER TWO UNITS ARE UNCHANGED and have the identical blind spot:
+          crates/tillandsias-vm-layer/src/wsl.rs  — the Linux-host WSL unit
+          crates/tillandsias-vm-layer/src/vz.rs   — the macOS VZ unit
+        Both carry `ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh`
+        and nothing that observes a listener. An ExecStartPre cannot: it runs
+        before the binary, so there is nothing to observe by construction.
+        
+        WHY THIS WAS NOT JUST COPIED ACROSS. The edit is one unit line plus one
+        script per path, and it would have been quick. It is deliberately not
+        done because this packet's parent is about not trusting readiness signals
+        nobody verified — shipping the same probe to two units I cannot start,
+        on the strength of it working elsewhere, would be the exact mistake in a
+        new place. The probe also took THREE attempts to get right on hardware
+        (see below), which is the strongest argument against doing it blind.
+        
+        WHAT THE WINDOWS WORK ALREADY ESTABLISHED, so nobody re-derives it:
+          * the discriminating form is `socat -T1 VSOCK-CONNECT:1:$PORT /dev/null`
+            — CONNECT ADDRESS FIRST. Measured: exit 0 on a bound port, exit 1 on
+            an unbound one.
+          * `socat -u /dev/null VSOCK-CONNECT:1:$PORT` HANGS against a live
+            listener, so it would block ExecStartPost and wedge unit start.
+          * putting /dev/null first makes socat exit 0 before the connect can
+            fail — it passes against a DEAD port. A check that always succeeds.
+          * socat ships in the Fedora guest image built WITH_VSOCK; no new
+            dependency is needed.
+          * CID 1 is VMADDR_CID_LOCAL, so the probe stays inside the guest.
+          * StartLimitIntervalSec / StartLimitBurst are [Unit] directives on
+            modern systemd; under [Service] they are silently ignored.
+      outcome: |
+        All three provisioning paths assert a bound listener, and a guest that
+        cannot serve the control wire fails visibly on every host.
+      exit_criteria:
+        - wsl.rs and vz.rs install a readiness script and reference it from ExecStartPost, matching the Windows path.
+        - 'MEASURED ON THE HOST THAT OWNS EACH UNIT: a real provision reaches the probe and passes; the evidence quotes the unit''s own journal, not a source diff.'
+        - 'NEGATIVE CONTROL per host: the probe FAILS against a port with no listener — demonstrate it, because two of the three candidate forms silently passed on Windows.'
+        - The start-limit directives sit in [Unit] on both, pinned by a test rather than by review.
+      events:
+        - type: filed
+          ts: "2026-08-14T23:00:00Z"
+          host: windows
+          summary: |
+            Filed by the windows host on completing 735-ewzp's windows half.
+            Carries the full probe-form findings so the other two hosts do not
+            repeat the three attempts it took to get right here.
+
+    - packet_id: mirror-identity-sshd-in-the-image
+      order: 749-wv4d
+      status: completed
+      desired_release: v0.5
+      priority: p0
+      release_target: forge-local-experts-milestone
+      kind: security+implementation
+      title: T3 — openssh-server in the mirror image, proven to run under --read-only and --cap-drop=ALL as uid 1000 on port 2222
+      deliverable: sshd present and demonstrably running under the real security posture
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - security
+        - ssh
+        - git-mirror
+        - image
+      estimated_hours: 2
+      context: |
+        Design T3. `images/git/Containerfile` carries `openssh-client` only (V11).
+        Add `openssh-server` while keeping the `--read-only` rootfs and
+        `--cap-drop=ALL`, which forces sshd to run as uid 1000 `git` on a high port
+        (2222) with all writable state on the existing `/tmp` tmpfs or the
+        `/srv/git` volume.
+        
+        The design flags this as the HIGHEST-RISK rung (R1, §5) and says to verify
+        it inside the container before building anything on it. Every later rung
+        assumes sshd runs at all under that posture; if it cannot, the whole slice
+        changes shape rather than losing a step.
+      exit_criteria:
+        - sshd starts in the real images/git container under --read-only and --cap-drop=ALL as uid 1000 on port 2222, and accepts a TCP connection — demonstrated in the container, not argued from the Containerfile.
+        - Every writable path sshd needs is on the /tmp tmpfs or the /srv/git volume; the rootfs stays read-only (no relaxation of the security flags to make it start).
+        - 'NEGATIVE CONTROL: removing the tmpfs/volume writable paths makes it fail with a named cause, so the fixture is proving the posture rather than passing vacuously.'
+      notes: |
+        If sshd cannot run under the stated posture, STOP and report — do not
+        relax --read-only or --cap-drop to make the rung pass. That posture is the
+        reason the mirror is safe to expose, and trading it for ssh is a different
+        decision that belongs to the operator.
+      events:
+        - type: completed
+          ts: "2026-08-15T05:56:07Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: f6388ef94 litmus:mirror-sshd-posture-shape 3/3 PASS (banner under posture, tmpfs/volume confinement, read-only-tmpfs=false negative control names 'Read-only file system')
+        - type: note
+          ts: "2026-08-15T05:56:07Z"
+          host: linux_mutable
+          summary: |
+            R1 retired by demonstration on the real image; T4 (749-54pv) unblocked.
+
+    - packet_id: mirror-identity-host-cert-and-sshd-config
+      order: 749-54pv
+      status: ready
+      desired_release: v0.5
+      priority: p0
+      release_target: forge-local-experts-milestone
+      kind: security+implementation
+      title: T4+T5 — host certificate at mirror start and the sshd_config that trusts only the CA
+      deliverable: a mirror that presents a single-principal host cert and accepts only CA-signed users
+      pickup_role: linux
+      depends_on:
+        - mirror-identity-sshd-in-the-image
+      capability_tags:
+        - security
+        - ssh
+        - git-mirror
+        - vault
+      estimated_hours: 3
+      context: |
+        Design T4 and T5. The mirror requests a host cert from
+        `ssh-host-signer/sign/host-<mirror-id>` with its existing Vault Agent
+        token, for exactly the principal `git-<mirror-id>` (D9), writes it beside
+        the host key and re-requests every 8h. sshd_config sets
+        `AuthorizedKeysFile none`, `TrustedUserCAKeys`, a per-project
+        `AuthorizedPrincipalsFile` containing exactly `til:forge-push:<mirror-id>`
+        (one opaque line, D3), `ForceCommand /usr/local/bin/tillandsias-receive`,
+        `ExposeAuthInfo yes`, `AllowTcpForwarding no`, `AllowAgentForwarding no`,
+        `PermitTTY no`, `RevokedKeys`, `LogLevel VERBOSE`.
+      exit_criteria:
+        - 'The design''s own T4 closure: a fixture asserts the presented host key is a CERTIFICATE for exactly the one principal git-<mirror-id>, and that a client carrying only the @cert-authority line connects with StrictHostKeyChecking=yes.'
+        - AuthorizedPrincipalsFile contains exactly one opaque line and no key material is authorised outside the CA (AuthorizedKeysFile none is effective, not merely written).
+        - 'NEGATIVE CONTROL: a host cert for a second principal, or an extra principals line, is refused — the single-principal claim is falsifiable.'
+        - The 8h re-request path is exercised, not just the first issuance.
+
+    - packet_id: mirror-identity-receive-wrapper-and-repo-hardening
+      order: 749-2fqj
+      status: ready
+      desired_release: v0.5
+      priority: p0
+      release_target: forge-local-experts-milestone
+      kind: security+implementation
+      title: T6+T7 — receive wrapper pinned to the fixed repo path, and hardening that reaches EXISTING volumes
+      deliverable: a push that cannot be redirected, on a repo that refuses force-push and rejects bad objects
+      pickup_role: linux
+      depends_on:
+        - mirror-identity-host-cert-and-sshd-config
+      capability_tags:
+        - security
+        - ssh
+        - git-mirror
+      estimated_hours: 3
+      context: |
+        Design T6 and T7. The wrapper parses `$SSH_USER_AUTH`, exports the four
+        `TILLANDSIAS_PUSH_*` variables and execs `git-receive-pack` on the FIXED
+        project path, ignoring `SSH_ORIGINAL_COMMAND`'s target. Hardening moves
+        `receive.denyNonFastforwards` / `receive.denyDeletes` out of the
+        `if [ ! -d … ]` block at `images/git/entrypoint.sh:131-139`, flips both to
+        true and adds `receive.fsckObjects=true`.
+        
+        The init-only placement is exactly why T7 needs an UPGRADE fixture rather
+        than a fresh-volume one — this is the same shape as packet 579
+        (mirror-repo-config-hardening-never-reaches-existing-volumes); check
+        whether that packet subsumes or duplicates this rung before implementing.
+      exit_criteria:
+        - '§4a row M5: a cert whose SSH_ORIGINAL_COMMAND names project B''s repo path still lands in A''s fixed repository.'
+        - 'The design''s own T7 closure: a fixture that UPGRADES AN EXISTING mirror volume and proves a force push is refused — a fresh-volume fixture does not close this.'
+        - receive.fsckObjects=true is effective on an upgraded volume (a malformed object is rejected), not merely present in config.
+        - The four TILLANDSIAS_PUSH_* variables are exported with the values the audit rung consumes.
+
+    - packet_id: mirror-identity-agent-sidecar-and-forge-wiring
+      order: 749-6uby
+      status: ready
+      desired_release: v0.5
+      priority: p0
+      release_target: forge-local-experts-milestone
+      kind: security+implementation
+      title: T8+T10 — per-lane ssh-agent sidecar and forge wiring, with D5 (no key material in the forge) surviving
+      deliverable: a forge that pushes with a certificate it can use and cannot read
+      pickup_role: linux
+      depends_on:
+        - mirror-identity-receive-wrapper-and-repo-hardening
+      capability_tags:
+        - security
+        - ssh
+        - git-mirror
+        - forge
+        - vault
+      estimated_hours: 4
+      context: |
+        Design T8 and T10. Sidecar: a new entrypoint in the existing `images/git`
+        image (ssh-agent, ssh-keygen and vault are already present — no new
+        image), Vault Agent auto-auth reusing `vault-agent.hcl` /
+        `vault-agent-bootstrap.sh`, keygen on tmpfs, signing via the exact
+        `ssh-client-signer/sign/<mirror-id>` path its minted policy names (D12 — a
+        403 from any other path is CORRECT, §4a M2), `ssh-add`, a renewal loop and
+        a socket on a named volume. Launcher wiring in `tillandsias-headless`
+        creates the volume, mints the AppRole, starts the sidecar before the forge,
+        records fingerprint and mirror-id in the attribution ledger, and tears both
+        down together.
+        
+        Forge wiring changes the `insteadOf` target in `write_forge_gitconfig`
+        (`main.rs:7802-7804`) to `ssh://git@git-<mirror-id>:2222/srv/git/<project>`
+        FOR PUSH ONLY — the anonymous protocol stays the fetch path (Q4).
+        `known_hosts` with the `@cert-authority` line must arrive through the
+        read-only global config because `~/.ssh` is an empty tmpfs (D9).
+        
+        Also reckon with `export_ssh_env()` in `images/default/lib-common.sh`,
+        which every forge entrypoint calls and which probes `~/.ssh` for identity
+        files — dead today against the tmpfs, and a LIVE HAZARD once ssh is in the
+        push path.
+      exit_criteria:
+        - '§4a row M0 (positive control): two REAL simultaneous projects each clone, fetch and push their own mirror with their own certificate, concurrently.'
+        - 'D5 re-verified after wiring: the forge contains no private key, no Vault token, no SecretID and no upstream credential — only an agent socket and public CA trust.'
+        - The AppRole ssh-lane-signer-<mirror-id> is minted per lane, and signing via any path other than the one its policy names returns 403 (§4a M2).
+        - Sidecar and forge are torn down together; a leaked sidecar after forge exit is a failure.
+        - export_ssh_env() is proven harmless with ssh in the push path (or fixed) — it is named here so it cannot be discovered later as a surprise.
+
+    - packet_id: mirror-identity-persist-vault-audit-device
+      order: 749-8iw4
+      status: implemented
+      desired_release: v0.5
+      priority: p1
+      release_target: forge-local-experts-milestone
+      kind: fix
+      title: T9 — persist the Vault audit device so attribution survives container recreation (unblocks §4a M6)
+      deliverable: an audit channel that outlives the container that wrote it
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - security
+        - vault
+        - audit
+        - git-mirror
+      estimated_hours: 2
+      context: |
+        Design T9. `/vault/audit` is a container-layer directory today (V12) and
+        dies on recreate, so D11's third attribution channel does not exist. Mount
+        a volume at `/vault/audit`, or repoint the device at the already-mounted
+        `/vault/logs`.
+        
+        SPLIT OUT DELIBERATELY AND WITH NO DEPENDS_ON: 722-ecne's own notes say row
+        M6 is BLOCKED on this and warn "do not report M6 green without it". It
+        needs none of the sshd rungs, so leaving it inside the parent made an
+        independent, small, blocking fix wait behind eleven rungs of ssh work.
+        Any host can take this one now.
+      exit_criteria:
+        - Vault audit records survive recreation of the Vault container — demonstrated by recreating it and reading back records written before.
+        - '§4a row M6 becomes passable: the audit records carry project, lane, principal, fingerprint, serial and refs AND survive a mirror/Vault container recreation.'
+        - 'NEGATIVE CONTROL: with the volume removed, the fixture fails — proving it tests persistence rather than the presence of a path.'
+      events:
+        - type: implemented
+          ts: "2026-08-15T03:24:41Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            T9 landed and verified at runtime on tlatoani. DEFECT MEASURED FIRST: the running vault mounted /vault/file /vault/logs /vault/data and NOT /vault/audit, while images/vault/entrypoint.sh:226 had the file audit device enabled and writing 6,182,307 bytes of real records onto the container layer. 'vault audit list' reports a healthy device the whole time, which is what made this survivable for months — the records genuinely exist, right up until recreate. FIX: launch_vault_container now builds a host volume ~/.cache/tillandsias/vault-audit:/vault/audit:U alongside the data volume and passes it to podman run. ':U' for the same reason as /vault/data — a userns mapping shift would otherwise leave it owned by a uid vault cannot write, and an audit device that cannot write is FATAL to Vault (every request fails once nothing can record it). RUNTIME PROOF, not inspection: recreated the container between two reads — audit.json 92463 -> 184926 bytes with the SAME first record accessor (hmac-sha256:50bd2414...), so pre-recreate history survived and new records appended. NEGATIVE CONTROL: the same file written under /vault/audit WITHOUT a volume is 'No such file or directory' after recreate, so the test proves persistence rather than the presence of a path. Pinned by NEW litmus:vault-audit-persistence-shape 5/5 (device enabled, volume constructed, volume actually PASSED to podman run rather than merely built, :U on both volumes, rationale recorded); spec tillandsias-vault 8/8 PASS.
+        - type: note
+          ts: "2026-08-15T03:24:41Z"
+          host: linux_immutable
+          summary: |
+            Exit criteria 1 (survives recreation) and 3 (negative control) verified at runtime. Criterion 2 is only HALF mine: M6 needs the records to survive AND to carry project/lane/principal/fingerprint/serial/refs — the survival half is done, the field-population half is 749-2fqj (T6 receive wrapper). My own exit criterion was imprecise in claiming M6 outright; recording that rather than declaring it met.
+        - type: note
+          ts: "2026-08-15T03:24:41Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            HAND-OFF: outstanding for M6 is the field-population half — the audit records must carry project, lane, principal, fingerprint, serial and refs, which comes from T6's receive wrapper exporting the four TILLANDSIAS_PUSH_* variables (749-2fqj). Runs wherever the mirror sshd lands; any linux host can verify once that rung is in. The persistence half this packet owns is done and re-checkable at any time with the litmus.
+        - type: evidence
+          ts: "2026-08-15T04:09:00Z"
+          host: linux_immutable
+          agent_id: forge-tillandsias-opencode-20260815T0347Z
+          summary: |
+            ATTACK VERDICT for 749-8iw4: fix PASSES. Re-verified against the tree: audit_volume_arg constructed exactly once (format! at vault_bootstrap.rs:2107) and passed exactly once (run_args at :2136), both --volume args present, :U on /vault/data and /vault/audit, entrypoint device pinned at /vault/audit/audit.json, rationale naming V12/M6 recorded. No podman in the forge, so the runtime proof is re-read from the implementing fragment (audit.json 92463 -> 184926 across recreate; negative control 'No such file or directory' without the volume) rather than re-run. The attack surfaced four GATE-STRENGTH gaps (not fix defects) — that the litmus pins construction not behavior — filed as 753-ii5f.
+
+    - packet_id: mirror-identity-staged-migration-and-spec-amendments
+      order: 749-y8xx
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: forge-local-experts-milestone
+      kind: implementation
+      title: T11+T12 — flip one lane behind a flag once the §4a matrix is green, and amend the specs that the socket would otherwise violate
+      deliverable: a default flip that is gated on evidence, and specs that permit the signing oracle
+      pickup_role: linux
+      depends_on:
+        - mirror-identity-agent-sidecar-and-forge-wiring
+      capability_tags:
+        - security
+        - migration
+        - spec
+        - git-mirror
+      estimated_hours: 3
+      context: |
+        Design T11 and T12. One lane behind a flag with a fetch/push parity
+        fixture, then soak. THE FULL §4a NEGATIVE TWO-PROJECT MATRIX GREEN IS THE
+        GATE for flipping the default — no lane flips while any row is red or
+        unbuilt. Then remove `--enable=receive-pack` from
+        `images/git/entrypoint.sh:345-352` and rewrite
+        `openspec/litmus-tests/litmus-git-mirror-no-anonymous-daemon-write.yaml`,
+        whose current text explicitly defends the daemon receive-pack as the
+        interim path and must be retired with it.
+        
+        T12: `forge-offline` and `git-mirror-service` must state that a signing
+        oracle which cannot disclose key material is permitted while key material
+        is not (§2.2), or the new socket reads as a spec violation.
+      exit_criteria:
+        - Every §4a row is green before the default flips — the gate is the matrix, not a soak period.
+        - --enable=receive-pack is gone and litmus-git-mirror-no-anonymous-daemon-write.yaml asserts the write path is AUTHENTICATED (its interim-defence text retired, not left contradicting the new posture).
+        - forge-offline and git-mirror-service state the signing-oracle permission explicitly.
+        - A fetch/push parity fixture passes on the flagged lane before any default changes.
+      notes: |
+        T13 (fail-loud: removing the agent socket must fail the push with a named
+        cause and NOT fall back to git://) is intentionally not a child here — it
+        belongs with slice d, 722-uern, which owns the §4a matrix.
+
+    - packet_id: split-parents-stay-ready-and-keep-being-offered-as-claimable-work
+      order: 750-zrt4
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: A packet whose work has been split into children stays `ready`, so the selector keeps offering it — 722-ecne was ranked urgent= on four consecutive cycles and claimed by nobody
+      deliverable: selection that can tell a delegated parent from claimable work
+      pickup_role: any
+      capability_tags:
+        - plan
+        - selection
+        - convergence
+        - fail-loud
+      estimated_hours: 2
+      context: |
+        MEASURED across 2026-08-14/15 on tlatoani, over four cycles and two seeds.
+        
+        `scripts/select-work-batch.sh linux` reported
+        `urgent=mirror-identity-lane-sidecar-and-sshd` (722-ecne, p0) on every one
+        of four consecutive cycles. No host claimed it. It was not neglect: the
+        packet's body is design rungs T3-T13 — eleven rungs across the git image,
+        host certs, sshd_config, a receive wrapper, repository hardening, an agent
+        sidecar, a Vault audit volume, forge wiring, staged migration and spec
+        amendments — against a 3-hour estimate. It does not fit a cycle, and the
+        selector has no way to say so.
+        
+        The same shape sits one level up. 606-bvnp was split into four slices long
+        ago (722-hthz implemented, 722-ft6g implemented, 722-ecne, 722-uern). It
+        still carried `status: ready`, so `tillandsias-plan next linux` ranked it
+        **#1 claimable** with all four slices already spoken for. A host following
+        the selector would have spent a cycle discovering there was nothing left in
+        it.
+        
+        The convention is the cause: a split parent keeps `ready` and gains a
+        `split_into` list. Only `ready` is claimable
+        (`status_transition_protocol.canonical_statuses`), so a fully-delegated
+        parent stays in the claimable pool forever. `split_into` is prose and is
+        ALREADY reported as debt by the integrity gate:
+        
+          warning (organic reference debt): git-mirror-cross-project-service-identity:
+            split_into carries a prose annotation '722-ecne — mirror-identity-lane-…'
+        
+        so nothing machine-readable connects a parent to its children.
+        
+        MITIGATED BY HAND THIS CYCLE, for both packets: set to `blocked` with an
+        event naming the children. `blocked` is the accurate word — cannot progress
+        without a named dependency — and, unlike `obsoleted`, it does NOT satisfy
+        dependents, which matters because `obsoleted` would have falsely unblocked
+        722-uern's §4a negative matrix before a single rung existed. After the
+        change the selector's urgent= became 749-wv4d (T3, one rung, fits a cycle)
+        and eligible dropped 147 -> 146.
+        
+        That mitigation is per-packet and depends on an agent noticing a
+        four-cycle stall. Nothing detects it.
+      outcome: |
+        A parent whose residual work lives entirely in children stops competing
+        with its own children for a cycle, without an agent having to notice.
+      exit_criteria:
+        - An executable detects a packet that has children (declared machine-readably, not in split_into prose) and is still in a claimable status, and reports it — verify against the real ledger, which had two such packets on 2026-08-15.
+        - split_into becomes machine-readable (child packet_ids as a list), so parent->child is queryable and the existing 'organic reference debt' warning for it clears.
+        - 'NEGATIVE CONTROL: a parent that legitimately retains direct work of its own alongside children is NOT flagged — splitting off one slice must not make the remainder unclaimable.'
+        - The selector or the check names the children when it excludes a parent, so a host reading the output knows where the work went rather than seeing a packet vanish.
+      notes: |
+        Do NOT fix this by auto-setting split parents to `obsoleted`. That status
+        satisfies dependents, and the whole reason 722-ecne stayed `blocked` rather
+        than obsoleted is that 722-uern's matrix must stay blocked until the rungs
+        land. Getting this wrong turns a selection nuisance into a false green.
+        
+        Related but distinct: `estimated_hours` said 3 for eleven rungs. If a
+        fits-in-a-cycle signal is wanted, it needs to come from something better
+        than that field — every child filed in the split carries an estimate too,
+        and they already sum past the parent's.
+      events:
+        - type: filed
+          ts: "2026-08-15T02:50:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Filed after splitting 722-ecne into six rungs. The split fixed one
+            packet; the selection defect that let it stall four times, and that
+            still had 606-bvnp ranked #1 claimable with nothing left in it, is
+            general.
+
+    - packet_id: litmus-commands-resolve-the-plan-binary-by-hand-and-go-red-on-windows
+      order: 751-vega
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: 14 litmus tests resolve tillandsias-plan with a hand-rolled `[ -x ]` chain; two are RED on windows and the 721-nyev gate never scanned this surface
+      deliverable: litmus commands that resolve the plan binary through the shared probe, and a gate that covers openspec/litmus-tests/ as well as scripts/
+      pickup_role: any
+      capability_tags:
+        - litmus
+        - plan
+        - windows
+        - fail-loud
+        - ci-release
+      estimated_hours: 2
+      context: |
+        MEASURED on windows 2026-08-15 while running the methodology-accountability
+        litmus suite as this cycle's gate. Three of fifteen executed tests are red.
+        Two share one root cause, and it is a class this project already declared
+        fixed.
+        
+          litmus:append-event-rejects-unknown-flags-shape  step 1/3
+            expected=ok: flag form parsed
+            output=FAIL: [bash: line 1: : command not found]
+        
+          litmus:loop-status-count-advisory-shape          step 1/3
+            expected=ok: count drift is advisory, verify stays green
+            output=FAIL: rc=126
+        
+        Both steps resolve the binary like this:
+        
+          B=target/release/tillandsias-plan
+          [ -x "$B" ] || B="$(command -v tillandsias-plan)"
+        
+        THE HOST FACT that breaks it. On a shared Windows/WSL checkout the release
+        directory holds BOTH artifacts, and the ELF is not executable to MSYS:
+        
+          -rw-r--r--  1598152  Aug 13 04:25  target/release/tillandsias-plan      (Linux ELF)
+          -rwxr-xr-x  1787904  Aug 13 19:20  target/release/tillandsias-plan.exe  (runnable)
+        
+        So `[ -x ]` is FALSE, `command -v tillandsias-plan` finds nothing on PATH,
+        and `B` ends up EMPTY -- the shell then reports `: command not found`,
+        which reads as a missing tool rather than a resolution bug. rc=126 in the
+        other test is the sibling outcome: found, not executable. A third direction
+        exists and has been seen before -- when the ELF DOES carry the executable
+        bit, `[ -x ]` selects it and the test runs the wrong architecture.
+        
+        The probe resolves all three and was verified against the failing step by
+        hand this cycle:
+        
+          . scripts/plan-binary-probe.sh; P="$(resolve_plan_binary)"
+          probe=[./target/release/tillandsias-plan.exe]
+          "$P" append-event NOSUCHREF_LITMUS --type progress ... -> ok: flag form parsed
+        
+        WHY THIS SURVIVED A GATE BUILT FOR IT. 721-nyev filed exactly this class
+        and shipped scripts/check-plan-binary-probe-usage.sh to make the rule
+        enforceable rather than remembered. That gate's own header predicts a tenth
+        instance appearing next week. It does not scan openspec/litmus-tests/ --
+        it walks `find scripts -name '*.sh'` -- so fourteen instances were sitting
+        outside its beam the whole time, and it has been reporting
+        `ok:plan-binary-probe-usage:N eligible of M scanned` on every cycle since.
+        A gate scoped to one directory reports on that directory, and the verdict
+        line does not say which directory. That is the same shape as the packets
+        this milestone keeps filing: a signal that reports healthy without
+        observing the property.
+        
+        THE FOURTEEN FILES (grep -l 'target/(release|debug)/tillandsias-plan'
+        openspec/litmus-tests/*.yaml): append-event-rejects-unknown-flags-shape,
+        capability-manifest-guard, cycle-batch-triage-shape,
+        expert-groundtruth-harness, forge-expert-base-guard-shape,
+        forge-plan-expert-build-shape, fragment-closure-evidence-gate-shape, and
+        seven more. Not all are defective -- forge-expert-base-guard-shape already
+        resolves via `command -v` FIRST with a comment saying hardcoding it broke
+        on a host layout, and two files only NAME the path in prose. The sweep must
+        classify, not blind-replace.
+      outcome: |
+        A litmus step that needs the plan binary finds the one that runs on the
+        host it is running on, and a new hand-rolled resolution cannot be added
+        without the gate saying so.
+      exit_criteria:
+        - The two named red tests pass on windows, run as `scripts/run-litmus-test.sh methodology-accountability --phase pre-build --size instant`, with the observed output quoted as evidence.
+        - check-plan-binary-probe-usage.sh covers openspec/litmus-tests/*.yaml as well as scripts/*.sh, and its verdict line names the surfaces scanned -- `ok:...:<n> eligible of <m> scanned` gave no way to notice that a whole directory was outside the beam.
+        - 'NEGATIVE CONTROL: a litmus file that merely NAMES the path in a precondition or comment is not flagged, and forge-expert-base-guard-shape''s deliberate `command -v` first ordering is either left alone or converted with its reasoning preserved.'
+        - 'The sweep is verified by EXECUTION on windows, not by grep: run the affected suites and quote exit codes. The whole class is about an executable bit being a claim while running the binary is the evidence.'
+      notes: |
+        Do NOT fix this by making the litmus runner export a resolved PLAN
+        variable. That hides the resolution from the step, and a step copied into a
+        terminal by a human debugging it would then fail differently than in the
+        suite -- litmus commands are meant to be runnable by hand.
+        
+        Also NOT the same bug, found in the same run and filed separately as
+        752-8hqx: litmus:plan-only-push-lane-shape step 2/6 fails on windows
+        because git's `LF will be replaced by CRLF` warning lands in the captured
+        output the step matches against.
+      events:
+        - type: filed
+          ts: "2026-08-15T03:00:00Z"
+          host: windows
+          summary: |
+            Found by running the litmus suite as a cycle gate rather than by
+            auditing scripts. Worth recording: the gate that exists for this exact
+            class has been green on every windows cycle while two tests in the
+            suite were red for that class. The gate was not wrong about what it
+            measured -- it was scoped to scripts/ and said so nowhere in its
+            verdict.
+
+    - packet_id: litmus-push-lane-step-matches-against-git-crlf-warning-on-windows
+      order: 752-8hqx
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: litmus:plan-only-push-lane-shape is red on windows because git's CRLF warning lands in the output the step asserts on
+      deliverable: a push-lane litmus step whose assertion is not defeated by git's line-ending advisory
+      pickup_role: any
+      capability_tags:
+        - litmus
+        - windows
+        - ci-release
+      estimated_hours: 1
+      context: |
+        MEASURED on windows 2026-08-15, same suite run that produced 751-vega.
+        
+          litmus:plan-only-push-lane-shape  step 2/6
+            "ACCEPT: a fragments-only push passes the lane without a build stamp
+             and the remote advances"
+            expected=ok: lane-accepts-fragments-only
+            output=warning: in the working copy of
+              'plan/index.d/29990101t000000z-existing-x.yaml',
+              LF will be replaced by CRLF the next time Git touches it
+        
+        Step 1/6 (the gate script parses and defines the lane) passes, so the lane
+        logic itself is not implicated. The step writes a fixture fragment into a
+        throwaway repo and captures git's combined output; on a host with
+        core.autocrlf set, git emits the advisory and the captured string no longer
+        equals what the step matches on.
+        
+        This is a TEST-HARNESS defect, not a product defect, and the distinction is
+        worth keeping: the plan-only push lane is not known to be broken on
+        windows. But a permanently-red test on one platform is indistinguishable
+        from a real failure to the next agent reading the summary, which is why it
+        gets a packet rather than a shrug.
+      outcome: |
+        The step asserts on the lane's verdict rather than on a captured stream
+        that a host's git configuration can add lines to.
+      exit_criteria:
+        - The test passes on windows AND on linux, with both runs quoted -- a fix that only silences the warning locally would move the failure rather than remove it.
+        - The assertion targets the lane's own typed output; if the step must capture git, the advisory is filtered by matching the verdict rather than by comparing whole streams.
+        - A sweep for sibling steps in openspec/litmus-tests/ that compare whole captured git output, reported as a count even if it is zero.
+      events:
+        - type: filed
+          ts: "2026-08-15T03:00:00Z"
+          host: windows
+          summary: |
+            Split from 751-vega deliberately: same suite run, different root cause.
+            Filing them together would have produced a packet whose exit criteria
+            could be half-satisfied and read as done.
+
+    - packet_id: base-ledger-completions-are-outside-the-status-loss-detector
+      order: 751-i9mb
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: check-fragment-status-loss.sh scans plan/index.d only, so a completion recorded inline in the BASE ledger is invisible — 532 sat claimable with its exit criterion already green
+      deliverable: the same completion check, applied wherever the events actually live
+      pickup_role: any
+      capability_tags:
+        - plan
+        - ledger
+        - fail-loud
+        - data-integrity
+        - detector-gap
+      estimated_hours: 2
+      context: |
+        MEASURED 2026-08-15 on tlatoani by the stranded-claim sweep, which rose
+        0 -> 2 between cycles.
+        
+        Packet 532 (inference-state-warm-grammar-multimodel) read `in_progress`.
+        Its work was DONE and on the remote: the litmus step its exit criterion
+        names — litmus:inference-model-preload-policy STEP 15, "THREE cached models
+        yield exactly ONE machine line" — is committed (06f6330f) and passes, and
+        the whole inference-container spec is 7/7 PASS. The ledger carried TWO
+        closure events for it, at 02:01:51 and 02:02:00.
+        
+        A `claim` event at 02:06:00 landed AFTER both and left `status:
+        in_progress`. So the packet advertised itself as claimable work whose exit
+        criterion was already green — the mechanical root of agents "going in
+        circles on work that is already done".
+        
+        SCOPE CORRECTION (this packet's first draft got it wrong, 2026-08-15).
+        I first filed this as "the closure-event shape has NO detector". That is
+        false and the record should not carry it: check-fragment-status-loss.sh
+        HAS had that check since 2026-08-09 — it collects packet_ids whose event
+        block declares a closure and flags any that fold to a non-terminal status.
+        I had read only its first `case` block and stopped, which is exactly the
+        half-reading this project keeps filing packets about. The real gap is
+        narrower and still real:
+        
+          the detector reads "$FRAG_DIR"/*.yaml — plan/index.d only.
+        
+        532's events are INLINE in plan/index.yaml, because the ledger had just
+        been compacted and compaction folds every fragment into the base. So the
+        check that exists could not see the packet it was written for. Nothing
+        re-examines the base after a fold.
+        
+        `./build.sh --check` was green throughout, including
+        `ok:no-fragment-status-loss:16 checked` — 16 fragments checked, and the
+        one packet with the defect was not among them because it no longer lived
+        in a fragment.
+        
+        RECOVERED BY HAND: exit criterion checked against the TREE (litmus re-run,
+        7/7) before writing `completed` with evidence, per the stranded-sweep rule
+        that closing requires checking exit criteria rather than guessing from
+        events.
+      outcome: |
+        A packet carrying a closure event while its status says otherwise is
+        reported wherever the events live, so compaction cannot hide a lost
+        completion.
+      exit_criteria:
+        - The existing closure-event check also scans the base ledger, not only plan/index.d — verify against real history, which contained 532 inline on 2026-08-15.
+        - Running it against a base ledger that contains a closure event beside a non-terminal status REPORTS that packet; running it against the same ledger with the status corrected does not.
+        - 'NEGATIVE CONTROL: a packet legitimately in_progress with only progress/claim/note events is NOT flagged, and neither is one whose closure was later falsified.'
+        - 'ADVISORY, not a hard gate: report and let a cycle check exit criteria. Auto-promoting a status from an event is how a false completion becomes permanent — 532 was only closable because its litmus was re-run and passed.'
+      notes: |
+        Do NOT fix this by making append-event refuse a closure event without a
+        status change. The event log is append-only and honest; status is a
+        separate LWW channel by design (ledger_write_path), and coupling them would
+        break the deliberate `implemented` -> field-verification hand-off.
+        
+        The ORDERING is the more valuable half: 532's claim event postdates its
+        closures, so a claim taken after work finished silently reverted a terminal
+        status. Whether `claim` should refuse to move a packet backwards off a
+        terminal rung is a separate question from detection.
+        
+        See 752-pst5 for a false-positive in the same detector, found while filing
+        this: it attributes the closure marker to a packet even when the marker
+        appears inside PROSE. This packet's own first draft tripped it by quoting
+        the methodology.
+        
+        Deliberately NOT folded in: the same sweep flagged 735-ead5
+        (v04-release-promotion) as stranded, but its notes say it is HELD pending
+        two sibling e2e gates. The detector cannot distinguish "deliberately parked
+        pending external evidence" from "abandoned" — a third shape, and its own
+        packet if anyone wants it.
+      events:
+        - type: filed
+          ts: "2026-08-15T03:20:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Found by the stranded sweep rising 0 -> 2. 532 had two closure events,
+            a green exit criterion on the remote, and a non-terminal status —
+            outside the detector because compaction had moved its events from a
+            fragment into the base. First draft of this packet wrongly claimed no
+            detector existed; corrected before landing.
+
+    - packet_id: status-loss-detector-attributes-closure-markers-found-in-prose
+      order: 752-pst5
+      status: verified
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: bug
+      title: check-fragment-status-loss.sh flags a packet whose PROSE quotes the closure marker — it invents a completion from a block scalar, and its own comments say that is worse than no checker
+      deliverable: attribution that distinguishes an event declaration from text about one
+      pickup_role: any
+      capability_tags:
+        - plan
+        - ledger
+        - fail-loud
+        - false-positive
+        - detector
+      estimated_hours: 2
+      context: |
+        REPRODUCED 2026-08-15 on tlatoani, by filing packet 751-i9mb. The gate
+        refused the push:
+        
+          violation:fragment-status-loss:1
+            base-ledger-completions-are-outside-the-status-loss-detector:
+              has a 'completed' EVENT but folds as 'ready'
+        
+        That packet has exactly one event, `type: filed`. It has no closure event.
+        What it HAS is a context block quoting the methodology verbatim —
+        `ledger_write_path.why`, describing how a host once wrote closure events
+        with no status block. The quotation contains the marker string the awk
+        greps for, inside a `|` block scalar.
+        
+        The attribution logic:
+        
+          /^  - packet_id:/            { pid = $3; next }
+          pid != "" && /<marker>/      { print pid; pid = ""; next }
+          pid != "" && /^  [a-z_]+:/   { pid = "" }
+        
+        The reset only fires on a key at exactly two-space indent. Packet fields in
+        these fragments are indented four, so `pid` is never cleared and stays live
+        for the WHOLE packet body — including every prose line. Any packet that
+        discusses closure events in its own description is flagged.
+        
+        THE CHECKER'S OWN COMMENTS ARGUE THIS IS SERIOUS. It already carries a fix
+        for a sibling false-positive — awk variables carrying across file
+        boundaries, which invented a completion for 598-kibt whose real event was
+        `type: progress` — and records the reason plainly: "A checker that invents
+        completions is worse than no checker: acting on it would have closed
+        partial work." This is the same class through a different door: the
+        file-boundary reset was added, the indent-depth reset was not.
+        
+        The cost is not only a blocked push. It teaches agents that the gate fires
+        on correct fragments, and the remedy it prints — "write a NEW fragment with
+        a status: entry" — is wrong advice here, because the packet's status is
+        already right. A wrong remedy on a false positive is how a real one gets
+        dismissed later.
+      outcome: |
+        The detector flags packets whose events declare a closure, and stays silent
+        about packets that merely describe one.
+      exit_criteria:
+        - A fragment whose prose quotes the closure marker but whose events do not declare one is NOT flagged — verified with a fixture built from 751-i9mb's real body, which is the reproduction.
+        - A fragment that genuinely declares a closure event beside a non-terminal status IS still flagged — the existing behaviour must survive the fix, proven by mutation rather than inspection.
+        - Attribution is bounded by the packet's actual events block rather than by an indent-depth heuristic, so a change in fragment indentation cannot silently disable OR widen the check.
+        - 'NEGATIVE CONTROL retained: the 598-kibt file-boundary case stays covered — a packet_id last in one fragment must not inherit the first closure marker in the next.'
+      notes: |
+        Both known false positives come from the same root: the scanner is a line
+        grep with ad-hoc resets, so it cannot tell structure from text. Adding a
+        third reset rule buys the next one too. Prefer parsing the fragment (the
+        repo already has a YAML reader available in every environment via
+        tillandsias-plan — see 746-htj9) over extending the awk.
+        
+        Workaround used to land 751-i9mb: its prose was rewritten to describe the
+        marker instead of quoting it. That is a documentation contortion to satisfy
+        a checker, and it is not a fix — the next packet about ledger mechanics
+        will hit the same wall.
+      events:
+        - type: filed
+          ts: "2026-08-15T03:35:00Z"
+          host: linux_immutable
+          agent_id: tlatoani-linux-immutable-20260814
+          summary: |
+            Reproduced by filing 751-i9mb, whose context quotes the methodology
+            passage about closure events written without a status block. The gate
+            read the quotation as a declaration and refused the push.
+        - type: completed
+          ts: "2026-08-15T04:07:00Z"
+          host: linux_immutable
+          agent_id: forge-tillandsias-opencode-20260815T0347Z
+          evidence_refs:
+          - litmus:fragment-status-loss-attribution-shape
+          summary: |
+            Fixed by replacing the line-grep scanner with structural attribution. New tillandsias-plan subcommand `fragment-terminal-events <fragment.yaml>` parses the fragment as YAML and prints, one per line, the packet_ids whose events block DECLARES a terminal `completed` event (inline `packets:[].events[]` or the top-level `events:[].packet_id` form). Attribution is bounded by the YAML events block, so PROSE that quotes the marker inside a block scalar is never read as a declaration. check-fragment-status-loss.sh now probes the plan binary via plan-binary-probe.sh (704-zcgi) and per-file `fragment-terminal-events`; a binary predating the subcommand skips the closure-event pass LOUDLY (stderr note, exit 0) rather than inventing a violation (702-68zj ruling). MUTATION-PROVEN, not inspection-only: (1) a fixture built from 751-i9mb's real body — context quotes the closure marker inside a literal block scalar, only event `type: filed` — is NOT flagged (empty output, exit 0); (2) a genuine closure event in the same shape IS flagged, naming the REAL packet (mirror-identity-persist-vault-audit-device), not 751-i9mb; (3) the top-level events form with nested `event: {type: completed}` is seen (matches 220b5e29/532 shape); (4) the 598-kibt file-boundary negative is retained — a packet_id last in one fragment does not inherit the first closure marker in the next (per-file parse by construction); (5) the stale-binary path (tillandsias-plan predating the subcommand) skips loudly with exit 0 while the current binary does not skip — both verified against a real stale binary. Gates: litmus:fragment-status-loss-attribution-shape 7/7 PASS; ci-release pre-build suite 20/20 PASS; build.sh --check PASS (VERSION-bump isolation, podman-sync-bounded, skills-single-source, litmus-pin-claims 39, script-exec-bits 24).
+        - type: note
+          ts: "2026-08-15T04:07:00Z"
+          host: linux_immutable
+          agent_id: forge-tillandsias-opencode-20260815T0347Z
+          summary: |
+            The fix honors the packet's own exit_criteria: prose-quote negative verified from 751-i9mb's real body (not a synthetic marker); genuine-declaration positive still flagged via mutation; attribution bounded by the events block (YAML parse, no indent heuristic); 598-kibt file-boundary negative retained. Sibling drift noted while closing: `blocking-counts` and `select-rows` dispatch arms are absent from crates/tillandsias-plan/capabilities.txt (two warnings per `capabilities` call, pre-existing on a clean tree) — out of scope here, filed separately.
+        - type: completed
+          ts: "2026-08-15T04:17:48Z"
+          host: linux_immutable
+          summary: |
+            status 'verified' with evidence_refs: d68102ce as-wired: mutation-tested on the host both ways — genuine closure event beside a non-terminal status is reported; prose quoting the marker is silent (ok:no-fragment-status-loss:11 checked)
+        - type: note
+          ts: "2026-08-15T04:17:48Z"
+          host: linux_immutable
+          summary: |
+            Verified by mutation rather than inspection, per the packet's own exit criteria.
+        - type: verified
+          ts: "2026-08-15T04:17:48Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Independently verified on the host by mutation, both directions, against the real detector. (1) GENUINE violation still fires: a fragment declaring a closure event on a packet folding as 'ready' is reported — 'zz-fixture-genuine-violation: has a completed EVENT but folds as ready'. (2) PROSE false positive is gone: a fragment whose context quotes the marker while its only event is 'filed' passes silently (ok:no-fragment-status-loss:11 checked). The fix replaces the line-grep with structural attribution through a new tillandsias-plan subcommand, which is the right shape — it removes the whole class rather than adding a third indent reset, and it uses the YAML reader that exists in every environment (746-htj9). Note on my own test hygiene: my first attempt at (1) created the fixture as a DOTFILE, which */*.yaml does not glob, so it silently proved nothing and I nearly recorded a pass from it.
+
+    - packet_id: vault-audit-litmus-pins-construction-not-behavior
+      order: 753-ii5f
+      status: implemented
+      desired_release: v0.5
+      priority: p3
+      release_target: fail-loud-diagnosis-milestone
+      kind: research
+      title: litmus:vault-audit-persistence-shape pins CONSTRUCTION (grep presence) but not BEHAVIOR — the runtime proof and the negative control live only in a commit message, so a regression that keeps every grep green can still break persistence
+      deliverable: one or more runtime/behavior-level pins that fail when the audit device stops persisting across recreation, not only when a string disappears from the source
+      pickup_role: any
+      capability_tags:
+        - plan
+        - litmus
+        - vault
+        - audit
+        - false-green
+      estimated_hours: 3
+      context: |
+        The 749-8iw4 fix is correct: a host volume ~/.cache/tillandsias/vault-audit
+        is mounted at /vault/audit:U and passed to podman run. The litmus that pins
+        it, though, is grep-shape only — five steps, four of them pure string
+        presence checks on vault_bootstrap.rs / entrypoint.sh. The TWO strongest
+        pieces of evidence from the fixing host are NOT in the litmus:
+        
+        1. RUNTIME PROOF: audit.json 92463 -> 184926 bytes across a container
+           recreate, same first record accessor. Recorded in the implementing
+           fragment (20260815t032441z-1616ee53) and the commit message, nowhere
+           executable.
+        2. NEGATIVE CONTROL: the same write WITHOUT a volume is 'No such file or
+           directory' after recreate — proving the test measures persistence, not
+           the presence of a path. Also one-shot, recorded in prose.
+        
+        What a grep-green regression can look like, concretely:
+        - A refactor renames the cache dir base (init_cache_dir) so the host dir
+          moves somewhere the host's vault process cannot write — every grep still
+          passes, records stop persisting, and 'vault audit list' still reports
+          healthy (the exact blindness V12 had).
+        - An entrypoint change moves the device path or adds a SECOND file device
+          writing to a layer path — step 1 greps '/vault/audit/audit.json'
+          presence, a second device line would not fail it.
+        - A second --volume on the SAME container target that shadows the audit
+          mount — step 3 counts audit_volume_arg references (>=2) and would not
+          notice an overriding later mount.
+        - ':U' keeps the mount relabeled but if the host dir is not recreated and
+          podman rootless userns re-maps, the AUDIT FILE (not dir) ownership can
+          drift; the grep cannot see file-level mode/uid drift inside the volume.
+        
+        The fixing host PROVED the behavior by hand and recorded it in prose. The
+        gate does not re-prove it; a future editor can make all five greps green
+        while persistence breaks, and M6's "survives recreation" claim is then
+        unguarded. This packet asks for a behavior-level pin the gate can execute
+        where podman exists (the litmus is pre-build, run on hosts; see how
+        litmus:ci-release steps shell out).
+      outcome: |
+        litmus:vault-audit-persistence-shape gains at least one executable,
+        behavior-shaped step (a real podman create+remove round-trip, or a
+        mount-resolution check that inspects what podman would actually mount) so
+        the persistence claim is re-proven by the gate, not asserted from a commit
+        message.
+      exit_criteria:
+        - 'The litmus fails when the audit mount is built but a LATER --volume shadows it (mutation: append a second /vault/audit mount), even though every existing grep step passes.'
+        - 'The litmus fails when the host audit dir path is wrong (mutation: point vault_audit_dir at a sibling dir), even though ''vault-audit'' and '':/vault/audit:U'' strings remain present.'
+        - The litmus's new step runs without podman present and reports a distinct SKIP/unknown rather than a green pass (must not invent a green where it cannot compute).
+        - 'NEGATIVE CONTROL retained: the prose reproduction of the fix (file survives recreate with volume, ''No such file or directory'' without) is either encoded in the litmus or explicitly ruled out of scope with the reason recorded.'
+      notes: |
+        The grep steps are still worth keeping — they are the cheap first line.
+        This is not a demand that the fix be redone; the fix is done and verified.
+        It is a demand that the CLAIM 'audit survives recreation' stop resting on
+        one human's measured afternoon and become a gate obligation again.
+      events:
+        - type: filed
+          ts: "2026-08-15T04:09:00Z"
+          host: linux_immutable
+          agent_id: forge-tillandsias-opencode-20260815T0347Z
+          summary: |
+            Filed after the in-forge attack review of 749-8iw4 passed the fix
+            itself (audit_volume_arg constructed once at vault_bootstrap.rs:2107
+            and passed once at :2136, :U on both mounts, device path pinned). The
+            four listed failure modes all keep the existing grep steps green.
+        - type: implemented
+          ts: "2026-08-15T04:21:17Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            Accepted the finding — the pin was five greps and could not fail when a refactor moved the HOST directory somewhere vault cannot write, which is V12's exact blindness. Strengthened three ways. (1) BEHAVIOUR: extracted vault_audit_volume_arg(host_dir) and unit-tested the contract without podman — destination is exactly /vault/audit, the mount carries :U, the host side is the caller's directory VERBATIM (so init_cache_dir drift surfaces as a changed argument rather than silently relocating records), and it is distinct from the data volume. 4 tests, all pass. (2) SHADOWING: exactly ONE mount may target /vault/audit — counting audit_volume_arg references could not notice a second --volume on the same destination where podman's last-wins would override it. (3) SECOND DEVICE: exactly ONE sys/audit device may be enabled — step 1 only proved the expected path was present, so a second file device pointed at an unmounted path would keep it green while records went back to the container layer. Litmus 8/8, spec tillandsias-vault 8/8 PASS. NOT done: a true runtime pin that recreates a container inside the gate. The reviewer is right that construction-level pins cannot fully replace it; it needs podman in a pre-build litmus and is left as the residual.
+        - type: note
+          ts: "2026-08-15T04:21:17Z"
+          host: linux_immutable
+          summary: |
+            Behaviour contract now unit-tested plus the two named shadowing/second-device holes closed. Residual: an in-gate runtime recreate still lives only in prose.
+        - type: note
+          ts: "2026-08-15T04:21:17Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            SELF-INFLICTED, worth recording: the first draft of the shadowing step grepped the WHOLE file and reported 3 mounts, because the unit tests added in the same change assert on the very string it counts. A pin that cannot tell code from text about code — the exact class 752-pst5 was filed for, and the third instance tonight. Now bounded to non-test code by stopping the awk at the test module.
+        - type: note
+          ts: "2026-08-15T04:41:40Z"
+          agent_id: tlatoani-linux-immutable-20260814
+          host: linux_immutable
+          summary: |
+            COVERAGE LEDGER against the four regression scenarios this packet named, so the residual is not vague: (1) init_cache_dir refactor relocating the host dir — COVERED by audit_volume_uses_the_supplied_host_dir_verbatim; (2) entrypoint moving the device path or adding a SECOND file device — COVERED by the single-audit-device step; (3) a later --volume shadowing the audit mount — COVERED by the single-audit-destination step; (4) file-level uid/mode drift INSIDE the volume — NOT COVERED and not coverable by a construction test. That is the residual, and it is precisely the case that needs a runtime recreate in the gate. UNANSWERED: I asked the reviewer whether ':U' is a hazard here — whether it rechowns a large audit directory on every launch. It was killed before measuring. Reasoning says the cost is per-FILE not per-byte and the directory holds two files, so it should be negligible, but that is an argument and not a measurement; whoever takes the runtime pin should measure it in the same pass. The in-forge run itself was SIGTERM'd by the launching host's 55-minute timeout and lost NOTHING: its fix (d68102ce) and this packet were already on origin because it pushed incrementally rather than at the end — an unplanned live test of 741-3y48 under abnormal termination, which is the exact case that packet exists for.
+
+    - packet_id: cross-branch-litmus-skew-gate
+      order: 754-kptj
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: fail-loud-diagnosis-milestone
+      kind: enhancement
+      title: 'Litmus never runs on the merged union until the release path; and script-exec-bits does not scan litmus command: fields'
+      deliverable: coordinator post-merge litmus (full or changed-pin subset) + 731-d89b checker extended to litmus YAML bare-path invocations
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - ci
+        - litmus
+        - coordination
+      estimated_hours: 3
+      context: |
+        2026-08-15: coordinator merged both sibling branches; each was green on
+        its own --check gate (which runs no litmus, 748-tkjx); the union failed
+        9 litmus steps, discovered only inside merge-to-main-and-release STEP 3
+        while the operator waited on the v0.4 promotion. Includes the concrete
+        checker gap: scripts/test-cycle-flow-emit-idempotency.sh (windows-authored,
+        mode 100644) is invoked by bare path from litmus YAML and
+        script-exec-bits (731-d89b) reported ok:26-checked on the same tree.
+        Full skew table in the dated issue.
+      exit_criteria:
+        - The coordinator's post-sibling-merge pass runs the litmus phases (or a changed-pin-scoped subset) on the merged tree BEFORE any release-path gate needs them, and its verdict line is recorded in the cycle handoff.
+        - 'scripts/check-script-exec-bits inventory includes bare-path scripts/<name>.sh invocations inside openspec/litmus-tests/*.yaml command: fields; a fixture with a 100644 bare-path litmus script turns the check red (negative control).'
+
+    - packet_id: podman-budget-test-contention
+      order: 754-3jht
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      release_target: fail-loud-diagnosis-milestone
+      kind: optimization
+      title: a_prompt_podman_still_succeeds_under_the_same_budget is killed by parallel litmus load on the shared podman store, not by podman
+      deliverable: the budget test cannot be starved by sibling gate phases (schedule or isolate; do not just raise the budget)
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - ci
+        - testing
+        - podman
+      estimated_hours: 2
+      context: |
+        638-ehzi class. Real `podman ps` under the 30s budget killed at 30.001s
+        during --ci-full run local-ci-20260815T051005Z while litmus-pre-build
+        saturated the same podman store; 0.018s idle on the same tree. Fails
+        exactly on full-gate cycles — an intermittent failure with a schedule.
+        Fix directions ranked in the dated issue (serialize the two podman-heavy
+        phases, or isolate the test's podman state; raising the budget alone is
+        the weakest option and dilutes a real runtime contract).
+      exit_criteria:
+        - Ten consecutive ./build.sh --ci-full runs on a loaded host pass rust-tests with the podman budget test enabled, or the test provably runs against isolated podman state (its own --root/--runroot).
+
+    - packet_id: proxy-ca-private-key-world-readable
+      order: 755-qcxh
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      release_target: socket-audit-master
+      kind: security
+      title: The enclave's TLS-interception CA private key is 0644 in /tmp — any local uid can mint certificates the enclave trusts
+      deliverable: the CA key is unreadable to uids other than its owner (podman secret, tightened bind mount + group mapping, or uid-mapped 0600) with the 2026-07-22 vault-cli field repro and SELinux relabel semantics kept green
+      pickup_role: linux
+      depends_on: []
+      capability_tags:
+        - security
+        - proxy
+        - tls
+        - secrets
+        - permissions
+      estimated_hours: 4
+      context: |
+        ensure_ca_bundle (main.rs:2366) deliberately sets intermediate.key to
+        0644 and re-asserts it every pass, in CA_DIR=/tmp/tillandsias-ca.
+        Production mounts it into the proxy by bind mount; the entrypoint's
+        podman-SECRET branch (which handles ownership correctly) is dead code —
+        no launcher creates the tillandsias-ca-key secret. Squid-as-proxy-user
+        under --userns=keep-id reads the key only BECAUSE it is world-readable;
+        0600 reproduces the filer's startup failure. Fix directions ranked in
+        the dated issue (secret delivery preferred: it makes the correct branch
+        reachable instead of deleting it).
+      exit_criteria:
+        - On a provisioned host, stat -c %a of the live CA key is not group/world-readable (or the key is delivered as a podman secret and no longer materialized world-readable on the host), demonstrated by a litmus that fails on a 0644 key.
+        - Squid starts healthy and vault-cli require_cacert stays green on a fresh guest (the 2026-07-22 field repro path).
+        - The entrypoint's unreachable branch is either made reachable (secret delivery) or removed in the same change — no fallback nobody takes remains.
