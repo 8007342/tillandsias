@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: status-loss-detector-attributes-closure-markers-found-in-prose
+    event:
+      type: verified
+      ts: "2026-08-15T04:17:48Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        Independently verified on the host by mutation, both directions, against the real detector. (1) GENUINE violation still fires: a fragment declaring a closure event on a packet folding as 'ready' is reported — 'zz-fixture-genuine-violation: has a completed EVENT but folds as ready'. (2) PROSE false positive is gone: a fragment whose context quotes the marker while its only event is 'filed' passes silently (ok:no-fragment-status-loss:11 checked). The fix replaces the line-grep with structural attribution through a new tillandsias-plan subcommand, which is the right shape — it removes the whole class rather than adding a third indent reset, and it uses the YAML reader that exists in every environment (746-htj9). Note on my own test hygiene: my first attempt at (1) created the fixture as a DOTFILE, which */*.yaml does not glob, so it silently proved nothing and I nearly recorded a pass from it.

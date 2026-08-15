@@ -1,0 +1,82 @@
+# @trace spec:ci-release
+name: litmus:fragment-status-loss-attribution-shape
+spec: ci-release
+phase: pre-build
+description: The status-loss gate's closure-event pass attributes completions to the packet's actual events block, not to prose that quotes the marker, and keeps the 598-kibt file-boundary isolation
+severity: high
+size: instant
+
+# ORDER 752-pst5. check-fragment-status-loss.sh's second pass used a line-grep
+# with ad-hoc resets: it cleared its packet_id on a two-space-indent key, but
+# fragment fields are indented four, so the id stayed live across the packet
+# body and any PROSE quoting the closure marker read as an event declaration.
+# It refused packet 751-i9mb's push because the description quoted the
+# methodology. Attribution is now structural — the fragment is parsed as YAML
+# (fragment-terminal-events, the same binary the script already requires for
+# the fold) and only `type:` keys under an events list count. This pins the
+# binary surface against isolated fixture files so the assertion never depends
+# on the branch diff or on the folded ledger.
+
+preconditions:
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "NEGATIVE CONTROL: prose quoting the closure marker is NOT an event declaration"
+    # Fixture modeled on packet 751-i9mb's real body (the reproduction): a
+    # context block scalar that QUOTES `type: completed`, whose only real event
+    # is `type: filed`. The old awk read the quotation as a completion.
+    command: "T=$(mktemp -d); printf 'packets:\\n  - packet_id: prose-quotes-marker\\n    order: 752-t\\n    status: ready\\n    title: \"a packet that quotes the marker\"\\n    context: |\\n      The methodology ledger_write_path.why describes how a host once wrote\\n      \\`type: completed\\` events with no status block. Quoting the marker is not\\n      an event declaration.\\n    events:\\n      - type: filed\\n        ts: \"2026-08-15T03:20:00Z\"\\n        host: h\\n        summary: filed\\n' > \"$T/f.yaml\"; out=$(./target/release/tillandsias-plan fragment-terminal-events \"$T/f.yaml\"); rc=$?; rm -rf \"$T\"; if [ $rc -ne 0 ] || [ -n \"$out\" ]; then echo \"FAIL: prose quoted as a declaration: rc=$rc out=$out\"; exit 1; fi; echo 'ok: prose quote is not a declaration'"
+    timeout_ms: 15000
+    expected_behavior: "ok: prose quote is not a declaration"
+
+  - step: "POSITIVE CONTROL: a genuine completed event IS a declaration"
+    command: "T=$(mktemp -d); printf 'packets:\\n  - packet_id: real-closure\\n    order: 752-t\\n    status: in_progress\\n    title: \"real closure\"\\n    events:\\n      - type: completed\\n        ts: \"2026-08-15T03:17:09Z\"\\n        host: h\\n        summary: done\\n' > \"$T/f.yaml\"; out=$(./target/release/tillandsias-plan fragment-terminal-events \"$T/f.yaml\"); rc=$?; rm -rf \"$T\"; if [ \"$out\" != 'real-closure' ]; then echo \"FAIL: genuine closure not declared: rc=$rc out=$out\"; exit 1; fi; echo 'ok: genuine closure declared'"
+    timeout_ms: 15000
+    expected_behavior: "ok: genuine closure declared"
+
+  - step: "POSITIVE CONTROL: the top-level events form is seen too (532's shape)"
+    command: "T=$(mktemp -d); printf 'events:\\n  - packet_id: top-level-closure\\n    event:\\n      type: completed\\n      ts: \"2026-08-15T03:17:09Z\"\\n      host: h\\n      summary: done\\n' > \"$T/f.yaml\"; out=$(./target/release/tillandsias-plan fragment-terminal-events \"$T/f.yaml\"); rc=$?; rm -rf \"$T\"; if [ \"$out\" != 'top-level-closure' ]; then echo \"FAIL: top-level events form not declared: rc=$rc out=$out\"; exit 1; fi; echo 'ok: top-level events form declared'"
+    timeout_ms: 15000
+    expected_behavior: "ok: top-level events form declared"
+
+  - step: "NEGATIVE CONTROL: the 598-kibt file-boundary stays isolated (per-file parse)"
+    # The historical false positive: a packet that is the LAST entry in one
+    # fragment inherited the first `type: completed` in the NEXT fragment. A
+    # per-file parse cannot inherit across files by construction; prove it.
+    command: "T=$(mktemp -d); printf 'packets:\\n  - packet_id: boundary-last-progress\\n    order: 752-t\\n    status: in_progress\\n    title: \"last packet, progress only\"\\n    events:\\n      - type: progress\\n        ts: \"2026-08-15T03:17:09Z\"\\n        host: h\\n        summary: partial\\n' > \"$T/a.yaml\"; printf 'packets:\\n  - packet_id: boundary-first-closure\\n    order: 752-t\\n    status: ready\\n    title: \"first packet, closure\"\\n    events:\\n      - type: completed\\n        ts: \"2026-08-15T03:17:09Z\"\\n        host: h\\n        summary: done\\n' > \"$T/b.yaml\"; out=$(./target/release/tillandsias-plan fragment-terminal-events \"$T/a.yaml\"; ./target/release/tillandsias-plan fragment-terminal-events \"$T/b.yaml\" | sort -u); rc=$?; rm -rf \"$T\"; if [ \"$out\" != 'boundary-first-closure' ]; then echo \"FAIL: file boundary crossed or closure missed: rc=$rc out=$out\"; exit 1; fi; echo 'ok: file boundary isolated'"
+    timeout_ms: 15000
+    expected_behavior: "ok: file boundary isolated"
+
+  - step: "the wrapper reports its grammar over the real ledger"
+    command: "scripts/check-fragment-status-loss.sh | grep -qE '^(ok:no-fragment-status-loss:[0-9]+ checked|violation:fragment-status-loss:[0-9]+)$' && echo 'ok: wrapper grammar holds'"
+    timeout_ms: 30000
+    expected_behavior: "ok: wrapper grammar holds"
+
+  # A binary predating the rule is stale HOST STATE, not a ledger defect. The
+  # second pass must SKIP loudly rather than fall back to a line-grep that can
+  # again invent completions (the checker's own rule: a checker that invents
+  # completions is worse than no checker), and the skip must not read as a
+  # violation.
+  - step: "a plan binary predating the rule skips the closure-event pass loudly, not as a violation"
+    command: "T=$(mktemp -d); mkdir -p \"$T/target/release\" \"$T/scripts\" \"$T/plan/index.d\"; printf '#!/bin/sh\\n[ \"$1\" = capabilities ] && { printf \"status\\\\ncheck\\\\nquery\\\\n\"; exit 0; }\\n[ \"$1\" = status ] && { printf \\\"751-i9mb\\\\tready\\\\tprose-quotes-marker\\\\n\\\"; exit 0; }\\nexit 1\\n' > \"$T/target/release/tillandsias-plan.exe\"; chmod +x \"$T/target/release/tillandsias-plan.exe\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; printf 'packets:\\n  - packet_id: prose-quotes-marker\\n    order: 752-t\\n    status: ready\\n    title: \"x\"\\n    context: |\\n      quotes `type: completed`\\n    events:\\n      - type: filed\\n        ts: \"2026-08-15T03:20:00Z\"\\n        host: h\\n' > \"$T/plan/index.d/f.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 0 ]; then echo \"FAIL: stale binary refused as violation: rc=$rc out=$out\"; exit 1; fi; echo \"$out\" | grep -q 'predates fragment-terminal-events' && echo 'ok: stale binary skips loudly' || { echo \"FAIL: no skip note: $out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: stale binary skips loudly"
+
+  # NEGATIVE CONTROL for the step above: the workspace's own current binary must
+  # NOT skip. Without this, a script that skipped unconditionally would pass the
+  # stale-binary step while disabling the gate entirely.
+  - step: "a current plan binary does NOT skip"
+    command: "out=$(scripts/check-fragment-status-loss.sh 2>&1); echo \"$out\" | grep -q 'predates fragment-terminal-events' && { echo \"FAIL: current binary skipped the gate: $out\"; exit 1; }; case \"$out\" in ok:no-fragment-status-loss:*|violation:fragment-status-loss:*) echo 'ok: current binary enforces';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: current binary enforces"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "status-loss gate: prose that quotes the closure marker is never a declaration, genuine closure events are, and the file boundary stays isolated"
+  log_fields:
+    spec: "ci-release"
+    test: "fragment-status-loss-attribution-shape"
+
+rollback:
+  on_failure: "restore scripts/check-fragment-status-loss.sh, the fragment-terminal-events subcommand, and the capabilities manifest from git history"

@@ -26,6 +26,7 @@ dependencies-of
 expire-claims
 # does not remove the capability — it makes the expert UNDER-report itself, and
 # file are checked against each other BEHAVIOURALLY by
+fragment-terminal-events
 fragments
 grade
 # IF YOU ADD A SUBCOMMAND: add it here in the same commit. The dispatch and this

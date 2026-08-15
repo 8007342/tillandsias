@@ -38,13 +38,17 @@ cd "$ROOT" || exit 2
 FRAG_DIR="plan/index.d"
 [ -d "$FRAG_DIR" ] || { echo "ok:no-fragment-status-loss:0 checked"; exit 0; }
 
-# Order 721-nyev: resolve by EXECUTION through the shared probe. An
-# executable BIT is a claim; running the binary is evidence. On a shared
+# One probe, shared with every script that needs the binary (704-zcgi/721-nyev):
+# RUNNING `capabilities` is evidence, an executable bit is a claim. On a shared
 # Windows/WSL checkout a WSL build leaves a Linux ELF at
 # target/release/tillandsias-plan beside the runnable .exe, and the old
 # first-match-on--x loop selected the ELF.
+#
+# Merge note 2026-08-15: windows and linux fixed this independently, in the same
+# hour, to the same shared probe. Keeping linux's wording; the two bodies were
+# semantically identical.
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
-PLAN="$(resolve_plan_binary || true)"
+PLAN="$(resolve_plan_binary)" || PLAN=""
 [ -n "$PLAN" ] || { echo "violation:fragment-status-loss:0"; echo "  tillandsias-plan not built; cannot resolve the fold" >&2; exit 2; }
 
 # Every (packet_id, status) pair declared under a `packets:` list in any
@@ -92,20 +96,32 @@ done <<< "$declared"
 # the naming half of the same trap as 642-fedr the same day. Three hosts
 # independently is a write-path defect, not three mistakes.
 event_violations=""
-declared_events="$(awk '
-    # Reset at every file boundary. Without this, a packet_id that is the LAST
-    # entry in one fragment inherits the first `type: completed` in the NEXT
-    # fragment — awk carries variables across files. That false-positived on
-    # 598-kibt, whose real event is `type: progress` and whose macOS verdict was
-    # explicitly "M6 green / M3 partial". A checker that invents completions is
-    # worse than no checker: acting on it would have closed partial work.
-    FNR == 1 { pid = "" }
-    /^  - packet_id:/ { pid = $3; next }
-    # Only look inside the event block that directly follows, and stop at the
-    # next sibling key, so a `type:` further down cannot be misattributed.
-    pid != "" && (/type: completed/ || /event: completed/) { print pid; pid = ""; next }
-    pid != "" && /^  [a-z_]+:/ { pid = "" }
-' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
+# Which packet_ids DECLARE a terminal `completed` event in their events block?
+#
+# ORDER 752-pst5. This used to be a line-grep with ad-hoc resets, and a grep
+# cannot tell an event declaration from PROSE that quotes the marker inside a
+# block scalar: packet 751-i9mb's own description quoted `type: completed` and
+# the gate invented a completion for it. Attribution is now STRUCTURAL — the
+# fragment is parsed as YAML and only `type:` keys under an events list count —
+# via `fragment-terminal-events`, the same binary this script already requires
+# for the fold. The per-file loop keeps the 598-kibt file-boundary isolation
+# by construction: each fragment is read alone, so the last packet of one file
+# can never inherit the first closure marker of the next.
+if plan_binary_has "$PLAN" fragment-terminal-events; then
+    declared_events="$(for f in "$FRAG_DIR"/*.yaml; do
+        [ -f "$f" ] || continue
+        "$PLAN" fragment-terminal-events "$f" 2>/dev/null
+    done | sort -u)"
+else
+    # ORDER 702-68zj: a binary that predates the rule is STALE HOST STATE, not
+    # a ledger defect. The first pass above still runs (it only needs `status`);
+    # the event pass is skipped LOUDLY rather than approximated with an awk that
+    # could again invent completions — a checker that invents completions is
+    # worse than no checker, and a half-correct scanner is exactly the next
+    # 752. Rebuild to enable the pass.
+    declared_events=""
+    echo "  note: $PLAN predates fragment-terminal-events — closure-event pass SKIPPED (rebuild with 'cargo build --release -p tillandsias-plan')" >&2
+fi
 
 if [ -n "$declared_events" ]; then
     while IFS= read -r pid; do
