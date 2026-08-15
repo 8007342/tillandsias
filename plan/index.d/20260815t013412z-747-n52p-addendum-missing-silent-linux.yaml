@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: BigPickle in the forge (adversarial review of 743-y5wh), 2026-08-15.
+# Empirical proof: reproduced with the append block from lib-common.sh:3883-3890
+# extracted verbatim into a harness at /tmp/opencode/attack-addendum.sh.
+
+packets:
+  - packet_id: startup-context-addendum-missing-delivers-nothing-silently
+    order: 747-n52p
+    release_target: forge-local-experts-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "A missing, unreadable, empty, or non-regular addendum delivers NO warning with exit 0 and no trace — the 743-y5wh fail-loud guard silently degrades into the exact silent-loss it was built to prevent"
+    deliverable: "when the addendum path is git-tracked (or the project is Tillandsias) but missing/unreadable/empty/non-regular, append a loud 'ADDENDUM NOT DELIVERED (<reason>)' placeholder to the context file and trace_lifecycle a warning; keep the append itself fail-soft (never fail a launch); stay silent off-project"
+    pickup_role: linux
+    capability_tags: [forge, startup-context, fail-loud, adversarial-review]
+    estimated_hours: 1
+    context: |
+      The append is guarded only by `[[ -r ... ]]` and `|| true`
+      (lib-common.sh:3884-3888), so every failure mode below exits 0 and appends
+      zero bytes of warning, with no trace_lifecycle line (that fires only in the
+      -r branch):
+
+        absent           -> skip, exit 0, 0 bytes          [silent]
+        chmod 000        -> skip, exit 0, 0 bytes          [silent]
+        empty            -> appends newline only           [silent]
+        whitespace-only  -> appends 6 whitespace bytes     [silent]
+        path is a dir    -> cat fails, || true swallows    [silent]
+        symlink->/dev/null -> appends nothing              [silent]
+
+      On Tillandsias the addendum is git-TRACKED (mode 100644). A push that
+      deletes it, a shallow/partial clone whose working tree lacks it, or a
+      checkout race therefore restores the exact class 743-y5wh fixed — agents
+      read a context file with no live guard and the launch reports success. The
+      normal-case silence is correct OFF Tillandsias (untracked path); on
+      Tillandsias absence is anomalous and must be loud.
+    exit_criteria:
+      - "Deleting the addendum from the working tree still yields a startup context that warns the agent (placeholder)."
+      - "A launch never fails or hangs because of the addendum (fail-soft preserved)."
+      - "Off Tillandsias (path not tracked) behavior is unchanged and silent."
+    notes: |
+      Distinguish 'expected but missing' via `git ls-files --error-unmatch
+      images/default/startup-context-addendum.md` (fail-soft: a git error means
+      'not expected', stay silent). Keep the append's own `|| true` so a write
+      error still cannot red the launch.
+    events:
+      - type: filed
+        ts: "2026-08-15T01:35:00Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815

@@ -1,0 +1,50 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: BigPickle in the forge (adversarial review of 743-y5wh), 2026-08-15.
+# Empirical proof: reproduced with the append block from lib-common.sh:3883-3890
+# extracted verbatim into a harness at /tmp/opencode/attack-addendum.sh.
+
+packets:
+  - packet_id: startup-context-addendum-can-hang-launch-via-fifo-or-char-device
+    order: 747-kw8u
+    release_target: forge-local-experts-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "The 743-y5wh addendum append is NOT fail-soft: a FIFO or a symlink to a character device at images/default/startup-context-addendum.md hangs inject_startup_context and every launch"
+    deliverable: "gate the append on a regular-file test ([[ -f ]]) and a bounded read (size cap / head -c), so a non-regular addendum is skipped, never hung"
+    pickup_role: linux
+    capability_tags: [forge, startup-context, fail-loud, adversarial-review, dos]
+    estimated_hours: 1
+    context: |
+      The 743-y5wh fix reads the addendum from the MOUNTED CHECKOUT and claims
+      "fail-soft by construction". The gate is `[[ -r "$addendum" ]]` followed by
+      an UNBOUNDED `cat "$addendum"` (lib-common.sh:3884-3888), wrapped only in
+      `2>/dev/null || true` — which cannot help a `cat` that never terminates.
+
+      Measured with the block extracted verbatim (timeout-bounded here; a real
+      launch has NO timeout around `inject_startup_context`, entrypoint-forge-opencode.sh:132):
+
+        addendum path = FIFO             -> `cat` blocks forever: launch HANGS
+        addendum path = symlink->/dev/zero -> HANGS and grows the context file
+                                              259MB in 3s before the test timeout
+
+      Both are reachable from a push. Git stores symlinks as mode 120000, so a
+      committed `startup-context-addendum.md -> /dev/zero` (or any char device,
+      or a symlink chain landing on a FIFO) hangs EVERY in-forge launch forever
+      with no error, while the `|| true` swallows the visible failure mode.
+      `[[ -r ]]` is true for FIFOs and character devices; `[[ -f ]]` is false for
+      both, true for the legitimate regular file — verified empirically.
+    exit_criteria:
+      - "A FIFO at the addendum path does not hang inject_startup_context (launch completes normally)."
+      - "A symlink to /dev/zero does not hang and does not grow the context file."
+      - "A legitimate regular-file addendum still appends verbatim."
+    notes: |
+      Also the seed of 747-iavs (size bound): even for a regular file, the read
+      must be bounded so a future or working-tree change cannot bloat the
+      append. The `[[ -f ]]` gate alone kills the FIFO/char-device class.
+    events:
+      - type: filed
+        ts: "2026-08-15T01:35:00Z"
+        host: forge
+        agent_id: bigpickle-forge-20260815
