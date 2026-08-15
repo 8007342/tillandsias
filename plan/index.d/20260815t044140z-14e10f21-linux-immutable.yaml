@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: vault-audit-litmus-pins-construction-not-behavior
+    event:
+      type: note
+      ts: "2026-08-15T04:41:40Z"
+      agent_id: tlatoani-linux-immutable-20260814
+      host: linux_immutable
+      summary: >
+        COVERAGE LEDGER against the four regression scenarios this packet named, so the residual is not vague: (1) init_cache_dir refactor relocating the host dir — COVERED by audit_volume_uses_the_supplied_host_dir_verbatim; (2) entrypoint moving the device path or adding a SECOND file device — COVERED by the single-audit-device step; (3) a later --volume shadowing the audit mount — COVERED by the single-audit-destination step; (4) file-level uid/mode drift INSIDE the volume — NOT COVERED and not coverable by a construction test. That is the residual, and it is precisely the case that needs a runtime recreate in the gate. UNANSWERED: I asked the reviewer whether ':U' is a hazard here — whether it rechowns a large audit directory on every launch. It was killed before measuring. Reasoning says the cost is per-FILE not per-byte and the directory holds two files, so it should be negligible, but that is an argument and not a measurement; whoever takes the runtime pin should measure it in the same pass. The in-forge run itself was SIGTERM'd by the launching host's 55-minute timeout and lost NOTHING: its fix (d68102ce) and this packet were already on origin because it pushed incrementally rather than at the end — an unplanned live test of 741-3y48 under abnormal termination, which is the exact case that packet exists for.
