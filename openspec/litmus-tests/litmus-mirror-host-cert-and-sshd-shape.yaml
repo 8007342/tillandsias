@@ -1,0 +1,44 @@
+# @trace spec:git-mirror-service
+name: litmus:mirror-host-cert-and-sshd-shape
+spec: git-mirror-service
+phase: pre-build
+size: quick
+severity: critical
+description: >
+  Order 749-54pv (design T4+T5 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md):
+  the mirror's presented host key is a CERTIFICATE for exactly the one
+  principal git-<mirror-id>, a client carrying only the @cert-authority line
+  connects with StrictHostKeyChecking=yes, AuthorizedKeysFile none is
+  EFFECTIVE (plain keys refused while a CA-signed cert with the right
+  principal is accepted through ForceCommand), the per-project
+  AuthorizedPrincipalsFile is exactly the single opaque til:forge-push line,
+  the negative controls REFUSE a two-principal host cert and an extra
+  principals line with named causes, and the 8 h re-request loop re-issues
+  with a new serial and SIGHUPs sshd.
+
+  All in-container scenarios run in the REAL images/git container under the
+  749-wv4d posture (--read-only --cap-drop=ALL --user 1000, writable state on
+  the /tmp tmpfs only). The Vault signer is stubbed hermetically through the
+  TILLANDSIAS_SSH_SIGNER_CMD seam; the live two-project matrix is 722-uern's,
+  and the lane stays behind TILLANDSIAS_MIRROR_SSHD=1 until T11 flips it.
+
+preconditions:
+  - workspace contains images/git/sshd-identity.sh
+  - workspace contains scripts/test-mirror-host-cert-and-sshd.sh
+  - podman is available on the host
+
+critical_path:
+  - step: "the DEFAULT rendered sshd_config carries the T5 directive set verbatim (host-side, no podman)"
+    command: "bash scripts/test-mirror-host-cert-and-sshd.sh render-default 2>&1 | tail -1"
+    timeout_ms: 15000
+    expected_behavior: "ok:hostcert-fixture:t5-directives-rendered"
+
+  - step: "all T4+T5 scenarios pass in the real container under the 749-wv4d posture (cert exactness, CA-only trust + connect, keys-outside-CA refused, negative principal controls, renewal)"
+    command: "bash scripts/test-mirror-host-cert-and-sshd.sh all 2>&1 | tail -1"
+    timeout_ms: 420000
+    expected_behavior: "ok: all mirror-host-cert scenarios passed"
+
+  - step: "the entrypoint lane stays flag-gated until T11 (default off, loud on failure)"
+    command: "grep -q 'TILLANDSIAS_MIRROR_SSHD:-0' images/git/entrypoint.sh && grep -q 'fail:sshd-identity:ensure' images/git/entrypoint.sh && echo 'ok: lane flag-gated and loud'"
+    timeout_ms: 5000
+    expected_behavior: "ok: lane flag-gated and loud"
