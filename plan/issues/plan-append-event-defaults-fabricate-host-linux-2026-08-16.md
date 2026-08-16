@@ -2,7 +2,10 @@
 
 - classification: enhancement
 - filed: 2026-08-16 (windows, meta-orchestration cycle 2)
-- status: open
+- status: resolved (2026-08-16, windows cycle 5, packet 772-4se9
+  plan-append-event-writer-identity-defaults: host defaults from the compiled
+  platform via shared resolve_writer_host, agent_id derives from
+  TILLANDSIAS_AGENT_ID or refuses loudly, both pinned by unit tests)
 - related: order 756-hn3a (agent_identity_contract: refuse, don't improvise)
 
 ## Observation

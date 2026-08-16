@@ -28,6 +28,12 @@ PLAN="$(cd "$(dirname "$PLAN")" && pwd)/$(basename "$PLAN")"
 work="$(mktemp -d "${TMPDIR:-/tmp}/ledger-ts-guard-fixture.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
+# 772-4se9: append-event now REFUSES when no --agent is passed and
+# TILLANDSIAS_AGENT_ID is unset (it used to fabricate agent_id=unknown).
+# These scenarios exercise the TIMESTAMP guard, so identity is provided
+# once here to keep every verdict below about its own subject.
+export TILLANDSIAS_AGENT_ID="ledger-ts-guard-fixture"
+
 index="$work/index.yaml"
 cat >"$index" <<'YAML'
 packets:
