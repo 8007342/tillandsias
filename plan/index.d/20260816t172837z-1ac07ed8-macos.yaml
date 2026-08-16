@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: macos-exec-wire-bulk-stdout-wedges-unbounded
+    event:
+      type: refuted
+      ts: "2026-08-16T17:28:37Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260816t1723z
+      host: macos
+      summary: >
+        PREMISE REFUTED BY THE PACKET'S OWN DISCRIMINATOR — the wedge was the probe, not the wire. The env-gated exec-trace (landed, kept: TILLANDSIAS_VSOCK_EXEC_TRACE=1) showed heartbeats-only during a 'wedge', and the argv revealed the cause: exec_guest_main JOINS argv into /bin/bash -lc "<joined>", so the probe's own 'bash -lc <quoted pipeline>' wrapper collapsed into inner 'bash -lc head' — head with no args reading the pty FOREVER (hence heartbeats + zero data + no exit: an honest picture of a child that never wrote anything). The 'slow producer OK' bracket was equally bogus: the chatty probe error-exited instantly (its observed rc=2 was the syntax error). CORRECTED SERIES, single-string commands: 32KB->44,842B/10s, 1MB->1,434,898B/9s, 14MB->14,348,938B/10s, all exit 0 — bulk stdout is FLAWLESS and fast (multi-MB/s through the wire; boot dominates the one-shot). 147 gains a throughput datum; the 'plausibly roots 635-kagg' speculation is WITHDRAWN (unsupported — that packet's evidence came from real lanes). The genuine residual is the trap that consumed three cycles: the silent argv join, filed as 773-hp6m.

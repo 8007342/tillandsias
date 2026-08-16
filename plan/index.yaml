@@ -1254,6 +1254,12 @@ plan_index:
       estimated_hours: 6
       events:
         - type: progress
+          ts: "2026-08-16T17:31:01Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1723z"
+          host: macos
+          summary: |
+            macOS THROUGHPUT datum (corrects the 2026-08-16T13:33Z event's wedge claim — that was a probe artifact, see 772-qn6j's refuted event): bulk guest stdout through the exec wire is healthy and fast — 14,348,938 bytes delivered inside a 10s one-shot (boot dominates; transfer is multi-MB/s), 1MB in 9s, 32KB in 10s, all exit 0. Combined with the 8x 9-10s control round trips: the macOS transport adds negligible overhead on BOTH the control and bulk paths. Series: target/idle-measure/772-true-series.txt.
+        - type: progress
           ts: "2026-08-16T13:30:16Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1323z"
           host: macos

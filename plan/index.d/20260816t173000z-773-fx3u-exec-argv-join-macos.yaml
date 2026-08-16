@@ -1,0 +1,61 @@
+packets:
+  - packet_id: exec-guest-argv-join-silently-rewrites-quoted-commands
+    order: 773-fx3u
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: '--exec-guest joins argv into /bin/bash -lc "<joined>", silently rewriting any command that carries its own shell wrapper or quoting — the trap that manufactured a phantom p1 and consumed three loop cycles'
+    pickup_role: macos
+    depends_on: []
+    capability_tags:
+      - macos
+      - tray
+      - ux
+      - fail-loud
+    context: |
+      (Referenced as "773-hp6m" in 772-qn6j's refuted event — that token was
+      guessed before minting; THIS packet's true order is 773-fx3u.)
+
+      exec_guest_main space-joins its argv and wraps it as
+      /bin/bash -lc "<joined>". Quoting the caller used is gone by then:
+      `--exec-guest bash -lc 'head -c 32768 /dev/zero | base64'` becomes
+      inner `bash -lc head` (head with NO args reading the pty forever —
+      observable as heartbeats + zero data + no exit, a perfect counterfeit
+      of a transport wedge), and
+      `--exec-guest bash -lc 'for i in ...; done'` becomes `bash -lc for`
+      (instant syntax error, rc=2 — a perfect counterfeit of a broken
+      command). This cost the 2026-08-16 loop three cycles and a phantom p1
+      (772-qn6j, now obsoleted with the full post-mortem and the corrected
+      series proving 14MB of stdout in 10s, exit 0).
+
+      The help text says `--exec-guest <cmd...>  run a command in the guest`
+      — nothing warns that argv is re-joined through a shell. Windows'
+      equivalent exec path should be checked for the same join in passing.
+    exit_criteria:
+      - single-word and multi-word argv behave identically to today (no regression for `--exec-guest uname -a`)
+      - a caller-quoted command survives verbatim — either argv is exec'd without re-joining when len > 1, or a joined form is refused/warned when the argv already contains a shell invocation, or the help documents the join contract explicitly with an example (choose ONE, record why)
+      - a fixture pins the chosen behavior for both the single-string and the wrapped-quoting forms
+    verifiable_closure: |
+      `--exec-guest bash -lc 'echo a b | wc -w'` either produces what the
+      caller meant or refuses loudly with the documented contract — never a
+      silent rewrite; fixture green.
+    notes: |
+      The exec-trace observability flag (TILLANDSIAS_VSOCK_EXEC_TRACE=1,
+      landed with 772's diagnosis) stays — it is what caught this in one
+      minute after three hypothesis cycles missed it, and it is the tool
+      the fixture can assert against.
+
+events:
+  - packet_id: exec-guest-argv-join-silently-rewrites-quoted-commands
+    event:
+      type: filed
+      ts: "2026-08-16T17:30:00Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1723z"
+      host: macos
+      summary: |
+        Filed from 772-qn6j's post-mortem. The counterfeit failure modes
+        (stdin-forever and instant-syntax-error) are worth naming because
+        they impersonate transport bugs convincingly enough to survive two
+        serious hypothesis cycles.
