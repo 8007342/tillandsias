@@ -1,0 +1,52 @@
+# @trace spec:dev-build
+#
+# Pins order 723-ydmk: nothing prevents a build artifact from being committed
+# AGAIN — an artifact matching .gitignore but already tracked is invisible to
+# the ignore rules, which is how target-musl/**, tillandsias-mcp-browser and
+# tillandsias-router-sidecar each reached history. The guard uses git's OWN
+# binary classification (numstat vs the empty tree), deliberately not file(1)
+# (a tracked plan/archive markdown with a stray NUL would be a permanent
+# false positive), plus an executable-extension lane that catches stub/empty
+# artifacts git classifies as text.
+name: litmus:no-tracked-binaries-shape
+spec: dev-build
+phase: pre-build
+description: >
+  Pin scripts/check-no-tracked-binaries.sh's verdict grammar, its live pass on
+  this tree, the hermetic fixture suite (ELF-blob refusal, extension-lane
+  refusal, allowlist-prefix pass, executable-inside-allowlist refusal, and the
+  text-only NEGATIVE CONTROL), the extended .gitignore block, and the
+  local-ci.sh wiring.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-no-tracked-binaries.sh
+  - git repository with at least one commit
+  - shell utilities (git, awk, grep, bash) are available in PATH
+
+critical_path:
+  - step: "guard exists, is executable, and parses"
+    command: "test -x scripts/check-no-tracked-binaries.sh && bash -n scripts/check-no-tracked-binaries.sh && echo 'ok: guard-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: guard-parses"
+
+  - step: "live run on this tree passes with the pinned grammar (falsifiable single line)"
+    command: "out=$(bash scripts/check-no-tracked-binaries.sh); echo \"$out\" | grep -qE '^ok:no-tracked-binaries:[0-9]+ binary-classified [0-9]+ allowlisted$' && [ \"$(echo \"$out\" | wc -l)\" = 1 ] && echo 'ok: live-grammar'"
+    timeout_ms: 10000
+    expected_behavior: "ok: live-grammar"
+
+  - step: "hermetic fixture suite passes, including the text-only NEGATIVE CONTROL"
+    command: "bash scripts/check-no-tracked-binaries.sh fixture 2>&1 | tail -1"
+    timeout_ms: 15000
+    expected_behavior: "ok: all no-tracked-binaries scenarios passed"
+
+  - step: ".gitignore carries the extended executable/linkable extension block"
+    command: "grep -qx '\\*\\.so' .gitignore && grep -qx '\\*\\.pdb' .gitignore && grep -qx '\\*\\.dylib' .gitignore && echo 'ok: gitignore-extended'"
+    timeout_ms: 3000
+    expected_behavior: "ok: gitignore-extended"
+
+  - step: "guard is wired into local-ci.sh beside the other check-*.sh gates"
+    command: "grep -q 'check-no-tracked-binaries.sh' scripts/local-ci.sh && echo 'ok: local-ci-wired'"
+    timeout_ms: 3000
+    expected_behavior: "ok: local-ci-wired"

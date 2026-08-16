@@ -65,6 +65,11 @@ source "$SCRIPT_DIR/scripts/common.sh"
 # no-op fallback are both `|| true`-guarded.
 . "$SCRIPT_DIR/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# 765-uti9 quick win (velocity audit F2/F10): anchor for the build-preamble
+# record — everything between here and the --check timer (git hooks, podman
+# registries, dev-proxy ensure, sidecar staging) was invisible to timing:,
+# hiding the post-VERSION-bump sidecar rebuild that can dwarf the timed block.
+_PREAMBLE_T0="$(timing_now_ms)"
 
 # Get the actual user's home directory (works with sudo)
 if [[ -n "${SUDO_USER:-}" ]]; then
@@ -1078,6 +1083,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # including a set -e abort when a sub-step fails — recording the real exit
     # code; it is cancelled at normal completion so a single record is emitted
     # and combined-flag runs do not over-count. NEVER alters the gate's exit.
+    # 765-uti9: emit the preamble duration first — best-effort per the
+    # 682-emvg contract, never alters the gate's exit.
+    timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
     _step "Checking Rust formatting..."
@@ -1087,11 +1095,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Formatting check passed"
 
-    _step "Type-checking workspace..."
-    _run cargo check --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
-    _info "Type-check passed"
-
-    _step "Running clippy (strict)..."
+    # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
+    # --workspace` step was fully subsumed by the clippy pass below — same
+    # virtual-manifest workspace, a strict SUPERSET of targets (--all-targets),
+    # -D warnings failing on every diagnostic check would report, and
+    # _require_host_build_tools hard-requires clippy-driver so no host can run
+    # check but not clippy. The two also share no fingerprints (clippy drives
+    # its own compiler), so the removed step was a full second frontend pass.
+    # Type errors now surface under the clippy banner.
+    _step "Running clippy (strict; includes the workspace type-check)..."
     _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings 2>&1
     _info "Clippy passed"
 
