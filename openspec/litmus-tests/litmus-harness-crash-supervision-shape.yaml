@@ -1,0 +1,44 @@
+# @trace spec:default-image
+#
+# Pins order 767-nkkq: non-interactive forge harness runs are crash-supervised.
+# Disposition chosen by 604-vmcg's forensics — the Bun/JSC SIGSEGV class is
+# upstream-shaped; what is OURS is that the harness ran as PID 1, so a crash
+# killed the container silently (status 139) and only host-side
+# systemd-coredump noticed. The supervisor converts that into a loud named
+# verdict + persisted evidence + truthful nonzero exit, NEVER restarts the
+# agent (a crashed drain cycle must not re-run its prompt unattended), and
+# stays silent on clean exits and ordered shutdowns (`podman stop` must not
+# read as a crash).
+#
+# All assertions live in the hermetic fixture (behavioral crash/shutdown/kill
+# scenarios plus the wiring scenario, which carries its own negative control —
+# the wiring matcher is proven red against a supervisor-stripped copy), per
+# the 634-39ik expression-pinning rule: the litmus asserts PROPERTIES through
+# the fixture, never bare source shapes.
+name: litmus:harness-crash-supervision-shape
+spec: default-image
+phase: pre-build
+description: >
+  Pin harness-supervisor.sh's contract (loud crash verdict on both streams,
+  evidence persistence, exactly-once execution, silent happy path, ordered
+  shutdowns not misread as crashes, external-kill loudness) and the image +
+  entrypoint wiring, all via the hermetic fixture suite with its built-in
+  negative controls.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/harness-supervisor.sh
+  - workspace contains scripts/test-harness-supervisor.sh
+  - bash, grep, pgrep available in PATH
+
+critical_path:
+  - step: "supervisor exists, is executable, and parses"
+    command: "test -x images/default/harness-supervisor.sh && bash -n images/default/harness-supervisor.sh && echo 'ok: supervisor-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: supervisor-parses"
+
+  - step: "hermetic fixture suite passes (crash verdict + evidence + exactly-once, ordered-shutdown silence, external-kill loudness, usage refusal, and the wiring scenario with its stripped-copy negative control)"
+    command: "bash scripts/test-harness-supervisor.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok: all harness-supervisor scenarios passed"

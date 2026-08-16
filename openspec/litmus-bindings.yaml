@@ -223,6 +223,7 @@ specs:
   - litmus:forge-agent-result-format
   - litmus:forge-policy-binary-discoverability
   - litmus:npm-harness-install-idempotent-shape
+  - litmus:harness-crash-supervision-shape
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
