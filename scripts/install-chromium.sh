@@ -2,12 +2,18 @@
 # @trace spec:host-chromium-on-demand, spec:download-telemetry, spec:chromium-safe-variant
 # @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
 # @cheatsheet security/owasp-top-10-2021.md
+# freshness: audited 2026-08-16 macos verdict=updated (774-cfw8) — header
+# integration claims corrected; the script is currently ORPHANED, see below.
 #
 # Tillandsias userspace Chromium installer.
 #
-# Sourced by scripts/install.sh during `curl ... | bash`, and also invoked
-# directly by the tray binary's `tillandsias --install-chromium` subcommand
-# (via the embedded copy in src-tauri/src/embedded.rs in a future change).
+# INTEGRATION STATUS (2026-08-16 freshness audit, 774-cfw8): NO consumer
+# exists today. The claims this header used to carry — "sourced by
+# scripts/install.sh" and "invoked by the tray's --install-chromium" — are
+# both false at HEAD (zero references in scripts/install*.{sh,ps1} and zero
+# in crates/). Only litmus:host-chromium-on-demand-shape references this
+# file, pinning a shape nothing ships. Packet 774-cfw8 holds the
+# wire-it-or-tombstone decision for the chromium/browser feature owner.
 #
 # Behaviour:
 #   * Downloads the pinned Chrome for Testing build into XDG_DATA_HOME/
