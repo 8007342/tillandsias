@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-signing-identity-provisioned
+    field: deliverable
+    value: a SignPath Foundation signing chain (published code-signing policy page and attribution, approved application, per-release manual approvals), with Azure Artifact Signing as the recorded fallback
+    ts: "2026-08-16T20:57:47Z"
+    host: windows
+
+events:
+  - packet_id: windows-signing-identity-provisioned
+    event:
+      type: note
+      ts: "2026-08-16T20:57:47Z"
+      host: windows
+      summary: >
+        operator decision 2026-08-16 (The Tlatoani, attended session) reshaping the packet from the Azure Trusted Signing deliverable to the SignPath Foundation chain; decision event and prerequisite chain in plan/index.d/20260816t210500z-776-signing-chain-windows.yaml
