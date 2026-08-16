@@ -1,0 +1,59 @@
+# Filed by the 767-es4w research fork (linux_mutable, 2026-08-16): the two
+# remedy lanes the packet's deliverable names, shaped from tonight's
+# symbolication evidence (see the 767-es4w progress event of the same ts).
+packets:
+  - packet_id: proxy-squid-version-bump-past-6-9
+    order: 782-9jfg
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: fix
+    title: "Bump the enclave proxy's squid past 6.9 — the chronic segfault has ONE deterministic signature (HttpHeader::clean under destroyStoreEntry) on Alpine 3.20's frozen squid-6.9-r0, and the 6.x line is at 6.12+ upstream"
+    deliverable: "images/proxy on a base whose squid is >= 6.10 (Alpine 3.21/3.22 or a pinned newer apk), passing the proxy litmus suite, with a recurrence sentinel: coredumpctl gains NO new squid dump matching the pinned signature for 7 days after deploy (recorded as the closure evidence)"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [proxy, squid, enclave, images]
+    estimated_hours: 3
+    context: |
+      767-es4w symbolication (2026-08-16, this fork): two dumps four weeks
+      apart (PIDs 2126717 @2026-08-11, 3987925 @2026-08-12) carry the exact
+      same stack on the same build-id 0348aa59... (squid-6.9-r0, byte-identical
+      to the CURRENT v0.4.260816.1 image): SIGSEGV in HttpHeader::clean() <-
+      HttpReply::clean() <- ~HttpReply() <- ~MemObject() <-
+      StoreEntry::destroyMemObject() <- destroyStoreEntry(), after which
+      squid's own death() handler hits an xassert inside
+      storeDirWriteCleanLogs() and aborts. Deterministic store-teardown
+      corruption under enclave (ssl-bump) traffic; cadence near-daily with
+      bursts. No exact public upstream match found in first-pass search
+      (bugs.squid-cache.org not exhaustively searched — do that before
+      pinning a specific fix commit), but the 6.x line fixed store/SslBump
+      lifecycle defects continuously through 6.10 (2024-06) and 6.12
+      (2024-10); Alpine 3.20's package is frozen at 6.9-r0. Base-image policy:
+      keep the pinned-tag rules (container-base gate) — a bump means a NEW
+      pinned base, never :latest. Coordinate with images/proxy DISTRO notes
+      (busybox/adduser/CA-path comments) if the base moves.
+  - packet_id: proxy-crash-watcher-loud-restart
+    order: 782-dpby
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: enhancement
+    title: "The enclave proxy must never sit Exited(139) silently: supervised restart WITH a loud, ledger-reaching crash record and a crash counter in diagnostics"
+    deliverable: "a watcher for application-lifetime enclave services (proxy first): on abnormal exit, restart bounded (cap + backoff) AND surface the event loudly (diagnostics surface + a finding that reaches plan/, not just stdout); crash counter visible in --diagnose; litmus with a kill-injection fixture proving both halves (restarted AND recorded)"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [proxy, enclave, fail-loud, supervision]
+    estimated_hours: 4
+    context: |
+      The unwatched half of 767-es4w: 263 SIGSEGVs since 2026-06-30 and a
+      two-day Exited(139) outage with zero alarms — every enclave consumer
+      degraded silently (the 604-vmcg lane's [ENV-FAIL] podman stalls may be
+      downstream of exactly this). INTERACTION NOTE, deliberate: 767-nkkq
+      (agent PID-1 supervision) rules NEVER-auto-restart for the AGENT lane —
+      that rule is about not silently resuming a crashed agent's WORK. An
+      infrastructure service is the opposite case: restart is correct, the
+      sin is silence. Both packets share the loud-record half; whoever
+      implements second should reuse the first's record surface. Restart cap
+      matters: squid 6.9's crash is deterministic under traffic (782-9jfg),
+      so an uncapped restart loop would flap — pair this with the version
+      bump, and make the counter make flapping VISIBLE.

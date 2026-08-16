@@ -53285,6 +53285,13 @@ plan_index:
         uid 1000. Cadence is near-daily with multi-crash bursts, which reads as
         traffic-triggered, not random.
 
+      events:
+        - type: progress
+          ts: "2026-08-16T23:41:07Z"
+          agent_id: "fork-767es4w-20260816T234107Z"
+          host: linux_mutable
+          summary: |
+            FORENSICS COMPLETE (research fork, 2026-08-16T23:5xZ). VERSION FACTS: the chronic crasher IS the enclave proxy — live container runs squid 6.9-r0 (Alpine 3.20, frozen there; upstream 6.x reached 6.12+ in 2024); the dev-cache lane's docker.io/library/squid:6.1 is a separate concern and NOT the crasher (dump cgroups are libpod scopes running 'squid -N' on musl = the Alpine images/proxy entrypoint). SYMBOLICATION: build-id 0348aa59... of the crashed binary is BYTE-IDENTICAL to the current v0.4.260816.1 image's squid; two dumps a day apart carry the exact same stack — SIGSEGV in HttpHeader::clean <- HttpReply::clean <- ~HttpReply <- ~MemObject <- StoreEntry::destroyMemObject <- destroyStoreEntry, then death() -> xassert in storeDirWriteCleanLogs -> abort. Deterministic store-teardown corruption under ssl-bump traffic. UPSTREAM: no exact public match in first-pass search; 6.x fixed store/SslBump lifecycle defects through 6.10/6.12 — exhaustive bugs.squid-cache.org search delegated to the bump packet. DISPOSITION: two children filed — 782-9jfg (version bump past 6.9 with a 7-day no-recurrence sentinel) and 782-dpby (loud-restart watcher with crash counter; interaction with 767-nkkq's never-silent-restart rule documented as agent-vs-infrastructure). This packet stays ready as the criteria holder until both land.
     - packet_id: forge-pid1-crash-supervision
       order: 767-nkkq
       status: ready
