@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:inference-container, spec:methodology-accountability
+# freshness: auditor=linux-yoga-claude-20260816t185912z date=2026-08-16 verdict=refreshed scope=exercised live twice this cycle on Silverblue (cycle-preflight cold start -> tillandsias-dev-inference healthy with qwen2.5:0.5b + nomic-embed-text; reuse-if-running path on the post-ff re-run); lib-dev-env.sh caller wiring verified (dev/runtime split, verdict file, lock retake); still meaningful, sound, and complete for the 718-nkm2 contract
 #
 # Order 718-nkm2. Make local inference available to the DEVELOPMENT host's
 # expert system, idempotently, so a cycle can call this at start and never think
