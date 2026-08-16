@@ -1,0 +1,29 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-16, from the operator directive:
+# "use toolboxes for everything; ensure_toolbox.sh as the default pattern".
+packets:
+  - packet_id: ensure-toolbox-default-pattern-adoption
+    order: 777-amku
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: enhancement
+    title: "OPERATOR DIRECTIVE 2026-08-16: every script is idempotent and toolbox-friendly via a shebang-level ensure_toolbox.sh include — adopt the pattern repo-wide and canonize it in methodology"
+    deliverable: "scripts/ensure_toolbox.sh (landed 2026-08-16, delegates to with-tillandsias-builder.sh direct mode) sourced by every script that needs tools the host may lack; a methodology/ entry stating the pattern; a litmus pinning the include's contract (create+init once, noop after, no caller option rewrite, silent noop off-toolbox hosts); host-daemon/package operator asks re-shaped as toolbox-friendliness packets"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [toolbox, methodology, portability, idempotence]
+    estimated_hours: 4
+    context: |
+      The operator rejected "enable host nix-daemon" as a remedy for 606-um5s:
+      toolboxes are the agreed substrate for everything; host-level daemons and
+      packages are snowflake state. scripts/ensure_toolbox.sh now exists with
+      the exact directed contract (if the toolbox doesn't exist, create and
+      init; otherwise noop) implemented by delegation to
+      with-tillandsias-builder.sh's marker-gated ensure — one implementation,
+      two entry shapes (ensure-only include vs re-exec wrapper). Adoption
+      sweep: audit scripts/ for host-tool dependencies (nix, ruby, jq
+      variants, perl, cross toolchains), add the include where needed, and
+      ensure the toolbox INIT installs the swept tool set (nix single-user in
+      the toolbox unblocks 606-um5s verification with zero host changes).
+      Guard against the 599-4wzr shipped-but-never-activated class: the litmus
+      and the methodology entry are part of DONE, not follow-ups.

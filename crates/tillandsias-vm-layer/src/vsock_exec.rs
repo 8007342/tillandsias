@@ -669,8 +669,22 @@ where
         .await?;
     }
 
+    // 772-qn6j observability: TILLANDSIAS_VSOCK_EXEC_TRACE=1 prints one
+    // stderr line per received envelope (kind + payload size). The 58-min
+    // wedge survived a 300s PER-ENVELOPE deadline, which proves complete
+    // envelopes kept arriving while zero data was delivered — this trace is
+    // what distinguishes "heartbeats-only arriving" (guest data path silent)
+    // from "data arriving but dropped here" without a guest rebuild.
+    let trace = std::env::var("TILLANDSIAS_VSOCK_EXEC_TRACE").is_ok_and(|v| v == "1");
     loop {
         let env = read_exec_envelope(&mut stream, idle_timeout).await?;
+        if trace {
+            let (kind, size) = match &env.body {
+                ControlMessage::PtyData { bytes, .. } => ("PtyData", bytes.len()),
+                other => (other.kind(), 0),
+            };
+            eprintln!("[exec-trace] recv {kind} bytes={size}");
+        }
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
