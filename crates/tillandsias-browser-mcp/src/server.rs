@@ -75,7 +75,7 @@ impl BrowserMcpServer {
 
     /// Test helper: pin a project label, binary override, and launch mode.
     pub fn with_project_label_and_mode(
-        config: McpServerConfig,
+        _config: McpServerConfig,
         project_label: impl Into<String>,
         browser_binary_override: Option<PathBuf>,
         fake_launch: bool,
@@ -364,7 +364,7 @@ impl BrowserMcpServer {
         };
         let args = Self::requested_arguments(request);
 
-        let response = match tool_name {
+        match tool_name {
             "browser.open" => self.handle_browser_open(id, args),
             "browser.list_windows" => self.handle_browser_list_windows(id),
             "browser.read_url" => self.handle_browser_read_url(id, args),
@@ -377,9 +377,7 @@ impl BrowserMcpServer {
             ),
             "browser.close" => self.handle_browser_close(id, args),
             other => Self::tool_error(id, format!("TOOL_NOT_FOUND: {other}")),
-        };
-
-        response
+        }
     }
 
     fn handle_browser_open(&self, id: u64, args: &serde_json::Value) -> RpcResponse {
