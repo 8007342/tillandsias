@@ -9,9 +9,9 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: headless-least-privilege-split
+  - packet_id: guest-container-metrics-over-control-wire
     field: next_action
     value: |
-      Windows cycle: apply the delegation directive set from plan/issues/headless-least-privilege-delegation-design-2026-08-16.md to the wsl_lifecycle.rs headless unit template, flip the NoNewPrivileges/CapabilityBoundingSet absence pins to joint-presence pins, and live-verify vault/lane ensures on an attended windows smoke
-    ts: "2026-08-16T19:51:10Z"
+      Wire the handler: route MetricsSnapshotRequest in control_dispatch (decide vsock-only vs both transports, update routing-matrix tests), add the vsock_server reply arm via spawn_blocking sampling, add litmus-guest-container-metrics-wire-shape, then file the macOS diagnose-consumption child
+    ts: "2026-08-16T20:10:52Z"
     host: linux-immutable

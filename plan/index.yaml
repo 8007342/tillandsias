@@ -1019,6 +1019,12 @@ plan_index:
         - "openspec/specs vsock-transport no longer sanctions unauthenticated 'accept from any CID' without an authz gate"
         - "./build.sh --check and --test pass"
       events:
+        - type: progress
+          ts: "2026-08-16T20:10:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Linux slice landed (1912b2ec1): gated-ON responder now rejects unauthenticated peers with a plaintext Error{Unauthorized} + fail-close (server_handshake_or_reclaim in secure-channel returns the stream on failure); litmus:vsock-unauthenticated-peer-rejected pinned and 4/4 green; vsock-transport spec no longer sanctions unauthz'd accept-from-any-CID (authz qualifier + rejection scenario; gate-off opt-in named a sanctioned transition). Criteria 2+3 met. Criterion 1 (default reachability) is owned by order 145 encrypted-channel-vsock-cutover — 137 stays ready with that sharpened remainder.
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
@@ -12969,6 +12975,12 @@ plan_index:
         - "collection failure surfaces as an error field, never a fabricated healthy sample (spec:observability-metrics)"
         - "--diagnose --json gains a metrics block on macOS (read over the wire)"
       events:
+        - type: progress
+          ts: "2026-08-16T20:10:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Partial slice landed (71f884e5a): container.rs + mount_io.rs samplers (cgroup v2 + mountinfo/diskstats, pure injectable cores, no-fabrication error fields) and trailing MetricsSnapshotRequest/Reply wire variants + structs (no WIRE_VERSION bump); 19 new tests green, clippy clean. partial_artifact_refs: 71f884e5a. NEXT: control_dispatch routing + vsock_server handler arm (mirror GithubLoginStatusRequest pattern) + litmus-guest-container-metrics-wire-shape + macOS diagnose consumption (cross-host child).
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
