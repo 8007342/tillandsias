@@ -57,6 +57,16 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: overhead_ratio"
 
+  - step: "commits_this_cycle counts FIRST-PARENT commits only (order 769-aqpc: merged-in sibling work must not inflate the flow commits= input)"
+    # Scratch repo: base -> side branch (2 commits) -> work commit w1 -> --no-ff
+    # merge of side. First-parent count from base is 2 (w1 + the merge commit);
+    # the plain count is 4. Measured 2026-08-16 on windows: a pre-push merge of
+    # origin/linux-next made the plain count report 24 where the cycle had made
+    # 3 commits + 1 merge, skewing overhead_ratio (682-yiz7's input) by 6x.
+    command: "d=$(mktemp -d); git init -q -b work \"$d/repo\"; mkdir -p \"$d/repo/scripts\"; cp scripts/cycle-metrics.sh scripts/plan-binary-probe.sh \"$d/repo/scripts/\"; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m base; git -C \"$d/repo\" tag base; git -C \"$d/repo\" checkout -q -b side; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m s1; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m s2; git -C \"$d/repo\" checkout -q work; git -C \"$d/repo\" -c user.email=l@t -c user.name=l commit -q --allow-empty -m w1; git -C \"$d/repo\" -c user.email=l@t -c user.name=l merge -q --no-ff -m m side; out=$(cd \"$d/repo\" && TILLANDSIAS_EXPERT_USAGE_LOG=$d/none1 TILLANDSIAS_CYCLE_FLOW_LOG=$d/none2 TILLANDSIAS_TIMING_LOG=$d/none3 bash scripts/cycle-metrics.sh base 2>/dev/null | grep '^repo:'); rm -rf \"$d\"; case \"$out\" in *commits_this_cycle=2*) echo 'ok: first-parent commits' ;; *) echo \"observed=$out expected commits_this_cycle=2 (w1 + merge; the 2 merged side commits are sibling work)\"; echo 'fail: merged-in sibling commits inflate commits_this_cycle' ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: first-parent commits"
+
   - step: "an absent flow log reports source=absent with no fabricated numbers"
     command: "F=$(mktemp -u); out=$(TILLANDSIAS_CYCLE_FLOW_LOG=$F scripts/cycle-metrics.sh --experts-only 2>/dev/null | grep '^flow:'); case \"$out\" in *cycles=0*overhead_ratio=-*source=absent*) echo 'ok: absent honest' ;; *) echo \"observed=$out\"; echo 'fail: absent log must report source=absent' ;; esac"
     timeout_ms: 10000
@@ -93,6 +103,7 @@ failure_modes:
   - "overhead_ratio computed as something other than total-commits-per-total-completed"
   - "an unwritable flow log path fails the cycle it was measuring"
   - "a retried finalization appends a duplicate record, so the metric is corrupted by the act of measuring"
+  - "commits_this_cycle counts merged-in sibling commits, inflating the overhead_ratio input on every platform branch that honors the pre-push merge gate"
 
 rollback:
   on_failure: "inspect scripts/cycle-metrics.sh --emit-flow emitter and the flow: reporting block for grammar or arithmetic drift"
