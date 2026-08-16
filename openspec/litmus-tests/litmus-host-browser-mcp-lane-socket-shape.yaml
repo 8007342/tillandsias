@@ -72,6 +72,18 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "Vsock) => Unsupported"
 
+  - step: "NEGATIVE CONTROL: each pin above refuses a fixture where the property is violated"
+    # 634-39ik: a grep pin is only worth its green if it can distinguish
+    # "property violated" from "text merely drifted". Three hermetic
+    # fixtures, one per invariant class — a dispatcher that SERVES McpFrame
+    # instead of refusing it, a launcher with no per-lane socket wiring, and
+    # a bridge that still claims McpFrame wrapping. Each must FAIL the same
+    # predicate the live steps run; if any fixture passes, the pin is
+    # decorative and this step says so.
+    command: "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; printf 'ControlMessage::McpFrame { .. } => { serve_mcp(frame); }\\n' > \"$d/served.rs\"; grep -A12 'ControlMessage::McpFrame { .. } =>' \"$d/served.rs\" | grep -qF 'ErrorCode::Unsupported' && { echo 'FAIL: refusal pin blind to a dispatcher that serves McpFrame'; exit 1; }; printf 'let dir = some_other_dir();\\n' > \"$d/nolane.rs\"; grep -qF 'mcp_socket_host_dir_for_lane' \"$d/nolane.rs\" && { echo 'FAIL: per-lane wiring pin blind to its absence'; exit 1; }; printf '# wraps each as a ControlMessage::McpFrame\\n' > \"$d/bridge.sh\"; head -20 \"$d/bridge.sh\" | grep -qF 'wraps each as a' || { echo 'FAIL: docstring pin blind to the false claim'; exit 1; }; echo 'ok: all three pins fail on a violating fixture'"
+    timeout_ms: 10000
+    expected_behavior: "ok: all three pins fail on a violating fixture"
+
 observability:
   traces:
     - "@trace spec:host-browser-mcp"
