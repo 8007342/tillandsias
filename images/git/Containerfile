@@ -97,6 +97,12 @@ RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
 
+# @trace spec:git-mirror-service — order 749-54pv (design T4+T5): host-cert
+# issuance/renewal from ssh-host-signer and the CA-only sshd_config renderer.
+# Started by the entrypoint only behind TILLANDSIAS_MIRROR_SSHD=1 until the
+# T11 staged migration flips the lane.
+COPY sshd-identity.sh /usr/local/bin/sshd-identity.sh
+
 # @trace spec:tillandsias-vault, spec:git-mirror-service
 COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl
 COPY vault-agent-bootstrap.sh /usr/local/bin/vault-agent-bootstrap
