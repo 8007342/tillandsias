@@ -1254,6 +1254,12 @@ plan_index:
       estimated_hours: 6
       events:
         - type: progress
+          ts: "2026-08-16T13:30:16Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1323z"
+          host: macos
+          summary: |
+            macOS measurements landed (audit contribution): 8x one-shot exec round trips 9-10s tight variance — the wire's CONTROL path adds negligible per-session overhead on this host; full series in plan/issues/macos-exec-wire-bulk-stdout-wedge-2026-08-16.md. The audit's payload leg found a REAL defect: bulk stdout >=~44KB from a fast producer wedges the exec session unbounded (58m31s observed) — filed as 772-qn6j (p1, socket-audit-master) with a 60-second hot-path repro that also unblocks 690-pz68's measurement constraint and plausibly roots 635-kagg.
+        - type: progress
           ts: "2026-08-16T07:56:29Z"
           agent_id: "windows-yolanda-fable5-20260816T0721Z"
           host: windows
