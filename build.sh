@@ -184,6 +184,35 @@ _phase_report() {
     _info "Gate phases totalled $(( total / 1000 ))s (set TILLANDSIAS_GATE_PROFILE=1 for every phase)"
 }
 
+# 765-dfry: flush every closed phase into the 682-emvg timing side-channel, in
+# ONE spawn (per-record emission costs ~15ms x ~45 phases per gate — the
+# audit's empty-suite-floor lesson applied to the telemetry itself). Step name
+# is a stable slug of the phase description, prefixed `step:` so consumers can
+# select the family; per-phase exit is 0 by definition (phase records carry
+# WHERE the time went; the gate's verdict lives on the build-check record).
+# Best-effort like every 682-emvg emission: never alters output or exit codes,
+# and never double-emits (the log is consumed on flush).
+_phase_emit_timing() {
+    _phase_close
+    [[ -n "$_PHASE_LOG" ]] || return 0
+    {
+        printf '%s' "$_PHASE_LOG" | awk -F'\t' \
+            -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" '
+            NF == 2 {
+                name = tolower($2)
+                gsub(/[^a-z0-9]+/, "-", name)
+                gsub(/^-+|-+$/, "", name)
+                if (length(name) > 64) name = substr(name, 1, 64)
+                if (name == "") next
+                printf "step:%s\tbuild\t%s\t0\t%s\n", name, $1, host
+            }' | bash "$SCRIPT_DIR/scripts/cycle-metrics.sh" --emit-timing-batch
+    } 2>/dev/null || true
+    # Consume on flush: combined dispatches (--ci-full --install) flush once
+    # per stage, so a later flush emits only the phases closed since this one.
+    _PHASE_LOG=""
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # Flag parsing
 # ---------------------------------------------------------------------------
@@ -1095,6 +1124,11 @@ if [[ "$FLAG_INSTALL" == true ]]; then
         fi
     fi
 
+    # 765-dfry: flush install-stage phase records (portable-launcher build,
+    # image ensure, status smoke, evidence bundle) so a --ci-full --install
+    # run's wall clock is attributable from the timing records alone.
+    _phase_emit_timing
+
     # If --install is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
@@ -1385,6 +1419,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # record for the whole gate. (packet 682-emvg)
     trap - EXIT
     _phase_report
+    # 765-dfry: flush per-phase records AFTER the printed report (report reads
+    # the same log; the flush consumes it).
+    _phase_emit_timing
     timing_emit build-check check "$_CHECK_T0" 0
 
     # If --check is the only remaining flag, exit

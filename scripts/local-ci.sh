@@ -63,6 +63,11 @@ set +e
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# 765-dfry: per-check duration anchor. Checks run sequentially and each ends
+# in archive_check_log, so "time since the previous archive (or section
+# start)" IS the check's own duration. Re-anchored by log_section and by
+# every archive_check_log call.
+_CHECK_ANCHOR_MS="$(timing_now_ms 2>/dev/null || echo 0)"
 
 # Parse flags
 FAST_MODE=0
@@ -693,6 +698,9 @@ write_convergence_artifacts() {
 log_section() {
     echo ""
     printf '%b%s%b\n' "${BOLD}${BLUE}" "▶ $*" "${NC}"
+    # 765-dfry: a section header starts a fresh check block — re-anchor so the
+    # first check in the section is not billed for inter-section work.
+    _CHECK_ANCHOR_MS="$(timing_now_ms 2>/dev/null || echo 0)"
 }
 
 log_pass() {
@@ -774,6 +782,19 @@ archive_check_log() {
         printf '%s\n' "$status" >"$archived_log"
     fi
 
+    # 765-dfry: per-check duration = time since the previous archive/section
+    # anchor (checks run sequentially and each ends here). A zero/absent
+    # anchor (timing-log stub) records 0 rather than an epoch-sized poison
+    # value; the anchor is always reset so the NEXT check measures cleanly.
+    local _acl_now _acl_dur
+    _acl_now="$(timing_now_ms 2>/dev/null || echo 0)"
+    _acl_dur=0
+    if [[ "${_CHECK_ANCHOR_MS:-0}" =~ ^[0-9]+$ && "${_CHECK_ANCHOR_MS:-0}" -gt 0 && "$_acl_now" =~ ^[0-9]+$ && "$_acl_now" -ge "${_CHECK_ANCHOR_MS}" ]]; then
+        _acl_dur=$((_acl_now - _CHECK_ANCHOR_MS))
+        [[ "$_acl_dur" -lt 86400000 ]] || _acl_dur=0
+    fi
+    _CHECK_ANCHOR_MS="$_acl_now"
+
     jq -nc \
         --arg ci_run_id "$CI_RUN_ID" \
         --arg ci_phase "$CI_PHASE" \
@@ -782,6 +803,7 @@ archive_check_log() {
         --arg source_log "${source_log:-}" \
         --arg archived_log "$archived_log" \
         --arg sha256 "$(sha256_file "$archived_log")" \
+        --argjson duration_ms "$_acl_dur" \
         '{
           ci_run_id:$ci_run_id,
           ci_phase:$ci_phase,
@@ -789,8 +811,21 @@ archive_check_log() {
           status:$status,
           source_log:$source_log,
           archived_log:$archived_log,
-          sha256:$sha256
+          sha256:$sha256,
+          duration_ms:$duration_ms
         }' >>"$CHECK_LOG_INDEX"
+
+    # Mirror into the 682-emvg side-channel so a ci-full run is attributable
+    # from the timing records alone (skipped checks spent no measured time and
+    # would only flatten the rolling averages — not emitted). Best-effort by
+    # timing_emit's own contract; the ~15ms spawn is noise on a minutes-long
+    # phase (the microseconds bound applies to the 8s --check gate, whose
+    # phases batch through --emit-timing-batch instead).
+    if [[ "$status" != "skipped" && "$_acl_dur" -gt 0 ]]; then
+        local _acl_rc=0
+        [[ "$status" == "fail" ]] && _acl_rc=1
+        timing_emit "check:$check_id" "$CI_PHASE" "$((_acl_now - _acl_dur))" "$_acl_rc"
+    fi
 }
 
 
