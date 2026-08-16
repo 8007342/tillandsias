@@ -82,3 +82,26 @@ at the installed VERSION (`scripts/build-image.sh` git lane or the next
 `git ls-remote <origin> 'refs/tillandsias/upstream-auth/*'` shows
 `authorized/<epoch>`. The macuahuitl overnight loop (2026-08-16→17) owns this
 lane tonight.
+
+## Update 2026-08-16T21:5xZ (linux_mutable) — verdict machinery LIVE; credential genuinely denied
+
+The rebuilt tillandsias-git image (v0.4.260815.1, probe wiring baked) was
+proven end-to-end by a direct forge lane: the fresh mirror now PUBLISHES
+verdict refs (observed `denied/1786914963`, refreshed every ~120s tick), the
+credential guard reported `blocked:upstream-push-unauthorized` on a FRESH
+verdict, the in-forge cycle refused worker drain, three sanctioned push
+attempts were rejected by the pre-receive relay, and no MO-FULL marker was
+emitted. Every layer of 756-2jnj behaved exactly as designed.
+
+CONCLUSION SHARPENED: the 702-griq stale-image half is FIXED on this host
+(verdicts publish); what remains is the credential itself — the mirror's
+Vault GitHub token is refused upstream RIGHT NOW. Yoga's 20:27Z push success
+was a single earlier good epoch (intermittent authorization — token expiry,
+fine-grained scope, or upstream rate/permission flapping are the candidates).
+
+**Operator action (the only remaining one):** repair/re-seed the mirror's
+Vault GitHub token push permission for 8007342/tillandsias, then verify
+`git ls-remote <origin> 'refs/tillandsias/upstream-auth/*'` shows
+`authorized/<epoch>`. The in-forge original of this update (commit fb4206bdf)
+died with its container, per the standing 741-3y48 shape; salvaged here from
+the launcher-captured output.

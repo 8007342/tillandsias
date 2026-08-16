@@ -51857,6 +51857,12 @@ plan_index:
         - 'Negative control: with a deliberately unauthorized/absent upstream credential, the guard goes red — pinned by an instant or quick pre-build litmus.'
         - 'Live closure on a real forge: lease-only commit pushed through the mirror, local HEAD == mirror-exported HEAD == GitHub branch head, check-forge-findings-persisted.sh passes.'
       events:
+        - type: progress
+          ts: "2026-08-16T21:21:21Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            DENIED-SIDE LIVE CLOSURE EVIDENCE 2026-08-16 (macuahuitl forge lane, rebuilt image): mirror publishes fresh verdict refs (denied/1786914963, ~120s refresh), guard reports blocked:upstream-push-unauthorized on a FRESH verdict (not stale/unpublished), worker drain refused, three sanctioned pushes rejected at the pre-receive relay, no marker emitted. The fail-closed half of criterion 4 is now proven on a real forge; the AUTHORIZED-side half (lease-only push converging) still awaits the operator's token repair.
         - type: note
           ts: "2026-08-15T17:13:55Z"
           host: linux_mutable
