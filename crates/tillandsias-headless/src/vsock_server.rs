@@ -30,7 +30,7 @@ use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase,
     WIRE_VERSION, decode, encode,
 };
-use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
+use tillandsias_secure_channel::{HopId, channel_psk, server_handshake_or_reclaim};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc, watch};
 use tracing::{debug, info, warn};
@@ -105,10 +105,32 @@ fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
     .clone()
 }
 
+/// Wrap `stream` per the secure-control-wire `mode`: `Off` passes the
+/// plaintext stream through, `On` runs the version-bound Noise responder
+/// handshake and returns the encrypted stream.
+///
+/// The mode is a PARAMETER (resolved by the caller via
+/// [`secure_control_wire_mode`]) rather than read here: the env gate caches
+/// through a `OnceLock`, so a unit test could never exercise the gated-ON
+/// path without process-wide env mutation if this function consulted the
+/// gate itself (order 137, vsock-exec-chain-authn-authz).
+///
+/// A FAILED gated-ON handshake RETURNS the raw stream with the error
+/// (`server_handshake_or_reclaim`): the order-137 cutover contract ("send
+/// Error{code: Unauthorized} and close",
+/// plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md) needs the
+/// still-plaintext connection for the rejection notice, and giving the
+/// stream back keeps every value owned — no borrow reaches across the
+/// caller's success/failure split.
+#[allow(clippy::type_complexity)]
 async fn maybe_secure_stream(
+    mode: SecureControlWireMode,
     stream: Box<dyn AsyncReadWrite + Unpin + Send>,
-) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
-    match secure_control_wire_mode().map_err(io::Error::other)? {
+) -> Result<
+    Box<dyn AsyncReadWrite + Unpin + Send>,
+    (Box<dyn AsyncReadWrite + Unpin + Send>, io::Error),
+> {
+    match mode {
         SecureControlWireMode::Off => Ok(stream),
         SecureControlWireMode::On => {
             let psk = channel_psk(
@@ -116,11 +138,20 @@ async fn maybe_secure_stream(
                 WIRE_VERSION,
                 HopId::HostGuest,
             );
-            let secure = server_handshake(stream, &psk).await?;
-            Ok(Box::new(secure))
+            match server_handshake_or_reclaim(stream, &psk).await {
+                Ok(secure) => Ok(Box::new(secure)),
+                Err((raw, err)) => Err((raw, err)),
+            }
         }
     }
 }
+
+/// Bound on the best-effort plaintext `Unauthorized` notice written to a
+/// peer that failed the secure-channel handshake (order 137). Best-effort by
+/// design: a peer that never reads must not be able to pin this handler —
+/// the notice is a courtesy diagnostic, the fail-closed `return` is the
+/// contract.
+const UNAUTHORIZED_NOTICE_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// Shared lifecycle state that the in-VM headless updates as it progresses
 /// through provisioning → ready → drain. The vsock listener reads from this
@@ -694,25 +725,94 @@ async fn serve_listener(listener: &mut Listener, shutdown: Arc<AtomicBool>, stat
 async fn handle_connection(
     stream: Box<dyn AsyncReadWrite + Unpin + Send>,
     state: VmStateHandle,
+    shutdown: watch::Receiver<bool>,
+) {
+    // The gate is resolved HERE (OnceLock-cached env read) and passed down so
+    // the gated-ON body stays unit-testable without env mutation (order 137).
+    handle_connection_with_mode(secure_control_wire_mode(), stream, state, shutdown).await
+}
+
+async fn handle_connection_with_mode(
+    mode: Result<SecureControlWireMode, String>,
+    raw_stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+    state: VmStateHandle,
     mut shutdown: watch::Receiver<bool>,
 ) {
-    let mut stream = match tokio::select! {
-        result = maybe_secure_stream(stream) => result,
-        _ = connection_shutdown(&mut shutdown) => return,
-    } {
-        Ok(secured) => {
-            info!(
-                spec = "vsock-transport",
-                "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
-            );
-            secured
-        }
+    let mode = match mode {
+        Ok(mode) => mode,
         Err(err) => {
-            warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
+            // Misconfigured gate (unknown flag value): fail closed without
+            // serving anything. No Unauthorized notice here — the parse error
+            // is an operator misconfiguration, not a peer-authorization
+            // verdict.
+            warn!(
+                spec = "vsock-transport",
+                error = %err,
+                "secure control wire misconfigured; closing connection"
+            );
             return;
         }
     };
+    // Every value stays OWNED across the success/failure split: a failed
+    // gated-ON handshake hands the raw stream BACK (server_handshake_or_reclaim),
+    // so no borrow of it has to span this match — the earlier borrowing
+    // draft was NLL-rejected (E0499, drop-liveness of the Ok box).
+    let handshake = tokio::select! {
+        result = maybe_secure_stream(mode, raw_stream) => result,
+        _ = connection_shutdown(&mut shutdown) => return,
+    };
+    let (mut refused_stream, err) = match handshake {
+        Ok(stream) => {
+            if mode == SecureControlWireMode::On {
+                info!(
+                    spec = "vsock-transport",
+                    "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
+                );
+            }
+            serve_ready_stream(stream, state, shutdown).await;
+            return;
+        }
+        Err((raw, err)) => (raw, err),
+    };
+    // Reached only when a gated-ON handshake FAILED (Off cannot fail).
+    // Order-137 cutover contract: "send Error{code: Unauthorized} and
+    // close", never a silent close. Best-effort and time-bounded: the write
+    // result is ignored so an unauthenticated peer that never reads cannot
+    // pin this handler.
+    // @trace plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md
+    if mode == SecureControlWireMode::On {
+        let unauthorized = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 0,
+            body: ControlMessage::Error {
+                seq_in_reply_to: None,
+                code: ErrorCode::Unauthorized,
+                message: "secure control wire required: the version-bound \
+                          secure-channel handshake failed; plaintext or \
+                          mismatched-version peers are not served"
+                    .to_string(),
+            },
+        };
+        let _ = tokio::time::timeout(
+            UNAUTHORIZED_NOTICE_TIMEOUT,
+            write_envelope(&mut refused_stream, &unauthorized),
+        )
+        .await;
+    }
+    warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
+}
 
+/// The post-handshake serving loop — everything after a connection is
+/// cleared to be served (the plaintext stream when the secure control wire
+/// is Off, the encrypted stream when On). Factored out of
+/// `handle_connection_with_mode` (order 137) so the success path can
+/// consume the secured stream inside its own match arm while the failure
+/// path keeps the reclaimed raw stream for the Unauthorized notice.
+async fn serve_ready_stream(
+    mut stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+    state: VmStateHandle,
+    mut shutdown: watch::Receiver<bool>,
+) {
     let first = match tokio::select! {
         result = read_envelope(&mut stream) => result,
         _ = connection_shutdown(&mut shutdown) => return,
@@ -1539,6 +1639,89 @@ mod tests {
         assert!(parse_secure_control_wire_mode(Ok("yes".to_string())).is_err());
         assert!(parse_secure_control_wire_mode(Ok("1".to_string())).is_err());
         assert!(parse_secure_control_wire_mode(Ok("true".to_string())).is_err());
+    }
+
+    /// Order 137 (vsock-exec-chain-authn-authz): a gated-ON responder that
+    /// receives a plaintext `Hello` — an unauthenticated / legacy peer, the
+    /// exact client shape `plaintext_peer_is_rejected` models in
+    /// tillandsias-secure-channel — must answer with a plaintext
+    /// `Error{code: Unauthorized}` envelope naming the secure-channel
+    /// requirement, must NEVER send `HelloAck`, and must then close the
+    /// connection (fail-closed). The mode is injected via
+    /// `handle_connection_with_mode` because `secure_control_wire_mode()`
+    /// caches through a OnceLock and env mutation is process-wide.
+    /// @trace plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md
+    #[tokio::test]
+    async fn gated_on_plaintext_peer_gets_unauthorized_error_not_helloack() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let server_task = tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::On),
+            Box::new(server),
+            state,
+            shutdown_rx,
+        ));
+
+        // A plaintext Hello: exactly what a pre-secure-channel client (or a
+        // probe replaying one) opens with.
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: "plaintext-legacy-client".to_string(),
+                    capabilities: Vec::new(),
+                    build_version: None,
+                },
+            },
+        )
+        .await
+        .expect("plaintext client writes Hello");
+
+        let reply = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("gated-ON responder must answer the rejected peer, not hang")
+            .expect("responder sends one well-formed plaintext envelope before closing");
+        match reply.body {
+            ControlMessage::Error {
+                code,
+                message,
+                seq_in_reply_to,
+            } => {
+                assert_eq!(
+                    code,
+                    ErrorCode::Unauthorized,
+                    "the rejection envelope must carry ErrorCode::Unauthorized"
+                );
+                assert!(
+                    message.contains("secure control wire required"),
+                    "the message must name the secure-channel requirement, got {message:?}"
+                );
+                assert_eq!(seq_in_reply_to, None, "no plaintext frame was accepted");
+            }
+            ControlMessage::HelloAck { .. } => {
+                panic!("gated-ON responder must never HelloAck an unauthenticated peer")
+            }
+            other => panic!("expected Error{{Unauthorized}}, got {other:?}"),
+        }
+
+        // Fail-closed: nothing is served after the notice — the next read
+        // must observe the connection closing, never a HelloAck or any
+        // other envelope.
+        let after = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("connection must close after the Unauthorized notice");
+        assert!(
+            after.is_err(),
+            "no envelope may follow the Unauthorized rejection, got {after:?}"
+        );
+
+        tokio::time::timeout(Duration::from_secs(2), server_task)
+            .await
+            .expect("handler must exit fail-closed")
+            .expect("handler must not panic");
     }
 
     /// Default is `Starting` (gap-6 contract). The vsock listener can

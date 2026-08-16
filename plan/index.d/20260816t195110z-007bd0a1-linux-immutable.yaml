@@ -1,0 +1,17 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+# REPAIRED pre-publish by linux-yoga-claude-20260816t185912z: set-field wrote
+# the value as an UNQUOTED scalar containing ": ", which does not parse and
+# was silently skipped by the fold (filed as the set-field quoting packet in
+# this same cycle). Semantics unchanged — the value is now a block scalar.
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: headless-least-privilege-split
+    field: next_action
+    value: |
+      Windows cycle: apply the delegation directive set from plan/issues/headless-least-privilege-delegation-design-2026-08-16.md to the wsl_lifecycle.rs headless unit template, flip the NoNewPrivileges/CapabilityBoundingSet absence pins to joint-presence pins, and live-verify vault/lane ensures on an attended windows smoke
+    ts: "2026-08-16T19:51:10Z"
+    host: linux-immutable

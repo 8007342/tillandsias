@@ -92,25 +92,62 @@ where
 /// Run the NNpsk0 handshake as the **responder** (guest for the host hop;
 /// container for the guest hop). Errors closed if the initiator's PSK (version)
 /// does not match — `read_message` on the first frame fails the AEAD check.
-pub async fn server_handshake<S>(mut stream: S, psk: &[u8; 32]) -> io::Result<EncryptedStream<S>>
+pub async fn server_handshake<S>(stream: S, psk: &[u8; 32]) -> io::Result<EncryptedStream<S>>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    let params = NOISE_PARAMS.parse().map_err(snow_err)?;
-    let mut hs = snow::Builder::new(params)
+    server_handshake_or_reclaim(stream, psk)
+        .await
+        .map_err(|(_, err)| err)
+}
+
+/// Like [`server_handshake`], but a FAILED handshake returns the stream
+/// alongside the error instead of dropping it. Order 137
+/// (vsock-exec-chain-authn-authz): the guest responder's cutover contract is
+/// "send Error{code: Unauthorized} and close" — the rejection notice needs
+/// the still-plaintext connection a by-value failure would otherwise destroy.
+pub async fn server_handshake_or_reclaim<S>(
+    mut stream: S,
+    psk: &[u8; 32],
+) -> Result<EncryptedStream<S>, (S, io::Error)>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let params = match NOISE_PARAMS.parse().map_err(snow_err) {
+        Ok(params) => params,
+        Err(err) => return Err((stream, err)),
+    };
+    let mut hs = match snow::Builder::new(params)
         .psk(0, psk)
         .build_responder()
-        .map_err(snow_err)?;
+        .map_err(snow_err)
+    {
+        Ok(hs) => hs,
+        Err(err) => return Err((stream, err)),
+    };
 
     let mut buf = vec![0u8; 65535];
     // <- e, psk
-    let msg = read_hs_frame(&mut stream).await?;
-    hs.read_message(&msg, &mut buf).map_err(snow_err)?;
+    let msg = match read_hs_frame(&mut stream).await {
+        Ok(msg) => msg,
+        Err(err) => return Err((stream, err)),
+    };
+    if let Err(err) = hs.read_message(&msg, &mut buf).map_err(snow_err) {
+        return Err((stream, err));
+    }
     // -> e, ee
-    let n = hs.write_message(&[], &mut buf).map_err(snow_err)?;
-    write_hs_frame(&mut stream, &buf[..n]).await?;
+    let n = match hs.write_message(&[], &mut buf).map_err(snow_err) {
+        Ok(n) => n,
+        Err(err) => return Err((stream, err)),
+    };
+    if let Err(err) = write_hs_frame(&mut stream, &buf[..n]).await {
+        return Err((stream, err));
+    }
 
-    let transport = hs.into_transport_mode().map_err(snow_err)?;
+    let transport = match hs.into_transport_mode().map_err(snow_err) {
+        Ok(transport) => transport,
+        Err(err) => return Err((stream, err)),
+    };
     Ok(EncryptedStream::new(stream, transport))
 }
 

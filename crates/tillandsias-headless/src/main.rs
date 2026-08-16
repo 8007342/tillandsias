@@ -230,6 +230,32 @@ fn main() {
         return;
     }
 
+    // Order 270: hidden helper mode — run ONE image ensure in its own session
+    // so a host-side PTY close cannot reap a multi-minute first-use build.
+    // Spawned only by run_image_ensure_detached (SetsidImageEnsure); not part
+    // of the operator CLI surface, so it is deliberately absent from --help.
+    if let Some(i) = user_args
+        .iter()
+        .position(|a| a == "--internal-ensure-image")
+    {
+        let debug = user_args.iter().any(|a| a == "--debug");
+        let (Some(root), Some(image_name), Some(image_tag)) = (
+            user_args.get(i + 1),
+            user_args.get(i + 2),
+            user_args.get(i + 3),
+        ) else {
+            eprintln!("Error: --internal-ensure-image requires <root> <image-name> <image-tag>");
+            std::process::exit(2);
+        };
+        match ensure_image_exists(Path::new(root), image_name, image_tag, debug) {
+            Ok(()) => std::process::exit(0),
+            Err(e) => {
+                eprintln!("[tillandsias] --internal-ensure-image {image_name} failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     // @trace spec:vsock-transport — `--listen-vsock <PORT>` switches the
     // headless service from binding the Linux Unix control socket to
     // binding a vsock listener on `VMADDR_CID_ANY:<PORT>`. Only available
@@ -1986,6 +2012,175 @@ fn ensure_image_decision(
     decide_image_build(identity.clone(), observation)
 }
 
+/// Order 270: operator opt-out for the detached first-use image ensure
+/// (`TILLANDSIAS_IMAGE_BUILD_DETACH=0` keeps the pre-270 in-process path).
+const IMAGE_BUILD_DETACH_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_DETACH";
+/// Set on the helper process so its own `ensure_image_exists` (including
+/// base-image recursion) stays in-process — one helper, never nested ones.
+const IMAGE_BUILD_HELPER_ENV: &str = "TILLANDSIAS_IMAGE_BUILD_HELPER";
+
+/// Order 270: pure decision — should this ensure detach into a
+/// session-surviving helper? The multi-minute first-use `podman build` ran
+/// as a direct child of the guest attach/login process in the same
+/// session/pgrp, so a host-side PTY close reaped it mid-build and left the
+/// exit-125 corrupt-overlay aftermath order 281 then had to heal. A helper
+/// in its OWN session (setsid, no controlling tty, no pipes to the dying
+/// parent) survives the close and finishes the build; the retry then hits
+/// the cache. Unix-only (setsid); the helper itself must never re-detach.
+fn image_build_detach_decision(
+    unix: bool,
+    inside_helper: bool,
+    env_override: Option<&str>,
+) -> bool {
+    if !unix || inside_helper {
+        return false;
+    }
+    !matches!(env_override, Some("0"))
+}
+
+fn inside_image_build_helper() -> bool {
+    std::env::var(IMAGE_BUILD_HELPER_ENV).is_ok()
+}
+
+/// Order 270: the helper's append-only per-image build log under the init
+/// cache dir (falling back to /tmp when no cache dir can be resolved).
+fn image_build_helper_log_path(image_name: &str) -> PathBuf {
+    let dir = init_cache_dir().unwrap_or_else(|_| PathBuf::from("/tmp"));
+    dir.join(format!("image-build-{image_name}.log"))
+}
+
+/// What the detached spawn would do — recorded by the test mock, executed by
+/// [`SetsidImageEnsure`]. Mirrors the OverlayHeal seam (order 281) so the
+/// detach path is unit-testable without creating processes.
+struct DetachedEnsureRequest {
+    root: PathBuf,
+    image_name: String,
+    image_tag: String,
+    log_path: PathBuf,
+    debug: bool,
+}
+
+trait DetachedImageEnsure {
+    /// Spawn the helper in its own session and WAIT for it; returns the
+    /// helper's exit code. The wait stays in the parent so foreground lanes
+    /// keep their ordering — detaching buys survival of parent death, not
+    /// asynchrony. If the parent is reaped mid-wait, the helper completes
+    /// anyway and tags the canonical alias; the next attach blocks on the
+    /// image flock (held by the HELPER, never the parent) and then reads the
+    /// cached image.
+    fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String>;
+}
+
+struct SetsidImageEnsure;
+
+impl DetachedImageEnsure for SetsidImageEnsure {
+    fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String> {
+        let exe = std::env::current_exe().map_err(|e| format!("resolve current_exe: {e}"))?;
+        let log = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&request.log_path)
+            .map_err(|e| format!("open image build log {}: {e}", request.log_path.display()))?;
+        let log_err = log
+            .try_clone()
+            .map_err(|e| format!("clone image build log handle: {e}"))?;
+        let mut command = Command::new(exe);
+        command
+            .arg("--internal-ensure-image")
+            .arg(&request.root)
+            .arg(&request.image_name)
+            .arg(&request.image_tag)
+            .env(IMAGE_BUILD_HELPER_ENV, "1")
+            .stdin(Stdio::null())
+            .stdout(log)
+            .stderr(log_err);
+        if request.debug {
+            command.arg("--debug");
+        }
+        #[cfg(unix)]
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let mut child = command
+            .spawn()
+            .map_err(|e| format!("spawn image ensure helper: {e}"))?;
+        // Low-frequency heartbeat instead of streamed build output (which
+        // goes to the log): a fast Skip/Retag round trip stays SILENT — the
+        // pre-270 path printed nothing there either — while a real build
+        // surfaces life on the PTY within ~5s and then every minute. The
+        // tray-facing signal is push_udp_event at build start, emitted
+        // inside the helper's build_image_with_logging as always.
+        let mut announced = false;
+        let mut last_beat = std::time::Instant::now();
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return Ok(status.code().unwrap_or(-1)),
+                Ok(None) => {
+                    let interval = if announced { 60 } else { 5 };
+                    if last_beat.elapsed() >= std::time::Duration::from_secs(interval) {
+                        announced = true;
+                        last_beat = std::time::Instant::now();
+                        eprintln!(
+                            "[tillandsias] image {} ensure still running in its detached helper; this may take several minutes (log: {})",
+                            request.image_name,
+                            request.log_path.display()
+                        );
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(250));
+                }
+                Err(e) => return Err(format!("wait image ensure helper: {e}")),
+            }
+        }
+    }
+}
+
+/// Order 270: route one image ensure through the session-detached helper.
+/// The parent never takes the image flock — the HELPER owns it (flock(2)
+/// releases on fd close, so a reaped parent must never be the holder a
+/// retry would wait on) and re-runs the full locked decision authoritatively.
+fn run_image_ensure_detached<D: DetachedImageEnsure>(
+    root: &Path,
+    image_name: &str,
+    image_tag: &str,
+    debug: bool,
+    detacher: &D,
+) -> Result<(), String> {
+    let log_path = image_build_helper_log_path(image_name);
+    if debug {
+        eprintln!(
+            "[tillandsias] detaching image ensure helper for {image_name} (log: {})",
+            log_path.display()
+        );
+    }
+    let request = DetachedEnsureRequest {
+        root: root.to_path_buf(),
+        image_name: image_name.to_string(),
+        image_tag: image_tag.to_string(),
+        log_path: log_path.clone(),
+        debug,
+    };
+    let code = detacher.run(&request)?;
+    if code == 0 {
+        return Ok(());
+    }
+    let tail = fs::read_to_string(&log_path)
+        .map(|s| {
+            let lines: Vec<&str> = s.lines().collect();
+            let start = lines.len().saturating_sub(15);
+            lines[start..].join("\n")
+        })
+        .unwrap_or_default();
+    Err(format!(
+        "detached image ensure helper for {image_name} exited {code}; log tail ({}):\n{tail}",
+        log_path.display()
+    ))
+}
+
 pub(crate) fn ensure_image_exists(
     root: &Path,
     image_name: &str,
@@ -2002,6 +2197,25 @@ pub(crate) fn ensure_image_exists(
         return Err(runtime_phase::refusal(&format!(
             "ensure image {image_name}"
         )));
+    }
+    // Order 270: detach into a session-surviving helper BEFORE taking the
+    // image flock — the parent must never be the lock holder (a PTY close
+    // reaping it would strand nothing, but only because flock dies with the
+    // fd; the HELPER owns the lock and the build). The helper re-enters this
+    // same function with the helper marker set and runs the locked
+    // identity → decision → build → alias path below unchanged.
+    let detach_override = std::env::var(IMAGE_BUILD_DETACH_ENV).ok();
+    // `!cfg!(test)`: in the unit-test harness `current_exe` is the TEST
+    // RUNNER, which cannot serve --internal-ensure-image (the clone fixtures
+    // proved it: five 'Unrecognized option' helper deaths). The decision and
+    // spawn seam are unit-tested directly; integration tests that spawn the
+    // real binary still exercise the live helper.
+    if image_build_detach_decision(
+        cfg!(all(unix, not(test))),
+        inside_image_build_helper(),
+        detach_override.as_deref(),
+    ) {
+        return run_image_ensure_detached(root, image_name, image_tag, debug, &SetsidImageEnsure);
     }
     let _image_lock = resource_lock::acquire(
         &format!("image-{image_name}"),
@@ -16959,6 +17173,129 @@ mod tests {
         enforce_ca_key_mode(&key).expect("enforce");
         let mode = std::fs::metadata(&key).expect("stat").permissions().mode() & 0o777;
         assert_eq!(mode, 0o600, "CA key must be owner-only after heal");
+    }
+
+    /// Order 270: the detach decision, both directions. Unix + not-helper +
+    /// no opt-out detaches; the helper itself, a non-unix target, or the
+    /// operator opt-out stay in-process.
+    #[test]
+    fn image_build_detach_decision_both_directions() {
+        assert!(image_build_detach_decision(true, false, None));
+        assert!(image_build_detach_decision(true, false, Some("1")));
+        // helper must never re-detach (one helper, recursion stays inside it)
+        assert!(!image_build_detach_decision(true, true, None));
+        // setsid is unix-only
+        assert!(!image_build_detach_decision(false, false, None));
+        // operator opt-out
+        assert!(!image_build_detach_decision(true, false, Some("0")));
+    }
+
+    /// Order 270: the spawn seam — the detached route hands the helper the
+    /// exact ensure coordinates and treats helper exit 0 as success, non-zero
+    /// as a failure carrying the log tail. No process is spawned.
+    #[test]
+    fn detached_image_ensure_routes_through_the_spawn_seam() {
+        struct MockDetacher {
+            recorded: std::cell::RefCell<Vec<DetachedEnsureRequest>>,
+            exit_code: i32,
+        }
+        impl DetachedImageEnsure for MockDetacher {
+            fn run(&self, request: &DetachedEnsureRequest) -> Result<i32, String> {
+                self.recorded.borrow_mut().push(DetachedEnsureRequest {
+                    root: request.root.clone(),
+                    image_name: request.image_name.clone(),
+                    image_tag: request.image_tag.clone(),
+                    log_path: request.log_path.clone(),
+                    debug: request.debug,
+                });
+                Ok(self.exit_code)
+            }
+        }
+
+        let ok = MockDetacher {
+            recorded: std::cell::RefCell::new(Vec::new()),
+            exit_code: 0,
+        };
+        run_image_ensure_detached(
+            Path::new("/some/root"),
+            "forge",
+            "tillandsias-forge:v1",
+            false,
+            &ok,
+        )
+        .expect("helper exit 0 is success");
+        let recorded = ok.recorded.borrow();
+        assert_eq!(recorded.len(), 1);
+        assert_eq!(recorded[0].root, PathBuf::from("/some/root"));
+        assert_eq!(recorded[0].image_name, "forge");
+        assert_eq!(recorded[0].image_tag, "tillandsias-forge:v1");
+        assert!(
+            recorded[0]
+                .log_path
+                .to_string_lossy()
+                .contains("image-build-forge.log"),
+            "per-image log path: {:?}",
+            recorded[0].log_path
+        );
+        drop(recorded);
+
+        let failing = MockDetacher {
+            recorded: std::cell::RefCell::new(Vec::new()),
+            exit_code: 7,
+        };
+        let err = run_image_ensure_detached(
+            Path::new("/some/root"),
+            "forge",
+            "tillandsias-forge:v1",
+            false,
+            &failing,
+        )
+        .expect_err("helper non-zero exit is a failure");
+        assert!(err.contains("exited 7"), "carries the helper exit: {err}");
+    }
+
+    /// Order 270 source-window pins: (a) the detach decision runs BEFORE the
+    /// image flock is taken — the parent must never be the lock holder a
+    /// retry waits on; (b) the detached path still routes through the SAME
+    /// locked identity → decision → build → alias machinery (a retry after
+    /// the helper completes therefore observes the cached image and Skips);
+    /// (c) main() dispatches the hidden helper mode back into
+    /// ensure_image_exists.
+    #[test]
+    fn detached_image_ensure_preserves_lock_and_decision_machinery() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "pub(crate) fn ensure_image_exists(");
+        let detach_idx = window
+            .find("image_build_detach_decision(")
+            .expect("ensure must consult the detach decision");
+        let lock_idx = window
+            .find("resource_lock::acquire(")
+            .expect("ensure must take the per-image flock");
+        assert!(
+            detach_idx < lock_idx,
+            "detach decision must precede the flock — only the helper locks"
+        );
+        for anchor in [
+            "ensure_image_identity(",
+            "ensure_image_decision(",
+            "build_image_with_logging(",
+            "apply_image_aliases(",
+        ] {
+            assert!(
+                window.contains(anchor),
+                "detached ensure must keep the locked decision machinery: {anchor}"
+            );
+        }
+        let main_window = source_window(source, "fn main()");
+        let dispatch_idx = main_window
+            .find("--internal-ensure-image")
+            .expect("main must dispatch the hidden helper mode");
+        assert!(
+            main_window[dispatch_idx..]
+                .find("ensure_image_exists(")
+                .is_some(),
+            "helper mode must run the same ensure_image_exists body"
+        );
     }
 
     // Regression: smoke-finding/rootless-bridge-network-missing. The dual-home

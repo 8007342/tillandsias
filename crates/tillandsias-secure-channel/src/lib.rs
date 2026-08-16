@@ -138,7 +138,9 @@ pub fn channel_psk(build_version: &str, wire_version: u16, hop: HopId) -> Zeroiz
 
 pub mod secure_stream;
 
-pub use secure_stream::{EncryptedStream, client_handshake, server_handshake};
+pub use secure_stream::{
+    EncryptedStream, client_handshake, server_handshake, server_handshake_or_reclaim,
+};
 
 #[cfg(test)]
 mod tests {

@@ -1,0 +1,63 @@
+name: litmus:vsock-unauthenticated-peer-rejected
+spec: vsock-transport
+description: >
+  Pin the order-137 authorization contract on the vsock control wire. The
+  guest responder binds VMADDR_CID_ANY and historically HelloAck'd any peer;
+  PtyOpen ultimately execs into the deepest forge container, so an
+  unauthenticated peer reaching HelloAck is the P0 exec-chain exposure
+  (plan/issues/security-audit-zero-trust-2026-07-01.md). The operator-chosen
+  closure is the encrypted version-bound channel (orders 141/145): when the
+  secure control wire is REQUIRED, a peer that fails the handshake —
+  plaintext, forged/absent PSK, mismatched version — gets a single plaintext
+  Error{Unauthorized} envelope and a closed connection, never HelloAck and
+  never a served control message. The default-ON flip is owned by order 145
+  (encrypted-channel-vsock-cutover, atomic cross-host); until then the gate
+  is opt-in and this litmus pins the gated-ON behaviour in-process (no VM
+  needed — exactly what the cutover deliverable's slice-4 plan promised).
+severity: critical
+size: instant
+phase: pre-build
+
+preconditions:
+  - cargo workspace builds (tillandsias-secure-channel + tillandsias-headless)
+
+critical_path:
+  - step: "primitive: a plaintext peer fails the version-bound handshake"
+    command: "cargo test -q -p tillandsias-secure-channel secure_stream::tests::plaintext_peer_is_rejected -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "primitive: a forged/mismatched PSK fails the handshake (closed, not downgraded)"
+    command: "cargo test -q -p tillandsias-secure-channel secure_stream::tests::mismatched_psk_handshake_fails -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "responder: gated-ON plaintext Hello gets Error{Unauthorized}, never HelloAck, then close"
+    command: "cargo test -q -p tillandsias-headless --features listen-vsock --bin tillandsias vsock_server::tests::gated_on_plaintext_peer_gets_unauthorized_error_not_helloack -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "Req: the Unauthorized emission exists on the responder's handshake-failure path"
+    command: "grep -q 'ErrorCode::Unauthorized' crates/tillandsias-headless/src/vsock_server.rs && grep -q 'server_handshake_or_reclaim' crates/tillandsias-headless/src/vsock_server.rs && echo 'ok: rejection notice wired on the reclaimed stream'"
+    timeout_ms: 10000
+    expected_behavior: "ok: rejection notice wired on the reclaimed stream"
+
+observability:
+  traces:
+    - "@trace spec:vsock-transport"
+    - "@trace spec:host-guest-transport"
+  expected_log: "unauthenticated peer receives Unauthorized and is closed; HelloAck only after a successful secure-channel handshake when required"
+  log_fields:
+    spec: "vsock-transport"
+    test: "vsock-unauthenticated-peer-rejected"
+    artifact: "crates/tillandsias-headless/src/vsock_server.rs"
+
+rollback:
+  on_failure: >
+    The responder drifted toward serving unauthenticated peers. Restore the
+    handle_connection_with_mode failure arm: reclaim the raw stream
+    (server_handshake_or_reclaim), send one plaintext Error{Unauthorized}
+    (time-bounded, best-effort), warn 'handshake failed', and fail-close.
+    The default-ON flip belongs to order 145 — do not close order 137's
+    reachability criterion here.
+  command: "grep -n 'Unauthorized\\|handshake failed' crates/tillandsias-headless/src/vsock_server.rs | head -8"

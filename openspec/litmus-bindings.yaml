@@ -1082,6 +1082,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
+  - litmus:headless-least-privilege-delegation-shape
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: graceful-shutdown
@@ -1123,5 +1124,6 @@ specs:
   litmus_tests:
   - litmus:vsock-handshake
   - litmus:vsock-exec-heartbeat
+  - litmus:vsock-unauthenticated-peer-rejected
   coverage_ratio: 100
   last_verified: '2026-07-14'
