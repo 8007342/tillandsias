@@ -607,6 +607,34 @@ multi_host_development:
       to report the completion of entire waves, avoiding unnecessary stalls
       while waiting for central unblocking.
 
+  toolbox_first_scripts:
+    trace: "operator directive 2026-08-16 (The Tlatoāni): 'use toolboxes for everything; scripts should be idempotent and toolbox friendly' — order 777-amku"
+    rule: >
+      Every repo script is idempotent and toolbox-friendly BY DEFAULT: a
+      script that may need tools the host lacks carries a shebang-adjacent
+      `source "$(dirname "${BASH_SOURCE[0]}")/ensure_toolbox.sh"` include.
+      The include's contract: if the build toolbox does not exist, create and
+      initialize it; otherwise noop. Never require a host daemon or host
+      package install (the nix-daemon lesson, 2026-08-16) when a toolbox can
+      carry the tool.
+    include_contract: >
+      scripts/ensure_toolbox.sh — (1) after it returns 0,
+      `toolbox run --container tillandsias-builder …` works on
+      toolbox-capable hosts; (2) on hosts without `toolbox` it is a silent,
+      instant noop; (3) create+init happens at most once (marker-gated in the
+      delegate); (4) it never re-execs the caller and never rewrites the
+      caller's shell options; (5) it DELEGATES to
+      scripts/with-tillandsias-builder.sh direct mode (`… true`) so the
+      ensure logic has exactly one implementation with two entry shapes —
+      the ensure-only include, and the re-exec wrapper for build entry
+      points. Pinned by litmus:ensure-toolbox-include-shape.
+    tool_dispatch_pattern: >
+      Host tool preferred when present, toolbox as the fallback — zero
+      behavior change on hosts that carry the tool natively:
+      `command -v <tool> >/dev/null && <tool> … || toolbox run --container
+      tillandsias-builder <tool> …`. Blockers phrased as "host needs
+      daemon/package X" are mis-shaped; re-file them as "script Y is not
+      toolbox-friendly yet".
   fedora_silverblue_immutable_builders:
     trace: "operator directive 2026-07-16 (The Tlatoāni, 'Toolboxes baby!!'): immutable != restricted"
     immutable_is_actually_flexible: >

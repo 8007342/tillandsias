@@ -4,6 +4,19 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 REPO_ROOT="$(dirname "$DIR")"
 
+# 777-amku toolbox-first pattern: this script has a HARD ruby dependency with
+# no yq fallback (it runs .rb programs, not just YAML parsing). Ensure the
+# toolbox, then prefer host ruby and fall back to the toolbox's — zero
+# behavior change on hosts that carry ruby natively.
+source "$DIR/ensure_toolbox.sh"
+_ruby() {
+    if command -v ruby >/dev/null 2>&1; then
+        ruby "$@"
+    else
+        toolbox run --container tillandsias-builder ruby "$@"
+    fi
+}
+
 cd "$REPO_ROOT"
 
 if [ "$1" == "--check" ]; then
@@ -13,11 +26,11 @@ if [ "$1" == "--check" ]; then
     
     sed 's|plan/|plan_tmp/|g' scripts/archive-plan-packets.rb > scripts/archive-plan-packets-check.rb
     
-    ruby scripts/archive-plan-packets-check.rb >/dev/null
+    _ruby scripts/archive-plan-packets-check.rb >/dev/null
     
     cp -a plan_tmp/ plan_tmp_bak/
     
-    ruby scripts/archive-plan-packets-check.rb >/dev/null
+    _ruby scripts/archive-plan-packets-check.rb >/dev/null
     
     if ! diff -qr plan_tmp/ plan_tmp_bak/ > /dev/null; then
         echo "Check failed: second run modified files. Not idempotent."
@@ -29,4 +42,4 @@ if [ "$1" == "--check" ]; then
     exit 0
 fi
 
-ruby scripts/archive-plan-packets.rb
+_ruby scripts/archive-plan-packets.rb
