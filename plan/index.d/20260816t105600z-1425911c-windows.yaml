@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: target-binary-exec-sites-run-dont-stat
+    event:
+      type: completed
+      ts: "2026-08-16T10:56:00Z"
+      agent_id: windows-yolanda-fable5-20260816t1021z
+      host: windows
+      summary: >
+        Both criteria landed (windows cycle 4, 2026-08-16). (1) Shared helpers target_binary_runs (rc!=126/127 on --help = the loader ran it) and resolve_target_binary <name> [profile] [root] (CARGO_TARGET_DIR-aware, .exe first) added to scripts/plan-binary-probe.sh, generalizing the plan-only probe. regenerate-cheatsheet-index.sh adopted first and verified live on the collision host: resolves the PE in 0.8s where the naive check used to exec the stale ELF (~30s lost). (2) Audit: 14 direct target/(debug|release) exec sites repo-wide. CONVERTED 11: regenerate-cheatsheet-index, audit-cheatsheet-sources, check-cheatsheet-sources, check-cheatsheet-tiers (its inline 672-4nts --help probe was the prototype; now resolves the runnable .exe instead of skipping), check-no-python-scripts, distill-forge-diagnostics, fetch-cheatsheet-source, test-pre-receive-yaml-gate, check-added-fragments-parse, run-litmus-test (litmus-rust fallback branch), release-preflight (probe-by-execution over its explicit candidate list incl. musl triples + .exe candidate). RECORDED SAFE 3: build-macos-tray.sh (single-platform lane, file-ops on its own fresh build), check-tray-import-surface.sh (platform-tagged .exe name pins the artifact), scan-litmus-expression-pinning.sh (grep pattern text, not an exec). Also safe: build.sh dev-run/packaging sites (exec immediately follows same-lane cargo build), images/ MCP wrappers (already execute-probed under 770-ehym), lib-common.sh cp (file op). Live gates green post-conversion: no-python ok, added-fragments ok:1-checked, cheatsheet-tiers now RUNS on windows (was skip), regenerate exposed a real stale INDEX.md entry (transport-overhead tier fix from linux) which this cycle regenerated.

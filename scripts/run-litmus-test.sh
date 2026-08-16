@@ -627,10 +627,17 @@ run_rust_queries_for_litmus() {
     local status=0
     printf '  [RUST QUERIES] %s...' "$(basename "$test_file")" >&2
 
+    # Run-don't-stat (order 770-ifeg): `-x` passes for the OTHER platform's
+    # artifact on a shared Windows/WSL checkout; probe by execution via the
+    # shared helper (sourced in a subshell so this large script's namespace
+    # stays untouched).
+    local litmus_rust_bin=""
+    litmus_rust_bin="$(. "$PROJECT_ROOT/scripts/plan-binary-probe.sh" \
+        && resolve_target_binary tillandsias-litmus-rust debug "$PROJECT_ROOT")" || litmus_rust_bin=""
     if command -v tillandsias-litmus-rust >/dev/null 2>&1; then
         output="$(tillandsias-litmus-rust check --litmus "$test_file" 2>&1)" || status=$?
-    elif [[ -x "$PROJECT_ROOT/target/debug/tillandsias-litmus-rust" ]]; then
-        output="$("$PROJECT_ROOT/target/debug/tillandsias-litmus-rust" check --litmus "$test_file" 2>&1)" || status=$?
+    elif [[ -n "$litmus_rust_bin" ]]; then
+        output="$("$litmus_rust_bin" check --litmus "$test_file" 2>&1)" || status=$?
     else
         output="$(cargo run --quiet -p tillandsias-litmus-rust -- check --litmus "$test_file" 2>&1)" || status=$?
     fi

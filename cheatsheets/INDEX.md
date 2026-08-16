@@ -30,7 +30,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - event-driven-basics.md              — Your system has multiple components that react to state changes happening elsew… [pull-on-demand: stub]
 - event-driven-ui-updates.md [DRAFT]  — Implementing event-driven architectures for responsive UIs. [bundled, partial-verify]
 - reactive-streams-spec.md            — You have a **stream** of asynchronous events whose producer might outpace its c… [pull-on-demand: stub]
-- transport-overhead.md               — touching the host↔guest control wire, adding a poll/refresh
+- transport-overhead.md               — touching the host↔guest control wire, adding a poll/refresh [bundled, partial-verify]
 
 ## build
 

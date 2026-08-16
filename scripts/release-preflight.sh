@@ -70,12 +70,19 @@ fi
 # a pass we did not earn. The two are not equivalent — a source grep cannot see
 # what the built help text actually renders.
 RETIRED_RE='(^|[^a-z-])--(install|without-vault|legacy-keyring-secrets)([^a-z-]|$)'
+# Run-don't-stat (order 770-ifeg): `-x` passes for the OTHER platform's
+# artifact on a shared Windows/WSL checkout, and an un-execable candidate
+# would silently produce an EMPTY --help below — a pass we did not earn.
+# Probe by execution; custom-triple dirs stay listed explicitly because
+# resolve_target_binary only walks target/<profile>/.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
 bin=""
 for candidate in \
     target/x86_64-unknown-linux-musl/release/tillandsias \
+    target/release/tillandsias.exe \
     target/release/tillandsias \
     target/aarch64-unknown-linux-musl/release/tillandsias; do
-    [[ -x "$candidate" ]] && { bin="$candidate"; break; }
+    target_binary_runs "$candidate" && { bin="$candidate"; break; }
 done
 
 if [[ -n "$bin" ]]; then

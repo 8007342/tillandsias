@@ -21,13 +21,13 @@ trap 'rm -rf "$TMPDIR_WORK"' EXIT
 cargo build --quiet --manifest-path "$PROJECT_ROOT/Cargo.toml" -p tillandsias-policy
 BIN_DIR="$TMPDIR_WORK/bin"
 mkdir -p "$BIN_DIR"
-POLICY_BIN="$PROJECT_ROOT/target/debug/tillandsias-policy"
-if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
-        [[ -x "$CARGO_TARGET_DIR/debug/tillandsias-policy" ]] && POLICY_BIN="$CARGO_TARGET_DIR/debug/tillandsias-policy"
-    else
-        [[ -x "$PROJECT_ROOT/$CARGO_TARGET_DIR/debug/tillandsias-policy" ]] && POLICY_BIN="$PROJECT_ROOT/$CARGO_TARGET_DIR/debug/tillandsias-policy"
-    fi
+# Run-don't-stat (order 770-ifeg): on a shared Windows/WSL checkout the
+# extensionless target/ path can hold the OTHER platform's artifact, and an
+# existence check symlinks an un-execable ELF onto PATH. Probe by execution.
+. "$PROJECT_ROOT/scripts/plan-binary-probe.sh"
+if ! POLICY_BIN="$(resolve_target_binary tillandsias-policy debug "$PROJECT_ROOT")"; then
+    echo "refused:no-runnable-tillandsias-policy (probed target/debug and CARGO_TARGET_DIR by execution)" >&2
+    exit 1
 fi
 ln -s "$POLICY_BIN" "$BIN_DIR/tillandsias-policy"
 export PATH="$BIN_DIR:$PATH"

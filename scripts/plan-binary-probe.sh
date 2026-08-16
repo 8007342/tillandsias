@@ -70,3 +70,51 @@ plan_binary_has() {
     local bin="$1" subcommand="$2"
     "$bin" capabilities 2>/dev/null | grep -qx "$subcommand"
 }
+
+# ── Generic run-don't-stat probe for ANY target/ binary (order 770-ifeg) ─────
+#
+# The same rule generalized beyond tillandsias-plan. Every script that execs a
+# target/(debug|release)/<name> artifact after an existence or `-x` check has
+# the identical bug on a shared Windows/WSL checkout: a WSL build leaves a
+# Linux ELF at exactly that extensionless path beside the runnable `.exe`, the
+# exact-name match wins over the shell's `.exe` fallback, and the script dies
+# with "Exec format error" (~30s lost per run of regenerate-cheatsheet-index.sh
+# on the windows host — see
+# plan/issues/windows-host-tooling-hits-linux-elves-in-target-2026-08-16.md).
+#
+# target_binary_runs <path>: true when the OS loader actually executes the
+# file. Exit 126 (found but cannot execute — wrong format, no permission) and
+# 127 (not runnable) are the loader saying no; ANY other exit code means the
+# artifact ran, which is the evidence an executable bit only claims. `--help`
+# is the probe argument because every workspace binary answers it without side
+# effects; callers that must also gate on binary VERSION keep using
+# resolve_plan_binary's `capabilities` probe, which is a stricter contract.
+target_binary_runs() {
+    [ -f "$1" ] || return 1
+    "$1" --help >/dev/null 2>&1
+    local rc=$?
+    [ "$rc" -ne 126 ] && [ "$rc" -ne 127 ]
+}
+
+# resolve_target_binary <name> [profile] [root]
+#   Print the first runnable candidate for a cargo-built binary and exit 0, or
+#   print nothing and return 1. `.exe` first: on the host where both artifacts
+#   exist, that is the runnable one. Honours CARGO_TARGET_DIR (absolute or
+#   root-relative) ahead of <root>/target, matching cargo's own resolution.
+#   profile defaults to debug — the profile `cargo build` produces.
+resolve_target_binary() {
+    local name="$1" profile="${2:-debug}" root="${3:-.}"
+    local ctd="${CARGO_TARGET_DIR:-}" dir candidate
+    if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
+        ctd="$root/$ctd"
+    fi
+    for dir in ${ctd:+"$ctd/$profile"} "$root/target/$profile"; do
+        for candidate in "$dir/$name.exe" "$dir/$name"; do
+            if target_binary_runs "$candidate"; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        done
+    done
+    return 1
+}
