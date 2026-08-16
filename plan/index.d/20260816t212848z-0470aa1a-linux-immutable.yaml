@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: host-browser-mcp-spec-rebaseline-to-per-lane-ndjson
+    event:
+      type: completed
+      ts: "2026-08-16T21:28:48Z"
+      agent_id: linux-yoga-claude-20260816t185912z
+      host: linux-immutable
+      summary: >
+        Spec transport requirement re-baselined onto the per-lane NDJSON socket with listener-derived attribution; McpFrame recorded as superseded-and-still-refused (live negative, verified in tray/mod.rs); missing NDJSON payload cap named as a tracked gap owned by 779-dqsv instead of silently blessed. litmus:host-browser-mcp-frame-shape retired and retargeted as litmus:host-browser-mcp-lane-socket-shape (6/6 PASS; docstring assertion verified with a live negative control that FAILS when the false McpFrame comment is restored). host-browser.sh docstring corrected.

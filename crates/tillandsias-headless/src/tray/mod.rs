@@ -732,7 +732,37 @@ impl LaneIdentity {
 /// are actionable JSON-RPC errors, not silent drops.
 ///
 /// @trace spec:host-browser-mcp, spec:subdomain-routing-via-reverse-proxy
-fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<serde_json::Value> {
+/// Ask the composed browser server for its tool descriptors (order 779-3trn).
+///
+/// Goes through `handle_request` rather than reaching into the server's
+/// internals, so the advertised list is by construction the same one
+/// `tools/call` dispatches against — the drift this packet exists to close
+/// was precisely a dispatcher advertising a different set than it served.
+fn browser_tool_descriptors(
+    browser: &tillandsias_browser_mcp::BrowserMcpServer,
+    rt: &tokio::runtime::Runtime,
+) -> Vec<serde_json::Value> {
+    let request = tillandsias_browser_mcp::framing::RpcRequest {
+        id: Some(0),
+        method: "tools/list".to_string(),
+        params: serde_json::Value::Object(Default::default()),
+    };
+    match rt.block_on(browser.handle_request(request)) {
+        tillandsias_browser_mcp::framing::RpcResponse::Success { result, .. } => result
+            .get("tools")
+            .and_then(|t| t.as_array())
+            .cloned()
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+fn handle_mcp_jsonrpc(
+    project_label: &str,
+    req: &serde_json::Value,
+    browser: &tillandsias_browser_mcp::BrowserMcpServer,
+    rt: &tokio::runtime::Runtime,
+) -> Option<serde_json::Value> {
     let method = req["method"].as_str().unwrap_or("");
     if method.starts_with("notifications/") {
         return None;
@@ -751,55 +781,66 @@ fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<se
                 }
             }
         }),
-        "tools/list" => serde_json::json!({
-            "result": {
-                "tools": [
-                    {
-                        "name": "publish_local",
-                        "description": "Publish this project's WEB service on the local reverse proxy and return its www.<project>.localhost URL. Idempotent: re-publishing replaces the running container and keeps the same URL.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "category": { "type": "string", "enum": ["WEB"] }
-                            },
-                            "required": ["category"]
-                        }
-                    },
-                    {
-                        "name": "service_status",
-                        "description": "Report the state of this project's published local service.",
-                        "inputSchema": { "type": "object", "properties": {} }
-                    },
-                    {
-                        "name": "service_stop",
-                        "description": "Stop this project's published local service and remove its route.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "category": { "type": "string", "enum": ["WEB"] }
-                            },
-                            "required": ["category"]
-                        }
+        // Order 779-3trn: the host-services trio PLUS the browser family.
+        // The browser descriptors come from the composed server itself, so
+        // what is advertised is exactly what `tools/call` will dispatch.
+        "tools/list" => {
+            let mut tools = vec![
+                serde_json::json!({
+                    "name": "publish_local",
+                    "description": "Publish this project's WEB service on the local reverse proxy and return its www.<project>.localhost URL. Idempotent: re-publishing replaces the running container and keeps the same URL.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
                     }
-                ]
-            }
-        }),
+                }),
+                serde_json::json!({
+                    "name": "service_status",
+                    "description": "Report the state of this project's published local service.",
+                    "inputSchema": { "type": "object", "properties": {} }
+                }),
+                serde_json::json!({
+                    "name": "service_stop",
+                    "description": "Stop this project's published local service and remove its route.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
+                    }
+                }),
+            ];
+            tools.extend(browser_tool_descriptors(browser, rt));
+            serde_json::json!({ "result": { "tools": tools } })
+        }
         "tools/call" => {
             let tool_name = req["params"]["name"].as_str().unwrap_or("");
             let args = req["params"]["arguments"].as_object();
 
-            // MULTI-thread runtime is load-bearing: the publish path re-enters
-            // podman_runtime()'s RuntimeOrHandle::block_on, which uses
-            // tokio::task::block_in_place — a PANIC on current-thread runtimes
-            // ("can call blocking only when running on the multi-threaded
-            // runtime"; live repro 2026-07-16, first tray publish_local killed
-            // its connection thread). The deny/handshake paths never hit it,
-            // so only a live publish exposes a regression here.
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(2)
-                .enable_all()
-                .build()
-                .unwrap();
+            // Order 779-3trn: the browser family is served by the composed
+            // BrowserMcpServer, whose project label came from the accepting
+            // listener's LaneIdentity — never from this request, and never
+            // from BrowserMcpServer::new()'s TILLANDSIAS_PROJECT env read.
+            // Attribution stays a property of the socket (order 505).
+            if tool_name.starts_with("browser.") {
+                let request = tillandsias_browser_mcp::framing::RpcRequest {
+                    id: req.get("id").and_then(|i| i.as_u64()),
+                    method: "tools/call".to_string(),
+                    params: req["params"].clone(),
+                };
+                let response = rt.block_on(browser.handle_request(request));
+                return match response {
+                    tillandsias_browser_mcp::framing::RpcResponse::Notification => None,
+                    other => other
+                        .to_line()
+                        .ok()
+                        .and_then(|line| serde_json::from_str(&line).ok()),
+                };
+            }
 
             match tool_name {
                 "publish_local" => {
@@ -918,6 +959,41 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     let Ok(read_half) = writer.try_clone() else {
         return;
     };
+
+    // Order 779-3trn: ONE browser server and ONE runtime for the whole
+    // connection.
+    //
+    // The label is pinned from the accepting listener's LaneIdentity, so
+    // `BrowserMcpServer::new()`'s TILLANDSIAS_PROJECT env read never runs —
+    // reading the environment here would reintroduce exactly the forgeable
+    // attribution order 505 deleted. The per-connection instance is also
+    // what makes the call semaphore mean "per session".
+    //
+    // MULTI-thread runtime is load-bearing and now hoisted out of the
+    // per-call path (it used to be rebuilt on every tools/call): the publish
+    // path re-enters podman_runtime()'s RuntimeOrHandle::block_on, which uses
+    // tokio::task::block_in_place — a PANIC on current-thread runtimes ("can
+    // call blocking only when running on the multi-threaded runtime"; live
+    // repro 2026-07-16, first tray publish_local killed its connection
+    // thread). The deny/handshake paths never hit it, so only a live publish
+    // exposes a regression here.
+    let Ok(rt) = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+    else {
+        warn!(
+            spec = "mcp-tool-socket",
+            "could not build the MCP connection runtime; closing"
+        );
+        return;
+    };
+    let browser = tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
+        tillandsias_browser_mcp::McpServerConfig::default(),
+        &project_label,
+        None,
+    );
+
     for line in BufReader::new(read_half).lines() {
         let Ok(line) = line else {
             return;
@@ -927,7 +1003,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
             continue;
         }
         let resp = match serde_json::from_str::<serde_json::Value>(line) {
-            Ok(req) => handle_mcp_jsonrpc(&project_label, &req),
+            Ok(req) => handle_mcp_jsonrpc(&project_label, &req, &browser, &rt),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -4536,11 +4612,33 @@ mod tests {
     /// NOT process env.
     ///
     /// @trace spec:mcp-tool-socket
+    /// Order 779-3trn test rigs: a hermetic composed browser server (fake
+    /// launch — never spawns chromium) and its runtime. The label is pinned
+    /// exactly as `serve_mcp_connection` pins it from LaneIdentity, so these
+    /// tests exercise the real attribution path.
+    fn test_browser() -> tillandsias_browser_mcp::BrowserMcpServer {
+        tillandsias_browser_mcp::BrowserMcpServer::with_project_label_and_mode(
+            tillandsias_browser_mcp::McpServerConfig::default(),
+            "demo",
+            None,
+            true,
+        )
+    }
+
+    fn test_rt() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("test runtime")
+    }
+
     #[test]
     fn mcp_initialize_and_tools_list_advertise_publish_tool_family() {
         let init =
             serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
-        let resp = handle_mcp_jsonrpc("demo", &init).expect("initialize replies");
+        let resp = handle_mcp_jsonrpc("demo", &init, &test_browser(), &test_rt())
+            .expect("initialize replies");
         assert_eq!(resp["jsonrpc"], "2.0");
         assert_eq!(resp["id"], 1);
         assert_eq!(
@@ -4549,21 +4647,49 @@ mod tests {
         );
 
         let list = serde_json::json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"});
-        let resp = handle_mcp_jsonrpc("demo", &list).expect("tools/list replies");
+        let resp = handle_mcp_jsonrpc("demo", &list, &test_browser(), &test_rt())
+            .expect("tools/list replies");
         let tools: Vec<&str> = resp["result"]["tools"]
             .as_array()
             .expect("tools array")
             .iter()
             .map(|t| t["name"].as_str().expect("tool name"))
             .collect();
+        // Order 779-3trn: the host-services trio still leads (unchanged
+        // ordering for existing consumers), and the browser family is now
+        // advertised alongside it — the wiring gap this packet closed.
         assert_eq!(
-            tools,
-            vec!["publish_local", "service_status", "service_stop"]
+            &tools[..3],
+            &["publish_local", "service_status", "service_stop"],
+            "the host-services trio must keep its identity and order"
         );
+        let browser_tools: Vec<&&str> =
+            tools.iter().filter(|t| t.starts_with("browser.")).collect();
+        assert_eq!(
+            browser_tools.len(),
+            8,
+            "all eight browser.* tools are advertised: {tools:?}"
+        );
+        for expected in [
+            "browser.open",
+            "browser.list_windows",
+            "browser.read_url",
+            "browser.screenshot",
+            "browser.click",
+            "browser.type",
+            "browser.eval",
+            "browser.close",
+        ] {
+            assert!(
+                tools.contains(&expected),
+                "{expected} must be advertised: {tools:?}"
+            );
+        }
+        assert_eq!(tools.len(), 11, "trio + browser family, nothing else");
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
         assert!(
-            handle_mcp_jsonrpc("demo", &note).is_none(),
+            handle_mcp_jsonrpc("demo", &note, &test_browser(), &test_rt()).is_none(),
             "notifications get no reply"
         );
     }
@@ -4574,12 +4700,111 @@ mod tests {
     ///
     /// @trace spec:mcp-tool-socket, spec:subdomain-routing-via-reverse-proxy
     #[test]
+    /// Order 779-3trn exit criterion: exercise the composition THROUGH THE
+    /// TRANSPORT, not by calling the dispatcher directly — a real
+    /// `UnixStream::pair()` driven by `serve_mcp_connection` with a pinned
+    /// `LaneIdentity`. That is the only way to prove the per-connection
+    /// server is built with listener-derived attribution and that the
+    /// browser family is reachable by an actual client.
+    ///
+    /// Hermetic: `fake_launch` means no chromium is ever spawned, and the
+    /// `browser.open` below carries a disallowed URL so it is refused by
+    /// policy before any launch decision.
+    ///
+    /// @trace spec:mcp-tool-socket, spec:host-browser-mcp
+    #[test]
+    fn mcp_connection_serves_browser_family_over_the_socket() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        let (client, server) = UnixStream::pair().expect("socketpair");
+        let handle = std::thread::spawn(move || {
+            serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+        });
+
+        let mut writer = client.try_clone().expect("clone client");
+        let mut reader = BufReader::new(client);
+        let mut read_line = || {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read reply");
+            serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
+        };
+
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+        )
+        .expect("write initialize");
+        let init = read_line();
+        assert_eq!(
+            init["result"]["serverInfo"]["name"],
+            "tillandsias-host-services"
+        );
+
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+        )
+        .expect("write tools/list");
+        let list = read_line();
+        let tools: Vec<&str> = list["result"]["tools"]
+            .as_array()
+            .expect("tools array")
+            .iter()
+            .map(|t| t["name"].as_str().expect("tool name"))
+            .collect();
+        assert_eq!(
+            tools.len(),
+            11,
+            "over the transport: trio + eight browser tools, got {tools:?}"
+        );
+        assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
+
+        // A disallowed URL must come back as a typed JSON-RPC error from the
+        // composed server — proving browser.* actually ROUTED there rather
+        // than falling through to the -32601 unknown-tool arm.
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"browser.open","arguments":{{"url":"file:///etc/passwd"}}}}}}"#
+        )
+        .expect("write browser.open");
+        let denied = read_line();
+        assert_eq!(denied["id"], 3);
+        // The browser family reports POLICY denials the MCP way — a result
+        // with `isError: true` and the reason in content — whereas the
+        // host-services trio uses JSON-RPC -32000 for its denials. Both are
+        // correct for their layer; what matters here is that the call
+        // reached the composed server at all.
+        assert_eq!(
+            denied["result"]["isError"], true,
+            "a disallowed URL must be refused: {denied}"
+        );
+        let text = denied["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        assert!(
+            text.contains("URL_NOT_ALLOWED"),
+            "the refusal must name the URL policy: {text}"
+        );
+        assert!(
+            denied.get("error").is_none(),
+            "browser.open must route to the composed server, never the -32601 unknown-tool fallback: {denied}"
+        );
+
+        drop(writer);
+        drop(reader);
+        handle.join().expect("connection thread joins");
+    }
+
+    #[test]
     fn mcp_tools_call_non_web_category_denied_loud() {
         let call = serde_json::json!({
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": {"name": "publish_local", "arguments": {"category": "DATABASE"}}
         });
-        let resp = handle_mcp_jsonrpc("demo", &call).expect("deny replies");
+        let resp =
+            handle_mcp_jsonrpc("demo", &call, &test_browser(), &test_rt()).expect("deny replies");
         assert_eq!(resp["id"], 3);
         assert_eq!(resp["error"]["code"], -32000);
         let message = resp["error"]["message"].as_str().expect("error message");
@@ -4592,7 +4817,8 @@ mod tests {
             "jsonrpc": "2.0", "id": 4, "method": "tools/call",
             "params": {"name": "drop_all_containers", "arguments": {}}
         });
-        let resp = handle_mcp_jsonrpc("demo", &forged).expect("unknown tool replies");
+        let resp = handle_mcp_jsonrpc("demo", &forged, &test_browser(), &test_rt())
+            .expect("unknown tool replies");
         assert_eq!(resp["error"]["code"], -32601);
     }
 
@@ -4701,7 +4927,9 @@ mod tests {
             let resp: serde_json::Value =
                 serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
                     .expect("valid JSON");
-            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 3);
+            // Order 779-3trn: the host-services trio plus the eight
+            // browser.* tools now compose on this socket (was 3).
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 11);
 
             drop(writer);
             drop(lines);

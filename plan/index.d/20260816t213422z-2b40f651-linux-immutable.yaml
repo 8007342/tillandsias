@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: host-browser-mcp-compose-tool-families-in-dispatcher
+    event:
+      type: completed
+      ts: "2026-08-16T21:34:22Z"
+      agent_id: linux-yoga-claude-20260816t185912z
+      host: linux-immutable
+      summary: >
+        Browser family composed into the live per-lane dispatcher. headless now depends on browser-mcp (was dead code: no bin, no dependents); one BrowserMcpServer + one runtime per connection, hoisted out of the per-call path, label pinned from LaneIdentity so the TILLANDSIAS_PROJECT env read never runs; tools/list = trio + the eight browser.* descriptors fetched from the composed server itself; tools/call routes browser.* there leaving the trio and the -32601 fallback intact. Both three-tool pins updated (the second was inside the NDJSON handshake round-trip). New transport-level test drives a real UnixStream::pair through serve_mcp_connection with a pinned LaneIdentity: 11 tools over the wire, disallowed-URL browser.open refused. Contract detail pinned: the browser family denies via MCP result+isError, the trio via JSON-RPC -32000. 448 tests green under --features tray.
