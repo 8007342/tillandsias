@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # @trace order:756-hn3a, spec:methodology-accountability
 # Pinned by litmus:agent-identity-canonical-source-shape.
+# bash-dialect: dual (probed fallback) — the timestamp helper probes the
+# printf time builtin and falls back to date(1); everything else is
+# pure-3.2. Marker consumed by scripts/check-bash-dialect.sh (761-g36m).
 #
 # agent-identity.sh — the CANONICAL source of a worker agent's identity.
 # Sourceable (functions only, no side effects) AND executable (CLI below).

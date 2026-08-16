@@ -1145,6 +1145,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # This guard shipped (order 440) but was ORPHANED (invoked by nothing) until
     # the guard-activation audit (599-4wzr) surfaced it; wiring it here activates
     # it as a real --check gate.
+    # Order 761-g36m: a bash-4-only construct in a shared script fails on
+    # Apple's bash 3.2 as a silent bad substitution or an empty verdict —
+    # the class that blocked every macOS push on 2026-08-16
+    # (agent-identity.sh) and emptied the windows sources verdict on
+    # 2026-08-14 (723-b9cn). Scripts must be 3.2-clean, refuse loudly, or
+    # carry the probed-fallback dual marker; the allowlist inside the
+    # checker is a burndown list, never an escape hatch.
+    _step "Checking scripts/ bash dialect (761-g36m)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-bash-dialect.sh" 2>&1; then
+        _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
+        exit 1
+    fi
+    _info "Bash dialect gate passed"
+
     _step "Checking plan/schema status-vocab divergence (440)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
         # Do NOT restate the cause here: the script emits one of three verdicts

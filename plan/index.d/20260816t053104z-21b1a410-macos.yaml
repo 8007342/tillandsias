@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: shared-scripts-bash4-isms-break-bash32-hosts
+    event:
+      type: progress
+      ts: "2026-08-16T05:31:04Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0523z
+      host: macos
+      summary: >
+        Criteria 2+3 DISCHARGED: scripts/check-bash-dialect.sh wired into ./build.sh --check (grammar ok:bash-dialect-clean | blocked:bash4-unguarded:N) with a 6-scenario hermetic fixture proving both directions plus the dual-marker and comment-mention edges (scripts/test-check-bash-dialect.sh). Comment-stripping in the checker REDUCED criterion 1's residual from 8 files to 3: five sweep candidates carried the constructs in comments only (check-windows-only-sources-verified.sh's mapfile was genuinely fixed under 723-b9cn — the cycle-1 note doubting that is corrected). Real remaining carriers, allowlisted for burndown: check-running-image-freshness.sh, loop-success-probe.sh, selective-tillandsias-reset.sh (declare -A / mapfile in code). agent-identity.sh carries the probed-fallback dual marker. The gate refuses NEW instances fleet-wide from this commit.
