@@ -204,5 +204,19 @@ if grep -q "podman rm -f tillandsias-proxy" "$LITMUS_PODMAN_CALLS_FILE"; then
     fail "fixture 2c: shared teardown incorrectly issued rm for core proxy" "$LITMUS_PODMAN_CALLS_FILE"
 fi
 
-echo "PASS: concurrent-forge shared-stack safety fixtures (order 443 slice 3)"
+# ── fixture 3b: upgrade-skewed mirror under a live sibling → refuse
+#    (order 666-qbjd; the recreate-no-sibling half is covered by the pure
+#    mirror_upgrade_skew_taxonomy + branch-shape pins, because the create
+#    arm's Vault provisioning has no offline fixture) ─────────────────────────
+case_env fixture3b
+echo "[fixture 3b] upgrade-skewed mirror + live sibling refuses (env-gated Rust test)"
+(
+    cd "$ROOT"
+    cargo test -q -p tillandsias-headless --bin tillandsias \
+        shared_stack_ensure_refuses_upgrade_skewed_mirror_under_live_sibling -- --exact --nocapture
+) >"$case_dir/cargo-test.log" 2>&1 ||
+    fail "fixture 3b: skewed-mirror ensure did not refuse under a live sibling (666-qbjd)" \
+        "$case_dir/cargo-test.log" "$LITMUS_PODMAN_CALLS_FILE"
+
+echo "PASS: concurrent-forge shared-stack safety fixtures (order 443 slice 3 + 666-qbjd skew)"
 exit 0
