@@ -394,6 +394,7 @@ impl PodmanClient {
                     state: "running".to_string(),
                     image: distro.to_string(),
                     config_hostname: String::new(),
+                    network_aliases: Vec::new(),
                 })
             } else {
                 Err(PodmanError::NotFound(distro.to_string()))
@@ -432,11 +433,25 @@ impl PodmanClient {
                             .as_str()
                             .unwrap_or("")
                             .to_string();
+                        // The aliases are what aardvark-dns actually answers;
+                        // flatten them across networks for the order-666-qbjd
+                        // upgrade-skew membership check. Absent field → empty.
+                        let network_aliases = inspect["NetworkSettings"]["Networks"]
+                            .as_object()
+                            .map(|nets| {
+                                nets.values()
+                                    .filter_map(|n| n["Aliases"].as_array())
+                                    .flatten()
+                                    .filter_map(|a| a.as_str().map(str::to_string))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
                         Ok(ContainerInspect {
                             name: name.to_string(),
                             state,
                             image,
                             config_hostname,
+                            network_aliases,
                         })
                     } else {
                         Err(PodmanError::NotFound(name.to_string()))
@@ -1873,6 +1888,14 @@ pub struct ContainerInspect {
     /// without touching Vault (order 606-bvnp D13). Empty on backends that
     /// cannot read it (WSL stub).
     pub config_hostname: String,
+    /// Every `--network-alias` the container answers as, flattened across its
+    /// networks (`NetworkSettings.Networks.*.Aliases`). The aliases are the
+    /// names aardvark-dns actually resolves, so the mirror upgrade-skew check
+    /// (order 666-qbjd) tests membership here — a retired shared alias
+    /// (`git-service`/`tillandsias-git`) without the expected per-project name
+    /// is positive old-generation evidence. Empty on backends that cannot
+    /// read it (WSL stub) and when the field is absent.
+    pub network_aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

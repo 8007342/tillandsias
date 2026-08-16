@@ -1,0 +1,49 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: linux-immutable (yoga) meta-orchestration cycle, 2026-08-16,
+# discovered while closing 579 (existing-volume hardening evidence run).
+packets:
+  - packet_id: probe-mirror-reachable-grep-is-locale-blind
+    release_target: fail-loud-diagnosis-milestone
+    order: 773-f5ma
+    status: ready
+    desired_release: v0.5
+    kind: bug
+    pickup_role: linux
+    priority: p2
+    tags:
+      - forge
+      - git-mirror
+      - diagnostics
+      - i18n
+      - litmus
+      - v0.5
+    title: |
+      probe_mirror_reachable's DOA-alias classification greps English-only git errors, so localized hosts never fast-fail.
+    context: |
+      images/default/lib-common.sh:522 (at linux-next a5eecc025) classifies a
+      dead git-mirror alias by grepping `git ls-remote` stderr for the English
+      strings `unable to look up|Name or service not known|Could not resolve`.
+      On a French-locale host (LANG=fr_*, this machine) git emits
+      `fatal : impossible de rechercher ... (Nom ou service inconnu)`, the
+      grep never matches, probe_mirror_reachable does not classify the DOA
+      alias, and the fast-fail path silently degrades to the slow path.
+      Observed live 2026-08-16: litmus:forge-clone-reachability-probe-shape
+      STEP 1/4 FAILs on this host for exactly this reason (verified: LC_ALL=C
+      reproduces the matching English string and the step passes). The
+      git-mirror-service instant litmus suite therefore reads 18/19 on
+      localized hosts with the one FAIL unrelated to the code under test —
+      a red litmus that trains agents to shrug is its own defect.
+    exit_criteria:
+      - |
+          probe_mirror_reachable forces a stable locale around the git ls-remote whose stderr it classifies (LC_ALL=C on that invocation, not the whole environment), or classifies by exit-code/behaviour instead of prose.
+      - |
+          litmus:forge-clone-reachability-probe-shape passes on a host with a non-English locale (negative control: the litmus or its fixture exercises the localized path, e.g. LANG=fr_FR.UTF-8, and still classifies the DOA alias).
+    events:
+      - type: filed
+        ts: "2026-08-16T19:40:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Found during 579 evidence run: git-mirror-service suite red on
+          French-locale hosts because the reachability probe's error grep is
+          English-only.

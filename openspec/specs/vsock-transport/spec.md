@@ -59,6 +59,23 @@ allocated by the hypervisor and is negotiable per backend:
 - **WHEN** the in-VM headless starts with `--listen-vsock 42420`
 - **THEN** it SHALL call `bind` on a vsock socket with `sa_family = AF_VSOCK, svm_cid = VMADDR_CID_ANY, svm_port = 42420`
 - **AND** it SHALL accept connections from any CID
+- **AND** transport-level accept carries no authorization (order 137): when
+  the secure control wire is required (`TILLANDSIAS_SECURE_CONTROL_WIRE=on`
+  — the opt-in state until order 145's atomic cutover flips the default,
+  which is a sanctioned transition, not a violation of this spec), no
+  control envelope SHALL be served before the version-bound secure-channel
+  handshake completes (see spec:host-guest-transport)
+
+#### Scenario: Unauthenticated peer is rejected
+- **WHEN** the secure control wire is required and a peer's connection fails
+  the version-bound secure-channel handshake (plaintext client, forged or
+  absent PSK, mismatched version — spec:host-guest-transport)
+- **THEN** the responder SHALL NOT send `HelloAck` and SHALL NOT serve any
+  control message on that connection
+- **AND** it SHALL send a single plaintext `Error` envelope with code
+  `Unauthorized` naming the secure-channel requirement (best-effort and
+  time-bounded, so a peer that never reads cannot pin the handler) and then
+  close the connection (fail-closed)
 
 #### Scenario: VZ guest CID is stable across restarts
 - **WHEN** the macOS host stops and restarts the VM via `VmRuntime::stop` then `start`

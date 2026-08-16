@@ -1019,6 +1019,18 @@ plan_index:
         - "openspec/specs vsock-transport no longer sanctions unauthenticated 'accept from any CID' without an authz gate"
         - "./build.sh --check and --test pass"
       events:
+        - type: progress
+          ts: "2026-08-16T20:10:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Linux slice landed (1912b2ec1): gated-ON responder now rejects unauthenticated peers with a plaintext Error{Unauthorized} + fail-close (server_handshake_or_reclaim in secure-channel returns the stream on failure); litmus:vsock-unauthenticated-peer-rejected pinned and 4/4 green; vsock-transport spec no longer sanctions unauthz'd accept-from-any-CID (authz qualifier + rejection scenario; gate-off opt-in named a sanctioned transition). Criteria 2+3 met. Criterion 1 (default reachability) is owned by order 145 encrypted-channel-vsock-cutover — 137 stays ready with that sharpened remainder.
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: verified
           ts: "2026-07-28T23:45:00Z"
           agent_id: "linux-mutable-metaorch-20260728"
@@ -8840,6 +8852,18 @@ plan_index:
         - "a retry after the build completes attaches to the cached image (no rebuild)"
         - "materialization emits a progress signal within ~5s of build start that the tray can render (test on the emit path)"
       events:
+        - type: completed
+          ts: "2026-08-16T19:44:10Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Guest-side detach landed: first-use image ensure re-execs a setsid helper that owns the image flock and the full locked decision machinery; parent waits with a quiet heartbeat (PTY signal <=5s on real builds, silent on Skip), per-image log under init cache dir, push_udp_event still fires at build start for the tray. Retry-hits-cache falls out of the flock + content-identity Skip (source-window pinned). Live setsid round trip verified on yoga. Live close-PTY-mid-build on a real VM attach rides the post-cut platform smoke per the 2026-07-21 slipped event.
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: filed
           ts: "2026-07-10T03:20:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
@@ -9044,6 +9068,18 @@ plan_index:
         - "root cause named + pinned by a unit test on the guest dispatch path"
         - "InteractiveStream macOS parity cell flips done with live evidence"
       events:
+        - type: note
+          ts: "2026-08-16T19:44:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Ledger hygiene per the 2026-07-11 reframe: pruned the three mis-placed order-264 forge-budget events (decision 02:20Z, progress 02:25Z, completed 03:55Z — a YAML-valid merge artifact) from this packet's events; they remain part of order 264's own record. Reframe precondition PINNED: 273 is NOT linux-implementable-as-is — the founding capture is confounded by the 5GB substrate; any dispatch fix must wait for the 250G re-test filed as 774-b529 (macos-attach-retest-on-healthy-substrate). Note 270's detached image-build helper landed 2026-08-16, removing the reap-the-build failure mode from the attach path.
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: filed
           ts: "2026-07-10T04:10:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
@@ -9052,43 +9088,6 @@ plan_index:
             Root-caused to the wire with the PTY tee during the attended
             session; guest-side dispatch is linux-owned so filed for linux
             pickup with the verbatim capture and a one-click repro loop.
-        - type: decision
-          ts: "2026-07-10T02:20:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
-          host: linux_mutable
-          summary: >
-            The Tlatoāni (2026-07-10) chose the doctrine change over the
-            env-var option: agents INSIDE a forge run at most ONE packet per
-            cycle, splitting a packet into smaller ready children when it
-            will not fit the launch envelope. Applies to ALL forge cycles
-            (the old exit criterion preserving greedy drain for non-litmus
-            forge cycles is superseded by this decision). Heartbeat/liveness
-            signals to replace timeout inference deferred to order 265.
-        - type: progress
-          ts: "2026-07-10T02:25:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
-          summary: >
-            Doctrine implemented: skills/meta-orchestration/SKILL.md worker
-            drain, skills/advance-work-from-plan/SKILL.md constraint 4, and
-            new canonical block methodology/distributed-work.yaml
-            worker_agent_protocol.forge_cycle_budget. Verification (all 7
-            litmus steps under the new doctrine) rides on this cycle's
-            final --ci-full --install gate; completion event to follow.
-        - type: completed
-          ts: "2026-07-10T03:55:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
-          host: linux_mutable
-          lease_id: "opencode-e2e-forge-budget-tension (claim-ledger-node.sh)"
-          summary: >
-            Verified live in gate run 20260710T021654Z:
-            litmus:opencode-prompt-e2e-shape passed ALL 7 STEPS for the
-            first time in its history. STEP 3's in-forge cycle obeyed the
-            one-packet doctrine (drained exactly order 224, 16078687),
-            completed inside the 600s budget, and its push satisfied the
-            branch-scoped STEP 6 probe — discharging this packet's both
-            criteria and order 262's residual full-chain criterion in the
-            same run. Timeout inference remains interim pending order 265
-            (heartbeat/liveness).
         - type: reframe
           ts: "2026-07-11T18:35:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
@@ -11057,6 +11056,18 @@ plan_index:
         - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
       events:
         - type: progress
+          ts: "2026-08-16T19:51:09Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Partial slice (linux): delegation design RECORDED (plan/issues/headless-least-privilege-delegation-design-2026-08-16.md — socket delegation over process split, target directive set, empty-CapabilityBoundingSet gotcha); headless podman surface AUDITED delegation-ready (shared-layer routing pinned; pty_handler exec matcher is validation, not spawn); litmus:headless-least-privilege-delegation-shape added and 3/3 green on yoga incl. live NNP delegated-client probe (podman 5.8.4 over user socket). Criterion 1 done; criterion 2 was already discharged by the 2026-08-16 macos event; criterion 3 done (the litmus). partial_artifact_refs: 4c6c92b38. REMAINDER (windows write scope): edit the wsl_lifecycle.rs unit template to the recorded three-line set and FLIP the absence pins at ~2712-2719, then live-verify no securing-vault latch on an attended windows smoke.
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
+        - type: progress
           ts: "2026-08-16T11:25:40Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1123z"
           host: macos
@@ -12964,6 +12975,18 @@ plan_index:
         - "collection failure surfaces as an error field, never a fabricated healthy sample (spec:observability-metrics)"
         - "--diagnose --json gains a metrics block on macOS (read over the wire)"
       events:
+        - type: progress
+          ts: "2026-08-16T20:10:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Partial slice landed (71f884e5a): container.rs + mount_io.rs samplers (cgroup v2 + mountinfo/diskstats, pure injectable cores, no-fabrication error fields) and trailing MetricsSnapshotRequest/Reply wire variants + structs (no WIRE_VERSION bump); 19 new tests green, clippy clean. partial_artifact_refs: 71f884e5a. NEXT: control_dispatch routing + vsock_server handler arm (mirror GithubLoginStatusRequest pattern) + litmus-guest-container-metrics-wire-shape + macOS diagnose consumption (cross-host child).
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: filed
           ts: "2026-07-13T23:10:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
@@ -29181,6 +29204,18 @@ plan_index:
         - the active spec explicitly supersedes the former <=10 deletion relay semantics and records the lane-exit cleanup compatibility decision
         - focused git-mirror fixtures, the bound litmus, and the full local build gate pass
       events:
+        - type: completed
+          ts: "2026-08-16T19:36:52Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Finish-and-close residual: explicit spec supersession sentence added (bulk-delete allowance + TILLANDSIAS_ALLOW_BULK_DELETE retired); evidence at this tree: existing-volume hardening fixture 9/9 PASS, litmus:git-mirror-existing-volume-hardening 3/3 PASS, live volume tillandsias-mirror-tillandsias receive.denyNonFastForwards/denyDeletes/fsckObjects all true (podman unshare mountpoint read; no git container exists to restart-gate, volume read is the durable evidence). Structural fix was already landed at 23f9e4e8. Suite note: git-mirror-service instant tier 18/19 — the one FAIL is the pre-existing locale-blind reachability grep, filed as 773-f5ma. Unblocks 610-txvr and 451.
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: progress
           ts: "2026-08-11T22:50:49Z"
           agent_id: "linux-mutable-session-20260811"
@@ -39100,6 +39135,18 @@ plan_index:
         - a post-659 launch against a pre-659 live mirror either recreates it (no live sibling) or refuses with an explicit upgrade-skew error (live sibling)
         - the concurrent-forge litmus grows the skew case
       events:
+        - type: completed
+          ts: "2026-08-16T19:36:32Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Reuse branch now detects identity-generation skew via network aliases (positive retired-alias evidence only), recreates with no live sibling, refuses loudly with one. ContainerInspect.network_aliases added; stateful mock replays real inspect json; fixture 3b + taxonomy + branch-shape tests; podman-orchestration litmus 9/9.
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - ts: "2026-08-10T20:00:00Z"
           event: filed
           summary: filed from the 659-8faj implementation report (finding 1).
@@ -51246,6 +51293,19 @@ plan_index:
         - On a provisioned host, stat -c %a of the live CA key is not group/world-readable (or the key is delivered as a podman secret and no longer materialized world-readable on the host), demonstrated by a litmus that fails on a 0644 key.
         - Squid starts healthy and vault-cli require_cacert stays green on a fresh guest (the 2026-07-22 field repro path).
         - The entrypoint's unreachable branch is either made reachable (secret delivery) or removed in the same change — no fallback nobody takes remains.
+      events:
+        - type: completed
+          ts: "2026-08-16T19:20:48Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Secret delivery landed: ensure_ca_bundle clamps the CA key to 0600 (heals 0644 DOWN, unit-tested); build_proxy_run_args mounts tillandsias-ca-key as a podman secret uid=1000,gid=1000,mode=0400 refreshed via create_file_podman_secret --replace at all four proxy launch sites; entrypoint key bind-mount fallback DELETED and staging reordered BEFORE squid -z (latent fatal exposed by live test); Containerfile chowns /etc/squid/certs to proxy (old cert-secret branch was dead without it); dev scripts + browser-isolation e2e litmus converted to secret delivery; new litmus:proxy-ca-key-not-world-readable bound to podman-secrets-integration, verified with live 0644 negative control (FAIL) and 0600 (PASS); live container test: squid healthy on 3128, in-container key 600 proxy, host key 600. vault-cli require_cacert reads only intermediate.crt (stays 0644). macOS same-class residue split to 772-shi9.
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
     - packet_id: windows-installer-is-the-only-release-asset-with-no-integrity-path
       order: 756-rfdr
       status: ready

@@ -1,0 +1,45 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: linux-immutable (yoga) meta-orchestration cycle, 2026-08-16,
+# as the 273 reframe's prescribed re-test child (order-273 slice).
+packets:
+  - packet_id: macos-attach-retest-on-healthy-substrate
+    release_target: socket-audit-master
+    order: 774-b529
+    status: ready
+    desired_release: v0.5
+    kind: verification
+    pickup_role: macos
+    priority: p2
+    tags:
+      - macos
+      - tray
+      - attach
+      - pty
+      - verification
+      - v0.5
+    title: |
+      Re-test the tray agent attach on the 250G substrate to decide whether 273's guest-dispatch bug is real or was the 5GB disk.
+    context: |
+      273 (guest-agent-attach-runs-login-flow) rests on a 2026-07-10 capture
+      taken on a ~5GB (and at times order-281-corrupt) guest disk, and its
+      2026-07-11 reframe event declares that evidence CONFOUNDED: on the
+      fixed 250G substrate the same attach died in the forge-base IMAGE
+      BUILD ('needs NNN MB more space'), PtyClose code=1 — not the login
+      flow, not code=0. The launch may never have reached run_opencode_mode.
+      273 is now blocked on THIS re-test; do not write a dispatch fix from
+      the confounded capture. Note: order 270 (detached image-build helper)
+      landed 2026-08-16 on linux-next — the first-use build now survives a
+      PTY close, so re-test with a release/build that includes it.
+    exit_criteria:
+      - |
+          Operator-driven agent leaf attach on the 250G substrate with TILLANDSIAS_PTY_DEBUG=1 and a pre-built (or successfully building) forge image; capture the tray-stderr tee.
+      - |
+          Verdict recorded on 273: either the agent TUI paints (273 is MOOT — was the disk; obsolete it with the capture as evidence) or the login flow still appears with a built forge image (273's dispatch bug is REAL; unblock it and attach the fresh capture as the new founding evidence).
+    events:
+      - type: filed
+        ts: "2026-08-16T19:46:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Filed per the 273 reframe's ACTION line; 273 flips to blocked on
+          this packet in the same commit.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: proxy-ca-private-key-world-readable
+    field: status
+    value: completed
+    ts: "2026-08-16T19:21:31Z"
+    host: linux-immutable
+
+events:
+  - packet_id: proxy-ca-private-key-world-readable
+    event:
+      type: completed
+      ts: "2026-08-16T19:21:31Z"
+      host: linux-immutable
+      summary: >
+        status 'completed' with evidence_refs: 67a66a658 + litmus:proxy-ca-key-not-world-readable PASS (0644 negative control FAIL verified live) + cargo test -p tillandsias-headless all green
+  - packet_id: proxy-ca-private-key-world-readable
+    event:
+      type: note
+      ts: "2026-08-16T19:21:31Z"
+      host: linux-immutable
+      summary: >
+        755-qcxh closed by linux-yoga-claude-20260816t185912z: secret-delivery implementation, litmus with live negative control, squid-health live evidence; macOS residue filed as 772-shi9
