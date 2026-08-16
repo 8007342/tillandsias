@@ -50373,6 +50373,13 @@ plan_index:
         - Sidecar and forge are torn down together; a leaked sidecar after forge exit is a failure.
         - export_ssh_env() is proven harmless with ssh in the push path (or fixed) — it is named here so it cannot be discovered later as a surprise.
 
+      events:
+        - type: note
+          ts: "2026-08-16T07:53:21Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            HELD AT IMPLEMENTED (756-2jnj precedent) — the live residual, exactly: criterion 1's M0 needs TWO real launched lanes pushing concurrently through the production wiring (belongs with the first TILLANDSIAS_MIRROR_SSHD=1 live launch, alongside 722-uern's matrix); criterion 2's D5 re-verification must run IN a live forge after wiring (the 2026-08-13 in-forge sweep is the recipe); criterion 4's teardown is contract-pinned (cleanup 5-removal fake-backend test + source window) but a live leaked-sidecar observation after a real forge exit closes it. Everything else is fixture-proven at this commit. The lane ships DARK: entrypoint sshd, sidecar start, and gitconfig pushInsteadOf all gate on TILLANDSIAS_MIRROR_SSHD=1 until T11 (749-y8xx) flips it with the migration story.
     - packet_id: mirror-identity-persist-vault-audit-device
       order: 749-8iw4
       status: implemented
