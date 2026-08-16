@@ -47,3 +47,17 @@ In scripts/test-hash-image-sources.sh: set `core.autocrlf=false` (and
 gate the chmod scenario on `core.fileMode=true`. Decide the hasher question
 above with the fixture's owner before changing scripts/hash-image-sources.sh
 itself.
+
+## Decision (2026-08-16)
+
+- who: The Tlatoāni (operator), attended session on windows/Yolanda,
+  2026-08-16
+- what: **hash-image-sources hashes GIT-NORMALIZED content, not
+  working-tree bytes.** The "Questions the fix must answer" hasher question
+  above is thereby ruled: the hash derives from git-normalized content
+  (e.g. `git ls-files -s` object ids), so two clones of the same commit
+  hash identically regardless of `core.autocrlf` or checkout location.
+- implementation: packet `hash-image-sources-git-normalized` (order
+  776-cm74, pickup_role any), filed
+  plan/index.d/20260816t211000z-776-cm74-windows.yaml. The exec-bit
+  scenario gating on `core.fileMode` remains part of that packet's scope.
