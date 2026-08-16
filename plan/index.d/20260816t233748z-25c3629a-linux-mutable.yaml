@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-runner-cannot-filter-by-litmus-id
+    field: status
+    value: completed
+    ts: "2026-08-16T23:37:48Z"
+    host: linux_mutable
+
+events:
+  - packet_id: litmus-runner-cannot-filter-by-litmus-id
+    event:
+      type: completed
+      ts: "2026-08-16T23:37:48Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: night2-cycle2: run-litmus-test.sh resolves a single-litmus filter (litmus:<name>, litmus-<name>, or bare <name>) to its owning spec and runs EXACTLY that test — spec ids keep strict precedence via a bindings check, unresolvable filters keep the 642 fail-loud refusal. Verified all four modes live: the original incident's bare-name replay now executes 1/1 PASS with 'Single-litmus filter' logged (was a refusal + full-suite round trip); litmus:-prefixed 1/1; spec-id path unchanged 6/6; garbage still refuses rc=1

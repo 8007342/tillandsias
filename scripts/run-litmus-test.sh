@@ -153,6 +153,12 @@ TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
 FILTER_SPEC=""
+# 764-8m5j: when the filter names a single LITMUS TEST (litmus:<name>,
+# litmus-<name>, or the bare <name>) rather than a spec, the runner resolves
+# the owning spec and runs ONLY that test instead of refusing — targeted
+# closure evidence without paying the whole spec suite. Spec ids take strict
+# precedence: resolution only fires when the filter matches no spec binding.
+FILTER_TEST_NAME=""
 FILTER_PHASE="all"
 SIZE_FILTER="all"
 COMPACT=0
@@ -1052,6 +1058,15 @@ run_tests_for_spec() {
         fi
 
         local test_phase
+        # 764-8m5j: exact-name filter, before phase/host/size so the skip
+        # reason is unambiguous when a single test was requested.
+        if [[ -n "$FILTER_TEST_NAME" && "$test_name" != "$FILTER_TEST_NAME" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Name filter: running only $FILTER_TEST_NAME"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
+
         test_phase="$(get_test_phase "$test_file")"
         if [[ "$FILTER_PHASE" != "all" && "$test_phase" != "$FILTER_PHASE" ]]; then
             log_test_result "$spec_id" "$test_name" "SKIP" "Phase mismatch: $test_phase"
@@ -1390,6 +1405,28 @@ main() {
     [[ "$COMPACT" == "1" ]] && log_info "Output mode: compact"
     [[ "$STRICT_MODE" == "1" ]] && log_info "Strict mode: enabled"
     echo "" >&2
+
+    # 764-8m5j: single-litmus filter resolution. Fires only when the filter is
+    # NOT a known spec binding (spec ids keep strict precedence), and resolves
+    # litmus:<name> / litmus-<name> / bare <name> to the owning spec + an
+    # exact-name test filter. An unresolvable filter falls through to the
+    # existing zero-match refusal — the 642 fail-loud boundary is unchanged.
+    if [[ -n "$FILTER_SPEC" ]] \
+        && ! grep -q "^- spec_id: ${FILTER_SPEC}\$" "${PROJECT_ROOT}/openspec/litmus-bindings.yaml" 2>/dev/null; then
+        local _cand _name_file _owner
+        _cand="$FILTER_SPEC"
+        [[ "$_cand" == litmus-* ]] && _cand="litmus:${_cand#litmus-}"
+        [[ "$_cand" == litmus:* ]] || _cand="litmus:${_cand}"
+        _name_file="$(grep -rlF "name: ${_cand}" "${LITMUS_TESTS_DIR}" 2>/dev/null | head -n 1)"
+        if [[ -n "$_name_file" ]]; then
+            _owner="$(grep -m1 -E '^spec:' "$_name_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//; s/"//g')"
+            if [[ -n "$_owner" ]]; then
+                FILTER_TEST_NAME="$_cand"
+                FILTER_SPEC="$_owner"
+                log_info "Single-litmus filter: ${FILTER_TEST_NAME} (owning spec: ${FILTER_SPEC})"
+            fi
+        fi
+    fi
 
     # Determine which specs to test
     local specs_to_test
