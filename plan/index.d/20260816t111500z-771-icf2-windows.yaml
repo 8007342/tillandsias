@@ -1,0 +1,48 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows meta-orchestration cycle 4, 2026-08-16.
+packets:
+  - packet_id: meta-orchestration-ghost-spec-author-or-repoint
+    order: 771-icf2
+    status: ready
+    desired_release: v0.5
+    release_target: fail-loud-diagnosis-milestone
+    priority: p3
+    kind: coordination
+    pickup_role: any
+    capability_tags:
+      - openspec
+      - meta-orchestration
+    title: |
+      The `meta-orchestration` ghost-trace baseline entry gets resolved: author openspec/specs/meta-orchestration from the skill + methodology canon, or re-point its ten script carriers — the baseline shrinks by one either way.
+    context: |
+      `meta-orchestration` is one of the nine pre-2026-08-16 entries in
+      openspec/ghost-trace-baseline.txt (767-yrnd owned only the seven
+      union-gate newcomers). Ten scripts carry `@trace spec:meta-orchestration`
+      (check-committable-branch, check-credential-channel,
+      check-forge-expert-base, check-forge-findings-persisted,
+      check-mo-full-attestations, claim-ledger-node, e2e-preflight,
+      forge-e2e-rate-limit, litmus-git-delta-wait, litmus-opencode-e2e-launch)
+      and the meta-orchestration litmus family declares `spec:
+      meta-orchestration`, but no openspec/specs/meta-orchestration exists —
+      the SKILL.md is the de facto spec. Every one of those traces is a ghost:
+      resolvable to nothing, unverifiable by the trace index.
+    exit_criteria:
+      - |
+          Either openspec/specs/meta-orchestration/spec.md exists, distilled from skills/meta-orchestration/SKILL.md + methodology/mo-full-attestation.yaml (guards, attestation contract, probe advisories — requirements, not runbook prose), and the ten carriers resolve against it; or the carriers are re-pointed to existing specs with a recorded rationale per file.
+      - |
+          openspec/ghost-trace-baseline.txt drops the `meta-orchestration` line in the same commit (the gate's stale-baseline direction enforces this) and `scripts/trace-coverage.sh --gate` stays green.
+    verifiable_closure: |
+      scripts/trace-coverage.sh --gate reports ok with baseline count reduced
+      by one and no `meta-orchestration` line in the baseline file.
+    events:
+      - type: filed
+        ts: "2026-08-16T11:15:00Z"
+        agent_id: windows-yolanda-fable5-20260816t1021z
+        host: windows
+        summary: |
+          Shaped from cycle-3's carry-over ("ghost trace spec:meta-orchestration
+          at scripts/forge-e2e-rate-limit.sh:2"): the single-site framing
+          understated it — the ghost has ten script carriers plus the litmus
+          family, so the reduction is one spec (or one recorded re-point), not
+          one comment edit. Authoring needs unhurried spec judgment; shaped
+          rather than rushed at 04:00.

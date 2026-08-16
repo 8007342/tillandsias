@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: target-binary-exec-sites-run-dont-stat
+    field: status
+    value: completed
+    ts: "2026-08-16T11:20:30Z"
+    host: windows
+
+events:
+  - packet_id: target-binary-exec-sites-run-dont-stat
+    event:
+      type: completed
+      ts: "2026-08-16T11:20:30Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: 82051c7b6 + live gates green post-conversion (no-python ok, added-fragments ok:1, cheatsheet-tiers runs on windows, regenerate 0.8s)

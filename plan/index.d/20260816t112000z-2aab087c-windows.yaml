@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mcp-health-probe-tool-call-depth
+    field: status
+    value: completed
+    ts: "2026-08-16T11:20:00Z"
+    host: windows
+
+events:
+  - packet_id: mcp-health-probe-tool-call-depth
+    event:
+      type: completed
+      ts: "2026-08-16T11:20:00Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: ae38d0626 + litmus:mcp-expert-health-probe-shape fixture 20/20 + live stage=full both experts via WindowsApps launcher
