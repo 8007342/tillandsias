@@ -20,17 +20,17 @@ preconditions:
 
 critical_path:
   - step: "FLAG form parses: --type/--summary are accepted (reaches resolve, not a malformed write)"
-    command: "B=target/release/tillandsias-plan; [ -x \"$B\" ] || B=\"$(command -v tillandsias-plan)\"; out=$(\"$B\" append-event NOSUCHREF_LITMUS --type progress --summary 'x y' --ts 2026-01-01T00:00:00Z --backfill 2>&1); echo \"$out\" | grep -qiE \"no packet matches|unresolved|NOSUCHREF_LITMUS\" && echo 'ok: flag form parsed' || { echo \"FAIL: [$out]\"; exit 1; }"
+    command: "B=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$B\" append-event NOSUCHREF_LITMUS --type progress --summary 'x y' --ts 2026-01-01T00:00:00Z --backfill 2>&1); echo \"$out\" | grep -qiE \"no packet matches|unresolved|NOSUCHREF_LITMUS\" && echo 'ok: flag form parsed' || { echo \"FAIL: [$out]\"; exit 1; }"
     timeout_ms: 15000
     expected_behavior: "ok: flag form parsed"
 
   - step: "POSITIONAL form still works (backward compatible)"
-    command: "B=target/release/tillandsias-plan; [ -x \"$B\" ] || B=\"$(command -v tillandsias-plan)\"; out=$(\"$B\" append-event NOSUCHREF_LITMUS progress 'x y' --ts 2026-01-01T00:00:00Z --backfill 2>&1); echo \"$out\" | grep -qiE \"no packet matches|unresolved|NOSUCHREF_LITMUS\" && echo 'ok: positional form parsed' || { echo \"FAIL: [$out]\"; exit 1; }"
+    command: "B=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$B\" append-event NOSUCHREF_LITMUS progress 'x y' --ts 2026-01-01T00:00:00Z --backfill 2>&1); echo \"$out\" | grep -qiE \"no packet matches|unresolved|NOSUCHREF_LITMUS\" && echo 'ok: positional form parsed' || { echo \"FAIL: [$out]\"; exit 1; }"
     timeout_ms: 15000
     expected_behavior: "ok: positional form parsed"
 
   - step: "UNKNOWN flag is rejected loudly (non-zero exit, names the flag) — no silent swallow"
-    command: "B=target/release/tillandsias-plan; [ -x \"$B\" ] || B=\"$(command -v tillandsias-plan)\"; out=$(\"$B\" append-event NOSUCHREF_LITMUS --bogus z progress foo --ts 2026-01-01T00:00:00Z --backfill 2>&1); rc=$?; [ \"$rc\" != 0 ] && echo \"$out\" | grep -qi \"unknown flag '--bogus'\" && echo 'ok: unknown flag rejected' || { echo \"FAIL rc=$rc [$out]\"; exit 1; }"
+    command: "B=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; out=$(\"$B\" append-event NOSUCHREF_LITMUS --bogus z progress foo --ts 2026-01-01T00:00:00Z --backfill 2>&1); rc=$?; [ \"$rc\" != 0 ] && echo \"$out\" | grep -qi \"unknown flag '--bogus'\" && echo 'ok: unknown flag rejected' || { echo \"FAIL rc=$rc [$out]\"; exit 1; }"
     timeout_ms: 15000
     expected_behavior: "ok: unknown flag rejected"
 

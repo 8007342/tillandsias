@@ -187,6 +187,21 @@ for _mcp_log_cand in \
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
 
+# Dev-vs-runtime environment hook: on the bare-metal DEVELOPMENT host this
+# defaults the inference endpoints to loopback and fires the idempotent
+# dev-inference ensure in the background, so the semantic lanes (plan_answer's
+# 706-f7mq fallback, spec_answer) have an endpoint to reach; inside the forge
+# USER RUNTIME it is a no-op (the enclave owns inference). Guarded source +
+# guarded call keep it `set -e`-safe. See lib-dev-env.sh for the design.
+for _dev_env_cand in \
+    "${BASH_SOURCE[0]%/*}/lib-dev-env.sh" \
+    "/home/forge/.config-overlay/mcp/lib-dev-env.sh"; do
+    if [ -r "$_dev_env_cand" ]; then . "$_dev_env_cand" 2>/dev/null && break; fi
+done
+if command -v tillandsias_dev_env_hook >/dev/null 2>&1; then
+    tillandsias_dev_env_hook "$PWD" || true
+fi
+
 # record_expert_call <tool> <result-text> <unknown-flag>
 # Outcome vocabulary (CLOSED SET):
 #   answered     — a cited envelope, or a non-envelope tool that produced output
@@ -281,6 +296,26 @@ resolve_plan_bin() {
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_BIN"
         return 0
+    fi
+    # Bare-metal DEV env: the checkout's own fresh artifact OUTRANKS a stale
+    # user-level install. Reproduced live 2026-08-15: ~/.local/bin/tillandsias-plan
+    # (installed Aug 12) refused "what is the current Direction?" with the
+    # tokens-refusal while the checkout's target/release answered it CITED —
+    # the host session was served weeks-old behaviour by the canonical-install
+    # preference below, and no capability gap fired because the staleness was
+    # behavioural, not a missing subcommand. This is 682-z5h8's stale-clone
+    # lesson applied to the BINARY. Inside the forge runtime the installed
+    # canonical path still wins (it IS the fresh artifact there).
+    if command -v tillandsias_exec_env >/dev/null 2>&1 \
+        && [ "$(tillandsias_exec_env)" = "dev" ]; then
+        _rpb_idx="$(resolve_plan_index)"
+        if [ -n "$_rpb_idx" ]; then
+            _rpb_root="$(dirname "$(dirname "$_rpb_idx")")"
+            if [ -x "$_rpb_root/target/release/tillandsias-plan" ]; then
+                printf '%s\n' "$_rpb_root/target/release/tillandsias-plan"
+                return 0
+            fi
+        fi
     fi
     for candidate in \
         "$PLAN_BIN_CANONICAL" \

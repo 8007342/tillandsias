@@ -342,6 +342,7 @@ specs:
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
+  - litmus:mcp-server-request-fault-isolation
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty

@@ -132,3 +132,44 @@ mf_touch_age_minutes() {
   touch -d "$2 minutes ago" "$1" 2>/dev/null \
     || touch -t "$(date -v -"$2"M +%Y%m%d%H%M.%S)" "$1"
 }
+
+# mf_plan_binary
+#   Print the tillandsias-plan the CURRENT HOST can actually run, or print
+#   nothing and return 1. Steps use it as:
+#
+#     P="$(mf_plan_binary)" || { echo 'fail: no runnable tillandsias-plan'; exit 1; }
+#
+#   WHY THIS EXISTS (order 751-vega). Fourteen litmus files resolved the binary
+#   by hand, almost all of them as a bare `./target/release/tillandsias-plan`.
+#   On a shared Windows/WSL checkout that path holds a **Linux ELF** left by a
+#   WSL build, sitting beside the runnable `.exe`:
+#
+#     -rw-r--r--  target/release/tillandsias-plan      (Linux ELF, not executable here)
+#     -rwxr-xr-x  target/release/tillandsias-plan.exe  (the one that runs)
+#
+#   Measured on windows 2026-08-15: two tests in methodology-accountability were
+#   red for this and nothing else -- one exiting 126 (found, not executable) and
+#   one reporting `: command not found` because the `[ -x ] || command -v`
+#   fallback chain left the variable EMPTY. A resolution bug wearing a
+#   missing-tool costume. A third direction exists: where the ELF DOES carry the
+#   executable bit, `[ -x ]` selects it and the step runs the wrong
+#   architecture.
+#
+#   This is the same class of host-dialect difference the mf_* helpers already
+#   absorb -- an author should not have to know the Windows/WSL target/ layout
+#   to write a step, any more than they should have to know GNU vs BSD `touch`.
+#
+#   It DELEGATES to scripts/plan-binary-probe.sh rather than reimplementing the
+#   search. That is the entire point of 704-zcgi: three scripts independently
+#   wrote the same wrong probe, so a fourth copy here -- even a correct one --
+#   would be the defect repeating itself one directory over.
+#
+#   RUNNING A STEP BY HAND: `source scripts/litmus-stdlib.sh` first, exactly as
+#   for any mf_* helper. The runner does it for you in the suite.
+mf_plan_binary() {
+  local probe="${LITMUS_PLAN_PROBE:-scripts/plan-binary-probe.sh}"
+  [ -f "$probe" ] || return 1
+  # shellcheck source=scripts/plan-binary-probe.sh
+  . "$probe" || return 1
+  resolve_plan_binary
+}

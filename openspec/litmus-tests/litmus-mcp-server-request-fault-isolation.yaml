@@ -1,0 +1,48 @@
+# @trace spec:forge-environment-discoverability
+name: litmus:mcp-server-request-fault-isolation
+spec: forge-environment-discoverability
+phase: pre-build
+size: instant
+severity: critical
+description: >
+  A fault in ONE request against the stdio MCP expert servers must fail that
+  request at worst — never the server. 2026-08-15 live outage (linux host
+  session): read_file(path=plan/index.yaml, offset=32484, limit=115) ran
+  `tail -n +32484 | head -n 115`; head exited after its 115 lines, tail took
+  SIGPIPE (141), and under `set -euo pipefail` the failed command substitution
+  killed project-info mid-request. The client saw "MCP error -32000:
+  Connection closed" on every in-flight call and ALL project-info tools
+  deregistered for the rest of the session — an expert outage of exactly the
+  class the 737-zcj5/741-* family exists to surface. The malformed-line lane
+  pins the second latent killer: project-info's main loop parsed each incoming
+  line with unguarded jq, so one non-JSON line from a client bug would have
+  ended the session the same way (forge-plan already carried the guard).
+
+preconditions:
+  - workspace contains images/default/config-overlay/mcp/project-info.sh
+  - workspace contains images/default/config-overlay/mcp/forge-plan.sh
+  - workspace contains scripts/test-mcp-server-resilience.sh
+
+critical_path:
+  - step: "project-info survives a SIGPIPE'd read_file(offset,limit) mid-window and still answers the NEXT request (the 2026-08-15 killer, replayed)"
+    command: "bash scripts/test-mcp-server-resilience.sh sigpipe 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:project-info-survives-sigpipe"
+
+  - step: "both servers survive a malformed (non-JSON) request line and answer the following tools/list"
+    command: "bash scripts/test-mcp-server-resilience.sh malformed 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:mcp-servers-survive-malformed-line"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "one faulted request never ends the stdio session; the follow-up request is answered"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "mcp-server-request-fault-isolation"
+
+failure_modes:
+  - "a new unguarded pipeline-to-head (or pipeline into any early-exiting reader) reintroduces the SIGPIPE-under-pipefail server kill"
+  - "a main-loop jq parse loses its `|| true` guard and a malformed client line ends the session"
+  - "a handler grows an unguarded read (`wc -l < file` on an unreadable path) that set -e escalates to server death"

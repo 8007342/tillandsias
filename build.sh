@@ -101,7 +101,64 @@ NC='\033[0m'
 _info()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${GREEN}[build]${NC} $*"; }
 _warn()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${YELLOW}[build]${NC} $*"; }
 _error() { echo -e "${RED}[build]${NC} $*" >&2; }
-_step()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"; }
+# ── Per-phase timing (order 758-jw6v) ────────────────────────────────────────
+#
+# WHY THIS EXISTS. `./build.sh --check` is the largest fixed cost in a
+# meta-orchestration cycle — ~130s, run three or four times per cycle — and
+# until now the only way to find out WHERE that went was to pipe the gate's
+# output through a timestamper and diff the gaps. I did that, attributed a 58s
+# gap to trace-coverage.sh, fixed trace-coverage.sh from 455s to 20s, and the
+# gate moved 146s -> 130s. The win was real; the attribution was wrong by a
+# factor of three, and wrong in the direction that would have justified more
+# work on the thing already fixed.
+#
+# A number nobody can see is a number nobody checks. So the gate now measures
+# itself: every `_step` closes the previous phase, and the end of the run
+# prints the total plus any phase that took longer than the threshold.
+#
+# QUIET BY DEFAULT, because 45 phases of timing on every commit is the kind of
+# noise that gets a signal ignored (734-sjb3). Only phases over
+# TILLANDSIAS_GATE_SLOW_MS (default 5s) are named; TILLANDSIAS_GATE_PROFILE=1
+# prints all of them.
+_PHASE_NAME=""
+_PHASE_T0=""
+_PHASE_LOG=""
+_now_ms() { date +%s%3N 2>/dev/null || echo 0; }
+
+_phase_close() {
+    [[ -n "$_PHASE_NAME" ]] || return 0
+    local now elapsed
+    now="$(_now_ms)"
+    elapsed=$(( now - _PHASE_T0 ))
+    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${_PHASE_NAME}
+"
+    _PHASE_NAME=""
+}
+
+_step()  {
+    _phase_close
+    _PHASE_NAME="$*"
+    _PHASE_T0="$(_now_ms)"
+    [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"
+}
+
+# Print the gate's own cost. Called once, at the end of --check.
+_phase_report() {
+    _phase_close
+    [[ -n "$_PHASE_LOG" ]] || return 0
+    local total slow_ms
+    slow_ms="${TILLANDSIAS_GATE_SLOW_MS:-5000}"
+    total="$(printf '%s' "$_PHASE_LOG" | awk -F'\t' '{s+=$1} END {printf "%d", s}')"
+    if [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]]; then
+        printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' \
+            '{printf "  %6.1fs  %s\n", $1/1000, $2}' >&2
+    else
+        printf '%s' "$_PHASE_LOG" | sort -rn \
+            | awk -F'\t' -v lim="$slow_ms" \
+            '$1 > lim {printf "  %6.1fs  %s\n", $1/1000, $2}' >&2
+    fi
+    _info "Gate phases totalled $(( total / 1000 ))s (set TILLANDSIAS_GATE_PROFILE=1 for every phase)"
+}
 
 # ---------------------------------------------------------------------------
 # Flag parsing
@@ -779,6 +836,11 @@ _write_gate_stamp() {
     # rendering could never express: no annotation references a spec that does
     # not exist. Non-mutating, as before — nothing is written to the worktree,
     # so a stamp can no longer be blocked by evidence the build itself dirtied.
+    # Announced so it is attributable. This ran silently, and the pause it
+    # produced was read as "trace-coverage is slow" when measurement later put
+    # most of the time elsewhere (758-jw6v). A phase with no name cannot be
+    # blamed correctly OR exonerated.
+    _step "Ratcheting ghost traces for the gate stamp (584-2qq2)..."
     local ghost_status
     if ! ghost_status="$("$SCRIPT_DIR/scripts/trace-coverage.sh" --gate 2>&1)"; then
         _error "Ghost-trace ratchet failed — gate stamp NOT recorded"
@@ -786,6 +848,7 @@ _write_gate_stamp() {
         return 1
     fi
 
+    _step "Writing the gate stamp..."
     if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
     else
@@ -1268,6 +1331,7 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Normal completion: cancel the abort-trap and emit exactly one success
     # record for the whole gate. (packet 682-emvg)
     trap - EXIT
+    _phase_report
     timing_emit build-check check "$_CHECK_T0" 0
 
     # If --check is the only remaining flag, exit

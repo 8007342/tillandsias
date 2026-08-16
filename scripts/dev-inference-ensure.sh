@@ -41,9 +41,26 @@
 #   blocked:no-network                   cannot fetch the runtime or a model
 #   blocked:install-failed:<detail>   e.g. runtime-download, pull-<model>, no-zstd
 #   blocked:not-ready-after:<seconds>s
-#   skip:not-wsl                         no business installing this elsewhere
+#   blocked:image-missing:build-inference   linux lane: no tillandsias-inference
+#                                           image — run ./build-inference.sh
+#   blocked:container-start-failed       linux lane: podman refused the container
+#   skip:unsupported-host                no lane was reasoned about for this host
+#   skip:no-local-inference              operator kill switch (620-ca7g)
 #
 # Exit 0 on ok/skip, 1 on blocked.
+#
+# LANES (2026-08-15, extends order 718-nkm2 to the Linux development host):
+#   wsl-native       — the original 718-nkm2 design: no podman/systemd in the
+#                      build distro, so ollama runs native on loopback.
+#   linux-container  — bare-metal Linux WITH podman (the immutable Fedora
+#                      hosts): the already-built tillandsias-inference image
+#                      runs as the SEPARATE container `tillandsias-dev-inference`
+#                      publishing loopback ${ENDPOINT_PORT} — separate name so
+#                      the forge enclave's own `tillandsias-inference` lifecycle
+#                      (--replace, no host publish, enclave DNS) never fights
+#                      it; same model cache so multi-GB weights are shared.
+#                      Idempotent: reuse-if-running, start-if-stopped,
+#                      launch-if-missing, never duplicate.
 
 set -uo pipefail
 
@@ -58,11 +75,24 @@ STATE_DIR="${TILLANDSIAS_DEV_INFERENCE_HOME:-$HOME/.local/share/tillandsias-dev-
 BIN="$STATE_DIR/bin/ollama"
 LOG="$STATE_DIR/serve.log"
 READY_BUDGET_SECS="${TILLANDSIAS_DEV_INFERENCE_READY_SECS:-90}"
+DEV_CONTAINER="tillandsias-dev-inference"
 
-# Refuse to install into a host this was not reasoned about. The whole design
-# rests on "the expert servers and this endpoint share a loopback".
-if ! grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
-    echo "skip:not-wsl"
+# Operator kill switch (620-ca7g): any value except "0" disables local
+# inference, loudly, on every lane.
+if [ -n "${TILLANDSIAS_NO_LOCAL_INFERENCE:-}" ] && [ "${TILLANDSIAS_NO_LOCAL_INFERENCE}" != "0" ]; then
+    echo "skip:no-local-inference"
+    exit 0
+fi
+
+# Lane selection. Refuse to install into a host no lane was reasoned about —
+# the whole design rests on "the expert servers and this endpoint share a
+# loopback".
+if grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
+    LANE="wsl-native"
+elif [ "$(uname -s 2>/dev/null)" = "Linux" ] && command -v podman >/dev/null 2>&1; then
+    LANE="linux-container"
+else
+    echo "skip:unsupported-host"
     exit 0
 fi
 
@@ -74,8 +104,52 @@ have_model() { # <model>
             >/dev/null 2>&1
 }
 
-pull_model() { # <model>
-    "$BIN" pull "$1" >>"$LOG" 2>&1
+pull_model() { # <model> — native binary when present, else the serve API.
+    # The API path covers the linux-container lane (the ollama binary lives
+    # inside the container); /api/pull streams progress JSON, which the log
+    # absorbs. Bounded: a model pull is minutes, never unbounded.
+    if [ -x "$BIN" ]; then
+        "$BIN" pull "$1" >>"$LOG" 2>&1
+    else
+        curl -fsS --max-time 1800 -X POST "$ENDPOINT/api/pull" \
+            -d "$(jq -cn --arg m "$1" '{name: $m}')" >>"$LOG" 2>&1
+    fi
+}
+
+# ── linux-container lane ────────────────────────────────────────────────────
+# Idempotent by construction: reuse-if-running, start-if-stopped,
+# launch-if-missing, never duplicate (`podman container exists` gates the run).
+# Returns 0 ensured, 1 podman refused, 2 no image built.
+ensure_container() {
+    if podman container exists "$DEV_CONTAINER" 2>/dev/null; then
+        _ec_state="$(podman inspect -f '{{.State.Status}}' "$DEV_CONTAINER" 2>/dev/null || echo unknown)"
+        if [ "$_ec_state" != "running" ]; then
+            podman start "$DEV_CONTAINER" >>"$LOG" 2>&1 || return 1
+        fi
+        return 0
+    fi
+    _ec_img=""
+    if podman image exists "localhost/tillandsias-inference:latest" 2>/dev/null; then
+        _ec_img="localhost/tillandsias-inference:latest"
+    else
+        _ec_img="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+            | grep '^localhost/tillandsias-inference:v' | sort -V | tail -1 || true)"
+    fi
+    [ -n "$_ec_img" ] || return 2
+    # Same hardening and the SAME model cache as the runtime container
+    # (build_inference_run_args), minus the enclave network and proxy — this
+    # endpoint is for the agent on this machine, bound to loopback only.
+    _ec_cache="$HOME/.cache/tillandsias/models"
+    mkdir -p "$_ec_cache" 2>/dev/null || true
+    podman run --detach --name "$DEV_CONTAINER" \
+        --publish "${ENDPOINT_HOST}:${ENDPOINT_PORT}:11434" \
+        --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable \
+        --userns=keep-id --pids-limit=128 \
+        --env OLLAMA_DEBUG=1 \
+        --env OLLAMA_KEEP_ALIVE="${TILLANDSIAS_DEV_INFERENCE_KEEP_ALIVE:-30m}" \
+        -v "$_ec_cache:/home/ollama/.ollama/models:rw" \
+        "$_ec_img" >>"$LOG" 2>&1 || return 1
+    return 0
 }
 
 install_runtime() {
@@ -130,16 +204,31 @@ wait_ready() {
 started="no"
 
 if ! api_up; then
-    if [ ! -x "$BIN" ]; then
-        curl -fsS --max-time 5 -o /dev/null https://ollama.com 2>/dev/null || {
-            echo "blocked:no-network"
-            exit 1
-        }
-        install_runtime || { echo "blocked:install-failed:runtime-download"; exit 1; }
+    if [ "$LANE" = "linux-container" ]; then
+        mkdir -p "$STATE_DIR" 2>/dev/null || true
+        ensure_container
+        case "$?" in
+            0) ;;
+            2) echo "blocked:image-missing:build-inference"; exit 1 ;;
+            *) echo "blocked:container-start-failed"; exit 1 ;;
+        esac
+        started="yes"
+        # First-ever start may exceed the budget while the image's entrypoint
+        # self-installs the ollama runtime; the ensure is idempotent, so the
+        # NEXT call converges to ready without re-doing anything.
+        wait_ready || { echo "blocked:not-ready-after:${READY_BUDGET_SECS}s"; exit 1; }
+    else
+        if [ ! -x "$BIN" ]; then
+            curl -fsS --max-time 5 -o /dev/null https://ollama.com 2>/dev/null || {
+                echo "blocked:no-network"
+                exit 1
+            }
+            install_runtime || { echo "blocked:install-failed:runtime-download"; exit 1; }
+        fi
+        start_serve
+        started="yes"
+        wait_ready || { echo "blocked:not-ready-after:${READY_BUDGET_SECS}s"; exit 1; }
     fi
-    start_serve
-    started="yes"
-    wait_ready || { echo "blocked:not-ready-after:${READY_BUDGET_SECS}s"; exit 1; }
 fi
 
 # Models are pulled only when absent, so the common path costs one /api/tags
