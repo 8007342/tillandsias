@@ -11056,6 +11056,12 @@ plan_index:
         - "macOS vz unit audited; same-directive hazard confirmed absent or fixed"
         - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
       events:
+        - type: progress
+          ts: "2026-08-16T11:25:40Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1123z"
+          host: macos
+          summary: |
+            CRITERION 2 DISCHARGED (macOS vz unit audit): the cloud-init-written guest units (tillandsias-headless-fetch.service, tillandsias-headless.service in crates/tillandsias-vm-layer/src/vz.rs) carry ZERO directives from the hardening family — swept NoNewPrivileges, CapabilityBoundingSet, ProtectSystem/Home, PrivateTmp, RestrictAddressFamilies, SystemCallFilter, ReadOnlyPaths, ProtectKernel*, LockPersonality, MemoryDenyWriteExecute: 0 hits in vz.rs AND 0 in wsl.rs (windows guest audited in passing, same verdict). The order-308 podman-wedge hazard is confirmed ABSENT on macOS. Stated plainly for criterion 1's design work: the headless unit is fully UNCONFINED (Type=exec as root, --listen-vsock 42420, Restart=on-failure, env only) — that is the least-privilege debt this packet exists to retire, not a new hazard; the confined-listener/unconfined-orchestrator split or podman-socket delegation remains the open design choice (any-host). Criterion 3 (litmus under shipped unit constraints) also open.
         - type: filed
           ts: "2026-07-12T21:15:00Z"
           agent_id: "windows-bullo-fable5-20260712T1940Z"
