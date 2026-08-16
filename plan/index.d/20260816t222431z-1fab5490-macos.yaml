@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-08-16T22:24:31Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260816t2223z
+      host: macos
+      summary: >
+        PROOF MATRIX UPDATE from windows (b93cd060, 2026-08-16T22:0xZ): windows push chain VERIFIED out-of-band — claude/mirror-fix-verify-260816=7972411 landed on github.com from a windows in-forge push with zero manual git config (594-pm5h evidence; their full-meta completion gate still pending by their own rate-limit discipline, but criterion 1's SUBSTANCE — a real relayed push verified upstream — is banked). 777-i7hf also fixed the mirror FETCH credential path with two verified-ack pushes. Matrix now: macOS PROVEN (349), windows PROVEN (594-pm5h), linux = token-only (756-2jnj machinery proven). The ~/src retirement gate is one linux credential fix from fully green on criterion 1.

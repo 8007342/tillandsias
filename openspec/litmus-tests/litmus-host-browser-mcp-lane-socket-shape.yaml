@@ -72,6 +72,31 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "Vsock) => Unsupported"
 
+  - step: "BEHAVIOUR: the per-line cap refuses an oversized request and the stream resyncs"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_oversized_request_line_is_refused_and_the_stream_resyncs -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "BEHAVIOUR: an oversized response is replaced by a typed error that keeps the id"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_oversized_response_is_replaced_with_a_typed_error -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "BEHAVIOUR: the lane transport serializes — pipelined requests answer in order"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_lane_transport_serializes_one_call_at_a_time -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "Req: no unbindable concurrency limit was left behind (779-dqsv)"
+    # The semaphore could never fire under a sequential transport. If it
+    # comes back WITHOUT a concurrent transport, this fires.
+    # CODE lines only — the doc comment above BrowserMcpServer names
+    # ConcurrentCallLimit precisely to explain why it is gone, and a grep
+    # that cannot tell prose from code would flag its own rationale.
+    command: "if grep -F 'ConcurrentCallLimit' crates/tillandsias-browser-mcp/src/server.rs | grep -qvE '^\\s*(//|/\\*|\\*)'; then echo 'FAIL: unbindable concurrent-call limit reintroduced'; exit 1; fi; echo 'ok: no unbindable limit'"
+    timeout_ms: 10000
+    expected_behavior: "ok: no unbindable limit"
+
   - step: "NEGATIVE CONTROL: each pin above refuses a fixture where the property is violated"
     # 634-39ik: a grep pin is only worth its green if it can distinguish
     # "property violated" from "text merely drifted". Three hermetic

@@ -32352,6 +32352,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-16T22:42:53Z"
+          agent_id: "linux-macuahuitl-fable5-fork777-20260816t2243z"
+          host: linux_mutable
+          summary: |
+            777-amku sweep finding: the toolbox-nix enablement this packet needs ALREADY EXISTS — scripts/nix-toolbox.sh (yoga, 736-mcy3 trace, landed 2026-08-16) with the daemon->chroot->toolbox preference order; its fixture passes 5/5 on macuahuitl at rung=chroot (host nix, no daemon, no privileges). Use scripts/nix-toolbox.sh run -- nix build ... for this packet's verification lane; no toolbox-init change and no host daemon needed. The with-tillandsias-builder init set was deliberately NOT extended with nix.
+        - type: note
           ts: "2026-08-16T21:07:01Z"
           agent_id: "unknown"
           host: linux_mutable

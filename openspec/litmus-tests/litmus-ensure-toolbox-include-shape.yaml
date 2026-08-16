@@ -1,0 +1,55 @@
+# @trace spec:dev-build
+#
+# Pins order 777-amku (operator directive 2026-08-16: "use toolboxes for
+# everything; scripts should be idempotent and toolbox friendly"): the
+# default shebang-level include scripts/ensure_toolbox.sh and its contract —
+# ensure-or-noop, no caller option rewrite, single delegated implementation.
+# Canonical statement: methodology/multi-host-development.yaml ->
+# toolbox_first_scripts.
+name: litmus:ensure-toolbox-include-shape
+spec: dev-build
+phase: pre-build
+description: >
+  Pin scripts/ensure_toolbox.sh: exists/parses/executable, sourcing it under
+  strict AND lax caller options leaves those options untouched, direct exec
+  works, the ensure logic is DELEGATED to with-tillandsias-builder.sh (one
+  implementation, two entry shapes), and the methodology canon entry is
+  present and routable.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/ensure_toolbox.sh
+  - workspace contains scripts/with-tillandsias-builder.sh
+  - shell utilities (bash, grep) are available in PATH
+
+critical_path:
+  - step: "include exists, is executable, and parses"
+    command: "test -x scripts/ensure_toolbox.sh && bash -n scripts/ensure_toolbox.sh && echo 'ok: include-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: include-parses"
+
+  - step: "sourcing under set -euo pipefail preserves the caller's strict options and returns 0"
+    command: "bash -c 'set -euo pipefail; source scripts/ensure_toolbox.sh; case $- in *e*) : ;; *) echo FAIL-e; exit 1;; esac; case $- in *u*) : ;; *) echo FAIL-u; exit 1;; esac; case \"$(set -o | grep pipefail)\" in *on*) echo \"ok: strict-options-preserved\";; *) echo FAIL-pipefail; exit 1;; esac'"
+    timeout_ms: 30000
+    expected_behavior: "ok: strict-options-preserved"
+
+  - step: "sourcing under lax options never arms errexit in the caller (the 731-pc5r class)"
+    command: "bash -c 'set +e; source scripts/ensure_toolbox.sh; case $- in *e*) echo FAIL-leak; exit 1;; *) echo \"ok: no-option-rewrite\";; esac'"
+    timeout_ms: 30000
+    expected_behavior: "ok: no-option-rewrite"
+
+  - step: "direct execution is an ensure-or-noop that exits 0"
+    command: "scripts/ensure_toolbox.sh && echo 'ok: direct-exec'"
+    timeout_ms: 30000
+    expected_behavior: "ok: direct-exec"
+
+  - step: "the ensure logic is delegated, never duplicated (with-tillandsias-builder.sh direct mode)"
+    command: "grep -q 'with-tillandsias-builder.sh\" true' scripts/ensure_toolbox.sh && ! grep -q 'toolbox create' scripts/ensure_toolbox.sh && echo 'ok: single-implementation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: single-implementation"
+
+  - step: "methodology canon entry present and routable (toolbox_first_scripts)"
+    command: "grep -q 'toolbox_first_scripts:' methodology/multi-host-development.yaml && grep -q '777-amku' methodology/multi-host-development.yaml && echo 'ok: canon-entry'"
+    timeout_ms: 3000
+    expected_behavior: "ok: canon-entry"

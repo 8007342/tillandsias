@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+    event:
+      type: progress
+      ts: "2026-08-16T21:26:56Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260816t2123z
+      host: macos
+      summary: >
+        CRITERION 2 DISCHARGED: the loss-on-shutdown window is now WRITTEN DOWN with code provenance — cheatsheets/runtime/forge-loss-on-shutdown-window.md. The load-bearing fact, verified in images/git/pre-receive-hook.sh: relay is SYNCHRONOUS and upstream-first — a client push-success means upstream durably holds the atomic ref set; relay failure fails the push loudly (no queue, no grace window). Loss surface reduces to uncommitted/unpushed lane work (the accepted ephemerality trade) and local-only projects (mirror volume = only copy; on macOS that volume is in-guest and dies with --reset-guest — flagged as the accept-or-fence decision in the doc). Deletes and force-pushes through the mirror are denied by receive config before the relay. Also noted from linux's 587ebbef: their 403 is narrowed to the TOKEN itself with the verdict machinery proven end-to-end — criterion 1's linux half is close.

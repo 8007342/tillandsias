@@ -90,12 +90,41 @@ shared control socket is now REFUSED with `ErrorCode::Unsupported` naming
 the per-lane requirement — it is a live negative, not dead code, and MUST
 keep refusing.
 
-**Known gap (tracked, not sanctioned):** this NDJSON path currently enforces
-no per-line payload cap, while the retired `McpFrame` path carried
-`MAX_MCP_FRAME_BYTES` (4 MiB). A base64 full-page screenshot therefore
-travels as one unbounded line. Owned by packet
-`host-browser-mcp-ndjson-transport-policy` (order 779-dqsv); this spec does
-not bless the absence of a cap.
+**Payload ceiling.** One JSON-RPC object per line, at most
+`MAX_MCP_FRAME_BYTES` (4 MiB) per line, enforced in BOTH directions
+(order 779-dqsv). The number is deliberately the same one the retired
+`McpFrame` path carried — the ceiling is a property of what MCP payloads
+contain (screenshots, large tool results), not of which transport carries
+them. An oversized REQUEST line is refused with
+`-32000 RequestTooLarge`, after which the stream resyncs at the next
+newline and the connection keeps serving. An oversized RESPONSE (the live
+producer being a base64 full-page `browser.screenshot`) is replaced by
+`-32000 ResponseTooLarge` carrying the request's `id`, so the failure
+surfaces where its reason is known instead of overrunning the peer's reader.
+
+**Concurrency.** The lane transport handles ONE request at a time: it reads
+a line, serves it to completion, and only then reads the next. Responses
+therefore return in request order even when a client pipelines. There is
+deliberately NO concurrent-call limit anywhere in this surface — the
+browser server previously carried a 16-permit semaphore that could never
+bind under this transport, and an unbindable limit reads as protection while
+providing none, so it was removed rather than left in place (order
+779-dqsv). A future transport that pipelines requests MUST introduce its
+limit in the transport, where it can actually bind, with a test that
+observes a rejection.
+
+#### Scenario: An oversized line is refused and the stream resyncs
+
+- **WHEN** a peer writes a line longer than the payload ceiling
+- **THEN** the tray replies `-32000` with a message beginning
+  `RequestTooLarge:`
+- **AND** the connection remains open, and the next well-formed request on
+  that connection is served normally
+
+#### Scenario: Responses return in request order
+
+- **WHEN** a client writes several requests without reading replies
+- **THEN** the tray answers them one per line in the order received
 
 @trace spec:host-browser-mcp, spec:tray-host-control-socket
 
