@@ -8206,17 +8206,6 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
         .join(".gitconfig"))
 }
 
-/// Write a forge-owned `.gitconfig` to disk for injection into forge containers.
-///
-/// The generated config prepopulates the mirror redirect (`url.insteadOf`)
-/// and `safe.directory` so the forge entrypoint's
-/// `rewrite_origin_for_enclave_push` can skip redundant writes on a read-only
-/// mount. The caller bind-mounts this file into the container at Git's
-/// standard global path, `/home/forge/.gitconfig`.
-///
-/// Returns `Some(path)` on success, `None` on any I/O error.
-/// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
-#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 // ---------------------------------------------------------------------------
 // Per-lane ssh-agent sidecar (order 749-6uby, design T8+T10)
 //
@@ -8250,6 +8239,7 @@ const FORGE_SSH_AGENT_SOCK: &str = "/run/tillandsias/ssh-agent/agent.sock";
 /// In-forge path of the read-only known_hosts (the @cert-authority line).
 const FORGE_SSH_KNOWN_HOSTS: &str = "/run/tillandsias/ssh-known_hosts";
 
+#[cfg_attr(not(feature = "tray"), allow(dead_code))]
 fn forge_gitconfig_dir() -> Option<PathBuf> {
     let home = std::env::var("HOME").ok()?;
     Some(
@@ -8449,6 +8439,16 @@ async fn ensure_ssh_lane_sidecar(
     Err("[ssh-lane] sidecar never printed its ready line within 30s".into())
 }
 
+/// Write a forge-owned `.gitconfig` to disk for injection into forge containers.
+///
+/// The generated config prepopulates the mirror redirect (`url.insteadOf`)
+/// and `safe.directory` so the forge entrypoint's
+/// `rewrite_origin_for_enclave_push` can skip redundant writes on a read-only
+/// mount. The caller bind-mounts this file into the container at Git's
+/// standard global path, `/home/forge/.gitconfig`.
+///
+/// Returns `Some(path)` on success, `None` on any I/O error.
+/// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
 pub(crate) fn write_forge_gitconfig(
     project_name: &str,
     mirror_id: Option<&str>,
