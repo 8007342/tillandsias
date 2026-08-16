@@ -37,3 +37,23 @@ conflated:
 Not filed as plan packets: the four undiagnosed FAILs need one diagnosis pass
 first, and filing four packets off an undiagnosed symptom would be the
 "packet on a false premise" mistake 637-df4z already recorded.
+
+## Update 2026-08-16 (windows, meta-orchestration cycle 2)
+
+Re-measured on the instant subset (16 executed): **15/16 green**. Of the
+2026-08-13 reds, `litmus:cycle-metrics-answer-rate-shape`,
+`litmus:cycle-flow-telemetry-shape` and
+`litmus:build-test-timing-telemetry-shape` now PASS on this host, and
+`litmus:timing-telemetry-implausible-guard-shape` passed both runs tonight.
+
+The one remaining red, `litmus:methodology-accountability-shape` step 4, has
+CHANGED failure mode: the `rg` dependency is gone (the step now uses
+`grep -rnIE`), and the step instead hits its 10s TIMEOUT — deterministically,
+two suite runs in a row — while the identical command completes in 0.6-2.5s
+standalone in native Git Bash. Diagnosis: it is the only step in the suite
+that greps the full `crates/` tree, and on this host the runner executes
+steps inside the WSL builder distro where the checkout is a /mnt/c 9p mount;
+a recursive grep there is an order of magnitude slower. Fixed this cycle by
+raising that step's `timeout_ms` to 60000 (the check is discoverability, not
+latency; expected_behavior unchanged). If the step is red again after this,
+it is a real discoverability regression, not the host.

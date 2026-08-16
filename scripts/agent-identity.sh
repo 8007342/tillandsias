@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # @trace order:756-hn3a, spec:methodology-accountability
+# freshness: auditor=windows-yolanda-fable5-20260816t0850z date=2026-08-16 verdict=refreshed scope=full file audit on windows (the platform whose hostname/-s gap motivated 743-mgf3): CLI id/node-name correct, bare invocation refuses empty-backend per grammar, hermetic fixture 11/11 green incl. env -i and bash-3.2 lowercase paths
 # Pinned by litmus:agent-identity-canonical-source-shape.
 # bash-dialect: dual (probed fallback) — the timestamp helper probes the
 # printf time builtin and falls back to date(1); everything else is

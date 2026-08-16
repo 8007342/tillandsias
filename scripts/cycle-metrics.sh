@@ -498,7 +498,15 @@ if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 commits="-"
 if [ -n "$SINCE_REF" ] && git -C "$REPO_ROOT" rev-parse --verify "$SINCE_REF" >/dev/null 2>&1; then
-    commits="$(git -C "$REPO_ROOT" rev-list --count "${SINCE_REF}..HEAD" 2>/dev/null || echo -)"
+    # --first-parent, deliberately (order 769-aqpc). On a platform branch the
+    # cycle's own work is the first-parent chain; a pre-push `git merge
+    # origin/linux-next` pulls in dozens of sibling commits that are NOT this
+    # cycle's output. Measured 2026-08-16 on windows: the plain count reported
+    # 24 where the cycle had made 3 commits + 1 merge — and this number feeds
+    # `--emit-flow commits=`, so the inflation skewed overhead_ratio (the
+    # greedier-batching decision input, 682-yiz7) by 6x for every cycle that
+    # merged. The merge commit itself still counts: making it was cycle work.
+    commits="$(git -C "$REPO_ROOT" rev-list --count --first-parent "${SINCE_REF}..HEAD" 2>/dev/null || echo -)"
 fi
 traces="unknown"
 if [ -x "$REPO_ROOT/scripts/generate-traces.sh" ]; then
