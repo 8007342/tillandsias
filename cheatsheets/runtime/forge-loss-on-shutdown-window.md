@@ -6,7 +6,7 @@
      images/git/entrypoint.sh:168-174 (receive.denyDeletes/denyNonFastForwards),
      plan/issues/macos-forge-349-closing-run-2026-08-16.md (live relayed-push
      proof), 756-2jnj events (verdict machinery + linux token blocker). -->
-<!-- freshness: filed 2026-08-16 macos 776-jcf3 -->
+<!-- freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=776-jcf3 authoring -->
 
 The ephemeral path (cloud ↔ ephemeral git-mirror ↔ ephemeral forge) makes one
 trade explicitly: **the forge container's filesystem is disposable**. This
