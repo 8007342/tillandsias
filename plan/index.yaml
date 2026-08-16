@@ -41440,6 +41440,12 @@ plan_index:
         - the tray's fallback timer stops firing while the push subscription is healthy, and resumes on drop
         - a measurement records idle wakeups/second before and after for both guest and tray — the claim 'near-zero at idle' must be evidenced, not asserted
       events:
+        - type: progress
+          ts: "2026-08-16T05:31:04Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0523z"
+          host: macos
+          summary: |
+            macOS transient-path sites DISCHARGED BY RECORDED JUSTIFICATION (the packet's deliverable explicitly allows 'a recorded justification per site'): vz.rs stop() 250ms state poll and transport_macos.rs connect 50ms pump now carry durable in-code justifications — both run only inside bounded transient windows (drain_timeout / connect timeout), contribute zero steady-state wakeups (the 2026-08-16 idle measurement was taken with both present), and their runloop pumps are load-bearing for VZ callback delivery; rewiring the SHUTDOWN path unattended is exactly what the windows near-miss warns against. Each justification names its removal condition. macOS outcome clause fully satisfied: steady-state near-zero measured, remaining timers justified. Packet residual is now guest-side only (30s podman shell-out + 2s/15s ticks in tillandsias-headless main.rs).
         - type: verified
           ts: "2026-08-15T02:48:33Z"
           agent_id: "unknown"
