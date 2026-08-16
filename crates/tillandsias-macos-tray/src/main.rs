@@ -104,7 +104,9 @@ fn main() {
              in-VM vault) and reprovision from scratch. Destructive by design;\n                  \
              you'll re-authenticate once\n    \
              --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
-             the control wire, print its output + exit, then stop\n    \
+             the control wire, print its output + exit, then stop. Words are\n                  \
+             JOINED and run via `/bin/bash -lc`; quote pipelines as ONE string\n                  \
+             (--exec-guest 'a | b') and never add your own bash/sh wrapper\n    \
              --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
              prompts for your git name, email, and PAT (token hidden)\n    \
              --list-cloud-projects  Boot the VM and list GitHub repos via the\n                  \
@@ -169,8 +171,21 @@ fn main() {
         require_no_live_tray("--exec-guest");
         // Join remaining args into a shell command string so the user can write
         // --exec-guest "ls -la" or --exec-guest tillandsias --debug --init
-        // without needing to pre-split argv themselves.
-        let shell_cmd = args[idx + 1..].join(" ");
+        // without needing to pre-split argv themselves. The join is
+        // LOAD-BEARING: the guest's PtyOpen allowlist (pty_handler.rs, order
+        // 141) only admits `/bin/bash -lc <string>` shapes, so verbatim argv
+        // pass-through is not an option — which makes a caller-supplied shell
+        // wrapper (`--exec-guest bash -lc '…'`) always a quoting bug: the
+        // inner quoting is gone by the time the words are re-joined, and the
+        // result counterfeits transport failures convincingly (773-fx3u cost
+        // three loop cycles to a phantom p1). Refuse it loudly instead.
+        let shell_cmd = match build_exec_guest_shell_cmd(&args[idx + 1..]) {
+            Ok(cmd) => cmd,
+            Err(msg) => {
+                eprintln!("{msg}");
+                std::process::exit(2);
+            }
+        };
         let guest_argv = vec!["/bin/bash".to_string(), "-lc".to_string(), shell_cmd];
         std::process::exit(diagnose::exec_guest_main(guest_argv));
     }
@@ -224,6 +239,8 @@ fn main() {
 
     // Every recognized mode above exits the process. Anything flag-shaped that
     // reaches here is unknown, and falling through would launch the full tray:
+    // (build_exec_guest_shell_cmd lives below the mode dispatch; the
+    // fall-through unknown-flag refusal keeps its existing shape.)
     // an unrelated GUI comes up AND the tray takes the VM singleton, so the
     // operator's *next* one-shot refuses (order 277) or wedges on the VZ
     // storage lock (663-69kp). `--with-token` — a real tillandsias-headless
@@ -255,6 +272,63 @@ fn main() {
             }
         };
     status_item::run();
+}
+
+/// 773-fx3u: build the `--exec-guest` shell command string from the raw CLI
+/// words. The words are space-joined and run as `/bin/bash -lc "<joined>"`
+/// (the guest allowlist admits no other shape), so caller quoting inside a
+/// word does not survive — a caller-supplied shell wrapper is therefore
+/// always a silent rewrite and is refused with the correct spelling shown.
+#[cfg(target_os = "macos")]
+fn build_exec_guest_shell_cmd(words: &[String]) -> Result<String, String> {
+    if words.is_empty() {
+        return Err("Error: --exec-guest requires a command, e.g. --exec-guest uname -a".into());
+    }
+    let first = words[0].as_str();
+    if matches!(first, "bash" | "sh" | "/bin/bash" | "/bin/sh" | "/usr/bin/env") {
+        return Err(format!(
+            "Error: --exec-guest words are JOINED and already run via `/bin/bash -lc`; \
+             a leading `{first}` re-wraps the command and its inner quoting is lost \
+             (the pipeline silently becomes `{first} …` with the rest as positional \
+             args — see packet 773-fx3u for the failure this manufactures).\n\
+             Write the command as ONE quoted string instead:\n\
+             tillandsias-tray --exec-guest 'head -c 100 /dev/zero | base64'"
+        ));
+    }
+    Ok(words.join(" "))
+}
+
+#[cfg(test)]
+mod exec_guest_argv_tests {
+    use super::build_exec_guest_shell_cmd;
+
+    fn w(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// 773-fx3u pins: plain words join unchanged (no regression for
+    /// `--exec-guest uname -a`), single quoted strings pass through, and a
+    /// caller-supplied shell wrapper is refused with the contract in the
+    /// message — never silently rewritten.
+    #[test]
+    fn join_contract() {
+        assert_eq!(
+            build_exec_guest_shell_cmd(&w(&["uname", "-a"])).unwrap(),
+            "uname -a"
+        );
+        assert_eq!(
+            build_exec_guest_shell_cmd(&w(&["head -c 100 /dev/zero | base64"])).unwrap(),
+            "head -c 100 /dev/zero | base64"
+        );
+        let err = build_exec_guest_shell_cmd(&w(&["bash", "-lc", "echo a | wc -w"])).unwrap_err();
+        assert!(err.contains("JOINED"), "refusal must state the contract");
+        assert!(err.contains("773-fx3u"));
+        assert!(
+            build_exec_guest_shell_cmd(&w(&["/bin/sh", "-c", "x"])).is_err(),
+            "sh spellings refuse too"
+        );
+        assert!(build_exec_guest_shell_cmd(&[]).is_err());
+    }
 }
 
 #[cfg(not(target_os = "macos"))]
