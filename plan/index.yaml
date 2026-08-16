@@ -22799,6 +22799,12 @@ plan_index:
         - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
         - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
       events:
+        - type: note
+          ts: "2026-08-16T23:56:57Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            LEDGER CORRECTION (operator-directed audit, 2026-08-16, evidence 5ad4168ed + plan/issues/cheatsheet-derived-tree-tracking-decision-2026-08-16.md): this packet's 2026-07-20T06:30Z 'CORRECTION: images/default/cheatsheets/ is GITIGNORED (build-generated), not committed' is FALSE and was false when written — 231 files were tracked at that instant, and git log -G shows the ignore rule was added 2026-07-04 AFTER 230 of them were already tracked (gitignore is inert against tracked paths; only 2 files were ever a true force-add). The original 06:20Z statement ('the ROOT is that it is a COMMITTED copy') was correct. That false correction is why no untrack was attempted for 21 days and it propagated verbatim into scripts/stage-image-cheatsheets.sh's docstring and litmus-cheatsheet-host-image-sync.yaml's description, both since corrected. DECISION NOW RECORDED: the tree STAYS tracked — build.rs embeds images/ into the binary, ./build.sh never stages cheatsheets, and the end-user lane builds from the embedded snapshot where no authored tree exists, so untracking breaks tillandsias --init for curl-installed users and reds every_containerfile_copy_source_exists_in_embedded_assets on a fresh clone. The real defect was INCOMPLETENESS (5 authored cheatsheets missing from the tracked copy while INDEX.md advertised all 5) — fixed, and now gated by an index-level equality check in stage-image-cheatsheets.sh with methodology canon at cheatsheets.storage_and_authority.
         - type: progress
           ts: "2026-07-29T05:30:00Z"
           agent_id: "linux-mutable-metaorch-20260729"

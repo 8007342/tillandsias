@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: linux-immutable (yoga) 2026-08-16, residue of the operator-directed
+# cheatsheet/expert coupling audit
+# (plan/issues/cheatsheet-derived-tree-tracking-decision-2026-08-16.md).
+packets:
+  - packet_id: cheatsheet-template-cannot-satisfy-its-own-canon
+    release_target: forge-local-experts-milestone
+    order: 782-avtk
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: any
+    priority: p2
+    tags:
+      - cheatsheets
+      - provenance
+      - experts
+      - v0.5
+    title: |
+      cheatsheets/TEMPLATE.md teaches a prose provenance section and NO YAML frontmatter, while methodology requires frontmatter on every cheatsheet.
+    context: |
+      `methodology/cheatsheets.yaml` (cheatsheet_frontmatter_required) states
+      every cheatsheet MUST carry YAML frontmatter "so the validator can
+      classify tier, authority, status, provenance, and lifecycle metadata
+      without relying on ad hoc filename heuristics". `cheatsheets/TEMPLATE.md`
+      — the file authors copy — contains NO frontmatter at all; it teaches a
+      prose `## Provenance` section with bullet URLs and a `**Last updated:**`
+      line. An author who follows the template produces a cheatsheet the canon
+      rejects and the gates cannot classify.
+
+      Live consequence, already in the tree:
+      `cheatsheets/runtime/forge-loss-on-shutdown-window.md` uses HTML-comment
+      `<!-- provenance: ... -->` / `<!-- freshness: ... -->` headers instead of
+      frontmatter, so it is INVISIBLE to every frontmatter-parsing gate — its
+      tier, sources and last_verified are unenforced. Coverage today is 219/222
+      authored files with frontmatter; the three without are INDEX.md
+      (generated), TEMPLATE.md, and that file.
+
+      This matters for the expert system specifically: the experts treat
+      cheatsheets as ground truth (methodology.yaml
+      cheatsheets_are_ground_truth_and_enforced_by_local_experts), and an entry
+      whose provenance no gate can read is an unverifiable citation.
+    exit_criteria:
+      - |
+          TEMPLATE.md carries a complete, copyable YAML frontmatter block covering every field the validator classifies (tags, languages, since, last_verified, sources, authority, status, tier, summary_generated_by, bundled_into_image, committed_for_project), so following the template satisfies the canon by construction.
+      - |
+          forge-loss-on-shutdown-window.md is converted to frontmatter (or its HTML-comment form is explicitly recognized by the validator), and a gate fails when an authored cheatsheet other than INDEX.md/TEMPLATE.md lacks frontmatter — with a negative control proving the gate sees a frontmatter-less file.
+    events:
+      - type: filed
+        ts: "2026-08-17T00:10:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Found during the derived-tree tracking audit; independent of that
+          decision but same coupling concern (attribution the experts rely on).
+
+  - packet_id: gitignore-comments-orphaned-by-silent-sort
+    release_target: stable-milestone-v1
+    order: 782-zy95
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: any
+    priority: p3
+    tags:
+      - hygiene
+      - traceability
+      - v0.5
+    title: |
+      A one-line .gitignore change silently sorted the whole file, orphaning ~30 rationale comments from the rules they documented.
+    context: |
+      Commit `c38e91f83` (2026-07-03), whose message says only ".gitignore: add
+      mock-release/ (local e2e test artifacts)", rewrote the entire file:
+      +62/-76, alphabetically sorted. Every explanatory comment was hoisted
+      into a sorted block at the top and separated from its rule. The
+      rationales still exist as text — e.g. "# Staged by scripts/build-image.sh
+      — cheatsheets-license-tiered (bundled-tier bake + meta side-channel)" at
+      line 24, and four `# @trace spec:` lines at 2-5 — but none of them sits
+      above the rule it justifies, so ~30 ignore patterns now read as
+      arbitrary.
+
+      This is the mechanism behind the operator's concern that ignore rules
+      "flip-flop": they did not flip, their JUSTIFICATIONS were detached. In a
+      project whose discipline is that every moving part carries a
+      justification, an unattributable ignore rule is the same defect class as
+      a ghost @trace — it reads as documented and documents nothing.
+    exit_criteria:
+      - |
+          Each surviving comment in .gitignore is reunited with the rule(s) it explains, or deleted if its rule no longer exists; the @trace lines sit above the patterns they trace.
+      - |
+          A rule with no discoverable rationale is either given one (from git history) or removed, and the reasoning is recorded in the commit rather than inferred later.
+    events:
+      - type: filed
+        ts: "2026-08-17T00:10:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Surfaced while tracing why the cheatsheet ignore rule had no
+          attached rationale; the rule itself turned out to postdate the sort
+          by one day, but ~30 other rules did lose theirs.
