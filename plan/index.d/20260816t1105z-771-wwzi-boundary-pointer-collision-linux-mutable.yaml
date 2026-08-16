@@ -1,0 +1,26 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-16, cycle 4.
+packets:
+  - packet_id: fork-agents-retire-the-parents-worktree-boundary
+    order: 771-wwzi
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "Concurrent same-session agents share one boundary-pointer convention — a fork's snapshot RETIRED the parent cycle's boundary dir mid-cycle, costing the parent its attestation basis"
+    deliverable: "boundary snapshots are collision-safe under concurrent same-host agents: per-process pointer files (or GIT_DIR-scoped stamps keyed by worktree), and snapshot's retire-the-previous step only retires boundaries belonging to ITS OWN worktree"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [meta-orchestration, worktree-guard, concurrency]
+    estimated_hours: 2
+    context: |
+      Observed 2026-08-16 ~10:5xZ (cycle 4): the parent cycle snapshotted its
+      boundary at cycle start; two fork agents (611-kqpf, 604-vmcg) later ran
+      meta-orchestration-worktree-guard snapshot in their own worktrees. The
+      guard's snapshot step retires "the previous boundary" (725-bu54
+      convention) — and retired the PARENT's boundary directory, because
+      retirement keys on the shared /tmp naming convention, not on which
+      worktree owns the boundary. The parent's Finalization verify then failed
+      blocked:boundary-state-missing and the cycle had to re-baseline against
+      a manually verified clean tree (honest but weaker than the snapshot
+      chain). Multi-agent single-host operation is now the NORMAL pattern
+      (five fork integrations tonight); the guard predates it.

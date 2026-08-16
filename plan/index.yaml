@@ -48969,6 +48969,12 @@ plan_index:
         tell in-forge agents to file issues, and if those land in the same
         ephemeral checkout the loss is much wider than this one review.
       events:
+        - type: note
+          ts: "2026-08-16T10:30:58Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Live specimen for criterion 1's remaining scope, 2026-08-16: an in-forge cycle FILED a blocker (git-mirror upstream 403) into its ephemeral checkout and could not push — the very 403 it reported — so the file died with the container and reached the host only via litmus-captured stdout (re-filed by hand as plan/issues/blocker-git-mirror-upstream-auth-denied-2026-08-16.md). The persistence gate covers cycle exit, but the credential-guard's file-a-blocker-then-stop path runs UNDER a known-unpushable condition — the gate and that path need to meet: a blocked-on-push cycle must surface its blocker through a channel that does not depend on the push it just declared broken.
         - type: filed
           ts: "2026-08-15T00:20:00Z"
           host: linux_immutable
