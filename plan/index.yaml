@@ -32340,6 +32340,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-16T21:07:01Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            OPERATOR RULING 2026-08-16: the nix-daemon host ask is WITHDRAWN — toolboxes are the substrate for everything (ensure_toolbox.sh pattern, 777-amku). This packet's 'Nix-capable host' precondition is satisfied by nix inside the tillandsias-builder toolbox (single-user, installed at toolbox init), not by host daemons. Re-shape the verification lane accordingly when claiming.
+        - type: note
           ts: "2026-08-16T07:08:45Z"
           agent_id: "unknown"
           host: linux_mutable
@@ -43271,6 +43277,12 @@ plan_index:
         - scripts/check-running-image-freshness.sh no longer returns `indeterminate` for a VERSION-tagged image whose source digest is knowable; it returns a decisive stale/current verdict, and scripts/test-running-image-freshness.sh gains a case pinning that (its existing negative control retained).
         - 'Rebuild cost is not regressed for the common case: an unchanged tree must still Skip. Evidence must include a measured back-to-back launch showing no rebuild on the second run.'
       events:
+        - type: note
+          ts: "2026-08-16T21:07:01Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Fleet-scale live specimen 2026-08-16: the upstream-auth verdict-unpublished block (blocker-git-mirror-upstream-auth-denied-2026-08-16.md) traces to exactly this class — freshly CREATED mirror containers served from a tillandsias-git IMAGE predating 756-2jnj, because the on-demand ensure keys on VERSION tag alone. Confirmed on two hosts (yoga's long-lived container AND macuahuitl's fresh cycle-4 stack). Interim remedy: rebuild the git image at the installed VERSION; the durable fix is this packet's source-digest ensure. Escalation-worthy: implemented -> live closure evidence available the moment a rebuilt image publishes a verdict ref.
         - type: filed
           ts: "2026-08-12T18:34:49Z"
           host: macos

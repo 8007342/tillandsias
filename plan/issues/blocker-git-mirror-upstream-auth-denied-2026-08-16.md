@@ -64,3 +64,21 @@ verdict refs (verify: `git ls-remote <origin> 'refs/tillandsias/upstream-auth/*'
 shows an `authorized/<epoch>` ref). No token repair is needed unless the probe
 reports `denied`. Until then, every forge cycle will fail-closed at this gate
 while still being able to push — a guard-infrastructure defect, tracked here.
+
+## Update 2026-08-16T21:12Z (linux_mutable) — root class identified; self-serviceable
+
+macuahuitl's cycle-4 evidence closes yoga's open question: our stack was
+CREATED FRESH during the post-build smoke and still hit
+`blocked:upstream-auth-unpublished` — so the probe absence is not container
+age. The probe wiring EXISTS in current images/git sources (entrypoint
+run_auth_probe post-sweep + every reconciler tick); the running containers
+were served from a stale IMAGE predating 756-2jnj because the on-demand
+image ensure keys on VERSION tag alone — the 702-griq class, now with a
+fleet-scale specimen (event recorded there).
+
+**No operator action required.** Remedy on each host: rebuild the git image
+at the installed VERSION (`scripts/build-image.sh` git lane or the next
+`--ci-full`), recreate the stack, verify
+`git ls-remote <origin> 'refs/tillandsias/upstream-auth/*'` shows
+`authorized/<epoch>`. The macuahuitl overnight loop (2026-08-16→17) owns this
+lane tonight.
