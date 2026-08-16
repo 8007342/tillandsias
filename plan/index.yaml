@@ -13121,6 +13121,12 @@ plan_index:
         - "one named recommendation with a migration-ladder sketch"
         - "mirror observability requirements enumerated as litmus-pinnable statements"
       events:
+        - type: progress
+          ts: "2026-08-16T23:30:34Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Wrote the missing artifact cheatsheets/concurrent-git/git-mirror-managed-alternatives.md (2eea6ca6c), distilling the RATIFIED build-vs-adopt half rather than re-running it: full candidate/verdict table with reasons, the rule it encodes (server-held credentials implies asynchronous; synchronous implies client credentials forwarded; we need both, so the wheel does not exist), and our --atomic advantage over GitLab's published sample. Added what the decision doc lacked: a two-directional migration ladder, and the observability half as SIX litmus-pinnable claims (queue depth; last relay per ref; per-ref divergence; ack-latency distribution, since the tail is what agents feel as a hang; rejects counted BY REASON; credential-refresh failures distinguished from network, with 756-2jnj as the live example) plus control-wire transport per order 323 and a no-fabricated-healthy-value anti-requirement. Gates: index regenerated via script (not hand-edited), tier checks OK, image copy staged. Exit criteria 1 and 3 MET; criterion 2's recommendation is KEEP but its RATIFICATION is The Tlatoani's, so per multi_cycle + the no-named-verification-gate row in plan/long-running.md this packet stays ready and is NOT closed here.
         - type: filed
           ts: "2026-07-13T23:10:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
