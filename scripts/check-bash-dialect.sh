@@ -21,15 +21,12 @@ set -u
 SCAN_DIR="${TILLANDSIAS_DIALECT_SCAN_DIR:-scripts}"
 SELF_NAME="check-bash-dialect.sh"
 
-# Known-legacy carriers, each pre-dating this gate (761-g36m residual — burn
-# this list DOWN, never add to it; a new entry means a new unguarded
-# bash-4-ism shipped, which is what this gate exists to refuse).
-#
-# The gate's first live run shrank this from the sweep's 8 candidates to 3:
-# five carried the constructs in COMMENTS only (the raw sweep grep did not
-# strip comments; this checker does).
-ALLOWLIST="check-running-image-freshness.sh loop-success-probe.sh \
-selective-tillandsias-reset.sh"
+# Burndown allowlist for known-legacy carriers. EMPTY since 2026-08-16
+# (761-g36m criterion 1 complete: the last three carriers were rewritten
+# 3.2-clean — string sets for the two `declare -A` uses, while-read append
+# for the mapfile). Never add to this list: a new entry means a new
+# unguarded bash-4-ism shipped, which is what this gate exists to refuse.
+ALLOWLIST=""
 
 # Constructs bash 3.2 cannot parse or lacks. Plain literals are safe: this
 # file is excluded from the scan by name, so self-matching cannot happen.

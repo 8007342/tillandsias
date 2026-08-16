@@ -31749,6 +31749,12 @@ plan_index:
       notes: |
         SEPARATE FINDING, do not fold in: `coredumpctl` also lists THREE squid SIGSEGVs (2026-08-01 18:59, 2026-08-01 21:50, 2026-08-03 17:41). squid is the enclave proxy. Nobody has been watching that, and it is not part of the opencode story — it wants its own packet after someone confirms whether the proxy silently restarted or degraded.
       events:
+        - type: note
+          ts: "2026-08-16T07:47:33Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Squid packet the notes asked for: filed as 767-es4w with the 263-crash census (2026-06-30..2026-08-12) and tonight's Exited(139)-for-two-days confirmation. HOLD at implemented: criterion 4 (consecutive-lane repro harness) is 767-qrbv; the recurrence-watch closes this packet only when a post-1.3.14 lane either reproduces (escalate upstream with the preserved dumps) or a quarter passes quiet.
         - type: filed
           ts: "2026-08-04T02:50:00Z"
           agent_id: linux-mutable-macuahuitl-opus5-20260804
@@ -50392,6 +50398,13 @@ plan_index:
         - Sidecar and forge are torn down together; a leaked sidecar after forge exit is a failure.
         - export_ssh_env() is proven harmless with ssh in the push path (or fixed) — it is named here so it cannot be discovered later as a surprise.
 
+      events:
+        - type: note
+          ts: "2026-08-16T07:53:21Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            HELD AT IMPLEMENTED (756-2jnj precedent) — the live residual, exactly: criterion 1's M0 needs TWO real launched lanes pushing concurrently through the production wiring (belongs with the first TILLANDSIAS_MIRROR_SSHD=1 live launch, alongside 722-uern's matrix); criterion 2's D5 re-verification must run IN a live forge after wiring (the 2026-08-13 in-forge sweep is the recipe); criterion 4's teardown is contract-pinned (cleanup 5-removal fake-backend test + source window) but a live leaked-sidecar observation after a real forge exit closes it. Everything else is fixture-proven at this commit. The lane ships DARK: entrypoint sshd, sidecar start, and gitconfig pushInsteadOf all gate on TILLANDSIAS_MIRROR_SSHD=1 until T11 (749-y8xx) flips it with the migration story.
     - packet_id: mirror-identity-persist-vault-audit-device
       order: 749-8iw4
       status: implemented
@@ -52061,6 +52074,12 @@ plan_index:
         to 3.2 on macOS anyway. Feature-detect or single-dialect code, never
         version-sniff by $BASH_VERSION string compare.
       events:
+        - type: completed
+          ts: "2026-08-16T07:23:41Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0623z"
+          host: macos
+          summary: |
+            Criterion 1 DISCHARGED, packet complete. The last three carriers rewritten bash-3.2-clean and verified on this 3.2 host: loop-success-probe.sh and selective-tillandsias-reset.sh replace declare -A with space-delimited string sets (exact spaced-token membership — collision-free for identifier/hex keys — and dedup-preserving KEPT counting in the destructive reset, semantics pinned by an inline harness under /bin/bash 3.2); check-running-image-freshness.sh replaces mapfile with a while-read append. bash -n parses all three under 3.2. The gate allowlist is now EMPTY and stays a refuse-additions burndown list; verifiable closure holds: ./build.sh --check passes the attestation-ledger check on this bash-3.2 host and check-bash-dialect is green over the full scripts/ tree with its 6-scenario fixture.
         - type: progress
           ts: "2026-08-16T02:10:43Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0150z

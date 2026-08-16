@@ -4922,6 +4922,24 @@ async fn cleanup_stack_containers(
     let _ = client
         .remove_container(&format!("tillandsias-browser-{project_name}"))
         .await;
+    // Order 749-6uby exit criterion 4: sidecar and forge are torn down
+    // TOGETHER — a leaked sidecar after forge exit is a failure. The socket
+    // volume goes with it (it holds only the socket; the next launch
+    // recreates both). Non-fatal like the other per-project removals.
+    let _ = client
+        .remove_container(&ssh_lane_sidecar_container_name(project_name))
+        .await;
+    let _ = client
+        .execute(
+            OperationKind::Container,
+            &[
+                "volume".into(),
+                "rm".into(),
+                "-f".into(),
+                ssh_lane_agent_volume(project_name),
+            ],
+        )
+        .await;
     ForgeCleanupOutcome::Removed
 }
 
@@ -5499,6 +5517,30 @@ fn build_opencode_forge_args(
             format!(
                 "type=bind,source={},target=/home/forge/.gitconfig,readonly=true",
                 gitconfig_path.display()
+            ),
+        ]);
+    }
+    // Order 749-6uby (T10): the SSH push lane's forge half — the agent
+    // SOCKET volume (rw: a unix connect needs write on the socket; both
+    // sides are uid 1000) and the read-only known_hosts. D5: the socket is
+    // the only credential-shaped thing the forge ever receives; the key
+    // lives in the sidecar's tmpfs. Wired only when the lane is enabled AND
+    // the sidecar setup produced the known_hosts (fail-loud upstream).
+    if mirror_ssh_push_lane_enabled()
+        && let Some(kh) = ssh_lane_known_hosts_path(project_name).filter(|p| p.exists())
+    {
+        args.extend([
+            "-v".into(),
+            format!(
+                "{}:{FORGE_SSH_AGENT_MOUNT_DIR}",
+                ssh_lane_agent_volume(project_name)
+            ),
+            "--env".into(),
+            format!("SSH_AUTH_SOCK={FORGE_SSH_AGENT_SOCK}"),
+            "--mount".into(),
+            format!(
+                "type=bind,source={},target={FORGE_SSH_KNOWN_HOSTS},readonly=true",
+                kh.display()
             ),
         ]);
     }
@@ -8175,6 +8217,238 @@ fn managed_gitconfig_path() -> Result<PathBuf, String> {
 /// Returns `Some(path)` on success, `None` on any I/O error.
 /// @trace plan/issues/forge-gitconfig-quarantine-and-injection-2026-07-07.md
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
+// ---------------------------------------------------------------------------
+// Per-lane ssh-agent sidecar (order 749-6uby, design T8+T10)
+//
+// D5 is the invariant: the forge NEVER holds key material. The sidecar owns
+// the key on its own tmpfs; the forge mounts only the agent SOCKET (a named
+// volume) plus a read-only known_hosts carrying the host-CA @cert-authority
+// line. The whole lane sits behind TILLANDSIAS_MIRROR_SSHD=1 — the same flag
+// gating the mirror's sshd — until the T11 staged migration flips defaults.
+// ---------------------------------------------------------------------------
+
+/// One flag flips the whole ssh push lane (mirror sshd + sidecar + forge
+/// wiring): T4-T10 land dark and T11 (749-y8xx) owns the default flip.
+pub(crate) fn mirror_ssh_push_lane_enabled() -> bool {
+    std::env::var("TILLANDSIAS_MIRROR_SSHD")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
+
+fn ssh_lane_sidecar_container_name(project_name: &str) -> String {
+    format!("tillandsias-ssh-sidecar-{project_name}")
+}
+
+fn ssh_lane_agent_volume(project_name: &str) -> String {
+    format!("tillandsias-ssh-agent-{project_name}")
+}
+
+/// In-forge mount point of the agent-socket volume; SSH_AUTH_SOCK points at
+/// the socket inside it.
+const FORGE_SSH_AGENT_MOUNT_DIR: &str = "/run/tillandsias/ssh-agent";
+const FORGE_SSH_AGENT_SOCK: &str = "/run/tillandsias/ssh-agent/agent.sock";
+/// In-forge path of the read-only known_hosts (the @cert-authority line).
+const FORGE_SSH_KNOWN_HOSTS: &str = "/run/tillandsias/ssh-known_hosts";
+
+fn forge_gitconfig_dir() -> Option<PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    Some(
+        PathBuf::from(home)
+            .join(".cache")
+            .join("tillandsias")
+            .join("forge-gitconfig"),
+    )
+}
+
+/// Host-side cache of the ssh-host-signer CA public key, written by
+/// [`ensure_ssh_lane_sidecar`] at lane setup. `write_forge_gitconfig` is
+/// sync and vault-less by design — it READS this cache instead of growing a
+/// Vault client, and the absence of the file with the lane enabled is
+/// reported loudly in the generated config itself.
+fn ssh_lane_host_ca_cache_path(project_name: &str) -> Option<PathBuf> {
+    Some(forge_gitconfig_dir()?.join(format!("{project_name}.host-ca.pub")))
+}
+
+fn ssh_lane_known_hosts_path(project_name: &str) -> Option<PathBuf> {
+    Some(forge_gitconfig_dir()?.join(format!("{project_name}.known_hosts")))
+}
+
+/// Append one line to the lane attribution ledger (design D11's host-side
+/// channel for this rung): which lane got which key fingerprint for which
+/// mirror identity, when. JSONL under the cache dir — greppable, append-only,
+/// and outside the project workspace.
+fn append_lane_attribution(project_name: &str, mirror_id: &str, fingerprint: &str) {
+    let Some(dir) = forge_gitconfig_dir().and_then(|d| d.parent().map(Path::to_path_buf)) else {
+        return;
+    };
+    let path = dir.join("lane-attribution.jsonl");
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let line = format!(
+        "{}\n",
+        serde_json::json!({
+            "ts_epoch": ts,
+            "project": project_name,
+            "mirror_id": mirror_id,
+            "fingerprint": fingerprint,
+            "container": ssh_lane_sidecar_container_name(project_name),
+        })
+    );
+    let _ = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, line.as_bytes()));
+}
+
+/// Build the sidecar's `podman run` args. Mirrors the git mirror's posture
+/// (`build_git_run_args`): enclave-only network, read-only rootfs,
+/// cap-drop=ALL, tmpfs /tmp — the key lives ONLY on that tmpfs. The agent
+/// socket lands on the named volume the forge mounts read-write (a unix
+/// socket connect needs write on the socket; both sides run uid 1000).
+fn build_ssh_lane_sidecar_run_args(
+    project_name: &str,
+    mirror_id: &str,
+    certs_dir: &Path,
+    image: &str,
+    vault_approle_secret: &str,
+) -> Vec<String> {
+    let mut args = vec![
+        "--detach".into(),
+        "--rm".into(),
+        "--replace".into(),
+        "--name".into(),
+        ssh_lane_sidecar_container_name(project_name),
+        "--network".into(),
+        ENCLAVE_ONLY_NET.into(),
+        "--cap-drop=ALL".into(),
+        "--security-opt=no-new-privileges".into(),
+        "--security-opt=label=disable".into(),
+        "--userns=keep-id".into(),
+        "--pids-limit=32".into(),
+        "--read-only".into(),
+        "--tmpfs".into(),
+        "/tmp:rw,noexec,nosuid,nodev,size=8m,mode=1777".into(),
+        "--volume".into(),
+        format!("{}:/ssh-agent", ssh_lane_agent_volume(project_name)),
+        "--secret".into(),
+        format!("{vault_approle_secret},{GIT_VAULT_APPROLE_SECRET_OPTS}"),
+        "--env".into(),
+        format!("TILLANDSIAS_MIRROR_ID={mirror_id}"),
+        "--env".into(),
+        format!(
+            "VAULT_ROLE={}",
+            crate::vault_bootstrap::mirror_lane_signer_role_name(mirror_id)
+        ),
+        "--env".into(),
+        "VAULT_ADDR=https://vault:8200".into(),
+        "--env".into(),
+        "VAULT_CACERT=/etc/tillandsias/ca.crt".into(),
+        "--env".into(),
+        "VAULT_TOKEN_FILE=/tmp/tillandsias-vault-token".into(),
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+            certs_dir.join("intermediate.crt").display()
+        ),
+        "--entrypoint".into(),
+        "/usr/local/bin/ssh-lane-sidecar".into(),
+    ];
+    args.push(image.into());
+    args.push("ensure".into());
+    args
+}
+
+/// T8+T10 lane setup, called from the shared-stack launch path AFTER the
+/// mirror is up and BEFORE any forge starts (the packet's ordering): mint
+/// the D6 AppRole, start the sidecar, wait for its ready line, harvest the
+/// fingerprint into the attribution ledger, and cache the host CA public
+/// key for `write_forge_gitconfig`'s known_hosts.
+///
+/// No-op (Ok) when the lane flag is off. Failure is a hard error to the
+/// caller: with the lane EXPLICITLY enabled, a forge that silently launches
+/// without a push path is the 0-findings-lost class this whole chain exists
+/// to prevent.
+async fn ensure_ssh_lane_sidecar(
+    client: &PodmanClient,
+    project_name: &str,
+    mirror_id: &str,
+    certs_dir: &Path,
+    version: &str,
+    debug: bool,
+) -> Result<(), String> {
+    if !mirror_ssh_push_lane_enabled() {
+        return Ok(());
+    }
+    crate::vault_bootstrap::provision_lane_signer_approle_for_launch(mirror_id, debug)
+        .await
+        .map_err(|e| format!("[ssh-lane] AppRole provisioning failed: {e}"))?;
+    // Cache the host CA public key first: the gitconfig writer runs inside
+    // the forge run-arg builders and must find it on disk.
+    let ca_pub = crate::vault_bootstrap::read_mirror_host_ca_public_key(debug)
+        .await
+        .map_err(|e| format!("[ssh-lane] host CA public key read failed: {e}"))?;
+    if let Some(cache) = ssh_lane_host_ca_cache_path(project_name) {
+        if let Some(parent) = cache.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(&cache, format!("{ca_pub}\n"))
+            .map_err(|e| format!("[ssh-lane] cannot cache host CA public key: {e}"))?;
+    }
+    let secret_name = crate::vault_bootstrap::mint_approle_auto_auth_for_container(
+        &crate::vault_bootstrap::mirror_lane_signer_role_name(mirror_id),
+        project_name,
+        debug,
+    )
+    .await
+    .map_err(|e| format!("[ssh-lane] AppRole auto-auth mint failed: {e}"))?;
+    client
+        .run_container_observed(
+            "forge-launch-ssh-sidecar",
+            &ssh_lane_sidecar_container_name(project_name),
+            &build_ssh_lane_sidecar_run_args(
+                project_name,
+                mirror_id,
+                certs_dir,
+                &versioned_image_tag("git", version),
+                &secret_name,
+            ),
+            debug,
+        )
+        .await
+        .map_err(|e| format!("[ssh-lane] failed to start sidecar: {e}"))?;
+    // Bounded readiness wait on the sidecar's grammar line; harvest the
+    // fingerprint for attribution (D11 host channel).
+    let name = ssh_lane_sidecar_container_name(project_name);
+    for _ in 0..30 {
+        if let Ok(tail) = client.log_tail(&name, 20).await {
+            if let Some(ready) = tail
+                .lines
+                .iter()
+                .find(|l| l.starts_with("ok:ssh-lane-sidecar:ready "))
+            {
+                let fingerprint = ready
+                    .split_whitespace()
+                    .find_map(|tok| tok.strip_prefix("fingerprint="))
+                    .unwrap_or("unknown");
+                append_lane_attribution(project_name, mirror_id, fingerprint);
+                return Ok(());
+            }
+            if let Some(fail) = tail
+                .lines
+                .iter()
+                .find(|l| l.starts_with("fail:ssh-lane-sidecar:"))
+            {
+                return Err(format!("[ssh-lane] sidecar refused: {fail}"));
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    Err("[ssh-lane] sidecar never printed its ready line within 30s".into())
+}
+
 pub(crate) fn write_forge_gitconfig(
     project_name: &str,
     mirror_id: Option<&str>,
@@ -8290,6 +8564,62 @@ pub(crate) fn write_forge_gitconfig(
                 config.push_str(
                     "# No mirror redirect: an origin was found but was not a form this mirror\n\
                      # can redirect (see sanitize_forge_origin_url). Pushes will not be relayed.\n",
+                );
+            }
+        }
+    }
+
+    // Order 749-6uby (design T10, Q4): the authenticated SSH PUSH lane.
+    // pushInsteadOf redirects ONLY pushes to the mirror's sshd; the anonymous
+    // git:// insteadOf above keeps owning fetch. Dark until T11:
+    // TILLANDSIAS_MIRROR_SSHD=1 gates it exactly like the mirror's sshd lane.
+    // known_hosts (the @cert-authority line, D9) is generated HERE from the
+    // launch-time CA cache and bind-mounted read-only — ~/.ssh in the forge
+    // is an empty tmpfs and must stay one.
+    if mirror_ssh_push_lane_enabled()
+        && let (Some(mid), Some(origin)) = (mirror_id, &origin_url)
+    {
+        match ssh_lane_host_ca_cache_path(project_name)
+            .and_then(|p| std::fs::read_to_string(p).ok())
+        {
+            Some(ca_pub) if !ca_pub.trim().is_empty() => {
+                let host = format!("git-{mid}");
+                if let Some(kh_path) = ssh_lane_known_hosts_path(project_name) {
+                    let kh = format!("@cert-authority {host} {}\n", ca_pub.trim());
+                    if std::fs::write(&kh_path, kh).is_ok() {
+                        let push_url = format!("ssh://git@{host}:2222/srv/git/{project_name}");
+                        config.push('\n');
+                        config.push_str(&format!("[url \"{push_url}\"]\n"));
+                        config.push_str(&format!("\tpushInsteadOf = {origin}\n"));
+                        if origin.starts_with("git@github.com:") {
+                            let nwo = origin
+                                .strip_prefix("git@github.com:")
+                                .and_then(|s| s.strip_suffix(".git"))
+                                .unwrap_or(origin.strip_prefix("git@github.com:").unwrap_or(""));
+                            config.push_str(&format!(
+                                "\tpushInsteadOf = https://github.com/{nwo}.git\n"
+                            ));
+                        }
+                        config.push('\n');
+                        config.push_str("[core]\n");
+                        config.push_str(&format!(
+                                "\tsshCommand = ssh -o UserKnownHostsFile={FORGE_SSH_KNOWN_HOSTS} -o StrictHostKeyChecking=yes -o IdentitiesOnly=no\n"
+                            ));
+                    }
+                }
+            }
+            _ => {
+                // Fail loud in the artifact AND on stderr, never silent:
+                // the lane is explicitly enabled but its CA cache is
+                // absent — pushes will still take the git:// path.
+                eprintln!(
+                    "[tillandsias] WARNING: TILLANDSIAS_MIRROR_SSHD=1 but no host-CA cache \
+                         exists for '{project_name}' — the SSH push lane was NOT wired into \
+                         its gitconfig (did ensure_ssh_lane_sidecar run?)."
+                );
+                config.push_str(
+                    "\n# SSH push lane ENABLED but NOT wired: host-CA cache missing.\n\
+                         # Pushes fall back to the anonymous mirror redirect above.\n",
                 );
             }
         }
@@ -11510,6 +11840,23 @@ async fn ensure_shared_git_and_inference_for_launch(
             .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
         Some(forge_launch_mirror_id)
     };
+    // Order 749-6uby (T8+T10): the per-lane ssh-agent sidecar starts AFTER
+    // the mirror (it signs against Vault and serves the socket the forge
+    // will mount) and BEFORE any forge (the packet's ordering). Runs on both
+    // the create and reuse mirror paths — a reused mirror with a missing
+    // sidecar would silently strand the push lane. No-op unless
+    // TILLANDSIAS_MIRROR_SSHD=1 (dark until T11).
+    if let Some(ref launch_mirror_id) = mirror_identity {
+        ensure_ssh_lane_sidecar(
+            client,
+            project_name,
+            launch_mirror_id,
+            certs_dir,
+            version,
+            debug,
+        )
+        .await?;
+    }
     // Order 443: inference is nearly stateless but --replacing it on every
     // launch drops loaded models and interrupts a sibling's inference.
     // Recreate-if-not-running (ephemerality/idempotency), not always.
@@ -11815,6 +12162,21 @@ fn build_forge_agent_run_args_with_vault(
             "/home/forge/.gitconfig",
             true,
         );
+    }
+    // Order 749-6uby (T10): SSH push lane, agent-mode forge half — see the
+    // OpenCode builder's identical block for the rationale (D5: socket only,
+    // key stays in the sidecar's tmpfs; known_hosts read-only, D9).
+    if mirror_ssh_push_lane_enabled()
+        && let Some(kh) = ssh_lane_known_hosts_path(project_name).filter(|p| p.exists())
+    {
+        spec = spec
+            .volume(
+                ssh_lane_agent_volume(project_name),
+                FORGE_SSH_AGENT_MOUNT_DIR,
+                MountMode::ReadWrite,
+            )
+            .env("SSH_AUTH_SOCK", FORGE_SSH_AGENT_SOCK)
+            .bind_mount(kh.display().to_string(), FORGE_SSH_KNOWN_HOSTS, true);
     }
 
     // Inject provider API keys from Vault as env vars so forge agents can call
@@ -14582,7 +14944,11 @@ mod tests {
 
         assert_eq!(outcome, ForgeCleanupOutcome::Removed);
         let seen = backend.seen();
-        assert_eq!(seen.len(), 3, "forge, then git, then browser: {seen:?}");
+        assert_eq!(
+            seen.len(),
+            5,
+            "forge, then git, then browser, then sidecar + socket volume (749-6uby): {seen:?}"
+        );
         assert!(
             seen[0]
                 .1
@@ -14608,6 +14974,25 @@ mod tests {
                 "tillandsias-browser-fixture".into()
             ],
         );
+        // Order 749-6uby exit criterion 4: the lane sidecar and its socket
+        // volume go down WITH the stack — a leaked sidecar is a failure.
+        assert_eq!(
+            seen[3].1,
+            vec![
+                "rm".to_string(),
+                "-f".into(),
+                "tillandsias-ssh-sidecar-fixture".into()
+            ],
+        );
+        assert_eq!(
+            seen[4].1,
+            vec![
+                "volume".to_string(),
+                "rm".into(),
+                "-f".into(),
+                "tillandsias-ssh-agent-fixture".into()
+            ],
+        );
     }
 
     /// Order 494: an ABSENT forge (`podman rm` exit 1) keeps the order-298
@@ -14623,8 +15008,9 @@ mod tests {
         assert_eq!(outcome, ForgeCleanupOutcome::Removed);
         assert_eq!(
             backend.seen().len(),
-            3,
-            "an absent forge must not block the git/browser wipe"
+            5,
+            "an absent forge must not block the git/browser/sidecar wipe \
+             (3 container removals + sidecar rm + socket-volume rm, 749-6uby)"
         );
     }
 
@@ -19057,6 +19443,208 @@ esac
                 "a configured origin must be Found"
             );
         }
+    }
+
+    /// Order 749-6uby (design T10, Q4): with the lane enabled and the
+    /// launch-time CA cache present, the config gains a PUSH-ONLY redirect
+    /// to the mirror's sshd plus a core.sshCommand pinning the read-only
+    /// known_hosts — while FETCH stays on the anonymous git:// insteadOf.
+    #[test]
+    fn write_forge_gitconfig_wires_ssh_push_lane_when_enabled() {
+        let _env = env_guard();
+        let _guard = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let old_home = std::env::var_os("HOME");
+        let old_flag = std::env::var_os("TILLANDSIAS_MIRROR_SSHD");
+        unsafe {
+            std::env::set_var("HOME", temp.path());
+            std::env::set_var("TILLANDSIAS_MIRROR_SSHD", "1");
+        }
+        struct Restore(Option<std::ffi::OsString>, Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                unsafe {
+                    match self.0.take() {
+                        Some(v) => std::env::set_var("HOME", v),
+                        None => std::env::remove_var("HOME"),
+                    }
+                    match self.1.take() {
+                        Some(v) => std::env::set_var("TILLANDSIAS_MIRROR_SSHD", v),
+                        None => std::env::remove_var("TILLANDSIAS_MIRROR_SSHD"),
+                    }
+                }
+            }
+        }
+        let _restore = Restore(old_home, old_flag);
+
+        let proj = temp.path().join("laneproj");
+        std::fs::create_dir_all(&proj).expect("mkdir");
+        if !std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&proj)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            return;
+        }
+        let _ = std::process::Command::new("git")
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/repo.git",
+            ])
+            .current_dir(&proj)
+            .status();
+
+        // The launch-time CA cache ensure_ssh_lane_sidecar would have written.
+        let cache = ssh_lane_host_ca_cache_path("laneproj").expect("cache path");
+        std::fs::create_dir_all(cache.parent().unwrap()).expect("mkdir cache dir");
+        std::fs::write(&cache, "ssh-ed25519 AAAATESTCAKEY host-ca\n").expect("write cache");
+
+        let path =
+            write_forge_gitconfig("laneproj", Some("abc123mid"), &proj).expect("config written");
+        let text = std::fs::read_to_string(&path).expect("read config");
+
+        assert!(
+            text.contains("[url \"ssh://git@git-abc123mid:2222/srv/git/laneproj\"]"),
+            "push redirect must target the opaque per-project sshd URL; got:\n{text}"
+        );
+        assert!(
+            text.contains("pushInsteadOf = https://github.com/example/repo.git"),
+            "the redirect must be pushInsteadOf — PUSH ONLY (Q4); got:\n{text}"
+        );
+        assert!(
+            text.contains("insteadOf = https://github.com/example/repo.git"),
+            "the anonymous git:// fetch redirect must SURVIVE the lane wiring; got:\n{text}"
+        );
+        assert!(
+            text.contains(&format!(
+                "sshCommand = ssh -o UserKnownHostsFile={FORGE_SSH_KNOWN_HOSTS}"
+            )),
+            "core.sshCommand must pin the read-only known_hosts (D9); got:\n{text}"
+        );
+        let kh = ssh_lane_known_hosts_path("laneproj").expect("kh path");
+        let kh_text = std::fs::read_to_string(&kh).expect("known_hosts written");
+        assert_eq!(
+            kh_text, "@cert-authority git-abc123mid ssh-ed25519 AAAATESTCAKEY host-ca\n",
+            "known_hosts must carry exactly the one @cert-authority line"
+        );
+    }
+
+    /// Lane flag ON but the CA cache absent: the config must SAY the lane is
+    /// unwired (loud), and no ssh redirect may appear (a half-wired lane that
+    /// pushes to an unverifiable host would be worse than the fallback).
+    #[test]
+    fn write_forge_gitconfig_ssh_lane_missing_ca_is_loud_not_silent() {
+        let _env = env_guard();
+        let _guard = crate::runtime_assets::env_lock();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let old_home = std::env::var_os("HOME");
+        let old_flag = std::env::var_os("TILLANDSIAS_MIRROR_SSHD");
+        unsafe {
+            std::env::set_var("HOME", temp.path());
+            std::env::set_var("TILLANDSIAS_MIRROR_SSHD", "1");
+        }
+        struct Restore(Option<std::ffi::OsString>, Option<std::ffi::OsString>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                unsafe {
+                    match self.0.take() {
+                        Some(v) => std::env::set_var("HOME", v),
+                        None => std::env::remove_var("HOME"),
+                    }
+                    match self.1.take() {
+                        Some(v) => std::env::set_var("TILLANDSIAS_MIRROR_SSHD", v),
+                        None => std::env::remove_var("TILLANDSIAS_MIRROR_SSHD"),
+                    }
+                }
+            }
+        }
+        let _restore = Restore(old_home, old_flag);
+
+        let proj = temp.path().join("noca");
+        std::fs::create_dir_all(&proj).expect("mkdir");
+        if !std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(&proj)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            return;
+        }
+        let _ = std::process::Command::new("git")
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/example/repo.git",
+            ])
+            .current_dir(&proj)
+            .status();
+
+        let path = write_forge_gitconfig("noca", Some("abc123mid"), &proj).expect("config");
+        let text = std::fs::read_to_string(&path).expect("read");
+        assert!(
+            text.contains("SSH push lane ENABLED but NOT wired"),
+            "missing CA cache with the lane on must be stated in the artifact; got:\n{text}"
+        );
+        assert!(
+            !text.contains("pushInsteadOf"),
+            "no half-wired push redirect may appear without the CA; got:\n{text}"
+        );
+    }
+
+    /// Order 749-6uby launch/teardown pins: the sidecar starts between the
+    /// mirror and the forge, is torn down with the stack, and both forge
+    /// builders wire the socket + known_hosts only behind the lane flag.
+    #[test]
+    fn ssh_lane_sidecar_wiring_windows() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let launch = source_window(
+            source,
+            "async fn ensure_shared_git_and_inference_for_launch(",
+        );
+        let sidecar_at = launch
+            .find("ensure_ssh_lane_sidecar(")
+            .expect("launch path must ensure the ssh lane sidecar");
+        let inference_at = launch
+            .find("forge-launch-inference")
+            .expect("launch window names the inference start");
+        assert!(
+            sidecar_at < inference_at,
+            "sidecar ensure must run after the mirror block and before the \
+             inference/forge half of the launch"
+        );
+        let cleanup = source_window(source, "async fn cleanup_stack_containers(");
+        assert!(
+            cleanup.contains("ssh_lane_sidecar_container_name(")
+                && cleanup.contains("ssh_lane_agent_volume("),
+            "exit criterion 4: cleanup must remove the sidecar AND its socket \
+             volume — a leaked sidecar after forge exit is a failure"
+        );
+        let ensure = source_window(source, "async fn ensure_ssh_lane_sidecar(");
+        assert!(
+            ensure.contains("mirror_ssh_push_lane_enabled()")
+                && ensure.contains("provision_lane_signer_approle_for_launch")
+                && ensure.contains("append_lane_attribution"),
+            "sidecar ensure must be flag-gated, mint the D6 AppRole, and record \
+             the attribution line"
+        );
+        // Both builders: socket volume + SSH_AUTH_SOCK behind the flag.
+        let occurrences = source
+            .matches("SSH_AUTH_SOCK={FORGE_SSH_AGENT_SOCK}")
+            .count()
+            + source
+                .matches("\"SSH_AUTH_SOCK\", FORGE_SSH_AGENT_SOCK")
+                .count();
+        assert!(
+            occurrences >= 2,
+            "both forge builders (args-vec and ContainerSpec) must export \
+             SSH_AUTH_SOCK at the mounted socket; found {occurrences}"
+        );
     }
 
     /// Order 425: the generated config must SAY why there is no redirect.

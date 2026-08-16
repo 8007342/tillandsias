@@ -1,4 +1,7 @@
 <!-- @trace spec:direct-podman-calls -->
+
+    # freshness: auditor=linux-macuahuitl-fable5-20260816t0748z date=2026-08-16 verdict=refreshed scope=tombstone re-validated — all three replacement specs exist on disk (podman-container-spec, podman-container-handle, podman-orchestration), bindings registry agrees (status obsolete, tombstone superseded:podman-orchestration), and no new behavior has accreted here since retirement; stamp uses the indented-# form because the HTML-comment stamp idiom is invisible to the inventory regex (filed this cycle)
+
 # direct-podman-calls Specification (Deprecated)
 
 ## Status

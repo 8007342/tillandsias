@@ -1,0 +1,30 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-16, cycle 2: reduction-engine
+# capture from the standing freshness audit.
+packets:
+  - packet_id: freshness-inventory-blind-to-html-comment-stamps
+    order: 768-9eut
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "Markdown freshness stamps wrapped in HTML comments (<!-- # freshness: ... -->) never match STAMP_RE — audited files are counted unstamped and their audits are invisible"
+    deliverable: "STAMP_RE accepts the <!-- leader (or the md idiom is migrated to a matching form repo-wide, one commit), with a fixture proving both the html-comment form and the malformed-date lane still classify correctly"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [freshness, tooling, markdown]
+    estimated_hours: 1
+    context: |
+      Found 2026-08-16 during the cycle-2 standing freshness audit. Empirical:
+      `printf '<!-- # freshness: auditor=x date=... -->' | grep -cE "$STAMP_RE"`
+      returns 0, while the bare `# freshness:` form returns 1 — and
+      openspec/specs/forge-environment-discoverability/spec.md (stamped
+      2026-08-07 in the html-comment form) is REPORTED as freshness-unstamped
+      by the live inventory. At least three files carry invisible stamps
+      (that spec + cheatsheets/runtime/opencode-web-launch.md +
+      cheatsheets/utils/git-workflows.md). Consequences: their audits do not
+      count toward coverage, and freshness-next will eventually re-offer
+      already-audited components — silent double work, plus a coverage number
+      that under-reports. The tombstone stamped this cycle
+      (openspec/specs/direct-podman-calls/spec.md) deliberately uses the
+      indented-# form as a workaround; migrate it back if the regex learns
+      the comment leader.

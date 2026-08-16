@@ -3427,6 +3427,18 @@ list_projects() {
 export_ssh_env() {
     local ssh_host_dir="${HOME}/.ssh"
 
+    # Order 749-6uby (exit criterion 5): with the SSH push lane live, the
+    # launcher exports SSH_AUTH_SOCK at the sidecar's mounted socket. This
+    # function is PROVEN HARMLESS against that lane and must stay so:
+    #   - a set SSH_AUTH_SOCK whose socket exists is KEPT (first branch —
+    #     never overridden by the /run/user fallbacks below);
+    #   - a set SSH_AUTH_SOCK whose socket is not there YET (sidecar still
+    #     starting) falls through WITHOUT unsetting the variable, so ssh
+    #     works the moment the socket appears;
+    #   - ~/.ssh in the forge is an empty tmpfs, so the key-file fallback
+    #     can never fabricate an identity (D5: no key material in-forge).
+    # Pinned by litmus:ssh-lane-sidecar-shape — do not reorder the probes.
+
     # No SSH directory on host — nothing to do.
     [ -d "$ssh_host_dir" ] || return 1
 
@@ -3925,6 +3937,19 @@ CONTEXT_EOF
         # demands.
         trace_lifecycle "startup-context" \
             "SKIPPED checkout addendum $addendum — not a readable regular file (FIFO, device, directory or dangling symlink); no warning was delivered"
+    elif git -C "$project_dir" ls-files --error-unmatch images/default/startup-context-addendum.md >/dev/null 2>&1; then
+        # EXPECTED BUT MISSING (747-n52p criterion 1): the addendum is TRACKED
+        # in this checkout yet absent from the working tree — someone deleted
+        # the warning surface. Deliver a placeholder so the agent still learns
+        # a warning was intended, and trace the delivery gap. A git error above
+        # means "not expected here" and stays silent — the off-Tillandsias
+        # negative control criterion 3 demands. Both writes fail-soft.
+        {
+            printf '\n## Checkout addendum — EXPECTED BUT MISSING\n'
+            printf 'images/default/startup-context-addendum.md is tracked in this checkout but absent from the working tree; the warnings it should carry were NOT delivered. Restore it or read it from git history.\n'
+        } >>"$ctx_file" 2>/dev/null || true
+        trace_lifecycle "startup-context" \
+            "PLACEHOLDER written for tracked-but-missing checkout addendum $addendum — expected warnings not delivered" || true
     fi
 
     # Ensure the file is gitignored (idempotent append).

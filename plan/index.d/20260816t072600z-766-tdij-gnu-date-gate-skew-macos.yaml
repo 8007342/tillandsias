@@ -1,0 +1,58 @@
+packets:
+  - packet_id: gate-scripts-gnu-date-isms-break-bsd-hosts
+    order: 766-tdij
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: 'GNU-date-isms in gate scripts: BSD date SUCCEEDS while emitting garbage, so exit-code guards never fire (third dialect-skew gate break in one week)'
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - shell
+      - cross-platform
+      - macos
+      - fail-loud
+    context: |
+      The 765 build-velocity phase telemetry added
+      `_now_ms() { date +%s%3N 2>/dev/null || echo 0; }` to build.sh.
+      %N/%3N is GNU-only; BSD/macOS date passes it through literally
+      ("<secs>3N") and EXITS ZERO, so the || guard never fires and the
+      phase arithmetic crashed every ./build.sh --check on macOS
+      ("17868650603N: value too great for base", 2026-08-16T07:24Z, the
+      first macOS gate run after merging a546a8ae).
+
+      Fixed in the filing commit: _now_ms validates digits and degrades to
+      whole seconds (the report only names phases over 5s, so second
+      granularity keeps every consumer meaningful).
+
+      This is the THIRD instance of one class in a week: bash-4-isms
+      (761-g36m, gate refuses them now), ruby psych-4-isms (762-8yna), and
+      GNU coreutils format extensions (this packet). The common shape: the
+      foreign dialect does not ERROR on the other platform — it succeeds
+      with wrong output, which is why exit-code guards and CI on the
+      authoring platform both miss it.
+    exit_criteria:
+      - a deterministic portability lint (extend check-bash-dialect.sh or a sibling) rejects GNU-date-only formats (%N, %3N, `date -d`, `date --date`) in scripts/ and build.sh unless the call sits behind a digit-validated or platform-probed fallback
+      - its fixture proves both directions (unguarded GNU-ism fails; probed/validated usage passes)
+      - the one known benign carrier (test-opencode-vault-auth-content.sh:94, %s%N as a uniqueness seed where garbage is still unique) is either exempted with a recorded reason or made portable
+    verifiable_closure: |
+      The lint runs inside ./build.sh --check, red on a fixture GNU-date-ism
+      and green on the live tree, verified on a BSD-date host.
+    notes: |
+      Same authoring guidance as 761-g36m: never version-sniff; probe the
+      format's OUTPUT (digits) or the feature, and keep one code path where
+      possible. build.sh's fixed _now_ms is the exemplar.
+
+events:
+  - packet_id: gate-scripts-gnu-date-isms-break-bsd-hosts
+    event:
+      type: filed
+      ts: "2026-08-16T07:26:00Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0623z"
+      host: macos
+      summary: |
+        Filed with the fix for the build.sh instance in the same commit
+        lineage (the gate could not even run to stamp without it). The
+        lint criterion is the durable half.

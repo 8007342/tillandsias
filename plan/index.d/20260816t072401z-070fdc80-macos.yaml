@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: shared-scripts-bash4-isms-break-bash32-hosts
+    field: status
+    value: completed
+    ts: "2026-08-16T07:24:01Z"
+    host: macos
+
+events:
+  - packet_id: shared-scripts-bash4-isms-break-bash32-hosts
+    event:
+      type: completed
+      ts: "2026-08-16T07:24:01Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: 899d39e9 check-bash-dialect:ok:bash-dialect-clean + test-check-bash-dialect:PASS-6/6 + test-agent-identity:PASS-11/11 on /bin/bash 3.2.57
+  - packet_id: shared-scripts-bash4-isms-break-bash32-hosts
+    event:
+      type: note
+      ts: "2026-08-16T07:24:01Z"
+      host: macos
+      summary: >
+        all three exit criteria discharged with on-host bash-3.2 evidence

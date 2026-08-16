@@ -3636,7 +3636,8 @@ pub fn build_host_signer_role_config(mirror_id: &str) -> serde_json::Value {
 /// mint, store, proceed") requires the host-side ensure.
 ///
 /// Deliberately NOT provisioned here: the `ssh-lane-signer-<mirror-id>`
-/// AppRole (D6) — that is sidecar wiring (§4 T8), a later rung.
+/// AppRole (D6) — that is sidecar wiring (§4 T8), provisioned per lane by
+/// [`provision_lane_signer_approle`] (order 749-6uby).
 pub async fn provision_mirror_ssh_roles(
     client: &VaultClient,
     mirror_id: &str,
@@ -3691,6 +3692,86 @@ pub async fn provision_mirror_ssh_roles(
             .map_err(|e| format!("mint policy {name}: {e}"))?;
     }
     Ok(())
+}
+
+/// AppRole name for one lane's ssh-agent sidecar (D6). Deliberately the SAME
+/// string as [`mirror_lane_signer_policy_name`]: the design names both the
+/// auth binding and the policy `ssh-lane-signer-<mirror-id>`, and a shared
+/// name makes the one-role-one-policy pairing visible in every Vault listing.
+pub fn mirror_lane_signer_role_name(mirror_id: &str) -> String {
+    mirror_lane_signer_policy_name(mirror_id)
+}
+
+/// Provision the per-lane sidecar AppRole (design T8/D6, order 749-6uby):
+/// an AGENT role (Vault Agent auto-auth — reusable SecretID within its
+/// bounded window, unlimited-use client tokens) bound to EXACTLY the one
+/// minted lane-signer policy, which permits exactly the one
+/// `ssh-client-signer/sign/<mirror-id>` path (D12). Signing through any
+/// other mirror's path returns 403 — §4a M2's exactness comes from this
+/// single-policy binding, so this function refuses to accept extra policies
+/// by construction (it takes none).
+///
+/// Idempotent: role writes are overwrites, and
+/// [`provision_mirror_ssh_roles`] has already minted the policy this role
+/// names (policy-before-role ordering means a half-provisioned lane fails
+/// CLOSED at login rather than open at sign time).
+pub async fn provision_lane_signer_approle(
+    client: &VaultClient,
+    mirror_id: &str,
+    debug: bool,
+) -> Result<String, String> {
+    let role = mirror_lane_signer_role_name(mirror_id);
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] provisioning lane-signer AppRole {role} -> {}",
+            mirror_lane_signer_policy_name(mirror_id)
+        );
+    }
+    client
+        .enable_approle()
+        .await
+        .map_err(|e| format!("enable_approle: {e}"))?;
+    client
+        .create_approle_agent_role(
+            &role,
+            &[&mirror_lane_signer_policy_name(mirror_id)],
+            APPROLE_TOKEN_TTL_SECS,
+            APPROLE_TOKEN_MAX_TTL_SECS,
+        )
+        .await
+        .map_err(|e| format!("create_approle_agent_role {role}: {e}"))?;
+    Ok(role)
+}
+
+/// Launch-path wrapper for [`provision_lane_signer_approle`]: builds the
+/// root-token client the same way the other launch-time mints do.
+pub async fn provision_lane_signer_approle_for_launch(
+    mirror_id: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    provision_lane_signer_approle(&client, mirror_id, debug).await
+}
+
+/// Read the host-signer CA public key (T10: the forge's `@cert-authority`
+/// known_hosts line must carry this, delivered read-only — `~/.ssh` in the
+/// forge is an empty tmpfs by design, D9).
+pub async fn read_mirror_host_ca_public_key(debug: bool) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("Vault container is not running".into());
+    }
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    client
+        .read_ssh_ca_public_key(SSH_HOST_SIGNER_MOUNT)
+        .await
+        .map_err(|e| format!("read {SSH_HOST_SIGNER_MOUNT} CA public key: {e}"))
 }
 
 /// Mint-or-read a project's opaque mirror identity (D13) and ensure its

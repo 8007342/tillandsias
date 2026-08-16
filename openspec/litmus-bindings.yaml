@@ -458,6 +458,7 @@ specs:
   - litmus:mirror-sshd-posture-shape
   - litmus:mirror-host-cert-and-sshd-shape
   - litmus:mirror-receive-wrapper-shape
+  - litmus:ssh-lane-sidecar-shape
   - litmus:forge-upstream-auth-gate
   coverage_ratio: 83
   last_verified: '2026-07-23'

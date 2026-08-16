@@ -131,7 +131,13 @@ for IMAGE in "${IMAGES[@]}"; do
 
     # Every container whose image repository is this image, regardless of which
     # tag it was started from.
-    mapfile -t CONTAINERS < <(
+    # while-read append instead of mapfile (761-g36m burndown — mapfile is
+    # bash>=4; Apple ships 3.2 and the failure mode there is an unbound
+    # array that reads as "no containers", not an error).
+    CONTAINERS=()
+    while IFS= read -r _cname; do
+        [ -n "$_cname" ] && CONTAINERS+=("$_cname")
+    done < <(
         podman ps --format '{{.Names}}\t{{.Image}}' 2>/dev/null \
             | awk -F'\t' -v img="tillandsias-$IMAGE" '$2 ~ ("(^|/)" img ":") {print $1}'
     )

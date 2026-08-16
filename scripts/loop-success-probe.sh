@@ -68,7 +68,16 @@ while [[ ! -f "$EVENT_LOG" ]]; do
     sleep 1
 done
 
-declare -A SEEN_STARTED=()
+# Space-delimited string set instead of `declare -A` (761-g36m burndown:
+# associative arrays don't exist on Apple's bash 3.2, and this probe must at
+# minimum refuse legibly there). Stage tokens are identifiers — no spaces.
+SEEN_STARTED=" "
+seen_started() {
+    case "$SEEN_STARTED" in
+        *" $1 "*) return 0 ;;
+    esac
+    return 1
+}
 ROUTE_READY=false
 LAUNCHED=false
 LAST_STAGE="init"
@@ -86,7 +95,7 @@ while (( $(date +%s) < deadline )); do
         LAST_DETAIL="$detail"
         case "$state" in
             started)
-                SEEN_STARTED["$stage"]=1
+                seen_started "$stage" || SEEN_STARTED="${SEEN_STARTED}${stage} "
                 ;;
             route_ready)
                 ROUTE_READY=true
@@ -108,7 +117,7 @@ while (( $(date +%s) < deadline )); do
     # Have all required start stages been seen, plus browser route+launch?
     all_started=true
     for s in "${REQUIRED_START_STAGES[@]}"; do
-        if [[ -z "${SEEN_STARTED[$s]:-}" ]]; then
+        if ! seen_started "$s"; then
             all_started=false
             break
         fi
@@ -124,7 +133,7 @@ done
 # Build a gist of which stages we did/didn't see.
 missing=()
 for s in "${REQUIRED_START_STAGES[@]}"; do
-    [[ -z "${SEEN_STARTED[$s]:-}" ]] && missing+=("$s")
+    seen_started "$s" || missing+=("$s")
 done
 [[ "$ROUTE_READY" != true ]] && missing+=("browser:route_ready")
 [[ "$LAUNCHED" != true ]] && missing+=("browser:launched")

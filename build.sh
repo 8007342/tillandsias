@@ -128,7 +128,26 @@ _error() { echo -e "${RED}[build]${NC} $*" >&2; }
 _PHASE_NAME=""
 _PHASE_T0=""
 _PHASE_LOG=""
-_now_ms() { date +%s%3N 2>/dev/null || echo 0; }
+# date '+%s%3N' is GNU-only. BSD/macOS date SUCCEEDS while passing %3N
+# through literally ("<secs>3N"), so an exit-code guard never fires and the
+# phase arithmetic explodes ("value too great for base" — first hit: macOS
+# 2026-08-16, 766-class dialect skew). Validate digits; degrade to whole
+# seconds — the report only names phases over TILLANDSIAS_GATE_SLOW_MS
+# (default 5s), so second granularity keeps every consumer meaningful.
+_now_ms() {
+    local t
+    t="$(date +%s%3N 2>/dev/null || true)"
+    case "$t" in
+        ''|*[!0-9]*)
+            t="$(date +%s 2>/dev/null || true)"
+            case "$t" in
+                ''|*[!0-9]*) t=0 ;;
+                *) t=$((t * 1000)) ;;
+            esac
+            ;;
+    esac
+    printf '%s' "$t"
+}
 
 _phase_close() {
     [[ -n "$_PHASE_NAME" ]] || return 0
@@ -373,6 +392,24 @@ _forge_check_only_without_host_podman_setup() {
     return 0
 }
 
+# 765-uti9 quick win (velocity audit F2): a check-only dispatch builds no
+# containers and pulls nothing through the dev proxy, so host podman registry
+# setup and the dev-proxy ensure (15x1s health-wait worst case) are pure
+# preamble tax there — on ANY host kind, not only in-forge. Same flag predicate
+# as above minus the host-kind gate; any other flag reinstates the full
+# preamble. Worst case: a --check with a changed lockfile loses proxy caching
+# for one cargo fetch — slower, never wrong.
+_check_only_dispatch() {
+    [[ "$FLAG_CHECK" == true ]] || return 1
+    [[ "$FLAG_RELEASE" == false ]] || return 1
+    [[ "$FLAG_TEST" == false ]] || return 1
+    [[ "$FLAG_INSTALL" == false ]] || return 1
+    [[ "$FLAG_INIT" == false ]] || return 1
+    [[ "$FLAG_CI" == false ]] || return 1
+    [[ "$FLAG_CI_FULL" == false ]] || return 1
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # Transparent HTTPS caching setup (dev proxy)
 # ---------------------------------------------------------------------------
@@ -484,6 +521,8 @@ ensure_dev_cache() {
 # @trace spec:podman-registries-config
 if _forge_check_only_without_host_podman_setup; then
     _info "Skipping host Podman registry setup for forge check-only build"
+elif _check_only_dispatch; then
+    _info "Skipping host Podman registry setup for check-only dispatch (765-uti9)"
 elif [[ "$FLAG_INSTALL" != true ]]; then
     "$SCRIPT_DIR/scripts/setup-podman-registries.sh" || {
         _warn "Failed to setup podman registries (non-fatal, build may continue)"
@@ -496,6 +535,8 @@ fi
 # @trace spec:dev-build
 if _forge_check_only_without_host_podman_setup; then
     _info "Skipping host dev cache setup for forge check-only build"
+elif _check_only_dispatch; then
+    _info "Skipping host dev cache setup for check-only dispatch (765-uti9)"
 elif [[ "$FLAG_INSTALL" != true ]]; then
     ensure_dev_cache
 else
