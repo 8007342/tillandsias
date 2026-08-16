@@ -50,8 +50,14 @@ fn main() {
     println!("cargo:rustc-env=TILLANDSIAS_GIT_SHA={sha_full}");
     println!("cargo:rustc-env=TILLANDSIAS_BUILD_TIME={build_time}");
 
-    // Re-run when HEAD moves or the index changes so the SHA/dirty flag stay
-    // accurate across commits/staging without a manual clean.
+    // Re-run when HEAD moves so the embedded SHA stays accurate across
+    // commits/branch switches. 765-uti9 quick win (velocity audit F6.1):
+    // .git/index is deliberately NOT tracked — its mtime moves on every
+    // `git add`/`status` refresh, and since this crate compiles (as a
+    // cfg-gated stub) on every host, index churn was forcing a rebuild into
+    // every gate run fleet-wide. Cost: the -dirty suffix can lag until the
+    // next HEAD move — provenance for any COMMITTED state is unchanged, and
+    // the full fingerprint redesign (BUILD_TIME fallback included) belongs to
+    // the tray-fingerprint packet, 765-evbt.
     println!("cargo:rerun-if-changed=../../.git/HEAD");
-    println!("cargo:rerun-if-changed=../../.git/index");
 }

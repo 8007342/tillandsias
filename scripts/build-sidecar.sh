@@ -153,8 +153,22 @@ if ! file "$SRC" | grep -q 'ELF'; then
 fi
 
 mkdir -p "$(dirname "$SIDECAR_DEST")"
-cp "$SRC" "$SIDECAR_DEST"
-chmod 0755 "$SIDECAR_DEST"
-
-SIZE="$(du -h "$SIDECAR_DEST" | cut -f1)"
-echo "[build-sidecar] staged: ${SIDECAR_DEST} (${SIZE})"
+# 765-uti9 quick win (velocity audit F6.3): the unconditional cp bumped the
+# staged file's mtime even when the rebuild produced BYTE-IDENTICAL output
+# (the common case after a VERSION-only bump — the binary embeds WIRE_VERSION,
+# not VERSION), tripping tillandsias-headless's rerun-if-changed asset
+# tracking and recompiling the workspace's largest crate across every
+# compilation variant. Skipping the copy when bytes match is truthful: the
+# staged artifact IS a fresh build's output; only the redundant mtime bump is
+# elided. A real byte change always copies, and the ELF-format assert above
+# ran against the fresh build either way. `touch` the dest so the is_stale
+# find -newer probe stops re-offering the same no-op rebuild.
+if [[ -f "$SIDECAR_DEST" ]] && cmp -s "$SRC" "$SIDECAR_DEST"; then
+    touch "$SIDECAR_DEST"
+    echo "[build-sidecar] staged copy already byte-identical to fresh build: ${SIDECAR_DEST} (mtime refreshed, no restage)"
+else
+    cp "$SRC" "$SIDECAR_DEST"
+    chmod 0755 "$SIDECAR_DEST"
+    SIZE="$(du -h "$SIDECAR_DEST" | cut -f1)"
+    echo "[build-sidecar] staged: ${SIDECAR_DEST} (${SIZE})"
+fi
