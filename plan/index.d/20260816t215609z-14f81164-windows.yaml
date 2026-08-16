@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: windows-git-mirror-daemon-has-no-upstream-credential-and-never-seeds
+    event:
+      type: completed
+      ts: "2026-08-16T21:56:09Z"
+      agent_id: windows-yolanda-fable5-20260816T2130Z-mirror-fix
+      host: windows
+      summary: >
+        ROOT CAUSE (sharper than filed): the daemon container HAD its Vault AppRole credential channel (Vault Agent authenticated on every start — journal 21:40:03.7Z) and the 'workstation' configured refspec is the deliberate order-301 TRACKING refspec (cloneable heads are written by the EXPLICIT command-line refspecs of the seed/reconcile fetches). The real defect: NO fetch path wired the Vault credential helper — entrypoint seed fetch (old :445), startup retry/FF fetches (old :472/:493), reconcile-exported-heads.sh:37 — only the push relay (relay-refs.sh) and probe-upstream-auth did. github.com/8007342/java is PRIVATE (verified: anonymous ls-remote with credential.helper disabled is refused; the filed 'non-empty via gh api' check was authenticated), so every anonymous fetch got 401 and died 'could not read Username' (journal 20:45:19Z + every 120s reconcile tick); zero refs forever while the port-only healthcheck said healthy. The ~400ms blip containers are the containerized gh list/clone calls (remote_projects.rs), NOT a seeder — the daemon container itself is the seeder, by design. FIX (platform-shared, images/): entrypoint.sh exports GIT_TERMINAL_PROMPT=0 plus the relay's reset+helper GIT_CONFIG credential.helper environment pair once at entrypoint scope so every fetch child inherits it; seed failure now classifies UPSTREAM AUTH REFUSED loudly instead of reading like 'upstream empty' (731-eupn); lib-common.sh no-cloneable-refs FATAL names all three causes; pinned by new litmus:git-mirror-fetch-credential-shape (6/6 green, bound in litmus-bindings.yaml) which also pins the order-301 tracking refspec so nobody 'fixes' it into a clobbering mirror refspec. LIVE VERIFICATION (this host, guest v0.4.260815.1 hot-swapped headless carrying the fix, git image sha256-ce2f2cd5, SAME previously-empty volume): container start 21:40:03Z -> Vault Agent token sink 21:40:03.7Z -> seed fetch 21:40:05 -> refs/heads/main=283a73a1 + 68 objects + HEAD->main + upstream-auth:authorized:1786916406; enclave git:// ls-remote advertises HEAD+main at the upstream SHA; OpenCode java lane cloned NON-EMPTY ('Cloning into /home/forge/src/java') and printed JAVA-LANE-SMOKE: OK, lane rc=0 (cold incl. full image rebuilds 21:33->21:41Z; warm relaunch 53s). EC1/EC2/EC4 met; EC3's container-healthcheck residue (health=daemon-up) spun off to 778-hb3x — the launcher gate is already refs-based (594-csgb) and the in-forge FATAL is now honest.
