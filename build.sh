@@ -123,7 +123,26 @@ _error() { echo -e "${RED}[build]${NC} $*" >&2; }
 _PHASE_NAME=""
 _PHASE_T0=""
 _PHASE_LOG=""
-_now_ms() { date +%s%3N 2>/dev/null || echo 0; }
+# date '+%s%3N' is GNU-only. BSD/macOS date SUCCEEDS while passing %3N
+# through literally ("<secs>3N"), so an exit-code guard never fires and the
+# phase arithmetic explodes ("value too great for base" — first hit: macOS
+# 2026-08-16, 766-class dialect skew). Validate digits; degrade to whole
+# seconds — the report only names phases over TILLANDSIAS_GATE_SLOW_MS
+# (default 5s), so second granularity keeps every consumer meaningful.
+_now_ms() {
+    local t
+    t="$(date +%s%3N 2>/dev/null || true)"
+    case "$t" in
+        ''|*[!0-9]*)
+            t="$(date +%s 2>/dev/null || true)"
+            case "$t" in
+                ''|*[!0-9]*) t=0 ;;
+                *) t=$((t * 1000)) ;;
+            esac
+            ;;
+    esac
+    printf '%s' "$t"
+}
 
 _phase_close() {
     [[ -n "$_PHASE_NAME" ]] || return 0
