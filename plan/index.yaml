@@ -29211,6 +29211,12 @@ plan_index:
         - the active spec explicitly supersedes the former <=10 deletion relay semantics and records the lane-exit cleanup compatibility decision
         - focused git-mirror fixtures, the bound litmus, and the full local build gate pass
       events:
+        - type: completed
+          ts: "2026-08-16T19:36:52Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Finish-and-close residual: explicit spec supersession sentence added (bulk-delete allowance + TILLANDSIAS_ALLOW_BULK_DELETE retired); evidence at this tree: existing-volume hardening fixture 9/9 PASS, litmus:git-mirror-existing-volume-hardening 3/3 PASS, live volume tillandsias-mirror-tillandsias receive.denyNonFastForwards/denyDeletes/fsckObjects all true (podman unshare mountpoint read; no git container exists to restart-gate, volume read is the durable evidence). Structural fix was already landed at 23f9e4e8. Suite note: git-mirror-service instant tier 18/19 — the one FAIL is the pre-existing locale-blind reachability grep, filed as 773-f5ma. Unblocks 610-txvr and 451.
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
