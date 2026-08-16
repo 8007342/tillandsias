@@ -60,3 +60,34 @@ Two additions to the smallest-next-action list:
    expert binary, or TILLANDSIAS_PLAN_BIN pinned in the server registration)
    so a sweep+rebuild on one side cannot break the other. Until then, every
    post-sweep cycle on this host starts with broken experts.
+
+## Update 2026-08-16 cycle 3: root cause fixed (770-ehym); probe depth shaped (770-f6u4)
+
+Cycle 3 verified the outage was still live at tool-call level (plan_status
+through the session's forge-plan server returned the line-417 exec error while
+the handshake probe said `ok:experts-healthy`), then landed both
+smallest-next-actions from the cycle-2 update as order 770-ehym:
+
+- `resolve_plan_bin` in BOTH wrappers (`forge-plan.sh`, `project-info.sh`) now
+  probes every candidate by execution (`plan_bin_runs` → `capabilities`),
+  mirroring `plan-binary-probe.sh`; all four naive `-x` sites replaced.
+- `scripts/wsl-plan-expert-ensure.sh` (committed, dual-lane) builds the expert
+  binary inside `tillandsias-build` with `CARGO_TARGET_DIR=~/.cache/tillandsias-wsl-target`
+  (WSL-local ext4 — the sweep's `target/` mandate cannot reach it) and installs
+  to `~/.local/bin/tillandsias-plan`, which is already `PLAN_BIN_CANONICAL`.
+  Live run: `ok:wsl-plan-expert:/root/.local/bin/tillandsias-plan`.
+- End-to-end proof on the collision host: a fresh forge-plan server launched
+  via the harness's actual launcher (`%LOCALAPPDATA%/Microsoft/WindowsApps/bash.exe`
+  → WSL default distro) served `tools/call plan_status(758-jw6v)` with the real
+  status line; the Git Bash lane returns the identical frame.
+
+Found while fixing: the health probe launches `bash` through the PROBING
+shell's PATH (Git Bash), but the harness resolves `bash` to the WindowsApps WSL
+launcher — the probe tests a different environment than the session's servers
+run in, so even a tool-call-depth probe from Git Bash would have called this
+outage healthy. That fidelity gap + the tool-call-depth stage + the
+preflight cadence decision are shaped as ready packet 770-f6u4; the
+`resolve_target_binary` generalization for host scripts is ready packet
+770-ifeg. A session whose server already cached the dead path stays on the
+direct-binary fallback until its MCP connection is relaunched (`PLAN_BIN` is
+re-resolved only while EMPTY — noted in 770-f6u4's problem statement territory).
