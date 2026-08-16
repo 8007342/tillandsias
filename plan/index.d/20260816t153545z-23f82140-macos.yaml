@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: macos-exec-wire-bulk-stdout-wedges-unbounded
+    event:
+      type: progress
+      ts: "2026-08-16T15:35:45Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260816t1423z
+      host: macos
+      summary: >
+        DIAGNOSIS CYCLE (three hypotheses tested, two killed, one standing): (1) REFUTED by measurement — CFRunLoop starvation: interleaving pump_cf_loop_for with the exec read loop changed nothing (after-fix 32KB/1MB still hang; change reverted per the near-miss discipline, evidence in the timing file's AFTER-FIX series). (2) REFUTED by arithmetic — frame overflow: the wire is postcard binary, 64,000-byte PtyData + overhead fits MAX_MESSAGE_BYTES=65,536; invariant holds. (3) SOLVED sub-mystery — why no deadline in 58min: read_exec_envelope's 300s timeout is PER ENVELOPE and connection-level liveness envelopes keep arriving every 30s — the literal 689-y2my heartbeat-defeats-deadline shape, meaning the guest pty pump is alive-but-not-delivering or the host reader is consuming-but-not-delivering. STANDING HYPOTHESIS, fits every fact including zero delivered bytes: host read_envelope desyncs on the first LARGE frame (length-prefix misparse under split reads?) and read_exact then eats all subsequent bytes (including heartbeats) into a bogus huge buffer forever — small slow frames never split the prefix. NEXT DISCRIMINATOR (cheap, host-side only, no guest rebuild): instrument read_envelope to log each length prefix + bytes-consumed when the repro runs; a bogus length on frame 1 confirms; a sane length shifts suspicion guest-side (outbound channel vs writer task under burst). Timing file carries both series.
