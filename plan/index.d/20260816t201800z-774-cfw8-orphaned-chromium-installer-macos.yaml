@@ -1,0 +1,46 @@
+packets:
+  - packet_id: chromium-installer-orphaned-with-false-integration-claims
+    order: 774-cfw8
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: audit+decision
+    title: 'scripts/install-chromium.sh has ZERO consumers while its header claimed two integrations; a litmus pins a shape nothing ships — wire it or tombstone it'
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - browser
+      - install
+      - freshness
+    context: |
+      Standing freshness audit (order 372 duty), 2026-08-16, macOS: the
+      inventory's flagged-next component claimed to be "sourced by
+      scripts/install.sh" and "invoked by the tray's --install-chromium".
+      Both false at HEAD: zero references in scripts/install*.{sh,ps1},
+      zero in crates/, zero anywhere except
+      litmus:host-chromium-on-demand-shape — a litmus faithfully pinning
+      the shape of a component nothing ships (the 660-ryhn inverse: a
+      registered litmus keeping a DEAD component looking alive).
+      Header corrected in the audit commit; three specs
+      (host-chromium-on-demand, download-telemetry, chromium-safe-variant)
+      still trace here, so tombstoning is a feature-owner decision, not an
+      audit-cycle one (discard-over-repair bias noted but not exercised
+      unilaterally against live specs).
+    exit_criteria:
+      - the chromium/browser feature owner either wires a real consumer (install.sh or a tray subcommand, with the litmus extended to prove the WIRING, not just the shape) or tombstones the script + litmus + spec deltas in one change
+      - no header claim survives that names a nonexistent consumer
+    verifiable_closure: |
+      grep -rl install-chromium scripts/install.sh crates/ finds a real
+      consumer, or the file and its litmus are gone in the same commit.
+
+events:
+  - packet_id: chromium-installer-orphaned-with-false-integration-claims
+    event:
+      type: filed
+      ts: "2026-08-16T20:18:00Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t2014z"
+      host: macos
+      summary: |
+        Filed from the cycle-17 freshness audit; disposition=updated
+        (header corrected, orphan status stated in the artifact itself).
