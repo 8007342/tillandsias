@@ -1,0 +1,46 @@
+# @trace spec:litmus-framework
+#
+# Pins order 611-kqpf: a documented LITMUS_PODMAN_MODE=fake command copied
+# into a PLAIN shell reached real rootless podman (2026-08-06 incident:
+# `expected 1 podman builds, saw 0` plus a userns-owned overlay tree that
+# needed `podman unshare` to delete). The fix is the sourceable guard
+# scripts/test-support/litmus-fake-podman-guard.sh: under fake mode with no
+# recognized shim on PATH it installs a fixture-owned shim that execs the
+# canonical mock and can never fall through to the real binary; in real mode
+# it is a strict no-op. The safety property is proven by the hermetic fixture
+# suite: a real-podman SPY records ZERO invocations, an injected mid-fixture
+# failure leaves only plain-rm-removable residue, and runner-style vs direct
+# invocations agree.
+name: litmus:fake-podman-direct-invocation-safety
+spec: litmus-framework
+backend: fake
+phase: pre-build
+description: >
+  Pin the fake-Podman direct-invocation safety contract: the guard exists and
+  parses, the incident fixture sources it, and the four-scenario hermetic
+  suite passes (real-mode no-op, displayed-command hermeticity with spy at
+  zero, injected-failure residue-freedom, runner/direct verdict parity).
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains scripts/test-support/litmus-fake-podman-guard.sh
+  - workspace contains scripts/test-litmus-fake-podman-hermetic.sh
+  - workspace contains scripts/test-image-build-convergence.sh
+  - shell utilities (bash, grep, find) are available in PATH
+
+critical_path:
+  - step: "guard exists, parses, and is a strict no-op outside fake mode"
+    command: "test -x scripts/test-support/litmus-fake-podman-guard.sh && bash -n scripts/test-support/litmus-fake-podman-guard.sh && bash -c 'unset LITMUS_PODMAN_MODE; b=$(command -v podman || true); source scripts/test-support/litmus-fake-podman-guard.sh; a=$(command -v podman || true); [ \"$a\" = \"$b\" ]' && echo 'ok: guard-noop-outside-fake'"
+    timeout_ms: 5000
+    expected_behavior: "ok: guard-noop-outside-fake"
+
+  - step: "the incident fixture sources the guard with a fixture-owned, trap-cleaned shim dir"
+    command: "grep -q 'litmus-fake-podman-guard.sh' scripts/test-image-build-convergence.sh && grep -q 'LITMUS_FAKE_PODMAN_BIN_DIR=\"$tmp/fake-podman\"' scripts/test-image-build-convergence.sh && echo 'ok: fixture-sources-guard'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fixture-sources-guard"
+
+  - step: "hermetic suite: spy-zero, injected-failure residue-freedom, verdict parity"
+    command: "bash scripts/test-litmus-fake-podman-hermetic.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok: all fake-podman-hermetic scenarios passed"
