@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: dev-inference-container-suppresses-e2e-eligibility
+    field: status
+    value: completed
+    ts: "2026-08-16T09:39:21Z"
+    host: linux_mutable
+
+events:
+  - packet_id: dev-inference-container-suppresses-e2e-eligibility
+    event:
+      type: completed
+      ts: "2026-08-16T09:39:21Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: cycle4-tree: live_runtime_is_present now excludes the tillandsias-dev-* family with the rationale in-code (idempotent self-relaunching dev services; reset costs one re-ensure, never in-flight work); scripts/test-e2e-preflight-live-runtime.sh extended with Case 6 (only dev containers -> eligible) and Case 7 (dev container alongside a real forge -> still refuses, the exclusion cannot eat the list) — 7/7 PASS; LIVE probe on this host flipped skip:live-runtime-present -> eligible with tillandsias-dev-inference running, un-suppressing the destructive gate the same night the regression shipped
