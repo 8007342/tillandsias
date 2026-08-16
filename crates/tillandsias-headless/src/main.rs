@@ -2363,6 +2363,19 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     false
 }
 
+/// Clamp the CA private key to owner-only access (0600) — 755-qcxh.
+///
+/// The key never needs to be readable by anyone but the owning uid: host-side
+/// readers (`ensure_vault_tls_leaf`) run as the owner, and the proxy container
+/// receives the key as a podman secret (`ensure_proxy_ca_key_secret`), not
+/// through this file's mode. Anything wider lets any local uid mint
+/// certificates the enclave trusts.
+#[cfg(unix)]
+fn enforce_ca_key_mode(key: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(key, std::fs::Permissions::from_mode(0o600))
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
@@ -2481,21 +2494,19 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                     format!("Failed to set cert permissions: {e}")
                 },
             )?;
-            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o644)).map_err(
-                |e| {
-                    error!(
-                        accountability = true,
-                        category = "secrets",
-                        spec = "secret-rotation",
-                        secret_name = "tillandsias-ca-key",
-                        operation = "rotation_failed",
-                        location = %key.display(),
-                        error = %e,
-                        "Failed to set CA key permissions"
-                    );
-                    format!("Failed to set key permissions: {e}")
-                },
-            )?;
+            enforce_ca_key_mode(&tmp_key).map_err(|e| {
+                error!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "secret-rotation",
+                    secret_name = "tillandsias-ca-key",
+                    operation = "rotation_failed",
+                    location = %key.display(),
+                    error = %e,
+                    "Failed to set CA key permissions"
+                );
+                format!("Failed to set key permissions: {e}")
+            })?;
         }
 
         std::fs::rename(&tmp_key, &key)
@@ -2518,14 +2529,14 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         }
     }
 
-    // Squid runs as a non-root user inside the container and needs read
-    // access to the key file mounted via bind-mount. Upgrade mode to 644
-    // every call so that keys generated before this fix (mode 640) are also
-    // healed without requiring a CA rotation.
+    // 755-qcxh: the proxy no longer reads this file through a bind mount —
+    // it receives the key as a podman secret — so nothing legitimate needs it
+    // wider than owner-only. Heal DOWN to 0600 every call so keys generated
+    // before this fix (deliberately world-readable 0644) are repaired without
+    // requiring a CA rotation.
     #[cfg(unix)]
     if key.is_file() {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644));
+        let _ = enforce_ca_key_mode(&key);
     }
 
     Ok(certs_dir)
@@ -2655,6 +2666,24 @@ fn build_catalog_service_run_args(
     ])
 }
 
+/// Name of the podman secret carrying the proxy CA private key.
+///
+/// Spec `podman-secrets-integration` has always mandated secret delivery for
+/// this material (`--secret=tillandsias-ca-key`); the launcher had drifted to
+/// a world-readable host bind mount, filed as security packet 755-qcxh. The
+/// name doubles as the in-container mount path
+/// `/run/secrets/tillandsias-ca-key`, which `images/proxy/entrypoint.sh`
+/// consumes.
+pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
+
+/// Podman `--secret` mount options for the proxy CA key. Mirrors
+/// `GIT_VAULT_TOKEN_SECRET_OPTS`: the proxy image runs as the unprivileged
+/// `proxy` user (uid/gid 1000, `images/proxy/Containerfile`) under
+/// `--userns=keep-id`, and podman defaults a secret mount to `root:root` —
+/// unreadable to that entrypoint. uid/gid 1000 + `mode=0400` keeps the key
+/// least-privilege while readable by exactly its consumer.
+pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
+
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     vec![
         "--detach".into(),
@@ -2680,13 +2709,28 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
             "{}:/etc/squid/certs/intermediate.crt:ro",
             certs_dir.join("intermediate.crt").display()
         ),
-        "-v".into(),
-        format!(
-            "{}:/etc/squid/certs/intermediate.key:ro",
-            certs_dir.join("intermediate.key").display()
-        ),
+        // 755-qcxh: the CA PRIVATE key travels as a podman secret, never a
+        // host bind mount — secret delivery is what lets the host file stay
+        // 0600. The public cert above stays a bind mount on purpose.
+        "--secret".into(),
+        format!("{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}"),
         image.into(),
     ]
+}
+
+/// Refresh the `tillandsias-ca-key` podman secret from the CA bundle.
+///
+/// Called immediately before every proxy launch. `--replace` underneath makes
+/// it rotation-safe: the 30-day CA refresh in `ensure_ca_bundle` reaches the
+/// proxy at its next start — the same visibility the old bind mount had, since
+/// the bundle publishes keys by inode rename, which a live bind mount never
+/// observed either.
+fn ensure_proxy_ca_key_secret(certs_dir: &Path, debug: bool) -> Result<(), String> {
+    crate::vault_bootstrap::create_file_podman_secret(
+        PROXY_CA_KEY_SECRET,
+        &certs_dir.join("intermediate.key"),
+        debug,
+    )
 }
 
 /// Ensure the enclave egress proxy (squid) container is running.
@@ -2731,6 +2775,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
     ensure_versioned_images(&root, &["proxy"], version, debug)?;
     let proxy_image = versioned_image_tag("proxy", version);
     let certs_dir = ensure_ca_bundle(debug)?;
+    ensure_proxy_ca_key_secret(&certs_dir, debug)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
@@ -3216,6 +3261,31 @@ pub(crate) fn git_mirror_service_identity(mirror_id: Option<&str>, project_name:
         Some(id) => crate::vault_bootstrap::mirror_service_hostname(id),
         None => sanitize_hostname(&format!("git-{project_name}")),
     }
+}
+
+/// The retired order-659-8faj shared mirror aliases. A running mirror that
+/// still advertises one of these without the expected per-project identity
+/// predates the per-project DNS swap — the positive old-generation evidence
+/// the order 666-qbjd upgrade-skew check requires. Never assign these again
+/// (pinned by `git_run_args_use_per_project_identity`).
+pub(crate) const RETIRED_SHARED_MIRROR_ALIASES: [&str; 2] = ["git-service", "tillandsias-git"];
+
+/// Pure decision for the order-666-qbjd mirror identity-generation skew.
+///
+/// Skew requires POSITIVE old-generation evidence: the aliases were readable
+/// AND contain a retired shared alias AND do not contain the expected
+/// per-project identity. Alias membership is the load-bearing test because
+/// the aliases are what aardvark-dns actually resolves; the container's
+/// `Config.Hostname` cannot disprove skew (the expected identity is derived
+/// FROM it on the recovery path, so a hostname match is circular, and a
+/// pre-659 mirror carries `--hostname git-<project>` while answering only
+/// the shared aliases). Empty aliases (inspect-degraded backends, e.g. the
+/// WSL stub) are NOT evidence — the caller keeps today's reuse behavior.
+fn mirror_upgrade_skew(aliases: &[String], expected: &str) -> bool {
+    let retired_present = aliases
+        .iter()
+        .any(|a| RETIRED_SHARED_MIRROR_ALIASES.contains(&a.as_str()));
+    retired_present && !aliases.iter().any(|a| a == expected)
 }
 
 /// Build the podman launch args for the per-project git-mirror container.
@@ -7295,6 +7365,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
         )
         .await;
 
+        ensure_proxy_ca_key_secret(&certs_dir, debug)?;
         client
             .run_container_observed(
                 "status-proxy",
@@ -10110,6 +10181,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
                 .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+            ensure_proxy_ca_key_secret(&certs_dir, debug)?;
             client
                 .run_container_observed(
                     "opencode-proxy",
@@ -11213,6 +11285,7 @@ pub(crate) fn run_opencode_web_mode(
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
                 .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+            ensure_proxy_ca_key_secret(&certs_dir, debug)?;
             client
                 .run_container_observed(
                     "opencode-web-proxy",
@@ -11829,144 +11902,204 @@ async fn ensure_shared_git_and_inference_for_launch(
     // (`git-<sanitized project>`), matching the guest-side git_mirror_host()
     // fallback and pre-swap mirrors.
     let git_mirror_running = crate::vault_bootstrap::container_running(&git_container_name);
-    let mirror_identity: Option<String> = if git_mirror_running {
-        if debug {
-            eprintln!(
-                "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
-            );
-        }
-        // Order 452 slice 2 (reused-mirror re-reconcile) + order 449: the
-        // mirror only fast-forwards its EXPORTED heads at container START,
-        // so reusing a long-lived one (order 443) serves increasingly
-        // stale heads — a forge then clones stale and its push rejects
-        // non-fast-forward. Re-run the same NON-forced exported-head
-        // fast-forward, then repair an unborn HEAD (old-image container),
-        // before any forge clones. Non-fatal by design: a diverged head
-        // is left for the relay to push UP, an offline upstream still
-        // serves the last-known-good tree, and the readiness gate below
-        // still enforces a resolvable HEAD.
-        if project_remote_url.is_some() {
-            let ff = client
-                .execute(
-                    OperationKind::Container,
-                    &[
-                        "exec".into(),
-                        git_container_name.clone(),
-                        "git".into(),
-                        "-C".into(),
-                        format!("/srv/git/{project_name}"),
-                        "fetch".into(),
-                        "origin".into(),
-                        "refs/heads/*:refs/heads/*".into(),
-                    ],
-                )
-                .await;
-            match ff {
-                Ok(out) if out.success() => {
-                    if debug {
-                        eprintln!(
-                            "[tillandsias] [forge-launch] reused mirror re-reconciled to upstream"
-                        );
-                    }
-                }
-                Ok(out) => eprintln!(
-                    "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile fetch exited {} (serving last-known-good heads; diverged heads relay up on push)",
-                    out.status.unwrap_or(-1)
-                ),
-                Err(e) => eprintln!(
-                    "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile failed: {e}"
-                ),
+    enum MirrorPlan {
+        Reuse(Option<String>),
+        Create,
+    }
+    let plan: MirrorPlan = if git_mirror_running {
+        // ONE inspect feeds both the order-606-bvnp D13 identity recovery and
+        // the order-666-qbjd upgrade-skew check — a second read could diverge.
+        //
+        // D13 recovery: a REUSED mirror's DNS identity is whatever the running
+        // container was launched with — never re-mint (a fresh mint produces a
+        // NEW opaque id and the builders would address a hostname no container
+        // answers as; pre-swap mirrors answer as `git-<project>`). Recover it
+        // Vault-free from the container's own Config.Hostname; an unreadable
+        // or empty hostname degrades to `None` (project-derived fallback).
+        let inspected = client.inspect_container(&git_container_name).await.ok();
+        let recovered_id: Option<String> = inspected
+            .as_ref()
+            .filter(|i| !i.config_hostname.is_empty())
+            .and_then(|i| i.config_hostname.strip_prefix("git-").map(str::to_string));
+        let expected = git_mirror_service_identity(recovered_id.as_deref(), project_name);
+        let aliases: &[String] = inspected
+            .as_ref()
+            .map(|i| i.network_aliases.as_slice())
+            .unwrap_or(&[]);
+        if mirror_upgrade_skew(aliases, &expected) {
+            // Order 666-qbjd: the running mirror predates the per-project DNS
+            // swap (659-8faj) — a new forge would be handed `{expected}` while
+            // the mirror answers only the retired shared aliases. Recreate it
+            // when no sibling lane depends on it; refuse loudly when one does
+            // (order 443: never destroy a mirror out from under a sibling).
+            // A listing error counts as sibling-live — leak-not-destroy, the
+            // same rule as cleanup_shared_stack_if_no_running_forge.
+            let siblings: Vec<String> = match client.list_containers("tillandsias-").await {
+                Ok(containers) => containers
+                    .into_iter()
+                    .filter(|c| is_active_lane_container(&c.name, &c.state))
+                    .map(|c| c.name)
+                    .collect(),
+                Err(e) => vec![format!("<container listing failed: {e}>")],
+            };
+            if siblings.is_empty() {
+                eprintln!(
+                    "[tillandsias] [forge-launch] WARNING: mirror upgrade-skew: \
+                     {git_container_name} answers retired aliases {aliases:?} but not the \
+                     expected per-project identity {expected}; no live sibling lane — \
+                     recreating with the current generation (named volume \
+                     tillandsias-mirror-{project_name} survives, stranded commits still flush)"
+                );
+                MirrorPlan::Create
+            } else {
+                return Err(format!(
+                    "[forge-launch] mirror upgrade-skew: running mirror {git_container_name} \
+                     answers the retired shared aliases {aliases:?}, not the expected \
+                     per-project identity {expected}, and live sibling lanes {siblings:?} \
+                     depend on it. Refusing to recreate it out from under them (order 443). \
+                     Remediation: finish or stop the sibling lanes, then relaunch — the next \
+                     launch recreates the mirror with the current identity generation; \
+                     stranded commits survive in the named volume \
+                     tillandsias-mirror-{project_name}."
+                ));
             }
-        }
-        // HEAD repair on a reused container. New images carry
-        // ensure-mirror-head; on an old image fall back to an inline
-        // conditional symbolic-ref when the launcher knows the branch.
-        // project_name is container-name-safe and the branch is charset-
-        // sanitized by read_host_project_current_branch, so the
-        // interpolation below cannot escape the sh -c word.
-        let repair = match project_default_branch {
-            Some(branch) => format!(
-                "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+        } else {
+            if debug {
+                eprintln!(
+                    "[tillandsias] git mirror {git_container_name} already running; reusing (order 443)"
+                );
+            }
+            // Order 452 slice 2 (reused-mirror re-reconcile) + order 449: the
+            // mirror only fast-forwards its EXPORTED heads at container START,
+            // so reusing a long-lived one (order 443) serves increasingly
+            // stale heads — a forge then clones stale and its push rejects
+            // non-fast-forward. Re-run the same NON-forced exported-head
+            // fast-forward, then repair an unborn HEAD (old-image container),
+            // before any forge clones. Non-fatal by design: a diverged head
+            // is left for the relay to push UP, an offline upstream still
+            // serves the last-known-good tree, and the readiness gate below
+            // still enforces a resolvable HEAD.
+            if project_remote_url.is_some() {
+                let ff = client
+                    .execute(
+                        OperationKind::Container,
+                        &[
+                            "exec".into(),
+                            git_container_name.clone(),
+                            "git".into(),
+                            "-C".into(),
+                            format!("/srv/git/{project_name}"),
+                            "fetch".into(),
+                            "origin".into(),
+                            "refs/heads/*:refs/heads/*".into(),
+                        ],
+                    )
+                    .await;
+                match ff {
+                    Ok(out) if out.success() => {
+                        if debug {
+                            eprintln!(
+                                "[tillandsias] [forge-launch] reused mirror re-reconciled to upstream"
+                            );
+                        }
+                    }
+                    Ok(out) => eprintln!(
+                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile fetch exited {} (serving last-known-good heads; diverged heads relay up on push)",
+                        out.status.unwrap_or(-1)
+                    ),
+                    Err(e) => eprintln!(
+                        "[tillandsias] [forge-launch] WARNING: reused-mirror re-reconcile failed: {e}"
+                    ),
+                }
+            }
+            // HEAD repair on a reused container. New images carry
+            // ensure-mirror-head; on an old image fall back to an inline
+            // conditional symbolic-ref when the launcher knows the branch.
+            // project_name is container-name-safe and the branch is charset-
+            // sanitized by read_host_project_current_branch, so the
+            // interpolation below cannot escape the sh -c word.
+            let repair = match project_default_branch {
+                Some(branch) => format!(
+                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
                    /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name} {branch}; \
                  elif ! git -C /srv/git/{project_name} rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
                    && git -C /srv/git/{project_name} show-ref --verify --quiet refs/heads/{branch}; then \
                    git -C /srv/git/{project_name} symbolic-ref HEAD refs/heads/{branch}; \
                  fi"
-            ),
-            None => format!(
-                "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
+                ),
+                None => format!(
+                    "if [ -x /usr/local/share/git-service/ensure-mirror-head ]; then \
                    /usr/local/share/git-service/ensure-mirror-head /srv/git/{project_name}; \
                  fi"
-            ),
-        };
-        if let Err(e) = client
-            .execute(
-                OperationKind::Container,
-                &[
-                    "exec".into(),
-                    git_container_name.clone(),
-                    "sh".into(),
-                    "-c".into(),
-                    repair,
-                ],
-            )
-            .await
-        {
-            eprintln!(
-                "[tillandsias] [forge-launch] WARNING: reused-mirror HEAD repair failed: {e}"
-            );
-        }
-        // Order 606-bvnp D13: a REUSED mirror's DNS identity is whatever the
-        // running container was launched with — never re-mint (a fresh mint
-        // produces a NEW opaque id and the builders would address a hostname
-        // no container answers as; pre-swap mirrors answer as `git-<project>`).
-        // Recover it Vault-free by reading the container's own Config.Hostname
-        // and returning the id portion after the `git-` prefix; an unreadable
-        // or empty hostname degrades to `None` (project-derived fallback,
-        // exactly what a pre-swap mirror answers as).
-        client
-            .inspect_container(&git_container_name)
-            .await
-            .ok()
-            .filter(|i| !i.config_hostname.is_empty())
-            .and_then(|i| i.config_hostname.strip_prefix("git-").map(str::to_string))
-    } else {
-        // Order 606-bvnp (design D13 + §2.3, rungs T1/T2): a project's FIRST
-        // mirror provision mints its opaque mirror-id and the exact
-        // per-project SSH signer roles + policies; every later create is one
-        // kv read (the kv entry is the completed-provision commit marker).
-        // The running-mirror reuse path above never touches Vault for this.
-        // Nothing consumes the identity yet — sshd wiring is T4+ — but the
-        // substrate must exist before any of those rungs can land, and
-        // failure here is LOUD by the same windows-260716-2 rule as the
-        // credential mint below (Vault is already a hard dependency of this
-        // create path).
-        let forge_launch_mirror_id = crate::vault_bootstrap::ensure_mirror_identity_provisioned(
-            project_name,
-            &enclave_subnet(),
-            debug,
-        )
-        .await
-        .map_err(|e| format!("[forge-launch] mirror service-identity provisioning failed: {e}"))?;
-        let git_vault_secret = Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
-        client
-            .run_container_observed(
-                "forge-launch-git",
-                &git_container_name,
-                &build_git_run_args(
-                    project_name,
-                    Some(&forge_launch_mirror_id),
-                    certs_dir,
-                    &versioned_image_tag("git", version),
-                    project_remote_url,
-                    project_default_branch,
-                    git_vault_secret.as_deref(),
                 ),
-                debug,
-            )
-            .await
-            .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
-        Some(forge_launch_mirror_id)
+            };
+            if let Err(e) = client
+                .execute(
+                    OperationKind::Container,
+                    &[
+                        "exec".into(),
+                        git_container_name.clone(),
+                        "sh".into(),
+                        "-c".into(),
+                        repair,
+                    ],
+                )
+                .await
+            {
+                eprintln!(
+                    "[tillandsias] [forge-launch] WARNING: reused-mirror HEAD repair failed: {e}"
+                );
+            }
+            // Identity was recovered by the single inspect above (D13).
+            MirrorPlan::Reuse(recovered_id)
+        }
+    } else {
+        MirrorPlan::Create
+    };
+    let mirror_identity: Option<String> = match plan {
+        MirrorPlan::Reuse(recovered) => recovered,
+        MirrorPlan::Create => {
+            // Order 606-bvnp (design D13 + §2.3, rungs T1/T2): a project's FIRST
+            // mirror provision mints its opaque mirror-id and the exact
+            // per-project SSH signer roles + policies; every later create is one
+            // kv read (the kv entry is the completed-provision commit marker).
+            // The running-mirror reuse path above never touches Vault for this.
+            // Nothing consumes the identity yet — sshd wiring is T4+ — but the
+            // substrate must exist before any of those rungs can land, and
+            // failure here is LOUD by the same windows-260716-2 rule as the
+            // credential mint below (Vault is already a hard dependency of this
+            // create path).
+            let forge_launch_mirror_id =
+                crate::vault_bootstrap::ensure_mirror_identity_provisioned(
+                    project_name,
+                    &enclave_subnet(),
+                    debug,
+                )
+                .await
+                .map_err(|e| {
+                    format!("[forge-launch] mirror service-identity provisioning failed: {e}")
+                })?;
+            let git_vault_secret =
+                Some(mint_git_mirror_vault_auto_auth(project_name, debug).await?);
+            client
+                .run_container_observed(
+                    "forge-launch-git",
+                    &git_container_name,
+                    &build_git_run_args(
+                        project_name,
+                        Some(&forge_launch_mirror_id),
+                        certs_dir,
+                        &versioned_image_tag("git", version),
+                        project_remote_url,
+                        project_default_branch,
+                        git_vault_secret.as_deref(),
+                    ),
+                    debug,
+                )
+                .await
+                .map_err(|e| format!("[forge-launch] failed to start git: {e}"))?;
+            Some(forge_launch_mirror_id)
+        }
     };
     // Order 749-6uby (T8+T10): the per-lane ssh-agent sidecar starts AFTER
     // the mirror (it signs against Vault and serves the socket the forge
@@ -16799,6 +16932,33 @@ mod tests {
         assert!(!has_arg(&args, "10.0.42.2"));
         assert!(has_arg(&args, "DEBUG_PROXY=1"));
         assert!(has_arg(&args, "tillandsias-proxy:v1"));
+        // 755-qcxh: the CA private key is delivered as a podman secret owned
+        // by the proxy uid; the world-readable key bind mount must never
+        // come back.
+        assert!(has_arg(&args, "--secret"));
+        assert!(has_arg(
+            &args,
+            "tillandsias-ca-key,uid=1000,gid=1000,mode=0400"
+        ));
+        assert!(
+            !args.iter().any(|a| a.contains("intermediate.key")),
+            "CA private key must not be bind-mounted: {args:?}"
+        );
+    }
+
+    // 755-qcxh: a pre-existing world-readable CA key (the old heal target was
+    // 0644) must be healed DOWN to owner-only on every ensure pass.
+    #[cfg(unix)]
+    #[test]
+    fn ca_key_mode_heals_world_readable_down_to_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let key = dir.path().join("intermediate.key");
+        std::fs::write(&key, "not-a-real-key").expect("write");
+        std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+        enforce_ca_key_mode(&key).expect("enforce");
+        let mode = std::fs::metadata(&key).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "CA key must be owner-only after heal");
     }
 
     // Regression: smoke-finding/rootless-bridge-network-missing. The dual-home
@@ -17710,6 +17870,183 @@ mod tests {
         );
     }
 
+    /// Order 666-qbjd: the skew predicate needs POSITIVE old-generation
+    /// evidence — a retired shared alias present AND the expected identity
+    /// absent. Taxonomy from the packet: pre-659 mirrors skew; post-659 and
+    /// post-D13 mirrors are healthy; a degraded inspect (empty aliases, e.g.
+    /// the WSL stub) is NOT evidence and keeps today's reuse behavior.
+    #[test]
+    fn mirror_upgrade_skew_taxonomy() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        // pre-659: shared aliases only → skew
+        assert!(mirror_upgrade_skew(
+            &s(&["git-service", "tillandsias-git"]),
+            "git-alpha"
+        ));
+        // post-659 pre-D13: per-project alias → healthy reuse
+        assert!(!mirror_upgrade_skew(&s(&["git-alpha"]), "git-alpha"));
+        // post-D13: opaque per-mirror alias → healthy reuse
+        assert!(!mirror_upgrade_skew(
+            &s(&["git-abcdef0123456789"]),
+            "git-abcdef0123456789"
+        ));
+        // transitional dual-identity (retired + expected) → healthy reuse
+        assert!(!mirror_upgrade_skew(
+            &s(&["git-service", "git-alpha"]),
+            "git-alpha"
+        ));
+        // degraded inspect: no aliases readable → not evidence (WSL stub)
+        assert!(!mirror_upgrade_skew(&[], "git-alpha"));
+        // unrelated aliases without a retired one → not skew
+        assert!(!mirror_upgrade_skew(&s(&["something-else"]), "git-alpha"));
+    }
+
+    /// Order 666-qbjd: the skew branch's disposition is keyed on live sibling
+    /// lanes — recreate only when none, refuse (with the stable token) when
+    /// one exists, and a container-listing failure counts as sibling-live
+    /// (leak-not-destroy, the cleanup_shared_stack rule).
+    #[test]
+    fn mirror_upgrade_skew_branch_recreates_only_without_live_siblings() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(
+            source,
+            "async fn ensure_shared_git_and_inference_for_launch(",
+        );
+        let skew_idx = window
+            .find("if mirror_upgrade_skew(")
+            .expect("ensure must run the upgrade-skew check on the reuse path");
+        let skew_window = &window[skew_idx..];
+        let empty_idx = skew_window
+            .find("siblings.is_empty()")
+            .expect("skew disposition must be keyed on live sibling lanes");
+        let create_idx = skew_window
+            .find("MirrorPlan::Create")
+            .expect("skew branch must be able to fall through to the create arm");
+        let refuse_idx = skew_window
+            .find("mirror upgrade-skew: running mirror")
+            .expect("skew branch must refuse with the stable upgrade-skew token");
+        assert!(
+            empty_idx < create_idx && create_idx < refuse_idx,
+            "skew branch shape: sibling check, then recreate, then refuse"
+        );
+        assert!(
+            skew_window[..refuse_idx].contains("container listing failed"),
+            "a listing error must count as sibling-live (leak-not-destroy)"
+        );
+    }
+
+    /// Order 666-qbjd fixture 3b: a running OLD-GENERATION mirror (retired
+    /// shared aliases, no per-project identity) with a LIVE sibling lane must
+    /// make the launch ensure REFUSE loudly — recreating would destroy the
+    /// mirror out from under the sibling (order 443) — and issue no run/rm
+    /// for the mirror. Runs only under the fixture env (fake stateful podman
+    /// on PATH; see scripts/test-concurrent-forge-shared-stack.sh).
+    #[test]
+    fn shared_stack_ensure_refuses_upgrade_skewed_mirror_under_live_sibling() {
+        if std::env::var("LITMUS_PODMAN_MODE").as_deref() != Ok("fake")
+            || std::env::var("LITMUS_PODMAN_STATEFUL_CONTAINERS").as_deref() != Ok("1")
+        {
+            eprintln!(
+                "[shared-stack fixture] skipped: needs LITMUS_PODMAN_MODE=fake + \
+                 LITMUS_PODMAN_STATEFUL_CONTAINERS=1 (run via scripts/test-concurrent-forge-shared-stack.sh)"
+            );
+            return;
+        }
+        let _guard = env_lock();
+        let calls_file = std::env::var("LITMUS_PODMAN_CALLS_FILE")
+            .expect("fixture env must set LITMUS_PODMAN_CALLS_FILE");
+
+        let podman = |args: &[&str]| {
+            let out = podman_cmd_sync()
+                .args(args)
+                .output_bounded(tillandsias_podman::OperationKind::Container.default_budget())
+                .expect("mock podman invokes");
+            assert!(out.status.success(), "mock podman {args:?} must succeed");
+        };
+
+        // Seed a pre-659 mirror: shared aliases, legacy name-based hostname.
+        let git_name = "tillandsias-git-fixtureproj";
+        podman(&[
+            "run",
+            "--detach",
+            "--name",
+            git_name,
+            "--hostname",
+            "git-fixtureproj",
+            "--network-alias",
+            "git-service",
+            "--network-alias",
+            "tillandsias-git",
+            "mock-git-image",
+        ]);
+        // ...and a live sibling lane that depends on it.
+        podman(&[
+            "run",
+            "--detach",
+            "--name",
+            "tillandsias-projB-forge",
+            "mock-forge-image",
+        ]);
+
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("tokio runtime");
+        let client = PodmanClient::new();
+
+        // Round-trip through the REAL parser: the mock's json inspect arm
+        // must feed inspect_container the hostname and aliases it recorded.
+        let inspected = rt
+            .block_on(client.inspect_container(git_name))
+            .expect("inspect_container parses the mock json inspect output");
+        assert_eq!(inspected.config_hostname, "git-fixtureproj");
+        assert_eq!(
+            inspected.network_aliases,
+            vec!["git-service".to_string(), "tillandsias-git".to_string()]
+        );
+
+        std::fs::write(&calls_file, "").expect("truncate calls log");
+        let result = rt.block_on(ensure_shared_git_and_inference_for_launch(
+            &client,
+            "fixtureproj",
+            std::path::Path::new("/tmp"),
+            "v-fixture",
+            Some("https://example.invalid/repo.git"),
+            Some("main"),
+            true,
+        ));
+        let err = result.expect_err("skewed mirror + live sibling must refuse the launch");
+        assert!(
+            err.contains("mirror upgrade-skew"),
+            "stable refusal token present: {err}"
+        );
+        assert!(
+            err.contains("tillandsias-projB-forge"),
+            "refusal names the live sibling: {err}"
+        );
+        assert!(
+            err.contains("git-fixtureproj"),
+            "refusal names the expected per-project identity: {err}"
+        );
+        let calls = std::fs::read_to_string(&calls_file).expect("calls log readable");
+        assert!(
+            !calls
+                .lines()
+                .any(|l| l.contains(" run ") && l.contains(git_name)),
+            "no recreate under a live sibling:\n{calls}"
+        );
+        assert!(
+            !calls
+                .lines()
+                .any(|l| l.contains(" rm ") && l.contains(git_name)),
+            "no rm under a live sibling:\n{calls}"
+        );
+        assert!(
+            !calls.contains("/srv/git/fixtureproj"),
+            "refusal must fire BEFORE the reuse re-reconcile:\n{calls}"
+        );
+    }
+
     /// Order 298: within `ensure_enclave_for_project`, the idempotency wipe
     /// (which removes tillandsias-proxy when no lane is live — always true on
     /// a first launch) must run BEFORE the dependency-model ensure, never
@@ -17954,11 +18291,14 @@ mod tests {
             "exactly one per-project network alias: {args:?}"
         );
 
-        // The retired shared aliases must never be assigned again.
-        assert!(
-            !has_arg(&args, "git-service") && !has_arg(&args, "tillandsias-git"),
-            "shared aliases git-service/tillandsias-git are retired (659-8faj): {args:?}"
-        );
+        // The retired shared aliases must never be assigned again (the same
+        // const drives the 666-qbjd upgrade-skew evidence check).
+        for retired in RETIRED_SHARED_MIRROR_ALIASES {
+            assert!(
+                !has_arg(&args, retired),
+                "shared alias {retired} is retired (659-8faj): {args:?}"
+            );
+        }
 
         // Sanitization flows through the single derivation point.
         assert_eq!(git_mirror_service_identity(None, "alpha"), "git-alpha");

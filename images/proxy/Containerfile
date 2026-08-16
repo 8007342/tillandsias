@@ -19,7 +19,7 @@ RUN apk add --no-cache squid openssl bash ca-certificates \
     && adduser -D -u 1000 -s /sbin/nologin proxy \
     && mkdir -p /var/spool/squid /var/log/squid /var/run/squid \
     && mkdir -p /var/lib/squid /etc/squid/certs \
-    && chown -R proxy:proxy /var/spool/squid /var/log/squid /var/run/squid /var/lib/squid
+    && chown -R proxy:proxy /var/spool/squid /var/log/squid /var/run/squid /var/lib/squid /etc/squid/certs
 
 COPY squid.conf /etc/squid/squid.conf
 COPY allowlist.txt /etc/squid/allowlist.txt

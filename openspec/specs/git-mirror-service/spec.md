@@ -117,7 +117,11 @@ eliminating that remaining transaction-boundary gap.
 This containment deliberately makes ref deletion unavailable through the
 anonymous daemon path. Any lane-exit or garbage-collection feature that needs
 to delete `agent/*` branches or other refs SHALL use a separately authenticated,
-policy-authorized mechanism and MUST NOT weaken this gate.
+policy-authorized mechanism and MUST NOT weaken this gate. The
+reject-every-deletion containment supersedes the former allowance of at most 10
+deletions per relay transaction and the `TILLANDSIAS_ALLOW_BULK_DELETE`
+override, which `litmus-git-mirror-safe-refspec-push.yaml:24` already asserts
+is absent from `relay-refs.sh`.
 
 @trace spec:git-mirror-service
 

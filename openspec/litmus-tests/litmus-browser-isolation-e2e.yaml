@@ -13,12 +13,12 @@ preconditions:
 
 critical_path:
   - step: "setup: create test project, enclave network, and ephemeral CA"
-    command: "TEST_PROJECT=/tmp/tillandsias-e2e-test; mkdir -p \"$TEST_PROJECT\" && cd \"$TEST_PROJECT\" && git init --quiet && podman network rm -f tillandsias-test-enclave-e2e >/dev/null 2>&1 || true; podman network create --subnet 10.0.43.0/24 tillandsias-test-enclave-e2e >/dev/null && mkdir -p /tmp/tillandsias-e2e-ca && openssl req -x509 -newkey rsa:2048 -keyout /tmp/tillandsias-e2e-ca/intermediate.key -out /tmp/tillandsias-e2e-ca/intermediate.crt -days 1 -nodes -subj '/CN=tillandsias-e2e-test-ca' >/dev/null 2>&1 && chmod 644 /tmp/tillandsias-e2e-ca/intermediate.crt && chmod 644 /tmp/tillandsias-e2e-ca/intermediate.key && echo TEST_PROJECT=$TEST_PROJECT"
+    command: "TEST_PROJECT=/tmp/tillandsias-e2e-test; mkdir -p \"$TEST_PROJECT\" && cd \"$TEST_PROJECT\" && git init --quiet && podman network rm -f tillandsias-test-enclave-e2e >/dev/null 2>&1 || true; podman network create --subnet 10.0.43.0/24 tillandsias-test-enclave-e2e >/dev/null && mkdir -p /tmp/tillandsias-e2e-ca && openssl req -x509 -newkey rsa:2048 -keyout /tmp/tillandsias-e2e-ca/intermediate.key -out /tmp/tillandsias-e2e-ca/intermediate.crt -days 1 -nodes -subj '/CN=tillandsias-e2e-test-ca' >/dev/null 2>&1 && chmod 644 /tmp/tillandsias-e2e-ca/intermediate.crt && chmod 600 /tmp/tillandsias-e2e-ca/intermediate.key && echo TEST_PROJECT=$TEST_PROJECT"
     timeout_ms: 8000
     expected_behavior: "TEST_PROJECT=/tmp/tillandsias-e2e-test"
 
-  - step: "launch proxy container (Squid forward proxy)"
-    command: "export PROXY_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-proxy | head -1) && [ -n \"$PROXY_IMG\" ] || { echo 'Proxy image not found'; exit 1; } && podman rm -f tillandsias-test-proxy-e2e 2>/dev/null; podman run -d --name tillandsias-test-proxy-e2e --hostname proxy --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -v /tmp/tillandsias-e2e-ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro -v /tmp/tillandsias-e2e-ca/intermediate.key:/etc/squid/certs/intermediate.key:ro \"$PROXY_IMG\" 2>&1 | tee /tmp/litmus-proxy-e2e.log | head -1"
+  - step: "launch proxy container (Squid forward proxy; key via podman secret, 755-qcxh)"
+    command: "export PROXY_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-proxy | head -1) && [ -n \"$PROXY_IMG\" ] || { echo 'Proxy image not found'; exit 1; } && podman rm -f tillandsias-test-proxy-e2e 2>/dev/null; podman secret create --replace --driver=file tillandsias-e2e-ca-key /tmp/tillandsias-e2e-ca/intermediate.key >/dev/null && podman run -d --name tillandsias-test-proxy-e2e --hostname proxy --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -v /tmp/tillandsias-e2e-ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro --secret source=tillandsias-e2e-ca-key,type=mount,target=tillandsias-ca-key,uid=1000,gid=1000,mode=0400 \"$PROXY_IMG\" 2>&1 | tee /tmp/litmus-proxy-e2e.log | head -1"
     timeout_ms: 10000
     expected_behavior: "container id returned"
 
@@ -88,7 +88,7 @@ critical_path:
     expected_behavior: "LOGS_OK|validation|cookie"
 
   - step: "cleanup: remove containers"
-    command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
+    command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e; echo CLEANUP_OK"
     timeout_ms: 10000
     expected_behavior: "CLEANUP_OK"
 
@@ -109,4 +109,4 @@ observability:
 
 rollback:
   on_failure: "ensure all test containers and networks are cleaned; inspect router logs for OTP validation errors"
-  command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e /tmp/tillandsias-e2e-test-* 2>/dev/null; echo 'Test cleanup complete'"
+  command: "podman rm -f tillandsias-test-proxy-e2e tillandsias-test-router-e2e tillandsias-test-forge-e2e 2>/dev/null; podman secret rm tillandsias-e2e-ca-key 2>/dev/null; podman network rm tillandsias-test-enclave-e2e 2>/dev/null; rm -rf /tmp/tillandsias-router-e2e /tmp/tillandsias-e2e-test-* 2>/dev/null; echo 'Test cleanup complete'"
