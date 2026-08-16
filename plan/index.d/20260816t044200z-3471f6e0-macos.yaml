@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: macos-forge-origin-not-rewritten-to-enclave-mirror
+    event:
+      type: refuted
+      ts: "2026-08-16T04:42:00Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0423z
+      host: macos
+      summary: >
+        Premise REFUTED by live in-forge probe on this enclave (v0.4.260815.1, target/smoke-e2e/06-wiring-probe.log, durable copy in the 763-munc packet context): origin IS the per-project enclave mirror (git://git-6no98mm4837ff0lpr5c0/tillandsias, the 659-8faj design), ls-remote through it returns CURRENT upstream HEAD 0548ee1f (mirror fresh), and git push --dry-run reached receive-pack and was evaluated (non-fast-forward policy rejection, correct for a stale-behind checkout) — transport and write path ALIVE. The BigPickle FAIL came from the stale seed checkout (main@1496e89f) whose check-credential-channel.sh predates 659-8faj and accepts only the retired tillandsias-git/git-service aliases, so it refused a correctly-wired origin. Real residuals now owned elsewhere: 763-munc (stale seed checkout produces false verdicts + non-ff-doomed pushes), and mirror-to-upstream authorization verdicts (refs/tillandsias/upstream-auth/* empty — release mirror image predates 756-2jnj; arrives with the next image rebuild, 759-vsaj fleet propagation).

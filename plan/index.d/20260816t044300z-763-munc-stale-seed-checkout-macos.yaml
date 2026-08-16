@@ -1,0 +1,72 @@
+packets:
+  - packet_id: macos-forge-seed-checkout-staleness-poisons-validation
+    order: 763-munc
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: 'The forge seed checkout (~/src/tillandsias) is 562 commits stale and nothing gates it: validation forges run retired guards and every push is non-ff-doomed'
+    pickup_role: macos
+    depends_on: []
+    capability_tags:
+      - macos
+      - forge
+      - coordination
+      - fail-loud
+    context: |
+      Demonstrated failure, two cycles apart, same root:
+
+      1. 2026-08-16T02:xx: a BigPickle validation run inside a fresh
+         v0.4.260815.1 enclave reported MO-SMOKE FAIL
+         missing:no-credential-channel. That verdict was FALSE — its
+         checkout (main @ 1496e89f, 2026-08-10) carries a
+         check-credential-channel.sh that predates 659-8faj and accepts
+         only the retired tillandsias-git/git-service mirror aliases, so
+         it refused the correctly-wired per-project origin. A p1 packet
+         (760-w76k) was filed on that false premise and is now obsoleted.
+
+      2. 2026-08-16T04:40: a raw in-forge probe (no script dependency)
+         proved the wiring healthy — origin
+         git://git-6no98mm4837ff0lpr5c0/tillandsias, ls-remote returns
+         CURRENT upstream HEAD 0548ee1f (the mirror seeds fresh from
+         upstream, independent of the stale checkout), and push --dry-run
+         reached receive-pack, failing only as non-fast-forward — which is
+         itself this bug: a forge seeded 562 commits behind can NEVER push
+         its branch, and discovers that at push time, hours into work.
+         Probe transcript: target/smoke-e2e/06-wiring-probe.log (macOS
+         host); verbatim results also quoted on 760-w76k's refuted event.
+
+      The mirror is NOT the problem (it self-seeds fresh). The WORKING
+      CHECKOUT lineage is: the launcher seeds the forge's branch from the
+      host checkout's current branch, and ~/src/tillandsias sits on a
+      5-day-old main that nothing refreshes, warns about, or refuses.
+      Every validation verdict produced from it is evidence about the
+      PAST, silently presented as evidence about the present.
+    exit_criteria:
+      - the forge launch path measures seed-checkout staleness against the mirror's corresponding branch head and REFUSES (or auto-fast-forwards, operator decision) beyond a declared bound, with a one-line verdict naming both SHAs
+      - a validation-lane launch on a stale checkout can no longer produce a clean-looking verdict without the staleness stated in the same output
+      - the ~/src/tillandsias refresh path is documented or automated (who ffs it, when), so the gate converges instead of permanently refusing
+    verifiable_closure: |
+      Launching a forge from a deliberately stale ~/src checkout yields a
+      loud staleness verdict (fixture or live), and a fresh-checkout launch
+      passes unchanged.
+    notes: |
+      Operator-decision point flagged rather than assumed: auto-ff of an
+      operator-owned checkout vs refuse-and-instruct. Do not silently
+      mutate ~/src — it is the forge's working tree, not this loop's.
+      Related: 759-vsaj (fleet write-readiness propagation), 756-2jnj
+      (mirror-side upstream-auth verdicts — still unpublished on enclaves
+      whose images predate it; arrives with the next image rebuild).
+
+events:
+  - packet_id: macos-forge-seed-checkout-staleness-poisons-validation
+    event:
+      type: filed
+      ts: "2026-08-16T04:43:00Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0423z"
+      host: macos
+      summary: |
+        Filed from the 760-w76k refutation probe. The false-FAIL and the
+        true-but-late non-ff rejection are one defect: nothing gates seed
+        freshness at launch.
