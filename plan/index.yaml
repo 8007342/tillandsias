@@ -12154,6 +12154,12 @@ plan_index:
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
         - type: progress
+          ts: "2026-08-16T09:45:23Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0923z"
+          host: macos
+          summary: |
+            CLOSING RUN COMPLETE — all three criteria hold with current-build evidence: dist tray git 7bc647f6 restaged guest 32b488cc over the release sha, every image rebuilt digest-keyed; /home/forge/.gitconfig + per-project mirror rewrite re-verified live; REAL push through the mirror relayed to the actual GitHub repo (ref verified upstream host-side, then removed via gh api — the mirror's pre-receive denies deletions by design, recorded as a docs note for 749/755); TLS parity git/curl/node/python all green through the enclave CA with the no-override env proof printed first. Evidence packet: plan/issues/macos-forge-349-closing-run-2026-08-16.md; raw transcript target/smoke-e2e/07-349-closing-run.log. Run was operator-authorized-unattended (hourly loop); deliverable says attended — operator countersign invited, status set completed on the strength of the evidence.
+        - type: progress
           ts: "2026-08-12T05:09:30Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t050913z"
           host: macos
@@ -52293,6 +52299,12 @@ plan_index:
         (mirror-side upstream-auth verdicts — still unpublished on enclaves
         whose images predate it; arrives with the next image rebuild).
       events:
+        - type: progress
+          ts: "2026-08-16T10:29:04Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1023z"
+          host: macos
+          summary: |
+            MECHANISM SLICE LANDED: report_seed_staleness at the forge launch-arg site prints an unconditional one-line verdict — branch, local sha, last-fetched-origin sha, behind-count, fetch-age-h, fresh/stale/unknown — computed entirely from LOCAL refs (no network in the launch path; the tracking ref's own age is stated so stale knowledge cannot pose as freshness). Criterion 2 discharged: a validation-lane launch can no longer look clean without the staleness in the same output (verified inputs on the live seed checkout: local 1496e89f0b40, origin/main 0548ee1f224a, behind 562 — the next launch prints verdict=stale). Criterion 1's ENFORCEMENT is opt-in (TILLANDSIAS_SEED_STALENESS_MAX_BEHIND refuses with loud remediation; exit 1) because the launcher is shared fleet-wide and a hard default would change sibling behavior unattended — the refuse-vs-auto-ff DEFAULT plus criterion 3 (the documented/automated refresh path) remain on the operator ruling this packet holds. Unit pin seed_staleness_tests::verdict_line_shapes (runs under --bins — the 731-vaqx spelling — 1/1), clippy clean.
         - type: filed
           ts: "2026-08-16T04:43:00Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0423z

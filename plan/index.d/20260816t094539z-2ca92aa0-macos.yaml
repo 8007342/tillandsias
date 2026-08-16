@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-forge-config-trust-live-parity
+    field: status
+    value: completed
+    ts: "2026-08-16T09:45:39Z"
+    host: macos
+
+events:
+  - packet_id: macos-forge-config-trust-live-parity
+    event:
+      type: completed
+      ts: "2026-08-16T09:45:39Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: 95d91125 plan/issues/macos-forge-349-closing-run-2026-08-16.md: push_rc=0 + upstream ref verified-then-removed + TLS 4/4 + no-ca-override-env
+  - packet_id: macos-forge-config-trust-live-parity
+    event:
+      type: note
+      ts: "2026-08-16T09:45:39Z"
+      host: macos
+      summary: >
+        all three exit criteria discharged with current-build live evidence; operator countersign invited on the attended clause
