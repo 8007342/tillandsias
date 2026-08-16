@@ -9,7 +9,7 @@ sources:
   - crates/tillandsias-headless/src/vsock_server.rs
 authority: high
 status: current
-tier: committed
+tier: bundled
 summary_generated_by: "windows meta-orchestration cycle, orders 147 + 690-xeda"
 bundled_into_image: false
 committed_for_project: true

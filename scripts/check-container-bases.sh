@@ -70,10 +70,16 @@ expect_base "images/router/Containerfile" "docker.io/library/caddy:2-alpine"
 
 latest_hits="$(
     # test-running-image-freshness.sh excluded: fixture must name the freshest local build
+    # The three mirror-identity fixtures (749-54pv/2fqj/6uby) are excluded for
+    # the same reason: each rebuilds and probes the CURRENT local git image.
     grep -RInE 'tillandsias-[a-z0-9_-]+:latest|docker\.io/library/[a-z0-9_-]+:latest|alpine:latest|nixos/nix:latest' \
         --exclude='check-container-bases.sh' \
         --exclude='build-image.sh' \
         --exclude='test-running-image-freshness.sh' \
+        --exclude='test-mirror-host-cert-and-sshd.sh' \
+        --exclude='test-mirror-receive-wrapper.sh' \
+        --exclude='test-mirror-sshd-posture.sh' \
+        --exclude='test-ssh-lane-sidecar.sh' \
         "$ROOT/scripts" \
         "$ROOT/images" \
         "$ROOT/docs/cheatsheets" \

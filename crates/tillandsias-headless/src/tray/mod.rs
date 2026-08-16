@@ -4628,6 +4628,38 @@ mod tests {
         server.join().expect("server thread joined");
     }
 
+    /// Pin TILLANDSIAS_HOST_PROJECT_ROOT to an empty per-test directory for
+    /// the tests that reach serve_mcp_connection's project validation. The
+    /// validator scans the AMBIENT project root, so without this these tests
+    /// pass or fail based on which other test mutated the env first and on
+    /// whether the host's ~/src happens to be empty — the 638-ehzi
+    /// schedule-race class, reproduced 2026-08-16 when newly added tests
+    /// shifted the schedule and a non-empty ~/src (created 08-12) made solo
+    /// runs fail deterministically. An EMPTY root is the deliberate fixture:
+    /// empty-scan-is-valid is the documented open-host behavior these tests
+    /// had been relying on implicitly.
+    fn with_empty_project_root<T>(f: impl FnOnce() -> T) -> T {
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-empty-project-root-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let prev = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        unsafe {
+            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
+        }
+        let out = f();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
+                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
+            }
+        }
+        out
+    }
+
     /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
     /// lane peer — one JSON-RPC object per line, replies in order.
     ///
@@ -4637,41 +4669,44 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        let (server_side, client_side) =
-            UnixStream::pair().expect("UnixStream::pair available on linux");
-        let identity = LaneIdentity::new("demo", "default");
-        let server = std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+        with_empty_project_root(|| {
+            let (server_side, client_side) =
+                UnixStream::pair().expect("UnixStream::pair available on linux");
+            let identity = LaneIdentity::new("demo", "default");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
 
-        let mut writer = client_side.try_clone().expect("clone client side");
-        let mut lines = BufReader::new(client_side).lines();
+            let mut writer = client_side.try_clone().expect("clone client side");
+            let mut lines = BufReader::new(client_side).lines();
 
-        writeln!(
-            writer,
-            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
-        )
-        .expect("write initialize");
-        let resp: serde_json::Value =
-            serde_json::from_str(&lines.next().expect("initialize reply").expect("readable"))
-                .expect("valid JSON");
-        assert_eq!(resp["id"], 1);
-        assert_eq!(
-            resp["result"]["serverInfo"]["name"],
-            "tillandsias-host-services"
-        );
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+            )
+            .expect("write initialize");
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("initialize reply").expect("readable"))
+                    .expect("valid JSON");
+            assert_eq!(resp["id"], 1);
+            assert_eq!(
+                resp["result"]["serverInfo"]["name"],
+                "tillandsias-host-services"
+            );
 
-        writeln!(
-            writer,
-            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
-        )
-        .expect("write tools/list");
-        let resp: serde_json::Value =
-            serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
-                .expect("valid JSON");
-        assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 3);
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+            )
+            .expect("write tools/list");
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
+                    .expect("valid JSON");
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 3);
 
-        drop(writer);
-        drop(lines);
-        server.join().expect("server thread joined");
+            drop(writer);
+            drop(lines);
+            server.join().expect("server thread joined");
+        });
     }
     /// Order 505: per-lane socket location and 0600 permissions.
     /// Asserts $XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock path shape
@@ -4725,43 +4760,46 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        // Set a forged environment variable in the test process
-        unsafe {
-            std::env::set_var("TILLANDSIAS_PROJECT", "attacker-wins");
-        }
+        with_empty_project_root(|| {
+            // Set a forged environment variable in the test process
+            unsafe {
+                std::env::set_var("TILLANDSIAS_PROJECT", "attacker-wins");
+            }
 
-        let (server_side, client_side) =
-            UnixStream::pair().expect("UnixStream::pair available on linux");
-        // Listener context attributes this connection to project "alpha", instance "w1"
-        let identity = LaneIdentity::new("alpha", "w1");
-        let server = std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+            let (server_side, client_side) =
+                UnixStream::pair().expect("UnixStream::pair available on linux");
+            // Listener context attributes this connection to project "alpha", instance "w1"
+            let identity = LaneIdentity::new("alpha", "w1");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
 
-        let mut writer = client_side.try_clone().expect("clone client side");
-        let mut lines = BufReader::new(client_side).lines();
+            let mut writer = client_side.try_clone().expect("clone client side");
+            let mut lines = BufReader::new(client_side).lines();
 
-        // Send tools/call for a non-WEB category
-        writeln!(
+            // Send tools/call for a non-WEB category
+            writeln!(
             writer,
             r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"publish_local","arguments":{{"category":"INVALID"}}}}}}"#
         )
         .expect("write tools/call");
 
-        let resp: serde_json::Value =
-            serde_json::from_str(&lines.next().expect("reply").expect("readable"))
-                .expect("valid JSON");
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("reply").expect("readable"))
+                    .expect("valid JSON");
 
-        // The error code is -32000
-        assert_eq!(resp["id"], 1);
-        assert_eq!(resp["error"]["code"], -32000);
+            // The error code is -32000
+            assert_eq!(resp["id"], 1);
+            assert_eq!(resp["error"]["code"], -32000);
 
-        drop(writer);
-        drop(lines);
-        server.join().expect("server thread joined");
+            drop(writer);
+            drop(lines);
+            server.join().expect("server thread joined");
 
-        // Clean up env
-        unsafe {
-            std::env::remove_var("TILLANDSIAS_PROJECT");
-        }
+            // Clean up env
+            unsafe {
+                std::env::remove_var("TILLANDSIAS_PROJECT");
+            }
+        });
     }
 
     /// Order 505: Different lanes have isolated socket subdirectories.

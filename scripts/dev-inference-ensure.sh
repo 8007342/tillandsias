@@ -128,13 +128,11 @@ ensure_container() {
         fi
         return 0
     fi
-    _ec_img=""
-    if podman image exists "localhost/tillandsias-inference:latest" 2>/dev/null; then
-        _ec_img="localhost/tillandsias-inference:latest"
-    else
-        _ec_img="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
-            | grep '^localhost/tillandsias-inference:v' | sort -V | tail -1 || true)"
-    fi
+    # Newest VERSIONED local build only — never a mutable :latest reference
+    # (container-base policy; build-image.sh always version-tags, so the
+    # versioned glob is the complete candidate set).
+    _ec_img="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null \
+        | grep '^localhost/tillandsias-inference:v' | sort -V | tail -1 || true)"
     [ -n "$_ec_img" ] || return 2
     # Same hardening and the SAME model cache as the runtime container
     # (build_inference_run_args), minus the enclave network and proxy — this
