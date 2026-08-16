@@ -63,6 +63,11 @@ TOKEN_FILE="${TILLANDSIAS_VAULT_TOKEN_FILE:-/tmp/tillandsias-vault-token}"
 VAULT_ADDR="${VAULT_ADDR:-https://vault:8200}"
 VAULT_CACERT="${VAULT_CACERT:-/etc/tillandsias/ca.crt}"
 RECEIVE_PATH="${TILLANDSIAS_RECEIVE_PATH:-/usr/local/bin/tillandsias-receive}"
+# T6 (749-2fqj): sshd sessions do NOT inherit the container environment, so the
+# wrapper's fixed-path resolution travels via SetEnv in the rendered config.
+# Defaults follow the entrypoint's own variables when present.
+RECEIVE_PROJECT="${TILLANDSIAS_RECEIVE_PROJECT:-${PROJECT:-}}"
+RECEIVE_ROOT="${TILLANDSIAS_RECEIVE_ROOT:-${TILLANDSIAS_GIT_SERVICE_ROOT:-/srv/git}}"
 CA_FILE="${TILLANDSIAS_TRUSTED_USER_CA_FILE:-}"
 SIGNER_CMD="${TILLANDSIAS_SSH_SIGNER_CMD:-}"
 
@@ -195,6 +200,10 @@ AuthorizedKeysFile none
 TrustedUserCAKeys $TRUSTED_CA
 AuthorizedPrincipalsFile $PRINCIPALS_FILE
 ForceCommand $RECEIVE_PATH
+# T6 (749-2fqj): the wrapper's fixed-path inputs. Sessions inherit no container
+# env; these are the ONLY channel, and the wrapper fails loud when they are
+# empty rather than guessing a repository.
+SetEnv TILLANDSIAS_RECEIVE_ROOT=$RECEIVE_ROOT TILLANDSIAS_RECEIVE_PROJECT=$RECEIVE_PROJECT TILLANDSIAS_MIRROR_ID=$MID
 ExposeAuthInfo yes
 AllowTcpForwarding no
 AllowAgentForwarding no

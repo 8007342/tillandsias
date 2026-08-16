@@ -457,6 +457,7 @@ specs:
   - litmus:git-mirror-relay-token-expiry
   - litmus:mirror-sshd-posture-shape
   - litmus:mirror-host-cert-and-sshd-shape
+  - litmus:mirror-receive-wrapper-shape
   - litmus:forge-upstream-auth-gate
   coverage_ratio: 83
   last_verified: '2026-07-23'
