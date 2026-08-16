@@ -103,6 +103,13 @@ RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
 # T11 staged migration flips the lane.
 COPY sshd-identity.sh /usr/local/bin/sshd-identity.sh
 
+# @trace spec:git-mirror-service — order 749-2fqj (design T6): the ForceCommand
+# receive wrapper. Execs git-receive-pack on the FIXED project path — the
+# requested target in SSH_ORIGINAL_COMMAND is ignored by design (§4a M5) —
+# and exports the four TILLANDSIAS_PUSH_* audit variables parsed from the
+# authenticating certificate ($SSH_USER_AUTH, ExposeAuthInfo yes).
+COPY tillandsias-receive.sh /usr/local/bin/tillandsias-receive
+
 # @trace spec:tillandsias-vault, spec:git-mirror-service
 COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl
 COPY vault-agent-bootstrap.sh /usr/local/bin/vault-agent-bootstrap

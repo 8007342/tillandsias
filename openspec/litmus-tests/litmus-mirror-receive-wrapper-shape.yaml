@@ -1,0 +1,64 @@
+# @trace spec:git-mirror-service
+#
+# Pins order 749-2fqj (design T6+T7): the ForceCommand receive wrapper that
+# lands every authenticated push in the FIXED project repository (§4a M5 —
+# the requested target in SSH_ORIGINAL_COMMAND is ignored by design), exports
+# the four TILLANDSIAS_PUSH_* audit variables parsed from the authenticating
+# certificate, and refuses non-receive verbs loud; plus the T7 receive
+# hardening being an EVERY-START migration that reaches pre-existing volumes
+# with fsckObjects effective, not decorative.
+#
+# The full container M5 proof (real sshd, real certs, real push) lives in
+# scripts/test-mirror-receive-wrapper.sh mode m5-container (quick tier runs
+# the offline lanes; the container lane is the suite's `all` mode and the
+# closure evidence). The order-579 suite covers the pre-receive relay half.
+name: litmus:mirror-receive-wrapper-shape
+spec: git-mirror-service
+phase: pre-build
+description: >
+  Pin tillandsias-receive's fixed-path contract, audit-variable export, loud
+  refusal grammar, the sshd_config SetEnv channel, the Containerfile COPY,
+  and the offline upgraded-volume hardening scenarios.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains images/git/tillandsias-receive.sh
+  - workspace contains scripts/test-mirror-receive-wrapper.sh
+  - shell utilities (git, ssh-keygen, awk, grep, bash) are available in PATH
+
+critical_path:
+  - step: "wrapper exists, is executable, and parses as POSIX sh"
+    command: "test -x images/git/tillandsias-receive.sh && sh -n images/git/tillandsias-receive.sh && echo 'ok: wrapper-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: wrapper-parses"
+
+  - step: "Containerfile ships the wrapper at the ForceCommand path"
+    command: "grep -q 'COPY tillandsias-receive.sh /usr/local/bin/tillandsias-receive' images/git/Containerfile && echo 'ok: containerfile-copy'"
+    timeout_ms: 3000
+    expected_behavior: "ok: containerfile-copy"
+
+  - step: "sshd_config renderer carries the SetEnv channel (sessions inherit no container env)"
+    command: "grep -q 'SetEnv TILLANDSIAS_RECEIVE_ROOT=' images/git/sshd-identity.sh && echo 'ok: setenv-channel'"
+    timeout_ms: 3000
+    expected_behavior: "ok: setenv-channel"
+
+  - step: "audit variables are exported from the certificate, never from the client request"
+    command: "bash scripts/test-mirror-receive-wrapper.sh vars-exported 2>&1 | tail -1"
+    timeout_ms: 15000
+    expected_behavior: "ok:receive-fixture:push-vars-exported-from-cert"
+
+  - step: "non-receive verbs, missing auth info, plain keys, and missing project are each refused with a named cause"
+    command: "bash scripts/test-mirror-receive-wrapper.sh refusals 2>&1 | tail -1"
+    timeout_ms: 15000
+    expected_behavior: "ok:receive-fixture:refusals-loud-and-named"
+
+  - step: "T7: force push and deletion are refused on an UPGRADED pre-existing volume"
+    command: "bash scripts/test-mirror-receive-wrapper.sh force-upgraded 2>&1 | tail -1"
+    timeout_ms: 20000
+    expected_behavior: "ok:receive-fixture:force-and-delete-refused-on-upgraded-volume"
+
+  - step: "T7: fsckObjects is EFFECTIVE on the upgraded volume (malformed object refused; permissive control copy accepts)"
+    command: "bash scripts/test-mirror-receive-wrapper.sh fsck-upgraded 2>&1 | tail -1"
+    timeout_ms: 20000
+    expected_behavior: "ok:receive-fixture:fsck-effective-on-upgraded-volume"
