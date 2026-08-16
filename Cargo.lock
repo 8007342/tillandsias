@@ -3128,6 +3128,7 @@ dependencies = [
  "sha2",
  "signal-hook",
  "tempfile",
+ "tillandsias-browser-mcp",
  "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-logging",
