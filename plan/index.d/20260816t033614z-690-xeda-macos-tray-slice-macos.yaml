@@ -1,0 +1,49 @@
+events:
+  - packet_id: steady-state-polling-and-idle-wakeups
+    order: 690-xeda
+    type: progress
+    ts: "2026-08-16T03:36:14Z"
+    agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0323z"
+    host: macos
+    summary: |
+      TRAY HALF (macOS) DONE AND MEASURED: exit criterion 3 discharged —
+      the tick timer no longer fires while the push subscription is healthy,
+      and resumes on drop.
+
+      The fix is an ADOPTION, not an invention: order 154's tick-retirement
+      helper `wait_tick_drop_or_request` (shared, fully pinned in
+      tillandsias-host-shell::subscription_health — including the 10-period
+      virtual-time suppression proof and the closed-channel timer re-arm)
+      was already in the workspace; action_host.rs still called the older
+      always-ticking `wait_tick_or_subscription_drop`. The call site now
+      passes suppress_timer = health.is_healthy(). macOS needs no
+      fast-poll-burst raiser: the burst intent is served push-natively
+      (login-transition CloudRefreshRequest primes the cloud list on the
+      subscription connection), so the request Notify exists unwired,
+      documented at the declaration.
+
+      MEASURED (criterion 4, tray half) — same HEAD with and only with this
+      diff (git-stash A/B), both binaries ad-hoc signed with the VZ
+      entitlement, run against the same freshly provisioned v0.4.260815.1
+      substrate, 13 x 5s top IDLEW samples at healthy idle (push healthy,
+      cloud list delivered, no user interaction):
+        baseline (always-tick)   15.5 per 5s  = 3.11 wakeups/s
+        fixed (timer suppressed)  9.6 per 5s  = 1.92 wakeups/s   (-38%)
+      Raw samples + tray logs: target/idle-measure/ on the macOS host.
+      The delta is far larger than the bare 2-fires-per-minute arithmetic
+      (0.033/s) — the timer wake cascaded through the tokio timer wheel and
+      runtime workers into multiple OS-level wakeups per fire.
+
+      OBSERVATION for the remaining work: the 1.92/s residual is the VM
+      living inside the tray process — VZ vCPU/timer servicing for the
+      guest's remaining ticks (the 30s podman shell-out and 2s/15s ticks
+      this packet still names) plus AppKit. The host-side sites still open:
+      vz.rs:1494 (shutdown-completion 250ms poll vs guestDidStop delegate)
+      and transport_macos.rs:383 (20Hz try_recv spin) — both are
+      TRANSIENT-path polls (shutdown, connect), not steady-state, so the
+      steady-state outcome clause is now satisfied on macOS; they remain
+      open as the packet's justification-or-replacement items.
+
+      Verification: cargo test -p tillandsias-macos-tray --bins 84/84
+      (the --bins spelling per 731-vaqx), tillandsias-host-shell 78/78,
+      clippy --all-targets clean.
