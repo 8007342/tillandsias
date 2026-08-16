@@ -184,10 +184,25 @@ commits touching the plan crate stack concurrent release builds against the
 same 4 cores. This is unmeasured on **every** host and is one `timing_emit`
 away from being answered.
 
-On this host it is currently moot and that is itself worth recording:
-`.git/hooks` contains only `*.sample`, `core.hooksPath` is unset, and
-`TILLANDSIAS_HOST_EXPERTS` is unset — so present per-commit cost is literally
-zero.
+This became LIVE on this host mid-session, and the transition is worth
+recording. At 15:0x the checkout had no hooks at all (`.git/hooks` held only
+`*.sample`, `core.hooksPath` unset at local/global/system scope), so per-commit
+cost was literally zero. At 15:23 `./build.sh --check` installed
+`pre-commit`, `post-commit` and `pre-push`. From that point the backgrounded
+`cargo build --release -p tillandsias-plan` fires for real on any commit
+touching the plan crate — on 4 E-cores, with no debounce and no single-flight
+lock.
+
+**A `core.hooksPath` probe is therefore not a durable answer to "are hooks
+installed?" on a host that has not yet run a build.** Any check that samples it
+before first build gets a false negative.
+
+Second finding from the same transition: the installed `pre-commit` hook runs
+without the interactive session's PATH, so `scripts/check-cheatsheet-tiers.sh`
+failed with `line 57: cargo: command not found` and degraded to a non-blocking
+validation ERROR. The hook found cargo absent on a host where cargo is
+installed and on PATH for every interactive shell. Hook PATH is its own defect
+surface.
 
 ## Finding — in-distro ollama in the RUNTIME distro is not durable
 
