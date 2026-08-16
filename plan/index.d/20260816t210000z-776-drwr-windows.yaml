@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows operator-attended session (The Tlatoāni, windows/Yolanda),
+# 2026-08-16.
+packets:
+  - packet_id: windows-tray-lane-launch-omits-accel-envelope
+    release_target: stable-milestone-v1
+    order: 776-drwr
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: windows
+    priority: p2
+    tags:
+      - windows
+      - tray
+      - forge
+      - accel
+      - provenance
+      - v0.5
+    title: |
+      The Windows tray lane-launch path never sets TILLANDSIAS_ACCEL_ENVELOPE — the first real tray-launched lane ran with no accel claim at all, and lib-common.sh's agent-facing "Accelerators" line is absent from lane logs.
+    context: |
+      Measured live 2026-08-16 ~20:55-21:05Z on windows/Yolanda, inside the
+      first real tray-launched forge lane on this host (container
+      tillandsias-java-forge, image localhost/tillandsias-forge:v0.4.260815.1,
+      guest v0.4.260815.1): TILLANDSIAS_ACCEL_ENVELOPE is ABSENT — not in
+      `podman inspect .Config.Env`, not in /proc/1/environ, and no
+      "Accelerators" line in `podman logs`. Not a GPU claim — a missing claim.
+      The claim side is headless main.rs `.env(TILLANDSIAS_ACCEL_ENVELOPE, ...)`,
+      which evidently does not reach this launch path.
+      Cross-references: 769-w3ma (its `accel_class=<value|unknown>` grammar now
+      has a confirmed real absent-envelope case on Windows) and 599-3b9h
+      (whose criterion-2 read produced this measurement; evidence events in
+      plan/index.d/20260816t205500z-599-3b9h-reads-windows.yaml).
+    exit_criteria:
+      - |
+          A tray-launched Windows forge lane carries TILLANDSIAS_ACCEL_ENVELOPE in its container environment (visible in `podman inspect .Config.Env` and /proc/1/environ), with the first line naming the host's accel class (cpu-only on this hardware).
+      - |
+          lib-common.sh's agent-facing "Accelerators" line renders in the lane log for tray-launched lanes.
+      - |
+          The launch-path divergence is named in the fix: where the headless `.env(TILLANDSIAS_ACCEL_ENVELOPE, ...)` claim attaches, and why the Windows tray lane-launch path bypassed it.
+    events:
+      - type: filed
+        ts: "2026-08-16T21:00:00Z"
+        agent_id: windows-fable5-attended-20260816
+        host: windows
+        summary: |
+          Filed from the 599-3b9h criterion-2 read during the operator-attended
+          session 2026-08-16 (The Tlatoāni, windows/Yolanda): the first real
+          tray-launched lane on this host had no accel envelope anywhere —
+          container env, PID 1 environ, or lane log.
