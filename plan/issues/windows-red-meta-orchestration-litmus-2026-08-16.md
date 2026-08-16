@@ -48,3 +48,32 @@ trunk safety is unaffected; the loss is local diagnostic power.
 Resize the three step budgets for the slowest host (as 770-f6u4 did in the
 same file family), and hand item 4's seam repro to the 756-2jnj owner with
 the step-8 output above.
+
+## Disposition (cycle 5, 2026-08-16)
+
+- Items 1 and 3 RESIZED and expected green: eligibility step 4 5s -> 60s
+  (probe passes standalone in <1s; the old budget priced only the skip
+  branches), opsx-sync-merge step 4 10s -> 90s (fixture PASSES on windows in
+  ~18s standalone, measured).
+- Item 2 resized 10s -> 90s but stays RED on windows for a REAL reason the
+  timeout was masking: test-hash-image-sources.sh is not windows-portable
+  (autocrlf clone-hash divergence + fileMode=false voiding the chmod
+  scenario). Spun off to plan/issues/
+  hash-image-sources-fixture-windows-portability-2026-08-16.md — this is a
+  fixture-portability defect, not a step-budget resize.
+- Item 4 (credential-channel step 8 mirror seam) untouched, remains with the
+  756-2jnj owner: the seam's fixture does not produce the forge-mirror
+  authorized path on windows; step-8 output recorded above.
+- Verification run (full meta-orchestration instant suite under the harness,
+  post-resize): 12 PASS / 3 FAIL, up from 11/15. Items 1 and 3 GREEN at the
+  new budgets. Remaining fails: the item-4 seam (expected), plus two NEW
+  boundary-jitter timeouts the same class predicted — dirty-tree STEP 3
+  (fixture measures 9.4s standalone vs its 10s budget; the SAME fixture
+  passed at 10s in the opsx suite minutes later) and
+  litmus:ledger-node-claim-shape STEP 2 (8 concurrent claimants measure 9.4s
+  standalone vs an 8s budget — over budget even unloaded; green in cycle 4
+  was luck). Resized in the same slice: dirty-tree step 3 10s -> 90s, step 4
+  10s -> 60s (5.2s measured, inside sibling-step harness tax), opsx step 5
+  10s -> 90s (same 9.4s fixture), claim step 2 8s -> 60s. Expected windows
+  steady state after this slice: 13 PASS / 2 FAIL (item-2 fixture
+  portability + item-4 seam), both owned elsewhere.

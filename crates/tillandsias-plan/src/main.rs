@@ -212,7 +212,9 @@ const USAGE: &str = concat!(
     "           methodology-index [--root D]\n",
     "                                     every indexed path with its file:line (the query surface)\n",
     "           append-event <id|order> <type> <summary> --ts <ISO> [--agent A] [--host H]\n",
-    "                                     append an event, VALIDATED before flush (refuses a broken ledger)\n",
+    "                                     append an event, VALIDATED before flush (refuses a broken ledger).\n",
+    "                                     --agent defaults from TILLANDSIAS_AGENT_ID and REFUSES when both\n",
+    "                                     are absent; --host defaults to the compiled platform (772-4se9)\n",
     "           grade [--root D] [--case ID] [--envelope F|-] [--list-engines] [SET.yaml ...]\n",
     "                                     ORDER 394d. Grade the experts against the COMMITTED ground\n",
     "                                     truth. Defaults to openspec/litmus-tests/groundtruth/\n",
@@ -436,29 +438,69 @@ fn now_epoch() -> i64 {
 
 /// The host string stamped on a ledger write when `--host` was not passed.
 ///
-/// It used to fall back to the literal `"host"`. Measured on 2026-08-15: eight
-/// of the fifty-two attributed entries in plan/index.d/ carry `host: host`
-/// beside twenty-four `linux_immutable`, twelve `macos` and eight `windows`.
-/// In a three-host CRDT ledger that makes roughly one write in six
-/// unattributable -- and worse, `host` is a plausible-LOOKING value, so it
-/// reads as a deliberate label rather than as a missing one. `unknown` is the
-/// honest word for an absence and sorts obviously wrong in any per-host report.
+/// It used to fall back to the literal `"host"`, then to `"unknown"` — and
+/// append-event, worse, hardcoded `"linux"`, a wrong FACT on two of the four
+/// host kinds, written by the windows .exe into durable events (order
+/// 772-4se9, plan/issues/plan-append-event-defaults-fabricate-host-linux-
+/// 2026-08-16.md). But the platform is not an absence: the binary knows it at
+/// compile time. `std::env::consts::OS` says exactly `linux`/`macos`/`windows`
+/// on the three host platforms, which is the ledger's own vocabulary
+/// (`--host <linux|macos|windows|...>`), so the default is now that compiled
+/// fact. Callers wanting the richer identity (`linux_immutable`, a forge
+/// label) still pass `--host`.
 ///
-/// TILLANDSIAS_HOST_KIND is still consulted for compatibility, but note it
-/// answers a DIFFERENT question -- forge-vs-host, not which machine wrote this
-/// -- and build.sh only ever compares it against "forge". Conflating a kind
-/// with an identity is how the useless default got here; the warning below
-/// points the caller at the flag that actually carries the answer.
+/// TILLANDSIAS_HOST_KIND is consulted first for compatibility — it answers a
+/// DIFFERENT question (forge-vs-host, not which machine wrote this), but when
+/// it is set to `forge` it is the more specific truth.
 fn resolve_writer_host() -> String {
-    if let Ok(kind) = std::env::var("TILLANDSIAS_HOST_KIND")
+    writer_host_from(std::env::var("TILLANDSIAS_HOST_KIND").ok())
+}
+
+/// Pure core of [`resolve_writer_host`], unit-testable without env races.
+fn writer_host_from(kind: Option<String>) -> String {
+    if let Some(kind) = kind
         && !kind.is_empty()
     {
         return kind;
     }
-    eprintln!(
-        "warning: ledger write has no --host and TILLANDSIAS_HOST_KIND is unset; recording host as 'unknown'. Pass --host <linux|macos|windows|...> so the fragment is attributable."
-    );
-    "unknown".to_string()
+    std::env::consts::OS.to_string()
+}
+
+/// The agent_id for a ledger event when `--agent` was not passed.
+///
+/// Precedence mirrors scripts/agent-identity.sh (order 756-hn3a): an explicit
+/// `--agent` wins, then launch-provided TILLANDSIAS_AGENT_ID, and when both
+/// are absent the write is REFUSED. The literal string `unknown` is not an
+/// identity — it is the hand-composed improvisation 756-hn3a removed from
+/// claim recipes — so it counts as absent from either source (order 772-4se9).
+fn resolve_writer_agent(flag: Option<String>) -> String {
+    match writer_agent_from(flag, std::env::var("TILLANDSIAS_AGENT_ID").ok()) {
+        Ok(agent) => agent,
+        Err(msg) => {
+            eprintln!("{msg}");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// Pure core of [`resolve_writer_agent`], unit-testable without env races.
+fn writer_agent_from(flag: Option<String>, env_id: Option<String>) -> Result<String, String> {
+    let usable = |s: &String| {
+        let t = s.trim();
+        !t.is_empty() && t != "unknown"
+    };
+    if let Some(agent) = flag.filter(usable) {
+        return Ok(agent);
+    }
+    if let Some(agent) = env_id.filter(usable) {
+        return Ok(agent);
+    }
+    Err(
+        "error: ledger event has no --agent and TILLANDSIAS_AGENT_ID is unset — refusing to \
+         record agent_id 'unknown'. Derive the id from scripts/agent-identity.sh (order \
+         756-hn3a) and pass --agent, or export TILLANDSIAS_AGENT_ID."
+            .to_string(),
+    )
 }
 
 /// Resolve the `--ts` for a ledger write (order 719-kgr5).
@@ -2875,8 +2917,13 @@ fn main() {
             // append-event <ref> <type> <summary> --ts <ISO> [--agent A] [--host H]
             let mut positional: Vec<String> = Vec::new();
             let mut ts: Option<String> = None;
-            let mut agent = "unknown".to_string();
-            let mut host = "linux".to_string();
+            // 772-4se9: no more hardcoded agent="unknown" / host="linux" —
+            // those defaults fabricated a wrong host FACT on two of the four
+            // host kinds and an improvised identity on all of them. Absent
+            // flags now resolve after the ref resolves: host from the
+            // compiled platform, agent from TILLANDSIAS_AGENT_ID or refusal.
+            let mut agent: Option<String> = None;
+            let mut host: Option<String> = None;
             let mut flag_type: Option<String> = None;
             let mut flag_summary: Option<String> = None;
             let mut backfill = false;
@@ -2889,11 +2936,11 @@ fn main() {
                     }
                     "--agent" => {
                         i += 1;
-                        agent = args.get(i).cloned().unwrap_or(agent);
+                        agent = args.get(i).cloned();
                     }
                     "--host" => {
                         i += 1;
-                        host = args.get(i).cloned().unwrap_or(host);
+                        host = args.get(i).cloned();
                     }
                     // Accept --type/--summary as explicit flags. Before this
                     // (690-2kwd fallout, 2026-08-12), passing them was silently
@@ -2948,6 +2995,14 @@ fn main() {
                 eprintln!("error: {}", unresolved_reason(&ledger, reference));
                 std::process::exit(1);
             };
+            // 772-4se9: identity resolves AFTER the ref so an unresolvable
+            // reference still reports as such (pinned by
+            // litmus:append-event-rejects-unknown-flags-shape), but BEFORE
+            // any byte is written — a refusal here writes nothing.
+            let agent = resolve_writer_agent(agent);
+            let host = host
+                .filter(|h| !h.trim().is_empty())
+                .unwrap_or_else(resolve_writer_host);
             let block = edit::event_block(etype, &ts, &agent, &host, summary);
             let raw = match std::fs::read_to_string(&index) {
                 Ok(r) => r,
@@ -3541,6 +3596,66 @@ mod tests {
     use super::*;
     use answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
     use std::collections::BTreeMap;
+
+    /// 772-4se9. append-event hardcoded host="linux", writing a wrong FACT
+    /// into durable events from every non-linux build. The default is now the
+    /// compiled platform, so this test — compiled and run on every host that
+    /// gates a push — proves no build can fabricate another platform's name.
+    #[test]
+    fn writer_host_default_is_the_compiled_platform_never_a_fabricated_linux() {
+        let host = writer_host_from(None);
+        assert_eq!(
+            host,
+            std::env::consts::OS,
+            "absent --host and TILLANDSIAS_HOST_KIND must yield the compiled platform"
+        );
+        assert_ne!(
+            host, "unknown",
+            "the platform is a known fact, not an absence"
+        );
+        #[cfg(not(target_os = "linux"))]
+        assert_ne!(
+            host, "linux",
+            "a non-linux build must never stamp host=linux by default (the 772-4se9 defect)"
+        );
+        // TILLANDSIAS_HOST_KIND still wins when set (forge), and an EMPTY
+        // kind is absence, not an identity.
+        assert_eq!(writer_host_from(Some("forge".into())), "forge");
+        assert_eq!(writer_host_from(Some(String::new())), std::env::consts::OS);
+    }
+
+    /// 772-4se9. agent_id="unknown" is the hand-composed improvisation
+    /// 756-hn3a removed: absent identity refuses instead of writing.
+    #[test]
+    fn writer_agent_refuses_absence_and_the_literal_unknown() {
+        assert_eq!(
+            writer_agent_from(Some("flag-id".into()), Some("env-id".into())).unwrap(),
+            "flag-id",
+            "an explicit --agent wins over the environment"
+        );
+        assert_eq!(
+            writer_agent_from(None, Some("windows-yolanda-fable5-20260816t124617z".into()))
+                .unwrap(),
+            "windows-yolanda-fable5-20260816t124617z",
+            "TILLANDSIAS_AGENT_ID is the launch-provided fallback"
+        );
+        assert!(
+            writer_agent_from(None, None).is_err(),
+            "no --agent and no TILLANDSIAS_AGENT_ID must refuse, never write 'unknown'"
+        );
+        assert!(
+            writer_agent_from(Some("unknown".into()), None).is_err(),
+            "the literal 'unknown' is not an identity from the flag"
+        );
+        assert!(
+            writer_agent_from(None, Some("unknown".into())).is_err(),
+            "the literal 'unknown' is not an identity from the environment"
+        );
+        assert!(
+            writer_agent_from(Some("   ".into()), Some(String::new())).is_err(),
+            "whitespace and empty values are absence"
+        );
+    }
 
     /// 696-6byc. A non-terminal ladder rung written with `--evidence` must NOT
     /// emit a terminal event: doing so makes the fragment claim completion in
