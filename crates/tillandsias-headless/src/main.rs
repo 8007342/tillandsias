@@ -2997,6 +2997,126 @@ fn read_host_project_current_branch(project_path: &Path) -> Option<String> {
     sanitize(head.trim().strip_prefix("ref: refs/heads/")?)
 }
 
+/// 763-munc: the seed-staleness verdict line, formatted from plain values so
+/// the shape is unit-testable without a repo. `behind`/`fetch_age_hours` are
+/// `None` when unknowable (no tracking ref, no FETCH_HEAD) — printed as
+/// `unknown`, never guessed. Verdict: `stale` when behind > 0, `fresh` when
+/// behind == 0, `unknown` otherwise — a checkout whose knowledge of upstream
+/// is itself old still says so via fetch-age-h.
+fn format_seed_staleness(
+    branch: &str,
+    local: &str,
+    upstream: Option<&str>,
+    behind: Option<u64>,
+    fetch_age_hours: Option<u64>,
+) -> String {
+    let up = upstream.unwrap_or("unknown");
+    let behind_s = behind.map_or("unknown".to_string(), |b| b.to_string());
+    let age_s = fetch_age_hours.map_or("unknown".to_string(), |a| a.to_string());
+    let verdict = match behind {
+        Some(0) => "fresh",
+        Some(_) => "stale",
+        None => "unknown",
+    };
+    format!(
+        "[tillandsias] seed-staleness: branch={branch} local={local} \
+         last-fetched-origin={up} behind={behind_s} fetch-age-h={age_s} verdict={verdict}"
+    )
+}
+
+/// Compute and print the seed-staleness verdict for a forge launch, entirely
+/// from LOCAL refs (`origin/<seed>` tracking ref + FETCH_HEAD mtime) — no
+/// network in the launch path, so the line is bounded and deterministic. The
+/// local tracking ref can itself lag upstream; `fetch-age-h` states exactly
+/// how old that knowledge is instead of pretending freshness.
+///
+/// Opt-in refusal: `TILLANDSIAS_SEED_STALENESS_MAX_BEHIND=<n>` refuses the
+/// launch (exit 1, loud remediation) when `behind` exceeds it. No auto-ff:
+/// mutating an operator-owned checkout is the 763-munc ruling still held
+/// open.
+fn report_seed_staleness(project_path: &Path, seed: &str) {
+    let git = |git_args: &[&str]| -> Option<String> {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(project_path)
+            .args(git_args)
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let s = String::from_utf8(out.stdout).ok()?;
+        let t = s.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    };
+    let local = git(&["rev-parse", "--short=12", "HEAD"]).unwrap_or_else(|| "unknown".into());
+    let tracking = format!("refs/remotes/origin/{seed}");
+    let upstream = git(&["rev-parse", "--short=12", &tracking]);
+    let behind = upstream.as_ref().and_then(|_| {
+        git(&["rev-list", "--count", &format!("HEAD..{tracking}")])
+            .and_then(|c| c.parse::<u64>().ok())
+    });
+    let fetch_age_hours = git(&["rev-parse", "--git-dir"]).and_then(|gd| {
+        let gd_path = if Path::new(&gd).is_absolute() {
+            PathBuf::from(&gd)
+        } else {
+            project_path.join(&gd)
+        };
+        std::fs::metadata(gd_path.join("FETCH_HEAD"))
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.elapsed().ok())
+            .map(|d| d.as_secs() / 3600)
+    });
+    eprintln!(
+        "{}",
+        format_seed_staleness(seed, &local, upstream.as_deref(), behind, fetch_age_hours)
+    );
+    if let Ok(max_s) = std::env::var("TILLANDSIAS_SEED_STALENESS_MAX_BEHIND")
+        && let Ok(max) = max_s.parse::<u64>()
+        && let Some(b) = behind
+        && b > max
+    {
+        eprintln!(
+            "[tillandsias] REFUSED: seed checkout is {b} commits behind \
+             origin/{seed} (bound {max}, TILLANDSIAS_SEED_STALENESS_MAX_BEHIND). \
+             Fetch and fast-forward the project checkout, or raise/unset the \
+             bound. Auto-fast-forward is deliberately NOT offered here — \
+             operator ruling pending on packet 763-munc."
+        );
+        std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod seed_staleness_tests {
+    use super::format_seed_staleness;
+
+    /// 763-munc pin: the verdict names BOTH shas, states unknowns as
+    /// `unknown` (never guessed), and classifies fresh/stale/unknown from
+    /// the behind count alone.
+    #[test]
+    fn verdict_line_shapes() {
+        let fresh = format_seed_staleness("main", "aaa111", Some("aaa111"), Some(0), Some(2));
+        assert!(fresh.contains("branch=main"));
+        assert!(fresh.contains("local=aaa111"));
+        assert!(fresh.contains("last-fetched-origin=aaa111"));
+        assert!(fresh.contains("behind=0"));
+        assert!(fresh.contains("fetch-age-h=2"));
+        assert!(fresh.ends_with("verdict=fresh"));
+
+        let stale = format_seed_staleness("main", "aaa111", Some("bbb222"), Some(562), None);
+        assert!(stale.contains("behind=562"));
+        assert!(stale.contains("fetch-age-h=unknown"));
+        assert!(stale.ends_with("verdict=stale"));
+
+        let unknown = format_seed_staleness("main", "aaa111", None, None, None);
+        assert!(unknown.contains("last-fetched-origin=unknown"));
+        assert!(unknown.contains("behind=unknown"));
+        assert!(unknown.ends_with("verdict=unknown"));
+    }
+}
+
 /// Mint the per-project git-mirror Vault Agent auto-auth credential.
 ///
 /// windows-260716-2 (P1, live repro on the WSL2 lane 2026-07-16): this
@@ -5501,6 +5621,14 @@ fn build_opencode_forge_args(
     // byte-identical to before. Caveat: a REUSED (not recreated) container
     // carries creation-time env, so a stale seed is possible until recreate.
     if let Some(seed) = read_host_project_current_branch(project_path) {
+        // 763-munc mechanism slice: a validation lane must not look clean
+        // without its seed's staleness stated in the same output. Verdict is
+        // unconditional; REFUSAL is opt-in via
+        // TILLANDSIAS_SEED_STALENESS_MAX_BEHIND (the refuse-vs-auto-ff
+        // DEFAULT is the operator decision the packet holds open, and this
+        // launcher is shared fleet-wide — a hard default here would change
+        // sibling hosts' behavior unattended).
+        report_seed_staleness(project_path, &seed);
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_FORGE_SEED_BRANCH={seed}"));
     }

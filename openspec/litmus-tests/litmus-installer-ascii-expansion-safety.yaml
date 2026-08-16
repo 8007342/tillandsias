@@ -1,3 +1,4 @@
+# freshness: auditor=linux-macuahuitl-fable5-20260816t1042z date=2026-08-16 verdict=refreshed scope=both steps re-run live and green (all three installer scripts present, bash -n clean, perl multibyte-adjacency scan empty); the bash-3.2 hazard it pins is platform-permanent, no drift in the pinned surfaces
 name: litmus:installer-ascii-expansion-safety
 spec: ci-release
 description: >

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# freshness: auditor=linux-macuahuitl-fable5-20260816t1140z date=2026-08-16 verdict=refreshed scope=fixture re-run live on linux 7/7 PASS (incl. case 7 stamp-demands-evidence); consumer wiring intact (build.sh invokes check-windows-only-sources-verified.sh at 2 sites, 716-f5kc report lane); no stale arm
 # @trace spec:windows-native-tray, spec:methodology-accountability
 #
 # Fixture for scripts/check-windows-only-sources-verified.sh (order 716-f5kc).
