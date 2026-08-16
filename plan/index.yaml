@@ -12154,6 +12154,12 @@ plan_index:
         - "representative mirror fetch/push plus Git, curl, Node, and Python TLS operations pass without editing host or repository config and without per-client CA override variables"
       events:
         - type: progress
+          ts: "2026-08-16T09:45:23Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0923z"
+          host: macos
+          summary: |
+            CLOSING RUN COMPLETE — all three criteria hold with current-build evidence: dist tray git 7bc647f6 restaged guest 32b488cc over the release sha, every image rebuilt digest-keyed; /home/forge/.gitconfig + per-project mirror rewrite re-verified live; REAL push through the mirror relayed to the actual GitHub repo (ref verified upstream host-side, then removed via gh api — the mirror's pre-receive denies deletions by design, recorded as a docs note for 749/755); TLS parity git/curl/node/python all green through the enclave CA with the no-override env proof printed first. Evidence packet: plan/issues/macos-forge-349-closing-run-2026-08-16.md; raw transcript target/smoke-e2e/07-349-closing-run.log. Run was operator-authorized-unattended (hourly loop); deliverable says attended — operator countersign invited, status set completed on the strength of the evidence.
+        - type: progress
           ts: "2026-08-12T05:09:30Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260812t050913z"
           host: macos
