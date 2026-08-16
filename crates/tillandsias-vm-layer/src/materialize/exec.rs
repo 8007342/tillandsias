@@ -13,6 +13,8 @@
 //!
 //! @trace spec:vm-provisioning-lifecycle (§3.4)
 
+// freshness: auditor=windows-fable5-mo-cycle6-20260816T2220Z date=2026-08-16 verdict=refreshed scope=standing audit (freshness-next draw): exported via materialize/mod.rs, consumed by the macos/wsl output adapters as designed, 6 in-file tests, RUNTIME_VIRTUAL_DIRS exclude/recreate invariant still coherent with snapshot_tar/recreate_runtime_dirs; no drift found
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
