@@ -1019,6 +1019,12 @@ plan_index:
         - "openspec/specs vsock-transport no longer sanctions unauthenticated 'accept from any CID' without an authz gate"
         - "./build.sh --check and --test pass"
       events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: verified
           ts: "2026-07-28T23:45:00Z"
           agent_id: "linux-mutable-metaorch-20260728"
@@ -8840,6 +8846,12 @@ plan_index:
         - "a retry after the build completes attaches to the cached image (no rebuild)"
         - "materialization emits a progress signal within ~5s of build start that the tray can render (test on the emit path)"
       events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: filed
           ts: "2026-07-10T03:20:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
@@ -9044,6 +9056,12 @@ plan_index:
         - "root cause named + pinned by a unit test on the guest dispatch path"
         - "InteractiveStream macOS parity cell flips done with live evidence"
       events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: filed
           ts: "2026-07-10T04:10:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260710T0202Z"
@@ -11056,6 +11074,12 @@ plan_index:
         - "macOS vz unit audited; same-directive hazard confirmed absent or fixed"
         - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
       events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: progress
           ts: "2026-08-16T11:25:40Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1123z"
@@ -12964,6 +12988,12 @@ plan_index:
         - "collection failure surfaces as an error field, never a fabricated healthy sample (spec:observability-metrics)"
         - "--diagnose --json gains a metrics block on macOS (read over the wire)"
       events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: filed
           ts: "2026-07-13T23:10:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
@@ -29181,6 +29211,12 @@ plan_index:
         - the active spec explicitly supersedes the former <=10 deletion relay semantics and records the lane-exit cleanup compatibility decision
         - focused git-mirror fixtures, the bound litmus, and the full local build gate pass
       events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - type: progress
           ts: "2026-08-11T22:50:49Z"
           agent_id: "linux-mutable-session-20260811"
@@ -39100,6 +39136,12 @@ plan_index:
         - a post-659 launch against a pre-659 live mirror either recreates it (no live sibling) or refuses with an explicit upgrade-skew error (live sibling)
         - the concurrent-forge litmus grows the skew case
       events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
         - ts: "2026-08-10T20:00:00Z"
           event: filed
           summary: filed from the 659-8faj implementation report (finding 1).
@@ -51246,6 +51288,13 @@ plan_index:
         - On a provisioned host, stat -c %a of the live CA key is not group/world-readable (or the key is delivered as a podman secret and no longer materialized world-readable on the host), demonstrated by a litmus that fails on a 0644 key.
         - Squid starts healthy and vault-cli require_cacert stays green on a fresh guest (the 2026-07-22 field repro path).
         - The entrypoint's unreachable branch is either made reachable (secret delivery) or removed in the same change — no fallback nobody takes remains.
+      events:
+        - type: claim
+          ts: "2026-08-16T19:06:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            yoga cycle drain: socket-audit-master batch seed host-20260816, agent linux-yoga-claude-20260816t185912z
     - packet_id: windows-installer-is-the-only-release-asset-with-no-integrity-path
       order: 756-rfdr
       status: ready
