@@ -52023,6 +52023,12 @@ plan_index:
         to 3.2 on macOS anyway. Feature-detect or single-dialect code, never
         version-sniff by $BASH_VERSION string compare.
       events:
+        - type: completed
+          ts: "2026-08-16T07:23:41Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0623z"
+          host: macos
+          summary: |
+            Criterion 1 DISCHARGED, packet complete. The last three carriers rewritten bash-3.2-clean and verified on this 3.2 host: loop-success-probe.sh and selective-tillandsias-reset.sh replace declare -A with space-delimited string sets (exact spaced-token membership — collision-free for identifier/hex keys — and dedup-preserving KEPT counting in the destructive reset, semantics pinned by an inline harness under /bin/bash 3.2); check-running-image-freshness.sh replaces mapfile with a while-read append. bash -n parses all three under 3.2. The gate allowlist is now EMPTY and stays a refuse-additions burndown list; verifiable closure holds: ./build.sh --check passes the attestation-ledger check on this bash-3.2 host and check-bash-dialect is green over the full scripts/ tree with its 6-scenario fixture.
         - type: progress
           ts: "2026-08-16T02:10:43Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0150z
