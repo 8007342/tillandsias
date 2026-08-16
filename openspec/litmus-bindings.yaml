@@ -1055,6 +1055,7 @@ specs:
   - litmus:opencode-vault-auth-content
   - litmus:git-mirror-vault-agent-auto-auth
   - litmus:forge-secret-capability-contract
+  - litmus:proxy-ca-key-not-world-readable
   coverage_ratio: 75
   last_verified: '2026-07-28'
 - spec_id: tillandsias-vault

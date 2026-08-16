@@ -96,6 +96,10 @@ fi
 
 podman rm -f "$PROXY_CONTAINER" 2>/dev/null || true
 
+# 755-qcxh: deliver the CA private key as a podman secret (matches the
+# entrypoint's only key path); the public cert stays a bind mount.
+podman secret create --replace --driver=file tillandsias-ca-key "$CERTS_DIR/intermediate.key"
+
 if ! podman run \
     --detach \
     --name "$PROXY_CONTAINER" \
@@ -109,7 +113,7 @@ if ! podman run \
     --pids-limit=32 \
     --env "DEBUG_PROXY=1" \
     -v "$CERTS_DIR/intermediate.crt:/etc/squid/certs/intermediate.crt:ro" \
-    -v "$CERTS_DIR/intermediate.key:/etc/squid/certs/intermediate.key:ro" \
+    --secret "tillandsias-ca-key,uid=1000,gid=1000,mode=0400" \
     "$PROXY_IMAGE" 2>&1 | tee /tmp/proxy-start.log; then
     log_error "Failed to start proxy container"
     podman logs "$PROXY_CONTAINER" 2>&1 | tail -20

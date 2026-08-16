@@ -1,0 +1,71 @@
+name: litmus:proxy-ca-key-not-world-readable
+spec: podman-secrets-integration
+description: >
+  Pin the CA-private-key privacy contract (security packet 755-qcxh). The
+  launcher deliberately left /tmp/tillandsias-ca/intermediate.key world-readable
+  (0644) so squid could read it through a bind mount — meaning any local uid
+  could mint certificates the enclave trusts. The fix restores what the
+  podman-secrets-integration spec always mandated: the key travels as the
+  `tillandsias-ca-key` podman secret (uid=1000,gid=1000,mode=0400), the host
+  file is clamped to 0600, and ensure_ca_bundle heals pre-fix 0644 keys DOWN
+  instead of up.
+
+  This is a BEHAVIOUR pin, not a string pin (753-ii5f discipline): the mode
+  check runs against the live key file when one exists, and the source pins
+  assert the arg-builder/entrypoint CONTRACT rather than incidental text. The
+  negative control is the reason to trust it — a world-readable key must FAIL
+  the live check.
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains images/proxy/entrypoint.sh
+
+critical_path:
+  - step: "Req: the proxy arg builder mounts the key as a secret, never a bind mount"
+    command: "grep -q '{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}' crates/tillandsias-headless/src/main.rs && ! grep -q 'intermediate.key:ro' crates/tillandsias-headless/src/main.rs && echo 'ok: secret delivery, no key bind mount'"
+    timeout_ms: 10000
+    expected_behavior: "ok: secret delivery, no key bind mount"
+
+  - step: "Req: secret mount options keep the key least-privilege for the proxy uid"
+    command: "grep -q 'PROXY_CA_KEY_SECRET_OPTS: &str = \"uid=1000,gid=1000,mode=0400\"' crates/tillandsias-headless/src/main.rs && echo 'ok: uid/gid 1000 mode 0400'"
+    timeout_ms: 10000
+    expected_behavior: "ok: uid/gid 1000 mode 0400"
+
+  - step: "Req: the entrypoint has exactly one KEY path (secret) — the key bind-mount fallback is gone"
+    # The CERT branch keeps its bind-mount fallback on purpose (public
+    # material); only the private-key fallback may never return.
+    command: "grep -q 'cp /run/secrets/tillandsias-ca-key' images/proxy/entrypoint.sh && ! grep -q 'CA key already present' images/proxy/entrypoint.sh && echo 'ok: secret-only key path'"
+    timeout_ms: 10000
+    expected_behavior: "ok: secret-only key path"
+
+  - step: "Req: ensure_ca_bundle clamps DOWN to 0600 — the old 0644 modes are gone from the key path"
+    command: "grep -q 'fn enforce_ca_key_mode' crates/tillandsias-headless/src/main.rs && grep -A3 'fn enforce_ca_key_mode' crates/tillandsias-headless/src/main.rs | grep -q 'from_mode(0o600)' && echo 'ok: 0600 clamp present'"
+    timeout_ms: 10000
+    expected_behavior: "ok: 0600 clamp present"
+
+  - step: "LIVE + NEGATIVE CONTROL: a live key must be 0600, and a 0644 key must FAIL this check"
+    # Behaviour, not prose: when the host has a provisioned CA the real key is
+    # checked; the negative control plants a world-readable key in a scratch
+    # dir and proves the same predicate rejects it. Skip cleanly when no CA
+    # exists (fresh host) — the arg/entrypoint pins above still hold the line.
+    command: "k=/tmp/tillandsias-ca/intermediate.key; if [ -f \"$k\" ]; then m=$(stat -c %a \"$k\"); [ \"$m\" = \"600\" ] || { echo \"FAIL: live key mode $m\"; exit 1; }; fi; d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; touch \"$d/intermediate.key\"; chmod 644 \"$d/intermediate.key\"; if [ \"$(stat -c %a \"$d/intermediate.key\")\" = \"600\" ]; then echo 'FAIL: negative control did not detect 0644'; exit 1; fi; echo 'ok: live 0600, 0644 detected as violation'"
+    timeout_ms: 10000
+    expected_behavior: "ok: live 0600, 0644 detected as violation"
+
+observability:
+  traces:
+    - "@trace spec:podman-secrets-integration"
+    - "@trace spec:proxy-container"
+    - "@trace spec:secret-rotation"
+  expected_log: "CA private key delivered as podman secret; host file owner-only; world-readable key rejected"
+  log_fields:
+    spec: "podman-secrets-integration"
+    test: "proxy-ca-key-not-world-readable"
+    artifact: "crates/tillandsias-headless/src/main.rs"
+
+rollback:
+  on_failure: "run stat -c %a /tmp/tillandsias-ca/intermediate.key — anything but 600 means ensure_ca_bundle's clamp regressed; check build_proxy_run_args for a reintroduced intermediate.key bind mount"
+  command: "stat -c %a /tmp/tillandsias-ca/intermediate.key 2>/dev/null || echo 'no live CA'"

@@ -51289,6 +51289,12 @@ plan_index:
         - Squid starts healthy and vault-cli require_cacert stays green on a fresh guest (the 2026-07-22 field repro path).
         - The entrypoint's unreachable branch is either made reachable (secret delivery) or removed in the same change — no fallback nobody takes remains.
       events:
+        - type: completed
+          ts: "2026-08-16T19:20:48Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Secret delivery landed: ensure_ca_bundle clamps the CA key to 0600 (heals 0644 DOWN, unit-tested); build_proxy_run_args mounts tillandsias-ca-key as a podman secret uid=1000,gid=1000,mode=0400 refreshed via create_file_podman_secret --replace at all four proxy launch sites; entrypoint key bind-mount fallback DELETED and staging reordered BEFORE squid -z (latent fatal exposed by live test); Containerfile chowns /etc/squid/certs to proxy (old cert-secret branch was dead without it); dev scripts + browser-isolation e2e litmus converted to secret delivery; new litmus:proxy-ca-key-not-world-readable bound to podman-secrets-integration, verified with live 0644 negative control (FAIL) and 0600 (PASS); live container test: squid healthy on 3128, in-container key 600 proxy, host key 600. vault-cli require_cacert reads only intermediate.crt (stays 0644). macOS same-class residue split to 772-shi9.
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"

@@ -1,0 +1,53 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: linux-immutable (yoga) meta-orchestration cycle, 2026-08-16,
+# while closing 755-qcxh (proxy CA key world-readable).
+packets:
+  - packet_id: macos-guest-diagnose-loosens-ca-key-mode
+    release_target: socket-audit-master
+    order: 772-shi9
+    status: ready
+    desired_release: v0.5
+    kind: security
+    pickup_role: macos
+    priority: p2
+    tags:
+      - macos
+      - security
+      - secrets
+      - proxy
+      - v0.5
+    title: |
+      macOS diagnose chmods the in-VM CA private key to 0644 — same defect class 755-qcxh removed on Linux.
+    context: |
+      755-qcxh (closed 2026-08-16 on linux-next) removed the world-readable
+      proxy CA private key on the Linux host: ensure_ca_bundle now clamps
+      /tmp/tillandsias-ca/intermediate.key to 0600 (healing old 0644 keys
+      DOWN), build_proxy_run_args delivers the key as the tillandsias-ca-key
+      podman secret (uid=1000,gid=1000,mode=0400), and the proxy entrypoint's
+      key bind-mount fallback was deleted. Pinned by
+      litmus:proxy-ca-key-not-world-readable (with a 0644 negative control).
+
+      The macOS tray carries the SAME defect class inside the VM guest:
+      crates/tillandsias-macos-tray/src/diagnose.rs chmods the guest-side
+      intermediate.key to 644 at two sites (approx lines 1093 and 1296 at
+      linux-next a5eecc025 — re-locate by grepping `chmod 644` /
+      `intermediate.key` in that file). The guest is single-purpose, so the
+      exposure is smaller than the Linux host case, but any guest-local uid
+      can still mint certificates the enclave trusts. Out of linux write
+      scope (crates/tillandsias-macos-tray/), so filed for the macOS lane
+      instead of edited cross-host.
+    exit_criteria:
+      - |
+          No code path in tillandsias-macos-tray sets the CA private key wider than 0600; existing 0644 guest keys are healed DOWN on the next diagnose/ensure pass (mirror the enforce_ca_key_mode shape from tillandsias-headless main.rs).
+      - |
+          The guest proxy keeps starting healthy after the tightening — on macOS the guest proxy consumes the key through the same versioned images, so verify against the secret-delivery path 755-qcxh made the only path (images/proxy/entrypoint.sh).
+      - |
+          A pin (unit test or litmus step reachable from the macOS lane) fails if a chmod wider than 0600 on intermediate.key returns to the crate.
+    events:
+      - type: filed
+        ts: "2026-08-16T19:25:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Split out of 755-qcxh scoping: cross-host residue of the
+          world-readable CA key class, macOS guest side.

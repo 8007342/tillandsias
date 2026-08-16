@@ -1826,7 +1826,7 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
     Ok(())
 }
 
-fn create_file_podman_secret(
+pub(crate) fn create_file_podman_secret(
     name: &str,
     path: &std::path::Path,
     debug: bool,

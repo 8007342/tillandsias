@@ -2363,6 +2363,19 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
     false
 }
 
+/// Clamp the CA private key to owner-only access (0600) — 755-qcxh.
+///
+/// The key never needs to be readable by anyone but the owning uid: host-side
+/// readers (`ensure_vault_tls_leaf`) run as the owner, and the proxy container
+/// receives the key as a podman secret (`ensure_proxy_ca_key_secret`), not
+/// through this file's mode. Anything wider lets any local uid mint
+/// certificates the enclave trusts.
+#[cfg(unix)]
+fn enforce_ca_key_mode(key: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(key, std::fs::Permissions::from_mode(0o600))
+}
+
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
     // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
@@ -2481,21 +2494,19 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                     format!("Failed to set cert permissions: {e}")
                 },
             )?;
-            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o644)).map_err(
-                |e| {
-                    error!(
-                        accountability = true,
-                        category = "secrets",
-                        spec = "secret-rotation",
-                        secret_name = "tillandsias-ca-key",
-                        operation = "rotation_failed",
-                        location = %key.display(),
-                        error = %e,
-                        "Failed to set CA key permissions"
-                    );
-                    format!("Failed to set key permissions: {e}")
-                },
-            )?;
+            enforce_ca_key_mode(&tmp_key).map_err(|e| {
+                error!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "secret-rotation",
+                    secret_name = "tillandsias-ca-key",
+                    operation = "rotation_failed",
+                    location = %key.display(),
+                    error = %e,
+                    "Failed to set CA key permissions"
+                );
+                format!("Failed to set key permissions: {e}")
+            })?;
         }
 
         std::fs::rename(&tmp_key, &key)
@@ -2518,14 +2529,14 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         }
     }
 
-    // Squid runs as a non-root user inside the container and needs read
-    // access to the key file mounted via bind-mount. Upgrade mode to 644
-    // every call so that keys generated before this fix (mode 640) are also
-    // healed without requiring a CA rotation.
+    // 755-qcxh: the proxy no longer reads this file through a bind mount —
+    // it receives the key as a podman secret — so nothing legitimate needs it
+    // wider than owner-only. Heal DOWN to 0600 every call so keys generated
+    // before this fix (deliberately world-readable 0644) are repaired without
+    // requiring a CA rotation.
     #[cfg(unix)]
     if key.is_file() {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644));
+        let _ = enforce_ca_key_mode(&key);
     }
 
     Ok(certs_dir)
@@ -2655,6 +2666,24 @@ fn build_catalog_service_run_args(
     ])
 }
 
+/// Name of the podman secret carrying the proxy CA private key.
+///
+/// Spec `podman-secrets-integration` has always mandated secret delivery for
+/// this material (`--secret=tillandsias-ca-key`); the launcher had drifted to
+/// a world-readable host bind mount, filed as security packet 755-qcxh. The
+/// name doubles as the in-container mount path
+/// `/run/secrets/tillandsias-ca-key`, which `images/proxy/entrypoint.sh`
+/// consumes.
+pub(crate) const PROXY_CA_KEY_SECRET: &str = "tillandsias-ca-key";
+
+/// Podman `--secret` mount options for the proxy CA key. Mirrors
+/// `GIT_VAULT_TOKEN_SECRET_OPTS`: the proxy image runs as the unprivileged
+/// `proxy` user (uid/gid 1000, `images/proxy/Containerfile`) under
+/// `--userns=keep-id`, and podman defaults a secret mount to `root:root` —
+/// unreadable to that entrypoint. uid/gid 1000 + `mode=0400` keeps the key
+/// least-privilege while readable by exactly its consumer.
+pub(crate) const PROXY_CA_KEY_SECRET_OPTS: &str = "uid=1000,gid=1000,mode=0400";
+
 fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     vec![
         "--detach".into(),
@@ -2680,13 +2709,28 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
             "{}:/etc/squid/certs/intermediate.crt:ro",
             certs_dir.join("intermediate.crt").display()
         ),
-        "-v".into(),
-        format!(
-            "{}:/etc/squid/certs/intermediate.key:ro",
-            certs_dir.join("intermediate.key").display()
-        ),
+        // 755-qcxh: the CA PRIVATE key travels as a podman secret, never a
+        // host bind mount — secret delivery is what lets the host file stay
+        // 0600. The public cert above stays a bind mount on purpose.
+        "--secret".into(),
+        format!("{PROXY_CA_KEY_SECRET},{PROXY_CA_KEY_SECRET_OPTS}"),
         image.into(),
     ]
+}
+
+/// Refresh the `tillandsias-ca-key` podman secret from the CA bundle.
+///
+/// Called immediately before every proxy launch. `--replace` underneath makes
+/// it rotation-safe: the 30-day CA refresh in `ensure_ca_bundle` reaches the
+/// proxy at its next start — the same visibility the old bind mount had, since
+/// the bundle publishes keys by inode rename, which a live bind mount never
+/// observed either.
+fn ensure_proxy_ca_key_secret(certs_dir: &Path, debug: bool) -> Result<(), String> {
+    crate::vault_bootstrap::create_file_podman_secret(
+        PROXY_CA_KEY_SECRET,
+        &certs_dir.join("intermediate.key"),
+        debug,
+    )
 }
 
 /// Ensure the enclave egress proxy (squid) container is running.
@@ -2731,6 +2775,7 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
     ensure_versioned_images(&root, &["proxy"], version, debug)?;
     let proxy_image = versioned_image_tag("proxy", version);
     let certs_dir = ensure_ca_bundle(debug)?;
+    ensure_proxy_ca_key_secret(&certs_dir, debug)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
@@ -7295,6 +7340,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
         )
         .await;
 
+        ensure_proxy_ca_key_secret(&certs_dir, debug)?;
         client
             .run_container_observed(
                 "status-proxy",
@@ -10110,6 +10156,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
                 .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+            ensure_proxy_ca_key_secret(&certs_dir, debug)?;
             client
                 .run_container_observed(
                     "opencode-proxy",
@@ -11213,6 +11260,7 @@ pub(crate) fn run_opencode_web_mode(
             let _ = podman_cmd_sync()
                 .args(["rm", "--ignore", "tillandsias-proxy"])
                 .output_bounded(tillandsias_podman::OperationKind::Container.default_budget());
+            ensure_proxy_ca_key_secret(&certs_dir, debug)?;
             client
                 .run_container_observed(
                     "opencode-web-proxy",
@@ -16799,6 +16847,33 @@ mod tests {
         assert!(!has_arg(&args, "10.0.42.2"));
         assert!(has_arg(&args, "DEBUG_PROXY=1"));
         assert!(has_arg(&args, "tillandsias-proxy:v1"));
+        // 755-qcxh: the CA private key is delivered as a podman secret owned
+        // by the proxy uid; the world-readable key bind mount must never
+        // come back.
+        assert!(has_arg(&args, "--secret"));
+        assert!(has_arg(
+            &args,
+            "tillandsias-ca-key,uid=1000,gid=1000,mode=0400"
+        ));
+        assert!(
+            !args.iter().any(|a| a.contains("intermediate.key")),
+            "CA private key must not be bind-mounted: {args:?}"
+        );
+    }
+
+    // 755-qcxh: a pre-existing world-readable CA key (the old heal target was
+    // 0644) must be healed DOWN to owner-only on every ensure pass.
+    #[cfg(unix)]
+    #[test]
+    fn ca_key_mode_heals_world_readable_down_to_0600() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let key = dir.path().join("intermediate.key");
+        std::fs::write(&key, "not-a-real-key").expect("write");
+        std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).expect("chmod");
+        enforce_ca_key_mode(&key).expect("enforce");
+        let mode = std::fs::metadata(&key).expect("stat").permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600, "CA key must be owner-only after heal");
     }
 
     // Regression: smoke-finding/rootless-bridge-network-missing. The dual-home
