@@ -11049,6 +11049,12 @@ plan_index:
         - "macOS vz unit audited; same-directive hazard confirmed absent or fixed"
         - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
       events:
+        - type: progress
+          ts: "2026-08-16T19:51:09Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Partial slice (linux): delegation design RECORDED (plan/issues/headless-least-privilege-delegation-design-2026-08-16.md — socket delegation over process split, target directive set, empty-CapabilityBoundingSet gotcha); headless podman surface AUDITED delegation-ready (shared-layer routing pinned; pty_handler exec matcher is validation, not spawn); litmus:headless-least-privilege-delegation-shape added and 3/3 green on yoga incl. live NNP delegated-client probe (podman 5.8.4 over user socket). Criterion 1 done; criterion 2 was already discharged by the 2026-08-16 macos event; criterion 3 done (the litmus). partial_artifact_refs: 4c6c92b38. REMAINDER (windows write scope): edit the wsl_lifecycle.rs unit template to the recorded three-line set and FLIP the absence pins at ~2712-2719, then live-verify no securing-vault latch on an attended windows smoke.
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
