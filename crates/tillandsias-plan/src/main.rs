@@ -3609,7 +3609,10 @@ mod tests {
             std::env::consts::OS,
             "absent --host and TILLANDSIAS_HOST_KIND must yield the compiled platform"
         );
-        assert_ne!(host, "unknown", "the platform is a known fact, not an absence");
+        assert_ne!(
+            host, "unknown",
+            "the platform is a known fact, not an absence"
+        );
         #[cfg(not(target_os = "linux"))]
         assert_ne!(
             host, "linux",
