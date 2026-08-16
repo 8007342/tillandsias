@@ -15,7 +15,7 @@
 #
 # Fixture: scripts/test-check-bash-dialect.sh (two directions: an unguarded
 # bash-4-ism FAILS, a guarded one PASSES).
-# freshness: filed 2026-08-16 macos 761-g36m
+# freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=761-g36m authoring
 set -u
 
 SCAN_DIR="${TILLANDSIAS_DIALECT_SCAN_DIR:-scripts}"

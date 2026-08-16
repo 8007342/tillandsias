@@ -1,5 +1,5 @@
 // @trace spec:structured-query-language
-// freshness: audited 2026-08-16 macos verdict=updated (781-hseq) — module is
+// freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=updated scope=781-hseq audit — module is
 // internally healthy (16 unit tests green) but has ZERO consumers outside
 // this crate: no CLI subcommand, no MCP tool, no headless surface calls it.
 // Packet 781-hseq holds the wire-or-tombstone decision (682 telemetry
