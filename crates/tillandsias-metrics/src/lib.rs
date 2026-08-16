@@ -5,7 +5,9 @@
 //! forge container climbing toward memory pressure before being OOM-killed).
 //! Wave 13 landed CPU + memory; Wave 15 (OBS-016/OBS-017) extends with disk
 //! I/O rates derived from `/proc/diskstats` and Pressure Stall Information
-//! parsed from `/proc/pressure`.
+//! parsed from `/proc/pressure`. Order 333 adds per-container cgroup v2
+//! samples ([`sample_containers`]) and per-mount cumulative I/O attribution
+//! ([`sample_mount_io`]) for the control-wire `MetricsSnapshot` surface.
 //!
 //! @trace spec:observability-metrics, spec:resource-metric-collection
 //! @cheatsheet observability/cheatsheet-metrics.md
@@ -33,13 +35,17 @@
 
 #![deny(missing_debug_implementations)]
 
+mod container;
 mod dashboard;
 mod error;
 mod models;
+mod mount_io;
 pub mod prometheus_exporter;
 mod sampler;
 
+pub use container::{ContainerMetric, sample_containers, sample_containers_from_ps_json};
 pub use dashboard::{DashboardSnapshot, emit_dashboard_metric};
 pub use error::MetricsError;
 pub use models::{CpuMetric, DiskIoMetric, DiskMetric, MemoryMetric, PsiMetric};
+pub use mount_io::{MountIoMetric, sample_mount_io, sample_mount_io_from_parts};
 pub use sampler::{MetricsSampler, archive_old_metrics};

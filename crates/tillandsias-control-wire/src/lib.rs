@@ -346,6 +346,29 @@ pub enum ControlMessage {
         session_id: u32,
         input_state: PtyInputState,
     },
+    /// Host → in-VM headless: request a guest metrics snapshot (per-container
+    /// cgroup v2 CPU/mem/blkio + per-mount cumulative I/O) over the control
+    /// wire — the idiomatic VM-boundary crossing for the macOS/Windows trays
+    /// and `--diagnose --json`, which cannot reach the guest's TCP `/metrics`
+    /// endpoint (order 333, guest-container-metrics-over-control-wire).
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not
+    /// bump the version). Older in-VM headless binaries reject it with
+    /// `Error::UnknownVariant`; same-generation binaries without the handler
+    /// reply `Error { Unsupported }`.
+    ///
+    /// @trace spec:observability-metrics, spec:vsock-transport
+    MetricsSnapshotRequest { seq: u64 },
+    /// In-VM headless → host: the requested metrics snapshot. A collection
+    /// failure travels as a populated `error` field on the affected entry
+    /// with its values `None` — never a fabricated healthy sample
+    /// (spec:observability-metrics).
+    ///
+    /// @trace spec:observability-metrics, spec:vsock-transport
+    MetricsSnapshotReply {
+        seq_in_reply_to: u64,
+        snapshot: MetricsSnapshotWire,
+    },
 }
 
 /// What the guest established about a PTY session's foreground process.
@@ -437,6 +460,57 @@ pub struct CloudProjectEntry {
     pub default_branch: String,
 }
 
+/// Guest metrics snapshot carried by `MetricsSnapshotReply`.
+///
+/// Standalone wire types (no dependency on `tillandsias-metrics` — this
+/// crate stays dependency-light for sidecar consumers); the guest-side
+/// conversion from the sampler's types lands with the vsock handler.
+/// `sampled_at_unix` is seconds since the Unix epoch, guest clock.
+///
+/// @trace spec:observability-metrics
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MetricsSnapshotWire {
+    pub sampled_at_unix: u64,
+    pub containers: Vec<ContainerMetricWire>,
+    pub mounts: Vec<MountIoMetricWire>,
+}
+
+/// Per-container cgroup v2 sample on the wire. Counters are cumulative:
+/// `cpu_usec` microseconds of CPU time, `memory_current_bytes` current
+/// bytes, `blkio_*` bytes/ops summed across devices. `None` means "could
+/// not be collected" — `error` says why. A failure never travels as a
+/// fabricated healthy zero (spec:observability-metrics).
+///
+/// @trace spec:observability-metrics
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerMetricWire {
+    pub name: String,
+    pub cpu_usec: Option<u64>,
+    pub memory_current_bytes: Option<u64>,
+    pub blkio_read_bytes: Option<u64>,
+    pub blkio_write_bytes: Option<u64>,
+    pub blkio_read_ops: Option<u64>,
+    pub blkio_write_ops: Option<u64>,
+    pub error: Option<String>,
+}
+
+/// Per-mount cumulative I/O counters on the wire, attributed to the mount's
+/// backing block device. Paths without a diskstats-visible backing device
+/// (tmpfs, virtiofs, overlay) carry `error: "unavailable: <fstype>"` with
+/// all counters `None`.
+///
+/// @trace spec:observability-metrics
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MountIoMetricWire {
+    pub path: String,
+    pub device: Option<String>,
+    pub read_bytes: Option<u64>,
+    pub write_bytes: Option<u64>,
+    pub read_ops: Option<u64>,
+    pub write_ops: Option<u64>,
+    pub error: Option<String>,
+}
+
 /// Error categories the tray emits on the control socket.
 ///
 /// `#[non_exhaustive]` — future error categories can be added without
@@ -508,6 +582,8 @@ impl ControlMessage {
             ControlMessage::LoginStatePush { .. } => "LoginStatePush",
             ControlMessage::CloudProjectsPush { .. } => "CloudProjectsPush",
             ControlMessage::LocalProjectsPush { .. } => "LocalProjectsPush",
+            ControlMessage::MetricsSnapshotRequest { .. } => "MetricsSnapshotRequest",
+            ControlMessage::MetricsSnapshotReply { .. } => "MetricsSnapshotReply",
         }
     }
 }
@@ -1945,6 +2021,21 @@ mod tests {
                 },
                 "LocalProjectsPush",
             ),
+            (
+                ControlMessage::MetricsSnapshotRequest { seq: 1 },
+                "MetricsSnapshotRequest",
+            ),
+            (
+                ControlMessage::MetricsSnapshotReply {
+                    seq_in_reply_to: 1,
+                    snapshot: MetricsSnapshotWire {
+                        sampled_at_unix: 0,
+                        containers: vec![],
+                        mounts: vec![],
+                    },
+                },
+                "MetricsSnapshotReply",
+            ),
         ];
         for (msg, expected) in cases {
             assert_eq!(
@@ -2121,6 +2212,110 @@ mod tests {
                 ],
             },
         });
+    }
+
+    #[test]
+    fn metrics_snapshot_request_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 300,
+            body: ControlMessage::MetricsSnapshotRequest { seq: 300 },
+        });
+    }
+
+    #[test]
+    fn metrics_snapshot_reply_empty_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 301,
+            body: ControlMessage::MetricsSnapshotReply {
+                seq_in_reply_to: 300,
+                snapshot: MetricsSnapshotWire {
+                    sampled_at_unix: 1_760_000_000,
+                    containers: vec![],
+                    mounts: vec![],
+                },
+            },
+        });
+    }
+
+    #[test]
+    fn metrics_snapshot_reply_with_entries_roundtrip() {
+        // One healthy container, one degraded container, one block-backed
+        // mount, one unavailable (tmpfs) mount — the error-not-fabrication
+        // contract must survive the wire byte-for-byte.
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 302,
+            body: ControlMessage::MetricsSnapshotReply {
+                seq_in_reply_to: 300,
+                snapshot: MetricsSnapshotWire {
+                    sampled_at_unix: 1_760_000_000,
+                    containers: vec![
+                        ContainerMetricWire {
+                            name: "proxy".into(),
+                            cpu_usec: Some(24_487_858),
+                            memory_current_bytes: Some(104_857_600),
+                            blkio_read_bytes: Some(91_889_664),
+                            blkio_write_bytes: Some(613_781_504),
+                            blkio_read_ops: Some(9_142),
+                            blkio_write_ops: Some(1_605),
+                            error: None,
+                        },
+                        ContainerMetricWire {
+                            name: "vault".into(),
+                            cpu_usec: None,
+                            memory_current_bytes: None,
+                            blkio_read_bytes: None,
+                            blkio_write_bytes: None,
+                            blkio_read_ops: None,
+                            blkio_write_ops: None,
+                            error: Some("cgroup scope libpod-….scope not found".into()),
+                        },
+                    ],
+                    mounts: vec![
+                        MountIoMetricWire {
+                            path: "/home/forge/src".into(),
+                            device: Some("vdb1".into()),
+                            read_bytes: Some(790_528),
+                            write_bytes: Some(45_056),
+                            read_ops: Some(77),
+                            write_ops: Some(11),
+                            error: None,
+                        },
+                        MountIoMetricWire {
+                            path: "/opt/cheatsheets".into(),
+                            device: None,
+                            read_bytes: None,
+                            write_bytes: None,
+                            read_ops: None,
+                            write_ops: None,
+                            error: Some("unavailable: tmpfs".into()),
+                        },
+                    ],
+                },
+            },
+        });
+    }
+
+    #[test]
+    fn metrics_snapshot_kinds() {
+        assert_eq!(
+            ControlMessage::MetricsSnapshotRequest { seq: 1 }.kind(),
+            "MetricsSnapshotRequest"
+        );
+        assert_eq!(
+            ControlMessage::MetricsSnapshotReply {
+                seq_in_reply_to: 1,
+                snapshot: MetricsSnapshotWire {
+                    sampled_at_unix: 0,
+                    containers: vec![],
+                    mounts: vec![],
+                },
+            }
+            .kind(),
+            "MetricsSnapshotReply"
+        );
     }
 
     #[test]
