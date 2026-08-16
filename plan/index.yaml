@@ -41446,6 +41446,23 @@ plan_index:
           host: macos
           summary: |
             macOS transient-path sites DISCHARGED BY RECORDED JUSTIFICATION (the packet's deliverable explicitly allows 'a recorded justification per site'): vz.rs stop() 250ms state poll and transport_macos.rs connect 50ms pump now carry durable in-code justifications — both run only inside bounded transient windows (drain_timeout / connect timeout), contribute zero steady-state wakeups (the 2026-08-16 idle measurement was taken with both present), and their runloop pumps are load-bearing for VZ callback delivery; rewiring the SHUTDOWN path unattended is exactly what the windows near-miss warns against. Each justification names its removal condition. macOS outcome clause fully satisfied: steady-state near-zero measured, remaining timers justified. Packet residual is now guest-side only (30s podman shell-out + 2s/15s ticks in tillandsias-headless main.rs).
+        - type: note
+          ts: "2026-08-15T08:37:04Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            SELECTOR NOTE, so this stops costing a cycle to rediscover: this packet has been ranked urgent= by scripts/select-work-batch.sh windows on FOUR consecutive cycles and no windows cycle can drain it further.
+
+            The windows-verifiable half is DONE and measured (79 ctx/20s -> 3 ctx/90s, ~0.03 wakeups/s, recorded 2026-08-15). What remains is:
+              - the 30s podman shell-out and the 2s/15s/500ms ticks in main.rs (guest-side,
+                still windows-testable in principle but below the noise floor now -- the
+                measurement says what is left is already ~0.03/s)
+              - vz.rs:1494, transport_macos.rs:383, action_host.rs:2835 -- macOS only
+              - criterion 4's tray half -- macOS only
+
+            So the majority of the residue is NOT claimable from this host, and a windows cycle that claims this packet spends its budget discovering that. This is the shape linux filed as 750-zrt4 (a packet whose residual work lives elsewhere still competes for a cycle), with one difference worth recording: 750-zrt4 is about parents fully delegated to CHILDREN, whereas this is a single packet whose remaining exit criteria are host-specific. A selector that only learns about split parents will still offer this one.
+
+            Not changing status. It is genuinely open and macOS should claim it. Recording the fact where the next windows agent will read it before claiming.
         - type: verified
           ts: "2026-08-15T02:48:33Z"
           agent_id: "unknown"
@@ -42411,6 +42428,45 @@ plan_index:
         - that signal does NOT block the push of a host that did not author the fragment, and a test proves an inherited malformed fragment still lets an unrelated change through
         - the rationale for choosing report-vs-gate is recorded where the next reader will find it, not just in a commit message
       events:
+        - type: note
+          ts: "2026-08-15T05:00:29Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            EVIDENCE FOR THIS PACKET, found from the other end — and a filing I RETRACTED because this packet already owns the question.
+
+            I had drafted 753-ed7i ("check skips an unparseable fragment and still reports ok") from a windows measurement, then found this packet and deleted the fragment before committing it. 699-dycj already states the problem AND warns against the fix I was scoping: "do not simply make `check` exit non-zero and call it done — re-read why 698 scoped itself first." Recording the measurement here instead.
+
+            MEASURED on windows 2026-08-15, throwaway ledger, by hand:
+
+              plan/index.yaml                -> packets: []
+              plan/index.d/...-lane-d-x.yaml -> packets: [unclosed
+
+              $ tillandsias-plan check
+              warning: ledger fragment plan\index.d\...-lane-d-x.yaml does not parse and was
+                       SKIPPED - its contents are not in the answers below
+              ok: 0 packets, ids unique, live references sound (0 parked-block edges)
+              CHECK_RC=0
+
+            THE GAP THIS PACKET DOES NOT YET NAME, and it is on the AUTHOR side that 698-7n6q was supposed to have covered. scripts/check-added-fragments-parse.sh is wired into build.sh and nowhere else. The plan-only push lane (668-2xeh) exists precisely to accept a fragments-only push WITHOUT running build.sh. So the one gate written to stop a malformed fragment at its author is bypassed by the only path that skips the build — which is the path fragments actually take. 698 is diff-scoped, deliberately and rightly; it simply is not consulted where it matters most.
+
+            The lane's own fallback made it worse rather than catching it. With no yq it says:
+
+              plan-only lane: note: yq absent - YAML parse of <fragment> delegated to
+              tillandsias-plan check, which folds every fragment
+
+            and `check` exits 0. So on windows the lane printed "validated <path>" beside an unparseable fragment and then "plan-only lane clean". That is the file's own stated worst case: a gate vouching for evidence it did not gather.
+
+            FIXED THIS CYCLE, in the lane only, both verified by litmus:plan-only-push-lane-shape step 6 (the negative control that had been silently passing on linux and could only fail on a yq-less host):
+              1. the lane now calls check-added-fragments-parse.sh when present, refusing on
+                 violation — closing the 698-bypass for every host, yq or not
+              2. the lane reads `does not parse and was SKIPPED` in check's output as the
+                 refusal check declines to make — defence in depth for a checkout where the
+                 added-fragments gate is absent
+
+            WHAT REMAINS FOR THIS PACKET IS UNTOUCHED. Both fixes are author-side and diff-scoped, the same shape 698 chose. Neither makes an ALREADY-LANDED malformed fragment loud fleet-wide, and neither should — the constraint recorded here (one host's typo must not red-gate every other host) still stands and still has no implementation.
+
+            Also worth knowing for whoever claims this: litmus:added-fragment-parse-gate-shape, the test that pins 698's gate, is currently RED on windows for unrelated reasons and is listed in 751-vega's residue. The gate protecting fragments has an unverified test on this host.
         - type: filed
           ts: "2026-08-12T03:33:14Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260812t033314z
@@ -47269,6 +47325,72 @@ plan_index:
         packet — that is a different decision about a retired spec name, and
         bundling it would make a performance fix look like a behaviour change.
       events:
+        - type: note
+          ts: "2026-08-15T05:40:25Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            THE DRIFT WARNING FIRED ON THE VERY COMMIT THAT INTRODUCED IT, and it was right.
+
+            Landing the fix above staged four files, and the hook printed:
+
+              warning: OpenSpec: ghost_check took 1309ms (budget ~300ms) - the scan is drifting; see order 734-sjb3
+
+            My 300ms budget was measured with a nearly-empty stage. ghost_check's cost is not fixed: it spawned one grep per staged FILE plus an `echo | grep` per @trace LINE, so it scales with files x traces. Budgeting a scaling phase with a constant is wrong, and the honest fix is in the COST, not the number — raising the budget to hide it would have taught the next reader to ignore the warning, which is how a real signal dies.
+
+            ghost_check is now spawn-free too: ONE `grep -nHE` over all staged files at once, and bash-native extraction of the refs on each line.
+
+              4 staged files (three copies of a 20k-line source file):
+                before  1,309ms
+                after     521ms
+              full hook, same staged set: 5,360ms
+
+            Budget raised to 900ms, which the heavy case now clears with margin rather than by redefinition.
+
+            Verified after the rewrite: two refs on ONE line (`@trace spec:a, spec:b`) are both reported — the comma-separated case the old `grep -oE` handled and a naive `[[ =~ ]]` would have silently truncated to the first — and --ci-mode still exits 1 with a ghost staged, 0 without.
+
+            Worth stating plainly: three phases in this hook had the same defect and I fixed them one at a time across two cycles, each time believing I was at the bottom. The pattern is not "zero_trace_check was slow", it is "every per-item subprocess on this host is the runtime". Anything added to this hook later should be read with that in mind.
+        - type: verified
+          ts: "2026-08-15T05:28:44Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            CLOSED. The hook now runs in 4.9 SECONDS. It was ~13 minutes when this packet was filed and ~69 seconds when this cycle started.
+
+            THE SECOND MEASUREMENT, which is the whole point — the previous cycle's fix was real but stopped at the first bottleneck and declared victory at "50s". Re-measuring per phase on this host today:
+
+              phase                     before    after
+              ghost_check                 243ms    236ms
+              zero_trace_check          64,197ms  1,715ms
+              staleness_check            3,586ms    600ms
+              cheatsheet_source_check       61ms     59ms
+              cheatsheet_tier_check        605ms    593ms
+              TOTAL                     ~68,700ms  4,910ms
+
+            Note the "before" total: 68.7s, not the 50s recorded last time. Either the tree grew or that number was taken differently; I am recording what I measured rather than the difference I would have preferred to report.
+
+            ROOT CAUSE, AGAIN, ONE LAYER DOWN. Inverting the 170-greps loop was correct and left the real cost untouched. Splitting zero_trace_check:
+
+              the repo-wide sweep .......  1.6s
+              the per-spec loop ......... 62.0s
+
+            The sweep was never the problem after the inversion. The LOOP was spawning three subprocesses per spec — a sed for the Status block, a grep to read it, a grep for set membership — 510 processes at ~107ms each. Identical root cause to the original defect: on Windows a process spawn costs two orders of magnitude more than the work it does, so ANY per-item subprocess is the entire runtime. staleness_check had the same shape (dirname + two basenames + a four-stage grep|head|sed|tr per change, eight spawns each).
+
+            Both are now spawn-free: retired specs come from ONE awk pass over every spec.md, membership is a bash associative array, and the change loop uses parameter expansion and a read loop. 510 spawns -> 2.
+
+            EQUIVALENCE CHECKED, NOT ASSUMED — and checked in the direction that could actually catch something. Diffing the zero-trace verdict old-vs-new gives "old=0 new=0, identical", which proves almost nothing since both are empty. So I diffed the underlying RETIRED SET instead, which is where the logic actually changed: 28 specs both ways, sets identical. Same for staleness: 6 warnings both ways, byte-identical output.
+
+            NEGATIVE CONTROL (exit criterion 4) — falsified in four directions, because a speed-up that quietly retires a check is the failure this criterion exists to prevent:
+              * an ACTIVE spec with no traces (fixture spec dir, status: active) -> still flagged
+              * the SAME fixture marked obsolete -> correctly not flagged
+              * a genuinely NEW ghost trace (@trace spec:zzz-definitely-no-such-spec-xyz in a staged .rs) -> caught
+              * --ci-mode with that ghost staged -> exit 1; with it removed -> exit 0
+
+            EXIT CRITERION 3, the one left open last cycle: every phase now announces itself before running, with the MEASURED budget beside it, and a phase that exceeds 4x its budget prints a drift warning that survives into scripted commits. Verified by lowering zero_trace_check's budget to 1ms and confirming the warning fires. The progress line itself is terminal-only — spamming it into every unattended cycle's log would make the loop noisier for no reader.
+
+            The budgets are deliberately the measured windows numbers rather than round figures. This cost scales with spec count and repo size, both of which only grow, so the next thirteen-minute scan announces itself instead of looking like a hang. That ambiguity, not the duration, is what cost two commits and left work staged twice.
+
+            UNTOUCHED, as this packet's notes require: the 16 pre-existing spec:mcp-tool-socket ghost traces. They are a separate decision about a retired spec name and folding them in would make a performance fix look like a behaviour change.
         - type: filed
           ts: "2026-08-14T12:05:00Z"
           host: windows
@@ -47980,6 +48102,23 @@ plan_index:
         both harder to see. The only reason they appear together here is that both
         were measured in the same hour.
       events:
+        - type: note
+          ts: "2026-08-15T06:40:24Z"
+          agent_id: "unknown"
+          host: windows
+          summary: |
+            OUTAGE OBSERVED, recorded per the operator's standing instruction that an MCP failure is a project event and not ignorable infrastructure.
+
+            WHEN: 2026-08-15T06:40Z, mid-cycle, on windows.
+            WHAT: both servers dropped at once. The harness reported all 14 forge-plan tools and all 13 project-info tools as no longer available -- expert_capability, methodology_ask, methodology_path, plan_answer, plan_blocked_by, plan_blocked_on, plan_burndown, plan_check, plan_closure, plan_next, plan_query, plan_ready, plan_status, spec_answer, and the whole project-info set.
+
+            WHAT IT COST THIS CYCLE: nothing measurable, and the reason is worth recording because it is the useful part. Every plan read and write in this cycle went through ./target/release/tillandsias-plan.exe directly -- status, next-order, append-event, check. The BINARY is unaffected by the MCP wrapper's health; only the tool-call surface went away. So the fallback was free here.
+
+            That is not a general reassurance. It held because this cycle's ledger work was deterministic-tier (status lookups, order minting, event appends) which the CLI serves identically. A cycle needing the semantic tier would have had no fallback at all, since that tier only exists behind the wrapper.
+
+            BOTH SERVERS AT ONCE points at a shared cause -- the wrapper host or the harness connection, not two independent expert crashes. This packet is already `verified` for making outages visible; what this occurrence adds is a data point about the shape: simultaneous, total, and silent from the plan's point of view until an agent happens to notice a tool list shrink. Nothing in the loop detected it. I noticed because the harness told me, not because any check did.
+
+            NOT re-opening the packet on this evidence. The recording mechanism worked -- this event exists. If a later cycle finds the same simultaneous-total shape again, that repetition is the argument for a health probe that runs per cycle rather than relying on an agent reading a tool list.
         - type: filed
           ts: "2026-08-14T21:22:00Z"
           host: windows

@@ -154,7 +154,7 @@ critical_path:
     # Deliberately NOT a check on the `operator-decision` TAG — two ready packets
     # carry that tag as implementation work informed by a ruling, which is
     # legitimately claimable, and blocking them would be a false positive.
-    command: "for r in linux macos windows; do n=$(./target/release/tillandsias-plan query --status ready --claimable-by \"$r\" --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase==\"tlatoani\")]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n operator-gated packet(s) claimable by $r\"; exit 1; fi; done; echo 'ok: operator-gated work is not host-claimable'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; for r in linux macos windows; do n=$(\"$MFPLAN\" query --status ready --claimable-by \"$r\" --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase==\"tlatoani\")]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n operator-gated packet(s) claimable by $r\"; exit 1; fi; done; echo 'ok: operator-gated work is not host-claimable'"
     timeout_ms: 30000
     expected_behavior: "ok: operator-gated work is not host-claimable"
 
@@ -162,7 +162,7 @@ critical_path:
     # `any` must match the WHOLE trimmed field. A pickup_role like "company-lane"
     # contains "any" and is emphatically not claimable by everyone; a substring
     # match would silently widen every host's queue.
-    command: "n=$(./target/release/tillandsias-plan query --status ready --claimable-by zzz-no-such-role --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase|test(\"^any$\")|not)]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n non-any packet(s) matched a nonexistent role\"; exit 1; fi; echo 'ok: any is a whole-field match'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; n=$(\"$MFPLAN\" query --status ready --claimable-by zzz-no-such-role --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase|test(\"^any$\")|not)]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n non-any packet(s) matched a nonexistent role\"; exit 1; fi; echo 'ok: any is a whole-field match'"
     timeout_ms: 30000
     expected_behavior: "ok: any is a whole-field match"
 
@@ -204,7 +204,7 @@ critical_path:
     # Asserts the OUTCOME, not the mechanism, so a different future fix satisfies
     # it too: whatever the selector does, it must not offer p3 work while a p0 is
     # claimable.
-    command: "best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); best_ledger=$(./target/release/tillandsias-plan query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '[.[]|(.priority//\"p3\")|sub(\"^p\";\"\")|tonumber]|min'); if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); best_ledger=$(\"$MFPLAN\" query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '[.[]|(.priority//\"p3\")|sub(\"^p\";\"\")|tonumber]|min'); if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
     timeout_ms: 60000
     expected_behavior: "ok: urgency reachable"
 

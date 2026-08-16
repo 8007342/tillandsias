@@ -434,6 +434,33 @@ fn now_epoch() -> i64 {
         .unwrap_or(0)
 }
 
+/// The host string stamped on a ledger write when `--host` was not passed.
+///
+/// It used to fall back to the literal `"host"`. Measured on 2026-08-15: eight
+/// of the fifty-two attributed entries in plan/index.d/ carry `host: host`
+/// beside twenty-four `linux_immutable`, twelve `macos` and eight `windows`.
+/// In a three-host CRDT ledger that makes roughly one write in six
+/// unattributable -- and worse, `host` is a plausible-LOOKING value, so it
+/// reads as a deliberate label rather than as a missing one. `unknown` is the
+/// honest word for an absence and sorts obviously wrong in any per-host report.
+///
+/// TILLANDSIAS_HOST_KIND is still consulted for compatibility, but note it
+/// answers a DIFFERENT question -- forge-vs-host, not which machine wrote this
+/// -- and build.sh only ever compares it against "forge". Conflating a kind
+/// with an identity is how the useless default got here; the warning below
+/// points the caller at the flag that actually carries the answer.
+fn resolve_writer_host() -> String {
+    if let Ok(kind) = std::env::var("TILLANDSIAS_HOST_KIND")
+        && !kind.is_empty()
+    {
+        return kind;
+    }
+    eprintln!(
+        "warning: ledger write has no --host and TILLANDSIAS_HOST_KIND is unset; recording host as 'unknown'. Pass --host <linux|macos|windows|...> so the fragment is attributable."
+    );
+    "unknown".to_string()
+}
+
 /// Resolve the `--ts` for a ledger write (order 719-kgr5).
 ///
 /// THE DEFECT THIS CLOSES. Every writer took `--ts` on trust, which made
@@ -1381,9 +1408,7 @@ fn run_loop_status(args: &[String], base: &Path) {
                 .position(|a| a == "--host")
                 .and_then(|i| args.get(i + 1))
                 .cloned()
-                .unwrap_or_else(|| {
-                    std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
-                });
+                .unwrap_or_else(resolve_writer_host);
             let suffix = args
                 .iter()
                 .position(|a| a == "--suffix")
@@ -3119,9 +3144,7 @@ fn main() {
                     args.iter().any(|a| a == "--backfill"),
                     "set-field",
                 );
-                let host = flagged("--host").unwrap_or_else(|| {
-                    std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
-                });
+                let host = flagged("--host").unwrap_or_else(resolve_writer_host);
                 let compact = loop_status::iso_to_compact(&ts);
                 let suffix = format!(
                     "{:08x}",
@@ -3217,9 +3240,7 @@ fn main() {
                 args.iter().any(|a| a == "--backfill"),
                 "set-field",
             );
-            let host = flagged("--host").unwrap_or_else(|| {
-                std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string())
-            });
+            let host = flagged("--host").unwrap_or_else(resolve_writer_host);
             let reason = flagged("--reason").unwrap_or_default();
 
             let compact = loop_status::iso_to_compact(&ts);
@@ -3315,8 +3336,7 @@ fn main() {
             let mut ttl_hours: i64 = 24;
             let mut dry_run = false;
             let mut now_epoch: Option<i64> = None;
-            let mut host =
-                std::env::var("TILLANDSIAS_HOST_KIND").unwrap_or_else(|_| "host".to_string());
+            let mut host = resolve_writer_host();
             let mut i = 1;
             while i < args.len() {
                 match args[i].as_str() {

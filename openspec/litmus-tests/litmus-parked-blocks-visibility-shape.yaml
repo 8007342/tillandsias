@@ -17,22 +17,22 @@ preconditions:
 
 critical_path:
   - step: "POSITIVE CONTROL: a dependent of an implemented packet is surfaced with its outstanding action"
-    command: "T=$(mktemp -d); printf 'steps:\\n  - packet_id: impl-dep\\n    order: 930\\n    status: implemented\\n    next_action: |\\n      rebuild and re-verify on a clean guest\\n  - packet_id: waiter\\n    order: 931\\n    status: pending\\n    depends_on: [impl-dep]\\n' > \"$T/index.yaml\"; out=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; echo \"$out\" | grep -q 'waiter	impl-dep	implemented	rebuild and re-verify on a clean guest' && echo 'ok: parked block surfaced'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); printf 'steps:\\n  - packet_id: impl-dep\\n    order: 930\\n    status: implemented\\n    next_action: |\\n      rebuild and re-verify on a clean guest\\n  - packet_id: waiter\\n    order: 931\\n    status: pending\\n    depends_on: [impl-dep]\\n' > \"$T/index.yaml\"; out=$(\"$MFPLAN\" --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; echo \"$out\" | grep -q 'waiter	impl-dep	implemented	rebuild and re-verify on a clean guest' && echo 'ok: parked block surfaced'"
     timeout_ms: 15000
     expected_behavior: "ok: parked block surfaced"
 
   - step: "NEGATIVE CONTROL: a dependent of a ready (progressing) packet is NOT surfaced"
-    command: "T=$(mktemp -d); printf 'steps:\\n  - packet_id: ready-dep\\n    order: 932\\n    status: ready\\n  - packet_id: waiter2\\n    order: 933\\n    status: pending\\n    depends_on: [ready-dep]\\n' > \"$T/index.yaml\"; out=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; if echo \"$out\" | grep -q 'waiter2'; then echo 'FAIL: a ready dependency was reported as a parked block'; exit 1; fi; echo 'ok: ready dependency not surfaced'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); printf 'steps:\\n  - packet_id: ready-dep\\n    order: 932\\n    status: ready\\n  - packet_id: waiter2\\n    order: 933\\n    status: pending\\n    depends_on: [ready-dep]\\n' > \"$T/index.yaml\"; out=$(\"$MFPLAN\" --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; if echo \"$out\" | grep -q 'waiter2'; then echo 'FAIL: a ready dependency was reported as a parked block'; exit 1; fi; echo 'ok: ready dependency not surfaced'"
     timeout_ms: 15000
     expected_behavior: "ok: ready dependency not surfaced"
 
   - step: "NEGATIVE CONTROL: a dependent of a terminal (done) packet is NOT surfaced"
-    command: "T=$(mktemp -d); printf 'steps:\\n  - packet_id: done-dep\\n    order: 934\\n    status: done\\n  - packet_id: waiter3\\n    order: 935\\n    status: pending\\n    depends_on: [done-dep]\\n' > \"$T/index.yaml\"; out=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; if echo \"$out\" | grep -q 'waiter3'; then echo 'FAIL: a terminal dependency was reported as a parked block'; exit 1; fi; echo 'ok: terminal dependency not surfaced'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); printf 'steps:\\n  - packet_id: done-dep\\n    order: 934\\n    status: done\\n  - packet_id: waiter3\\n    order: 935\\n    status: pending\\n    depends_on: [done-dep]\\n' > \"$T/index.yaml\"; out=$(\"$MFPLAN\" --index \"$T/index.yaml\" parked-blocks); rm -rf \"$T\"; if echo \"$out\" | grep -q 'waiter3'; then echo 'FAIL: a terminal dependency was reported as a parked block'; exit 1; fi; echo 'ok: terminal dependency not surfaced'"
     timeout_ms: 15000
     expected_behavior: "ok: terminal dependency not surfaced"
 
   - step: "the check command counts parked-block edges in its ok line"
-    command: "./target/release/tillandsias-plan check 2>/dev/null | grep -qE 'parked-block edge' && echo 'ok: check reports parked-block edge count'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; \"$MFPLAN\" check 2>/dev/null | grep -qE 'parked-block edge' && echo 'ok: check reports parked-block edge count'"
     timeout_ms: 30000
     expected_behavior: "ok: check reports parked-block edge count"
 

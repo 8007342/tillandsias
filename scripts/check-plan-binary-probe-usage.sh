@@ -27,8 +27,31 @@
 # a genuine exception ever appears, that is a signal to reconsider the rule, not
 # to add an allow-list.
 #
+# WHY IT NOW SCANS TWO SURFACES (order 751-vega). This gate walked
+# `find scripts -name '*.sh'` and had been reporting ok on every windows cycle
+# while FOURTEEN litmus files resolved the binary by hand and two of them were
+# RED for exactly that. The gate was not wrong about what it measured -- it was
+# scoped to scripts/, and its verdict said so nowhere. That is the same defect
+# one level up from the one it exists to catch: a signal reporting healthy
+# without observing the property. The verdict line now NAMES each surface and
+# its counts, so a surface that is not being scanned is visible in the output
+# rather than inferable from the source.
+#
+# THE LITMUS RULE differs in one respect. A litmus command may build its OWN
+# tillandsias-plan into a scratch target dir and run it from there:
+#
+#   CARGO_TARGET_DIR=$F/target cargo build ... && $F/target/release/tillandsias-plan
+#
+# That is not the shared checkout's binary and the probe must not resolve it --
+# the whole point of that step is to run the artifact it just built. So the
+# pattern requires the path to be the CHECKOUT-relative one (`./target/...`,
+# `target/...`), not one rooted at a variable. This is a distinction in the
+# rule, not an allow-list of files: any command naming the shared checkout's
+# path is in scope regardless of which file it lives in.
+#
 # GRAMMAR (exactly one line on stdout)
-#   ok:plan-binary-probe-usage:<eligible> eligible of <scanned> scanned
+#   ok:plan-binary-probe-usage:<eligible> eligible of <scanned> scanned \
+#       [scripts=<e>/<s> litmus=<e>/<s>]
 #   violation:plan-binary-probe-usage:<n>
 #
 # Exit 0 on ok, 1 on violation, 2 on usage error.
@@ -72,18 +95,63 @@ while IFS= read -r f; do
     fi
 done < <(find "$SCAN_DIR" -name '*.sh' -type f 2>/dev/null | sort)
 
+sh_checked="$checked"
+sh_scanned="$scanned"
+
+# ── Surface 2: litmus step commands (order 751-vega) ──────────────────────────
+# A litmus `command:` runs in a bash -c child that has already sourced
+# scripts/litmus-stdlib.sh, so the compliant form there is `mf_plan_binary`
+# (which delegates to the same probe) rather than sourcing the probe directly.
+LITMUS_DIR="${LITMUS_SCAN_DIR:-openspec/litmus-tests}"
+lit_checked=0
+lit_scanned=0
+if [ -d "$LITMUS_DIR" ]; then
+    while IFS= read -r f; do
+        lit_scanned=$((lit_scanned + 1))
+        # Only `command:` lines execute. A precondition or a comment naming the
+        # path is documentation, and flagging it would be the "gate that greps
+        # its own comment" antipattern 601-462g names.
+        cmds="$(grep -E '^[[:space:]]*-?[[:space:]]*command:' "$f")"
+        [ -n "$cmds" ] || continue
+        # The CHECKOUT-relative path only: `$F/target/release/...` is a binary
+        # the step built for itself and must not be redirected to the probe.
+        hardcoded=0
+        printf '%s' "$cmds" \
+            | grep -qE '(^|[^/$[:alnum:]_])\.?/?target/(release|debug)/tillandsias-plan' \
+            && hardcoded=1
+        compliant=0
+        printf '%s' "$cmds" | grep -q 'mf_plan_binary' && compliant=1
+        grep -q "$PROBE_REL" "$f" && compliant=1
+        # Count every file that USES the plan binary, not only the ones still
+        # naming the path. Counting eligibility as "still broken" would make the
+        # surface total FALL as the sweep fixed files, so a fully-converted
+        # directory would report the same `litmus=0/347` as one nobody had ever
+        # looked at -- the exact ambiguity that hid this surface in the first
+        # place.
+        [ "$hardcoded" -eq 1 ] || [ "$compliant" -eq 1 ] || continue
+        lit_checked=$((lit_checked + 1))
+        [ "$compliant" -eq 1 ] || violations+=("$f")
+    done < <(find "$LITMUS_DIR" -name '*.yaml' -type f 2>/dev/null | sort)
+fi
+checked=$((checked + lit_checked))
+scanned=$((scanned + lit_scanned))
+
 if [ "${#violations[@]}" -gt 0 ]; then
     echo "violation:plan-binary-probe-usage:${#violations[@]}"
     for v in "${violations[@]}"; do
         echo "  $v runs tillandsias-plan from a hardcoded target/ path without sourcing scripts/$PROBE_REL" >&2
     done
-    echo "  REMEDY: . \"\$(dirname \"\${BASH_SOURCE[0]}\")/plan-binary-probe.sh\"; PLAN=\"\$(resolve_plan_binary)\"" >&2
-    echo "  An executable bit is a claim; running the binary is evidence (704-zcgi, 721-nyev)." >&2
+    echo "  REMEDY (scripts): . \"\$(dirname \"\${BASH_SOURCE[0]}\")/plan-binary-probe.sh\"; PLAN=\"\$(resolve_plan_binary)\"" >&2
+    echo "  REMEDY (litmus):  MFPLAN=\"\$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }" >&2
+    echo "  An executable bit is a claim; running the binary is evidence (704-zcgi, 721-nyev, 751-vega)." >&2
     exit 1
 fi
 
-# Say BOTH numbers. "1 checked" reads as "it only looked at one file",
-# when it means "one file mentions the path and it is compliant" -- the
-# count invites the same misreading this whole class is about.
-echo "ok:plan-binary-probe-usage:${checked} eligible of ${scanned} scanned"
+# Say BOTH numbers, and say them PER SURFACE. "1 checked" reads as "it only
+# looked at one file" when it means "one file mentions the path and it is
+# compliant" -- the count invites the same misreading this whole class is
+# about. The per-surface breakdown exists for a sharper reason: this gate was
+# green for weeks while a whole directory sat outside its beam, and a single
+# total could never have shown that (751-vega).
+echo "ok:plan-binary-probe-usage:${checked} eligible of ${scanned} scanned [scripts=${sh_checked}/${sh_scanned} litmus=${lit_checked}/${lit_scanned}]"
 exit 0

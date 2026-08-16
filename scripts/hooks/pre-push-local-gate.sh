@@ -236,6 +236,25 @@ attempt_plan_only_lane() {
             echo "$out" | head -6 | sed 's/^/  /' >&2
             return 1
         fi
+        # A fragment `check` could not PARSE is skipped with a warning and an
+        # exit code of ZERO (measured on windows 2026-08-15, order 753-*):
+        #
+        #   warning: ledger fragment plan/index.d/<f> does not parse and was
+        #            SKIPPED — its contents are not in the answers below
+        #   ok: 0 packets, ids unique, live references sound
+        #
+        # Without yq this lane DELEGATES its YAML parse to that command (see the
+        # LANE_NOTES above), so a `packets: [unclosed` fragment sailed onto the
+        # trunk on the fast lane while the lane printed "validated <path>". That
+        # is this file's own stated worst case -- a gate vouching for evidence it
+        # did not gather -- so the skip is read here as the refusal `check`
+        # declines to make. The deeper question of whether `check` itself should
+        # exit non-zero is filed separately; it has callers on three hosts.
+        if printf '%s' "$out" | grep -q 'does not parse and was SKIPPED'; then
+            echo "plan-only lane: validation FAILED — tillandsias-plan check could not PARSE a pushed fragment and skipped it (full gate required):" >&2
+            printf '%s' "$out" | grep 'does not parse and was SKIPPED' | head -6 | sed 's/^/  /' >&2
+            return 1
+        fi
         if [[ -f scripts/check-fragment-status-loss.sh ]]; then
             if ! out="$(bash scripts/check-fragment-status-loss.sh 2>&1)"; then
                 echo "plan-only lane: validation FAILED — check-fragment-status-loss refused (full gate required):" >&2
@@ -247,6 +266,22 @@ attempt_plan_only_lane() {
         fi
     else
         LANE_NOTES+=("target/release/tillandsias-plan absent — fragment schema and status-loss checks skipped (yq parsed every pushed blob)")
+    fi
+
+    # The AUTHOR-SIDE fragment parse gate (order 698-7n6q). It was wired into
+    # build.sh and nowhere else -- and this lane exists precisely to accept a
+    # push WITHOUT build.sh. So the one gate written to stop a malformed
+    # fragment at its author was bypassed by the only path that skips the build,
+    # which is the path fragments actually take. Measured windows 2026-08-15:
+    # `packets: [unclosed` pushed clean through this lane.
+    if [[ -f scripts/check-added-fragments-parse.sh ]]; then
+        if ! out="$(bash scripts/check-added-fragments-parse.sh 2>&1)"; then
+            echo "plan-only lane: validation FAILED — check-added-fragments-parse refused (full gate required):" >&2
+            echo "$out" | head -6 | sed 's/^/  /' >&2
+            return 1
+        fi
+    else
+        LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
     fi
 
     # Forbidden-pattern check that applies to any tracked text, fragments
