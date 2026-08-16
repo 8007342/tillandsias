@@ -46650,6 +46650,13 @@ plan_index:
         - 'Pinned by a litmus with a NEGATIVE CONTROL: a repo with only text files must pass, or ''refuse everything'' would satisfy the positive case.'
         - The .gitignore block is extended to the extensions actually seen; verify `git ls-files | grep -iE '\.(so|dylib|dll|exe|a|wasm|pdb)$'` is empty first so the change is safe.
 
+      events:
+        - type: progress
+          ts: "2026-08-16T06:45:07Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Note for the next reader: the exit criteria's 'five icon/image assets' undercounted — git's own heuristic classifies all 33 SVG species icons as binary alongside the 5 raster assets. The allowlist is therefore 4 path PREFIXES (assets/icons/, both tray asset dirs, images/dmg/), documented in the guard with the executable class never allowlistable.
     - packet_id: e2e-preflight-false-live-runtime-on-macos
       order: 723-fndi
       status: ready
