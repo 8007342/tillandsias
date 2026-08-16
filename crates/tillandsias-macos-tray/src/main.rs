@@ -285,7 +285,10 @@ fn build_exec_guest_shell_cmd(words: &[String]) -> Result<String, String> {
         return Err("Error: --exec-guest requires a command, e.g. --exec-guest uname -a".into());
     }
     let first = words[0].as_str();
-    if matches!(first, "bash" | "sh" | "/bin/bash" | "/bin/sh" | "/usr/bin/env") {
+    if matches!(
+        first,
+        "bash" | "sh" | "/bin/bash" | "/bin/sh" | "/usr/bin/env"
+    ) {
         return Err(format!(
             "Error: --exec-guest words are JOINED and already run via `/bin/bash -lc`; \
              a leading `{first}` re-wraps the command and its inner quoting is lost \
