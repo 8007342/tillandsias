@@ -279,7 +279,12 @@ fn main() {
 /// (the guest allowlist admits no other shape), so caller quoting inside a
 /// word does not survive — a caller-supplied shell wrapper is therefore
 /// always a silent rewrite and is refused with the correct spelling shown.
-#[cfg(target_os = "macos")]
+// Pure string logic with no macOS dependency — deliberately NOT target-gated
+// so its #[cfg(test)] pins compile and run on every host. It shipped gated
+// while the tests were not (2026-08-16), which broke `--all-targets` builds
+// on every non-macOS host: the fleet-wide test run is the guard against a
+// recurrence, so keep this un-gated even though only macOS calls it.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn build_exec_guest_shell_cmd(words: &[String]) -> Result<String, String> {
     if words.is_empty() {
         return Err("Error: --exec-guest requires a command, e.g. --exec-guest uname -a".into());

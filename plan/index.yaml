@@ -53839,6 +53839,12 @@ plan_index:
         minute after three hypothesis cycles missed it, and it is the tool
         the fixture can assert against.
       events:
+        - type: note
+          ts: "2026-08-16T21:08:56Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Cross-platform repair 2026-08-16 (no behavior change): build_exec_guest_shell_cmd shipped target_os=macos-gated while its test module was plain cfg(test), breaking --all-targets compiles on every non-macOS host at the sibling merge union. Un-gated the pure-string fn (allow(dead_code) off-macos) so the 773-fx3u pins now run FLEET-WIDE — the recurrence guard is the tests themselves.
         - type: filed
           ts: "2026-08-16T17:30:00Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260816t1723z
