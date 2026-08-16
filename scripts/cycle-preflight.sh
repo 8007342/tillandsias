@@ -36,6 +36,19 @@
 #   ok:cycle-preflight:<plan-verdict>:<inference-report>
 #   blocked:preflight:<component>:<detail>
 #
+# On windows hosts <plan-verdict> carries a `+wsl-<report>` suffix (order
+# 770-f6u4, cadence decision): the instrument-rebuild principle applies to the
+# WSL-side expert binary too — the MCP servers the harness launches live in the
+# WSL distro and exec ~/.local/bin/tillandsias-plan there (770-ehym), so a
+# cycle that rebuilds only the PE can still start with stale-or-missing
+# experts after a sweep. scripts/wsl-plan-expert-ensure.sh is invoked after
+# the host rebuild; its verdict is folded INTO the plan segment with colons
+# re-spelled as dashes (e.g. `rebuilt+wsl-ok`,
+# `rebuilt+wsl-degraded-wsl-build-failed`) so the pinned colon arity of this
+# line is unchanged and no gate word appears inside an ok line. The ensure
+# script is advisory by contract (always exit 0): a degraded WSL lane is a
+# degraded read path, never a blocked cycle.
+#
 # <inference-report> is ok:*, skip:*, degraded:<reason>, or unknown — never
 # blocked:*. Inference is advisory (see below), and on 2026-08-15 a failed
 # forge saw the ensure script's own gating verdict pass through verbatim:
@@ -91,6 +104,22 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
         echo "blocked:preflight:plan:capabilities-refused"
         exit 1
     fi
+
+    # Windows: the WSL-side expert lifecycle is part of the instrument too
+    # (770-f6u4 cadence decision; mechanism 770-ehym). Advisory — the ensure
+    # script always exits 0 — and its verdict is folded into the plan segment
+    # colon-free so the pinned line arity is preserved.
+    case "$(uname -s 2>/dev/null)" in
+        MINGW* | MSYS* | CYGWIN*)
+            wsl_verdict="$(bash "$ROOT/scripts/wsl-plan-expert-ensure.sh" 2>/dev/null | tail -1)"
+            case "$wsl_verdict" in
+                ok:wsl-plan-expert:*) wsl_report="wsl-ok" ;;
+                skip:* | degraded:*) wsl_report="wsl-$(printf '%s' "$wsl_verdict" | tr ':' '-' | cut -c1-60)" ;;
+                *) wsl_report="wsl-degraded-no-verdict" ;;
+            esac
+            plan_verdict="${plan_verdict}+${wsl_report}"
+            ;;
+    esac
 fi
 
 # Inference is a REPORT, not a gate: the deterministic expert tiers work without

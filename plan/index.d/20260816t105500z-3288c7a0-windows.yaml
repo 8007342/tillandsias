@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: mcp-health-probe-tool-call-depth
+    event:
+      type: completed
+      ts: "2026-08-16T10:55:00Z"
+      agent_id: windows-yolanda-fable5-20260816t1021z
+      host: windows
+      summary: >
+        All four criteria landed (windows cycle 4, 2026-08-16). (1) probe_server now runs the full conversation: initialize + notifications/initialized + one cheap tools/call per expert (forge-plan expert_capability with the order-569 pinned grammar and now!=none/stale-binary; project-info project_type non-empty; unknown servers tools/list), demanding the called tool's PINNED output because the wrappers deliver exec failures as structurally valid result frames — frame validity alone would have called the 2026-08-16 outage healthy. (2) Launcher fidelity: on windows a registered bare bash resolves the way the harness does (WindowsApps then System32 WSL bash), seams TILLANDSIAS_MCP_PROBE_OS/TILLANDSIAS_MCP_HARNESS_BASH, launcher recorded in every JSONL record. (3) litmus:mcp-expert-health-probe-shape: 3 new adversarial fixtures (handshake-then-error, handshake-then-silence, valid-frame-carrying-wrapper-error-text = the live shape) + stage-token and launcher-fidelity scenarios + repointed args-honoured step; 20/20 fixture scenarios green. (4) Cadence decision IMPLEMENTED: cycle-preflight.sh invokes wsl-plan-expert-ensure.sh on windows, verdict folded into the plan segment colon-free (rebuilt+wsl-ok) preserving pinned line arity. Live: probe through WindowsApps bash reports stage=full for both experts in ~2s each.
