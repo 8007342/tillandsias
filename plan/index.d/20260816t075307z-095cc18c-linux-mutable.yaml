@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mirror-identity-agent-sidecar-and-forge-wiring
+    field: status
+    value: implemented
+    ts: "2026-08-16T07:53:07Z"
+    host: linux_mutable
+
+events:
+  - packet_id: mirror-identity-agent-sidecar-and-forge-wiring
+    event:
+      type: progress
+      ts: "2026-08-16T07:53:07Z"
+      host: linux_mutable
+      summary: >
+        status 'implemented' (not terminal) with evidence_refs: worktree@f234b138e: T8+T10 implemented and hermetically proven — scripts/test-ssh-lane-sidecar.sh 4/4 in the REAL images/git container (ready+fingerprint+agent-serving via socket-only client shape; host-type/two-principal/wrong-principal certs each refused with named causes; renewal loop exercised at 2s interval with agent alive; §4a M2 against a REAL in-container vault dev-server: token holding the minted-shape exact-path policy signs ssh-client-signer/sign/<own-mid> 200 and gets HTTP 403 from <other-mid>); litmus:ssh-lane-sidecar-shape registered+green under git-mirror-service (git-mirror-service quick suite 25/25 PASS); cargo 351 passed incl. write_forge_gitconfig_wires_ssh_push_lane_when_enabled (pushInsteadOf-only Q4 + core.sshCommand + @cert-authority known_hosts), ssh_lane_sidecar_wiring_windows (sidecar between mirror and forge; cleanup removes sidecar+volume; flag-gated; D6 mint; attribution), cleanup-contract 5-removal pins; export_ssh_env probe order pinned (criterion 5). ./build.sh --check green.
