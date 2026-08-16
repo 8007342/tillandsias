@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# freshness: refreshed 2026-08-16 windows-yolanda-fable5-20260816t0921z
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"

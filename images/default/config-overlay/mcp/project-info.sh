@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # MCP Server: Project Info for Tillandsias forge containers
+# freshness: updated 2026-08-16 windows-yolanda-fable5-20260816t0921z
 # @trace spec:layered-tools-overlay, spec:forge-environment-discoverability
 # Communicates via JSON-RPC over stdin/stdout (MCP stdio transport)
 #
@@ -396,6 +397,15 @@ resolve_plan_index() {
     printf '\n'
 }
 
+# 770-ehym: run-don't-stat, mirroring forge-plan.sh's plan_bin_runs and the
+# shared host probe (721-nyev). `-x` passes on /mnt/c for the OTHER platform's
+# artifact in a shared Windows/WSL checkout; executing `capabilities` is the
+# only test that proves THIS server can actually run the candidate. The
+# TILLANDSIAS_PLAN_BIN override stays existence-checked, not probed (704-zcgi).
+plan_bin_runs() {
+    [ -n "$1" ] && "$1" capabilities >/dev/null 2>&1
+}
+
 resolve_plan_bin() {
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_BIN"
@@ -410,7 +420,7 @@ resolve_plan_bin() {
         _rpb_idx="$(resolve_plan_index)"
         if [ -n "$_rpb_idx" ]; then
             _rpb_root="$(dirname "$(dirname "$_rpb_idx")")"
-            if [ -x "$_rpb_root/target/release/tillandsias-plan" ]; then
+            if plan_bin_runs "$_rpb_root/target/release/tillandsias-plan"; then
                 printf '%s\n' "$_rpb_root/target/release/tillandsias-plan"
                 return 0
             fi
@@ -420,7 +430,7 @@ resolve_plan_bin() {
         "$HOME/.local/bin/tillandsias-plan" \
         "/usr/local/bin/tillandsias-plan" \
         "/usr/bin/tillandsias-plan"; do
-        if [ -x "$candidate" ]; then
+        if plan_bin_runs "$candidate"; then
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -429,7 +439,7 @@ resolve_plan_bin() {
     _idx="$(resolve_plan_index)"
     if [ -n "$_idx" ]; then
         _root="$(dirname "$(dirname "$_idx")")"
-        if [ -x "$_root/target/release/tillandsias-plan" ]; then
+        if plan_bin_runs "$_root/target/release/tillandsias-plan"; then
             printf '%s\n' "$_root/target/release/tillandsias-plan"
             return 0
         fi

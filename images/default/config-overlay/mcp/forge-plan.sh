@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # MCP Server: Forge Plan + Methodology Query Tools
+# freshness: updated 2026-08-16 windows-yolanda-fable5-20260816t0921z
 # @trace order:456, order:394b, order:394c, spec:spec-traceability, invariant:plan_is_queried_via_mcp_server_avoiding_heuristic_parsing
 # Communicates via JSON-RPC over stdin/stdout (MCP stdio transport)
 #
@@ -292,6 +293,22 @@ resolve_plan_index() {
 # artifact ensure_forge_experts just produced and is the one the launch state
 # reports on, so preferring a possibly-stale target/release there would make the
 # experts state line lie about which binary is answering.
+# 770-ehym: an executable BIT is a claim; RUNNING the binary is evidence
+# (order 721-nyev, scripts/plan-binary-probe.sh — the shared host probe this
+# mirrors). On a shared Windows/WSL checkout the shared target/ path can hold
+# the OTHER platform's artifact: `-x` passes on /mnt/c for a Windows PE this
+# WSL-hosted server cannot exec, so every tool call died at exec time while
+# the initialize handshake stayed green (2026-08-16, forge-plan.sh line 417,
+# plan/issues/windows-host-tooling-hits-linux-elves-in-target-2026-08-16.md).
+# `capabilities` is the probe subcommand for the same reason the host probe
+# uses it: it exits 0 only on a binary modern enough to serve this wrapper.
+# The TILLANDSIAS_PLAN_BIN override stays existence-checked, not probed — an
+# explicit override is the caller naming the binary, not a candidate to be
+# judged (704-zcgi, first corpus run).
+plan_bin_runs() {
+    [ -n "$1" ] && "$1" capabilities >/dev/null 2>&1
+}
+
 resolve_plan_bin() {
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_BIN"
@@ -311,7 +328,7 @@ resolve_plan_bin() {
         _rpb_idx="$(resolve_plan_index)"
         if [ -n "$_rpb_idx" ]; then
             _rpb_root="$(dirname "$(dirname "$_rpb_idx")")"
-            if [ -x "$_rpb_root/target/release/tillandsias-plan" ]; then
+            if plan_bin_runs "$_rpb_root/target/release/tillandsias-plan"; then
                 printf '%s\n' "$_rpb_root/target/release/tillandsias-plan"
                 return 0
             fi
@@ -321,7 +338,7 @@ resolve_plan_bin() {
         "$PLAN_BIN_CANONICAL" \
         "/usr/local/bin/tillandsias-plan" \
         "/usr/bin/tillandsias-plan"; do
-        if [ -x "$candidate" ]; then
+        if plan_bin_runs "$candidate"; then
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -332,7 +349,7 @@ resolve_plan_bin() {
     _idx="$(resolve_plan_index)"
     if [ -n "$_idx" ]; then
         _root="$(dirname "$(dirname "$_idx")")"
-        if [ -x "$_root/target/release/tillandsias-plan" ]; then
+        if plan_bin_runs "$_root/target/release/tillandsias-plan"; then
             printf '%s\n' "$_root/target/release/tillandsias-plan"
             return 0
         fi
