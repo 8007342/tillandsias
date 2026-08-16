@@ -1124,5 +1124,6 @@ specs:
   litmus_tests:
   - litmus:vsock-handshake
   - litmus:vsock-exec-heartbeat
+  - litmus:vsock-unauthenticated-peer-rejected
   coverage_ratio: 100
   last_verified: '2026-07-14'
