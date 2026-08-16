@@ -404,6 +404,20 @@ git daemon \
 GIT_DAEMON_PID=$!
 echo "$(date -Is) [git-service] daemon listening on 9418 (clones available; startup sweep runs in background)" >> "$SLOG"
 
+# ── Order 749-54pv (design T4+T5): authenticated ssh push lane ─────────────
+# Behind TILLANDSIAS_MIRROR_SSHD=1 until the T11 staged migration flips the
+# default. Failure is LOUD but non-fatal: the anonymous mirror lane above must
+# keep serving clones; an absent ssh lane means pushes have no authenticated
+# path, which the T13 litmus makes a named failure rather than a fallback.
+if [ "${TILLANDSIAS_MIRROR_SSHD:-0}" = "1" ]; then
+    if ! /usr/local/bin/sshd-identity.sh ensure; then
+        echo "WARNING: fail:sshd-identity:ensure — authenticated push lane ABSENT; anonymous mirror continues (749-54pv; lane flip is T11)" >&2
+        echo "$(date -Is) [git-service] WARNING sshd-identity ensure failed; ssh push lane absent" >> "$SLOG"
+    else
+        echo "$(date -Is) [git-service] sshd identity lane ready on ${TILLANDSIAS_SSHD_PORT:-2222}" >> "$SLOG"
+    fi
+fi
+
 # Only do this on a real mirror tree (skip empty/init'ing service).
 #
 # Safety: build an explicit refspec list from this mirror's local refs.

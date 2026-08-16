@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: no-guard-against-recommitting-a-binary
+    field: status
+    value: completed
+    ts: "2026-08-16T06:45:07Z"
+    host: linux_mutable
+
+events:
+  - packet_id: no-guard-against-recommitting-a-binary
+    event:
+      type: completed
+      ts: "2026-08-16T06:45:07Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: worktree@0addee587: scripts/check-no-tracked-binaries.sh landed per criteria — git-numstat-vs-empty-tree classification (NOT file(1)) + executable-extension lane; live verdict ok:no-tracked-binaries:38 binary-classified 38 allowlisted (allowlist = 4 documented image-asset prefixes; packet's 'five assets' was empirically 38 blobs, git binary-classifies the SVG icon families); hermetic fixture 5/5 incl. text-only NEGATIVE CONTROL, ELF-blob refusal, zero-byte .so extension-lane refusal, allowlisted-image pass, .so-inside-allowed-prefix refusal; pre-verified git ls-files ext scan EMPTY then .gitignore extended (so/dylib/dll/exe/a/wasm/pdb); wired into local-ci.sh beside container-bases (guard-activation audit satisfied); litmus:no-tracked-binaries-shape 5/5 STEPS OK registered under dev-build; ./build.sh --check green

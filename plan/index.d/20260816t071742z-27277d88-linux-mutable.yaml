@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: mirror-identity-receive-wrapper-and-repo-hardening
+    field: status
+    value: completed
+    ts: "2026-08-16T07:17:42Z"
+    host: linux_mutable
+
+events:
+  - packet_id: mirror-identity-receive-wrapper-and-repo-hardening
+    event:
+      type: completed
+      ts: "2026-08-16T07:17:42Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: f94a35b60: all four exit criteria fixture-proven. C1 (§4a M5): scripts/test-mirror-receive-wrapper.sh m5-container — REAL images/git container under the 749-wv4d posture, real sshd + fixture-CA certs; git push to ssh://.../projectB landed the exact commit in the FIXED /tmp/fx/srv/projecta (sha compared), projectB never created, SetEnv channel verified rendered. C2 (T7 upgrade): force-and-delete-refused-on-upgraded-volume — volume born permissive, upgraded by the REAL entrypoint setup-only seam, rewind and deletion refused; PLUS the order-579 suite (test-git-mirror-existing-volume-hardening.sh) 9/9 cases PASS at this tree for the hooks/relay half. C3: fsck-effective-on-upgraded-volume — malformed commit (committer missing email, hash-object --literally) REFUSED with fsck cause and no ref created, while an otherwise-identical fsckObjects=false control copy ACCEPTS the same push — the config gate is the deciding control. C4: push-vars-exported-from-cert — offline PATH-interposed recorder asserts argv=fixed repo and KEY_FP/PRINCIPAL/SERIAL/KEY_ID exactly match the cert (SHA256 fp, til:forge-push:<mid>, serial 42, key id); in-container pre-receive hook dump re-proves all four during the M5 push (serial 99, key id token-m5-keyid). litmus:mirror-receive-wrapper-shape registered under git-mirror-service, suite 25/25 PASS; test-mirror-host-cert-and-sshd.sh all green after the SetEnv addition; ./build.sh --check green

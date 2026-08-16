@@ -1063,6 +1063,30 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
+    # CHECK 6b: No tracked build artifacts (order 723-ydmk)
+    # ============================================================================
+    # A build artifact matching .gitignore but ALREADY TRACKED is invisible to
+    # the ignore rules — the mechanism behind all three historical binary leaks.
+    # git's own binary classification (numstat vs the empty tree) + an
+    # executable-extension lane; image assets pass via a documented prefix
+    # allowlist inside the guard.
+
+    log_section "No Tracked Binaries"
+    if [[ -f "scripts/check-no-tracked-binaries.sh" ]]; then
+        if bash scripts/check-no-tracked-binaries.sh 2>&1 | tee /tmp/no-tracked-binaries.log; then
+            log_pass "No tracked build artifacts outside the image-asset allowlist"
+            archive_check_log "no-tracked-binaries" "pass" /tmp/no-tracked-binaries.log
+        else
+            log_fail_tracked "no-tracked-binaries" "Tracked binary artifact found (see /tmp/no-tracked-binaries.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/no-tracked-binaries.log >&2
+            archive_check_log "no-tracked-binaries" "fail" /tmp/no-tracked-binaries.log
+        fi
+    else
+        log_fail_missing_guard "no-tracked-binaries" "scripts/check-no-tracked-binaries.sh"
+        archive_check_log "no-tracked-binaries" "skipped"
+    fi
+
+    # ============================================================================
     # Guard activation audit (order 599-4wzr) — a guard nobody can prove is
     # running is not a guard. Fails loud if any check-*.sh has no invoker.
     # ============================================================================

@@ -1,0 +1,31 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-16: capture from the 749-2fqj
+# implementation fork, per the reduction-engine capture contract.
+packets:
+  - packet_id: build-image-regenerates-metrics-dashboard-from-empty-telemetry
+    order: 766-7zqf
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "build-image.sh regenerates plan/metrics-dashboard.md from whatever telemetry the invoking environment has — in a fresh worktree that is EMPTY, and the committed history is silently clobbered"
+    deliverable: "the dashboard regeneration is either gated on non-empty telemetry (refuse to overwrite a richer committed dashboard with an emptier one, loudly) or moved out of build-image.sh into an explicit telemetry-owning step"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [telemetry, build, plan-tooling, fail-loud]
+    estimated_hours: 2
+    context: |
+      Observed 2026-08-16 by the 749-2fqj implementation fork: running
+      scripts/build-image.sh inside a fresh git worktree regenerated
+      plan/metrics-dashboard.md from the worktree environment's EMPTY telemetry
+      logs and silently replaced the committed dashboard content — the fork had
+      to notice and revert the churn by hand before committing. Same
+      last-writer-wins shape as 747-hws2 (startup-context addendum) and the
+      metrics rule "never report a metric the tooling did not produce": an
+      empty-input regeneration REMOVES real history and presents it as current.
+      Any agent worktree (now a standard pattern: three forks used worktrees
+      tonight) or fresh clone that builds an image will hit this. Secondary
+      observation from the same fork, recorded here rather than as its own
+      packet: rootless podman fails with an opaque `require_podman` 127 when a
+      fixture leaks a deleted $HOME — fixture authors should subshell-scope
+      HOME overrides; a loud precondition check in require_podman would turn
+      that 127 into a named refusal.

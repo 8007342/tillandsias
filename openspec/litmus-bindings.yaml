@@ -235,8 +235,9 @@ specs:
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
   - litmus:cross-target-cfg-gate-check
+  - litmus:no-tracked-binaries-shape
   coverage_ratio: 100
-  last_verified: '2026-07-15'
+  last_verified: '2026-08-16'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []
@@ -455,6 +456,8 @@ specs:
   - litmus:forge-gitdir-staging-chown
   - litmus:git-mirror-relay-token-expiry
   - litmus:mirror-sshd-posture-shape
+  - litmus:mirror-host-cert-and-sshd-shape
+  - litmus:mirror-receive-wrapper-shape
   - litmus:forge-upstream-auth-gate
   coverage_ratio: 83
   last_verified: '2026-07-23'

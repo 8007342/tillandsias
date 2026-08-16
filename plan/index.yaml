@@ -32213,6 +32213,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-16T07:08:45Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Host-capability blocker recorded by the 723-sazx verification fork (2026-08-16): nix-daemon.socket is disabled/inactive on macuahuitl and there is no passwordless sudo, so no local nix build can run — this packet's 'Nix-capable host' precondition is NOT met here until the operator runs: sudo systemctl enable --now nix-daemon.socket. Same block applies to any local re-verification of the release nix lane.
+        - type: note
           ts: "2026-08-11T09:15:00Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
           host: macos
@@ -35833,6 +35839,12 @@ plan_index:
         The last criterion is the generalizable one. A scoring function that cannot tell "absent" from "low" will always fail in this direction, and will always fail quietly.
 
       events:
+        - type: note
+          ts: "2026-08-16T07:08:45Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Observed 2026-08-16 by the 723-sazx fork on HEAD d037f4100: litmus:selector-urgency-not-inert-shape FAILED ('urgency inert or missing ( vs )') on a tree where 723-sazx was still the ready p0; the SAME litmus passes after 723-sazx completed. The verdict appears coupled to live ledger state — an urgency litmus that can go red or green purely because the pool changed is an intermittent with a schedule (637-df4z/638-ehzi lesson). Worth a hermetic fixture pool instead of the live ledger; filing decision left to the selector packet's owner.
         - type: completed
           ts: "2026-08-12T06:02:28Z"
           host: host
@@ -46650,6 +46662,13 @@ plan_index:
         - 'Pinned by a litmus with a NEGATIVE CONTROL: a repo with only text files must pass, or ''refuse everything'' would satisfy the positive case.'
         - The .gitignore block is extended to the extensions actually seen; verify `git ls-files | grep -iE '\.(so|dylib|dll|exe|a|wasm|pdb)$'` is empty first so the change is safe.
 
+      events:
+        - type: progress
+          ts: "2026-08-16T06:45:07Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Note for the next reader: the exit criteria's 'five icon/image assets' undercounted — git's own heuristic classifies all 33 SVG species icons as binary alongside the 5 raster assets. The allowlist is therefore 4 path PREFIXES (assets/icons/, both tray asset dirs, images/dmg/), documented in the guard with the executable class never allowlistable.
     - packet_id: e2e-preflight-false-live-runtime-on-macos
       order: 723-fndi
       status: ready
@@ -50306,6 +50325,13 @@ plan_index:
         - receive.fsckObjects=true is effective on an upgraded volume (a malformed object is rejected), not merely present in config.
         - The four TILLANDSIAS_PUSH_* variables are exported with the values the audit rung consumes.
 
+      events:
+        - type: note
+          ts: "2026-08-16T07:17:43Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            579 DISPOSITION (the packet's own precheck): NOT subsumed, NOT duplicated. The hardening-placement half 749-2fqj quoted (entrypoint:131-139 init-only block) was ALREADY LANDED as an every-start migration before this work, and 579's own 9-case suite covers the pre-receive relay half at this tree (9/9 PASS live 2026-08-16). 579 stays ready on its own residual: spec supersession of the <=10-deletion relay semantics, the live existing-volume restart gate, and the full local-build E2E its next_action names (commit 23f9e4e8 pickup). This packet's upgraded-volume fixtures pin the receive-CONFIG half only; no double-close.
     - packet_id: mirror-identity-agent-sidecar-and-forge-wiring
       order: 749-6uby
       status: ready
