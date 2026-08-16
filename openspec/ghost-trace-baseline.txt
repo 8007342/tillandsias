@@ -1,3 +1,16 @@
+# 2026-08-16 union-gate surfacing (767-yrnd): seven pre-existing ghosts from
+# sibling branches, first caught when the macOS host ran the gate on the
+# merged union — origin/linux-next fails identically at this baseline.
+# BURNDOWN entries: each is assigned an owner on packet 767-yrnd to be
+# resolved by creating the spec or deleting the annotation, then removed
+# here (the gate's stale-baseline direction enforces the removal).
+error-message-localization
+help-system-localization
+macos-tray-build-and-release
+mcp-tool-socket
+shell-prompt-localization-fr
+shell-prompt-localization-ja
+windows-wsl-runtime
 enclave-service-catalog
 fat-spec-corpus-index
 forge-git-ergonomics
