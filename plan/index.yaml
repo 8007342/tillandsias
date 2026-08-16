@@ -39136,6 +39136,12 @@ plan_index:
         - a post-659 launch against a pre-659 live mirror either recreates it (no live sibling) or refuses with an explicit upgrade-skew error (live sibling)
         - the concurrent-forge litmus grows the skew case
       events:
+        - type: completed
+          ts: "2026-08-16T19:36:32Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Reuse branch now detects identity-generation skew via network aliases (positive retired-alias evidence only), recreates with no live sibling, refuses loudly with one. ContainerInspect.network_aliases added; stateful mock replays real inspect json; fixture 3b + taxonomy + branch-shape tests; podman-orchestration litmus 9/9.
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
