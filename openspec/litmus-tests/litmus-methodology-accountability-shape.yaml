@@ -31,8 +31,15 @@ critical_path:
     timeout_ms: 3000
 
   - step: "verify the methodology accountability trace surface remains discoverable"
+    # 60s, not 10s (2026-08-16, windows): this is the one step in the suite
+    # that greps the full crates/ tree, and on Windows the runner executes it
+    # inside the WSL builder distro where the checkout is a /mnt/c 9p mount —
+    # measured sub-second in native Git Bash and >10s under the runner, a
+    # deterministic host-context red for a discoverability check that has no
+    # latency requirement. See
+    # plan/issues/research-windows-methodology-accountability-litmus-red-2026-08-13.md.
     command: "grep -rnIE '@trace spec:methodology-accountability' methodology openspec docs cheatsheets scripts src-tauri crates images"
-    timeout_ms: 10000
+    timeout_ms: 60000
     expected_behavior: "methodology-accountability"
 
 observability:
