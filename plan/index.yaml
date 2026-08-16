@@ -52827,6 +52827,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-16T08:50:30Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            REPRODUCED ON THE MAIN CHECKOUT 2026-08-16T09:0xZ: a plain ./build.sh --check on linux_mutable's primary checkout (not a worktree) regenerated plan/metrics-dashboard.md from an empty telemetry source — 9 recorded builds of duration/size history flattened to empty arrays; caught only because the meta-orchestration boundary guard flagged the tree drift at attestation. Restored from HEAD. This raises the packet: the trigger is the shared regeneration path under --check with an empty/unreachable telemetry env, ANY checkout. Priority should be revisited (p2 -> p1 candidate) by whoever claims it.
+        - type: note
           ts: "2026-08-16T08:49:33Z"
           agent_id: "unknown"
           host: linux_mutable
