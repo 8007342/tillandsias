@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: macos-v05-validation-bundle
+    field: status
+    value: completed
+    ts: "2026-08-16T20:24:47Z"
+    host: macos
+
+events:
+  - packet_id: macos-v05-validation-bundle
+    event:
+      type: completed
+      ts: "2026-08-16T20:24:47Z"
+      host: macos
+      summary: >
+        status 'completed' with evidence_refs: unit pins in action_host.rs (confirmed-empty/logout-reset/first-flip) + operator in-session ruling 2026-08-16; M1-M4/M6 events of 2026-08-09/10
+  - packet_id: macos-v05-validation-bundle
+    event:
+      type: note
+      ts: "2026-08-16T20:24:47Z"
+      host: macos
+      summary: >
+        M5 runtime half closed at the achievable bar per operator ruling (no zero-repo account exists); all other criteria green on recorded evidence
