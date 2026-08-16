@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: freshness-inventory-blind-to-html-comment-stamps
+    field: status
+    value: completed
+    ts: "2026-08-16T22:37:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: freshness-inventory-blind-to-html-comment-stamps
+    event:
+      type: completed
+      ts: "2026-08-16T22:37:00Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: cycle1-20260816T22xx: STAMP_RE leader set extended with the <!--[#] markdown-comment form; freshness-inventory --self-test PASS (5 fixtures + unstamped lane intact, malformed-date lane untouched); the three previously-invisible audited files (forge-environment-discoverability spec, opencode-web-launch + git-workflows cheatsheets) now count STAMPED (unstamped-report count 0, coverage 25/1301) and stop being re-offered to freshness-next

@@ -14,6 +14,25 @@ SIZES=$(jq -r 'select(.image == "forge") | .size_bytes' "$METRICS_FILE" | tail -
 BYTES_DL=$(jq -r 'select(.image == "forge") | .bytes_downloaded // 0' "$METRICS_FILE" | tail -n 20)
 CACHE_HITS=$(jq -r 'select(.image == "forge") | .cache_hits // 0' "$METRICS_FILE" | tail -n 20)
 
+# 766-7zqf: the dashboard is a COMMITTED, cross-host artifact, but this
+# telemetry file is per-host ephemeral cache — on a host that never built the
+# forge image (or a fresh worktree/checkout) the forge-filtered series is
+# EMPTY, and regenerating would silently destroy the committed history (bit
+# two checkouts on 2026-08-16, caught only by the boundary guard). Refuse,
+# loudly, to replace a richer dashboard with a poorer one; a host with equal
+# or more local data points regenerates exactly as before. Never fails the
+# calling build (exit 0 — the refusal is the correct outcome, not an error).
+NEW_POINTS=$(echo "$DURATIONS" | grep -c '^[0-9]' || true)
+OLD_POINTS=0
+if [[ -f "$DASHBOARD_FILE" ]]; then
+    OLD_POINTS=$(grep -oE 'x-axis "Builds" 1 -> [0-9]+' "$DASHBOARD_FILE" | head -1 | grep -oE '[0-9]+$' || true)
+    OLD_POINTS="${OLD_POINTS:-0}"
+fi
+if [[ "$NEW_POINTS" -lt "$OLD_POINTS" ]]; then
+    echo "[generate-dashboard] REFUSED: local telemetry carries $NEW_POINTS forge build point(s) but $DASHBOARD_FILE records $OLD_POINTS — regenerating would destroy committed history (766-7zqf). Keeping the richer file." >&2
+    exit 0
+fi
+
 # Build Mermaid graph data for Duration
 COUNT_D=$(echo "$DURATIONS" | wc -l | tr -d ' ')
 MERMAID_DURATION="xychart-beta
