@@ -6,7 +6,7 @@
 use crate::answer::{Citation, CitationKind, Confidence, Envelope, Freshness};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
-use std::net::TcpStream;
+use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -87,6 +87,59 @@ impl PlanSectionProvider {
 
         sections
     }
+
+    /// Scan a YAML file for `<key>:` and return its scalar (plain or `>`/`|`
+    /// block) as a citable section. Deterministic, no YAML parser: the plan
+    /// pointer surfaces are hand-maintained files whose keys appear once, and
+    /// the citation must carry the REAL line span, which a parsed Value no
+    /// longer knows.
+    fn scan_yaml_key_block(&self, rel: &str, key: &str) -> Option<SemanticSection> {
+        let path = self.root.join(rel);
+        let raw = std::fs::read_to_string(&path).ok()?;
+        let lines: Vec<&str> = raw.lines().collect();
+        let needle = format!("{key}:");
+        for (idx, line) in lines.iter().enumerate() {
+            let trimmed = line.trim_start();
+            let Some(after) = trimmed.strip_prefix(&needle) else {
+                continue;
+            };
+            let indent = line.len() - trimmed.len();
+            let rest = after.trim();
+            let (content, line_end) =
+                if rest.is_empty() || rest.starts_with('>') || rest.starts_with('|') {
+                    // Block scalar: the more-indented lines that follow. Blank
+                    // lines inside the block are skipped, not terminators; the
+                    // span ends at the last content line.
+                    let mut parts: Vec<String> = Vec::new();
+                    let mut end = idx + 1;
+                    for (j, follow) in lines.iter().enumerate().skip(idx + 1) {
+                        if follow.trim().is_empty() {
+                            continue;
+                        }
+                        let f_indent = follow.len() - follow.trim_start().len();
+                        if f_indent <= indent {
+                            break;
+                        }
+                        parts.push(follow.trim().to_string());
+                        end = j + 1;
+                    }
+                    (parts.join(" "), end)
+                } else {
+                    (rest.trim_matches(['"', '\'']).to_string(), idx + 1)
+                };
+            if content.is_empty() {
+                return None;
+            }
+            return Some(SemanticSection {
+                file_rel: rel.to_string(),
+                section_title: key.to_string(),
+                content,
+                line_start: idx + 1,
+                line_end: line_end.max(idx + 1),
+            });
+        }
+        None
+    }
 }
 
 impl SemanticSectionProvider for PlanSectionProvider {
@@ -153,7 +206,31 @@ impl SemanticSectionProvider for PlanSectionProvider {
             }
         }
 
-        if best_score >= 15 { best_match } else { None }
+        if best_score >= 15 {
+            return best_match;
+        }
+
+        // Ratified pointer-surface fallback. The markdown scorer effectively
+        // requires a HEADING hit (+25 vs +1 per content token against the 15
+        // bar), and no plan markdown carries a "Direction" heading — so the
+        // bootstrap's own first question ("what is the current Direction?")
+        // refused for months while plan.yaml's `frontier_note` sat there
+        // answering it verbatim. For direction-class queries only, fall back
+        // to the designated plan.yaml current_state pointers, cited at their
+        // real line span. Closed vocabulary, first non-empty key wins.
+        let wants_direction = lower.contains("direction")
+            || lower.contains("goal")
+            || lower.contains("focus")
+            || lower.contains("frontier")
+            || lower.contains("theme");
+        if wants_direction {
+            for key in ["frontier_note", "next_step"] {
+                if let Some(sec) = self.scan_yaml_key_block("plan.yaml", key) {
+                    return Some(sec);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -209,7 +286,19 @@ impl SemanticExplainer {
     /// Dispatch prompt to local Ollama inference service with bounded timeout.
     pub fn query_inference(&self, prompt: &str) -> Option<String> {
         let addr = format!("{}:{}", self.inference_host, self.inference_port);
-        let mut stream = TcpStream::connect_timeout(&addr.parse().ok()?, self.timeout).ok()?;
+        // Resolve HOSTNAMES, not just numeric IPs. The previous
+        // `addr.parse::<SocketAddr>()` accepted only literal IPs, so the
+        // default enclave DNS name `inference:11434` (and any localhost
+        // spelling) short-circuited to None on EVERY call — the synthesis
+        // path was dead code in both environments (order 718-nkm2's design
+        // notes flagged exactly this; observed live 2026-08-15 when every
+        // open-ended bare-metal query degraded to unsupported).
+        let resolved = (self.inference_host.as_str(), self.inference_port)
+            .to_socket_addrs()
+            .ok()?;
+        let mut stream = resolved
+            .into_iter()
+            .find_map(|a| TcpStream::connect_timeout(&a, self.timeout).ok())?;
 
         let _ = stream.set_read_timeout(Some(self.timeout));
         let _ = stream.set_write_timeout(Some(self.timeout));
@@ -340,5 +429,79 @@ mod tests {
         let freshness = Freshness::new("mocksha".to_string(), "2026-08-12T00:00:00Z".to_string());
         let env = explainer.explain_query(&provider, "nonexistent topic", &freshness);
         assert!(env.is_none());
+    }
+
+    fn fixture_root(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("tilland-sem-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("fixture dir");
+        dir
+    }
+
+    #[test]
+    fn direction_query_falls_back_to_plan_yaml_frontier_note() {
+        let root = fixture_root("frontier");
+        std::fs::write(
+            root.join("plan.yaml"),
+            "plan:\n  current_state:\n    frontier_note: >\n      Current product frontier is the portable cloud region path:\n      source-matching embedded guest binary and secure wire.\n    plan_index: plan/index.yaml\n",
+        )
+        .expect("write plan.yaml");
+
+        let provider = PlanSectionProvider::new(&root);
+        let sec = provider
+            .find_section("what is the current Direction?")
+            .expect("frontier_note pointer answers direction queries");
+        assert_eq!(sec.file_rel, "plan.yaml");
+        assert_eq!(sec.section_title, "frontier_note");
+        assert!(sec.content.contains("Current product frontier"));
+        assert_eq!(sec.line_start, 3);
+        assert_eq!(sec.line_end, 5);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn direction_fallback_does_not_fire_for_non_direction_queries() {
+        let root = fixture_root("nondir");
+        std::fs::write(
+            root.join("plan.yaml"),
+            "plan:\n  current_state:\n    frontier_note: >\n      Current product frontier is the portable cloud region path.\n",
+        )
+        .expect("write plan.yaml");
+
+        let provider = PlanSectionProvider::new(&root);
+        // Semantic intent (milestone) but not direction-class: the pointer
+        // fallback must not dress the frontier text up as a milestone answer.
+        assert!(
+            provider
+                .find_section("which milestone is active?")
+                .is_none()
+        );
+        // No semantic intent at all: unchanged refusal.
+        assert!(provider.find_section("status of 394a").is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn scan_yaml_key_block_handles_plain_scalars_and_missing_keys() {
+        let root = fixture_root("plain");
+        std::fs::write(
+            root.join("plan.yaml"),
+            "plan:\n  current_state:\n    next_step: \"Use the highest-impact ready packet\"\n",
+        )
+        .expect("write plan.yaml");
+
+        let provider = PlanSectionProvider::new(&root);
+        let sec = provider
+            .scan_yaml_key_block("plan.yaml", "next_step")
+            .expect("plain scalar is citable");
+        assert_eq!(sec.content, "Use the highest-impact ready packet");
+        assert_eq!(sec.line_start, 3);
+        assert_eq!(sec.line_end, 3);
+        assert!(
+            provider
+                .scan_yaml_key_block("plan.yaml", "absent_key")
+                .is_none()
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
