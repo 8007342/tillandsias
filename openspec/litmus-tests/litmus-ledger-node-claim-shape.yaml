@@ -34,8 +34,13 @@ critical_path:
     expected_behavior: "ok: probe-defined"
 
   - step: "8 concurrent claimants on the same node produce exactly one winner and 7 in-flight"
+    # 60s, sized for the SLOWEST host: 8 concurrent bash spawns measure 9.4s
+    # standalone on windows (2026-08-16) — OVER the old 8s budget even
+    # unloaded; MSYS process-spawn pricing, not lease contention. Correctness
+    # (1 winner / 7 in-flight) reproduces at that speed. Same treatment as
+    # 770-f6u4; see plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md.
     command: "r=$(mktemp -d)/leases; out=$(for i in $(seq 1 8); do TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\" bash scripts/claim-ledger-node.sh claim shared/node & done; wait); c=$(printf '%s\\n' \"$out\" | grep -c '^claimed:'); f=$(printf '%s\\n' \"$out\" | grep -c '^in-flight:'); rr=$(printf '%s\\n' \"$out\" | grep -c '^reclaimed:'); [ \"$c\" = 1 ] && [ \"$f\" = 7 ] && [ \"$rr\" = 0 ] && echo 'ok: single-winner' || { echo \"FAIL: claimed=$c in-flight=$f reclaimed=$rr\"; exit 1; }"
-    timeout_ms: 8000
+    timeout_ms: 60000
     expected_behavior: "ok: single-winner"
 
   - step: "a held node reports in-flight on status, and release frees it"

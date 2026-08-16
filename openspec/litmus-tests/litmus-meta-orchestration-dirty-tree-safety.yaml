@@ -32,18 +32,30 @@ critical_path:
     expected_behavior: "ok: syntax"
 
   - step: "blocked dirty-tree fixture preserves startup bytes"
+    # 90s, sized for the SLOWEST host: the fixture measures 9.4s standalone on
+    # windows (2026-08-16) — the old 10s budget was the boundary itself, and
+    # harness spawn tax flipped it red on load jitter. Same treatment as
+    # 770-f6u4; see plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md.
     command: "scripts/test-meta-orchestration-dirty-tree-safety.sh"
-    timeout_ms: 10000
+    timeout_ms: 90000
     expected_behavior: "PASS: blocked cycle preserved startup tracked and untracked bytes"
 
   - step: "local full-install preparation preserves tracked release and dashboard state"
+    # 60s: 5.2s standalone on windows (measured 2026-08-16); the old 10s left
+    # less headroom than the measured MSYS harness tax on sibling steps.
     command: "scripts/test-build-sh-ci-full-install-prep.sh"
-    timeout_ms: 10000
+    timeout_ms: 60000
     expected_behavior: "ci-full-install-prep: ok"
 
   - step: "canonical skills invalidate the forge image cache key"
+    # 90s, sized for the SLOWEST host: the fixture needs ~12-16s of git ops on
+    # windows (measured 2026-08-16) and the old 10s budget killed it BEFORE it
+    # could print its real verdict. NOTE: on windows the step then fails for a
+    # real reason the timeout was masking — core.autocrlf=true makes the clone
+    # hash diverge and core.fileMode=false makes the exec-bit scenario a no-op.
+    # See plan/issues/hash-image-sources-fixture-windows-portability-2026-08-16.md.
     command: "scripts/test-hash-image-sources.sh"
-    timeout_ms: 10000
+    timeout_ms: 90000
     expected_behavior: "PASS: canonical skills participate in forge image cache key"
 
 observability:
