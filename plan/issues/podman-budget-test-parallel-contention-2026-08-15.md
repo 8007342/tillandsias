@@ -39,3 +39,27 @@ cycles that run the full gate — an intermittent failure with a schedule.
   `duration: 30.001534079s`
 - Idle: `time podman ps` → real 0m0.018s (this host, same tree, minutes later)
 - Prior art: 638-ehzi (rust-tests vs tray-contract racing on `$HOME`)
+
+## Second sighting: a different test, same class (2026-08-16, yoga)
+
+`resource_lock::tests::is_held_reflects_lock_lifecycle`
+(`crates/tillandsias-headless/src/resource_lock.rs:355`, "dropped guard must
+release the probe") FAILED inside a full `cargo test -p tillandsias-headless
+--bin tillandsias` run on linux_immutable (yoga) at 2026-08-16T21:32Z, and
+PASSED immediately when re-run alone with `--exact`. Nothing in that cycle
+touched `resource_lock`; the cycle's edits were in `tray/mod.rs` and
+`Cargo.toml`.
+
+Same shape as 754-3jht: a test asserting on a REAL shared host resource —
+here the advisory flock probe under `$XDG_RUNTIME_DIR/tillandsias-locks`,
+rather than podman — while sibling tests in the same parallel batch contend
+for it. The lock file is process-global, so any concurrently-running test
+that acquires/releases a lock in the same namespace can make the "is it held
+now?" probe answer for the wrong moment.
+
+Recording as evidence rather than a new packet: 754-3jht already owns
+"host-resource tests need isolation from the parallel batch", and this is a
+second instance of that class, not a second defect. Whoever picks up
+754-3jht should widen its scope from the podman budget test to the shared
+class (podman + resource_lock), because a fix that only serializes the
+podman test leaves this one flaky.

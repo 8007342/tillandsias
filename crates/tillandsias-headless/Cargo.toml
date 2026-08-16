@@ -14,6 +14,11 @@ path = "src/main.rs"
 [dependencies]
 tillandsias-core = { path = "../tillandsias-core" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
+# Order 779-3trn: the tray's per-lane MCP dispatcher composes the browser
+# tool family. Before this the crate had no [[bin]] and no dependents — it
+# was dead code in the product while the forge's host-browser MCP server
+# reached a dispatcher that had never heard of browser.*.
+tillandsias-browser-mcp = { path = "../tillandsias-browser-mcp" }
 tillandsias-logging = { path = "../tillandsias-logging" }
 tillandsias-metrics = { path = "../tillandsias-metrics" }
 tillandsias-otp = { path = "../tillandsias-otp" }

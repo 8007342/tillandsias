@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: guest-container-metrics-over-control-wire
+    field: status
+    value: completed
+    ts: "2026-08-16T21:22:19Z"
+    host: linux-immutable
+
+events:
+  - packet_id: guest-container-metrics-over-control-wire
+    event:
+      type: completed
+      ts: "2026-08-16T21:22:19Z"
+      host: linux-immutable
+      summary: >
+        status 'completed' with evidence_refs: 05073eed6 + litmus:guest-container-metrics-wire-shape 7/7 PASS + cargo test -p tillandsias-headless --features listen-vsock green
+  - packet_id: guest-container-metrics-over-control-wire
+    event:
+      type: note
+      ts: "2026-08-16T21:22:19Z"
+      host: linux-immutable
+      summary: >
+        333 guest side closed by linux-yoga-claude-20260816t185912z; cross-host criterion 4 owned by child 778-n9z2
