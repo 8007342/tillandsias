@@ -62,6 +62,21 @@ if ! curl -fsS -m 5 "$EP/api/version" >/dev/null 2>&1; then
     exit 2
 fi
 
+# Nanosecond clock. BSD date does NOT understand %N and passes it through
+# literally, so `date +%s%N` exits 0 with "1755387123N" — a successful command
+# emitting garbage, which an exit-code guard cannot catch and which would
+# silently become a plausible-looking per_chunk_ms. Validate the digits once,
+# up front, and refuse rather than publish a timing number derived from an
+# unverified clock (766-tdij). A benchmark that lies is worse than no benchmark.
+_bench_now_ns() { date +%s%N; }  # gnu-date: ok (digit-validated by the refusal below)
+case "$(_bench_now_ns)" in
+    '' | *[!0-9]*)
+        echo "bench: ERROR this date(1) does not support %N nanoseconds (BSD date emits garbage)." >&2
+        echo "bench: install GNU coreutils date, or run this harness on a GNU host." >&2
+        exit 2
+        ;;
+esac
+
 # A fixed, non-trivial prompt so prefill is measurable rather than rounding error.
 PROMPT="You are a build engineer. Explain, in careful detail, why a language model's token generation speed on a small CPU is limited by memory bandwidth rather than by arithmetic throughput, and what that implies for choosing a model size on a machine with a single memory channel."
 
@@ -138,13 +153,13 @@ bench_embed() {
     # Sequential, one round trip per chunk — the shape a commit-time re-embed
     # would use. Batching was measured at only ~14% better (order 552 evidence),
     # so the sequential number is not a strawman.
-    start=$(date +%s%N)
+    start=$(_bench_now_ns)
     i=0
     while [ "$i" -lt "$EMBED_N" ]; do
         printf '%s' "$payload" | curl -fsS -m 300 "$EP/api/embed" -d @- >/dev/null 2>&1
         i=$((i + 1))
     done
-    end=$(date +%s%N)
+    end=$(_bench_now_ns)
 
     total_ms=$(( (end - start) / 1000000 ))
     per_ms=$(awk -v t="$total_ms" -v n="$EMBED_N" 'BEGIN{printf "%.1f", t/n}')
@@ -161,7 +176,26 @@ bench_embed() {
 cores=$(nproc 2>/dev/null || echo unknown)
 echo "host: name=$HOST_NAME cores=$cores endpoint=$EP claimed_engine=$CLAIMED num_predict=$NUM_PREDICT"
 
-bench_model "qwen2.5:0.5b"   "T0"
-bench_model "tinyllama:1.1b" "T1"
-bench_model "phi3.5:3.8b"    "T2"
+# Model set. Defaults to the models.json tier table; override with a
+# space-separated `<model>:<label>` list to sweep a different range, e.g. the
+# sub-1B decomposition sweep this host exists to characterise:
+#
+#   BENCH_MODELS="smollm2:135m=S135 gemma3:270m=S270 qwen2.5:0.5b=T0" \
+#     scripts/bench-inference-floor.sh
+#
+# The label is free-form: tier names (T0..T5) for the shipped table, anything
+# else for exploratory sweeps. A model absent from the endpoint reports
+# ERROR=no-response and does NOT abort the sweep — one missing model must not
+# cost the other measurements.
+BENCH_MODELS="${BENCH_MODELS:-qwen2.5:0.5b=T0 tinyllama:1.1b=T1 phi3.5:3.8b=T2}"
+
+for spec in $BENCH_MODELS; do
+    # Split on the LAST '=' so model tags containing ':' (qwen2.5:0.5b) survive.
+    model="${spec%=*}"
+    label="${spec##*=}"
+    [ -n "$model" ] || continue
+    [ "$label" = "$spec" ] && label="-"
+    bench_model "$model" "$label"
+done
+
 bench_embed
