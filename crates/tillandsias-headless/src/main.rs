@@ -13045,10 +13045,7 @@ fn maybe_spawn_vsock_listener(
                             // timer. notify_one stores a permit if the
                             // probe is mid-check, so a racing death is
                             // handled on its next park.
-                            if matches!(
-                                action,
-                                "died" | "die" | "stop" | "remove" | "cleanup"
-                            ) {
+                            if matches!(action, "died" | "die" | "stop" | "remove" | "cleanup") {
                                 events_liveness_nudge.notify_one();
                             }
                             let name = match parsed
