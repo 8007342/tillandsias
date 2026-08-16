@@ -963,9 +963,17 @@ clone_project_from_mirror() {
 #     sources -> rebuild and reinstall, converging on the same result.
 #   - Ephemeral: the launch state lives in tmpfs (/dev/shm) and dies with the
 #     container; the installed binary lives in the container-ephemeral
-#     $HOME/.local/bin. The ONLY thing that outlives the container is the
-#     sanctioned cargo cache — and per the research's §7.3 carve-out a compiled
-#     binary in a cache volume is a BUILD ARTIFACT, not expert knowledge.
+#     $HOME/.local/bin. The ONLY things that outlive the container are the
+#     sanctioned cargo cache AND (order 781-6gys) the probed expert artifact
+#     INSIDE it (cargo/prebuilt-plan/) — per the research's §7.3 carve-out a
+#     compiled binary in the build cache is a
+#     BUILD ARTIFACT, not expert knowledge — and the teardown proofs prune
+#     the cargo subtree. Before that
+#     artifact cache, EVERY lane re-entered cargo (the tmpfs stamp and the
+#     installed binary both die with the container), and on a cold or
+#     contended cargo cache that build alone outlives the 600s smoke cap
+#     (FORGE_EXIT=124 twice on windows, 2026-08-16). Warm lanes now restore
+#     in O(cp), no cargo, no target-dir lock.
 #
 # NEVER GATES A LAUNCH
 #   Every failure mode writes a NAMED degraded reason and returns 0, mirroring
@@ -1240,6 +1248,7 @@ start_forge_experts_async() {
 # returns 0, always leaves a named state behind. Intended to be backgrounded.
 ensure_forge_experts() {
     local project_dir crate_dir bin_dst stamp src_hash short_hash target_dir built
+    local cache_dir cache_bin cache_stamp _cache_tmp
     local started rc=0 elapsed=0
     started="$(date +%s 2>/dev/null || echo 0)"
 
@@ -1277,6 +1286,41 @@ ensure_forge_experts() {
         trace_lifecycle "experts" "ready (cached): ${bin_dst} already matches source ${short_hash}"
         _forge_experts_set_state ready
         return 0
+    fi
+
+    # Order 781-6gys: persistent-artifact warm path. The tmpfs stamp and the
+    # installed binary die with the container, so before this branch EVERY
+    # lane re-entered cargo — fresh-clone mtimes dirty the crate fingerprints
+    # and a concurrent agent build holds the shared target-dir lock, so on a
+    # cold or contended cache the build alone outlives the 600s smoke cap
+    # (FORGE_EXIT=124 twice on windows, 2026-08-16). The compiled binary is a
+    # BUILD ARTIFACT under the research's §7.3 carve-out, so it lives INSIDE
+    # the cargo build-cache subtree of the per-project volume ($CARGO_HOME is
+    # $PROJECT_CACHE/cargo) — deliberately: the ephemerality proofs
+    # (litmus:forge-experts-teardown-ephemeral) prune `-name cargo` from
+    # their persistent-surface scans, so placing the artifact THERE keeps the
+    # carve-out exactly as narrow as the scans encode it. The serving surface
+    # stays ephemeral: the artifact is always COPIED OUT into $HOME/.local/bin
+    # and the MCP wrapper never probes the volume. Keyed on the SAME source
+    # hash as the build (a build-cache key, same family as a cargo
+    # fingerprint — never knowledge); the EXEC PROBE — not the stamp — is the
+    # install gate, so image/toolchain drift that breaks the cached binary
+    # falls through to a fresh build instead of installing a dud.
+    # Destroy-safe: deleting the volume costs the next lane one build.
+    cache_dir="${FORGE_EXPERTS_CACHE_DIR:-${TILLANDSIAS_PROJECT_CACHE:-/home/forge/.cache/tillandsias-project}/cargo/prebuilt-plan}"
+    cache_bin="$cache_dir/tillandsias-plan"
+    cache_stamp="$cache_dir/source-hash"
+    if [ "$src_hash" != "unknown" ] && [ -x "$cache_bin" ] && [ -r "$cache_stamp" ] \
+        && [ "$(cat "$cache_stamp" 2>/dev/null || true)" = "$src_hash" ] \
+        && _forge_experts_probe_answer_surface "$cache_bin"; then
+        mkdir -p "$FORGE_EXPERTS_BIN_DIR" 2>/dev/null || true
+        if install -m 0755 "$cache_bin" "$bin_dst" 2>/dev/null; then
+            printf '%s\n' "$src_hash" > "$stamp" 2>/dev/null || true
+            trace_lifecycle "experts" "ready (cache-volume): restored ${bin_dst} from ${cache_bin} (src=${short_hash}) — no cargo"
+            _forge_experts_set_state ready
+            return 0
+        fi
+        trace_lifecycle "experts" "cache-volume restore could not install ${cache_bin} -> ${bin_dst}; falling through to build"
     fi
 
     if ! command -v cargo >/dev/null 2>&1; then
@@ -1336,6 +1380,27 @@ ensure_forge_experts() {
         trace_lifecycle "experts" "degraded (stale-source): built binary lacks the \`answer\` subcommand — checkout predates the expert crate (order 531)"
         _forge_experts_set_state degraded stale-source
         return 0
+    fi
+
+    # Order 781-6gys: publish the PROBED artifact + stamp into the persistent
+    # cache so the next lane restores in O(cp) instead of re-entering cargo.
+    # mktemp-then-rename keeps a concurrent lane from ever reading a torn
+    # binary (rename is atomic within the volume), and two lanes racing here
+    # write identical bytes for identical sources, so the race is idempotent.
+    # Best-effort on every step: a full or read-only volume degrades the warm
+    # path, never the session. Placed AFTER the answer-surface probe so a
+    # stale-source binary is never published for other lanes to restore.
+    if mkdir -p "$cache_dir" 2>/dev/null; then
+        _cache_tmp="$(mktemp "$cache_dir/.tillandsias-plan.XXXXXX" 2>/dev/null || true)"
+        if [ -n "$_cache_tmp" ] \
+            && install -m 0755 "$bin_dst" "$_cache_tmp" 2>/dev/null \
+            && mv -f "$_cache_tmp" "$cache_bin" 2>/dev/null; then
+            { printf '%s\n' "$src_hash" > "$cache_stamp.tmp.$$" \
+                && mv -f "$cache_stamp.tmp.$$" "$cache_stamp"; } 2>/dev/null || true
+            trace_lifecycle "experts" "cached artifact to ${cache_bin} (src=${short_hash}) for warm lanes"
+        else
+            rm -f "$_cache_tmp" 2>/dev/null || true
+        fi
     fi
 
     elapsed=$(( $(date +%s 2>/dev/null || echo 0) - started ))

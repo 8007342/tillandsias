@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows meta-orchestration cycle 2026-08-16T22:20Z (cycle 6,
+# hourly loop), 781-6gys implementation + same-story capture.
+packets:
+  - packet_id: windows-red-forge-env-discoverability-litmus
+    release_target: fail-loud-diagnosis-milestone
+    order: 782-ih74
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: windows
+    priority: p3
+    tags:
+      - litmus
+      - windows
+      - platform-tax
+      - v0.5
+    title: |
+      Two forge-environment-discoverability litmus tests are red-by-default on windows at HEAD, unrecorded until now.
+    context: |
+      litmus:expert-refresh-cargo-target-shape (STEP 2, fake-cargo fixture,
+      `FAIL: content= log_success=0` with git CRLF warnings on the fixture
+      files) and litmus:project-answer-synthesis-refusal-typed (STEP 3,
+      dead-endpoint refusal, EMPTY output) both fail identically on a
+      PRISTINE worktree at 9a677a116 on windows, so they are pre-existing
+      host reds, not regressions. Discovered while running the scoped suite
+      for the 781-6gys change. A spec suite red-by-default trains agents to
+      read failures as noise. Full diagnosis notes:
+      plan/issues/research/windows-red-forge-env-discoverability-litmus-2026-08-16.md
+    exit_criteria:
+      - |
+          Both tests either pass on windows or carry an explicit, machine-readable host-eligibility skip with a named reason — never a silent red.
+      - |
+          The root cause (CRLF fixture corruption vs real engine gap) is named in the closing event with reproduction evidence.
+    events:
+      - type: filed
+        ts: "2026-08-16T23:00:00Z"
+        agent_id: windows-fable5-mo-cycle6-20260816T2220Z
+        host: windows
+        summary: |
+          Filed from the 781-6gys litmus run; pristine-HEAD attribution done
+          the same session (worktree at 9a677a116 shows identical failures).
+
+events:
+  - packet_id: mo-smoke-cap-unreachable-on-windows-forge-plan-expert-rebuilds-every-lane
+    event:
+      type: progress
+      ts: "2026-08-16T23:00:00Z"
+      agent_id: windows-fable5-mo-cycle6-20260816T2220Z
+      host: windows
+      summary: |
+        Exit criterion 1 IMPLEMENTED (order 781-6gys): ensure_forge_experts
+        (images/default/lib-common.sh) now publishes the probed
+        tillandsias-plan artifact + its source-hash key into the persistent
+        per-project cache volume at cargo/prebuilt-plan/ — INSIDE the cargo
+        subtree deliberately, so the ephemerality proofs
+        (litmus:forge-experts-teardown-ephemeral) keep pruning it as the
+        sanctioned §7.3 build-artifact carve-out — and restores it on warm
+        lanes in O(cp) with ZERO cargo involvement (no target-dir lock, no
+        fresh-clone mtime rebuild). The exec probe, not the stamp, gates
+        both restore and publish, so image/toolchain drift falls through to
+        a fresh build. Structural pins added:
+        litmus:forge-plan-expert-build-shape (artifact-cache-warm-path
+        step) and litmus:forge-experts-ephemerality-shape (allowlist +
+        order-621-2re2 paying assertion). Both scoped suites pass except
+        two PRE-EXISTING windows reds now tracked as 782-ih74.
+        GROUNDING CORRECTION to the packet context: the cache volume DOES
+        persist cargo/target (4.3G observed read-only in the guest) — but
+        it was created 14:48 local 2026-08-16, DURING run 1, so both capped
+        runs paid a cold build; and even warm, nothing persisted the
+        BINARY, so every lane still re-entered cargo.
+        REMAINING (criterion 2): lib-common.sh is baked into the forge
+        image at build time, so the fix reaches lanes at the next image
+        rebuild; a warm-stack smoke harness run recording `MO-SMOKE: PASS`
+        with FORGE_EXIT=0 evidence is still needed and was NOT run this
+        cycle (operator lanes possibly live; do-not-disturb).
+  - packet_id: codex-lane-mirror-wait-unbounded
+    event:
+      type: progress
+      ts: "2026-08-16T23:00:00Z"
+      agent_id: windows-fable5-mo-cycle6-20260816T2220Z
+      host: windows
+      summary: |
+        Source-reading narrows the residual (not claimed this cycle): the
+        packet premise "no attempt cap" does not match CURRENT source. The
+        codex lane shares clone_project_from_mirror
+        (images/default/lib-common.sh), whose network clone loop is capped
+        at max_retries=12 with a loud FATAL and the 777-i7hf-aware
+        empty-vs-auth disambiguation; the codex CLI path also passes
+        through ensure_enclave_for_project, whose launcher-side
+        wait_for_git_mirror_ready gate is bounded
+        (GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS) and refuses the launch.
+        The observed indefinite ~2.5s retry therefore most likely came
+        from (a) a forge image predating these bounds (same
+        stale-bundled-assets family as 683-g7p6), or (b) a restart/retry
+        loop OUTSIDE the entrypoint. Smallest next action for the
+        claimant: pull the guest journal for the offending codex
+        container's image tag from the 2026-08-16 ~21:00Z window before
+        writing any code.
