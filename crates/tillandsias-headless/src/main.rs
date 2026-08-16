@@ -2205,8 +2205,13 @@ pub(crate) fn ensure_image_exists(
     // same function with the helper marker set and runs the locked
     // identity → decision → build → alias path below unchanged.
     let detach_override = std::env::var(IMAGE_BUILD_DETACH_ENV).ok();
+    // `!cfg!(test)`: in the unit-test harness `current_exe` is the TEST
+    // RUNNER, which cannot serve --internal-ensure-image (the clone fixtures
+    // proved it: five 'Unrecognized option' helper deaths). The decision and
+    // spawn seam are unit-tested directly; integration tests that spawn the
+    // real binary still exercise the live helper.
     if image_build_detach_decision(
-        cfg!(unix),
+        cfg!(all(unix, not(test))),
         inside_image_build_helper(),
         detach_override.as_deref(),
     ) {
