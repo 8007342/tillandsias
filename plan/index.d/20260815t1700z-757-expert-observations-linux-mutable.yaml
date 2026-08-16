@@ -1,0 +1,69 @@
+# Filed by linux_mutable, 2026-08-15, from the failed-forge handoff's
+# priority-4 observations — both REPRODUCED before filing, per the handoff's
+# own instruction. 757-yi8c is fixed in the same commit that files it.
+packets:
+  - packet_id: expert-already-substring-routes-to-ready-listing
+    order: 757-yi8c
+    status: completed
+    desired_release: v0.5
+    priority: p2
+    kind: fix
+    title: "The classifier read Ready intent out of 'alREADY': a duplicate-detection question was answered with the whole ready-for-forge listing as exact"
+    deliverable: "token-boundary routing for the bare 'ready' trigger + a graded groundtruth routing case"
+    pickup_role: linux
+    release_target: harness-mcp-expert-validation
+    capability_tags: [experts, plan, routing, groundtruth]
+    estimated_hours: 1
+    context: |
+      Reproduced live: "is there already a packet about the forge image
+      missing the hostname executable?" returned the entire ready-for-forge
+      listing (confidence exact) because wants_ready used substring
+      contains("ready") — matching "alREADY" — and role_in matched the token
+      "forge". Fixed in crates/tillandsias-plan/src/answer.rs (token-boundary
+      match), unit test already_is_not_a_ready_intent_but_the_ready_token_still_is,
+      and graded case plan-already-does-not-route-to-the-ready-listing in
+      expert-groundtruth-rung1.yaml (answer_excludes the listing headline) —
+      the metric gap the handoff named ("98% answered / 100% ground truth did
+      not catch the semantically wrong routing") is closed by growing the
+      corpus, not by redefining answer_rate.
+    exit_criteria:
+      - "The reproduction question returns unsupported (or a semantically relevant answer), never the ready listing; pinned by a graded groundtruth case."
+      - "The literal 'ready' token still routes to the ready listing (unit test)."
+
+  - packet_id: project-info-transport-drops-mid-session
+    order: 757-qwqz
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: fix
+    title: "project-info MCP transport closes mid-session while the start-of-cycle health probe reports healthy — twice on 2026-08-15, no trace either time"
+    deliverable: "a mid-session project-info transport failure is surfaced by telemetry or healed by a retry/fallback path, like 741-t66e did for the plan expert"
+    pickup_role: linux
+    release_target: harness-mcp-expert-validation
+    capability_tags: [experts, mcp, telemetry, fail-loud]
+    estimated_hours: 3
+    context: |
+      Witnessed independently twice on 2026-08-15: (a) the linux-mutable
+      coordinator's recon — mcp__project-info__read_file returned MCP -32000
+      Connection closed mid cited-span read, the whole toolset then
+      disconnected for the session; (b) the failed windows forge — transport
+      closed during one cited-span read while the start-of-cycle health probe
+      had reported healthy. Order 741-t66e made forge-plan MCP outages leave
+      an automatic trace; project-info has no equivalent, so a
+      systematically-dying server looks identical to an unused one in the
+      mcp: metrics line (calls just stop).
+    exit_criteria:
+      - "A project-info transport failure after a healthy start leaves a durable trace (telemetry line or filed finding) without relying on the agent noticing."
+      - "Either the server is restarted/reconnected automatically, or the failure verdict tells the agent the fallback (filesystem reads) is now the sanctioned path for the rest of the cycle."
+
+events:
+  - packet_id: expert-already-substring-routes-to-ready-listing
+    event:
+      type: completed
+      ts: "2026-08-15T17:00:00Z"
+      host: linux_mutable
+      summary: >
+        Fixed and graded in the filing commit: answer.rs token-boundary wants_ready
+        (cites 757-yi8c), unit test green, groundtruth rung1 now 21/21 including
+        plan-already-does-not-route-to-the-ready-listing; reproduction question
+        returns unsupported with zero citations.

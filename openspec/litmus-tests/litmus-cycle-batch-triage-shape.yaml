@@ -236,6 +236,25 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: split parent suppressed only while a slice is open"
 
+  - step: "HOST CAPABILITY: nix-required work is excluded when nix is absent, included when nix is declared"
+    # P3 from the 2026-08-15 failed-forge handoff (sibling of the order
+    # 660-z774 pool-fidelity family). The live selector handed 723-sazx — a p0
+    # whose deliverable is `nix build`, capability_tags [release, ci, nix] —
+    # to a forge where `command -v nix` failed, as directly-completable work;
+    # the miss surfaced hours later as a GitHub 403 on first push.
+    # pickup_role answers "which lane may claim", not "what can this host
+    # run"; the selector now subtracts tool-gated packets (TOOL_CAP_TAGS,
+    # fixture-seamed via TILLANDSIAS_HOST_CAPS) from the pool before scoring.
+    #
+    # TWO-SIDED from one fixture ledger, flipped by the declared capability
+    # set alone. The nix-less side must drop ONLY the nix-tagged packet and
+    # confess the drop in triage; the nix-declared side is the negative
+    # control proving the filter discriminates on the declared set instead of
+    # suppressing tagged work unconditionally.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: nix-required-pkt\\n    order: 910-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: caps-epic\\n    capability_tags: [release, nix]\\n  - packet_id: plain-pkt\\n    order: 910-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n    release_target: caps-epic\\n    capability_tags: [plan]\\n' > \"$d/ledger.yaml\"; printf '#!/usr/bin/env bash\\nexec \"%s/target/release/tillandsias-plan\" --index \"%s/ledger.yaml\" \"$@\"\\n' \"$PWD\" \"$d\" > \"$d/plan\"; chmod +x \"$d/plan\"; absent=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo\" scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); present=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo nix\" scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); rm -rf \"$d\"; printf '%s' \"$absent\" | grep -q 'nix-required-pkt' && { echo 'FAIL: nix-required packet offered to a nix-less host'; exit 1; }; printf '%s' \"$absent\" | grep -q \"^packet$(printf '\\t')910-bbbb\" || { echo 'FAIL: nix-less host lost capability-clean work too'; exit 1; }; printf '%s' \"$absent\" | grep -qE '^triage: .* caps_filtered=1$' || { echo 'FAIL: capability drop not confessed in triage'; exit 1; }; printf '%s' \"$present\" | grep -q \"^packet$(printf '\\t')910-aaaa\" || { echo 'FAIL: declared nix did not restore nix-required work'; exit 1; }; echo 'ok: capability filter is two-sided'"
+    timeout_ms: 30000
+    expected_behavior: "ok: capability filter is two-sided"
+
 observability:
   traces:
     - "@trace spec:ci-release"

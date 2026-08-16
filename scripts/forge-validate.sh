@@ -53,7 +53,11 @@ if [ "$credential_rc" -eq 0 ] && [[ "$credential_verdict" =~ ^ok:[a-z0-9-]+$ ]];
     pass=$((pass + 1))
 else
     case "$credential_verdict" in
-        missing:no-credential-channel) credential_reason="$credential_verdict" ;;
+        # blocked:* (order 756-2jnj): the forge->mirror half works but the
+        # mirror->upstream half is not currently write-authorized. Report the
+        # verdict itself — it names the exact fault (unauthorized credential,
+        # missing Vault token, stale/unpublished probe verdict).
+        missing:no-credential-channel|blocked:*) credential_reason="$credential_verdict" ;;
         *) credential_reason="invalid-output" ;;
     esac
     printf 'FAIL credential-channel %s\n' "$credential_reason"

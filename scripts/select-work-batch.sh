@@ -46,7 +46,9 @@
 #          `urgent=` appears ONLY when the order-645 override displaced a slot
 #          with a strictly-higher-priority packet from outside the chosen epic.
 #   ^packet\t<order>\t<packet_id>\t<priority>$
-#   ^triage: eligible=<n> grouped=<n> ungrouped=<n> epics=<n>$
+#   ^triage: eligible=<n> grouped=<n> ungrouped=<n> epics=<n> urgency_unscored=<n>[ caps_filtered=<n>]$
+#          `caps_filtered=` appears ONLY when host-capability filtering dropped
+#          rows (see HOST TOOL CAPABILITIES below).
 # or exactly one refusal line:
 #   ^refused:(no-eligible-work|no-plan-binary|missing-tool|parse-failure|stale-plan-binary|query-failed|bad-role):.*$
 # Exit 0 on a batch, 1 on refusal.
@@ -316,6 +318,78 @@ if [ -z "$rows" ]; then
     exit 1
 fi
 
+# HOST TOOL CAPABILITIES (failed-forge handoff 2026-08-15, P3; sibling of the
+# order 660-z774 pool-fidelity family). pickup_role answers "which LANE may
+# claim this"; it says nothing about what the HOST can actually run. The live
+# selector handed 723-sazx — a p0 whose deliverable is `nix build` — to a forge
+# where `command -v nix` failed, as directly-completable work, and the miss
+# surfaced hours later as a GitHub 403 at push time. methodology
+# distributed-work.yaml (3_filter_eligible) already requires intersecting
+# capability_tags with the host's declared capabilities; the selector simply
+# never implemented that intersection.
+#
+# THE MAP IS DELIBERATELY SMALL. A capability tag names a TOOL only when every
+# packet carrying it needs that binary on the selecting host; most tags are
+# TOPICS (security, forge, plan, rust...) and must never be listed here.
+# Enrolling a tag asserts "no host without <binary> can make progress on ANY
+# packet tagged <tag>" — assert it per tag, deliberately. `podman` (31 ready
+# carriers, mixed tool/topic usage) and `cargo` are the known candidates; they
+# are NOT enrolled until their carriers are audited the way nix's were.
+# Format: one tag per word, tag name == probed binary name.
+TOOL_CAP_TAGS="nix"
+
+# TILLANDSIAS_HOST_CAPS, when SET (even empty), is the declared capability set
+# verbatim — a space-separated list of tool names — and replaces the probes.
+# That is the fixture seam and the escape hatch for a host whose probe lies.
+if [ -n "${TILLANDSIAS_HOST_CAPS+x}" ]; then
+    HOST_CAPS=" ${TILLANDSIAS_HOST_CAPS} "
+else
+    HOST_CAPS=" "
+    for tool in $TOOL_CAP_TAGS; do
+        command -v "$tool" >/dev/null 2>&1 && HOST_CAPS="${HOST_CAPS}${tool} "
+    done
+fi
+
+# Subtract, don't project: `--tag` is the binary's own all-must-match tag
+# filter, so the packets to drop come from the same projection as the pool
+# (same status/claimability/release/deps-clear/unleased semantics), and a host
+# with every tool present runs ZERO extra queries. Scoring, entropy, budget and
+# the order-645 urgent override all run downstream of this subtraction, so a
+# tool-gated p0 cannot re-enter through the urgency door.
+CAPS_FILTERED=0
+for tool in $TOOL_CAP_TAGS; do
+    case "$HOST_CAPS" in *" ${tool} "*) continue ;; esac
+    cap_err="$(mktemp)"
+    cap_rows="$("$PLAN" select-rows --status ready --claimable-by "$ROLE" \
+        "${REL_ARG[@]+"${REL_ARG[@]}"}" --tag "$tool" --limit 400 2>"$cap_err")"
+    cap_rc=$?
+    if [ "$cap_rc" -ne 0 ]; then
+        reason="$(tr -d '\r' < "$cap_err" | grep -m1 . || true)"
+        rm -f "$cap_err"
+        # Fail LOUD, never open: silently skipping the subtraction would hand
+        # tool-gated work to a host that cannot run it — the exact defect.
+        echo "refused:query-failed:${PLAN} select-rows --tag ${tool} exited ${cap_rc}: ${reason:-<no stderr>}"
+        exit 1
+    fi
+    rm -f "$cap_err"
+    [ -n "$cap_rows" ] || continue
+    before_n="$(printf '%s\n' "$rows" | grep -c .)"
+    # Marker-line stream, same shape as the ==ROWS== scoring feed below: BSD
+    # awk rejects -v values containing newlines.
+    rows="$({ printf '%s\n' "$cap_rows"; printf '==CAPDROP==\n'; printf '%s\n' "$rows"; } \
+        | awk -F'\t' '
+            $0 == "==CAPDROP==" { in_pool = 1; next }
+            !in_pool { drop[$4] = 1; next }
+            !($4 in drop)')"
+    after_n="$(printf '%s\n' "$rows" | grep -c .)"
+    CAPS_FILTERED=$((CAPS_FILTERED + before_n - after_n))
+done
+
+if [ -z "$rows" ]; then
+    echo "refused:no-eligible-work:every ready packet claimable by role ${ROLE} needs a tool this host lacks (caps_filtered=${CAPS_FILTERED}; install the tool or declare TILLANDSIAS_HOST_CAPS)"
+    exit 1
+fi
+
 # The dependency graph needs EVERY ready packet, not just this role's — a linux
 # packet can be the thing a macos packet is waiting on, and that downstream
 # weight is exactly the "residual it is holding up" minimax asks us to maximise.
@@ -517,8 +591,12 @@ done
 # urgency signal is VISIBLE and gets fixed (backfill priority/kind), never
 # absorbed as a silent zero the way the old `// "p3"` default hid it.
 urgency_unscored="$(printf '%s\n' "$rows" | awk -F'\t' '$1==99' | grep -c .)"
-printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s\n' \
-    "$eligible" "$grouped" "$ungrouped" "$epics" "$urgency_unscored"
+# caps_filtered rides the triage line ONLY when the host-capability subtraction
+# dropped rows (same conditional idiom as the header's `urgent=`), so a fully
+# capable host emits byte-identical output to the pre-filter selector.
+printf 'triage: eligible=%s grouped=%s ungrouped=%s epics=%s urgency_unscored=%s%s\n' \
+    "$eligible" "$grouped" "$ungrouped" "$epics" "$urgency_unscored" \
+    "$( [ "${CAPS_FILTERED:-0}" -gt 0 ] && printf ' caps_filtered=%s' "$CAPS_FILTERED" )"
 # The frontier is printed so a cycle can justify its choice, and so a human can
 # see what it did NOT pick. An unexplained selection is unauditable.
 printf '%s\n' "$scored" | head -n "$k" | while IFS=$'\t' read -r sc e c b n; do

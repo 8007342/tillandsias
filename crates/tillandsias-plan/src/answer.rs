@@ -562,7 +562,14 @@ pub fn classify(ledger: &Ledger, question: &str) -> Option<Intent> {
         || lower.contains("whats next")
         || lower.contains("what is next")
         || lower.contains("work can i do");
-    let wants_ready = lower.contains("ready")
+    // ORDER 757-yi8c: "ready" must match as a TOKEN, not a substring.
+    // `lower.contains("ready")` fired on "alREADY", so the duplicate-detection
+    // question "is there already a packet about the forge image missing the
+    // hostname executable?" — whose only other routing signal was the role
+    // word "forge" — was answered with the entire ready-for-forge listing,
+    // served as exact. A semantically unrelated exact answer is worse than an
+    // honest unsupported (2026-08-15 failed-forge handoff, priority 4).
+    let wants_ready = lower_tokens.iter().any(|t| t == "ready")
         || lower.contains("what can i pick up")
         || lower.contains("work can i pick up");
 
@@ -1322,6 +1329,32 @@ mod tests {
         std::fs::write(&path, raw).expect("write answer fixture");
         let ledger = Ledger::load(&path).expect("load answer fixture");
         (ledger, path)
+    }
+
+    /// ORDER 757-yi8c. "alREADY" must not trigger the ready listing: a
+    /// duplicate-detection question whose only other signal is a role word
+    /// ("forge") was answered with the entire ready-for-forge listing served
+    /// as exact. The classifier must not read Ready intent out of it; the
+    /// token form still must.
+    #[test]
+    fn already_is_not_a_ready_intent_but_the_ready_token_still_is() {
+        let ledger = live_ledger();
+        let misroute = classify(
+            &ledger,
+            "is there already a packet about the forge image missing the hostname executable?",
+        );
+        assert!(
+            !matches!(
+                misroute,
+                Some(Intent::Ready { .. }) | Some(Intent::Next { .. })
+            ),
+            "'already' + a role word must not route to the ready/next listing, got {misroute:?}"
+        );
+        let token = classify(&ledger, "ready packets for forge");
+        assert!(
+            matches!(token, Some(Intent::Ready { .. })),
+            "the literal 'ready' token must keep routing to the ready listing, got {token:?}"
+        );
     }
 
     /// EXIT CRITERION (ii). The fixture query returns at least one citation,

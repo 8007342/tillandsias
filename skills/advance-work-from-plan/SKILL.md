@@ -35,7 +35,20 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     | Linux           | `linux`       | `linux-next`     |
     | macOS           | `macos`       | `osx-next`       |
     | Windows         | `windows`     | `windows-next`   |
-4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
+4.  **Create Agent ID**: Do NOT hand-compose it — call the canonical helper
+    (order 756-hn3a; contract: `methodology/distributed-work.yaml` →
+    `agent_identity_contract`):
+    ```bash
+    agent_id="$(scripts/agent-identity.sh id <backend>)" || exit 1   # backend: claude|codex|opencode|gemini
+    ```
+    It resolves `<platform>-<workstation>-<backend>-<utc-timestamp>` from
+    stable sources (TILLANDSIAS_AGENT_ID taken whole; else
+    TILLANDSIAS_WORKSTATION → HOSTNAME → /etc/hostname → node-name probe),
+    sanitizes once, and REFUSES (`refused:agent-identity:empty-<component>`,
+    non-zero, empty stdout) instead of minting an incomplete ID. On refusal
+    do NOT claim, append, or push anything — a prose recipe on a
+    hostname-less forge wrote lease `forge--codex-20260815t162555z` (EMPTY
+    workstation) while HOSTNAME sat unread in its environment.
 5.  **Orient via MCP — do NOT read whole ledgers.** This is a rule, not a
     suggestion. Canonical: `methodology/distributed-work.yaml` →
     `mcp_first_read_path`.
@@ -165,7 +178,7 @@ automates. Canonical: `methodology/distributed-work.yaml` → `cycle_batch_triag
 ## 3 — Claim the Lease
 
 1.  **Mint Lease ID**: Mint a content-stable lease ID.
-2.  **Emit Claim Event**: Append a `claim` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> claim "<summary>" --ts "<ISO-8601-UTC>" --agent "<your-agent-id>" --host "<host>"` or by creating an append-only fragment in `plan/index.d/<utc>-<suffix>-<host>.yaml`.
+2.  **Emit Claim Event**: Append a `claim` event as a fragment in `plan/index.d/` using `tillandsias-plan append-event <packet-id> claim "<summary>" --ts "<ISO-8601-UTC>" --agent "$agent_id" --host "<host>"` or by creating an append-only fragment in `plan/index.d/<utc>-<suffix>-<host>.yaml`. `$agent_id` is the §1.4 helper output (`scripts/agent-identity.sh id <backend>`) — if the helper refused, there is no identity to claim with, and no event may be appended.
 
     If `append-event` refuses with `packet_id not found`, the packet lives only
     in a fragment and that command cannot see it (600-c266) — write the event

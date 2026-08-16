@@ -1,0 +1,102 @@
+# Filed by linux_mutable, 2026-08-15, from the four-agent pervasiveness
+# research (plan/issues/mirror-write-403-pervasiveness-research-2026-08-15.md).
+# Verdict: the 403 class is harness-, platform-, and release-independent by
+# construction; root cause is zero authorization validation at token-seed
+# time, with anonymous pulls keeping it latent until the first relay push.
+packets:
+  - packet_id: github-login-validates-push-authorization
+    order: 759-vceg
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: fix
+    title: "tillandsias --github-login stores any token that authenticates — it must refuse one that cannot push to the target repo"
+    deliverable: "seed-time push-authorization validation: the login flow verifies the pasted token's effective push permission on the project repo BEFORE writing secret/github/token, and refuses loud with exact remediation when absent"
+    pickup_role: linux
+    owner_host: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [credentials, github, vault, fail-loud, login]
+    estimated_hours: 3
+    depends_on: []
+    context: |
+      Research 2026-08-15: the login flow checks non-emptiness, gh
+      authentication, and Vault round-trip — never authorization
+      (main.rs:7350-7408, 7812-7864; vault_bootstrap.rs:746-755). Its own
+      guidance steers operators to a fine-grained PAT (main.rs:7450-7466),
+      the exact class that authenticates as the owner yet is denied push when
+      Contents:write or the repo selection is missing — producing the
+      2026-08-15 "Permission to 8007342/tillandsias.git denied to 8007342"
+      hours into a work cycle. Validation shape: after gh auth status, a
+      non-mutating effective-permission check against the TARGET repo
+      (gh api repos/{owner}/{repo} --jq .permissions.push covers classic and
+      fine-grained; a git push --dry-run through the same URL is the
+      transport-level alternative), run INSIDE the ephemeral login container
+      so the token still never touches host disk. On push=false: do not
+      write Vault, print which permission is missing and the token_guidance
+      remediation, exit non-zero. Automation (stdin) mode gets the same gate.
+      Note the repo may be derived per-project (TILLANDSIAS_PROJECT_REMOTE_URL);
+      when no upstream is configured, validate against the account (scopes
+      header) and say so rather than skipping silently.
+    exit_criteria:
+      - "A token without effective push permission on the target repo is REFUSED at login: nothing written to Vault, exit non-zero, message names the missing permission and the remediation; a push-capable token seeds exactly as today."
+      - "Both paste and stdin automation modes gated; the token value still never reaches argv, env listings, logs, or host disk."
+      - "A hermetic litmus (mocked gh/api responses) pins accept and refuse paths, including the fine-grained-PAT-without-Contents:write shape from the incident."
+
+  - packet_id: fleet-propagation-write-readiness
+    order: 759-vsaj
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: coordination
+    title: "Every installed release carries the reachability-only guard — propagate 756-2jnj + 759-vceg to the fleet and re-validate every seeded credential"
+    deliverable: "all three platform hosts run a release carrying the fail-closed guard, their mirrors publish fresh authorization verdicts, and any denied/no-credential host has re-seeded with a push-capable token"
+    pickup_role: linux
+    owner_host: linux
+    release_target: stable-milestone-v1
+    capability_tags: [coordination, release, credentials, fleet]
+    estimated_hours: 2
+    depends_on: [forge-upstream-write-readiness-guard]
+    context: |
+      Timeline research: the 756-2jnj guard is in NO published release; every
+      channel (stable v0.4.260810.1, latest v0.3.260724.1, daily
+      v0.4.260815.1) ships reachability-only. The next daily promotion
+      carries it automatically; this packet is the COORDINATION half: after
+      that release, each host must (a) rebuild/restart its mirror on the new
+      git image so the probe publishes, (b) read the verdict, (c) if
+      denied/no-credential, re-run --github-login with a push-capable token
+      (classic repo scope, or fine-grained with Contents:RW on the project
+      repo). Windows host first — its 2026-08-15 incident state is known
+      denied. The linux_mutable host's own mirror has never pushed upstream
+      live (local-only accepts, git-push.log 2026-08-06) and its Vault is
+      down — it re-validates itself the same way.
+    exit_criteria:
+      - "A release tag containing b7850fadc (756-2jnj) is published and recorded as latest in the plan."
+      - "windows-next and osx-next queue entries instruct the mirror-restart + verdict-read + conditional re-login sequence, and each host records its verdict (authorized|denied->reseeded) as an event on this packet."
+      - "This host's own stack reports a fresh authorized (or explicitly local-only) verdict, recorded here."
+
+  - packet_id: host-keyring-push-authorization-probe
+    order: 759-ffh7
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: enhancement
+    title: "ok:gh-keyring proves authentication, not authorization — the host branches of the credential guard have the same latent class as the forge branch had"
+    deliverable: "the host-side credential verdict optionally verifies effective push permission on the project repo (cheap, cached, non-mutating), so a weakly-scoped keyring token is caught before a cycle's final push instead of at it"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [credentials, github, fail-loud]
+    estimated_hours: 2
+    depends_on: []
+    context: |
+      Research: gh auth status (the ok:gh-keyring source) verifies the token
+      authenticates, not that it can push to this repo. This host's keyring
+      happens to carry classic repo scope (verified push=true live), but a
+      host whose keyring token is fine-grained-without-Contents:write would
+      sail through every guard and fail at its final git push — the same
+      class as the forge 403, direct-push flavor. One cheap gh api
+      repos/{owner}/{repo} permissions probe (rate-limit friendly, cacheable
+      per cycle) closes it. Keep grammar compatible; a network-unreachable
+      probe must degrade to today's behavior loudly, not block offline work.
+    exit_criteria:
+      - "With a push-capable keyring the verdict is unchanged; with a simulated no-push token the guard emits a distinct blocked verdict before committable work; offline degrades loud-but-permissive."
+      - "Pinned by an extension of litmus:credential-channel-check-shape with a negative control."
