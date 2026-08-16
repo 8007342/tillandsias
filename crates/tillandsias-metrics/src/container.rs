@@ -34,7 +34,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use tillandsias_podman::{OperationKind, podman_cmd_sync};
 
 /// Production cgroup v2 mount point.
 const CGROUP_ROOT: &str = "/sys/fs/cgroup";
@@ -116,9 +116,12 @@ struct PsRow {
 /// wire instead of an empty "all healthy" list. A legitimately empty
 /// container list returns an empty vector.
 pub fn sample_containers() -> Vec<ContainerMetric> {
-    let output = match Command::new("podman")
+    // Route through the shared bounded layer (714-4r6w): a direct
+    // std::process spawn can wait on a wedged podman forever, and the
+    // sync-budget gate counts exactly this shape.
+    let output = match podman_cmd_sync()
         .args(["ps", "--format", "json"])
-        .output()
+        .output_bounded(OperationKind::Container.default_budget())
     {
         Ok(output) => output,
         Err(err) => {
