@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows operator-attended session (The Tlatoāni, windows/Yolanda),
+# 2026-08-16. Records the license decision that closes 776-it8u the same
+# session it was filed.
+events:
+  - packet_id: repo-osi-license-decision
+    event:
+      type: decision
+      ts: "2026-08-16T21:30:00Z"
+      agent_id: windows-fable5-attended-20260816
+      host: windows
+      summary: |
+        OPERATOR DECISION (The Tlatoāni, 2026-08-16, attended session on
+        windows/Yolanda): the repo license is GPL-3.0. The canonical FSF
+        text (https://www.gnu.org/licenses/gpl-3.0.txt, verbatim, sha256
+        3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986)
+        is committed as LICENSE at the repo root (commit 17d16629f).
+        SignPath constraints confirmed for the choice: GPL-3.0 is
+        OSI-approved; no proprietary components and no commercial
+        dual-licensing are in play. This satisfies the license side of
+        signpath-foundation-application's (776-t8hs) dependency.

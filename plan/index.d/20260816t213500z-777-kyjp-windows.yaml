@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows operator-attended session (The Tlatoāni, windows/Yolanda),
+# 2026-08-16. Records the device-flow-only login directive on 648-e5pf and
+# files its implementation successor.
+packets:
+  - packet_id: github-login-device-flow-only
+    release_target: fail-loud-diagnosis-milestone
+    order: 777-kyjp
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: linux
+    priority: p2
+    deliverable: crates/tillandsias-headless/src/main.rs
+    depends_on: []
+    capability_tags:
+      - auth
+      - github
+      - login
+      - ux
+    title: |
+      Remove the GitHub token-paste prompts entirely — device login is the ONLY GitHub auth flow.
+    context: |
+      OPERATOR DIRECTIVE (The Tlatoāni, 2026-08-16, attended session on
+      windows/Yolanda; recorded as a decision event on 648-e5pf): remove the
+      token-paste prompts entirely; device login becomes the only GitHub auth
+      flow — "that one works much better". Live-session grounding: the token
+      paste failed twice, the device flow succeeded end to end (first Windows
+      reproduction of 648-e5pf, progress event
+      plan/index.d/20260816t211500z-648-e5pf-windows.yaml). 648-e5pf
+      established the mechanism: GH_LOGIN_TOKEN_SCRIPT (main.rs:7100) pipes to
+      `gh auth login --with-token` and contains no device flow, while GitHub
+      is registered AuthModel::OAuthDevice (main.rs:523) — a declared auth
+      model and an actual input method that disagree. This packet resolves the
+      disagreement in favor of the declared model. Related findings from the
+      same run:
+      plan/issues/enhancement/github-login-device-flow-dangling-enter-prompt-2026-08-16.md
+      and
+      plan/issues/enhancement/github-login-device-url-not-clickable-2026-08-16.md.
+    exit_criteria:
+      - |
+          The GitHub login flow presents NO token-entry prompt anywhere; the device flow (one-time code + github.com/login/device URL) is the only path and completes the sign-in.
+      - |
+          GH_LOGIN_TOKEN_SCRIPT and its prompt surface are removed (not merely hidden), and the AuthModel::OAuthDevice registration matches the actual flow.
+      - |
+          648-e5pf is closed against this packet when the device-only flow lands, with its untraced question (which component launched the device flow after the token attempt failed) answered or explicitly carried forward.
+    events:
+      - type: filed
+        ts: "2026-08-16T21:35:00Z"
+        agent_id: windows-fable5-attended-20260816
+        host: windows
+        summary: |
+          Filed as the implementation successor of the operator's
+          device-flow-only directive (decision event on 648-e5pf, same
+          fragment).
+
+events:
+  - packet_id: github-login-prompts-for-an-unneeded-token
+    event:
+      type: decision
+      ts: "2026-08-16T21:35:00Z"
+      agent_id: windows-fable5-attended-20260816
+      host: windows
+      summary: |
+        OPERATOR DIRECTIVE (The Tlatoāni, 2026-08-16, attended session on
+        windows/Yolanda): REMOVE the token-paste prompts entirely; device
+        login becomes the ONLY GitHub auth flow — "that one works much
+        better". Grounded in today's live run (token paste failed twice,
+        device flow succeeded end to end — the first Windows reproduction,
+        recorded as a progress event earlier this session). The fix
+        direction for this packet is thereby RULED: device-flow-only, not
+        prompt-repair. Implementation successor filed:
+        github-login-device-flow-only (777-kyjp). This packet's untraced
+        question (which component launched the device flow after the token
+        attempt failed) remains open inside the successor's scope.
