@@ -176,6 +176,21 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: idempotent-source-keyed"
 
+  - step: "781-6gys: warm lanes restore the artifact from the persistent cache volume, keyed AND exec-probed"
+    # Every lane used to re-enter cargo: the installed binary and the tmpfs
+    # idempotency stamp both die with the container, and on a cold/contended
+    # cargo cache that build alone outlives the 600s smoke cap (FORGE_EXIT=124
+    # twice, windows 2026-08-16). Pin the three properties of the fix inside
+    # ensure_forge_experts: (1) the cache dir derives from the persistent
+    # per-project volume (TILLANDSIAS_PROJECT_CACHE), (2) a restore branch
+    # exists ('ready (cache-volume)') keyed on the same source hash, and
+    # (3) the answer-surface probe gates BOTH the restore and the publish —
+    # two call sites — so an image-drift-broken or stale-source binary is
+    # never installed from, or published to, the cache.
+    command: "blk=$(sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh); printf '%s' \"$blk\" | grep -q 'TILLANDSIAS_PROJECT_CACHE' && printf '%s' \"$blk\" | grep -q 'ready (cache-volume)' && printf '%s' \"$blk\" | grep -q 'cached artifact to' && printf '%s' \"$blk\" | grep -c '_forge_experts_probe_answer_surface' | grep -qE '^[2-9]$' && echo 'ok: artifact-cache-warm-path'"
+    timeout_ms: 5000
+    expected_behavior: "ok: artifact-cache-warm-path"
+
   - step: "NO-PYTHON: the expert build path is cargo + POSIX shell only"
     command: "sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -qiE '(^|[^a-z])python' && exit 1; sed -n '/^ensure_forge_experts() {/,/^}/p' images/default/lib-common.sh | grep -q 'cargo build' && echo 'ok: no-python-cargo-only'"
     timeout_ms: 5000
