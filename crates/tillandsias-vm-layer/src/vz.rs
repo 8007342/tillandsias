@@ -1491,6 +1491,19 @@ impl VmRuntime for VzRuntime {
         // delegate plumbing is a follow-on iteration. Instead we poll
         // `state` (== `VZVirtualMachineStateStopped` = 4) every 250 ms while
         // pumping the runloop so VZ callbacks can fire.
+        //
+        // 690-xeda recorded justification (the no-polling doctrine permits a
+        // justified transient timer): this loop exists ONLY inside stop(),
+        // bounded by `drain_timeout`, and contributes zero steady-state
+        // wakeups — the 2026-08-16 idle measurement (3.11 -> 1.92 wakeups/s
+        // after the tick-loop retirement) was taken with this code present
+        // and idle. The runloop pump is load-bearing while we wait (VZ
+        // delivers its state transitions and completion blocks via the
+        // pumped loop), so replacing the poll means real delegate plumbing,
+        // not a blocking wait — and the shutdown path is exactly where the
+        // 690-xeda windows near-miss (a guest that killed itself every 30s,
+        // caught only by a measurement guard) says not to rewire casually.
+        // If the delegate lands, remove this justification with it.
         let request_result = unsafe { vm.requestStopWithError() };
         if let Err(e) = request_result {
             // The VM may already be stopped or in an invalid state for stop;

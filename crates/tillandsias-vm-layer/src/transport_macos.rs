@@ -374,6 +374,17 @@ pub fn connect_to_vm_vsock(
     // Bridge VZ's dispatch-queue completion handler to this thread via a
     // mpsc channel; pump CFRunLoop until the result arrives or `timeout`
     // elapses.
+    //
+    // 690-xeda recorded justification (the no-polling doctrine permits a
+    // justified transient timer): this 50 ms pump-and-check runs ONLY for
+    // the duration of one vsock connect attempt, bounded by `timeout`, and
+    // contributes zero steady-state wakeups (measured 2026-08-16 with this
+    // code present and idle). A plain `recv_timeout` block looks
+    // equivalent, but the pump keeps this thread's runloop servicing
+    // whatever VZ schedules on it during bring-up; proving the blocking
+    // form safe requires connect-under-load testing on real hardware —
+    // worth doing only if a measurement ever shows connects hot. If that
+    // proof lands, remove this justification with it.
     let (tx, rx) = std::sync::mpsc::channel::<Result<SocketConnection, ConnectError>>();
     let vm_for_connect = VmForConnect(vm.clone());
     dispatch_to_main_queue(move || vm_for_connect.connect_and_report(port, tx));

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # @trace order:756-hn3a, spec:methodology-accountability
 # Pinned by litmus:agent-identity-canonical-source-shape.
+# bash-dialect: dual (probed fallback) — the timestamp helper probes the
+# printf time builtin and falls back to date(1); everything else is
+# pure-3.2. Marker consumed by scripts/check-bash-dialect.sh (761-g36m).
 #
 # agent-identity.sh — the CANONICAL source of a worker agent's identity.
 # Sourceable (functions only, no side effects) AND executable (CLI below).
@@ -77,6 +80,31 @@
 # ./build.sh --check, which is the difference between a helper that works and
 # one that works where you tested it. Builtins have no PATH sensitivity, so
 # this cannot depend on the caller's environment.
+# ${var,,} is bash>=4; Apple ships bash 3.2 and /usr/bin/env bash resolves to
+# it (738-3pft decision 4: shared writers stay 3.2-clean or fail loud — on 3.2
+# the bash-4 form is a bad-substitution error, the label came back EMPTY, and
+# the attestation gate failed closed for the whole macOS host). Lowercase via
+# a case table instead: pure builtins, so it keeps this file's env -i /
+# empty-PATH guarantee, and it is ONE code path that behaves identically on
+# every bash rather than a fast path plus a fallback that only runs where
+# nobody tested it — the exact failure mode the header describes.
+tillandsias_lower() {
+    local s="${1:-}" out="" c i
+    for ((i = 0; i < ${#s}; i++)); do
+        c="${s:i:1}"
+        case "$c" in
+            A) c=a ;; B) c=b ;; C) c=c ;; D) c=d ;; E) c=e ;; F) c=f ;;
+            G) c=g ;; H) c=h ;; I) c=i ;; J) c=j ;; K) c=k ;; L) c=l ;;
+            M) c=m ;; N) c=n ;; O) c=o ;; P) c=p ;; Q) c=q ;; R) c=r ;;
+            S) c=s ;; T) c=t ;; U) c=u ;; V) c=v ;; W) c=w ;; X) c=x ;;
+            Y) c=y ;; Z) c=z ;;
+        esac
+        out="$out$c"
+    done
+    printf '%s' "$out"
+    return 0
+}
+
 tillandsias_node_name() {
     local h="" etc="${TILLANDSIAS_ETC_HOSTNAME:-/etc/hostname}"
     h="$(hostname -s 2>/dev/null || true)"
@@ -84,7 +112,7 @@ tillandsias_node_name() {
     [ -n "$h" ] || h="$(uname -n 2>/dev/null || true)"
     [ -n "$h" ] || { [ -r "$etc" ] && read -r h < "$etc"; }
     h="${h%%.*}"
-    printf '%s' "${h,,}"
+    tillandsias_lower "$h"
     return 0
 }
 
@@ -93,7 +121,7 @@ tillandsias_node_name() {
 # only.
 tillandsias_sanitize_component() {
     local s="${1:-}"
-    s="${s,,}"
+    s="$(tillandsias_lower "$s")"
     s="${s//[^a-z0-9-]/-}"
     while [[ "$s" == *--* ]]; do s="${s//--/-}"; done
     s="${s#-}"
@@ -162,10 +190,26 @@ tillandsias_agent_backend() {
 }
 
 # tillandsias_agent_timestamp — UTC compact stamp via the printf time builtin
-# (bash >= 4.2). TZ is scoped to the one builtin call.
+# (bash >= 4.2). Apple's bash 3.2 printf rejects '%(' as an invalid format
+# character and exits non-zero, so probe silently and fall back to date(1)
+# with the identical format. There is no pure-builtin clock on 3.2, so the
+# fallback tries PATH first, then the fixed locations date actually occupies
+# on the hosts where bash 3.2 exists (macOS/BSD: /bin/date) — keeping the
+# env -i guarantee everywhere the time builtin exists, and degrading to a
+# fixed absolute path, never to silence, where it does not. TZ is scoped to
+# the one call in every branch.
 tillandsias_agent_timestamp() {
-    TZ=UTC0 printf '%(%Y%m%dt%H%M%S)Tz' -1
-    return 0
+    local d
+    if TZ=UTC0 printf '%(%s)T' -1 >/dev/null 2>&1; then
+        TZ=UTC0 printf '%(%Y%m%dt%H%M%S)Tz' -1
+        return 0
+    fi
+    for d in date /bin/date /usr/bin/date; do
+        if TZ=UTC0 "$d" '+%Y%m%dt%H%M%Sz' 2>/dev/null; then
+            return 0
+        fi
+    done
+    return 1
 }
 
 # tillandsias_agent_id [backend] — the full canonical id on stdout, or a
