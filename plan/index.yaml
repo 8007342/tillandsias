@@ -32213,6 +32213,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-16T07:08:45Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Host-capability blocker recorded by the 723-sazx verification fork (2026-08-16): nix-daemon.socket is disabled/inactive on macuahuitl and there is no passwordless sudo, so no local nix build can run — this packet's 'Nix-capable host' precondition is NOT met here until the operator runs: sudo systemctl enable --now nix-daemon.socket. Same block applies to any local re-verification of the release nix lane.
+        - type: note
           ts: "2026-08-11T09:15:00Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260810t043031z
           host: macos
@@ -35833,6 +35839,12 @@ plan_index:
         The last criterion is the generalizable one. A scoring function that cannot tell "absent" from "low" will always fail in this direction, and will always fail quietly.
 
       events:
+        - type: note
+          ts: "2026-08-16T07:08:45Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Observed 2026-08-16 by the 723-sazx fork on HEAD d037f4100: litmus:selector-urgency-not-inert-shape FAILED ('urgency inert or missing ( vs )') on a tree where 723-sazx was still the ready p0; the SAME litmus passes after 723-sazx completed. The verdict appears coupled to live ledger state — an urgency litmus that can go red or green purely because the pool changed is an intermittent with a schedule (637-df4z/638-ehzi lesson). Worth a hermetic fixture pool instead of the live ledger; filing decision left to the selector packet's owner.
         - type: completed
           ts: "2026-08-12T06:02:28Z"
           host: host

@@ -67,7 +67,7 @@ critical_path:
     expected_behavior: "ok: unstable channel published"
 
   - step: "the landing page can link Windows portables (version-stable aliases exist and are checksummed)"
-    command: "grep -Fq 'cp \"${ZIP}\" tillandsias-windows-x64.zip' .github/workflows/release.yml && grep -Fq 'sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe >> SHA256SUMS-windows' .github/workflows/release.yml && grep -Fq 'latest/download/tillandsias-windows-x64.zip' README.md && grep -Fq 'latest/download/Tillandsias.dmg' README.md && echo 'ok: portable aliases linkable'"
+    command: "grep -Fq 'cp \"${ZIP}\" tillandsias-windows-x64.zip' .github/workflows/release.yml && grep -Fq 'sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe install-windows.ps1 >> SHA256SUMS-windows' .github/workflows/release.yml && grep -Fq 'latest/download/tillandsias-windows-x64.zip' README.md && grep -Fq 'latest/download/Tillandsias.dmg' README.md && echo 'ok: portable aliases linkable'"
     timeout_ms: 3000
     expected_behavior: "ok: portable aliases linkable"
 
