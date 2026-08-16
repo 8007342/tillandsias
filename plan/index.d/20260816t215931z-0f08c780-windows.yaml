@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-git-mirror-daemon-has-no-upstream-credential-and-never-seeds
+    field: status
+    value: completed
+    ts: "2026-08-16T21:59:31Z"
+    host: windows
+
+events:
+  - packet_id: windows-git-mirror-daemon-has-no-upstream-credential-and-never-seeds
+    event:
+      type: completed
+      ts: "2026-08-16T21:59:31Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: commit efda53d6a; litmus:git-mirror-fetch-credential-shape 6/6 OK in the registered git-mirror-service suite (windows 2026-08-16, fail set unchanged vs baseline a1ab8d81f); live as-wired check: java mirror seeded refs/heads/main=283a73a1 + OpenCode lane JAVA-LANE-SMOKE: OK rc=0 + two verified-ack pushes landed upstream (7972411126b3, out-of-band ls-remote)
+  - packet_id: windows-git-mirror-daemon-has-no-upstream-credential-and-never-seeds
+    event:
+      type: note
+      ts: "2026-08-16T21:59:31Z"
+      host: windows
+      summary: >
+        all exit criteria addressed live 2026-08-16; EC3 healthcheck residue spun off to 778-hb3x (see completed event of same date)

@@ -15765,6 +15765,12 @@ plan_index:
         - "no manual git config inside the forge: the injected gitconfig alone routes the push through the mirror"
         - "recurring viability: second cycle on the same guest succeeds (collision packet fixed or documented interim cleanup)"
       events:
+        - type: progress
+          ts: "2026-08-16T21:56:36Z"
+          agent_id: "windows-yolanda-fable5-20260816T2130Z-mirror-fix"
+          host: windows
+          summary: |
+            TRANSPARENT PUSH CHAIN VERIFIED LIVE on windows (2026-08-16 21:45-21:46Z, java OpenCode lane, guest v0.4.260815.1 + 777-i7hf fetch-credential fix): the in-forge agent committed a016df5 then 7972411126b336d55d1003064d69be5d9881068f on claude/mirror-fix-verify-260816 and pushed TWICE through the injected gitconfig route with zero manual git config; each push returned 'remote: [relay] Atomic push to https://github.com/8007342/java.git succeeded' + '[pre-receive] Relay verified: upstream durably accepted the ref transaction'; OUT-OF-BAND host-side ls-remote against github.com (not the mirror) shows refs/heads/claude/mirror-fix-verify-260816=7972411126b336d55d1003064d69be5d9881068f with main untouched at 283a73a1 — upstream SHA advanced across both pushes (a016df5.. then 7972411..). EC1+EC2 satisfied on the java project; recurring viability: consecutive lanes on the same guest all green (trivial-prompt lane rc=0, push lane rc=0 53s warm, MO smoke lane[s] recorded on the e2e litmus shape). NOT completed here: the packet's GOAL wording wants a FULL /meta-orchestration cycle pushing its own work — full-meta was rate-limited this session (limited:full-meta:14400s honored; smoke mode run instead), so the full-cycle rerun stays the completion gate.
         - type: filed
           ts: "2026-07-16T08:35:00Z"
           agent_id: "windows-bullo-fable5-20260716T0731Z"
@@ -47371,6 +47377,13 @@ plan_index:
         - A failed fetch renders something truthful — retain the previous list, or a distinct 'couldn't reach GitHub' row — never '(no repos)'.
         - 'Tests for: confirmed-empty renders (no repos); failed-fetch does NOT.'
 
+      events:
+        - type: note
+          ts: "2026-08-16T21:56:37Z"
+          agent_id: "windows-yolanda-fable5-20260816T2130Z-mirror-fix"
+          host: windows
+          summary: |
+            Adjacent honesty landed via 777-i7hf (2026-08-16, windows): the forge no-cloneable-refs FATAL in images/default/lib-common.sh now names all three causes (still seeding / genuinely empty / upstream fetch cannot AUTHENTICATE) and points at the mirror log's 'Seed fetch failed: UPSTREAM AUTH REFUSED' marker, which the mirror entrypoint now emits for 401/403-class seed failures. The live java repro's misleading 'or upstream is empty' reading cannot recur in that form. The wire-level discriminator work this packet tracks (CloudRefreshReply ok/err) remains open and untouched.
     - packet_id: forge-validate-push-absent-reported-as-failed
       order: 732-z8ef
       release_target: architecture-audit-epic

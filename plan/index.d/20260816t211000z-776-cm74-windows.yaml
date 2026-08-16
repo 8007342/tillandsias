@@ -1,0 +1,44 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows operator-attended session (The Tlatoāni, windows/Yolanda),
+# 2026-08-16.
+packets:
+  - packet_id: hash-image-sources-git-normalized
+    release_target: stable-milestone-v1
+    order: 776-cm74
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: any
+    priority: p2
+    tags:
+      - build
+      - forge
+      - windows
+      - portability
+      - v0.5
+    title: |
+      scripts/hash-image-sources.sh hashes GIT-NORMALIZED content (index object ids), not working-tree bytes.
+    context: |
+      OPERATOR DECISION (The Tlatoāni, 2026-08-16, attended session on
+      windows/Yolanda): the hasher hashes git-normalized content, not
+      working-tree bytes — ruling the open hasher question in
+      plan/issues/hash-image-sources-fixture-windows-portability-2026-08-16.md
+      (decision appended there, same date). This makes the forge-image source
+      hash invariant under core.autocrlf and checkout location, which is what
+      the fixture's cross-location comparison actually needs to be truthful on
+      Windows (today the CRLF working-tree bytes hash differently between two
+      clones of the SAME commit).
+    exit_criteria:
+      - |
+          scripts/hash-image-sources.sh derives its hash from git-normalized content (e.g. git ls-files -s object ids over the image source set), so two clones of the same commit hash identically regardless of core.autocrlf or checkout location.
+      - |
+          scripts/test-hash-image-sources.sh passes on Windows (a core.autocrlf=true host config) and on Linux; the exec-bit scenario is gated on core.fileMode=true with a loud skip verdict where false, per the issue's second question.
+    events:
+      - type: filed
+        ts: "2026-08-16T21:10:00Z"
+        agent_id: windows-fable5-attended-20260816
+        host: windows
+        summary: |
+          Filed from the operator's 2026-08-16 ruling on the fixture-
+          portability issue; cites
+          plan/issues/hash-image-sources-fixture-windows-portability-2026-08-16.md.

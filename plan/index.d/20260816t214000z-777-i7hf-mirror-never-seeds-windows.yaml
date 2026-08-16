@@ -1,0 +1,165 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows operator-attended session (The Tlatoāni, windows/Yolanda),
+# 2026-08-16. Live lane-launch defect bundle: the git mirror never seeds on
+# this host, blocking every lane launch; plus the codex lane's unbounded
+# mirror wait, and live evidence notes on 731-eupn and 626-w3fn.
+packets:
+  - packet_id: windows-git-mirror-daemon-has-no-upstream-credential-and-never-seeds
+    release_target: stable-milestone-v1
+    order: 777-i7hf
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: windows
+    priority: p1
+    tags:
+      - windows
+      - git-mirror
+      - forge
+      - credentials
+      - fail-loud
+      - v0.5
+    title: |
+      The Windows lane git mirror never seeds — the daemon container has no upstream credential channel and a workstation fetch refspec — so every lane launch on this host fails or hangs on an empty mirror.
+    context: |
+      MAJOR DEFECT, root-caused live by the operator (The Tlatoāni,
+      ~2026-08-16T20:55-21:05Z, windows/Yolanda). Repro: OpenCode lane for
+      project `java` (upstream github.com/8007342/java — VERIFIED NON-EMPTY
+      via gh api: size=316, default_branch=main, pushed_at=2026-06-12). Lane
+      sequence: "cloud: cloning 8007342/java ... clone complete" -> four
+      images built fresh (router/inference/forge-base/forge, all
+      digest_missing, several minutes) -> 12 in-lane
+      `git clone git://git-hhpf3na9q9rs1i74sbhg/java` attempts, each
+      "warning: You appear to have cloned an empty repository" -> "[forge]
+      FATAL: ... EMPTY checkout (no HEAD) after 12 attempts. The mirror is
+      reachable but advertised no cloneable refs — it has not finished
+      seeding from upstream (or upstream is empty)." Multiple relaunches
+      identical — NOT a first-time race. A codex lane launched afterwards
+      HUNG retrying the mirror clone every ~2.5s indefinitely (guest journal
+      21:00Z onward; each attempt logged by the daemon as "fatal: the remote
+      end hung up unexpectedly") — filed separately as 777-k88g.
+
+      Forensics on the long-lived mirror container tillandsias-git-java
+      (image localhost/tillandsias-git:v0.4.260815.1, Up since ~20:45Z,
+      healthcheck "healthy" throughout):
+      - /srv/git/java bare repo exists; HEAD -> refs/heads/main; refs/heads/
+        EMPTY; no packed-refs; refs/remotes/ ABSENT;
+        `find objects -type f | wc -l` = 0; FETCH_HEAD 0 bytes, mtime
+        touched 21:00Z (something retries fetches).
+      - git-daemon args are correct (--base-path=/srv/git --export-all
+        --enable=receive-pack --listen=0.0.0.0 --port=9418).
+      - Repo config: remote origin = https://github.com/8007342/java.git
+        with fetch refspec `+refs/heads/*:refs/remotes/origin/*` — a
+        WORKSTATION refspec; even a successful fetch would land refs where
+        git:// clients cannot clone them. A mirror wants
+        `+refs/heads/*:refs/heads/*` or mirror=true. tagOpt --no-tags.
+      - Live test fetch inside the container: "fatal: could not read
+        Username for 'https://github.com': No such device or address" ->
+        the daemon container has NO upstream credential channel, despite
+        the operator's GitHub device-login completing ~30 min before the
+        container was created (vault write path was healthy).
+      - Context: short-lived tillandsias-git blip containers (~400ms
+        create->remove each, with per-op podman secret create/secret
+        remove) were observed at 13:28-13:29 local — if those blips are the
+        intended seeding mechanism (fetch with secret, push into the daemon
+        via receive-pack), they either never targeted java or fail fast.
+
+      Cross-references: 594-pisu
+      (git-mirror-container-created-without-relay-credential — completed on
+      linux; this is its regression or its unported Windows path), 594-csgb
+      (mirror-first-seed vs launch-readiness race), 756-2jnj (healthcheck
+      says healthy while upstream auth is absent — health = daemon-up, not
+      refs-present), 731-eupn (the FATAL text conflates "not seeded" with
+      "upstream empty"; live evidence note recorded on it this session),
+      and cycle 4's windows litmus mirror-seam red.
+    exit_criteria:
+      - |
+          For a project with a non-empty upstream, the mirror seeds within a bounded time of container creation: refs/heads/ populated via a mirror-style refspec (`+refs/heads/*:refs/heads/*` or mirror=true), objects non-zero, and an in-lane `git clone git://...` yields a NON-EMPTY checkout.
+      - |
+          The seeding path has a working upstream credential channel on Windows (the vault-held GitHub credential reaches whatever performs the upstream fetch), or the design is changed so the daemon container never needs one — either way the actual mechanism (blip containers or in-daemon fetch) is named and verified live on this host.
+      - |
+          Mirror health/readiness reflects refs-present, not merely daemon-up (756-2jnj family), so a lane launch cannot be handed an unseeded mirror silently.
+      - |
+          The live repro passes end to end: an OpenCode lane for 8007342/java on this host reaches a non-empty checkout.
+    events:
+      - type: filed
+        ts: "2026-08-16T21:40:00Z"
+        agent_id: windows-fable5-attended-20260816
+        host: windows
+        summary: |
+          Filed from the operator's live root-cause session 2026-08-16:
+          empty bare repo (0 objects, empty refs/heads, 0-byte FETCH_HEAD),
+          workstation fetch refspec, and no upstream credential channel in
+          the daemon container, while the healthcheck reported healthy
+          throughout and upstream was verified non-empty.
+
+  - packet_id: codex-lane-mirror-wait-unbounded
+    release_target: fail-loud-diagnosis-milestone
+    order: 777-k88g
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: any
+    priority: p2
+    tags:
+      - forge
+      - lanes
+      - fail-loud
+      - v0.5
+    title: |
+      The codex lane retries the mirror clone forever — no attempt cap, no timeout, no fail-loud.
+    context: |
+      Observed live 2026-08-16 from ~21:00Z (windows/Yolanda) during the
+      mirror-never-seeds defect (777-i7hf): a codex lane hung retrying the
+      mirror clone every ~2.5s indefinitely (guest journal; each attempt
+      logged by the daemon as "fatal: the remote end hung up unexpectedly").
+      Contrast the OpenCode lane in the same launch against the same mirror:
+      it fails LOUD after 12 attempts with a FATAL naming the mirror state.
+      Only the lane's wait policy differs; the codex lane's unbounded wait
+      converts a diagnosable mirror defect into a silent hang.
+    exit_criteria:
+      - |
+          The codex lane bounds its mirror-clone wait (attempt cap and/or timeout) and fails LOUD with a verdict naming the mirror state, consistent with the OpenCode lane's grammar (and with 731-eupn's not-seeded vs upstream-empty disambiguation when that lands).
+      - |
+          A test or litmus pins the bounded-wait behavior so an unbounded retry loop cannot return silently.
+    events:
+      - type: filed
+        ts: "2026-08-16T21:40:00Z"
+        agent_id: windows-fable5-attended-20260816
+        host: windows
+        summary: |
+          Filed from the same live session as 777-i7hf: the codex lane hung
+          indefinitely where the OpenCode lane failed loud after 12
+          attempts.
+
+events:
+  - packet_id: empty-cloud-reply-conflates-no-repos-with-failed-fetch
+    event:
+      type: progress
+      ts: "2026-08-16T21:40:00Z"
+      agent_id: windows-fable5-attended-20260816
+      host: windows
+      summary: |
+        LIVE EVIDENCE (2026-08-16, windows/Yolanda, java-lane repro of
+        777-i7hf): the OpenCode lane's FATAL — "EMPTY checkout (no HEAD)
+        after 12 attempts. The mirror is reachable but advertised no
+        cloneable refs — it has not finished seeding from upstream (or
+        upstream is empty)." — fired while upstream github.com/8007342/java
+        was VERIFIED NON-EMPTY via gh api (size=316, default_branch=main,
+        pushed_at=2026-06-12). The conflation this packet names ("not
+        seeded" vs "upstream empty") had a real operator staring at it
+        during root-cause; the unseeded-mirror root cause is filed as
+        777-i7hf.
+  - packet_id: first-run-long-work-is-silent-across-surfaces
+    event:
+      type: note
+      ts: "2026-08-16T21:40:00Z"
+      agent_id: windows-fable5-attended-20260816
+      host: windows
+      summary: |
+        Windows evidence (2026-08-16 ~20:45-21:00Z, first lane launch on a
+        freshly version-bumped guest v0.4.260815.1): all four enclave
+        images (router/inference/forge-base/forge) rebuilt from scratch,
+        each digest_missing, several SILENT minutes per image, before the
+        lane could proceed — observed live by the operator during the
+        java-lane repro of 777-i7hf.

@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: windows-runtime-guest-reprovision-and-lane-verification
+    field: status
+    value: completed
+    ts: "2026-08-16T20:55:29Z"
+    host: windows
+
+events:
+  - packet_id: windows-runtime-guest-reprovision-and-lane-verification
+    event:
+      type: completed
+      ts: "2026-08-16T20:55:29Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: first tray-launched forge lane on windows/Yolanda 2026-08-16T20:55-21:05Z (container tillandsias-java-forge, image localhost/tillandsias-forge v0.4.260815.1, guest v0.4.260815.1); criterion 1 long satisfied (guest >= 0.4.260802.1); criterion 3 PASS - token grep empty in both the exec session and /proc/1/environ (first post-82160687 measurement on Windows); criterion 2 read taken - TILLANDSIAS_ACCEL_ENVELOPE absent, defect filed as 776-drwr; evidence events in plan/index.d/20260816t205500z-599-3b9h-reads-windows.yaml
+  - packet_id: windows-runtime-guest-reprovision-and-lane-verification
+    event:
+      type: note
+      ts: "2026-08-16T20:55:29Z"
+      host: windows
+      summary: >
+        all three exit criteria discharged in the operator-attended session 2026-08-16 (The Tlatoani, windows/Yolanda); the absent accel envelope is tracked separately as windows-tray-lane-launch-omits-accel-envelope 776-drwr

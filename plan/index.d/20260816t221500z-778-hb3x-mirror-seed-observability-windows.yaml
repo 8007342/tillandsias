@@ -1,0 +1,67 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows mission session (Yolanda, 2026-08-16) — follow-on
+# observability packet spun out of the 777-i7hf root-cause/fix session,
+# covering exactly the honesty gaps that were found but deliberately NOT
+# fixed on the critical path.
+packets:
+  - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+    release_target: fail-loud-diagnosis-milestone
+    order: 778-hb3x
+    status: ready
+    desired_release: v0.5
+    kind: enhancement
+    pickup_role: any
+    priority: p2
+    tags:
+      - git-mirror
+      - fail-loud
+      - observability
+      - healthcheck
+      - v0.5
+    title: |
+      A mirror that can NEVER seed still reports healthy everywhere cheap to look: healthcheck is port-only, the auth probe publishes `error` (not the credential truth) on an unseeded mirror, and the launcher's seeded-gate waits its full budget without ever surfacing the seed-fetch error.
+    context: |
+      Spun out of 777-i7hf (windows java-lane live repro 2026-08-16). During
+      the ~80 minutes the mirror was fetch-broken, every cheap surface said
+      fine: the container HEALTHCHECK (nc 127.0.0.1 9418, images/git/
+      Containerfile) reported "healthy" throughout because the daemon WAS up;
+      probe-upstream-auth on the empty mirror exited via `finish error`
+      ("mirror has no local heads to probe with") — a verdict that conflates
+      "cannot seed" with a transport failure and never names the credential
+      state; and the launcher's 594-csgb seeded-gate simply burned its
+      cold-seed budget in silence — the actual per-tick failure line
+      ("could not read Username ...") existed only in the container journal.
+
+      The 777-i7hf fix (credentialed fetch paths + the loud UPSTREAM AUTH
+      REFUSED seed classification + the three-cause forge FATAL text) makes
+      the root cause diagnosable at the mirror log and the in-forge FATAL.
+      This packet is the remaining surface work, kept OFF that fix's critical
+      path deliberately:
+      - healthcheck (or a sibling readiness surface) should distinguish
+        "daemon up, mirror seeded/local-only" from "daemon up, origin
+        configured, zero refs, seed failing" (756-2jnj family: health =
+        daemon-up, not refs-present);
+      - probe-upstream-auth on an unseeded mirror with an https origin
+        should still probe (synthetic ref or ls-remote form) or at least
+        publish the credential-channel truth instead of `error`;
+      - the launcher seeded-gate (wait_for_git_mirror_ready) should
+        surface the mirror's last seed-fetch failure line while it waits,
+        so a never-going-to-seed wait is visibly different from a slow
+        first seed.
+    exit_criteria:
+      - |
+          A mirror with a configured origin and zero refs whose seed fetch is failing is distinguishable from a healthy/seeding mirror WITHOUT reading the container journal (healthcheck state, published ref, or launcher gate output — at least one cheap surface).
+      - |
+          probe-upstream-auth publishes an honest verdict (not `error`) for the unseeded-mirror-with-https-origin case, or its `error` verdict carries the no-heads reason in the published namespace.
+      - |
+          The launcher's seeded-gate output includes the mirror's seed-failure reason when one exists, and a litmus pins that surface.
+    events:
+      - type: filed
+        ts: "2026-08-16T22:15:00Z"
+        agent_id: windows-yolanda-fable5-20260816T2130Z-mirror-fix
+        host: windows
+        summary: |
+          Filed from the 777-i7hf fix session as the found-but-not-fixed
+          observability residue (mission rule: honesty fixes must not expand
+          the fix's critical path). Live evidence for every named surface is
+          in the 777-i7hf completion event of the same date.
