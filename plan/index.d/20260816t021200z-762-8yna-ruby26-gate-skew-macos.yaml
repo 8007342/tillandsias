@@ -1,0 +1,56 @@
+packets:
+  - packet_id: gate-ruby-exprs-assume-psych4-autoloaded-date
+    order: 762-8yna
+    release_target: fail-loud-diagnosis-milestone
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: 'check-plan-schema-divergence.sh ruby fallback assumed psych-4 (safe_load_file) and autoloaded Date — macOS system ruby 2.6 reported index-load-failed on a loadable index'
+    pickup_role: macos
+    depends_on: []
+    capability_tags:
+      - shell
+      - ruby
+      - cross-platform
+      - macos
+      - fail-loud
+    context: |
+      Second gate-blocker in the same macOS pre-push run as 761-g36m, one gate
+      further down the chain. The 440 status-vocab gate's ruby fallback
+      (used where yq is off PATH, which is this host under build.sh) failed
+      twice on macOS system ruby 2.6.10:
+        1. `permitted_classes: [Time, Date]` without `require "date"` —
+           rubies >= 3.x get Date because psych itself requires it; 2.6 does
+           not → uninitialized constant Date.
+        2. `YAML.safe_load_file` — psych 4 (ruby >= 3.1) only →
+           undefined method for Psych:Module.
+      Both produced `blocked:index-load-failed` for a perfectly loadable
+      index — the 720-24u6 verdict-honesty fix meant the message correctly
+      named the load failure rather than a phantom divergence, which is what
+      made the diagnosis take minutes instead of a cycle.
+    exit_criteria:
+      - the ruby fallback requires date explicitly and uses safe_load(File.read(...)), parsing identically on psych >= 3.1 (ruby 2.6) and psych 4+
+      - bash scripts/check-plan-schema-divergence.sh prints ok:status-vocab-in-sync on macOS system ruby 2.6
+    verifiable_closure: |
+      ./build.sh --check passes the 440 gate on a host whose only YAML reader
+      is ruby 2.6.
+    notes: |
+      Fixed in the same commit that files this packet (both criteria hold:
+      -rdate + safe_load(File.read), verdict ok:status-vocab-in-sync on ruby
+      2.6.10). Filed completed with the fix as evidence. Residual ruby-dialect
+      sweep across other gate scripts belongs to 761-g36m's checker criterion
+      — extend that checker's grammar to ruby psych-4-isms
+      (safe_load_file, unrequired Date) if the sweep finds more.
+
+events:
+  - packet_id: gate-ruby-exprs-assume-psych4-autoloaded-date
+    event:
+      type: completed
+      ts: "2026-08-16T02:12:00Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0150z"
+      host: macos
+      summary: |
+        Fix + verification in the filing commit: -rdate added, safe_load_file
+        replaced with safe_load(File.read(...)); checker prints
+        ok:status-vocab-in-sync under ruby 2.6.10 on macOS.

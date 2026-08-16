@@ -1,0 +1,71 @@
+packets:
+  - packet_id: shared-scripts-bash4-isms-break-bash32-hosts
+    order: 761-g36m
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: 'bash-4-isms in shared scripts silently break bash-3.2 hosts: agent-identity.sh blocked every macOS push via the new attestation gate (fixed); 8 more scripts carry the pattern'
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - shell
+      - cross-platform
+      - macos
+      - fail-loud
+    context: |
+      scripts/agent-identity.sh (756-hn3a, landed on linux 2026-08-15) used
+      ${var,,} twice and printf '%(...)T' — bash>=4 forms. Apple ships bash
+      3.2.57 and /usr/bin/env bash resolves to it (738-3pft decision 4 warned
+      about exactly this class ONE DAY earlier). On this host the expansions
+      were bad-substitution errors, tillandsias_node_name returned EMPTY, and
+      the new check-mo-full-attestations.sh gate — correctly fail-closed —
+      REFUSED with violation:mo-full-attestations:host-unresolved, blocking
+      every ./build.sh --check and therefore every push from macOS.
+
+      FIXED in this commit, first slice: lowercase now goes through a
+      pure-builtin case table (one code path, identical on every bash,
+      preserves the file's env -i / empty-PATH guarantee — the first fix
+      attempt used tr/date fallbacks and test-agent-identity.sh correctly
+      failed 10/11 under env -i, which is the suite doing its job), and the
+      timestamp probes the printf time builtin then degrades to an
+      absolute-path date chain. test-agent-identity.sh 11/11 green under
+      /bin/bash 3.2; mo-full-attest.sh host resolves.
+
+      RESIDUAL (this packet's open work): the same sweep grep —
+        grep -lE '\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?,,\}|\^\^|mapfile |readarray |declare -A |%\(%' scripts/*.sh
+      — still names 8 files: check-opsx-generated-dirt.sh,
+      check-pickup-role-grammar.sh, check-windows-only-sources-verified.sh
+      (mapfile — the very example 738-3pft measured, supposedly fixed under
+      723-b9cn; verify whether the fix regressed in a merge or never landed),
+      check-running-image-freshness.sh, loop-success-probe.sh,
+      run-litmus-test.sh, selective-tillandsias-reset.sh,
+      update-convergence-dashboard.sh. Some may be linux-only lanes; the
+      point of the audit is that NOBODY currently knows which, and the
+      failure mode is silent-empty, not loud.
+    exit_criteria:
+      - each of the 8 remaining scripts is either made bash-3.2-clean or carries an explicit early `bash>=4 required` refusal that exits non-zero with a named verdict (silent-empty is the forbidden outcome)
+      - a deterministic checker (grep-grammar class) rejects new bash-4-only constructs in scripts/ that lack the explicit refusal, wired into ./build.sh --check
+      - the checker's fixture proves both directions — a bash-4-ism without a guard FAILS, one with the refusal guard PASSES
+    verifiable_closure: |
+      ./build.sh --check on a bash-3.2 host passes the attestation-ledger
+      check, and the new bash-dialect checker is green on the full scripts/
+      tree with its two-direction fixture.
+    notes: |
+      Do not "fix" by switching shebangs to /usr/bin/env bash — that resolves
+      to 3.2 on macOS anyway. Feature-detect or single-dialect code, never
+      version-sniff by $BASH_VERSION string compare.
+
+events:
+  - packet_id: shared-scripts-bash4-isms-break-bash32-hosts
+    event:
+      type: progress
+      ts: "2026-08-16T02:10:43Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0150z"
+      host: macos
+      summary: |
+        Slice 1 landed: agent-identity.sh bash-3.2-clean (case-table
+        lowercase, probed timestamp fallback), test-agent-identity.sh 11/11
+        under /bin/bash 3.2, macOS push gate unblocked. Residual: 8-script
+        sweep + the dialect checker.
