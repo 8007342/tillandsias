@@ -12806,11 +12806,9 @@ fn maybe_spawn_vsock_listener(
                 // to be up during Starting/Draining/Stopping.
                 let phase = liveness_state.current_phase();
                 if phase != tillandsias_control_wire::VmPhase::Ready {
-                    let _ = tokio::time::timeout(
-                        std::time::Duration::from_secs(60),
-                        phase_rx.recv(),
-                    )
-                    .await;
+                    let _ =
+                        tokio::time::timeout(std::time::Duration::from_secs(60), phase_rx.recv())
+                            .await;
                     continue;
                 }
                 // run_check shells out to podman (container_running +
