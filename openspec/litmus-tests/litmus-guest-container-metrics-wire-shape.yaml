@@ -1,0 +1,85 @@
+name: litmus:guest-container-metrics-wire-shape
+spec: observability-metrics
+description: >
+  Pin the order-333 guest metrics contract on the control wire. Before this
+  packet `tillandsias-metrics` sampled only guest-SYSTEM level (sysinfo +
+  /proc/diskstats + PSI) and served it over a TCP-only /metrics that macOS
+  and Windows hosts cannot reach; no per-container view existed anywhere, so
+  a tray could not answer "which enclave container is eating the box?"
+  without a TCP hack into the VM.
+
+  Three properties are pinned, and the third is the one that matters most:
+
+    1. WIRE — MetricsSnapshotRequest/Reply exist as TRAILING additive
+       variants with standalone wire structs, and WIRE_VERSION did NOT bump
+       (the non_exhaustive additive-enum rule; a bump would strand every
+       older sidecar).
+    2. ROUTING — the request is vsock-only in the shared routing matrix
+       (guest facts; the unix/tray side cannot sample another machine's
+       cgroups) and the reply is response-only on both transports.
+    3. NO FABRICATION — a collection failure travels as an `error` field
+       with counters left `None`, never as a healthy-looking zero. This is
+       the spec:observability-metrics contract, and it is asserted
+       behaviourally (conversion + live duplex round trip), not by grep.
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - cargo workspace builds (tillandsias-control-wire, tillandsias-metrics, tillandsias-headless)
+
+critical_path:
+  - step: "WIRE: additive variants + wire structs roundtrip, WIRE_VERSION unchanged"
+    command: "cargo test -q -p tillandsias-control-wire metrics_snapshot -- --nocapture 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok."
+
+  - step: "Req: no WIRE_VERSION bump rode along with the additive variants"
+    command: "grep -qE 'pub const WIRE_VERSION: u(16|32) = 2;' crates/tillandsias-control-wire/src/lib.rs && echo 'ok: WIRE_VERSION still 2 (additive-only)'"
+    timeout_ms: 10000
+    expected_behavior: "ok: WIRE_VERSION still 2 (additive-only)"
+
+  - step: "ROUTING: vsock-only request, response-only reply, pinned in both matrices"
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias control_dispatch::tests::vsock_routing_matrix -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "ROUTING: the unix side refuses the guest-only request"
+    command: "cargo test -q -p tillandsias-headless --bin tillandsias control_dispatch::tests::unix_socket_routing_matrix -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "NO FABRICATION: a failed sample keeps its error and reports NO counters"
+    command: "cargo test -q -p tillandsias-headless --features listen-vsock --bin tillandsias vsock_server::tests::metrics_wire_conversion_preserves_errors_and_none_counters -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "LIVE: a MetricsSnapshotRequest over a duplex connection gets a correlated reply"
+    command: "cargo test -q -p tillandsias-headless --features listen-vsock --bin tillandsias vsock_server::tests::metrics_snapshot_request_gets_a_correlated_reply -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "SAMPLERS: cgroup + mountinfo/diskstats parsing, incl. tmpfs unavailable"
+    command: "cargo test -q -p tillandsias-metrics 2>&1 | tail -4"
+    timeout_ms: 300000
+    success_pattern: "test result: ok."
+
+observability:
+  traces:
+    - "@trace spec:observability-metrics"
+    - "@trace spec:vsock-transport"
+  expected_log: "guest per-container and per-mount samples cross the control wire; failures carry an error field, never a fabricated zero"
+  log_fields:
+    spec: "observability-metrics"
+    test: "guest-container-metrics-wire-shape"
+    artifact: "crates/tillandsias-metrics/src/container.rs"
+
+rollback:
+  on_failure: >
+    Either the additive-enum rule was broken (variant reordered or
+    WIRE_VERSION bumped — check crates/tillandsias-control-wire/src/lib.rs),
+    the routing matrix stopped treating MetricsSnapshotRequest as vsock-only
+    (a new variant falling into decide_route's forward-defence wildcard reads
+    as Unsupported), or a sampler started emitting zeros where it cannot
+    collect — the one failure mode spec:observability-metrics forbids.
+  command: "grep -n 'MetricsSnapshot' crates/tillandsias-control-wire/src/lib.rs crates/tillandsias-headless/src/control_dispatch.rs | head -12"

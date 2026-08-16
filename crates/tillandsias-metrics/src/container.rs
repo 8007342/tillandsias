@@ -80,7 +80,11 @@ impl ContainerMetric {
     /// A sample that carries only a collection failure: every value `None`,
     /// `error` populated. This is what a total failure looks like on the
     /// wire — visibly broken, never silently healthy.
-    fn error_only(name: impl Into<String>, error: impl Into<String>) -> Self {
+    ///
+    /// Public so the vsock handler can report a sampling-task failure in the
+    /// same shape the samplers use (order 333) instead of inventing an empty
+    /// snapshot.
+    pub fn error_only(name: impl Into<String>, error: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             cpu_usec: None,

@@ -1,0 +1,55 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: linux-immutable (yoga) meta-orchestration cycle 2, 2026-08-16,
+# splitting 333's cross-host exit criterion out at the ownership boundary.
+packets:
+  - packet_id: macos-diagnose-consumes-guest-metrics-snapshot
+    release_target: socket-audit-master
+    order: 778-n9z2
+    status: ready
+    desired_release: v0.5
+    kind: enhancement
+    pickup_role: macos
+    priority: p2
+    depends_on:
+      - guest-container-metrics-over-control-wire
+    tags:
+      - macos
+      - tray
+      - observability
+      - control-wire
+      - v0.5
+    title: |
+      macOS --diagnose --json gains a metrics block read over the control wire (333's exit criterion 4, split at the write-scope boundary).
+    context: |
+      Order 333's guest side LANDED on linux-next 2026-08-16: the guest
+      headless samples per-container cgroup v2 counters and per-mount I/O and
+      answers `MetricsSnapshotRequest` with `MetricsSnapshotReply` over vsock
+      (additive wire variants, no WIRE_VERSION bump; routing pinned vsock-only
+      in control_dispatch; litmus:guest-container-metrics-wire-shape 7/7).
+      The guest advertises the capability string `MetricsSnapshotRequest` in
+      its HelloAck server_caps, so the tray can feature-detect rather than
+      version-sniff.
+
+      333's fourth exit criterion — "`--diagnose --json` gains a metrics block
+      on macOS (read over the wire)" — lives in
+      `crates/tillandsias-macos-tray/`, outside the linux write scope, so it
+      is split here rather than edited cross-host. Wire types to consume:
+      `MetricsSnapshotWire { sampled_at_unix, containers, mounts }` with
+      `ContainerMetricWire` / `MountIoMetricWire` (all counters `Option<u64>`;
+      a failed sample carries `error` and leaves counters `None`).
+    exit_criteria:
+      - |
+          `--diagnose --json` on macOS includes a metrics block populated from a MetricsSnapshotRequest over the control wire when the guest advertises the MetricsSnapshotRequest capability, and omits it (or marks it unsupported) when the guest does not — feature detection via HelloAck server_caps, never a version comparison.
+      - |
+          The NO-FABRICATION contract survives the tray hop: a container or mount sample carrying `error` renders as an error in the diagnose JSON with its counters absent — never as a zero (spec:observability-metrics).
+      - |
+          Evidence from a booted guest: the diagnose JSON shows at least one real per-container sample and the named hot-path mounts, captured on an attended macOS smoke.
+    events:
+      - type: filed
+        ts: "2026-08-16T22:05:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Split out of 333 at the ownership boundary once the guest side
+          landed; parent closes with criteria 1-3 met and this child owning
+          criterion 4.
