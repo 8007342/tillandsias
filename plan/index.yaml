@@ -50313,6 +50313,13 @@ plan_index:
         - receive.fsckObjects=true is effective on an upgraded volume (a malformed object is rejected), not merely present in config.
         - The four TILLANDSIAS_PUSH_* variables are exported with the values the audit rung consumes.
 
+      events:
+        - type: note
+          ts: "2026-08-16T07:17:43Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            579 DISPOSITION (the packet's own precheck): NOT subsumed, NOT duplicated. The hardening-placement half 749-2fqj quoted (entrypoint:131-139 init-only block) was ALREADY LANDED as an every-start migration before this work, and 579's own 9-case suite covers the pre-receive relay half at this tree (9/9 PASS live 2026-08-16). 579 stays ready on its own residual: spec supersession of the <=10-deletion relay semantics, the live existing-volume restart gate, and the full local-build E2E its next_action names (commit 23f9e4e8 pickup). This packet's upgraded-volume fixtures pin the receive-CONFIG half only; no double-close.
     - packet_id: mirror-identity-agent-sidecar-and-forge-wiring
       order: 749-6uby
       status: ready
