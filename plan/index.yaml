@@ -52293,6 +52293,12 @@ plan_index:
         (mirror-side upstream-auth verdicts — still unpublished on enclaves
         whose images predate it; arrives with the next image rebuild).
       events:
+        - type: progress
+          ts: "2026-08-16T10:29:04Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t1023z"
+          host: macos
+          summary: |
+            MECHANISM SLICE LANDED: report_seed_staleness at the forge launch-arg site prints an unconditional one-line verdict — branch, local sha, last-fetched-origin sha, behind-count, fetch-age-h, fresh/stale/unknown — computed entirely from LOCAL refs (no network in the launch path; the tracking ref's own age is stated so stale knowledge cannot pose as freshness). Criterion 2 discharged: a validation-lane launch can no longer look clean without the staleness in the same output (verified inputs on the live seed checkout: local 1496e89f0b40, origin/main 0548ee1f224a, behind 562 — the next launch prints verdict=stale). Criterion 1's ENFORCEMENT is opt-in (TILLANDSIAS_SEED_STALENESS_MAX_BEHIND refuses with loud remediation; exit 1) because the launcher is shared fleet-wide and a hard default would change sibling behavior unattended — the refuse-vs-auto-ff DEFAULT plus criterion 3 (the documented/automated refresh path) remain on the operator ruling this packet holds. Unit pin seed_staleness_tests::verdict_line_shapes (runs under --bins — the 731-vaqx spelling — 1/1), clippy clean.
         - type: filed
           ts: "2026-08-16T04:43:00Z"
           agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0423z
