@@ -8846,6 +8846,12 @@ plan_index:
         - "a retry after the build completes attaches to the cached image (no rebuild)"
         - "materialization emits a progress signal within ~5s of build start that the tray can render (test on the emit path)"
       events:
+        - type: completed
+          ts: "2026-08-16T19:44:10Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Guest-side detach landed: first-use image ensure re-execs a setsid helper that owns the image flock and the full locked decision machinery; parent waits with a quiet heartbeat (PTY signal <=5s on real builds, silent on Skip), per-image log under init cache dir, push_udp_event still fires at build start for the tray. Retry-hits-cache falls out of the flock + content-identity Skip (source-window pinned). Live setsid round trip verified on yoga. Live close-PTY-mid-build on a real VM attach rides the post-cut platform smoke per the 2026-07-21 slipped event.
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
@@ -9056,6 +9062,12 @@ plan_index:
         - "root cause named + pinned by a unit test on the guest dispatch path"
         - "InteractiveStream macOS parity cell flips done with live evidence"
       events:
+        - type: note
+          ts: "2026-08-16T19:44:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Ledger hygiene per the 2026-07-11 reframe: pruned the three mis-placed order-264 forge-budget events (decision 02:20Z, progress 02:25Z, completed 03:55Z — a YAML-valid merge artifact) from this packet's events; they remain part of order 264's own record. Reframe precondition PINNED: 273 is NOT linux-implementable-as-is — the founding capture is confounded by the 5GB substrate; any dispatch fix must wait for the 250G re-test filed as 774-b529 (macos-attach-retest-on-healthy-substrate). Note 270's detached image-build helper landed 2026-08-16, removing the reap-the-build failure mode from the attach path.
         - type: claim
           ts: "2026-08-16T19:06:07Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
@@ -9070,43 +9082,6 @@ plan_index:
             Root-caused to the wire with the PTY tee during the attended
             session; guest-side dispatch is linux-owned so filed for linux
             pickup with the verbatim capture and a one-click repro loop.
-        - type: decision
-          ts: "2026-07-10T02:20:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
-          host: linux_mutable
-          summary: >
-            The Tlatoāni (2026-07-10) chose the doctrine change over the
-            env-var option: agents INSIDE a forge run at most ONE packet per
-            cycle, splitting a packet into smaller ready children when it
-            will not fit the launch envelope. Applies to ALL forge cycles
-            (the old exit criterion preserving greedy drain for non-litmus
-            forge cycles is superseded by this decision). Heartbeat/liveness
-            signals to replace timeout inference deferred to order 265.
-        - type: progress
-          ts: "2026-07-10T02:25:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
-          summary: >
-            Doctrine implemented: skills/meta-orchestration/SKILL.md worker
-            drain, skills/advance-work-from-plan/SKILL.md constraint 4, and
-            new canonical block methodology/distributed-work.yaml
-            worker_agent_protocol.forge_cycle_budget. Verification (all 7
-            litmus steps under the new doctrine) rides on this cycle's
-            final --ci-full --install gate; completion event to follow.
-        - type: completed
-          ts: "2026-07-10T03:55:00Z"
-          agent_id: "linux-macuahuitl-fable5-20260710T0009Z"
-          host: linux_mutable
-          lease_id: "opencode-e2e-forge-budget-tension (claim-ledger-node.sh)"
-          summary: >
-            Verified live in gate run 20260710T021654Z:
-            litmus:opencode-prompt-e2e-shape passed ALL 7 STEPS for the
-            first time in its history. STEP 3's in-forge cycle obeyed the
-            one-packet doctrine (drained exactly order 224, 16078687),
-            completed inside the 600s budget, and its push satisfied the
-            branch-scoped STEP 6 probe — discharging this packet's both
-            criteria and order 262's residual full-chain criterion in the
-            same run. Timeout inference remains interim pending order 265
-            (heartbeat/liveness).
         - type: reframe
           ts: "2026-07-11T18:35:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260711T1758Z"
