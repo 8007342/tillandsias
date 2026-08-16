@@ -1,4 +1,5 @@
 <!-- @trace spec:dev-build -->
+<!-- # freshness: auditor=windows-yolanda-fable5-20260816t0721z date=2026-08-16 verdict=updated scope=standing per-cycle audit — the Host-native requirement contradicted build.sh's deliberate re-exec discipline (with-tillandsias-builder.sh toolbox on Silverblue, methodology development_environment_lifecycle 2026-08-13; with-wsl2-builder.sh tillandsias-build WSL2 distro on Windows, operator directive 2026-07-15; both sourced at build.sh:32,39). Requirement rewritten to specify the transparent substrate re-exec instead of forbidding it; every other requirement re-read and confirmed current -->
 # dev-build Specification
 
 ## Status
@@ -10,14 +11,30 @@ Define the build pipeline for local development, install, and CI gating. The
 pipeline MUST keep cheap pre-build validation separate from the expensive
 post-build smoke so measurable debt is visible instead of folded into one blob.
 ## Requirements
-### Requirement: Host-native build execution
-The build script SHALL run Rust build commands directly on the host workstation. The normal build path MUST NOT require a Toolbox container or a Nix shell.
+### Requirement: Transparent build-substrate re-exec
+The build script SHALL detect the host and transparently re-exec into the
+platform's dedicated build substrate when the host base OS is not itself the
+build environment: the `tillandsias-builder` toolbox on immutable Silverblue
+hosts, and the `tillandsias-build` WSL2 distro on Windows hosts (each created
+idempotently on first use, never on the runtime/smoke substrate). On ordinary
+mutable Linux the build SHALL run directly on the host. The caller-visible
+contract is identical on every platform — same flags, same outputs — and the
+normal build path MUST NOT require a Nix shell.
 
-#### Scenario: First run on a Fedora workstation
-- **WHEN** `./build.sh` is run from a host with the required Rust toolchain and Podman available
+#### Scenario: First run on a mutable Fedora workstation
+- **WHEN** `./build.sh` is run from a mutable Linux host with the required Rust toolchain and Podman available
 - **THEN** the host Podman runtime wrapper SHALL initialize writable runtime state
 - **AND** Rust build commands SHALL execute directly on the host
-- **AND** no Toolbox container SHALL be created as part of the build path
+- **AND** no build container SHALL be created as part of the build path
+
+#### Scenario: Run on an immutable Silverblue host
+- **WHEN** `./build.sh` is run on a Silverblue (ostree) host
+- **THEN** the script SHALL re-exec itself inside the `tillandsias-builder` toolbox, creating and provisioning it idempotently when absent
+
+#### Scenario: Run on a Windows host
+- **WHEN** `./build.sh` is run from Git Bash/MSYS on Windows
+- **THEN** the script SHALL re-exec itself inside the `tillandsias-build` WSL2 distro, importing it idempotently from the cached rootfs when absent
+- **AND** the runtime `tillandsias` distro MUST NOT be used as the build substrate (destructive smoke e2e unregisters it)
 
 #### Scenario: Portable install prerequisites
 - **WHEN** `./build.sh --install` is run

@@ -40,6 +40,15 @@
 # ACCEPT a strictly smaller class of pushes; it can never weaken the normal
 # path.
 #
+# ATTESTATION-LEDGER APPENDS (order 767-iukh): one carve-out to "new files
+# only" — per-host ledgers under plan/mo-full-attestations.d/ grow by APPEND
+# (mo-full-attest.sh record), so the Finalization bookkeeping commit arrives
+# as a modification. It qualifies only when the pushed blob is a byte-exact
+# append-only extension of the remote blob, every added line satisfies the
+# attestation grammar with LOCAL_SHA == REMOTE_SHA, and
+# check-mo-full-attestations.sh accepts the whole ledger. Anything else
+# (rewrites, truncations, README.md, nested paths) falls to the full gate.
+#
 # BYPASS
 #
 # `git push --no-verify` still works, deliberately — a hook that cannot be
@@ -98,7 +107,8 @@ fi
 LANE_NOTES=()
 
 attempt_plan_only_lane() {
-    local -a files=() srcs=()
+    local -a files=() srcs=() bases=()
+    local att_seen=0
     LANE_NOTES=()
 
     if [[ -z "$REFS" ]]; then
@@ -129,25 +139,62 @@ attempt_plan_only_lane() {
         local status path
         while IFS=$'\t' read -r status path; do
             [[ -n "$status" ]] || continue
-            if [[ "$status" != "A" ]]; then
-                echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; fragments are immutable, only NEW fragment files qualify (full gate required)" >&2
-                return 1
-            fi
             case "$path" in
+                plan/mo-full-attestations.d/?*.md)
+                    # Order 767-iukh: the Finalization bookkeeping commit
+                    # (mo-full-attest.sh record) APPENDS to an existing
+                    # per-host attestation ledger, so it arrives as status
+                    # 'M' — the one modification with a build-free
+                    # verifiable closure: append-only extension of the
+                    # remote blob, marker grammar over the added lines, and
+                    # check-mo-full-attestations.sh (all below). Before this
+                    # branch, every full-mode cycle paid a full-gate re-run
+                    # (~2.5 min measured) to push a 3-line bookkeeping
+                    # commit whose content the dedicated checker already
+                    # verifies.
+                    if [[ "${path#plan/mo-full-attestations.d/}" == */* ]]; then
+                        echo "plan-only lane: not applicable — '$path' is nested below plan/mo-full-attestations.d/ (full gate required)" >&2
+                        return 1
+                    fi
+                    if [[ "$path" == "plan/mo-full-attestations.d/README.md" ]]; then
+                        echo "plan-only lane: not applicable — '$path' is prose, not a per-host attestation ledger (full gate required)" >&2
+                        return 1
+                    fi
+                    if [[ "$status" != "A" && "$status" != "M" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; only new or appended attestation ledgers qualify (full gate required)" >&2
+                        return 1
+                    fi
+                    if [[ "$status" == "M" ]]; then
+                        bases+=("$remote_sha")
+                    else
+                        bases+=("")
+                    fi
+                    att_seen=1
+                    ;;
                 plan/index.d/?*.yaml)
+                    if [[ "$status" != "A" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; fragments are immutable, only NEW fragment files qualify (full gate required)" >&2
+                        return 1
+                    fi
                     if [[ "${path#plan/index.d/}" == */* ]]; then
                         echo "plan-only lane: not applicable — '$path' is nested below plan/index.d/ (full gate required)" >&2
                         return 1
                     fi
+                    bases+=("")
                     ;;
                 plan/loop_status.d/?*.md)
+                    if [[ "$status" != "A" ]]; then
+                        echo "plan-only lane: not applicable — '$path' has status '$status' in the outgoing diff; fragments are immutable, only NEW fragment files qualify (full gate required)" >&2
+                        return 1
+                    fi
                     if [[ "${path#plan/loop_status.d/}" == */* ]]; then
                         echo "plan-only lane: not applicable — '$path' is nested below plan/loop_status.d/ (full gate required)" >&2
                         return 1
                     fi
+                    bases+=("")
                     ;;
                 *)
-                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/ and plan/loop_status.d/ (full gate required)" >&2
+                    echo "plan-only lane: not applicable — '$path' is outside plan/index.d/, plan/loop_status.d/, and plan/mo-full-attestations.d/ (full gate required)" >&2
                     return 1
                     ;;
             esac
@@ -183,7 +230,7 @@ attempt_plan_only_lane() {
 
     # Per-file validation runs against the PUSHED blob (git show <sha>:<path>),
     # not the worktree — the lane vouches for the bytes the remote receives.
-    local tmp i blob
+    local tmp i blob added oldblob oldsz newsz _tag _disp _lsha _branch _rsha
     tmp="$(mktemp -d)" || {
         echo "plan-only lane: not applicable — mktemp failed (full gate required)" >&2
         return 1
@@ -221,6 +268,46 @@ attempt_plan_only_lane() {
                     echo "plan-only lane: validation FAILED — ${files[$i]} carries a section other than '## Cycle' (loop-status fragments are Cycle-only; full gate required)" >&2
                     rm -rf "$tmp"; return 1
                 fi
+                ;;
+            plan/mo-full-attestations.d/*)
+                # Order 767-iukh: append-only + grammar closure. A modified
+                # ledger must extend the remote blob byte-for-byte, and every
+                # ADDED line must be blank, a '## <ISO-UTC> <host>' heading,
+                # or a well-formed MO-FULL marker whose LOCAL_SHA equals
+                # REMOTE_SHA (the record-time invariant). The dedicated
+                # checker below re-validates the WHOLE ledger, including
+                # own-host commit reachability.
+                added="$tmp/added"
+                if [[ -n "${bases[$i]}" ]]; then
+                    oldblob="$tmp/oldblob"
+                    if ! git show "${bases[$i]}:${files[$i]}" > "$oldblob" 2>/dev/null; then
+                        echo "plan-only lane: validation FAILED — cannot read the remote base of ${files[$i]} (full gate required)" >&2
+                        rm -rf "$tmp"; return 1
+                    fi
+                    oldsz="$(wc -c < "$oldblob")"
+                    newsz="$(wc -c < "$blob")"
+                    if [[ "$newsz" -le "$oldsz" ]] || ! head -c "$oldsz" "$blob" | cmp -s "$oldblob" -; then
+                        echo "plan-only lane: validation FAILED — ${files[$i]} is not an append-only extension of the remote ledger (full gate required)" >&2
+                        rm -rf "$tmp"; return 1
+                    fi
+                    tail -c +"$((oldsz + 1))" "$blob" > "$added"
+                else
+                    cp "$blob" "$added"
+                fi
+                if LC_ALL=C grep -qvE '^(|## [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z [A-Za-z0-9._-]+|MO-FULL: (COMPLETE|BLOCKED) [0-9a-f]{40} [A-Za-z0-9][A-Za-z0-9._/-]* [0-9a-f]{40})$' "$added"; then
+                    echo "plan-only lane: validation FAILED — ${files[$i]} added lines break the attestation-ledger grammar (full gate required)" >&2
+                    rm -rf "$tmp"; return 1
+                fi
+                if ! grep -qE '^MO-FULL: ' "$added"; then
+                    echo "plan-only lane: validation FAILED — ${files[$i]} adds no MO-FULL marker line (full gate required)" >&2
+                    rm -rf "$tmp"; return 1
+                fi
+                while read -r _tag _disp _lsha _branch _rsha; do
+                    if [[ "$_lsha" != "$_rsha" ]]; then
+                        echo "plan-only lane: validation FAILED — ${files[$i]} added marker has LOCAL_SHA != REMOTE_SHA (full gate required)" >&2
+                        rm -rf "$tmp"; return 1
+                    fi
+                done < <(grep -E '^MO-FULL: ' "$added")
                 ;;
         esac
     done
@@ -284,6 +371,24 @@ attempt_plan_only_lane() {
         LANE_NOTES+=("scripts/check-added-fragments-parse.sh absent — skipped")
     fi
 
+    # Order 767-iukh: when the push touches the attestation ledger, the
+    # dedicated gate must vouch for it — it re-validates the WHOLE ledger
+    # (grammar on every file, commit reachability for this host's own file),
+    # exactly as ./build.sh --check would have. Fail closed when it is
+    # absent; fragment-only pushes are unaffected.
+    if [[ $att_seen -eq 1 ]]; then
+        if [[ -f scripts/check-mo-full-attestations.sh ]]; then
+            if ! out="$(bash scripts/check-mo-full-attestations.sh 2>&1)"; then
+                echo "plan-only lane: validation FAILED — check-mo-full-attestations refused (full gate required):" >&2
+                echo "$out" | head -6 | sed 's/^/  /' >&2
+                return 1
+            fi
+        else
+            echo "plan-only lane: not applicable — scripts/check-mo-full-attestations.sh absent while the push touches plan/mo-full-attestations.d/ (fail closed; full gate required)" >&2
+            return 1
+        fi
+    fi
+
     # Forbidden-pattern check that applies to any tracked text, fragments
     # included (methodology base64_script_injection_ban).
     if [[ -f scripts/check-no-base64-script-injection.sh ]]; then
@@ -298,7 +403,7 @@ attempt_plan_only_lane() {
 
     # ── Accept ────────────────────────────────────────────────────────────────
     echo "" >&2
-    echo "plan-only lane: outgoing diff adds only new plan fragment files — accepting without the build stamp" >&2
+    echo "plan-only lane: outgoing diff adds only new plan fragment files / append-only attestation-ledger records — accepting without the build stamp" >&2
     for i in "${!files[@]}"; do
         echo "plan-only lane: validated ${files[$i]}" >&2
     done
