@@ -89,6 +89,38 @@ if [ -f /run/secrets/tillandsias-ca-cert ]; then
     echo "CA certificate loaded from podman secret."
 fi
 
+# @trace spec:git-mirror-service, spec:secrets-management, spec:tillandsias-vault
+# Upstream FETCH authentication (777-i7hf, live Windows repro 2026-08-16).
+#
+# Every upstream fetch this entrypoint performs — the empty-mirror seed, the
+# startup retry/fast-forward fetches, and the periodic reconcile loop — used
+# to run with NO credential helper. Only the push relay (relay-refs.sh) and
+# the auth probe wired the Vault-backed helper. A PRIVATE upstream answers an
+# anonymous fetch with 401; git, having no terminal, dies with "could not
+# read Username for 'https://github.com'", and the mirror stays at ZERO refs
+# forever while the port-level healthcheck keeps saying healthy — so every
+# forge lane clones an empty repository and aborts (github.com/8007342/java,
+# the first private upstream this stack served).
+#
+# Wire the helper ONCE here via git's documented environment form so every
+# git child of this entrypoint (seed, retry-push fetches, reconciler ticks)
+# inherits it. The empty first helper RESETS inherited helpers
+# (credential.helper is additive, gitcredentials(7)) — the exact shape
+# relay-refs.sh and probe-upstream-auth.sh already use. Public upstreams
+# never trigger a credential challenge, so anonymous mirrors behave exactly
+# as before; when Vault holds no token the helper fails loudly on stderr and
+# GIT_TERMINAL_PROMPT=0 makes the fetch die crisply instead of probing a
+# terminal that does not exist.
+GIT_TERMINAL_PROMPT=0
+GIT_CONFIG_COUNT=2
+GIT_CONFIG_KEY_0=credential.helper
+GIT_CONFIG_VALUE_0=""
+GIT_CONFIG_KEY_1=credential.helper
+GIT_CREDENTIAL_HELPER="${GIT_CREDENTIAL_HELPER:-/usr/local/bin/git-credential-tillandsias}"
+GIT_CONFIG_VALUE_1="$GIT_CREDENTIAL_HELPER"
+export GIT_TERMINAL_PROMPT GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 \
+       GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1
+
 # @trace spec:git-mirror-service
 # Branch-namespace policy (rung 2, order 500): the DEFAULTS live HERE, in
 # Tillandsias-owned config — the pre-receive hook CODE stays convention-
@@ -442,7 +474,20 @@ for mirror in "$GIT_SERVICE_ROOT"/*; do
         # leave a fresh mirror with no cloneable heads/tags. This one-time seed
         # writes local heads and tags directly so clones over the git daemon see
         # them; subsequent reconcile fetches use the safe tracking refspec.
-        FETCH_OUTPUT="$(git -C "$mirror" fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' 2>&1)" || retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
+        if ! FETCH_OUTPUT="$(git -C "$mirror" fetch origin '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*' 2>&1)"; then
+            case "$FETCH_OUTPUT" in
+                # @trace spec:git-mirror-service
+                # 777-i7hf/731-eupn honesty: an auth refusal must never read
+                # like "upstream empty". Name the credential channel so the
+                # operator repairs Vault/GitHub login, not the upstream repo.
+                *"could not read Username"*|*"terminal prompts disabled"*|*"Authentication failed"*|*"Invalid username or password"*|*"error: 401"*|*"error: 403"*)
+                    retry_msg "[git-mirror] Seed fetch failed: UPSTREAM AUTH REFUSED — the upstream demands credentials (private repository?) and none were accepted. This is NOT an empty upstream. Check the [vault-agent] log and the Vault GitHub token (GitHub Login). $FETCH_OUTPUT"
+                    ;;
+                *)
+                    retry_msg "[git-mirror] Seed fetch failed: $FETCH_OUTPUT"
+                    ;;
+            esac
+        fi
         # The seed just wrote refs/heads/* into a repo whose HEAD may still
         # point at a branch upstream never had (unborn-HEAD defect). Repoint
         # HEAD now so the very first clone checks out a real branch.

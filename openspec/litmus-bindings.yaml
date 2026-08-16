@@ -460,6 +460,7 @@ specs:
   - litmus:mirror-receive-wrapper-shape
   - litmus:ssh-lane-sidecar-shape
   - litmus:forge-upstream-auth-gate
+  - litmus:git-mirror-fetch-credential-shape
   coverage_ratio: 83
   last_verified: '2026-07-23'
 - spec_id: github-credential-health

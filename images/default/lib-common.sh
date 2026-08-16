@@ -878,7 +878,7 @@ _clone_project_from_mirror_impl() {
                         echo "[forge] The mirror ADVERTISES refs but its HEAD is unset (unborn-HEAD mirror defect)." >&2
                         echo "[forge] Restart/rebuild the tillandsias-git container so ensure-mirror-head repairs it (images/git/ensure-mirror-head.sh)." >&2
                     else
-                        echo "[forge] The mirror is reachable but advertised no cloneable refs — it has not finished seeding from upstream (or upstream is empty)." >&2
+                        echo "[forge] The mirror is reachable but advertised no cloneable refs. Three known causes (777-i7hf): (a) the first seed is still fetching (large repo, slow link); (b) the upstream is genuinely empty; (c) the mirror's upstream fetch cannot AUTHENTICATE (private upstream) — check the tillandsias-git container log for 'Seed fetch failed: UPSTREAM AUTH REFUSED' and repair GitHub Login/Vault before blaming the upstream." >&2
                     fi
                     echo "[forge] Refusing to launch an agent on an empty working tree." >&2
                     exit 1
