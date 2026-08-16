@@ -732,6 +732,47 @@ impl LaneIdentity {
 /// are actionable JSON-RPC errors, not silent drops.
 ///
 /// @trace spec:host-browser-mcp, spec:subdomain-routing-via-reverse-proxy
+/// Per-LINE payload ceiling on the live per-lane NDJSON MCP socket
+/// (order 779-dqsv).
+///
+/// Deliberately the SAME number as the retired `McpFrame` per-variant cap,
+/// re-exported rather than re-invented: the payload ceiling is a property of
+/// what MCP carries (screenshots, large tool results), not of which transport
+/// happens to carry it. Before this, the retired path had a 4 MiB cap and the
+/// LIVE path had none at all — an unbounded base64 screenshot travelled as
+/// one line.
+pub(crate) const MAX_MCP_LINE_BYTES: usize = tillandsias_control_wire::MAX_MCP_FRAME_BYTES;
+
+/// Render one response line, enforcing the OUTBOUND half of the per-line cap
+/// (order 779-dqsv).
+///
+/// This is the half with a live producer: a base64 full-page
+/// `browser.screenshot` can exceed any sane line length, and writing it would
+/// blow the peer's own reader instead of failing here, where the reason is
+/// known and can be said. The oversized result is replaced by a typed error
+/// that keeps the request's `id`, so the client still correlates the failure
+/// to its call.
+///
+/// Pure so the replacement is testable without a tool that can actually
+/// produce megabytes.
+fn cap_response_line(resp: &serde_json::Value) -> String {
+    let rendered = resp.to_string();
+    if rendered.len() <= MAX_MCP_LINE_BYTES {
+        return rendered;
+    }
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": resp.get("id").cloned().unwrap_or(serde_json::Value::Null),
+        "error": {
+            "code": -32000,
+            "message": format!(
+                "ResponseTooLarge: result exceeded the {MAX_MCP_LINE_BYTES}-byte per-line cap"
+            ),
+        }
+    })
+    .to_string()
+}
+
 /// Ask the composed browser server for its tool descriptors (order 779-3trn).
 ///
 /// Goes through `handle_request` rather than reaching into the server's
@@ -959,6 +1000,7 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     let Ok(read_half) = writer.try_clone() else {
         return;
     };
+    let mut reader = BufReader::new(read_half);
 
     // Order 779-3trn: ONE browser server and ONE runtime for the whole
     // connection.
@@ -994,11 +1036,72 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
         None,
     );
 
-    for line in BufReader::new(read_half).lines() {
-        let Ok(line) = line else {
+    loop {
+        let mut raw = String::new();
+        // BOUNDED read (order 779-dqsv): `.take(MAX + 1)` caps what a single
+        // line can allocate. Reading the line first and measuring afterwards
+        // would let a hostile or looping peer allocate without limit — the
+        // exact hole this cap closes — so the ceiling is applied to the READ,
+        // not to the result.
+        let read = (&mut reader)
+            .take(MAX_MCP_LINE_BYTES as u64 + 1)
+            .read_line(&mut raw);
+        let Ok(byte_count) = read else {
             return;
         };
-        let line = line.trim();
+        if byte_count == 0 {
+            return; // clean EOF
+        }
+        if byte_count > MAX_MCP_LINE_BYTES && !raw.ends_with('\n') {
+            // Oversized: drain to the next newline so the stream resyncs,
+            // answer with a typed error, and keep serving. Draining is itself
+            // bounded — a peer that never sends a newline just closes.
+            let mut discarded = 0usize;
+            loop {
+                let mut sink = String::new();
+                let Ok(n) = (&mut reader)
+                    .take(MAX_MCP_LINE_BYTES as u64)
+                    .read_line(&mut sink)
+                else {
+                    return;
+                };
+                if n == 0 {
+                    return;
+                }
+                discarded += n;
+                if sink.ends_with('\n') {
+                    break;
+                }
+                if discarded > MAX_MCP_LINE_BYTES * 8 {
+                    warn!(
+                        spec = "mcp-tool-socket",
+                        discarded, "peer kept sending an unterminated oversized line; closing"
+                    );
+                    return;
+                }
+            }
+            warn!(
+                spec = "mcp-tool-socket",
+                project = %project_label,
+                limit = MAX_MCP_LINE_BYTES,
+                "MCP request line exceeded the per-line cap; refused"
+            );
+            let too_large = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": serde_json::Value::Null,
+                "error": {
+                    "code": -32000,
+                    "message": format!(
+                        "RequestTooLarge: one JSON-RPC object per line, at most {MAX_MCP_LINE_BYTES} bytes"
+                    ),
+                }
+            });
+            if writeln!(writer, "{too_large}").is_err() {
+                return;
+            }
+            continue;
+        }
+        let line = raw.trim();
         if line.is_empty() {
             continue;
         }
@@ -1013,10 +1116,19 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 }
             })),
         };
-        if let Some(resp) = resp
-            && writeln!(writer, "{resp}").is_err()
-        {
-            return;
+        if let Some(resp) = resp {
+            let rendered = cap_response_line(&resp);
+            if rendered.len() != resp.to_string().len() {
+                warn!(
+                    spec = "mcp-tool-socket",
+                    project = %project_label,
+                    limit = MAX_MCP_LINE_BYTES,
+                    "MCP response exceeded the per-line cap; replaced with a typed error"
+                );
+            }
+            if writeln!(writer, "{rendered}").is_err() {
+                return;
+            }
         }
     }
 }
@@ -4791,6 +4903,156 @@ mod tests {
             denied.get("error").is_none(),
             "browser.open must route to the composed server, never the -32601 unknown-tool fallback: {denied}"
         );
+
+        drop(writer);
+        drop(reader);
+        handle.join().expect("connection thread joins");
+    }
+
+    /// Order 779-dqsv: the per-line cap binds on the INBOUND half. An
+    /// oversized line is refused with a typed error, the stream RESYNCS at
+    /// the next newline (a normal request after it still works), and the
+    /// connection is not killed. Before this cap the live NDJSON path had no
+    /// limit at all while the retired McpFrame path had 4 MiB.
+    ///
+    /// @trace spec:mcp-tool-socket, spec:host-browser-mcp
+    #[test]
+    fn mcp_oversized_request_line_is_refused_and_the_stream_resyncs() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        let (client, server) = UnixStream::pair().expect("socketpair");
+        let handle = std::thread::spawn(move || {
+            serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+        });
+
+        let mut writer = client.try_clone().expect("clone client");
+        let mut reader = BufReader::new(client);
+        let mut read_json = || {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read reply");
+            serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
+        };
+
+        // One line just past the cap: valid JSON shape, hostile size.
+        let padding = "x".repeat(MAX_MCP_LINE_BYTES + 1024);
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"publish_local","arguments":{{"category":"{padding}"}}}}}}"#
+        )
+        .expect("write oversized line");
+
+        let refused = read_json();
+        assert_eq!(refused["error"]["code"], -32000);
+        let message = refused["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.starts_with("RequestTooLarge:"),
+            "the refusal must name the cap: {message}"
+        );
+
+        // RESYNC: a normal request after the oversized one is still served —
+        // the cap refuses a line, it does not poison the connection.
+        writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+        )
+        .expect("write tools/list");
+        let list = read_json();
+        assert_eq!(list["id"], 2);
+        assert!(
+            list["result"]["tools"]
+                .as_array()
+                .is_some_and(|t| !t.is_empty()),
+            "the connection still serves after an oversized line: {list}"
+        );
+
+        drop(writer);
+        drop(reader);
+        handle.join().expect("connection thread joins");
+    }
+
+    /// Order 779-dqsv: the OUTBOUND half of the cap — the one with a live
+    /// producer, since a base64 full-page `browser.screenshot` can exceed any
+    /// sane line length. An oversized response is replaced by a typed error
+    /// naming the cap, so the failure surfaces here (where the reason is
+    /// known) instead of blowing up the peer's reader.
+    #[test]
+    fn mcp_oversized_response_is_replaced_with_a_typed_error() {
+        // NEGATIVE CONTROL: a normal response passes through byte-identical.
+        let under = serde_json::json!({"jsonrpc": "2.0", "id": 1, "result": {"ok": true}});
+        assert_eq!(
+            cap_response_line(&under),
+            under.to_string(),
+            "a response under the cap must pass through untouched"
+        );
+
+        // A screenshot-sized result IS replaced — with the id preserved, so
+        // the client can still correlate the failure to its call.
+        let huge = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "result": { "content": [{ "type": "text", "text": "A".repeat(MAX_MCP_LINE_BYTES) }] }
+        });
+        let capped = cap_response_line(&huge);
+        assert!(
+            capped.len() <= MAX_MCP_LINE_BYTES,
+            "the replacement itself must fit under the cap"
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&capped).expect("replacement is JSON");
+        assert_eq!(parsed["id"], 7, "the request id survives the replacement");
+        assert_eq!(parsed["error"]["code"], -32000);
+        assert!(
+            parsed["error"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("ResponseTooLarge:"),
+            "the error names the cap: {parsed}"
+        );
+        assert!(
+            parsed.get("result").is_none(),
+            "the oversized payload must NOT survive alongside the error"
+        );
+    }
+
+    /// Order 779-dqsv: pin what the lane transport ACTUALLY enforces, now
+    /// that the unreachable 16-call semaphore is gone. The loop reads one
+    /// line, handles it to completion, and only then reads the next — so a
+    /// second request cannot begin before the first response is written.
+    /// This is the guarantee a future concurrent transport would have to
+    /// deliberately break (and would then owe a real, bindable limit).
+    #[test]
+    fn mcp_lane_transport_serializes_one_call_at_a_time() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        let (client, server) = UnixStream::pair().expect("socketpair");
+        let handle = std::thread::spawn(move || {
+            serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+        });
+
+        let mut writer = client.try_clone().expect("clone client");
+        let mut reader = BufReader::new(client);
+
+        // Pipeline three requests without reading anything back.
+        for id in 1..=3 {
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/list"}}"#
+            )
+            .expect("write pipelined request");
+        }
+
+        // Responses come back in request order, one per line — the
+        // observable signature of a sequential handler.
+        for expected in 1..=3 {
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("read reply");
+            let resp: serde_json::Value = serde_json::from_str(line.trim()).expect("reply is JSON");
+            assert_eq!(
+                resp["id"], expected,
+                "sequential transport answers in request order"
+            );
+        }
 
         drop(writer);
         drop(reader);
