@@ -103,6 +103,16 @@ RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
 # T11 staged migration flips the lane.
 COPY sshd-identity.sh /usr/local/bin/sshd-identity.sh
 
+# @trace spec:git-mirror-service, spec:tillandsias-vault — order 749-6uby
+# (design T8): the per-lane ssh-agent sidecar. Same image, different
+# entrypoint (the launcher overrides --entrypoint): ssh-agent/ssh-keygen and
+# the vault binary are already here, and a second image would be a second
+# thing to version-skew. Runs ONLY as a separate container the launcher
+# starts behind TILLANDSIAS_MIRROR_SSHD=1; the mirror entrypoint never
+# invokes it.
+COPY ssh-lane-sidecar.sh /usr/local/bin/ssh-lane-sidecar
+RUN chmod +x /usr/local/bin/ssh-lane-sidecar
+
 # @trace spec:tillandsias-vault, spec:git-mirror-service
 COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl
 COPY vault-agent-bootstrap.sh /usr/local/bin/vault-agent-bootstrap

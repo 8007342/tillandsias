@@ -3427,6 +3427,18 @@ list_projects() {
 export_ssh_env() {
     local ssh_host_dir="${HOME}/.ssh"
 
+    # Order 749-6uby (exit criterion 5): with the SSH push lane live, the
+    # launcher exports SSH_AUTH_SOCK at the sidecar's mounted socket. This
+    # function is PROVEN HARMLESS against that lane and must stay so:
+    #   - a set SSH_AUTH_SOCK whose socket exists is KEPT (first branch —
+    #     never overridden by the /run/user fallbacks below);
+    #   - a set SSH_AUTH_SOCK whose socket is not there YET (sidecar still
+    #     starting) falls through WITHOUT unsetting the variable, so ssh
+    #     works the moment the socket appears;
+    #   - ~/.ssh in the forge is an empty tmpfs, so the key-file fallback
+    #     can never fabricate an identity (D5: no key material in-forge).
+    # Pinned by litmus:ssh-lane-sidecar-shape — do not reorder the probes.
+
     # No SSH directory on host — nothing to do.
     [ -d "$ssh_host_dir" ] || return 1
 
