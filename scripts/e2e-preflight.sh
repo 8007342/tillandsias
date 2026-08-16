@@ -65,7 +65,13 @@ live_runtime_is_present() {
   ps_out="$(podman ps --format '{{.Names}}' 2>/dev/null)" || return 0
   [ -z "$ps_out" ] && return 1
   # A forge itself, or any of the shared-stack services the forge brings up.
-  printf '%s\n' "$ps_out" | grep -qiE '^tillandsias-|git-service' && return 0
+  # DEV-ENVIRONMENT containers (tillandsias-dev-*) are excluded: they are
+  # idempotent, self-relaunching services (the dev cache squid, the 760-3mh8
+  # dev-inference lane) that every consumer re-ensures at start — a reset
+  # costs one re-ensure, never in-flight work. Without this exclusion the
+  # always-on dev-inference container suppressed the destructive e2e gate on
+  # every dev host permanently (order 769-g2wr).
+  printf '%s\n' "$ps_out" | grep -viE '^tillandsias-dev-' | grep -qiE '^tillandsias-|git-service' && return 0
   return 1
 }
 

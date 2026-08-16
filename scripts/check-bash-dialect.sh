@@ -32,8 +32,20 @@ ALLOWLIST=""
 # file is excluded from the scan by name, so self-matching cannot happen.
 PAT_EXPANSION='\$\{[A-Za-z_][A-Za-z0-9_]*(\[[^]]*\])?(,,|\^\^)'
 PAT_BUILTIN='(^|[^A-Za-z0-9_])(mapfile|readarray)([^A-Za-z0-9_]|$)'
-PAT_ASSOC='declare -A'
+# -A (assoc, 4.0), -g (global, 4.2), -n (nameref, 4.3) — including combined
+# flags like -gA, which slipped past the earlier literal 'declare -A' and
+# crashed trace-coverage.sh on this host (766-tdij follow-on).
+PAT_ASSOC='declare +-[a-zA-Z]*[Agn]'
 PAT_PRINTF_T='%\([^)]*\)T'
+# GNU-date-only forms (766-tdij). BSD date SUCCEEDS on an unknown %-format,
+# passing it through literally, so exit-code guards never fire — the 765
+# phase telemetry crashed every macOS gate run exactly this way. Scoped to
+# date invocations so %N in awk/printf formats elsewhere never trips it.
+# Line-level exemption: a raw-line comment `# gnu-date: ok (<reason>)` for
+# digit-validated fallbacks (build.sh _now_ms is the exemplar) or sites
+# where garbage output is provably harmless.
+PAT_GNUDATE='(^|[^A-Za-z0-9_])date[^|;&()]*\+[^ "]*%-?[0-9]*N|(^|[^A-Za-z0-9_])date +(-d|--date)[ =]'
+GNUDATE_EXEMPT='# gnu-date: ok'
 
 in_allowlist() {
   case " $ALLOWLIST " in
@@ -61,28 +73,61 @@ code_of() {
 
 unguarded=0
 allowlisted_hits=0
-for f in "$SCAN_DIR"/*.sh; do
+# build.sh carries the gate's own phase telemetry, so it is scanned too
+# (766-tdij) — unless a fixture redirects the scan dir.
+SCAN_FILES=""
+for _c in "$SCAN_DIR"/*.sh; do SCAN_FILES="$SCAN_FILES $_c"; done
+if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -f build.sh ]; then
+  SCAN_FILES="$SCAN_FILES build.sh"
+fi
+
+for f in $SCAN_FILES; do
   [ -f "$f" ] || continue
   base="${f##*/}"
   [ "$base" = "$SELF_NAME" ] && continue
   case "$base" in test-check-bash-dialect*) continue ;; esac
   hits="$(code_of "$f" | grep -nE "$PAT_EXPANSION|$PAT_BUILTIN|$PAT_ASSOC|$PAT_PRINTF_T" || true)"
-  [ -n "$hits" ] || {
-    if in_allowlist "$base"; then
-      echo "[check-bash-dialect] note: '$base' is allowlisted but carries no bash-4-ism any more — shrink the allowlist (761-g36m burndown)" >&2
+  if [ -n "$hits" ]; then
+    if has_refusal_guard "$f"; then
+      :
+    elif in_allowlist "$base"; then
+      allowlisted_hits=$((allowlisted_hits + 1))
+    else
+      echo "[check-bash-dialect] UNGUARDED bash-4-ism in '$f' (first hits):" >&2
+      printf '%s\n' "$hits" | head -3 >&2
+      unguarded=$((unguarded + 1))
     fi
-    continue
-  }
-  if has_refusal_guard "$f"; then
-    continue
+  elif in_allowlist "$base"; then
+    echo "[check-bash-dialect] note: '$base' is allowlisted but carries no bash-4-ism any more — shrink the allowlist (761-g36m burndown)" >&2
   fi
-  if in_allowlist "$base"; then
-    allowlisted_hits=$((allowlisted_hits + 1))
-    continue
+
+  # GNU-date-isms (766-tdij): the BASH_VERSINFO guard and the allowlist say
+  # nothing about date(1), so these are judged per line — exempt only via a
+  # raw-line `# gnu-date: ok (<reason>)` marking a digit-validated fallback
+  # or provably-harmless garbage.
+  gnudate_bad=""
+  _gd="$(code_of "$f" | grep -nE "$PAT_GNUDATE" || true)"
+  if [ -n "$_gd" ]; then
+    while IFS= read -r _h; do
+      [ -n "$_h" ] || continue
+      _ln="${_h%%:*}"
+      # A same-line BSD arm (date -v / -jf / -r) makes the line
+      # self-portable — the GNU form fails on BSD and the chain catches it.
+      if printf '%s' "$_h" | grep -qE 'date +-(v|jf|r)'; then
+        continue
+      fi
+      if sed -n "${_ln}p" "$f" | grep -qF "$GNUDATE_EXEMPT"; then
+        continue
+      fi
+      gnudate_bad="${gnudate_bad}${_h}
+"
+    done <<< "$_gd"
   fi
-  echo "[check-bash-dialect] UNGUARDED bash-4-ism in '$f' (first hits):" >&2
-  printf '%s\n' "$hits" | head -3 >&2
-  unguarded=$((unguarded + 1))
+  if [ -n "$gnudate_bad" ]; then
+    echo "[check-bash-dialect] UNEXEMPTED GNU-date-ism in '$f' (BSD date succeeds with garbage output — exit-code guards cannot catch it):" >&2
+    printf '%s' "$gnudate_bad" | head -3 >&2
+    unguarded=$((unguarded + 1))
+  fi
 done
 
 if [ "$unguarded" -gt 0 ]; then

@@ -91,7 +91,7 @@ printf '%s' "${TEST_GEMINI_KEY:?}"
 STUB
 chmod +x "$WORK/bin/vault-cli.sh"
 export PATH="$WORK/bin:$PATH"
-export TEST_GEMINI_KEY="runtime-gemini-$RANDOM-$$-$(date +%s%N)"
+export TEST_GEMINI_KEY="runtime-gemini-$RANDOM-$$-$(date +%s%N)" # gnu-date: ok (uniqueness seed; BSD's literal-N output is still unique)
 export TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1
 OPENCODE_AUTH_CONTENT="ambient-must-not-win-$RANDOM-$$"
 export OPENCODE_AUTH_CONTENT
