@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Browser MCP bridge: proxy stdio JSON-RPC through host control socket.
+# Browser MCP bridge: proxy stdio JSON-RPC to this lane's MCP socket.
 #
-# Reads JSON-RPC messages from stdin (newline-delimited), wraps each as a
-# ControlMessage::McpFrame, sends via Unix socket to the tray, and proxies
-# responses back to stdout.
+# Relays newline-delimited JSON-RPC (NDJSON) verbatim in both directions
+# over $TILLANDSIAS_CONTROL_SOCKET — which since order 505 is this LANE's
+# own socket (/run/host/tillandsias-mcp/mcp.sock), not the shared postcard
+# control socket. This is a raw socat pipe: no envelope, no length prefix,
+# no Hello handshake. Attribution comes from which listener accepted the
+# connection, so this script never names the project.
+#
+# (It previously claimed to wrap each line as a ControlMessage::McpFrame.
+# It never did after order 505, and McpFrame on the shared control socket
+# is now refused with ErrorCode::Unsupported.)
 #
 # @trace spec:host-browser-mcp, spec:default-image
 # @cheatsheet web/mcp.md, runtime/networking.md

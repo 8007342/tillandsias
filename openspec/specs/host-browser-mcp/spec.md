@@ -65,48 +65,65 @@ The eight v1 tools are:
 - **AND** the error `message` field begins with `Method not found:`
 - **AND** the connection remains open for further requests
 
-### Requirement: MCP transport rides the existing host control socket
+### Requirement: MCP transport is a per-lane NDJSON socket with listener-derived attribution
 
-The MCP server SHALL NOT bind a new socket. Instead, the JSON-RPC byte
-stream from each forge container SHALL be carried inside a new
-`ControlMessage::McpFrame { session_id: u64, payload: Vec<u8> }` variant
-on the `tray-host-control-socket` postcard envelope. The forge-side
-client (a stdio shim invoked by the agent's MCP runtime) SHALL connect
-to `$TILLANDSIAS_CONTROL_SOCKET`
-(`/run/host/tillandsias/control.sock` inside the container per
-`tray-host-control-socket`), perform the standard `Hello`/`HelloAck`
-exchange, and then bidirectionally relay length-prefixed JSON-RPC frames
-wrapped in `McpFrame` envelopes.
+Each forge lane SHALL be served by its OWN Unix-domain socket, created by
+the tray at `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`
+and bind-mounted into the lane's container at `/run/host/tillandsias-mcp`,
+with `TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock`. The
+forge-side client is a raw stdio bridge (`config-overlay/mcp/host-browser.sh`,
+`socat`) that relays newline-delimited JSON-RPC (NDJSON) in both directions —
+no `Hello`/`HelloAck` exchange and no postcard framing on this path.
 
-`session_id` SHALL be issued by the tray on the first `McpFrame`
-received over a given control-socket connection and SHALL persist for
-the lifetime of that connection. When the connection drops, the tray
-SHALL discard any per-session in-memory state (the `WindowRegistry`
-holds windows beyond connection lifetime — see the window-survival
-requirement below).
+The lane's identity SHALL be derived from WHICH LISTENER accepted the
+connection, never from the request body and never from the peer process's
+environment. That is the whole point of the per-lane socket: attribution is
+a property of the socket the tray itself created for that lane.
+
+**Supersedes (order 505, commit `dd8fd63f`):** the earlier requirement that
+MCP ride `ControlMessage::McpFrame` on the shared
+`tray-host-control-socket` and that "no additional socket nodes are
+created". That design attributed frames by reading the peer's `/proc`
+environ, which is forgeable; it was replaced by per-lane listeners with
+mode-0600 sockets and per-lane mount isolation. `McpFrame` arriving on the
+shared control socket is now REFUSED with `ErrorCode::Unsupported` naming
+the per-lane requirement — it is a live negative, not dead code, and MUST
+keep refusing.
+
+**Known gap (tracked, not sanctioned):** this NDJSON path currently enforces
+no per-line payload cap, while the retired `McpFrame` path carried
+`MAX_MCP_FRAME_BYTES` (4 MiB). A base64 full-page screenshot therefore
+travels as one unbounded line. Owned by packet
+`host-browser-mcp-ndjson-transport-policy` (order 779-dqsv); this spec does
+not bless the absence of a cap.
 
 @trace spec:host-browser-mcp, spec:tray-host-control-socket
 
-#### Scenario: Forge stub frames JSON-RPC inside McpFrame
+#### Scenario: Forge bridge relays NDJSON over the per-lane socket
 
-- **WHEN** the forge-side stub reads a JSON-RPC line from the agent's
-  stdout
-- **THEN** the stub wraps the line as a `ControlMessage::McpFrame {
-  session_id, payload }` postcard envelope with the existing 4-byte
-  big-endian length prefix
-- **AND** writes the framed envelope to
-  `/run/host/tillandsias/control.sock`
-- **AND** the tray-side reader deserialises the envelope, dispatches the
-  `payload` to the MCP server module, and writes the response back as
-  another `McpFrame` envelope on the same connection
+- **WHEN** the forge-side bridge reads a JSON-RPC line from the agent's stdout
+- **THEN** it writes that line verbatim to
+  `/run/host/tillandsias-mcp/mcp.sock` (no envelope, no length prefix)
+- **AND** the tray's per-lane listener dispatches the line to the MCP
+  server module and writes the JSON-RPC response back as one line on the
+  same connection
 
-#### Scenario: No new socket node is created on disk
+#### Scenario: A frame on the shared control socket is refused
 
-- **WHEN** the tray starts with `host-browser-mcp` enabled
-- **THEN** no additional Unix-domain socket nodes are created beyond
+- **WHEN** a client sends `ControlMessage::McpFrame` on
   `$XDG_RUNTIME_DIR/tillandsias/control.sock`
-- **AND** an audit of `lsof -U` for the tray PID lists exactly the
-  control socket plus any consumer-accepted streams
+- **THEN** the tray replies `Error { code: Unsupported }` whose message
+  names the per-lane socket requirement
+- **AND** no MCP tool is dispatched from that connection
+
+#### Scenario: Each lane gets its own socket node
+
+- **WHEN** the tray launches a lane with `host-browser-mcp` enabled
+- **THEN** a socket node exists at
+  `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`, created
+  with owner-only permissions
+- **AND** the lane container sees ONLY its own lane directory at
+  `/run/host/tillandsias-mcp` — no other lane's socket is reachable from it
 
 ### Requirement: Browser provider is bundled Chromium only
 
