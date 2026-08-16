@@ -31703,7 +31703,7 @@ plan_index:
     - packet_id: opencode-segfault-reproduced-with-a-host-side-coredump
       release_target: fail-loud-diagnosis-milestone
       order: 604-vmcg
-      status: ready
+      status: implemented
       desired_release: v0.5
       role: runtime
       pickup_role: linux
@@ -31797,6 +31797,11 @@ plan_index:
           host: forge
           summary: |
             Group under fail-loud-diagnosis-milestone (order 625-jd5f)
+        - type: progress
+          ts: "2026-08-16T07:47:33Z"
+          host: linux_mutable
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: forensics 2026-08-16 (fork, worktree@9fa356d05): criteria 1-3 discharged, 4 filed as 767-qrbv. C3 PRESERVED: both opencode dumps survive and are copied out of rotation — the original 3450686 (2026-08-03 19:40 PDT, 91.3M) AND a previously unrecorded SECOND x86_64 incident 129170 (2026-08-10 12:47 PDT, 94.1M, Big Pickle validation lane), plus BOTH paired yq SIGABRT dumps, to ~/claudia/tillandsias-forensics/604-vmcg/ with coredumpctl info metadata and the squid census. C1 SYMBOLICATED to the achievable ceiling: exact binary recovered from npm (opencode-linux-x64 1.18.11/1.18.12 share one platform binary) and BUILD-ID-VERIFIED against the core via eu-unstrip (c30f169b1bef81fa57467cd091ba53aab5235468); frame #1 return address 0x39ca5d0 disassembles to a handler(int){abort()} shim at 0x39ca5b0 — the Bun fault handler, mechanically confirming the arm64 panic-then-abort shape; frames #2+ (identical offsets across BOTH incidents: 0x46a5425/0x4ffadda/0x51820fc...) sit in statically-linked JavaScriptCore entered from anonymous JIT frames; full names need JSC debug info Bun does not ship. C2 DISPOSITION: supervise PID 1 (filed shaped as 767-nkkq) + recurrence-watch on Bun>1.3.14; pin rejected (install-at-launch floats forward and the bug is upstream-shaped); accept-and-document rejected (silent container death is the 741-3y48 class). NEW SIGNATURE recorded: in both incidents a child yq SIGABRT precedes the opencode SIGSEGV by 3-9s (2026-08-03 19:40:00->19:40:03; 2026-08-10 12:46:55->12:47:04, same boot-ids pairwise); journal shows zero OOM in either window — memory pressure ruled out as recorded cause; child-abnormal-exit handling in Bun is the live hypothesis
     - packet_id: codex-mcp-config-merge-fixture
       order: 605-u9g5
       status: completed
@@ -41423,7 +41428,7 @@ plan_index:
     - packet_id: steady-state-polling-and-idle-wakeups
       release_target: socket-audit-master
       order: 690-xeda
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       title: 'Near-zero idle is not met: the guest polls an AtomicBool 4x/second forever and shells out to podman every 30s; the tray keeps a timer that guards nothing'
@@ -41602,6 +41607,16 @@ plan_index:
           host: forge
           summary: |
             Group under socket-audit-master (order 625-jd5f)
+        - type: completed
+          ts: "2026-08-16T07:59:51Z"
+          host: windows
+          summary: |
+            status 'completed' with evidence_refs: a0f4229f6: cargo test -p tillandsias-headless --features listen-vsock 407/407 PASS (incl. subscriber_nudge_wakes_parked_waiter_on_subscribe); live-guest idle measurement 60s windows main_ctx=2/2 all_tasks_ctx=170->93 release-sha16=d91ce81d14d786b4 dev-sha16=e2f042152ad4a353; vsock accept socat exit 0; post-restore --diagnose wire REACHABLE phase=Ready podman_ready=true
+        - type: note
+          ts: "2026-08-16T07:59:51Z"
+          host: windows
+          summary: |
+            all four exit criteria satisfied across hosts: named vsock sites event-driven (2026-08-15 windows), 30s podman shell-out driven by podman events + 2s/15s ticks subscriber-parked (this cycle), macOS transient sites discharged by recorded justification (2026-08-16 macos), guest+tray before/after measurements recorded
     - packet_id: podman-invocations-have-no-timeout
       release_target: fail-loud-diagnosis-milestone
       order: 690-7adz
@@ -46393,7 +46408,7 @@ plan_index:
 
     - packet_id: build-entrypoints-do-not-stage-router-sidecar
       order: 723-wd8i
-      status: implemented
+      status: completed
       desired_release: v0.5
       priority: p0
       kind: defect
@@ -46484,9 +46499,14 @@ plan_index:
             statically linked, stripped". The musl cross-compile path on macOS is
             healthy; the 702-griq rust-lld pin for darwin is doing its job.
 
+        - type: completed
+          ts: "2026-08-16T07:45:21Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: criteria 1-3 REPRODUCED-FIXED-REVERIFIED on macOS hardware 2026-08-14 (build-macos-tray.sh + local-ci.sh stage before first cargo invocation; build.rs names the remedy); criterion 4's OPEN item was by its own text 'filed as 723-ydmk', and 723-ydmk COMPLETED 2026-08-16 (check-no-tracked-binaries.sh + litmus 5/5) — plus litmus:sidecar-is-a-build-graph-input 5/5 pins the nix-graph lane (verified live by the 723-sazx closure tonight), so both halves of the recommit-vs-omit class now have falsifiable guards
     - packet_id: release-nix-builds-headless-without-staging-the-sidecar
       order: 723-sazx
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p0
       kind: defect
@@ -46571,6 +46591,11 @@ plan_index:
           host: macos
           summary: |
             workflow-level staging is inert; requirement moved into the build graph via flake.nix preBuild, which still needs a nix host to verify
+        - type: completed
+          ts: "2026-08-16T07:03:51Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: v0.4.260815.1+d037f4100: all criteria discharged, chain: (c1,c2) workflow ordering + corrected comment in-tree (.github/workflows/release.yml:106-134); (c3) release run 31867778950 (v0.4.260815.1, dispatched by linux_mutable 2026-08-15) built both headless nix derivations green and published the assets — the criterion's 'clean checkout' alternative is subsumed because the CI checkout IS a clean tree; (c4, the last OPEN scope) the SAME run proves the flake preBuild: stageRouterSidecar (aebd15590, 2026-08-14) is a verified ancestor of tag v0.4.260815.1, the CI checkout carried no untracked sidecar, and the 2026-08-14 falsified event proved the workflow-level install cannot reach the store-copied flake source — so the headless build.rs found images/router/tillandsias-router-sidecar ONLY via the preBuild dependency edge. Structural pins live this session: litmus:sidecar-is-a-build-graph-input 5/5 PASS (all three embedding derivations carry preBuild; expression references the DERIVATION; flake parses without a daemon). Caveat recorded honestly: a local clean-tree rerun on macuahuitl 2026-08-16 is blocked — nix-daemon.socket disabled/inactive, no passwordless sudo; operator action: sudo systemctl enable --now nix-daemon.socket. Not load-bearing for closure given the CI proof.
     - packet_id: main-still-tracks-the-committed-sidecar-elf
       order: 723-qeju
       status: ready
@@ -46645,7 +46670,7 @@ plan_index:
 
     - packet_id: no-guard-against-recommitting-a-binary
       order: 723-ydmk
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: enhancement
@@ -46693,6 +46718,11 @@ plan_index:
           host: linux_mutable
           summary: |
             Note for the next reader: the exit criteria's 'five icon/image assets' undercounted — git's own heuristic classifies all 33 SVG species icons as binary alongside the 5 raster assets. The allowlist is therefore 4 path PREFIXES (assets/icons/, both tray asset dirs, images/dmg/), documented in the guard with the executable class never allowlistable.
+        - type: completed
+          ts: "2026-08-16T06:45:07Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: worktree@0addee587: scripts/check-no-tracked-binaries.sh landed per criteria — git-numstat-vs-empty-tree classification (NOT file(1)) + executable-extension lane; live verdict ok:no-tracked-binaries:38 binary-classified 38 allowlisted (allowlist = 4 documented image-asset prefixes; packet's 'five assets' was empirically 38 blobs, git binary-classifies the SVG icon families); hermetic fixture 5/5 incl. text-only NEGATIVE CONTROL, ELF-blob refusal, zero-byte .so extension-lane refusal, allowlisted-image pass, .so-inside-allowed-prefix refusal; pre-verified git ls-files ext scan EMPTY then .gitignore extended (so/dylib/dll/exe/a/wasm/pdb); wired into local-ci.sh beside container-bases (guard-activation audit satisfied); litmus:no-tracked-binaries-shape 5/5 STEPS OK registered under dev-build; ./build.sh --check green
     - packet_id: e2e-preflight-false-live-runtime-on-macos
       order: 723-fndi
       status: ready
@@ -49873,7 +49903,7 @@ plan_index:
     - packet_id: startup-context-addendum-append-has-no-size-cap
       order: 747-iavs
       release_target: forge-local-experts-milestone
-      status: implemented
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -49924,6 +49954,11 @@ plan_index:
           summary: |
             Bounded read landed with the 747-kw8u fix.
 
+        - type: completed
+          ts: "2026-08-16T07:45:21Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: 97a6f5602+cycle2: litmus:startup-context-addendum-shape 13/13 STEPS OK live — STEP 7 pins the byte-bounded read (head -c TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES, default 65536, replacing unbounded cat), STEP 5 normal append unchanged, STEP 3+6 fail-soft + regular-file gate so the cap can never fail or hang a launch (747-kw8u verified covers the hang class); boundary header (STEP 8) carries the loud in-file notice
     - packet_id: startup-context-addendum-can-hang-launch-via-fifo-or-char-device
       order: 747-kw8u
       release_target: forge-local-experts-milestone
@@ -50004,7 +50039,7 @@ plan_index:
     - packet_id: startup-context-addendum-missing-delivers-nothing-silently
       order: 747-n52p
       release_target: forge-local-experts-milestone
-      status: implemented
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -50062,6 +50097,11 @@ plan_index:
           summary: |
             Present-but-rejected is traced; absent stays silent.
 
+        - type: completed
+          ts: "2026-08-16T07:45:21Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: cycle2-worktree: criterion 1 implemented tonight — a TRACKED-but-missing addendum now writes an EXPECTED BUT MISSING placeholder into the context and traces the delivery gap, via git ls-files --error-unmatch exactly as the packet's own notes prescribed (branch order functionally verified in a throwaway repo: readable->append, present-but-rejected->traced SKIP [STEP 9], tracked-but-deleted->placeholder [new STEP 13], untracked->silent = criterion 3's off-Tillandsias negative control); litmus:startup-context-addendum-shape 13/13 live; both writes fail-soft (criterion 2)
     - packet_id: editing-a-shared-file-breaks-litmus-in-specs-you-never-ran
       order: 748-tkjx
       status: ready
@@ -50282,7 +50322,7 @@ plan_index:
 
     - packet_id: mirror-identity-host-cert-and-sshd-config
       order: 749-54pv
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p0
       release_target: forge-local-experts-milestone
@@ -50314,9 +50354,15 @@ plan_index:
         - 'NEGATIVE CONTROL: a host cert for a second principal, or an extra principals line, is refused — the single-principal claim is falsifiable.'
         - The 8h re-request path is exercised, not just the first issuance.
 
+      events:
+        - type: completed
+          ts: "2026-08-16T06:56:50Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: 55660ed9a: scripts/test-mirror-host-cert-and-sshd.sh all 6/6 PASS in the REAL images/git container under the 749-wv4d posture — t5-directives-rendered (default config pins the T5 set verbatim incl. ForceCommand /usr/local/bin/tillandsias-receive), cert-exact-single-principal (host CERTIFICATE, exactly git-<mirror-id>), ca-only-client-connects (client with ONLY the @cert-authority line, StrictHostKeyChecking=yes, HostKeyAlias-bound to git-<mirror-id>, reaches ForceCommand; wrong CA fails host verification), keys-outside-ca-refused (plain key Permission denied while CA cert accepted — AuthorizedKeysFile none EFFECTIVE; principals file single exact line), negatives-refused (two-principal cert -> fail:sshd-identity:cert-principal-violation, extra principals line -> fail:sshd-identity:principals-violation), renewal-exercised (1s override: issuance count >=2, NEW serial, SIGHUP, sshd alive; 8h default pinned). litmus:mirror-host-cert-and-sshd-shape registered. Caveats recorded: StrictModes no (posture-forced, compensated in-renderer), lane flag-gated until T11.
     - packet_id: mirror-identity-receive-wrapper-and-repo-hardening
       order: 749-2fqj
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p0
       release_target: forge-local-experts-milestone
@@ -50356,9 +50402,14 @@ plan_index:
           host: linux_mutable
           summary: |
             579 DISPOSITION (the packet's own precheck): NOT subsumed, NOT duplicated. The hardening-placement half 749-2fqj quoted (entrypoint:131-139 init-only block) was ALREADY LANDED as an every-start migration before this work, and 579's own 9-case suite covers the pre-receive relay half at this tree (9/9 PASS live 2026-08-16). 579 stays ready on its own residual: spec supersession of the <=10-deletion relay semantics, the live existing-volume restart gate, and the full local-build E2E its next_action names (commit 23f9e4e8 pickup). This packet's upgraded-volume fixtures pin the receive-CONFIG half only; no double-close.
+        - type: completed
+          ts: "2026-08-16T07:17:42Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: f94a35b60: all four exit criteria fixture-proven. C1 (§4a M5): scripts/test-mirror-receive-wrapper.sh m5-container — REAL images/git container under the 749-wv4d posture, real sshd + fixture-CA certs; git push to ssh://.../projectB landed the exact commit in the FIXED /tmp/fx/srv/projecta (sha compared), projectB never created, SetEnv channel verified rendered. C2 (T7 upgrade): force-and-delete-refused-on-upgraded-volume — volume born permissive, upgraded by the REAL entrypoint setup-only seam, rewind and deletion refused; PLUS the order-579 suite (test-git-mirror-existing-volume-hardening.sh) 9/9 cases PASS at this tree for the hooks/relay half. C3: fsck-effective-on-upgraded-volume — malformed commit (committer missing email, hash-object --literally) REFUSED with fsck cause and no ref created, while an otherwise-identical fsckObjects=false control copy ACCEPTS the same push — the config gate is the deciding control. C4: push-vars-exported-from-cert — offline PATH-interposed recorder asserts argv=fixed repo and KEY_FP/PRINCIPAL/SERIAL/KEY_ID exactly match the cert (SHA256 fp, til:forge-push:<mid>, serial 42, key id); in-container pre-receive hook dump re-proves all four during the M5 push (serial 99, key id token-m5-keyid). litmus:mirror-receive-wrapper-shape registered under git-mirror-service, suite 25/25 PASS; test-mirror-host-cert-and-sshd.sh all green after the SetEnv addition; ./build.sh --check green
     - packet_id: mirror-identity-agent-sidecar-and-forge-wiring
       order: 749-6uby
-      status: ready
+      status: implemented
       desired_release: v0.5
       priority: p0
       release_target: forge-local-experts-milestone
@@ -50411,6 +50462,11 @@ plan_index:
           host: linux_mutable
           summary: |
             HELD AT IMPLEMENTED (756-2jnj precedent) — the live residual, exactly: criterion 1's M0 needs TWO real launched lanes pushing concurrently through the production wiring (belongs with the first TILLANDSIAS_MIRROR_SSHD=1 live launch, alongside 722-uern's matrix); criterion 2's D5 re-verification must run IN a live forge after wiring (the 2026-08-13 in-forge sweep is the recipe); criterion 4's teardown is contract-pinned (cleanup 5-removal fake-backend test + source window) but a live leaked-sidecar observation after a real forge exit closes it. Everything else is fixture-proven at this commit. The lane ships DARK: entrypoint sshd, sidecar start, and gitconfig pushInsteadOf all gate on TILLANDSIAS_MIRROR_SSHD=1 until T11 (749-y8xx) flips it with the migration story.
+        - type: progress
+          ts: "2026-08-16T07:53:07Z"
+          host: linux_mutable
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: worktree@f234b138e: T8+T10 implemented and hermetically proven — scripts/test-ssh-lane-sidecar.sh 4/4 in the REAL images/git container (ready+fingerprint+agent-serving via socket-only client shape; host-type/two-principal/wrong-principal certs each refused with named causes; renewal loop exercised at 2s interval with agent alive; §4a M2 against a REAL in-container vault dev-server: token holding the minted-shape exact-path policy signs ssh-client-signer/sign/<own-mid> 200 and gets HTTP 403 from <other-mid>); litmus:ssh-lane-sidecar-shape registered+green under git-mirror-service (git-mirror-service quick suite 25/25 PASS); cargo 351 passed incl. write_forge_gitconfig_wires_ssh_push_lane_when_enabled (pushInsteadOf-only Q4 + core.sshCommand + @cert-authority known_hosts), ssh_lane_sidecar_wiring_windows (sidecar between mirror and forge; cleanup removes sidecar+volume; flag-gated; D6 mint; attribution), cleanup-contract 5-removal pins; export_ssh_env probe order pinned (criterion 5). ./build.sh --check green.
     - packet_id: mirror-identity-persist-vault-audit-device
       order: 749-8iw4
       status: implemented
@@ -51415,6 +51471,12 @@ plan_index:
           summary: |
             status 'verified' with evidence_refs: clean-room provision from a rebuilt tray (build_commit 83d3339cb) after wsl --unregister: exit_code 0, wire reachable=true phase=Ready podman_ready=true, guest_version 0.4.260815.1; tray-written daemon unit carries no ExecStartPost directive and the ready unit is Type=oneshot Wants= not Requires=; negative control on that same fresh guest still catches a dead port (NOT-BOUND exit 1); three probe states falsified by execution (bound 0 / NOT-BOUND 1 / INDETERMINATE 2); 24/24 wsl_ unit tests green
 
+        - type: progress
+          ts: "2026-08-16T06:04:26Z"
+          agent_id: windows-yolanda-fable5-20260816T0554Z
+          host: windows
+          summary: |
+            FULL windows lane re-run of the SAME published tag v0.4.260815.1 (2026-08-16, clean-room: wsl --unregister + 258MB cache purge): cold-boot provision PASSED — [provision] RESULT: VM Ready, provision_exit=0, NOT-BOUND count 0, vsock_listener=bound within ~1s of daemon start. The shipped unit STILL carries ExecStartPost=headless-ready.sh 42420, and this run logged 'preflight vsock_loopback loaded' where the morning FAIL logged 'missing' — the defect did not fire, it did not go away. One PASS + one FAIL on identical artifact+host = the cold-boot readiness path is NONDETERMINISTIC; the promotion verdict for the tag remains the morning FAIL, and exit criteria (fix verified on a NEWLY CUT tag) are unchanged. Report: plan/issues/smoke-e2e-findings-v0.4.260815.1-2026-08-16-windows.md
     - packet_id: build-check-is-the-dominant-fixed-per-cycle-cost-on-windows
       order: 758-jw6v
       status: ready
@@ -52025,7 +52087,7 @@ plan_index:
     - packet_id: shared-scripts-bash4-isms-break-bash32-hosts
       order: 761-g36m
       release_target: fail-loud-diagnosis-milestone
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p1
       kind: bug
@@ -52102,6 +52164,16 @@ plan_index:
           summary: |
             Criteria 2+3 DISCHARGED: scripts/check-bash-dialect.sh wired into ./build.sh --check (grammar ok:bash-dialect-clean | blocked:bash4-unguarded:N) with a 6-scenario hermetic fixture proving both directions plus the dual-marker and comment-mention edges (scripts/test-check-bash-dialect.sh). Comment-stripping in the checker REDUCED criterion 1's residual from 8 files to 3: five sweep candidates carried the constructs in comments only (check-windows-only-sources-verified.sh's mapfile was genuinely fixed under 723-b9cn — the cycle-1 note doubting that is corrected). Real remaining carriers, allowlisted for burndown: check-running-image-freshness.sh, loop-success-probe.sh, selective-tillandsias-reset.sh (declare -A / mapfile in code). agent-identity.sh carries the probed-fallback dual marker. The gate refuses NEW instances fleet-wide from this commit.
 
+        - type: completed
+          ts: "2026-08-16T07:24:01Z"
+          host: macos
+          summary: |
+            status 'completed' with evidence_refs: 899d39e9 check-bash-dialect:ok:bash-dialect-clean + test-check-bash-dialect:PASS-6/6 + test-agent-identity:PASS-11/11 on /bin/bash 3.2.57
+        - type: note
+          ts: "2026-08-16T07:24:01Z"
+          host: macos
+          summary: |
+            all three exit criteria discharged with on-host bash-3.2 evidence
     - packet_id: gate-ruby-exprs-assume-psych4-autoloaded-date
       order: 762-8yna
       release_target: fail-loud-diagnosis-milestone
@@ -52309,3 +52381,772 @@ plan_index:
         recommended-question/coverage contract — the bootstrap surface and the
         expert must agree on what a cold-start agent may ask. Dedupe against that
         investigation's packets before implementing.
+    - packet_id: mcp-stdio-request-fault-isolation
+      order: 760-r74a
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: 'project-info MCP server dies mid-session: a SIGPIPE''d read_file pipeline (or one malformed client line) kills the whole stdio server under set -euo pipefail'
+      deliverable: a fault in one request fails that request at worst — never the server; litmus:mcp-server-request-fault-isolation pins both classes with a proven-red negative control
+      pickup_role: linux
+      owner_host: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - mcp
+        - experts
+        - shell
+        - fail-loud
+        - forge
+      estimated_hours: 2
+      context: |
+        Live outage 2026-08-15 ~17:20Z (operator host session, linux):
+        read_file(path=plan/index.yaml, offset=32484, limit=115) runs
+        `tail -n +32484 | head -n 115`; head exits after 115 lines, tail takes
+        SIGPIPE (141) with ~19k lines still to write, and under
+        `set -euo pipefail` the failed command substitution killed the SERVER.
+        Reproduced exactly: the pre-fix server exits rc=141 answering ZERO of
+        two queued requests. project-info's main loop also parsed each incoming
+        line with UNGUARDED jq (forge-plan already carried the `|| true` guard),
+        so one malformed client line was a second latent session-killer, and
+        unreadable-file `wc -l < f` a third. The outage class is exactly what
+        737-zcj5/741-* made observable — this packet closes the server-side
+        cause for the stdio surfaces.
+      exit_criteria:
+        - the 2026-08-15 killer request replayed against project-info answers BOTH queued requests and the server exits 0
+        - a malformed (non-JSON) line fails nothing but itself on both servers
+        - the negative control proves the litmus catches the pre-fix server (rc=141, zero replies)
+      events:
+        - type: completed
+          ts: "2026-08-16T06:08:37Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: 51bbfe298: read_file SIGPIPE + malformed-line + unreadable-file guards in project-info.sh; litmus:mcp-server-request-fault-isolation (2 lanes) registered + PASS; negative control vs pre-fix server rc=141/0 replies; discoverability suite 16/16 x3
+
+    - packet_id: bare-metal-expert-semantic-lane-wiring
+      order: 760-3mh8
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: 'The DEV-host expert system has no semantic tier: enclave-DNS-only inference endpoint, dead hostname resolution in semantic_expert, no launch-if-missing lifecycle, and a stale user-level binary shadowing the checkout'
+      deliverable: 'bare-metal harnesses resolve open-ended queries through the same expert system as in-forge ones: dev/runtime env hook, loopback endpoint defaults, idempotent linux-container inference ensure, hostname-capable synthesis dispatch, and checkout-artifact preference in dev'
+      pickup_role: linux
+      owner_host: linux
+      release_target: forge-local-experts-milestone
+      capability_tags:
+        - experts
+        - inference
+        - mcp
+        - lifecycle
+        - dev-environment
+      estimated_hours: 4
+      context: |
+        Four stacked causes, each verified live 2026-08-15/16:
+        (1) resolve_plan_bin preferred ~/.local/bin/tillandsias-plan (installed
+        Aug 12) over the checkout's fresh target/release, so the host session
+        was served pre-706-f7mq behaviour — the exact "what is the current
+        Direction?" refusal — while the checkout binary answered it CITED
+        (plan/loop_status.md:6731-6753). 682-z5h8's stale-clone lesson, applied
+        to the BINARY. (2) semantic_expert::query_inference parsed the endpoint
+        with SocketAddr::parse, which only accepts numeric IPs — the default
+        `inference:11434` NEVER parsed, so ollama synthesis was dead code in
+        BOTH environments (718-nkm2's design notes flagged it; now
+        ToSocketAddrs). (3) No inference lifecycle existed for the bare-metal
+        Linux dev host: 718-nkm2's dev-inference-ensure was WSL-only
+        (skip:not-wsl), the runtime container publishes no host port, and
+        nothing launched anything — the linux-container lane now runs the
+        already-built tillandsias-inference image as `tillandsias-dev-inference`
+        on loopback 11434 (reuse-if-running, start-if-stopped,
+        launch-if-missing, never duplicate; 620-ca7g kill switch honored;
+        shared model cache). (4) The MCP servers had no dev-vs-runtime hook:
+        lib-dev-env.sh now names the split, defaults the endpoints to loopback
+        in dev, fires the ensure once in the background at server start (INERT
+        under TILLANDSIAS_NO_SINGLETON so litmus/test runs never launch
+        containers), and the direction-class pointer fallback cites
+        plan.yaml's frontier_note when no markdown section clears the scorer.
+      exit_criteria:
+        - plan_answer 'what is the current Direction?' through the real forge-plan server on this host returns a CITED envelope (confidence=retrieved)
+        - with the inference container stopped, the same query still answers cited (deterministic content fallback) and the server survives
+        - 'the ensure is idempotent across states: absent -> launched (verified live: tillandsias-dev-inference healthy), stopped -> started, running -> reused, verdict grammar consumed by cycle-preflight unchanged'
+        - test-run contexts (TILLANDSIAS_NO_SINGLETON) provably never autostart the container
+      events:
+        - type: completed
+          ts: "2026-08-16T06:08:46Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: 51bbfe298: lib-dev-env.sh dev/runtime hook + loopback endpoint defaults; dev-inference-ensure linux-container lane launched tillandsias-dev-inference live (healthy, verdict ok:dev-inference-ready:qwen2.5:0.5b:nomic-embed-text); semantic_expert ToSocketAddrs + frontier_note pointer (5 unit tests); resolve_plan_bin dev preference; e2e: plan_answer Direction via forge-plan.sh = retrieved cited plan/loop_status.md:6731-6753, identical with inference stopped, server rc=0; cargo test -p tillandsias-plan 137 passed; ./build.sh --check green
+
+    - packet_id: dev-host-spec-rag-index-never-built
+      order: 760-hzi4
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: enhancement
+      title: 'spec_answer still refuses on the DEV host: the spec RAG index (chunks.jsonl + vectors.jsonl) is only built in-forge under /dev/shm/tillandsias-experts'
+      deliverable: a dev-host location + build/refresh step for the spec index (552's launch/commit hook or a dev sibling), so bare-metal spec_answer serves the same L1 RAG tier as in-forge
+      pickup_role: linux
+      release_target: forge-local-experts-milestone
+      capability_tags:
+        - experts
+        - rag
+        - inference
+        - dev-environment
+      estimated_hours: 3
+      context: |
+        Follow-up capture from the 760-3mh8 wave (2026-08-16): the embed
+        endpoint now defaults sanely on dev (ollama /v1), but
+        FORGE_SPEC_INDEX_DIR defaults to the tmpfs launch-state dir that only
+        lib-common.sh::ensure_forge_experts populates, so bare-metal spec_answer
+        correctly refuses with the index-not-built reason. Orders 547/548/552
+        own the machinery; what is missing is a dev-host index home + refresh
+        trigger (plausibly the same commit hook 685-yidq env-gates).
+      exit_criteria:
+        - on a dev host with the ensure green, spec_answer returns a retrieved envelope instead of the index-not-built refusal
+        - the index refreshes on commit or names its staleness in the envelope
+
+    - packet_id: stale-user-level-expert-install-refresh
+      order: 760-nwzr
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: enhancement
+      title: '~/.local/bin/tillandsias-plan goes stale silently on dev hosts: nothing refreshes or skew-stamps the user-level install that non-MCP consumers may still resolve'
+      deliverable: either ./build.sh refreshes the user-level install when it exists, or the capability line carries a behavioural version so a weeks-old install names its own skew
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - experts
+        - staleness
+        - build
+        - capability-honesty
+      estimated_hours: 2
+      context: |
+        Capture from the 760-3mh8 root-cause (2026-08-16): the dev-env
+        preference now routes the MCP servers to the checkout artifact, but the
+        Aug-12 ~/.local/bin binary remains on PATH for anything else that runs
+        `tillandsias-plan` bare. Order 569's capability manifest catches missing
+        SUBCOMMANDS, not behavioural drift within existing ones (706-f7mq
+        changed `answer` internals invisibly to the gap check). Options are in
+        the deliverable; the wrong fix is deleting the install (the forge
+        canonical path must stay authoritative in-runtime).
+      exit_criteria:
+        - a dev host with a weeks-old user-level install either gets it refreshed by the normal build flow or sees its skew named by expert_capability
+
+    - packet_id: gate-per-step-telemetry
+      order: 765-dfry
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: build-velocity+telemetry
+      title: 'Per-step gate telemetry: preamble, per-guard, per-check, and per-litmus-test durations'
+      deliverable: 'timing_emit instrumentation in build.sh (per --check step: fmt, clippy x2, plan check, plan-orders, each guard script, trace-coverage --gate, stamp write, plus the preamble record), a duration_ms field per check in local-ci''s check-log archive, and per-test elapsed in run-litmus-test.sh compact output'
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: Only three step names exist in /tmp/tillandsias-timing.jsonl; local-ci.sh:432-452 times only run_litmus_phase; the build.sh preamble (:357-:715) runs before the --check timer at :1081, so the sidecar-rebuild tax is invisible; the 254s quick lane cannot be ranked test-by-test. Prerequisite evidence substrate for approving or revoking every other velocity change.'
+      exit_criteria:
+        - Every --check step and every guard script emits a named timing record under the 682-emvg grammar (best-effort, never alters wrapped exit codes; 693-tf79 rejection applies)
+        - A --ci-full run's wall clock is attributable across quick-litmus / clippy-all-features / rust-tests / install from the records alone
+        - The 55 pre-build quick litmus tests are rankable by measured duration (per-test elapsed in compact output), naming which of the 44 cargo-invoking tests dominate the ~254s lane
+        - 'The post-VERSION-bump sidecar rebuild appears as a named slowest-step candidate in the timing: rolling line'
+        - No gate exit code changes under fault injection (timing sink unwritable)
+
+    - packet_id: gate-stamp-scope-awareness
+      order: 765-dt8h
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: build-velocity+gate-integrity
+      title: 'Scoped gate stamps: record what the gate validated and make pre-push compare scope to the outgoing diff'
+      deliverable: gate-stamp.sh write/verify extended with a scope field (full | class-set); pre-push-local-gate.sh verify path comparing stamp scope against the outgoing diff's change classes, refusing with a loud message naming the missing classes and the exact rerun command
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: gate-stamp.sh content-hashes the whole tree but records THAT a gate passed, not WHICH (verified: no scope concept in the script); _write_gate_stamp (build.sh:825-859) writes identically from --check/--ci/--ci-full; pre-push accepts any fresh stamp. Without this, any scoped run converts every selector skip into trunk exposure — the highest silent-green risk in the whole design.'
+      exit_criteria:
+        - A stamp written by an unscoped (full) gate behaves exactly as today (byte-format change is backward-compatible or migrates loudly)
+        - A scoped stamp is accepted only when the outgoing diff's classes are a subset of the stamped classes; any parse ambiguity or unknown scope token is treated as stale (fail closed) with the full-gate rerun command printed
+        - The 668-2xeh plan-only lane is preserved intact as the narrowest instance and its fail-closed refusal grammar is reused
+        - 'Negative litmus: a stamp scoped to {plan-ledger} plus an outgoing diff touching crates/ is refused at pre-push'
+        - No scoped stamp can be produced by any gate until this packet lands (ordering constraint on the selector packets, recorded in their depends_on)
+
+    - packet_id: litmus-diff-scoped-selection
+      order: 765-mza8
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: build-velocity+litmus-tooling
+      title: 'Diff-scoped litmus selection: inputs metadata plus a fail-closed --diff-scope rung in the runner'
+      deliverable: 'An optional inputs: glob-list field in litmus test YAML (mirroring the phase:/size:/host_kind: pattern at run-litmus-test.sh:342-448); a --diff-scope <base> runner flag inserting a per-test SKIP after the size check, active only when the test declares inputs, the diff misses them all, and the test file itself is unchanged; annotations for the slowest pre-build quick tests first (per the telemetry packet''s ranking); a new added-inputs guard in the 634-39ik/698-7n6q family refusing dead globs'
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: The quick lane costs 251.6-268.9s per --ci-full and pays full price when red (local-ci.sh:60 set +e); selection is phase/size/host-kind only; 236 instant + 55 quick pre-build tests run for a plan-fragment-only diff. Precedents: 634-39ik diff-scoping (polarity inverted: this REMOVES coverage so it fails closed), 668-2xeh loud per-file acceptance. Depends on the scoped-stamp packet.'
+      exit_criteria:
+        - Tests without inputs always run; --ci-full's in-loop, rate-limited invocation may pass --diff-scope, but the release lane (merge-to-main-and-release), the daily full anchor, and any run where the base ref is missing or the diff unparseable run FULL, loudly
+        - Every diff-scoped skip uses the loud per-test SKIP grammar naming the base SHA; an all-skipped phase reports 'N diff-scoped skips against base <sha>' — never a vacuous green (explicit-filter zero-match failure at run-litmus-test.sh:1443-1463 preserved)
+        - 'A NEWLY ADDED inputs: field whose globs match no tracked file is refused by the added-inputs guard (a dead glob is an always-skip)'
+        - A test file's own change always forces the test to run regardless of inputs
+        - A 24h full-run ratchet refuses to skip (forces FULL, loudly) when the last recorded full quick-tier run is older than 24h
+        - 'Measured: in-loop --ci-full pre-build litmus drops from ~254s to a diff-proportional cost on a plan-only tree, with the skip ledger naming every scoped-out test'
+        - e2e/runtime tests remain unannotated (their input is the built product)
+
+    - packet_id: build-check-stamp-memoization
+      order: 765-tkq2
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: build-velocity+gate-tooling
+      title: 'Stamp-based --check memoization: loud early exit when tree bytes are identical to the last green gate'
+      deliverable: 'An early check at the top of build.sh''s --check block: when gate-stamp verify returns ok:gate-fresh (with toolchain versions folded into the stamp), print the memoized verdict with the stamp timestamp and the TILLANDSIAS_FORCE_CHECK=1 override, and exit 0'
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: gate-stamp.sh already proves ''the gate validated these bytes'' (~60ms content hash over 4,241 files) and pre-push already trusts it — the same trust extended to the gate''s own entry point. --check runs 2-5x per cycle at p50 8.1s green; telemetry shows clusters minutes apart on identical trees. Risk (environmental drift the hash can''t see) is bounded by the toolchain fold and the force knob.'
+      exit_criteria:
+        - rustc -V and cargo clippy -V are folded into the stamp so a toolchain swap invalidates memoization
+        - The early exit prints one attributable line every time — 'ok:gate-fresh (stamped <ts>; TILLANDSIAS_FORCE_CHECK=1 to re-run)' — never a silent green
+        - TILLANDSIAS_FORCE_CHECK=1 bypasses memoization unconditionally
+        - The 2nd-5th --check of a cycle on an unchanged tree (post-rebase no-op, finalization after stamp-covered edits) measures ~0.3s instead of 8-12s in the timing records
+        - Memoization applies to --check only; --ci/--ci-full/--release never memoize
+        - 'Negative litmus: editing any tracked or untracked byte after a green gate forces a full re-run'
+
+    - packet_id: change-class-gate-selector
+      order: 765-xpct
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: build-velocity+gate-tooling
+      title: Change-class selector (change-class.sh) with pilot scoping of the two heavy plan/litmus guards
+      deliverable: 'A sourced scripts/change-class.sh computing the change-class set once per gate run (diff vs merge-base with origin/<platform>-next, plus worktree-dirty and untracked, mirroring 634-39ik''s shape); a selector matrix in build.sh keying gates to declared input classes; pilot: check-fragment-status-loss (key: plan-ledger ∪ plan-core incl. crates/tillandsias-plan) and check-groundtruth-mutable-status-pins (key: spec+litmus ∪ plan-ledger); the keep-unconditional list embedded as data with per-entry incident citations'
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: Investigator-measured: fragment-status-loss 2,381ms + groundtruth-mutable-status-pins 1,083ms of the ~7s warm --check are pure functions of narrow path families (verified: FSL reads plan/index.d + the tillandsias-plan fold; GMS reads openspec/litmus-tests/groundtruth + the plan binary). Precedent shape: 634-39ik (loud diff-scoping) + 668-2xeh (fail-closed class keying), polarity inverted because this consumer removes coverage.'
+      exit_criteria:
+        - Unknown path → FULL; missing/unfetchable base ref → FULL; build-tooling class (build.sh, local-ci.sh, run-litmus-test.sh, the guard's own script) → FULL; last full run older than 24h → selector refuses to skip — all four fail-closed paths covered by negative litmus tests
+        - Every skip prints one line naming the gate, the intersecting-class evidence, the diff base SHA, and the last FULL run timestamp
+        - The selector writes only scoped stamps (depends on the scoped-stamp packet; a scoped run can never write scope=full)
+        - The keep-unconditional set (gate-stamp verify, release-preflight, ghost-trace ratchet, version-bump isolation + monotonicity, guard-activation audit, python/base64 bans, plan-schema-divergence, mo-full-attestations, podman-sync-budgets, script-exec-bits, the three added-* guards) is data with a comment per entry naming its incident (599-4wzr, dd8fd63f, 668-2xeh) — removing an entry is a reviewable diff
+        - Operator (Tlatoani) approval recorded before activation, as the symmetric twin of bar_raise_governance (methodology/convergence.yaml:410) — scope reduction is a bar decision the loop must not self-enact
+        - 'Pilot measured: a code-only cycle drops ~3.5s per --check with both pilot guards'' skip lines present in the log'
+
+    - packet_id: tray-fingerprint-stability-non-artifact-lanes
+      order: 765-evbt
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: build-velocity+build-hygiene
+      title: Stabilize tray-crate build fingerprints in non-artifact lanes
+      deliverable: 'macos-tray build.rs: constant TILLANDSIAS_BUILD_TIME fallback unless SOURCE_DATE_EPOCH is set, plus a TILLANDSIAS_GIT_SHA_OVERRIDE honored via rerun-if-env-changed that suppresses all .git rerun directives when set; windows-tray build.rs: the existing BUILD_COMMIT_SHA_OVERRIDE (:94) likewise suppressing its .git tracking when set; loop wiring exporting the overrides for --check and the pre-build CI phase ONLY; a build.sh guard refusing the overrides inside --install and --release dispatches'
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: macos-tray build.rs:31-32 stamps date -u on every rerun and :55-56 tracks .git/HEAD+index; windows-tray build.rs:82-92 tracks refs/heads/<branch>+packed-refs (~3 commits/hour) with the override hook already present but the directives unconditional. Both crates recompile under every one of the ~5 per-cycle compile variants after any git activity; post-commit checks measure 9-12s vs 5.5-7s clean. The .git/index quick win lands first; this packet finishes the job.'
+      exit_criteria:
+        - With overrides exported, two consecutive commits produce zero tray-crate recompiles in check/clippy/test lanes (verified via cargo build-plan or fingerprint inspection)
+        - build.sh --install and --release hard-fail loudly if either override is set in the environment — a staged artifact can never carry false provenance
+        - The e2e embedded-SHA freshness gate still fails loud on an override-built binary (the safe direction, verified by negative test)
+        - Nix/release lanes are untouched (exact provenance preserved)
+        - SOURCE_DATE_EPOCH behavior for reproducible release builds is unchanged
+
+    - packet_id: sidecar-staleness-evaluation-stamp
+      order: 765-5efu
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: build-velocity+build-hygiene
+      title: 'Sidecar staging staleness redesign: evaluation stamp + dev-lane thin-LTO profile'
+      deliverable: build-sidecar.sh keeping a gitignored evaluation stamp (e.g. images/router/.sidecar.stamp) so is_stale's find -newer keys on the last evaluation rather than the staged binary's mtime (eliminating the perpetual re-stale state the byte-compare quick win leaves after VERSION bumps); optionally a [profile.release-sidecar] (inherits release, lto=thin, codegen-units=16) for the local dev lane only
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: build-sidecar.sh:49-63 is_stale keys find -newer on the staged binary; VERSION is in the input set deliberately (710-w9kc) but the binary embeds only WIRE_VERSION (main.rs:136-141, build_version: None), so bump-triggered rebuilds are byte-identical; the cascade into tillandsias-headless''s asset tracking is the multi-variant cost. The byte-compare quick win stops the cascade; this packet stops the repeated warm rebuilds too.'
+      exit_criteria:
+        - After a VERSION bump with unchanged sidecar sources, the SECOND and later build.sh invocations skip the sidecar cargo build entirely (stamp newer than VERSION), verified by the preamble timing record
+        - The find -newer input set (3 crates + Cargo.toml + Cargo.lock + VERSION) is unchanged — only the reference file moves, so false negatives are impossible by construction (a genuinely newer source always trips the stamp)
+        - The 723-b9cn ELF-format assert and wrong-artifact removal are untouched
+        - release.yml and the nix derivation keep fat LTO; only the local dev lane may use the thin profile, and order 710-w9kc's version-matched intent for install/release lanes is preserved and documented in the script header
+        - 'Negative test: editing a sidecar source file after the stamp forces a rebuild and a restage'
+
+    - packet_id: crane-deps-stability-and-binary-cache
+      order: 765-8hc3
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: build-velocity+nix
+      title: Crane deps-derivation stability and a fleet binary cache (extends 606-um5s)
+      deliverable: 'flake.nix: a depsOnlySrc (sourceByRegex or equivalent covering Cargo.toml/Cargo.lock/crate manifests, letting crane''s mkDummySrc stub the rest) passed to all four buildDepsOnly calls while buildPackage keeps craneSrc; a deps-.drv stability assertion in release.yml extending the existing cache-regression warning; a binary cache (cachix or LAN attic) pushed from release.yml and substituted by build-guest-binaries.sh''s local nix lane'
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: flake.nix:43-59 feeds the full tree as src to commonCraneArgs; all four buildDepsOnly calls (:93/:109/:125/:160) inherit it, so any file change invalidates every dep derivation; build-guest-binaries.sh:187-200 prefers nix locally (nix on PATH) and is invoked by every --ci-full --install (build.sh:875-895/:927); release.yml caches only the nix store keyed on flake.lock. This is the largest event-scoped compute sink in the loop — plausibly 10-30 min per cold event.'
+      exit_criteria:
+        - Two consecutive source-only commits (Cargo.lock unchanged) leave all four deps derivation paths byte-identical, verified by nix build --dry-run in CI
+        - release.yml warns loudly when a deps .drv changes while Cargo.lock is unchanged (extension of the :181-183 regression warning)
+        - An over-narrow source filter fails LOUD at buildDepsOnly (missing manifest = evaluation error), never silently — confirmed by deliberately dropping a crate manifest in a test evaluation
+        - A second host (or a clean checkout) substitutes dependency artifacts from the cache instead of cold-compiling ~1,000 crates for two musl targets
+        - 'Measured: --ci-full --install guest-binary preparation after an ordinary commit no longer cold-rebuilds dependency derivations'
+
+    - packet_id: thin-lto-dev-install-lane
+      order: 765-rm6a
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: build-velocity+build-hygiene
+      title: Thin-LTO dev-install lane for cycle-end installs
+      deliverable: A dev-install profile or CARGO_PROFILE_RELEASE_LTO=thin export in the meta-orchestration cycle-end install invocation only; release.yml, tagged releases, and flake.nix stay on fat LTO
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: Cargo.toml:105-108 (lto=true, codegen-units=1, strip=true) applies to every local install; the in-forge cycle contract mandates a cycle-end install; warm install measured 1m04s (plan/loop_status.d/20260812t235600z-32de7f7f-linux-mutable.md), dominated by the single-threaded fat-LTO link. Gated p3 by the PSK same-lane verification, which must land first.'
+      exit_criteria:
+        - Cycle-end TILLANDSIAS_SKIP_VERSION_BUMP=1 ./build.sh --install wall clock drops measurably (baseline 1m04s warm, fat-LTO-link dominated), recorded via the timing records
+        - 'The secure-channel PSK derivation (runtime hash of the running binary) is verified compatible: guest and host binaries used within one cycle are proven to come from the same build lane before enabling, with a loud refusal when lanes are mixed'
+        - Any litmus asserting binary size or byte-equality with the nix artifact is identified up front and either passes or the packet is rescoped — no silent divergence
+        - Tagged/release artifacts are byte-for-byte governed by the unchanged fat-LTO lanes
+
+    - packet_id: worktree-shared-cache-and-target-gc
+      order: 765-eqq3
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: build-velocity+infra
+      title: Worktree-agent build cache and bounded target GC
+      deliverable: sccache installed with a capped local disk cache, RUSTC_WRAPPER=sccache + CARGO_INCREMENTAL=0 exported in the worktree-agent entry path ONLY (never the main checkout's hot loop); a periodic bounded sweep (cargo-sweep --time 14 or equivalent) of the 74GB target/ that never runs concurrently with a build
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+        - gates
+        - telemetry
+      context: 'Filed from plan/issues/build-velocity-audit-2026-08-15.md (operator velocity directive 2026-08-15; fail-loud constraints F11/F12 of the report bind every selector/skip proposal). Draft evidence: sccache not installed, no RUSTC_WRAPPER, no shared target-dir (.cargo/config.toml verified); target/ = 74GB; the live agent worktree carries its own separate 281MB partial target — zero artifact sharing, so each spawned worktree pays a cold dep build. Disk headroom is 261GB today, making this hygiene (p3) rather than emergency.'
+      exit_criteria:
+        - A fresh .claude/worktrees agent's first cargo check hits the shared compile cache for dependency crates instead of cold-building (measured before/after)
+        - The main checkout's loop env is proven free of RUSTC_WRAPPER (incremental compilation wins there; sccache cannot cache incremental units) — enforced by an assertion in the loop's env setup, not by memory
+        - target/ size is bounded (14-day artifact age) with the sweep serialized against builds via an explicit lock, and a loud log line per sweep naming bytes reclaimed
+        - A corrupt cache entry fails the compile loudly (rustc error) — documented failure mode, no silent fallback
+
+    - packet_id: build-check-quick-win-wave
+      order: 765-uti9
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: optimization
+      title: Apply the seven endorsed quick wins from the 2026-08-15 build-velocity audit (~40s/cycle combined)
+      deliverable: 'each quick win from the report appendix applied as its own verified change: drop redundant cargo check --workspace; skip podman/dev-proxy preamble on check-only dispatches; byte-stable sidecar restage; macos-tray git-index fingerprint fix; content-conditional bump-version rewrites; local-ci clippy lane aligned to --all-targets; build-preamble timing record'
+      pickup_role: linux
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - build
+        - velocity
+      estimated_hours: 3
+      context: The machine-readable list with exact edits and per-item risk lives in the appendix of plan/issues/build-velocity-audit-2026-08-15.md. Items are independent; apply one at a time with ./build.sh --check green between items — the 2026-08-16 with-tillandsias-builder RETURN-trap incident is the cautionary tale for batching build-system edits.
+      exit_criteria:
+        - each applied win keeps ./build.sh --check green and its stated coverage-neutrality argument holds under review
+        - 'timing: line shows a lower build-check average over the following cycles, cited in the closure evidence'
+        - any win found unsafe is dropped with a reasoned-declined note rather than forced
+      events:
+        - type: progress
+          ts: "2026-08-16T06:45:07Z"
+          agent_id: unknown
+          host: linux_mutable
+          summary: |
+            Quick wins 1 and 7 of 7 applied (cycle 1, worktree@0addee587): (1) the subsumed cargo check --workspace step removed from build.sh --check — clippy --all-targets carries the type-check, banner reworded, rationale in-line (audit F3, zero silent-green surface); (7) build-preamble timing record emitted before the --check timer — FIRST RECORD: build-preamble 4205ms against build-check 7017ms, i.e. the invisible tax was ~37 percent of the real gate cost on a warm tree (audit F2/F10 vindicated on the first sample). ./build.sh --check green after both; remaining wins 2-6 stay one-at-a-time per the packet's batching caution.
+        - type: progress
+          ts: "2026-08-16T07:45:21Z"
+          agent_id: unknown
+          host: linux_mutable
+          summary: |
+            Quick wins 2, 5, 6 of 7 applied (cycle 2), each verified: (2) check-only dispatches skip podman registry setup AND the dev-proxy ensure on every host kind — _check_only_dispatch beside the forge predicate, both skip sites fired in the green gate run, and build-preamble telemetry collapsed 4205ms -> 12ms (the 15x1s health-wait worst case is gone from --check); pin test scripts/test-build-sh-forge-check-only.sh still ok; (5) bump-version.sh Cargo.toml rewrites are content-conditional — same-SEMVER bumps no longer touch mtimes that feed find -newer staleness probes (predicate verified both directions in a sandbox; NOT run live per the 702-eusw fleet-block trap); (6) local-ci default clippy lane aligned to --all-targets so it shares fingerprints with the gate's flavor, coverage strictly wider. Remaining: 3 (sidecar byte-stable restage) and 4 (macos-tray fingerprint) — both medium, artifact-provenance-adjacent, left for a dedicated slot.
+
+    - packet_id: build-image-regenerates-metrics-dashboard-from-empty-telemetry
+      order: 766-7zqf
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: build-image.sh regenerates plan/metrics-dashboard.md from whatever telemetry the invoking environment has — in a fresh worktree that is EMPTY, and the committed history is silently clobbered
+      deliverable: the dashboard regeneration is either gated on non-empty telemetry (refuse to overwrite a richer committed dashboard with an emptier one, loudly) or moved out of build-image.sh into an explicit telemetry-owning step
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - telemetry
+        - build
+        - plan-tooling
+        - fail-loud
+      estimated_hours: 2
+      context: |
+        Observed 2026-08-16 by the 749-2fqj implementation fork: running
+        scripts/build-image.sh inside a fresh git worktree regenerated
+        plan/metrics-dashboard.md from the worktree environment's EMPTY telemetry
+        logs and silently replaced the committed dashboard content — the fork had
+        to notice and revert the churn by hand before committing. Same
+        last-writer-wins shape as 747-hws2 (startup-context addendum) and the
+        metrics rule "never report a metric the tooling did not produce": an
+        empty-input regeneration REMOVES real history and presents it as current.
+        Any agent worktree (now a standard pattern: three forks used worktrees
+        tonight) or fresh clone that builds an image will hit this. Secondary
+        observation from the same fork, recorded here rather than as its own
+        packet: rootless podman fails with an opaque `require_podman` 127 when a
+        fixture leaks a deleted $HOME — fixture authors should subshell-scope
+        HOME overrides; a loud precondition check in require_podman would turn
+        that 127 into a named refusal.
+
+    - packet_id: gate-scripts-gnu-date-isms-break-bsd-hosts
+      order: 766-tdij
+      release_target: fail-loud-diagnosis-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: 'GNU-date-isms in gate scripts: BSD date SUCCEEDS while emitting garbage, so exit-code guards never fire (third dialect-skew gate break in one week)'
+      pickup_role: any
+      depends_on: []
+      capability_tags:
+        - shell
+        - cross-platform
+        - macos
+        - fail-loud
+      context: |
+        The 765 build-velocity phase telemetry added
+        `_now_ms() { date +%s%3N 2>/dev/null || echo 0; }` to build.sh.
+        %N/%3N is GNU-only; BSD/macOS date passes it through literally
+        ("<secs>3N") and EXITS ZERO, so the || guard never fires and the
+        phase arithmetic crashed every ./build.sh --check on macOS
+        ("17868650603N: value too great for base", 2026-08-16T07:24Z, the
+        first macOS gate run after merging a546a8ae).
+        
+        Fixed in the filing commit: _now_ms validates digits and degrades to
+        whole seconds (the report only names phases over 5s, so second
+        granularity keeps every consumer meaningful).
+        
+        This is the THIRD instance of one class in a week: bash-4-isms
+        (761-g36m, gate refuses them now), ruby psych-4-isms (762-8yna), and
+        GNU coreutils format extensions (this packet). The common shape: the
+        foreign dialect does not ERROR on the other platform — it succeeds
+        with wrong output, which is why exit-code guards and CI on the
+        authoring platform both miss it.
+      exit_criteria:
+        - a deterministic portability lint (extend check-bash-dialect.sh or a sibling) rejects GNU-date-only formats (%N, %3N, `date -d`, `date --date`) in scripts/ and build.sh unless the call sits behind a digit-validated or platform-probed fallback
+        - its fixture proves both directions (unguarded GNU-ism fails; probed/validated usage passes)
+        - the one known benign carrier (test-opencode-vault-auth-content.sh:94, %s%N as a uniqueness seed where garbage is still unique) is either exempted with a recorded reason or made portable
+      verifiable_closure: |
+        The lint runs inside ./build.sh --check, red on a fixture GNU-date-ism
+        and green on the live tree, verified on a BSD-date host.
+      notes: |
+        Same authoring guidance as 761-g36m: never version-sniff; probe the
+        format's OUTPUT (digits) or the feature, and keep one code path where
+        possible. build.sh's fixed _now_ms is the exemplar.
+      events:
+        - type: filed
+          ts: "2026-08-16T07:26:00Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0623z
+          host: macos
+          summary: |
+            Filed with the fix for the build.sh instance in the same commit
+            lineage (the gate could not even run to stamp without it). The
+            lint criterion is the durable half.
+
+    - packet_id: seven-ghost-trace-specs-need-owners
+      order: 767-yrnd
+      release_target: fail-loud-diagnosis-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: coordination
+      title: Seven @trace annotations reference specs that never existed — surfaced by the first union-tree ghost gate run; baselined for burndown, owners assigned here
+      pickup_role: any
+      depends_on: []
+      capability_tags:
+        - openspec
+        - cross-platform
+        - coordination
+      context: |
+        First ./build.sh --check on the merged union (macOS, 2026-08-16T07:2x)
+        tripped ghost-trace-gate on seven specs absent from openspec/specs/.
+        origin/linux-next fails identically at the same baseline — each
+        branch's diff-scoped runs missed them (the 658-kcd5 scoping
+        limitation, union-gate edition, same story as 754-kptj).
+        
+        Baselined with provenance in openspec/ghost-trace-baseline.txt so the
+        union gate is green fleet-wide again; the baseline is a burndown list
+        and the gate's stale-baseline direction enforces removal as each is
+        resolved (create the spec, archive the defining change, or delete the
+        annotation).
+        
+        OWNERS by referencing file:
+          - error-message-localization, shell-prompt-localization-fr/-ja
+            (scripts/test-locale-coverage.sh) and help-system-localization
+            (scripts/help-fr.sh, help-es.sh): the tray string/locale family —
+            natural home is the 628-c7qd shared-string-layer owner; likely
+            resolution is ONE localization spec covering the corpus, not four.
+          - macos-tray-build-and-release (scripts/install-macos.sh,
+            build-macos-dmg.sh): macOS host — this loop can draft the spec
+            from the existing build/install runbooks in a later cycle.
+          - mcp-tool-socket (tillandsias-headless main.rs, tray/mod.rs):
+            linux/headless owner.
+          - windows-wsl-runtime (tillandsias-podman client.rs, lib.rs):
+            windows owner.
+      exit_criteria:
+        - each of the seven is resolved (spec created, defining change archived, or annotation deleted) by its owner above
+        - openspec/ghost-trace-baseline.txt shrinks back to its 9 pre-2026-08-16 entries or fewer, enforced by the gate's stale-baseline direction
+      verifiable_closure: |
+        scripts/trace-coverage.sh ghosts reports none of the seven, and the
+        baseline no longer lists them.
+      events:
+        - type: filed
+          ts: "2026-08-16T07:30:00Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0623z
+          host: macos
+          summary: |
+            Filed with the baseline additions in the same commit. Fourth
+            union-gate skew instance caught by this host's loop in 24h
+            (bash-4, ruby-psych4, GNU date, ghost traces) — the diff-scoped
+            gates all share the blind spot; 658-kcd5 remains the structural
+            fix.
+
+    - packet_id: plan-only-lane-refuses-attestation-ledger-appends
+      order: 767-iukh
+      status: completed
+      desired_release: v0.5
+      priority: p2
+      kind: optimization
+      title: The pre-push plan-only lane refuses the Finalization attestation-ledger commit — plan/mo-full-attestations.d/<host>.md arrives as a modification, forcing a ~2.5-min full-gate re-run for a 3-line bookkeeping commit, twice in one night
+      deliverable: the plan-only lane admits append-only extensions of per-host attestation ledgers under a build-free verifiable closure (append-only byte-prefix property + MO-FULL grammar on added lines + check-mo-full-attestations.sh), fail-closed for everything else, pinned by litmus scenarios
+      pickup_role: any
+      capability_tags:
+        - git-hooks
+        - gate
+        - meta-orchestration
+        - overhead
+      estimated_hours: 2
+      context: |
+        Verified against scripts/hooks/pre-push-local-gate.sh before filing
+        (operator instruction): the lane's qualification required EVERY outgoing
+        path to be status 'A' AND under plan/index.d/ or plan/loop_status.d/ —
+        an append to the existing per-host attestation ledger is status 'M' and
+        outside both dirs, so it was refused on two independent grounds. The
+        Finalization sequence (SKILL step 9) runs ./build.sh --check BEFORE the
+        mo-full-attest record commit, so the bookkeeping push always found a
+        stale stamp, fell out of the lane, and paid the full gate again. It bit
+        twice during the 2026-08-15/16 smoke finalization on windows.
+      outcome: |
+        The bookkeeping commit rides the fast lane under a closure as strong as
+        the full gate provides for it: the pushed blob must byte-exactly extend
+        the remote blob, every added line must be blank, a '## <ISO-UTC> <host>'
+        heading, or a well-formed MO-FULL marker with LOCAL_SHA == REMOTE_SHA,
+        and check-mo-full-attestations.sh must accept the whole ledger
+        (grammar everywhere + own-host commit reachability). Rewrites,
+        truncations, README.md edits, and nested paths still fall to the full
+        gate; fragment-only behavior is unchanged.
+      events:
+        - type: filed
+          ts: "2026-08-16T07:40:00Z"
+          agent_id: windows-yolanda-fable5-20260816T0721Z
+          host: windows
+          summary: |
+            Operator-named friction item; claim verified against the lane's qualification block (status-A-only + two-directory allowlist) before filing, per the directive.
+        - type: verified
+          ts: "2026-08-16T07:52:00Z"
+          agent_id: windows-yolanda-fable5-20260816T0721Z
+          host: windows
+          summary: |
+            Implemented in scripts/hooks/pre-push-local-gate.sh (qualification carve-out for plan/mo-full-attestations.d/?*.md with A|M status; per-file append-only + grammar validation against the PUSHED blobs; check-mo-full-attestations.sh wired into the lane closure, fail closed when absent). Pinned by two new scenarios in litmus:plan-only-push-lane-shape (ACCEPT append-only extension, REFUSE rewrite). Behaviorally verified in the tillandsias-build distro via real git-push fixtures: 5/5 PASS — accept-append, refuse-rewrite, refuse-garbage-append, plus both regression halves (fragments-only still accepted; fragment modification still refused with the pinned status-M message).
+
+    - packet_id: enclave-squid-proxy-chronic-segfaults-unwatched
+      order: 767-es4w
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      title: squid (the enclave proxy) has 263 recorded SIGSEGVs since 2026-06-30 and nothing watches it — tonight it sat Exited(139) for two days with zero alarms
+      deliverable: a proxy that either restarts under supervision with a crash counter surfaced in diagnostics, or fails the lane loudly when it dies; plus a decision on the crash root cause (squid build/config vs traffic pattern)
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - proxy
+        - squid
+        - enclave
+        - fail-loud
+        - forensics
+      estimated_hours: 4
+      context: |
+        604-vmcg's notes asked for this packet after confirming whether the proxy
+        silently restarted or degraded. CONFIRMED 2026-08-16 (forensics fork):
+        `coredumpctl list` holds 263 squid SIGSEGV entries from 2026-06-30
+        through 2026-08-12 (census preserved at
+        ~/claudia/tillandsias-forensics/604-vmcg/squid-crash-census.txt), and the
+        parent session's cycle-0 container sweep found tillandsias-proxy
+        Exited(139) ~2 days old with nothing restarting or reporting it — the
+        proxy segfaults, STAYS DOWN, and every enclave consumer degrades
+        silently. Recent dumps (2026-08-10 onward) are `present` and
+        symbolicable; older ones are missing/inaccessible. Two of the 263
+        (2026-08-10 02:14, 03:12) ran as uid 525287 (container userns), the rest
+        uid 1000. Cadence is near-daily with multi-crash bursts, which reads as
+        traffic-triggered, not random.
+
+    - packet_id: forge-pid1-crash-supervision
+      order: 767-nkkq
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: enhancement
+      title: Supervise the forge harness so an agent crash no longer kills the container silently — the lane must FAIL LOUD with preserved evidence instead of dying as PID 1
+      deliverable: 'a minimal PID-1 supervisor (or exec wrapper) in the forge launch path: harness crash -> record signal/rc + last-output pointer into a durable finding surface, mark the lane failed-crashed, exit nonzero; NEVER auto-restart the agent silently'
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - forge
+        - opencode
+        - bun
+        - crash
+        - fail-loud
+        - supervision
+      estimated_hours: 4
+      context: |
+        Disposition chosen by 604-vmcg's forensics (2026-08-16) from evidence:
+        the crash is a Bun/JSC runtime fault (build-id-verified binary
+        c30f169b..., Bun v1.3.14/0d9b296a; identical return-address frames
+        across the 2026-08-03 and 2026-08-10 x86_64 incidents; frame #1 is a
+        literal handler(int){abort()} shim, faulting frames live in
+        statically-linked JavaScriptCore entered from JIT code — the same shape
+        as the 2026-07-27 arm64 panic). Upstream-shaped: not fixable in this
+        repo, may already be fixed in newer Bun (install-at-launch means lanes
+        float to newer opencode; RECURRENCE-WATCH: a crash with Bun > 1.3.14
+        should be escalated upstream with the preserved dumps). What IS ours:
+        today a SIGSEGV in the agent takes the whole container because opencode
+        runs as PID 1 — the lane dies with status 139 and only host-side
+        systemd-coredump noticed. Supervision converts that into a loud,
+        attributable lane failure with evidence, and generalizes to every
+        harness (claude/codex), closing the same silent-death class 741-3y48
+        closed for findings. Constraint: do NOT silently restart the agent —
+        a crashed drain cycle must not re-run its prompt unattended.
+
+    - packet_id: smoke-harness-consecutive-lane-dimension
+      order: 767-qrbv
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: enhancement
+      title: The smoke/e2e harness runs one lane; both opencode segfaults hit the SECOND consecutive lane of a session — the repro dimension is untested
+      deliverable: an opt-in smoke variant (or e2e gate step) that runs two consecutive forge lanes against the same stack and asserts the second lane's health, wired into the repro notes of 604-vmcg
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - e2e
+        - smoke
+        - forge
+        - crash
+        - repro
+      estimated_hours: 3
+      context: |
+        604-vmcg criterion 4, shaped as its own packet by the forensics fork
+        (2026-08-16): incident 1 (2026-08-04) was the second consecutive forge
+        lane ~20min after a clean first lane; incident 2 (2026-08-10) was a
+        long-running validation lane. The repeat-session dimension exists in
+        neither the litmus tier nor the smoke skills, so the crash-prone shape
+        is exercised only by accident. Keep it opt-in/rate-limited — a second
+        lane doubles smoke cost (the 4h e2e rate limit and the velocity audit
+        both bound this).
+
+    - packet_id: freshness-inventory-blind-to-html-comment-stamps
+      order: 768-9eut
+      status: ready
+      desired_release: v0.5
+      priority: p2
+      kind: bug
+      title: 'Markdown freshness stamps wrapped in HTML comments (<!-- # freshness: ... -->) never match STAMP_RE — audited files are counted unstamped and their audits are invisible'
+      deliverable: STAMP_RE accepts the <!-- leader (or the md idiom is migrated to a matching form repo-wide, one commit), with a fixture proving both the html-comment form and the malformed-date lane still classify correctly
+      pickup_role: any
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - freshness
+        - tooling
+        - markdown
+      estimated_hours: 1
+      context: |
+        Found 2026-08-16 during the cycle-2 standing freshness audit. Empirical:
+        `printf '<!-- # freshness: auditor=x date=... -->' | grep -cE "$STAMP_RE"`
+        returns 0, while the bare `# freshness:` form returns 1 — and
+        openspec/specs/forge-environment-discoverability/spec.md (stamped
+        2026-08-07 in the html-comment form) is REPORTED as freshness-unstamped
+        by the live inventory. At least three files carry invisible stamps
+        (that spec + cheatsheets/runtime/opencode-web-launch.md +
+        cheatsheets/utils/git-workflows.md). Consequences: their audits do not
+        count toward coverage, and freshness-next will eventually re-offer
+        already-audited components — silent double work, plus a coverage number
+        that under-reports. The tombstone stamped this cycle
+        (openspec/specs/direct-podman-calls/spec.md) deliberately uses the
+        indented-# form as a workaround; migrate it back if the regex learns
+        the comment leader.
+
+    - packet_id: dev-inference-container-suppresses-e2e-eligibility
+      order: 769-g2wr
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: bug
+      title: The always-on tillandsias-dev-inference container makes e2e-preflight report skip:live-runtime-present forever — the 760-3mh8 dev lane permanently disables the destructive e2e gate on every dev host
+      deliverable: e2e-preflight's live-runtime probe distinguishes dev-environment containers (tillandsias-dev-inference, and the dev expert family generally) from the runtime substrate it protects, OR the smoke skill stops/relaunches the dev container around the reset — either way the gate becomes runnable again on a host with the dev lane active, with a litmus pinning the chosen behavior
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - e2e
+        - podman
+        - dev-environment
+        - gates
+      estimated_hours: 2
+      context: |
+        Observed 2026-08-16T08:40Z (linux_mutable cycle 3): scripts/e2e-preflight.sh
+        eligibility returned `skip:live-runtime-present` with `podman ps` showing
+        EXACTLY ONE running container — tillandsias-dev-inference, the idempotent
+        dev-lane ollama container introduced by 760-3mh8 (2026-08-16) and
+        re-ensured by every cycle-preflight. Before that change this host's probe
+        returned `eligible` (recorded cycle 0, same night). Consequence: the
+        local-build destructive e2e gate — the vehicle for the live closures of
+        559, 741-3y48 criterion 1, 743-y5wh, and the 749-* live residuals — can
+        never fire on a host running the dev expert lane, which is now every dev
+        host by default. The probe is not wrong to be conservative (skip verdicts
+        are recorded, never re-litigated, per the runbook); the CLASSIFICATION is
+        what must learn the dev/runtime distinction the 760-3mh8 work introduced
+        everywhere else. Same family as 723-fndi (false live-runtime verdict on
+        macOS when the podman machine is stopped) — a fix should look at both.
