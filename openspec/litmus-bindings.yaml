@@ -576,6 +576,12 @@ specs:
   - litmus:user-runtime-checkout-free-install
   coverage_ratio: 100
   last_verified: '2026-05-20'
+- spec_id: litmus-framework
+  status: active
+  litmus_tests:
+  - litmus:fake-podman-direct-invocation-safety
+  coverage_ratio: 100
+  last_verified: '2026-08-16'
 - spec_id: macos-native-tray
   status: active
   litmus_tests:

@@ -72,6 +72,16 @@ export TILLANDSIAS_BUILD_VERBOSE=0
 mkdir -p "$HOME" "$(dirname "$LITMUS_PODMAN_CALLS_FILE")"
 : >"$LITMUS_PODMAN_CALLS_FILE"
 
+# 611-kqpf: the documented command for this fixture is
+#   LITMUS_PODMAN_MODE=fake scripts/test-image-build-convergence.sh proxy
+# and it must be hermetic in a PLAIN shell, not only under the runner's PATH
+# shim. The guard installs a fixture-owned shim (exec podman-mock.sh) when no
+# recognized shim is present; the shim dir lives inside $tmp so this
+# fixture's own trap removes it on every exit path.
+export LITMUS_FAKE_PODMAN_BIN_DIR="$tmp/fake-podman"
+# shellcheck source=scripts/test-support/litmus-fake-podman-guard.sh
+source "$ROOT/scripts/test-support/litmus-fake-podman-guard.sh"
+
 build_count() {
     grep -c 'podman build --format' "$LITMUS_PODMAN_CALLS_FILE" || true
 }

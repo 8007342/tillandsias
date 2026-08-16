@@ -52831,6 +52831,19 @@ plan_index:
         HOME overrides; a loud precondition check in require_podman would turn
         that 127 into a named refusal.
 
+      events:
+        - type: note
+          ts: "2026-08-16T08:50:30Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            REPRODUCED ON THE MAIN CHECKOUT 2026-08-16T09:0xZ: a plain ./build.sh --check on linux_mutable's primary checkout (not a worktree) regenerated plan/metrics-dashboard.md from an empty telemetry source — 9 recorded builds of duration/size history flattened to empty arrays; caught only because the meta-orchestration boundary guard flagged the tree drift at attestation. Restored from HEAD. This raises the packet: the trigger is the shared regeneration path under --check with an empty/unreachable telemetry env, ANY checkout. Priority should be revisited (p2 -> p1 candidate) by whoever claims it.
+        - type: note
+          ts: "2026-08-16T08:49:33Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            Scope correction from the 611-kqpf fork (2026-08-16): ./build.sh --check in a fresh worktree ALSO regenerates plan/metrics-dashboard.md from empty telemetry — the fix must cover the shared regeneration path, not just build-image.sh. Second observation for whoever takes the runner next: the real-podman preflight regex can false-ENV-FAIL a litmus whose steps merely contain 'command -v podman'; backend: fake is the documented escape, but the trigger match deserves tightening.
     - packet_id: gate-scripts-gnu-date-isms-break-bsd-hosts
       order: 766-tdij
       release_target: fail-loud-diagnosis-milestone
