@@ -27,8 +27,9 @@ use tillandsias_control_wire::transport::{
 };
 use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
-    ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase,
-    WIRE_VERSION, decode, encode,
+    ContainerMetricWire, ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry,
+    MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase, WIRE_VERSION, decode,
+    encode,
 };
 use tillandsias_secure_channel::{HopId, channel_psk, server_handshake_or_reclaim};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -143,6 +144,65 @@ async fn maybe_secure_stream(
                 Err((raw, err)) => Err((raw, err)),
             }
         }
+    }
+}
+
+/// Hot paths sampled for per-mount I/O on every `MetricsSnapshotRequest`
+/// (order 333, deliverable
+/// `plan/issues/guest-container-metrics-over-control-wire-2026-07-13.md`):
+/// the forge worktree, the pull cache, the cheatsheet overlay, the git-mirror
+/// store, and the proxy cache. A path whose backing device is not visible in
+/// `/proc/diskstats` (tmpfs, virtiofs, overlay) reports `error: unavailable:
+/// <fstype>` rather than a fabricated zero — that is the point of naming them
+/// explicitly instead of sampling whatever happens to be mounted.
+const METRICS_MOUNT_PATHS: &[&str] = &[
+    "/home/forge/src",
+    "/var/cache/tillandsias",
+    "/opt/cheatsheets",
+    "/srv/git",
+    "/var/spool/squid",
+];
+
+/// Convert sampler types into their wire counterparts (order 333). The wire
+/// crate deliberately owns standalone structs so sidecar consumers need no
+/// dependency on `tillandsias-metrics`; this is the one place the two shapes
+/// meet, and it is a pure field-for-field move — `None` and `error` travel
+/// through unchanged, so the no-fabrication contract cannot be lost in
+/// translation.
+fn metrics_snapshot_wire(
+    containers: Vec<tillandsias_metrics::ContainerMetric>,
+    mounts: Vec<tillandsias_metrics::MountIoMetric>,
+) -> MetricsSnapshotWire {
+    MetricsSnapshotWire {
+        sampled_at_unix: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        containers: containers
+            .into_iter()
+            .map(|c| ContainerMetricWire {
+                name: c.name,
+                cpu_usec: c.cpu_usec,
+                memory_current_bytes: c.memory_current_bytes,
+                blkio_read_bytes: c.blkio_read_bytes,
+                blkio_write_bytes: c.blkio_write_bytes,
+                blkio_read_ops: c.blkio_read_ops,
+                blkio_write_ops: c.blkio_write_ops,
+                error: c.error,
+            })
+            .collect(),
+        mounts: mounts
+            .into_iter()
+            .map(|m| MountIoMetricWire {
+                path: m.path,
+                device: m.device,
+                read_bytes: m.read_bytes,
+                write_bytes: m.write_bytes,
+                read_ops: m.read_ops,
+                write_ops: m.write_ops,
+                error: m.error,
+            })
+            .collect(),
     }
 }
 
@@ -861,6 +921,9 @@ async fn serve_ready_stream(
                 "CloudRefreshRequest".into(),
                 "VmShutdownRequest".into(),
                 "GithubLoginStatusRequest".into(),
+                // Order 333: advertise guest metrics so a tray can feature-
+                // detect instead of probing a version table.
+                "MetricsSnapshotRequest".into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -1240,6 +1303,59 @@ async fn serve_ready_stream(
                     },
                 };
                 if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
+                }
+            }
+            ControlMessage::MetricsSnapshotRequest { seq } => {
+                // Order 333: per-container cgroup counters + per-mount I/O,
+                // sampled in the GUEST and returned over the control wire so
+                // macOS/Windows trays never need a TCP path into the VM.
+                // spawn_blocking because the samplers read /sys and /proc and
+                // shell out to `podman ps` (bounded).
+                //
+                // The no-fabrication contract rides in the DATA, not in the
+                // control flow: a failed sample travels as `error` with the
+                // values `None` (spec:observability-metrics), so this arm
+                // always replies — an empty-but-healthy-looking snapshot is
+                // exactly what the packet forbids, and the samplers never
+                // produce one.
+                let snapshot = tokio::task::spawn_blocking(|| {
+                    let containers = tillandsias_metrics::sample_containers();
+                    let mounts = tillandsias_metrics::sample_mount_io(METRICS_MOUNT_PATHS);
+                    (containers, mounts)
+                })
+                .await;
+                let (containers, mounts) = match snapshot {
+                    Ok(sampled) => sampled,
+                    Err(err) => {
+                        // The blocking pool itself failed — report it as a
+                        // sample-level error rather than an empty snapshot.
+                        warn!(
+                            spec = "observability-metrics",
+                            error = %err,
+                            "metrics sampling task failed"
+                        );
+                        (
+                            vec![tillandsias_metrics::ContainerMetric::error_only(
+                                "sampler",
+                                format!("metrics sampling task failed: {err}"),
+                            )],
+                            Vec::new(),
+                        )
+                    }
+                };
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::MetricsSnapshotReply {
+                        seq_in_reply_to: seq,
+                        snapshot: metrics_snapshot_wire(containers, mounts),
+                    },
+                };
+                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown)
+                    .await
+                    .is_err()
+                {
                     break 'connection;
                 }
             }
@@ -2536,5 +2652,144 @@ mod tests {
             "/this/dir/intentionally/does/not/exist/under/tillandsias",
         ));
         assert!(entries.is_empty());
+    }
+
+    /// Order 333: the sampler → wire conversion is field-for-field, and the
+    /// no-fabrication contract must survive it. A failed sample arrives on
+    /// the wire with its `error` intact and every counter still `None` —
+    /// never rewritten into a healthy-looking zero.
+    #[test]
+    fn metrics_wire_conversion_preserves_errors_and_none_counters() {
+        let containers = vec![
+            tillandsias_metrics::ContainerMetric {
+                name: "tillandsias-proxy".to_string(),
+                cpu_usec: Some(1234),
+                memory_current_bytes: Some(4096),
+                blkio_read_bytes: Some(10),
+                blkio_write_bytes: Some(20),
+                blkio_read_ops: Some(1),
+                blkio_write_ops: Some(2),
+                error: None,
+            },
+            tillandsias_metrics::ContainerMetric::error_only("podman", "spawn failed"),
+        ];
+        let mounts = vec![tillandsias_metrics::MountIoMetric {
+            path: "/opt/cheatsheets".to_string(),
+            device: None,
+            read_bytes: None,
+            write_bytes: None,
+            read_ops: None,
+            write_ops: None,
+            error: Some("unavailable: tmpfs".to_string()),
+        }];
+
+        let wire = metrics_snapshot_wire(containers, mounts);
+
+        assert_eq!(wire.containers.len(), 2);
+        assert_eq!(wire.containers[0].name, "tillandsias-proxy");
+        assert_eq!(wire.containers[0].cpu_usec, Some(1234));
+        assert_eq!(wire.containers[0].blkio_write_ops, Some(2));
+        assert!(wire.containers[0].error.is_none());
+
+        let failed = &wire.containers[1];
+        assert_eq!(failed.error.as_deref(), Some("spawn failed"));
+        assert!(
+            failed.cpu_usec.is_none()
+                && failed.memory_current_bytes.is_none()
+                && failed.blkio_read_bytes.is_none()
+                && failed.blkio_write_bytes.is_none()
+                && failed.blkio_read_ops.is_none()
+                && failed.blkio_write_ops.is_none(),
+            "a failed container sample must carry NO fabricated counters: {failed:?}"
+        );
+
+        assert_eq!(wire.mounts.len(), 1);
+        assert_eq!(wire.mounts[0].path, "/opt/cheatsheets");
+        assert_eq!(wire.mounts[0].error.as_deref(), Some("unavailable: tmpfs"));
+        assert!(
+            wire.mounts[0].read_bytes.is_none() && wire.mounts[0].write_ops.is_none(),
+            "an unavailable mount must carry NO fabricated counters"
+        );
+    }
+
+    /// Order 333: a `MetricsSnapshotRequest` over a live duplex connection
+    /// gets a `MetricsSnapshotReply` correlated to its seq. Exercises the
+    /// real handler arm end to end (samplers included — on a host with no
+    /// cgroup/podman visibility they return error-carrying samples, which is
+    /// precisely the contract being asserted: a reply, never a hang or a
+    /// silent empty).
+    #[tokio::test]
+    async fn metrics_snapshot_request_gets_a_correlated_reply() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(256 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::Off),
+            Box::new(server),
+            state,
+            shutdown_rx,
+        ));
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: "metrics-test-client".to_string(),
+                    capabilities: Vec::new(),
+                    build_version: None,
+                },
+            },
+        )
+        .await
+        .expect("client writes Hello");
+        let ack = read_envelope(&mut client).await.expect("HelloAck");
+        match ack.body {
+            ControlMessage::HelloAck { server_caps, .. } => assert!(
+                server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
+                "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
+            ),
+            other => panic!("expected HelloAck, got {other:?}"),
+        }
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 7,
+                body: ControlMessage::MetricsSnapshotRequest { seq: 7 },
+            },
+        )
+        .await
+        .expect("client writes MetricsSnapshotRequest");
+
+        let reply = tokio::time::timeout(Duration::from_secs(30), read_envelope(&mut client))
+            .await
+            .expect("guest must answer a metrics request, not hang")
+            .expect("well-formed reply envelope");
+        match reply.body {
+            ControlMessage::MetricsSnapshotReply {
+                seq_in_reply_to,
+                snapshot,
+            } => {
+                assert_eq!(
+                    seq_in_reply_to, 7,
+                    "reply must correlate to the request seq"
+                );
+                assert_eq!(
+                    snapshot.mounts.len(),
+                    METRICS_MOUNT_PATHS.len(),
+                    "every named hot path is reported (available or error-carrying)"
+                );
+                for mount in &snapshot.mounts {
+                    assert!(
+                        mount.error.is_some() || mount.device.is_some(),
+                        "a mount sample is either resolved or explains itself: {mount:?}"
+                    );
+                }
+            }
+            other => panic!("expected MetricsSnapshotReply, got {other:?}"),
+        }
     }
 }

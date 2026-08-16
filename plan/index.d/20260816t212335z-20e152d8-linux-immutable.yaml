@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: host-browser-mcp-live-tool-family-wiring-gap
+    field: status
+    value: blocked
+    ts: "2026-08-16T21:23:35Z"
+    host: linux-immutable
+
+events:
+  - packet_id: host-browser-mcp-live-tool-family-wiring-gap
+    event:
+      type: note
+      ts: "2026-08-16T21:23:35Z"
+      host: linux-immutable
+      summary: >
+        616-nm7q superseded by its four children (779-5ryn, 779-3trn, 779-dqsv, 779-hae5) filed by linux-yoga-claude-20260816t185912z; parent parked pending their completion

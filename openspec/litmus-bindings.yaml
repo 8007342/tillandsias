@@ -1045,6 +1045,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-metrics-shape
+  - litmus:guest-container-metrics-wire-shape
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: podman-secrets-integration

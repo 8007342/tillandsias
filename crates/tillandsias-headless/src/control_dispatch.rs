@@ -124,6 +124,15 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         (GithubLoginStatusRequest { .. }, Vsock) => Handle,
         (GithubLoginStatusRequest { .. }, UnixSocket) => Unsupported,
 
+        // Order 333: MetricsSnapshotRequest is vsock-only. The samples are
+        // GUEST facts — per-container cgroup counters and per-mount I/O for
+        // the enclave's own containers — so only the in-VM headless can
+        // answer them. That is the whole point of the packet: macOS and
+        // Windows trays read guest metrics over the control wire instead of
+        // needing a TCP path into the VM.
+        (MetricsSnapshotRequest { .. }, Vsock) => Handle,
+        (MetricsSnapshotRequest { .. }, UnixSocket) => Unsupported,
+
         // McpFrame is the host-browser-mcp tunnel between forge and tray
         // — it flows ONLY across the local Unix socket (the forge in-VM
         // has no direct host-browser dependency). Vsock side rejects.
@@ -147,7 +156,8 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | SubscribeAck
             | VmStatusPush { .. }
             | LoginStatePush { .. }
-            | CloudProjectsPush { .. },
+            | CloudProjectsPush { .. }
+            | MetricsSnapshotReply { .. },
             _,
         ) => ResponseOnly,
 
@@ -365,6 +375,21 @@ mod tests {
                 },
                 "CloudProjectsPush",
             ),
+            (
+                ControlMessage::MetricsSnapshotRequest { seq: 1 },
+                "MetricsSnapshotRequest",
+            ),
+            (
+                ControlMessage::MetricsSnapshotReply {
+                    seq_in_reply_to: 1,
+                    snapshot: tillandsias_control_wire::MetricsSnapshotWire {
+                        sampled_at_unix: 0,
+                        containers: vec![],
+                        mounts: vec![],
+                    },
+                },
+                "MetricsSnapshotReply",
+            ),
         ]
     }
 
@@ -389,7 +414,9 @@ mod tests {
                 | "PtyClose"
                 | "DeliverCredentials"
                 | "GetVaultHandover"
-                | "GithubLoginStatusRequest" => DispatchOutcome::Unsupported,
+                | "GithubLoginStatusRequest"
+                // Order 333: guest-only facts (cgroup + /proc sampling).
+                | "MetricsSnapshotRequest" => DispatchOutcome::Unsupported,
                 "HelloAck"
                 | "IssueAck"
                 | "Error"
@@ -402,7 +429,8 @@ mod tests {
                 | "SubscribeAck"
                 | "VmStatusPush"
                 | "LoginStatePush"
-                | "CloudProjectsPush" => DispatchOutcome::ResponseOnly,
+                | "CloudProjectsPush"
+                | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
@@ -433,6 +461,7 @@ mod tests {
                 | "DeliverCredentials"
                 | "GetVaultHandover"
                 | "GithubLoginStatusRequest"
+                | "MetricsSnapshotRequest"
                 | "Subscribe" => DispatchOutcome::Handle,
                 "IssueWebSession" | "EvictProject" | "McpFrame" => DispatchOutcome::Unsupported,
                 "HelloAck"
@@ -447,7 +476,8 @@ mod tests {
                 | "SubscribeAck"
                 | "VmStatusPush"
                 | "LoginStatePush"
-                | "CloudProjectsPush" => DispatchOutcome::ResponseOnly,
+                | "CloudProjectsPush"
+                | "MetricsSnapshotReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(

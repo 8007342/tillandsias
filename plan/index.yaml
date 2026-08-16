@@ -13016,6 +13016,12 @@ plan_index:
         - "collection failure surfaces as an error field, never a fabricated healthy sample (spec:observability-metrics)"
         - "--diagnose --json gains a metrics block on macOS (read over the wire)"
       events:
+        - type: completed
+          ts: "2026-08-16T21:22:19Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Guest side complete. Criteria 1-3 met: MetricsSnapshotRequest/Reply round-trips over a live duplex connection returning per-container cgroup v2 samples and per-mount I/O for the five named hot paths; collection failures surface as error fields with counters None (conversion test + sampler tests), never fabricated zeros. Routing pinned vsock-only in both matrices; guest advertises the capability in HelloAck. litmus:guest-container-metrics-wire-shape 7/7 PASS. Criterion 4 (macOS --diagnose --json consumption) split to 778-n9z2 at the macos-tray write-scope boundary. Unblocks 329 (forge hot-path placement metrics).
         - type: progress
           ts: "2026-08-16T20:10:51Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
@@ -33340,6 +33346,12 @@ plan_index:
         - openspec/litmus-tests/litmus-host-browser-mcp-shape.yaml
         - plan/issues/host-browser-mcp-live-tool-family-wiring-gap-2026-08-06.md
       events:
+        - type: progress
+          ts: "2026-08-16T21:23:35Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            SPLIT into four children at independently-verifiable seams (779-5ryn spec re-baseline, 779-3trn dispatcher composition, 779-dqsv NDJSON transport policy, 779-hae5 Nix packaging parity); sequence 5ryn -> 3trn -> dqsv -> hae5 because the spec re-baseline settles what parity means. Scoping confirmed every leg of the finding in source AND surfaced three facts the deliverable lacked: (a) socat is absent from the Nix image entirely, so overlay packaging alone still dies with command-not-found; (b) the '17th concurrent call is rejected' criterion is STRUCTURALLY UNREACHABLE today — serve_mcp_connection is a strictly sequential BufReader::lines loop, so 16 in-flight calls cannot exist on one connection; (c) the host-browser-mcp spec still mandates the McpFrame transport that order 505 deleted, so the 4MiB cap and litmus-host-browser-mcp-frame-shape guard a dead contract while the live NDJSON path has no cap at all. Also verified: crates/tillandsias-browser-mcp has no [[bin]] and no dependents — dead code in the product. Note for pickup: nix is NOT installed on yoga, so 779-hae5 needs a Nix-capable host.
         - type: filed
           ts: "2026-08-06T10:22:31Z"
           agent_id: linux-mutable-root-codex-20260806t001750z
@@ -51857,6 +51869,12 @@ plan_index:
         - 'Negative control: with a deliberately unauthorized/absent upstream credential, the guard goes red — pinned by an instant or quick pre-build litmus.'
         - 'Live closure on a real forge: lease-only commit pushed through the mirror, local HEAD == mirror-exported HEAD == GitHub branch head, check-forge-findings-persisted.sh passes.'
       events:
+        - type: progress
+          ts: "2026-08-16T21:21:21Z"
+          agent_id: "unknown"
+          host: linux_mutable
+          summary: |
+            DENIED-SIDE LIVE CLOSURE EVIDENCE 2026-08-16 (macuahuitl forge lane, rebuilt image): mirror publishes fresh verdict refs (denied/1786914963, ~120s refresh), guard reports blocked:upstream-push-unauthorized on a FRESH verdict (not stale/unpublished), worker drain refused, three sanctioned pushes rejected at the pre-receive relay, no marker emitted. The fail-closed half of criterion 4 is now proven on a real forge; the AUTHORIZED-side half (lease-only push converging) still awaits the operator's token repair.
         - type: note
           ts: "2026-08-15T17:13:55Z"
           host: linux_mutable
