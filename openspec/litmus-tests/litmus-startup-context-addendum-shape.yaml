@@ -123,6 +123,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: rationale-recorded"
 
+  - step: "a TRACKED-but-missing addendum yields a placeholder, distinct from present-but-rejected and from merely-absent (747-n52p criterion 1)"
+    # Three-way boundary: readable regular file -> append; present-but-not-a-
+    # regular-file -> traced SKIP; tracked in git but deleted from the worktree
+    # -> PLACEHOLDER (someone intended warnings to reach agents); not tracked
+    # at all -> silent (the off-Tillandsias negative control).
+    command: "grep -q 'EXPECTED BUT MISSING' images/default/lib-common.sh && grep -q 'ls-files --error-unmatch images/default/startup-context-addendum.md' images/default/lib-common.sh && echo 'ok: tracked-but-missing-placeholder'"
+    timeout_ms: 3000
+    expected_behavior: "ok: tracked-but-missing-placeholder"
+
 observability:
   traces:
     - "@trace spec:meta-orchestration"

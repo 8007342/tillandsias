@@ -3925,6 +3925,19 @@ CONTEXT_EOF
         # demands.
         trace_lifecycle "startup-context" \
             "SKIPPED checkout addendum $addendum — not a readable regular file (FIFO, device, directory or dangling symlink); no warning was delivered"
+    elif git -C "$project_dir" ls-files --error-unmatch images/default/startup-context-addendum.md >/dev/null 2>&1; then
+        # EXPECTED BUT MISSING (747-n52p criterion 1): the addendum is TRACKED
+        # in this checkout yet absent from the working tree — someone deleted
+        # the warning surface. Deliver a placeholder so the agent still learns
+        # a warning was intended, and trace the delivery gap. A git error above
+        # means "not expected here" and stays silent — the off-Tillandsias
+        # negative control criterion 3 demands. Both writes fail-soft.
+        {
+            printf '\n## Checkout addendum — EXPECTED BUT MISSING\n'
+            printf 'images/default/startup-context-addendum.md is tracked in this checkout but absent from the working tree; the warnings it should carry were NOT delivered. Restore it or read it from git history.\n'
+        } >>"$ctx_file" 2>/dev/null || true
+        trace_lifecycle "startup-context" \
+            "PLACEHOLDER written for tracked-but-missing checkout addendum $addendum — expected warnings not delivered" || true
     fi
 
     # Ensure the file is gitignored (idempotent append).

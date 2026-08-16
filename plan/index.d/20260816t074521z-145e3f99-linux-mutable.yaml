@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: startup-context-addendum-append-has-no-size-cap
+    field: status
+    value: completed
+    ts: "2026-08-16T07:45:21Z"
+    host: linux_mutable
+
+events:
+  - packet_id: startup-context-addendum-append-has-no-size-cap
+    event:
+      type: completed
+      ts: "2026-08-16T07:45:21Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: 97a6f5602+cycle2: litmus:startup-context-addendum-shape 13/13 STEPS OK live — STEP 7 pins the byte-bounded read (head -c TILLANDSIAS_STARTUP_ADDENDUM_MAX_BYTES, default 65536, replacing unbounded cat), STEP 5 normal append unchanged, STEP 3+6 fail-soft + regular-file gate so the cap can never fail or hang a launch (747-kw8u verified covers the hang class); boundary header (STEP 8) carries the loud in-file notice
