@@ -24,6 +24,38 @@
 #   TILLANDSIAS_SKIP_TOOLBOX=1  — force skip, run bare on host
 # =============================================================================
 
+# `source` runs in the CALLER's shell, so these options would otherwise rewrite
+# the sourcer's error handling permanently — the 731-pc5r leak: local-ci.sh
+# deliberately omits -e (run-every-check, report-at-end design), and this line
+# silently re-armed errexit there, killing the suite at its own advisory step on
+# the happy path. The helper body still runs under its own strict options; the
+# RETURN trap hands a sourcer back exactly the option state it entered with
+# (every guard's `return` and the end-of-file return all pass through it; the
+# re-exec paths replace the process, where caller options are moot).
+# Capture must NOT use a $(...) subshell: command substitution clears errexit
+# (shopt inherit_errexit is off), so `$(set +o)` records -e as absent even when
+# the caller had it. Read $- and [[ -o pipefail ]] in the current shell, and
+# restore by REMOVING only what the caller lacked — the helper only ever adds.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    _TB_CALLER_FLAGS="$-"
+    _TB_CALLER_PIPEFAIL=0
+    [[ -o pipefail ]] && _TB_CALLER_PIPEFAIL=1
+    # Idempotent; invoked EXPLICITLY at every sourced return site below (the
+    # two terminal paths are `exec`, where caller options are moot). NOT a
+    # RETURN trap: `trap - RETURN` issued inside the running handler does not
+    # reliably clear across sourced-file boundaries — observed 2026-08-16: the
+    # trap re-fired at the NEXT sourced file's return in build.sh (line 39,
+    # with-wsl2-builder.sh) with the handler already unset, an instant
+    # command-not-found under the caller's errexit.
+    _tb_restore_caller_opts() {
+        [[ -n "${_TB_CALLER_FLAGS:-}" ]] || return 0
+        [[ "$_TB_CALLER_FLAGS" == *e* ]] || set +e
+        [[ "$_TB_CALLER_FLAGS" == *u* ]] || set +u
+        [[ "$_TB_CALLER_PIPEFAIL" == 1 ]] || set +o pipefail
+        unset _TB_CALLER_FLAGS _TB_CALLER_PIPEFAIL
+        return 0
+    }
+fi
 set -euo pipefail
 
 SELF="${BASH_SOURCE[0]}"
@@ -41,30 +73,35 @@ _TB_DIRECT=0
 # ── Guard: skip if already inside the builder toolbox ─────────────────────
 if [[ -n "${TOOLBOX_PATH:-}" ]]; then
     [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+    ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
     return 0 2>/dev/null || exit 0
 fi
 
 # ── Guard: skip inside any OCI/container runtime ──────────────────────────
 if [[ "${container:-}" == "oci" ]] || [[ "${container:-}" == "podman" ]]; then
     [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+    ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
     return 0 2>/dev/null || exit 0
 fi
 
 # ── Guard: explicit skip ─────────────────────────────────────────────────
 if [[ "${TILLANDSIAS_SKIP_TOOLBOX:-}" == "1" ]]; then
     [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+    ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
     return 0 2>/dev/null || exit 0
 fi
 
 # ── Guard: only trigger on Silverblue / rpm-ostree hosts ──────────────────
 if [[ ! -f /etc/os-release ]]; then
     [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+    ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
     return 0 2>/dev/null || exit 0
 fi
 
 VARIANT_ID="$(grep -oP '^VARIANT_ID=\K.*' /etc/os-release 2>/dev/null || true)"
 if [[ "$VARIANT_ID" != "silverblue" ]] && ! command -v rpm-ostree &>/dev/null; then
     [[ "$_TB_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+    ! declare -F _tb_restore_caller_opts >/dev/null || _tb_restore_caller_opts
     return 0 2>/dev/null || exit 0
 fi
 
