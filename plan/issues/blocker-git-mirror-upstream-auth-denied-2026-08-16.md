@@ -19,3 +19,24 @@ any forge launch) to republish a fresh `authorized` verdict ref.
 the ephemeral forge checkout and could not be pushed (the 403 it reports), so
 it died with the container; it reached the host only because the litmus
 launcher captured stdout. Cross-referenced as live evidence on 741-3y48.
+
+## Update 2026-08-16T20:24Z — verdict variant: `blocked:upstream-auth-unpublished`
+
+A second forge cycle hit the credential-channel guard at 20:24Z, this time
+with a **different** verdict: the mirror publishes NO
+`refs/tillandsias/upstream-auth/*` ref at all (`blocked:upstream-auth-unpublished`,
+not the morning's `denied` 403). Reads over `git://git-dejpgkh1q5b47s5tureg`
+work (heads list, `git fetch`), so forge→mirror is reachable; the mirror's
+probe (`images/git/probe-upstream-auth.sh`, published every
+`MIRROR_RECONCILE_INTERVAL`=120s tick per `images/git/entrypoint.sh`) is
+either not running in the live container or the container image predates
+order 756-2jnj. This means upstream write authorization is **unproven**, not
+confirmed-denied. The cycle refused worker drain per the guard, updated this
+blocker, and pushed it (or reproduced it in the handoff if the push also
+failed — check git history for this file).
+
+**Smallest next action (operator, unchanged):** restart/rebuild the
+`tillandsias-git` mirror container so its probe runs and republishes a fresh
+`authorized` verdict ref, or repair the Vault GitHub token / repo push
+permission if the probe reports `denied`. Re-run `images/git/probe-upstream-auth.sh`
+(or any forge launch) to verify.
