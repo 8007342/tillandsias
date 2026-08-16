@@ -1,0 +1,61 @@
+# Filed by windows (yolanda), 2026-08-16: operator-named friction item from
+# tonight's smoke finalization, verified against scripts/ before filing, then
+# implemented and behaviorally verified in the same cycle (reduction-engine
+# capture -> reduce in one pass; the fix directly lowers the fixed per-cycle
+# cost the 682-yiz7 overhead_ratio measures).
+packets:
+  - packet_id: plan-only-lane-refuses-attestation-ledger-appends
+    order: 767-iukh
+    status: completed
+    desired_release: v0.5
+    priority: p2
+    kind: optimization
+    title: "The pre-push plan-only lane refuses the Finalization attestation-ledger commit — plan/mo-full-attestations.d/<host>.md arrives as a modification, forcing a ~2.5-min full-gate re-run for a 3-line bookkeeping commit, twice in one night"
+    deliverable: "the plan-only lane admits append-only extensions of per-host attestation ledgers under a build-free verifiable closure (append-only byte-prefix property + MO-FULL grammar on added lines + check-mo-full-attestations.sh), fail-closed for everything else, pinned by litmus scenarios"
+    pickup_role: any
+    capability_tags: [git-hooks, gate, meta-orchestration, overhead]
+    estimated_hours: 2
+    context: |
+      Verified against scripts/hooks/pre-push-local-gate.sh before filing
+      (operator instruction): the lane's qualification required EVERY outgoing
+      path to be status 'A' AND under plan/index.d/ or plan/loop_status.d/ —
+      an append to the existing per-host attestation ledger is status 'M' and
+      outside both dirs, so it was refused on two independent grounds. The
+      Finalization sequence (SKILL step 9) runs ./build.sh --check BEFORE the
+      mo-full-attest record commit, so the bookkeeping push always found a
+      stale stamp, fell out of the lane, and paid the full gate again. It bit
+      twice during the 2026-08-15/16 smoke finalization on windows.
+    outcome: |
+      The bookkeeping commit rides the fast lane under a closure as strong as
+      the full gate provides for it: the pushed blob must byte-exactly extend
+      the remote blob, every added line must be blank, a '## <ISO-UTC> <host>'
+      heading, or a well-formed MO-FULL marker with LOCAL_SHA == REMOTE_SHA,
+      and check-mo-full-attestations.sh must accept the whole ledger
+      (grammar everywhere + own-host commit reachability). Rewrites,
+      truncations, README.md edits, and nested paths still fall to the full
+      gate; fragment-only behavior is unchanged.
+    events:
+      - type: filed
+        ts: "2026-08-16T07:40:00Z"
+        agent_id: windows-yolanda-fable5-20260816T0721Z
+        host: windows
+        summary: >
+          Operator-named friction item; claim verified against the lane's
+          qualification block (status-A-only + two-directory allowlist) before
+          filing, per the directive.
+      - type: verified
+        ts: "2026-08-16T07:52:00Z"
+        agent_id: windows-yolanda-fable5-20260816T0721Z
+        host: windows
+        summary: >
+          Implemented in scripts/hooks/pre-push-local-gate.sh (qualification
+          carve-out for plan/mo-full-attestations.d/?*.md with A|M status;
+          per-file append-only + grammar validation against the PUSHED blobs;
+          check-mo-full-attestations.sh wired into the lane closure, fail
+          closed when absent). Pinned by two new scenarios in
+          litmus:plan-only-push-lane-shape (ACCEPT append-only extension,
+          REFUSE rewrite). Behaviorally verified in the tillandsias-build
+          distro via real git-push fixtures: 5/5 PASS — accept-append,
+          refuse-rewrite, refuse-garbage-append, plus both regression halves
+          (fragments-only still accepted; fragment modification still
+          refused with the pinned status-M message).

@@ -1254,6 +1254,12 @@ plan_index:
       estimated_hours: 6
       events:
         - type: progress
+          ts: "2026-08-16T07:56:29Z"
+          agent_id: "windows-yolanda-fable5-20260816T0721Z"
+          host: windows
+          summary: |
+            Windows slice: exit criteria 1+2 CONFIRMED by inspection at this tree — LIVE_CLIENT is a static OnceLock<Mutex<Option<Client>>> reused on the fast path of live_client_request (crates/tillandsias-windows-tray/src/notify_icon.rs:135,1272-1293), reopened ONLY when absent or after a request failure (one reconnect, no loop); refresh_vm_status (:1886) and refresh_github_login (:2116) are single-shot — request, match reply, return; no tight-loop retries. Criterion 5 DONE: transport overhead guarantee written to cheatsheets/architecture/transport-overhead.md (category subdir per INDEX authoring rules; the packet's literal path cheatsheets/transport-overhead.md predates the category layout) citing the 690-xeda measurements. REMAINING: headless crash root cause (the 2026-06-30 oscillation — note 757-4hdt cold-boot nondeterminism may be related) and litmus:no-polling-noops.
+        - type: progress
           ts: "2026-07-28T22:20:00Z"
           agent_id: "forge-opencode-smoke-20260728"
           host: forge
@@ -41452,6 +41458,12 @@ plan_index:
         - the tray's fallback timer stops firing while the push subscription is healthy, and resumes on drop
         - a measurement records idle wakeups/second before and after for both guest and tray — the claim 'near-zero at idle' must be evidenced, not asserted
       events:
+        - type: verified
+          ts: "2026-08-16T07:56:17Z"
+          agent_id: "windows-yolanda-fable5-20260816T0721Z"
+          host: windows
+          summary: |
+            GUEST RESIDUAL DONE — all four exit criteria now satisfied; packet closable. Implemented this cycle (windows): (1) the 30s podman shell-out (liveness probe) is now DRIVEN BY the existing podman events stream — container-down actions (died/die/stop/remove/cleanup) nudge a tokio Notify (notify_one, so a death racing an in-flight check is caught on the next park), with a 300s backstop for events-stream gaps; re-ensure latency IMPROVES from <=30s to ~event delivery. (2) The liveness non-Ready 15s phase poll now parks on the VmStatus push stream (set_phase broadcasts every transition; 60s lag backstop). (3) The 2s login-state tick and 15s local-projects rescan PARK on a new VmStateHandle::subscriber_nudge (fired by subscribe_login_state/subscribe_local_projects) whenever they have zero subscribers or a non-Ready VM — zero timers at idle; the 2s tick is an ACTIVE-SESSION cadence only, justified in-code (sentinel is a file; event upgrade = file-watch dependency decision). (4) Remaining transient timers carry written justifications with removal conditions (advancer 500ms bounded by 60s + task exits; events-monitor 500ms pre-podman + 2s restart tick error-path-only). MEASURED on the live idle guest, no client attached, 60s windows, MainPID-stable guard: release v0.4.260815.1 (sha16 d91ce81d14d786b4) main_ctx=2 all_tasks_ctx=170; dev build (sha16 e2f042152ad4a353) main_ctx=2 all_tasks_ctx=93 — 45 percent fewer all-thread wakeups. METHODOLOGY CORRECTION recorded: /proc/pid/status counts the MAIN THREAD only — the prior 0.03/s number could not see worker-thread timer wakeups; sum /proc/pid/task/*/status (all_tasks_ctx) is the honest idle figure and both are reported here. Functional: 407 unit tests pass incl. new subscriber_nudge_wakes_parked_waiter_on_subscribe; vsock accepts (socat exit 0); restart container churn re-ensured by the probe; the vault generate-root/Shamir heal error seen during restart PRE-EXISTS (57 matching journal lines in the original release provision window). Host end state restored: release binary back (sha verified), tray relaunched, final post-condition AFTER the last mutating step: --diagnose wire REACHABLE phase=Ready podman_ready=true.
         - type: progress
           ts: "2026-08-16T05:31:04Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260816t0523z"

@@ -12392,6 +12392,10 @@ fn maybe_spawn_vsock_listener(
         // appears, or Starting → Failed after 60s. Cheap filesystem
         // polls every 500 ms; the host tray sees the transition over
         // the vsock control wire without a probe-connect.
+        // 690-xeda justification: transient-only — this poll exists solely
+        // during the Starting window, hard-bounded by the 60s timeout, and
+        // the task EXITS after the transition; zero steady-state wakeups.
+        // Removal condition: an inotify/event source for socket creation.
         let advancer_state = state.clone();
         let advancer = tokio::spawn(async move {
             advancer_state
@@ -12413,17 +12417,38 @@ fn maybe_spawn_vsock_listener(
                 .watch_shutdown_and_mark_stopping(watcher_shutdown)
                 .await;
         });
-        // Liveness probe: periodically check managed containers are still
-        // running and re-ensure any that died (order 228, slice 4).
-        // Drives self-healing during VmPhase::Ready without a full restart.
+        // Liveness probe: check managed containers are still running and
+        // re-ensure any that died (order 228, slice 4). Drives self-healing
+        // during VmPhase::Ready without a full restart.
+        //
+        // Order 690-xeda: EVENT-DRIVEN, not a 30s timer. The podman events
+        // monitor below nudges this task when a container goes down
+        // ("died"/"die"/"stop"/"remove"/"cleanup"), so re-ensure latency is
+        // now bounded by event delivery (~ms) instead of a poll interval,
+        // while a fully idle Ready VM wakes only on the 300s backstop that
+        // covers gaps in the events stream (podman restart, stream
+        // re-spawn). The nudge uses notify_one, which stores a permit when
+        // this task is mid-check — a death racing an in-flight check is
+        // caught on the next park, never lost.
         let liveness_state = state.clone();
+        let liveness_nudge = Arc::new(tokio::sync::Notify::new());
+        let liveness_wake = Arc::clone(&liveness_nudge);
         let liveness = tokio::spawn(async move {
+            // Non-Ready phases park on the VmStatus push stream (set_phase
+            // broadcasts every transition) instead of a 15s phase poll; the
+            // 60s timeout is a backstop for a lagged/dropped receiver, not
+            // the mechanism.
+            let mut phase_rx = liveness_state.subscribe_vm_status();
             loop {
                 // Only probe during Ready phase — containers aren't expected
                 // to be up during Starting/Draining/Stopping.
                 let phase = liveness_state.current_phase();
                 if phase != tillandsias_control_wire::VmPhase::Ready {
-                    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                    let _ = tokio::time::timeout(
+                        std::time::Duration::from_secs(60),
+                        phase_rx.recv(),
+                    )
+                    .await;
                     continue;
                 }
                 // run_check shells out to podman (container_running +
@@ -12453,7 +12478,13 @@ fn maybe_spawn_vsock_listener(
                         eprintln!("[liveness] check failed: {e}");
                     }
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                // Park until podman reports a container going down; 300s
+                // backstop only (order 690-xeda near-zero idle).
+                let _ = tokio::time::timeout(
+                    std::time::Duration::from_secs(300),
+                    liveness_wake.notified(),
+                )
+                .await;
             }
         });
         // Login-state probe (order 230): while at least one connection is
@@ -12466,6 +12497,7 @@ fn maybe_spawn_vsock_listener(
         // GithubLoginStatusRequest probes piggyback into the same broadcast,
         // so rotations that keep presence constant converge on request.
         let login_probe_state = state.clone();
+        let login_probe_nudge = state.subscriber_nudge();
         let login_probe = tokio::spawn(async move {
             let mut last_presence: Option<bool> = None;
             // Order 276: 2s ticks. Each tick stats the satisfier-completion
@@ -12473,8 +12505,36 @@ fn maybe_spawn_vsock_listener(
             // cadence (every 30th tick) — is_github_key_present costs a
             // stability lease + container check + vault exec, far too heavy
             // for the fast path.
+            //
+            // Order 690-xeda: the 2s tick is an ACTIVE-SESSION cadence only.
+            // With zero LoginState subscribers (or a non-Ready VM) this loop
+            // PARKS on subscriber_nudge — no timer at all — so an idle
+            // headless spends zero wakeups here. The 60s timeout is the
+            // backstop for the documented notify_waiters race and for phase
+            // flips, not the mechanism. A sentinel written while parked
+            // stays on disk and is processed on the first active tick
+            // (previously it was consumed and dropped). The active tick
+            // itself stays a timer: the sentinel is a filesystem flag, and
+            // an event-driven upgrade needs a file-watch dependency
+            // (notify/inotify) — a dependency decision recorded in
+            // 690-xeda, not taken unilaterally here.
             let mut ticks_since_presence: u32 = 30; // first heavy check on the first eligible tick
             loop {
+                if login_probe_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
+                    || !login_probe_state.has_login_state_subscribers()
+                {
+                    // Nobody listening (or VM not steady): PARK. Baseline
+                    // drops so the next subscriber gets a fresh push, and
+                    // the heavy check is due immediately on wake.
+                    last_presence = None;
+                    ticks_since_presence = 30;
+                    let _ = tokio::time::timeout(
+                        std::time::Duration::from_secs(60),
+                        login_probe_nudge.notified(),
+                    )
+                    .await;
+                    continue;
+                }
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
                 let sentinel = vsock_server::login_transition_sentinel_path();
                 let sentinel_hit = std::fs::metadata(&sentinel).is_ok();
@@ -12489,9 +12549,9 @@ fn maybe_spawn_vsock_listener(
                 if login_probe_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
                     || !login_probe_state.has_login_state_subscribers()
                 {
-                    // Nobody listening (or VM not steady): skip the podman
-                    // exec entirely and drop the baseline so the next
-                    // subscriber gets a fresh push.
+                    // Subscriber vanished (or phase left Ready) during the
+                    // sleep: skip the podman exec; the outer gate parks on
+                    // the next iteration.
                     last_presence = None;
                     if heavy_due {
                         ticks_since_presence = 0;
@@ -12552,29 +12612,50 @@ fn maybe_spawn_vsock_listener(
         // spends zero scans. A local readdir costs no podman exec and no
         // wire round-trip; an inotify upgrade is a future enhancement
         // (headless has no notify dep today).
+        //
+        // Order 690-xeda: "zero scans" is now also zero WAKEUPS — with no
+        // LocalProjects subscriber (or a non-Ready VM) the loop parks on
+        // subscriber_nudge instead of ticking every 15s to decide to do
+        // nothing. On wake the scan runs immediately, so a new subscriber
+        // sees a list without waiting out a tick; the 15s cadence applies
+        // only between scans of an active subscription. The 60s timeout
+        // backstops the documented notify_waiters race and phase flips.
         let local_projects_state = state.clone();
+        let local_projects_nudge = state.subscriber_nudge();
         let local_projects_rescan = tokio::spawn(async move {
             loop {
-                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
                 if local_projects_state.current_phase() != tillandsias_control_wire::VmPhase::Ready
                     || !local_projects_state.has_local_projects_subscribers()
                 {
+                    let _ = tokio::time::timeout(
+                        std::time::Duration::from_secs(60),
+                        local_projects_nudge.notified(),
+                    )
+                    .await;
                     continue;
                 }
                 let entries = tokio::task::spawn_blocking(vsock_server::enumerate_local_projects)
                     .await
                     .unwrap_or_default();
                 local_projects_state.set_local_projects(entries);
+                tokio::time::sleep(std::time::Duration::from_secs(15)).await;
             }
         });
 
         // Podman events monitor: reads `podman events --format json`
-        // and pushes curated step names to the tray.
+        // and pushes curated step names to the tray. Order 690-xeda: this
+        // is also the event source that drives the liveness probe above.
         let events_state = state.clone();
+        let events_liveness_nudge = Arc::clone(&liveness_nudge);
         let events_monitor = tokio::spawn(async move {
             use tokio::io::AsyncBufReadExt;
             loop {
-                // Wait for podman to be ready
+                // Wait for podman to be ready. 690-xeda justification: this
+                // 500ms poll runs only before podman is up (a bounded
+                // transient window during Starting); steady state parks in
+                // next_line().await on the events stream with zero timer
+                // wakeups. Removal condition: an event source for podman
+                // socket readiness in the guest.
                 if !events_state.podman_ready() {
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     continue;
@@ -12596,6 +12677,18 @@ fn maybe_spawn_vsock_listener(
                                 Some(a) => a,
                                 _ => continue,
                             };
+                            // Order 690-xeda: container-down events nudge
+                            // the liveness probe so re-ensure runs when
+                            // something actually died instead of on a 30s
+                            // timer. notify_one stores a permit if the
+                            // probe is mid-check, so a racing death is
+                            // handled on its next park.
+                            if matches!(
+                                action,
+                                "died" | "die" | "stop" | "remove" | "cleanup"
+                            ) {
+                                events_liveness_nudge.notify_one();
+                            }
                             let name = match parsed
                                 .get("Actor")
                                 .and_then(|a| a.get("Attributes"))
@@ -12634,6 +12727,9 @@ fn maybe_spawn_vsock_listener(
                     let _ = child.wait().await;
                 }
 
+                // 690-xeda justification: error-path only — reached solely
+                // when the `podman events` child exits (podman restarting or
+                // stream failure). Steady state blocks in next_line() above.
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             }
         });

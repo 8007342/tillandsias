@@ -173,6 +173,15 @@ pub struct VmStateHandle {
     push_seq: Arc<std::sync::atomic::AtomicU64>,
     /// Last event message.
     last_event: Arc<RwLock<String>>,
+    /// Order 690-xeda: waker for the steady-state probe loops. The periodic
+    /// login-state and local-projects tasks PARK (no timer at all) while
+    /// they have zero subscribers; `subscribe_login_state` /
+    /// `subscribe_local_projects` fire this so a parked loop wakes when the
+    /// first listener arrives. `notify_waiters` carries no stored permit, so
+    /// a subscribe landing between a loop's gate check and its `notified()`
+    /// await can be missed — every parked loop therefore pairs the wait with
+    /// a bounded backstop timeout rather than trusting the wake alone.
+    subscriber_nudge: Arc<tokio::sync::Notify>,
 }
 
 /// Last observed login state shared between the handle clones: `None` until
@@ -222,7 +231,15 @@ impl VmStateHandle {
             local_projects: Arc::new(RwLock::new(None)),
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
+            subscriber_nudge: Arc::new(tokio::sync::Notify::new()),
         }
+    }
+
+    /// Order 690-xeda: clone of the subscriber-arrival waker. Probe loops
+    /// that are subscriber-gated park on `notified()` (with a bounded
+    /// backstop) instead of ticking on a timer nobody is listening to.
+    pub fn subscriber_nudge(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.subscriber_nudge)
     }
 
     /// Subscribe to the `VmStatus` push topic. Each call returns an
@@ -235,8 +252,13 @@ impl VmStateHandle {
 
     /// Subscribe to the `LoginState` push topic (order 230). Same
     /// independent-receiver semantics as [`subscribe_vm_status`].
+    /// Order 690-xeda: also wakes the parked login-state probe loop so the
+    /// first subscriber gets a fresh observation without waiting out the
+    /// backstop.
     pub fn subscribe_login_state(&self) -> broadcast::Receiver<ControlMessage> {
-        self.login_state_tx.subscribe()
+        let rx = self.login_state_tx.subscribe();
+        self.subscriber_nudge.notify_waiters();
+        rx
     }
 
     /// Subscribe to the `CloudProjects` push topic (order 231). Same
@@ -309,8 +331,13 @@ impl VmStateHandle {
 
     /// Subscribe to the `LocalProjects` push topic (order 260). Same
     /// independent-receiver semantics as [`subscribe_vm_status`].
+    /// Order 690-xeda: also wakes the parked rescan loop so the first
+    /// subscriber gets a scan immediately instead of waiting out the
+    /// backstop.
     pub fn subscribe_local_projects(&self) -> broadcast::Receiver<ControlMessage> {
-        self.local_projects_tx.subscribe()
+        let rx = self.local_projects_tx.subscribe();
+        self.subscriber_nudge.notify_waiters();
+        rx
     }
 
     /// True when at least one connection is subscribed to `LocalProjects`.
@@ -2160,6 +2187,31 @@ mod tests {
         assert!(state.has_login_state_subscribers());
         drop(rx);
         assert!(!state.has_login_state_subscribers());
+    }
+
+    /// Order 690-xeda: a probe loop parked on `subscriber_nudge` wakes when
+    /// the first subscriber arrives (both nudging topics), so parking idle
+    /// loops costs no subscriber-visible latency beyond the documented
+    /// backstop.
+    #[tokio::test]
+    async fn subscriber_nudge_wakes_parked_waiter_on_subscribe() {
+        use std::time::Duration;
+        for topic in ["login_state", "local_projects"] {
+            let state = VmStateHandle::new();
+            let nudge = state.subscriber_nudge();
+            let parked = tokio::spawn(async move { nudge.notified().await });
+            // Let the waiter actually park before nudging: notify_waiters
+            // wakes only CURRENT waiters (no stored permit).
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let _rx = match topic {
+                "login_state" => state.subscribe_login_state(),
+                _ => state.subscribe_local_projects(),
+            };
+            tokio::time::timeout(Duration::from_secs(2), parked)
+                .await
+                .unwrap_or_else(|_| panic!("{topic} subscribe must wake the parked waiter"))
+                .expect("parked waiter task must not panic");
+        }
     }
 
     #[test]
