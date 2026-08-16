@@ -1,4 +1,9 @@
 // @trace spec:structured-query-language
+// freshness: audited 2026-08-16 macos verdict=updated (781-hseq) — module is
+// internally healthy (16 unit tests green) but has ZERO consumers outside
+// this crate: no CLI subcommand, no MCP tool, no headless surface calls it.
+// Packet 781-hseq holds the wire-or-tombstone decision (682 telemetry
+// family is the natural owner).
 //! Loki-style structured log query language for trace index.
 //!
 //! Provides query parser and executor for filtering, aggregating, and analyzing logs.

@@ -13,32 +13,39 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Semaphore;
 use url;
 
 /// Configuration for the MCP server.
-pub struct McpServerConfig {
-    pub max_concurrent_calls_per_session: usize,
-}
+///
+/// Order 779-dqsv removed `max_concurrent_calls_per_session`. See
+/// [`BrowserMcpServer`] for why a concurrency limit here was unreachable.
+#[derive(Default)]
+pub struct McpServerConfig {}
 
-impl Default for McpServerConfig {
-    fn default() -> Self {
-        Self {
-            max_concurrent_calls_per_session: crate::DEFAULT_CONCURRENT_CALLS,
-        }
-    }
-}
-
-/// Per-session state: tracks concurrent tool calls and session metadata.
+/// Per-session state: tracks session metadata.
 pub struct SessionState {
     pub session_id: u64,
     pub project_label: String,
-    /// Semaphore limiting concurrent `tools/call` invocations.
-    /// @trace spec:host-browser-mcp
-    pub call_semaphore: Arc<Semaphore>,
 }
 
 /// The MCP server instance.
+///
+/// **No concurrent-call limit (order 779-dqsv).** This server used to hold a
+/// 16-permit semaphore acquired with `try_acquire_owned`, returning
+/// `ConcurrentCallLimit` when exhausted. It could never fire: its only
+/// transport is the per-lane NDJSON socket, whose loop reads one line,
+/// handles it to completion, and only then reads the next — so at most ONE
+/// permit was ever held, and 16 in-flight calls could not exist. A limit
+/// that cannot bind is not protection; it reads as protection, which is
+/// worse. Removed rather than left as an untaken branch (the same rule that
+/// retired the proxy CA-key bind-mount fallback in 755-qcxh).
+///
+/// What the transport DOES enforce is one in-flight `tools/call` per lane
+/// connection, pinned by
+/// `tray::tests::mcp_lane_transport_serializes_one_call_at_a_time`. If a
+/// future transport pipelines requests, reintroduce a limit THERE, where it
+/// can actually bind, and give it a test that observes a rejection.
+///
 /// @trace spec:host-browser-mcp, spec:browser-isolation-tray-integration
 pub struct BrowserMcpServer {
     project_label: String,
@@ -46,7 +53,6 @@ pub struct BrowserMcpServer {
     fake_launch: bool,
     windows: Arc<WindowRegistry>,
     debounce: Arc<DebounceTable>,
-    call_semaphore: Arc<Semaphore>,
 }
 
 impl BrowserMcpServer {
@@ -69,7 +75,7 @@ impl BrowserMcpServer {
 
     /// Test helper: pin a project label, binary override, and launch mode.
     pub fn with_project_label_and_mode(
-        config: McpServerConfig,
+        _config: McpServerConfig,
         project_label: impl Into<String>,
         browser_binary_override: Option<PathBuf>,
         fake_launch: bool,
@@ -80,7 +86,6 @@ impl BrowserMcpServer {
             fake_launch,
             windows: Arc::new(WindowRegistry::default()),
             debounce: Arc::new(DebounceTable::default()),
-            call_semaphore: Arc::new(Semaphore::new(config.max_concurrent_calls_per_session)),
         }
     }
 
@@ -353,18 +358,13 @@ impl BrowserMcpServer {
             None => return Self::json_rpc_error(0, -32600, "tools/call requires an id"),
         };
 
-        let permit = match Arc::clone(&self.call_semaphore).try_acquire_owned() {
-            Ok(permit) => permit,
-            Err(_) => return Self::json_rpc_error(id, -32000, "ConcurrentCallLimit"),
-        };
-
         let tool_name = match Self::requested_tool_name(request) {
             Some(name) => name,
             None => return Self::json_rpc_error(id, -32602, "tools/call requires name"),
         };
         let args = Self::requested_arguments(request);
 
-        let response = match tool_name {
+        match tool_name {
             "browser.open" => self.handle_browser_open(id, args),
             "browser.list_windows" => self.handle_browser_list_windows(id),
             "browser.read_url" => self.handle_browser_read_url(id, args),
@@ -377,10 +377,7 @@ impl BrowserMcpServer {
             ),
             "browser.close" => self.handle_browser_close(id, args),
             other => Self::tool_error(id, format!("TOOL_NOT_FOUND: {other}")),
-        };
-
-        drop(permit);
-        response
+        }
     }
 
     fn handle_browser_open(&self, id: u64, args: &serde_json::Value) -> RpcResponse {

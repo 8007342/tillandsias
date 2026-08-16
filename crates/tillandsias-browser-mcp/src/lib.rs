@@ -16,5 +16,7 @@ pub mod window_registry;
 pub use cdp_client::{CdpConnectionPool, CdpSession};
 pub use server::{BrowserMcpServer, McpServerConfig};
 
-/// Default per-session concurrent call limit (16 tools can run in parallel).
-pub const DEFAULT_CONCURRENT_CALLS: usize = 16;
+// Order 779-dqsv: the per-session concurrent-call limit (DEFAULT_CONCURRENT_CALLS)
+// was REMOVED. Its only transport handles one request at a time, so the limit
+// could never bind — see `BrowserMcpServer` for the full reasoning and for where
+// a limit belongs if a future transport pipelines requests.

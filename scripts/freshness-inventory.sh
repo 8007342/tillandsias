@@ -132,7 +132,11 @@ if [ "${1:-}" = "--self-test" ]; then
     exit 0
 fi
 
-STAMP_RE='^[[:space:]]*(#|//|\*+[[:space:]]*)?[[:space:]]*freshness:[[:space:]]+auditor=([^[:space:]]+)[[:space:]]+date=([0-9T:Z-]+)[[:space:]]+verdict=(refreshed|updated|obsoleted)[[:space:]]*scope=(.*)$'
+# 768-9eut: the leader set includes the Markdown HTML-comment form
+# (`<!-- # freshness: ... -->`) — three already-audited md files carried
+# stamps in that form and were counted UNSTAMPED, under-reporting coverage
+# and re-offering audited components to freshness-next.
+STAMP_RE='^[[:space:]]*(#|//|\*+[[:space:]]*|<!--[[:space:]]*#?[[:space:]]*)?[[:space:]]*freshness:[[:space:]]+auditor=([^[:space:]]+)[[:space:]]+date=([0-9T:Z-]+)[[:space:]]+verdict=(refreshed|updated|obsoleted)[[:space:]]*scope=(.*)$'
 
 # Components to inventory, relative to REPO_ROOT.
 INVENTORY_PATHS=(

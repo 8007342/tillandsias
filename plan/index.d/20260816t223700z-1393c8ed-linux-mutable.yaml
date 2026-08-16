@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: build-image-regenerates-metrics-dashboard-from-empty-telemetry
+    field: status
+    value: completed
+    ts: "2026-08-16T22:37:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: build-image-regenerates-metrics-dashboard-from-empty-telemetry
+    event:
+      type: completed
+      ts: "2026-08-16T22:37:00Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: cycle1-20260816T22xx: guard landed at the source ALL callers share (scripts/generate-dashboard.sh) — regeneration now refuses, loudly on stderr and with exit 0, to replace a dashboard recording more forge build points than local telemetry carries; sandbox verification both directions (git-only telemetry vs 9-point committed dashboard -> REFUSED + file byte-identical; 10-point telemetry -> regenerates); root cause named in-code: committed cross-host artifact regenerated from per-host ephemeral cache. The ssh-lane fixture's interim backup guard remains as defense-in-depth

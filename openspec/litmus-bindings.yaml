@@ -236,6 +236,7 @@ specs:
   - litmus:wsl2-builder-wrapper-shape
   - litmus:cross-target-cfg-gate-check
   - litmus:no-tracked-binaries-shape
+  - litmus:ensure-toolbox-include-shape
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: direct-podman-calls

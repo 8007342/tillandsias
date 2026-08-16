@@ -82,8 +82,17 @@ pub const CAP_PTY_HEARTBEAT_V1: &str = "pty.heartbeat@v1";
 /// heartbeat, which is what lets a mixed-version fleet keep working unchanged.
 pub const CAP_PTY_HEARTBEAT_V2: &str = "pty.heartbeat@v2";
 
-/// Maximum permitted MCP frame payload size (for McpFrame variant only).
-/// Screenshots and large tool responses may require multi-MB capacity.
+/// Maximum permitted MCP payload size — 4 MiB, sized for screenshots and
+/// large tool responses.
+///
+/// Order 779-dqsv: this number OUTLIVED the transport it was written for.
+/// It was the per-variant cap on `McpFrame`, which order 505 retired (that
+/// path is now refused; see `host-browser-mcp` spec). The live MCP transport
+/// is the per-lane NDJSON socket, and it enforces this same number as a
+/// per-LINE cap — `tray::MAX_MCP_LINE_BYTES` re-exports it rather than
+/// inventing a second limit, so there is exactly one MCP payload ceiling in
+/// the tree. The constant stays here because control-wire is where wire
+/// limits live and the refused variant still exists.
 ///
 /// @trace spec:host-browser-mcp, spec:tray-host-control-socket
 pub const MAX_MCP_FRAME_BYTES: usize = 4 * 1024 * 1024; // 4 MiB
