@@ -42,7 +42,9 @@ if grep -q 'Generated:' "$README_PATH"; then
     ERRORS=$((ERRORS+1))
   else
     # Check if timestamp is older than 7 days
-    TIMESTAMP_EPOCH=$(date -d "$TIMESTAMP" +%s 2>/dev/null || echo 0)
+    # GNU then BSD (-jf) — without the BSD arm this read epoch 0 on macOS and
+    # called every README stale (766-tdij).
+    TIMESTAMP_EPOCH=$(date -d "$TIMESTAMP" +%s 2>/dev/null || TZ=UTC0 date -jf "%Y-%m-%dT%H:%M:%S" "${TIMESTAMP%Z}" +%s 2>/dev/null || echo 0)
     NOW_EPOCH=$(date +%s)
     AGE_SECONDS=$((NOW_EPOCH - TIMESTAMP_EPOCH))
     DAYS_OLD=$((AGE_SECONDS / 86400))

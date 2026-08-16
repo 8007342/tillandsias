@@ -136,7 +136,7 @@ _PHASE_LOG=""
 # (default 5s), so second granularity keeps every consumer meaningful.
 _now_ms() {
     local t
-    t="$(date +%s%3N 2>/dev/null || true)"
+    t="$(date +%s%3N 2>/dev/null || true)" # gnu-date: ok (digit-validated below; degrades to seconds)
     case "$t" in
         ''|*[!0-9]*)
             t="$(date +%s 2>/dev/null || true)"

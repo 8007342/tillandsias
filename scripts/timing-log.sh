@@ -49,7 +49,7 @@ TILLANDSIAS_TIMING_LOG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")" 2>/dev/null
 # fall back to whole seconds * 1000. Always prints a bare integer.
 timing_now_ms() {
     local _n
-    _n="$(date +%s%3N 2>/dev/null)"
+    _n="$(date +%s%3N 2>/dev/null)" # gnu-date: ok (digit-validated by the case below; degrades to seconds*1000)
     case "$_n" in
         '' | *[!0-9]*) date +%s 2>/dev/null | awk '{printf "%d000", $1}' 2>/dev/null || echo 0 ;;
         *) printf '%s' "$_n" ;;

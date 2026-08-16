@@ -151,16 +151,21 @@ _SPEC_SETS_BUILT=""
 _build_spec_sets() {
     [ -z "$_SPEC_SETS_BUILT" ] || return 0
     _SPEC_SETS_BUILT=1
-    declare -gA _SPEC_CHANGE=() _SPEC_ARCHIVE=()
+    # Space-delimited string sets, not `declare -gA` (761-g36m class: -g and
+    # associative arrays are both bash>=4; on Apple's 3.2 the declare ERRORS,
+    # the sets never build, and every archived-change spec re-reports as a
+    # ghost — which resurrected all seven 767-yrnd ghosts on macOS an hour
+    # after linux resolved them). Spec names are path components: no spaces.
+    _SPEC_CHANGE=" " _SPEC_ARCHIVE=" "
     local n
     # `*/specs/<name>/spec.md` — the name is the second-to-last path element,
     # which is exactly what the per-spec `-path` glob used to match.
     while IFS= read -r n; do
-        [ -n "$n" ] && _SPEC_CHANGE["$n"]=1
+        [ -n "$n" ] && _SPEC_CHANGE="${_SPEC_CHANGE}${n} "
     done < <(find openspec/changes -maxdepth 4 -path "*/specs/*/spec.md" \
         ! -path "*/archive/*" 2>/dev/null | awk -F/ '{print $(NF-1)}')
     while IFS= read -r n; do
-        [ -n "$n" ] && _SPEC_ARCHIVE["$n"]=1
+        [ -n "$n" ] && _SPEC_ARCHIVE="${_SPEC_ARCHIVE}${n} "
     done < <(find openspec/changes/archive -path "*/specs/*/spec.md" 2>/dev/null \
         | awk -F/ '{print $(NF-1)}')
 }
@@ -171,8 +176,8 @@ _locate_spec() {
     # set, and it must keep precedence over change/archive as before.
     [ -f "openspec/specs/${name}/spec.md" ] && { printf 'active'; return; }
     _build_spec_sets
-    [ -n "${_SPEC_CHANGE[$name]:-}" ] && { printf 'change'; return; }
-    [ -n "${_SPEC_ARCHIVE[$name]:-}" ] && { printf 'archive'; return; }
+    case "$_SPEC_CHANGE" in *" $name "*) printf 'change'; return ;; esac
+    case "$_SPEC_ARCHIVE" in *" $name "*) printf 'archive'; return ;; esac
     printf ''
 }
 

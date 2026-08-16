@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: gate-scripts-gnu-date-isms-break-bsd-hosts
+    event:
+      type: completed
+      ts: "2026-08-16T08:36:54Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260816t0823z
+      host: macos
+      summary: >
+        All three criteria discharged, plus the class immediately paid out: the GNU-date lint (PAT_GNUDATE in check-bash-dialect.sh, per-line '# gnu-date: ok' exemptions, same-line BSD-arm recognition for date -v/-jf/-r chains) found FIVE live carriers beyond the build.sh instance. Real macOS bugs fixed: check-readme-discipline.sh called every README stale (epoch 0), test-forge-liveness-probe.sh failed its deadline test falsely — both now carry TZ=UTC0 BSD -jf arms (the first fix attempt parsed UTC as local, off by exactly this host's 7h offset, caught by the fixture run) — plus GNU touch -d arms in the liveness fixture; timing-log.sh and the litmus-helper markers exempted with verified reasons; manage-cache.sh recognized as already self-portable. Liveness fixture now 8/8 on macOS for the first time. BONUS: lint pattern widened to combined declare flags (-gA/-g/-n) after linux's trace-coverage.sh rewrite crashed on 3.2 and resurrected all seven 767-yrnd ghosts — trace-coverage now uses string sets and reports ok:ghost-trace-gate baseline=9 current=9 under /bin/bash 3.2. Dialect fixture 11/11.

@@ -54,9 +54,35 @@ printf '#!/usr/bin/env bash\n# never use ${x,,} or mapfile here\necho ok\n' > "$
 rm "$TMP/dual.sh"
 expect "comment-mention-passes" "ok:bash-dialect-clean" 0
 
+# 766-tdij direction 1: an unexempted GNU-date-ism is refused — BSD date
+# succeeds with garbage, so only the lint can catch it.
+printf '#!/usr/bin/env bash\nt="$(date +%%s%%3N)"\necho "$t"\n' > "$TMP/gnudate.sh"
+rm "$TMP/commented.sh"
+expect "unexempted-gnu-date-refused" "blocked:bash4-unguarded:1" 1
+
+# 766-tdij direction 2: the SAME construct with the line-level exemption
+# (digit-validated fallback claim) passes.
+printf '#!/usr/bin/env bash\nt="$(date +%%s%%3N)" # gnu-date: ok (digit-validated)\necho "$t"\n' > "$TMP/gnudate-ok.sh"
+rm "$TMP/gnudate.sh"
+expect "exempted-gnu-date-passes" "ok:bash-dialect-clean" 0
+
+# date -d (GNU relative-date form) is caught too.
+printf '#!/usr/bin/env bash\ndate -d yesterday +%%Y\n' > "$TMP/dated.sh"
+rm "$TMP/gnudate-ok.sh"
+expect "date-d-refused" "blocked:bash4-unguarded:1" 1
+rm "$TMP/dated.sh"
+
+# Combined declare flags (-gA) are caught; plain indexed `declare -a` is not.
+printf '#!/usr/bin/env bash\ndeclare -gA M=()\n' > "$TMP/assoc.sh"
+expect "declare-gA-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\ndeclare -a L=()\necho ok\n' > "$TMP/indexed.sh"
+rm "$TMP/assoc.sh"
+expect "declare-a-passes" "ok:bash-dialect-clean" 0
+rm "$TMP/indexed.sh"
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 6/6 scenarios green"
+echo "PASS: check-bash-dialect fixture 11/11 scenarios green"
 exit 0

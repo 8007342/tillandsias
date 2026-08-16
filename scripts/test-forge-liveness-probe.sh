@@ -62,7 +62,7 @@ echo ""
 echo "=== Test 3: dead_air (stale heartbeat > 120s) ==="
 DIR3="$TMPDIR/test3"
 mkdir -p "$DIR3"
-touch -d "200 seconds ago" "$DIR3/.forge-heartbeat"
+touch -d "200 seconds ago" "$DIR3/.forge-heartbeat" 2>/dev/null || touch -t "$(date -v-200S +%Y%m%d%H%M.%S)" "$DIR3/.forge-heartbeat" # BSD arm: -d is GNU-only (766-tdij)
 run_test \
     "dead_air" "dead_air" 1 \
     "$PROBE" status --project-dir "$DIR3" --heartbeat-file ".forge-heartbeat" $NC --start-time "$(date +%s)"
@@ -80,7 +80,9 @@ echo "=== Test 5: deadline calculation ==="
 START=$(date +%s)
 DEADLINE=$($PROBE deadline --budget 5400 --start-time "$START" 2>/dev/null)
 EXPECTED_EPOCH=$((START + 5400))
-ACTUAL_EPOCH=$(date -d "$DEADLINE" +%s 2>/dev/null || echo "0")
+# GNU then BSD (-jf) — without the BSD arm this test failed falsely on macOS
+# (epoch 0 never equals the expected deadline; 766-tdij).
+ACTUAL_EPOCH=$(date -d "$DEADLINE" +%s 2>/dev/null || TZ=UTC0 date -jf "%Y-%m-%dT%H:%M:%S" "${DEADLINE%Z}" +%s 2>/dev/null || echo "0")
 TOTAL=$((TOTAL + 1))
 if [[ "$ACTUAL_EPOCH" == "$EXPECTED_EPOCH" ]]; then
     echo "  PASS: deadline = $DEADLINE (epoch $ACTUAL_EPOCH)"
@@ -94,7 +96,7 @@ echo ""
 echo "=== Test 6: alive_progressing with custom heartbeat deadline ==="
 DIR6="$TMPDIR/test6"
 mkdir -p "$DIR6"
-touch -d "60 seconds ago" "$DIR6/.forge-heartbeat"
+touch -d "60 seconds ago" "$DIR6/.forge-heartbeat" 2>/dev/null || touch -t "$(date -v-60S +%Y%m%d%H%M.%S)" "$DIR6/.forge-heartbeat" # BSD arm: -d is GNU-only (766-tdij)
 (cd "$DIR6" && git init -q && git commit -q --allow-empty -m "init")
 run_test \
     "alive_progressing_custom_deadline" "alive_progressing" 0 \
