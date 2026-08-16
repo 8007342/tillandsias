@@ -65,77 +65,34 @@ The eight v1 tools are:
 - **AND** the error `message` field begins with `Method not found:`
 - **AND** the connection remains open for further requests
 
-### Requirement: MCP transport is a per-lane NDJSON socket with listener-derived attribution
+### Requirement: MCP reaches this server over the per-lane tool socket
 
-Each forge lane SHALL be served by its OWN Unix-domain socket, created by
-the tray at `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`
-and bind-mounted into the lane's container at `/run/host/tillandsias-mcp`,
-with `TILLANDSIAS_CONTROL_SOCKET=/run/host/tillandsias-mcp/mcp.sock`. The
-forge-side client is a raw stdio bridge (`config-overlay/mcp/host-browser.sh`,
-`socat`) that relays newline-delimited JSON-RPC (NDJSON) in both directions —
-no `Hello`/`HelloAck` exchange and no postcard framing on this path.
-
-The lane's identity SHALL be derived from WHICH LISTENER accepted the
-connection, never from the request body and never from the peer process's
-environment. That is the whole point of the per-lane socket: attribution is
-a property of the socket the tray itself created for that lane.
+The browser tool family is served over the per-lane MCP socket, whose
+contract — path shape, `0600` permissions, per-lane mount isolation,
+listener-derived attribution, NDJSON framing, the 4 MiB per-line ceiling, and
+one-request-in-flight ordering — is specified once in `mcp-tool-socket` and
+SHALL NOT be restated here. The forge-side client is the raw stdio bridge
+`images/default/config-overlay/mcp/host-browser.sh` (a `socat` relay to
+`$TILLANDSIAS_CONTROL_SOCKET`); it performs no framing, no handshake, and
+never names the project.
 
 **Supersedes (order 505, commit `dd8fd63f`):** the earlier requirement that
-MCP ride `ControlMessage::McpFrame` on the shared
-`tray-host-control-socket` and that "no additional socket nodes are
-created". That design attributed frames by reading the peer's `/proc`
-environ, which is forgeable; it was replaced by per-lane listeners with
-mode-0600 sockets and per-lane mount isolation. `McpFrame` arriving on the
-shared control socket is now REFUSED with `ErrorCode::Unsupported` naming
-the per-lane requirement — it is a live negative, not dead code, and MUST
-keep refusing.
+MCP ride `ControlMessage::McpFrame` on the shared `tray-host-control-socket`
+and that "no additional socket nodes are created". That design attributed
+frames by reading the peer's `/proc` environ, which is forgeable. `McpFrame`
+arriving on the shared control socket is now REFUSED with
+`ErrorCode::Unsupported` naming the per-lane requirement — a live negative
+that MUST keep refusing, not dead code to delete.
 
-**Payload ceiling.** One JSON-RPC object per line, at most
-`MAX_MCP_FRAME_BYTES` (4 MiB) per line, enforced in BOTH directions
-(order 779-dqsv). The number is deliberately the same one the retired
-`McpFrame` path carried — the ceiling is a property of what MCP payloads
-contain (screenshots, large tool results), not of which transport carries
-them. An oversized REQUEST line is refused with
-`-32000 RequestTooLarge`, after which the stream resyncs at the next
-newline and the connection keeps serving. An oversized RESPONSE (the live
-producer being a base64 full-page `browser.screenshot`) is replaced by
-`-32000 ResponseTooLarge` carrying the request's `id`, so the failure
-surfaces where its reason is known instead of overrunning the peer's reader.
-
-**Concurrency.** The lane transport handles ONE request at a time: it reads
-a line, serves it to completion, and only then reads the next. Responses
-therefore return in request order even when a client pipelines. There is
-deliberately NO concurrent-call limit anywhere in this surface — the
-browser server previously carried a 16-permit semaphore that could never
-bind under this transport, and an unbindable limit reads as protection while
-providing none, so it was removed rather than left in place (order
-779-dqsv). A future transport that pipelines requests MUST introduce its
-limit in the transport, where it can actually bind, with a test that
-observes a rejection.
-
-#### Scenario: An oversized line is refused and the stream resyncs
-
-- **WHEN** a peer writes a line longer than the payload ceiling
-- **THEN** the tray replies `-32000` with a message beginning
-  `RequestTooLarge:`
-- **AND** the connection remains open, and the next well-formed request on
-  that connection is served normally
-
-#### Scenario: Responses return in request order
-
-- **WHEN** a client writes several requests without reading replies
-- **THEN** the tray answers them one per line in the order received
-
-@trace spec:host-browser-mcp, spec:tray-host-control-socket
+@trace spec:host-browser-mcp, spec:mcp-tool-socket
 
 #### Scenario: Forge bridge relays NDJSON over the per-lane socket
 
 - **WHEN** the forge-side bridge reads a JSON-RPC line from the agent's stdout
 - **THEN** it writes that line verbatim to
   `/run/host/tillandsias-mcp/mcp.sock` (no envelope, no length prefix)
-- **AND** the tray's per-lane listener dispatches the line to the MCP
-  server module and writes the JSON-RPC response back as one line on the
-  same connection
+- **AND** the tray's per-lane listener dispatches it and writes the JSON-RPC
+  response back as one line on the same connection
 
 #### Scenario: A frame on the shared control socket is refused
 
@@ -144,15 +101,6 @@ observes a rejection.
 - **THEN** the tray replies `Error { code: Unsupported }` whose message
   names the per-lane socket requirement
 - **AND** no MCP tool is dispatched from that connection
-
-#### Scenario: Each lane gets its own socket node
-
-- **WHEN** the tray launches a lane with `host-browser-mcp` enabled
-- **THEN** a socket node exists at
-  `$XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock`, created
-  with owner-only permissions
-- **AND** the lane container sees ONLY its own lane directory at
-  `/run/host/tillandsias-mcp` — no other lane's socket is reachable from it
 
 ### Requirement: Browser provider is bundled Chromium only
 

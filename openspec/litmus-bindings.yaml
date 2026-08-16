@@ -1028,6 +1028,12 @@ specs:
   - litmus:chromium-variants-launch-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
+- spec_id: mcp-tool-socket
+  status: active
+  litmus_tests:
+  - litmus:host-browser-mcp-lane-socket-shape
+  coverage_ratio: 100
+  last_verified: '2026-08-16'
 - spec_id: mcp-on-demand
   status: active
   litmus_tests:
