@@ -65,6 +65,15 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Resolve the DEVELOPMENT ENVIRONMENT declaration before anything reads an
+# expert. The resolver exports TILLANDSIAS_HOST_EXPERTS only on a host that has
+# declared itself, refuses inside a forge (the enclave's END USER RUNTIME owns
+# its own expert lifecycle), and never overrides a value the caller already
+# set. Sourcing it is a no-op on every other host, and it sets no shell options.
+if [ -f "$ROOT/scripts/dev-host-experts.sh" ]; then
+    . "$ROOT/scripts/dev-host-experts.sh"
+fi
 cd "$ROOT" || { echo "blocked:preflight:root:cannot-cd"; exit 1; }
 
 plan_verdict="skipped"
