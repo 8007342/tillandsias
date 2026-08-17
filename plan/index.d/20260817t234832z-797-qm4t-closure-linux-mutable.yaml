@@ -1,0 +1,130 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T23:48:32Z.
+#
+# Closes 797-qm4t's remaining channel AND recovers the work that channel's
+# absence discarded. The lost note is re-filed below against the packet_id it
+# should have carried — the original fragment stays as written, because it is
+# append-only and because it is now the guard's own regression evidence.
+status:
+  - packet_id: fragment-status-loss-guard-cannot-see-unrecognized-shapes
+    field: status
+    value: completed
+    ts: "2026-08-17T23:48:32Z"
+    host: linux_mutable
+
+events:
+  - packet_id: fragment-status-loss-guard-cannot-see-unrecognized-shapes
+    event:
+      type: completed
+      ts: "2026-08-17T23:48:32Z"
+      agent_id: linux-macuahuitl-opus5-20260817T233700Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. A sibling had already closed the two channels
+        where a fragment CLAIMS a closure — the `status:` LWW block and a terminal
+        `completed` event both now name an unknown packet_id. This closes the third: a
+        NON-TERMINAL event (note, progress, filed) addressed to a packet_id the fold has
+        never heard of, which was dropped in total silence. New subcommand
+        `tillandsias-plan fragment-event-packets` prints every packet_id an events block
+        addresses whatever the type, parsed as YAML with the same exit-3-on-unparseable
+        contract as its terminal-only sibling (787-f7dh) — deliberately NOT a line-grep,
+        because 752-pst5 moved this off grep precisely so PROSE quoting a marker inside a
+        block scalar is never read as a declaration. Wired into
+        check-fragment-status-loss.sh in the SAME per-fragment loop so an unparseable
+        fragment is counted once, not twice. Checked count rose 92 -> 102.
+        REPORTED, NOT ENFORCED, and the asymmetry is deliberate: the closure channels stay
+        hard violations because a lost closure is lost work with a claim attached, while
+        this channel sees every note in an append-only corpus nobody may rewrite, and
+        699-dycj is explicit that one host's typo must not become every host's red build.
+        The silence was the defect; naming it is the fix.
+      evidence_refs:
+        - "crates/tillandsias-plan/src/main.rs: fragment-event-packets subcommand; capabilities.txt entry; 149+17 crate tests pass"
+        - "scripts/check-fragment-status-loss.sh: A channel, advisory split, checked 92 -> 102"
+        - "scripts/test-fragment-status-loss.sh: 25 -> 28 scenarios, including a cross-control that a note on a KNOWN packet stays silent"
+        - "mutation: disable the A channel -> the new scenario FAILS; restore -> 28/28 and the live advisory returns"
+  - packet_id: fragment-status-loss-guard-cannot-see-unrecognized-shapes
+    event:
+      type: note
+      ts: "2026-08-17T23:48:32Z"
+      agent_id: linux-macuahuitl-opus5-20260817T233700Z
+      host: linux_mutable
+      summary: |
+        THE REGRESSION EVIDENCE IS MY OWN AND IT IS STILL IN THE TREE.
+
+        Scanning all 1095 packets against every packet_id referenced by a
+        fragment found exactly ONE unknown id in the whole corpus:
+        `inference-gpu-passthrough-fat-host-thinnest-rung`, in fragment
+        20260817t184639z. I invented it for order 406 rather than asking
+        plan_answer; the real id is `inference-cuda-bringup-fat-host`.
+
+        What it cost: that fragment carried a `note` with the entire
+        GPU-passthrough measurement set — the rootless CDI verification, the
+        vram_mb=24564 reading, the CUDA backends, and the two-line diagnosis of
+        what was actually missing. It is on disk, it is NOT in the fold, it is
+        NOT on 406, and before this change nothing anywhere said so. Four
+        validators reported green over it.
+
+        I am NOT editing that fragment. It is append-only, and it is now the
+        only live specimen of the condition this guard exists to report — a
+        corpus with one honest offender is worth more than a clean one. The
+        note's CONTENT is recovered below against the correct packet_id, which
+        is the part that actually matters.
+
+        Worth stating plainly because it is the third time tonight: the fix for
+        all of this was one query. `plan_answer "what is the packet_id for
+        order 406"` answers at confidence=exact with a citation. I hand-wrote a
+        plausible id instead, twice, and the ledger silently absorbed both.
+  - packet_id: inference-cuda-bringup-fat-host
+    event:
+      type: note
+      ts: "2026-08-17T23:48:32Z"
+      agent_id: linux-macuahuitl-opus5-20260817T233700Z
+      host: linux_mutable
+      summary: |
+        RECOVERED NOTE (originally written 2026-08-17T18:46Z against an invented
+        packet_id and therefore discarded by the fold; see 797-qm4t). Re-filed
+        verbatim in substance so the measurements are not lost a second time.
+
+        MEASURED THE WHOLE PATH ON THE FAT CUDA HOST. This packet is the
+        "thinnest rung" and it is thinner than it looks: every hard part
+        already works.
+
+        THE HOST: Intel Core Ultra 7 265KF (20 cores), 62 GiB RAM, NVIDIA RTX
+        A5000 with 24564 MiB VRAM, Intel NPU at /dev/accel/accel0, 953 GB NVMe.
+
+        WHAT THE STACK WAS DOING WITH IT: nothing. The dev inference
+        container's HostConfig.Devices was [], there was no /dev/nvidia* inside
+        it, and the GPU sat at 4% / 576 MiB (the display). It served
+        qwen2.5:0.5b on CPU, which is why spec_answer's synthesis fell back to
+        the retrieval-only cited-digest floor: a 0.5B model on a 24 GiB
+        accelerator that was not plugged in.
+
+        WHAT I VERIFIED, in order:
+          1. `nvidia-ctk cdi generate` works ROOTLESS, rc=0, no rpm and no
+             second sudo — exactly what order 408 asks for. It emits kind
+             nvidia.com/gpu with devices "all", "0" and the GPU UUID. Only
+             cosmetic warnings (nvidia_drv.so / libglxserver, X-server libs
+             irrelevant to compute).
+          2. `podman run --device nvidia.com/gpu=all` against the inference
+             image: the entrypoint printed `vram_mb=24564`. The container SEES
+             the card.
+          3. Same run printed `engine backends available: cuda_v12 cuda_v13
+             vulkan`. The ollama payload already carries CUDA.
+
+        WHAT WAS ACTUALLY MISSING, and it was two lines: the same run printed
+        `tuning: tier=cpu ... vram_mb=24564` — it saw 24 GiB and chose CPU,
+        because entrypoint.sh:165 reads `${TILLANDSIAS_INFERENCE_TIER:-cpu}`
+        and nothing set it. Tier is an INPUT that gets corroborated against
+        /dev/nvidia0 (entrypoint.sh:227-237), not derived from the hardware.
+
+        WHY IT MATTERED BEYOND ONE HOST: the policy router's fallback chains
+        terminate in the CPU tier-S terminal by design (ROUTE-2). On this host
+        the chain had ALWAYS terminated there — not because the fallback logic
+        is wrong, but because the GPU lane was never offered to it. The fleet
+        therefore had no HIGH-tier reference measurement at all.
+
+        Both halves have since landed (408 completed; the dev endpoint runs
+        tier=gpu-cuda with a confirmed CUDA runner). This packet's remaining
+        question is unchanged and stated on its progress note: does
+        `tillandsias --init` produce a RUNTIME inference container with
+        tier=gpu-cuda and a CUDA runner? One stack launch answers it.
