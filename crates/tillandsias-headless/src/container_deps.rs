@@ -333,12 +333,37 @@ impl Satisfier for RealSatisfier {
 pub struct LivenessResult {
     pub re_ensured: Vec<Service>,
     pub running: Vec<Service>,
+    /// Order 767-es4w: cumulative death count per managed service since this
+    /// probe was constructed, carried out of the cycle so a caller can surface
+    /// it. Only services that have died at least once appear.
+    pub deaths: Vec<(Service, u32)>,
 }
 
 impl LivenessResult {
     pub fn all_running(&self) -> bool {
         self.re_ensured.is_empty()
     }
+}
+
+/// The ONE machine-grepable line emitted when a managed service is found dead.
+///
+/// Order 767-es4w. Before this, `LivenessProbe::run_check` printed
+/// `[liveness] <name> not running — re-ensuring` to stderr and nothing else:
+/// no exit code, no count, no grammar, and on a stream nobody reads. That is
+/// how a proxy accumulated 263 SIGSEGVs and sat Exited(139) for two days with
+/// zero alarms — it WAS being restarted, silently.
+///
+/// The grammar mirrors 767-nkkq's `fail:harness-crashed:...` and the proxy
+/// supervisor's `fail:proxy-crashed:...` deliberately: one line, `fail:` verb,
+/// colon-separated `key=value` fields, greppable without a parser.
+///
+/// `deaths` is cumulative for the service, so a flapping service is visible as
+/// a rising number rather than as an indistinguishable stream of identical
+/// lines.
+pub fn death_verdict(service_name: &str, state: &str, exit_code: i64, deaths: u32) -> String {
+    format!(
+        "fail:managed-service-death:service={service_name}:state={state}:exit={exit_code}:deaths={deaths}:action=re-ensure"
+    )
 }
 
 /// Periodic liveness probe for container-backed managed services.
@@ -348,11 +373,36 @@ impl LivenessResult {
 /// heartbeat task during VmPhase::Ready.
 pub struct LivenessProbe {
     debug: bool,
+    /// Order 767-es4w: cumulative per-service death count for the life of this
+    /// probe (i.e. the life of the daemon's supervisor task). The probe is the
+    /// only component that observes every death, so it is the only place the
+    /// count can be kept without inventing a second surface.
+    deaths: Vec<(Service, u32)>,
 }
 
 impl LivenessProbe {
     pub fn new(debug: bool) -> Self {
-        LivenessProbe { debug }
+        LivenessProbe {
+            debug,
+            deaths: Vec::new(),
+        }
+    }
+
+    /// Record one death for `service` and return its new cumulative count.
+    fn bump_death(&mut self, service: Service) -> u32 {
+        for entry in self.deaths.iter_mut() {
+            if entry.0 == service {
+                entry.1 += 1;
+                return entry.1;
+            }
+        }
+        self.deaths.push((service, 1));
+        1
+    }
+
+    /// Cumulative death counts observed so far, for diagnostics surfaces.
+    pub fn death_counts(&self) -> &[(Service, u32)] {
+        &self.deaths
     }
 
     /// Run one liveness check cycle.
@@ -365,6 +415,7 @@ impl LivenessProbe {
         let mut result = LivenessResult {
             re_ensured: Vec::new(),
             running: Vec::new(),
+            deaths: Vec::new(),
         };
 
         // Container-backed services that should always be running in steady
@@ -376,11 +427,23 @@ impl LivenessProbe {
             if crate::vault_bootstrap::container_running(service.name()) {
                 result.running.push(service);
             } else {
-                eprintln!("[liveness] {} not running — re-ensuring", service.name());
+                // Order 767-es4w: a dead managed service is now LOUD and
+                // COUNTED, with the exit code that says how it died. The
+                // silent re-ensure this replaces is exactly how the proxy's
+                // two-day Exited(139) outage went unnoticed.
+                let (state, exit_code) =
+                    crate::vault_bootstrap::container_exit_state(service.name())
+                        .unwrap_or_else(|| ("unknown".to_string(), -1));
+                let deaths = self.bump_death(service);
+                let verdict = death_verdict(service.name(), &state, exit_code, deaths);
+                // BOTH streams: launchers capture different ones (767-nkkq).
+                println!("{verdict}");
+                eprintln!("{verdict}");
                 satisfier.satisfy(service).map_err(|e| {
                     format!("liveness: failed to re-ensure {}: {e}", service.name())
                 })?;
                 result.re_ensured.push(service);
+                result.deaths.push((service, deaths));
             }
         }
 
@@ -689,6 +752,7 @@ mod tests {
         let result = LivenessResult {
             re_ensured: vec![],
             running: vec![Service::Vault, Service::Proxy],
+            deaths: vec![],
         };
         assert!(result.all_running());
     }
@@ -699,7 +763,90 @@ mod tests {
         let result = LivenessResult {
             re_ensured: vec![Service::Proxy],
             running: vec![Service::Vault],
+            deaths: vec![(Service::Proxy, 1)],
         };
         assert!(!result.all_running());
+    }
+
+    // ── Managed-service death loudness (order 767-es4w) ──────────────────────
+
+    /// The death verdict is ONE machine-grepable line carrying the exit code
+    /// and the running count. Pinned as a whole string: the point of the
+    /// grammar is that an operator (or a grep in a lane) can match it without
+    /// a parser, so a silent reshuffle of the fields is a regression.
+    #[test]
+    fn death_verdict_is_one_grepable_line_with_exit_code_and_count() {
+        let v = death_verdict("tillandsias-proxy", "exited", 139, 3);
+        assert_eq!(
+            v,
+            "fail:managed-service-death:service=tillandsias-proxy:state=exited:exit=139:deaths=3:action=re-ensure"
+        );
+        assert!(!v.contains('\n'), "verdict must be a single line: {v}");
+        assert!(
+            v.starts_with("fail:"),
+            "a dead managed service is a failure verb, not a note: {v}"
+        );
+    }
+
+    /// The two-day outage this packet exists for was Exited(139), and the
+    /// verdict must carry that code — a death report that omits HOW the
+    /// service died sends the reader back to podman.
+    #[test]
+    fn death_verdict_distinguishes_exit_codes() {
+        let segv = death_verdict("tillandsias-proxy", "exited", 139, 1);
+        let oom = death_verdict("tillandsias-proxy", "exited", 137, 1);
+        assert_ne!(segv, oom);
+        assert!(segv.contains(":exit=139:"));
+        assert!(oom.contains(":exit=137:"));
+    }
+
+    /// An uninspectable container still produces a verdict — a probe that
+    /// stayed silent because `podman inspect` failed would reproduce exactly
+    /// the silence this packet is closing.
+    #[test]
+    fn death_verdict_survives_an_unknown_state() {
+        let v = death_verdict("tillandsias-proxy", "unknown", -1, 1);
+        assert!(v.starts_with("fail:managed-service-death:"));
+        assert!(v.contains(":state=unknown:exit=-1:"));
+    }
+
+    /// Counts are per-service and cumulative, so a flapping service shows a
+    /// rising number instead of an indistinguishable stream of identical lines.
+    #[test]
+    fn death_counts_are_cumulative_and_per_service() {
+        let mut probe = LivenessProbe::new(false);
+        assert!(probe.death_counts().is_empty());
+        assert_eq!(probe.bump_death(Service::Proxy), 1);
+        assert_eq!(probe.bump_death(Service::Proxy), 2);
+        assert_eq!(probe.bump_death(Service::Vault), 1);
+        assert_eq!(probe.bump_death(Service::Proxy), 3);
+
+        let counts = probe.death_counts();
+        assert_eq!(counts.len(), 2, "one entry per service that has died");
+        let proxy = counts
+            .iter()
+            .find(|(s, _)| *s == Service::Proxy)
+            .expect("proxy counted");
+        let vault = counts
+            .iter()
+            .find(|(s, _)| *s == Service::Vault)
+            .expect("vault counted");
+        assert_eq!(proxy.1, 3);
+        assert_eq!(vault.1, 1);
+    }
+
+    /// A service that never died must never appear in the counts — otherwise
+    /// "deaths" would be indistinguishable from "services observed".
+    #[test]
+    fn a_healthy_service_is_absent_from_the_death_counts() {
+        let mut probe = LivenessProbe::new(false);
+        probe.bump_death(Service::Proxy);
+        assert!(
+            !probe
+                .death_counts()
+                .iter()
+                .any(|(s, _)| *s == Service::Vault),
+            "vault never died and must not be listed"
+        );
     }
 }

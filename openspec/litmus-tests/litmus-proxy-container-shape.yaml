@@ -136,7 +136,16 @@ critical_path:
     # binary `security_file_certgen` initialises the ssl_db; the
     # CA cert is delivered via the podman secret. Pin the 3
     # surfaces: cache init, certgen tooling, podman-secret read.
-    command: "grep -F 'squid -z' images/proxy/entrypoint.sh && grep -F 'security_file_certgen' images/proxy/entrypoint.sh && grep -F '/run/secrets/tillandsias-ca-cert' images/proxy/entrypoint.sh && parse=$(grep -nF 'squid -k parse' images/proxy/entrypoint.sh | cut -d: -f1) && launch=$(grep -nF 'exec squid -N' images/proxy/entrypoint.sh | cut -d: -f1) && test \"$parse\" -lt \"$launch\" && echo 'ok: security_file_certgen and pre-launch parser gate'"
+    #
+    # 767-es4w: the launch matcher is `exec .*squid -N`, not the literal
+    # `exec squid -N`, because squid is no longer PID 1 — squid-supervisor is,
+    # and squid is its child (`exec /usr/local/bin/squid-supervisor squid
+    # squid -N`). The PROPERTY this step owns is unchanged and is the only
+    # thing it should pin: the config parse gate runs BEFORE the launch exec.
+    # Which process wraps the launch belongs to
+    # litmus:proxy-crash-supervision-shape, whose wiring scenario carries a
+    # stripped-copy negative control for exactly that.
+    command: "grep -F 'squid -z' images/proxy/entrypoint.sh && grep -F 'security_file_certgen' images/proxy/entrypoint.sh && grep -F '/run/secrets/tillandsias-ca-cert' images/proxy/entrypoint.sh && parse=$(grep -nF 'squid -k parse' images/proxy/entrypoint.sh | cut -d: -f1) && launch=$(grep -nE '^exec .*squid -N' images/proxy/entrypoint.sh | cut -d: -f1) && test -n \"$parse\" && test -n \"$launch\" && test \"$parse\" -lt \"$launch\" && echo 'ok: security_file_certgen and pre-launch parser gate'"
     timeout_ms: 3000
     expected_behavior: "ok: security_file_certgen and pre-launch parser gate"
 

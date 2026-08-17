@@ -1,0 +1,58 @@
+# @trace spec:proxy-container
+#
+# Pins order 767-es4w: the enclave proxy is crash-supervised, and — the part
+# that took two days of nobody noticing — a REAL crash and an ORDERED SHUTDOWN
+# no longer look the same.
+#
+# Measured on macuahuitl 2026-08-17, and the reason this litmus exists: an
+# IDLE squid, given `podman stop`, logs "Squid Cache (Version 6.12): Exiting
+# normally." and THEN segfaults inside libc exit() running the global
+# Store::Controller destructor (HttpHeader::clean <- HttpReply::clean <-
+# ~HttpReply <- ~MemObject <- StoreEntry::destroyMemObject <-
+# destroyStoreEntry <- hashFreeItems <- Store::Controller::~Controller).
+# 100% reproducible on squid 6.9 AND 6.12, with zero traffic, with the disk
+# cache removed, with the store disabled, with the cache_peer removed and with
+# ssl-bump removed. So before this change EVERY ordered stop produced
+# Exited(139) — and the container that really was dead for two days looked
+# exactly like a container someone had stopped.
+#
+# All assertions live in the hermetic fixture (real script, throwaway state
+# dir, no podman/squid), per the 634-39ik expression-pinning rule: PROPERTIES
+# through behaviour, never bare source shapes. The fixture carries its own
+# controls — scenarios 3 and 5 fire the SAME signal and demand DIFFERENT
+# verdicts, so losing the discrimination turns exactly one of them red, and
+# the wiring scenario is proven falsifiable against a supervisor-stripped copy.
+name: litmus:proxy-crash-supervision-shape
+spec: proxy-container
+phase: pre-build
+description: >
+  Pin squid-supervisor.sh's contract: an unsolicited fatal signal yields a
+  counted, machine-grepable fail:proxy-crashed verdict on BOTH streams plus a
+  bounded restart; the exit-time teardown segfault that follows every ordered
+  shutdown yields a separately-counted note:proxy-exit-teardown-crash and an
+  exit code normalised to 0; the flap cap gives up with a TRUTHFUL nonzero
+  exit rather than spinning; clean exits and plain ordered shutdowns stay
+  byte-silent; and the image + entrypoint wiring holds.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/proxy/squid-supervisor.sh
+  - workspace contains scripts/test-squid-supervisor.sh
+  - bash, grep, pkill available in PATH
+
+critical_path:
+  - step: "supervisor exists, is executable, and parses"
+    command: "test -x images/proxy/squid-supervisor.sh && bash -n images/proxy/squid-supervisor.sh && echo 'ok: proxy-supervisor-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: proxy-supervisor-parses"
+
+  - step: "supervisor is bash-3.2 clean (macOS system bash is the floor)"
+    command: "TILLANDSIAS_DIALECT_SCAN_DIR=images/proxy bash scripts/check-bash-dialect.sh"
+    timeout_ms: 10000
+    expected_behavior: "ok:bash-dialect-clean"
+
+  - step: "hermetic fixture suite passes (counted crash + bounded restart, exit-time teardown named and normalised to 0, flap-cap giveup with truthful rc, silent happy path, silent ordered shutdown, usage refusal, wiring with its stripped-copy negative control)"
+    command: "bash scripts/test-squid-supervisor.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok: all squid-supervisor scenarios passed"
