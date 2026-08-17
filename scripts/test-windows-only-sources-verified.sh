@@ -125,4 +125,47 @@ out="$(run stamp --from "$WORK/red.txt")"
 [ "$out" = "ok:windows-sources-verified:2" ]     || fail "case 7: a DECLARED red must be tolerated, got '$out'"
 echo "ok: case 7 — the stamp demands evidence and refuses undeclared reds"
 
-echo "PASS: windows-only source verification report (7/7)"
+# --- case 8: THE REFUSAL'S OWN COMMAND SHAPE MUST BE ACCEPTED (order 801-ajcd)
+# Self-referential on purpose, and the only form that cannot drift: the argv is
+# EXTRACTED from the live refusal text and then EXECUTED. A message that says
+# one thing while the parser wants another turns this red, which is exactly what
+# happened for weeks — the text read `pass --from <cargo-test-output>`, so
+# obeying it verbatim produced `stamp pass --from …` and was refused again.
+rm -f "$WORK/stamp"
+refusal="$(run stamp 2>/dev/null)"
+case "$refusal" in
+    refused:stamp-needs-evidence:usage:*) ;;
+    *) fail "case 8: the bare-stamp refusal must carry a 'usage: <argv>' shape, got '$refusal'" ;;
+esac
+# Everything between `usage: ` and the first `;` is the claimed argv.
+claimed="${refusal#*usage: }"
+claimed="${claimed%%;*}"
+# Drop argv[0] (the script name) and the <placeholder>, substitute the real
+# transcript, and run what the message told the reader to run.
+claimed_args="${claimed#* }"
+claimed_args="${claimed_args%% <*}"
+# shellcheck disable=SC2086
+out="$(run $claimed_args "$WORK/green.txt")"
+[ "$out" = "ok:windows-sources-verified:2" ] \
+    || fail "case 8: the refusal's own argv ('$claimed_args <file>') was not accepted by the parser, got '$out'"
+# The literal pre-801-ajcd wording is still answered rather than refused twice —
+# scripts and transcripts written from it during those weeks keep working.
+rm -f "$WORK/stamp"
+out="$(run stamp pass --from "$WORK/green.txt")"
+[ "$out" = "ok:windows-sources-verified:2" ] \
+    || fail "case 8: the legacy 'stamp pass --from <file>' form must be tolerated, got '$out'"
+# NEGATIVE CONTROL: tolerating `pass` must not have made evidence optional.
+rm -f "$WORK/stamp"
+out="$(run stamp pass 2>/dev/null)"
+case "$out" in
+    refused:stamp-needs-evidence:usage:*) ;;
+    *) fail "case 8 negative control: 'stamp pass' with no --from must still refuse, got '$out'" ;;
+esac
+out="$(run stamp --from 2>/dev/null)"
+case "$out" in
+    refused:stamp-needs-evidence:usage:*) ;;
+    *) fail "case 8 negative control: '--from' with no path must still refuse, got '$out'" ;;
+esac
+echo "ok: case 8 — the refusal's own command shape parses, and evidence stays mandatory"
+
+echo "PASS: windows-only source verification report (8/8)"
