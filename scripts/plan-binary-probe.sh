@@ -52,6 +52,18 @@ resolve_plan_binary() {
     # yoga 2026-08-17: the forge lane died here with no ./target/ directory
     # while the build had succeeded.
     #
+    # WINDOWS FOUND THE SAME DEFECT INDEPENDENTLY, same day, different cause —
+    # recorded here because two unrelated causes converging on one line is the
+    # argument for fixing it HERE rather than at either call site:
+    # scripts/with-wsl2-builder.sh points CARGO_TARGET_DIR at a distro-native
+    # path precisely so target/ never lands on 9p ("9p-backed target/ makes
+    # cargo crawl"), so on that host too the just-built binary is not under
+    # ./target and preflight refused a binary that ran fine and declared 35
+    # capabilities. Their framing of the family is worth keeping: the four
+    # earlier instances re-implemented the probe and looked in the right place
+    # the wrong way; this one uses the shared probe correctly and the shared
+    # probe looks in the wrong place.
+    #
     # resolve_target_binary (order 770-ifeg), fifty lines below in THIS file,
     # already honours CARGO_TARGET_DIR. The newer generic probe learned the
     # lesson the older specific one still had — the fifth instance of the
