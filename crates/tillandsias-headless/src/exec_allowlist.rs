@@ -61,8 +61,68 @@ pub fn exec_argv_is_allowed(argv: &[String]) -> bool {
             }
         }
         "podman" => false,
+        // 795-zshi: the verbatim-argv arm. Reached only when argv[0] is an
+        // absolute path, so it cannot shadow any name-based arm above.
+        other if other.starts_with('/') => verbatim_argv_is_allowed(argv),
         _ => false,
     }
+}
+
+/// Absolute-path prefixes the verbatim arm will spawn from.
+///
+/// Deliberately prefixes rather than a fixed binary list: the arm exists so
+/// structured callers stop flattening argv into a shell string, and a
+/// two-entry list would leave every other caller flattening — which is the
+/// defect, not a mitigation.
+const VERBATIM_ARGV_PREFIXES: &[&str] = &["/usr/local/bin/", "/usr/bin/", "/bin/"];
+
+/// Program names that may NEVER be `argv[0]` on the verbatim arm.
+///
+/// A shell here would re-open the exact hole this arm closes: the caller
+/// would be back to packing a command into one string and quoting it.
+const VERBATIM_ARGV_FORBIDDEN: &[&str] = &["bash", "sh", "dash", "zsh", "ksh", "fish", "env"];
+
+/// Verbatim-argv admission (795-zshi).
+///
+/// WHY THIS IS NOT A WIDENING OF AUTHORITY, which is the only question that
+/// matters for a security boundary: the existing `/bin/bash -l|-lc <string>`
+/// arm never inspects the script, so it already permits running ANY binary in
+/// the guest. Everything reachable through this arm was therefore already
+/// reachable through that one. What changes is only HOW the request is
+/// expressed — a vector instead of a string — which removes the quoting layer
+/// that produced four field defects (the Esmeralda unbalanced-quote crashes,
+/// the `wt.exe` semicolon split, orders 326 and 366).
+///
+/// The two restrictions earn their place:
+///   * ABSOLUTE PATH under a known prefix — a bare name would resolve through
+///     `PATH`, making the admitted program depend on environment the caller
+///     also controls.
+///   * NO SHELL as `argv[0]` — otherwise the caller is straight back to
+///     flattening, and the arm would launder the very thing it replaces.
+///
+/// Arguments are NOT inspected. That is intentional and is the point: they
+/// are passed to `execve` as a vector, so no parser ever sees them and no
+/// quoting rule can be got wrong.
+pub fn verbatim_argv_is_allowed(argv: &[String]) -> bool {
+    let Some(program) = argv.first() else {
+        return false;
+    };
+    if !VERBATIM_ARGV_PREFIXES
+        .iter()
+        .any(|p| program.starts_with(p))
+    {
+        return false;
+    }
+    // No path traversal: `/usr/bin/../../bin/bash` starts with an allowed
+    // prefix but is a shell.
+    if program.contains("/..") {
+        return false;
+    }
+    let name = program.rsplit('/').next().unwrap_or_default();
+    if name.is_empty() || VERBATIM_ARGV_FORBIDDEN.contains(&name) {
+        return false;
+    }
+    true
 }
 
 #[cfg(test)]
@@ -135,6 +195,75 @@ mod exec_allowlist_tests {
             "curl",
             "evil.example"
         ])));
+    }
+
+    /// 795-zshi: the verbatim arm accepts a structured argv, so a caller
+    /// never has to pack a command into one string.
+    #[test]
+    fn verbatim_argv_arm_accepts_absolute_non_shell_programs() {
+        assert!(exec_argv_is_allowed(&argv(&[
+            "/usr/local/bin/tillandsias-headless",
+            "--github-login"
+        ])));
+        assert!(exec_argv_is_allowed(&argv(&["/usr/bin/uname", "-a"])));
+        // The arguments are NOT inspected — that is the point. Text that no
+        // shell will ever parse cannot be mis-quoted.
+        assert!(exec_argv_is_allowed(&argv(&[
+            "/usr/bin/printf",
+            "%s",
+            "a'b; rm -rf /$(evil)"
+        ])));
+    }
+
+    /// The two restrictions that keep the arm from laundering what it
+    /// replaces.
+    #[test]
+    fn verbatim_argv_arm_refuses_shells_relative_paths_and_traversal() {
+        // A shell as argv[0] would put the caller straight back to packing a
+        // command into one string.
+        for shell in ["/bin/sh", "/bin/dash", "/usr/bin/zsh", "/usr/bin/env"] {
+            assert!(
+                !exec_argv_is_allowed(&argv(&[shell, "-c", "echo hi"])),
+                "{shell} must not be admitted by the verbatim arm"
+            );
+        }
+        // Traversal that lands on a shell while starting with a good prefix.
+        assert!(!exec_argv_is_allowed(&argv(&[
+            "/usr/bin/../../bin/bash",
+            "-lc",
+            "echo hi"
+        ])));
+        // Bare names would resolve through PATH — environment the caller also
+        // controls.
+        assert!(!exec_argv_is_allowed(&argv(&["uname", "-a"])));
+        // Outside the admitted prefixes.
+        assert!(!exec_argv_is_allowed(&argv(&["/opt/evil/payload"])));
+        assert!(!exec_argv_is_allowed(&argv(&["/usr/bin/"])));
+    }
+
+    /// The property that makes this arm safe to add at all: it grants NO
+    /// authority the existing bash arm did not already grant, because that
+    /// arm never inspects its script and can therefore launch anything.
+    ///
+    /// Written as a test rather than a comment so the claim is checked: for
+    /// every program the verbatim arm admits, the equivalent bash-arm request
+    /// is admitted too. If a future change narrowed the bash arm, this would
+    /// fail and the security argument would have to be re-made rather than
+    /// inherited.
+    #[test]
+    fn verbatim_arm_grants_nothing_the_bash_arm_did_not() {
+        for program in [
+            "/usr/local/bin/tillandsias-headless",
+            "/usr/bin/uname",
+            "/bin/ls",
+        ] {
+            assert!(exec_argv_is_allowed(&argv(&[program])));
+            assert!(
+                exec_argv_is_allowed(&argv(&["/bin/bash", "-lc", program])),
+                "the bash arm already permits running {program}, so the \
+                 verbatim arm adds no authority"
+            );
+        }
     }
 
     /// 795-zshi's asymmetry, pinned as a FACT rather than an opinion: a
