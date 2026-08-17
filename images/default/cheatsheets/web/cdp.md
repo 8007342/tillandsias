@@ -2,7 +2,7 @@
 tags: [cdp, chromium, browser-automation, websocket, debugging]
 languages: [bash, javascript, typescript]
 since: 2026-05-06
-last_verified: 2026-05-06
+last_verified: 2026-08-17
 sources:
   - https://chromedevtools.github.io/devtools-protocol/
   - https://chromedevtools.github.io/devtools-protocol/1-3/
@@ -12,6 +12,7 @@ tier: bundled
 summary_generated_by: hand-curated
 bundled_into_image: true
 committed_for_project: false
+# freshness: auditor=windows-yolanda-fable5-20260817t0821z date=2026-08-17 verdict=updated scope=standing FRESHNESS audit — every documented method (Target.getTargets/attachToTarget, Page.navigate/getNavigationHistory/captureScreenshot, Runtime.evaluate, Network.setCookies), the JSON-RPC-2.0-over-WebSocket framing, the /json discovery flow, the sessionId idiom, the error shape and the loopback-only security notes all re-validated against the cited upstream refs and against this repo's own client (crates/tillandsias-browser-mcp/src/cdp_client.rs) — all sound. UPDATED for two reasons: (1) the header claimed two different verification dates (last_verified 2026-05-06 vs body "Last updated: 2026-04-27"), the one thing a freshness record must not be ambiguous about (same defect git-workflows.md was updated for on 2026-08-14); (2) the Base64 Payload Handling snippet taught base64::decode, a free function REMOVED in base64 0.22 — which is this workspace's own pin (Cargo.toml:52) — so the example could not compile against the project it ships with; replaced with the engine idiom cdp_client.rs actually uses
 ---
 # Chrome DevTools Protocol (CDP) Quick Reference
 
@@ -21,7 +22,7 @@ committed_for_project: false
 
 - https://chromedevtools.github.io/devtools-protocol/ — canonical protocol reference (stable)
 - https://chromedevtools.github.io/devtools-protocol/1-3/ — stable v1.3 API index
-- **Last updated:** 2026-04-27
+- **Last updated:** 2026-08-17 (see the `freshness:` stamp in the frontmatter for the audit scope)
 
 ## Overview
 
@@ -64,11 +65,16 @@ Once attached via `Target.attachToTarget`:
 ```
 
 ### Base64 Payload Handling
-`Page.captureScreenshot` returns PNG as base64. Decode before saving:
+`Page.captureScreenshot` returns PNG as base64. Decode before saving. Use the
+engine API — the old `base64::decode` free function was removed in base64 0.22,
+which is this workspace's pin, so it will not compile here:
 ```rust
-let png_bytes = base64::decode(response.data)?;
+use base64::Engine as _;
+
+let png_bytes = base64::engine::general_purpose::STANDARD.decode(response.data)?;
 std::fs::write("screenshot.png", png_bytes)?;
 ```
+This is the idiom the in-repo client uses (`crates/tillandsias-browser-mcp/src/cdp_client.rs`).
 
 ### Error Handling
 CDP errors are JSON-RPC standard:

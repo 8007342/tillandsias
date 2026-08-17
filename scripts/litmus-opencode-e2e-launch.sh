@@ -16,6 +16,11 @@
 #           drain, no commits; the in-forge agent must print `MO-SMOKE: PASS`
 #           as its verdict. 600s hard cap, no liveness extension needed.
 #
+# TILLANDSIAS_E2E_FORCE_MODE=smoke forces the smoke path even when the limiter
+# would allow full (order 781-6gys). De-escalation ONLY: any other value is
+# refused with exit 2, so the override can never evade the token budget. Use
+# `--print-mode` to resolve and print `mode=<full|smoke>` without launching.
+#
 # Writes the chosen mode to /tmp/opencode-e2e-mode so litmus steps 4-6 can
 # skip delta assertions for smoke runs (a verify-only cycle pushes nothing).
 # Prints FORGE_EXIT=<rc> as its last line; exit 0 only on a passing run.
@@ -28,12 +33,47 @@ MODE_FILE=/tmp/opencode-e2e-mode
 LOG=/tmp/opencode-e2e-forge.log
 BH="$(cat /tmp/opencode-e2e-head-before 2>/dev/null || true)"
 
+PRINT_MODE=0
+[ "${1:-}" = "--print-mode" ] && PRINT_MODE=1
+
 if scripts/forge-e2e-rate-limit.sh check full-meta >/dev/null 2>&1; then
     MODE=full
 else
     MODE=smoke
     echo "NOTE: full-meta e2e rate-limited ($(scripts/forge-e2e-rate-limit.sh status full-meta)) — running smoke mode"
 fi
+
+# Order 781-6gys criterion 2: the smoke path — the one EVERY rate-limited lane
+# takes, and the one that packet's exit criterion must produce evidence for —
+# was unreachable on demand. Mode came solely from the limiter, so deliberately
+# exercising smoke meant recording a full-meta run that never happened, i.e.
+# falsifying the very budget ledger the directive exists to protect.
+#
+# The override is DE-ESCALATION ONLY, and that asymmetry is the whole safety
+# argument: forcing `smoke` can only ever make a run cheaper, so it cannot be
+# used to evade the 2026-07-11 token-budget directive. Forcing `full` would do
+# exactly that, so it is refused loud rather than silently ignored — an override
+# that quietly does nothing is how a budget guard rots. The escalating direction
+# already has a reviewed owner: TILLANDSIAS_E2E_FORCE=1 on the limiter itself.
+case "${TILLANDSIAS_E2E_FORCE_MODE:-}" in
+    "") ;;
+    smoke)
+        if [ "$MODE" = full ]; then
+            echo "NOTE: TILLANDSIAS_E2E_FORCE_MODE=smoke — de-escalating full -> smoke (no full-meta budget consumed)"
+        fi
+        MODE=smoke
+        ;;
+    *)
+        echo "FAIL: TILLANDSIAS_E2E_FORCE_MODE='${TILLANDSIAS_E2E_FORCE_MODE}' — only 'smoke' is accepted (de-escalation only; use TILLANDSIAS_E2E_FORCE=1 on scripts/forge-e2e-rate-limit.sh to escalate)" >&2
+        exit 2
+        ;;
+esac
+
+if [ "$PRINT_MODE" = 1 ]; then
+    echo "mode=$MODE"
+    exit 0
+fi
+
 echo "$MODE" > "$MODE_FILE"
 
 if [ "$MODE" = full ]; then
