@@ -136,6 +136,33 @@ if [ "${1:-}" = "--emit-timing" ]; then
     exit 0
 fi
 
+# ── --emit-timing-batch: append MANY duration records in ONE spawn (765-dfry)
+# stdin lines, tab-separated: step<TAB>phase<TAB>duration_ms<TAB>exit<TAB>host
+# Rationale: each spawn of this script costs ~10-20ms; a --check run closes
+# ~45 phases, so per-record emission would tax the gate ~0.7s to measure 6ms
+# guards — the audit's empty-suite-floor lesson applied to telemetry itself.
+# One spawn amortizes the whole gate. Same grammar and best-effort contract as
+# --emit-timing; the 693-tf79 day bound applies per line; malformed lines are
+# skipped, never written poisoned. Always exits 0.
+if [ "${1:-}" = "--emit-timing-batch" ]; then
+    {
+        etb_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        awk -F'\t' -v ts="$etb_ts" '
+            NF >= 3 && $1 != "" {
+                step = $1; phase = $2; dur = $3; ec = $4; host = $5
+                if (dur !~ /^[0-9]+$/) dur = 0
+                if (dur + 0 >= 86400000) next
+                if (ec !~ /^[0-9]+$/) ec = 0
+                if (phase == "") phase = "-"
+                if (host == "") host = "-"
+                gsub(/["\\]/, "", step); gsub(/["\\]/, "", phase); gsub(/["\\]/, "", host)
+                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d}\n", \
+                    ts, host, step, phase, dur, ec
+            }' >>"$TIMING_LOG"
+    } 2>/dev/null || true
+    exit 0
+fi
+
 # ── --emit-flow: append one per-cycle packet-flow record (packet 682-epud) ────
 # Best-effort by construction, mirroring images/.../mcp-usage-log.sh: the whole
 # append is wrapped so a full disk, a read-only path, or a missing `date` cannot
@@ -447,8 +474,18 @@ if [ -r "$TIMING_LOG" ]; then
         | if $n == 0 then "0 - - -:-"
           else
             ($r | map(select(.step=="build-check") | .duration_ms // 0)) as $bc
-          | ($r | map(select((.step|tostring)|test("^litmus")) | .duration_ms // 0)) as $lm
-          | ($r | max_by(.duration_ms // 0)) as $slow
+          # 765-dfry: scoped EXACTLY to the suite aggregate — per-test records
+          # are `litmus:<name>` and would otherwise pollute this average with
+          # a different grain (the old ^litmus prefix matched both).
+          | ($r | map(select(.step=="litmus-suite") | .duration_ms // 0)) as $lm
+          # 765-dfry: slowest prefers the FINEST grain. Aggregate records
+          # (build-check, build-preamble, litmus-suite, local-ci-phase-*)
+          # contain their own sub-steps, so they always out-size them and the
+          # line would forever name an unattackable total. When per-step
+          # records exist (step:/check:/litmus:), pick slowest among those;
+          # fall back to all records otherwise (pre-765 logs keep working).
+          | ($r | map(select((.step|tostring)|test("^(step:|check:|litmus:)")))) as $fine
+          | ((if ($fine|length) > 0 then $fine else $r end) | max_by(.duration_ms // 0)) as $slow
           | "\($n) " +
             "\(if ($bc|length)>0 then (($bc|add)/($bc|length)|round) else "-" end) " +
             "\(if ($lm|length)>0 then (($lm|add)/($lm|length)|round) else "-" end) " +
