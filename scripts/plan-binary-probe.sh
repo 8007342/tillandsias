@@ -42,7 +42,29 @@ resolve_plan_binary() {
         printf '%s\n' "${TILLANDSIAS_PLAN_BIN}"
         return 0
     fi
+    # CARGO_TARGET_DIR FIRST (order 783-jdeh). Every forge exports it
+    # (images/default/lib-common.sh: CARGO_TARGET_DIR="$PROJECT_CACHE/cargo/target")
+    # so that ./target/ does not exist in the mounted checkout at all. A probe
+    # that looks only under ./target therefore cannot see the binary
+    # cycle-preflight.sh JUST BUILT one line earlier, and reports
+    # `blocked:preflight:plan:capabilities-refused` — blaming the instrument
+    # for a path assumption and costing the forge its whole cycle. Measured on
+    # yoga 2026-08-17: the forge lane died here with no ./target/ directory
+    # while the build had succeeded.
+    #
+    # resolve_target_binary (order 770-ifeg), fifty lines below in THIS file,
+    # already honours CARGO_TARGET_DIR. The newer generic probe learned the
+    # lesson the older specific one still had — the fifth instance of the
+    # path-assumption class 704-zcgi centralised this file to end.
+    local ctd="${CARGO_TARGET_DIR:-}"
+    if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
+        ctd="./$ctd"
+    fi
     for candidate in \
+        ${ctd:+"$ctd/release/tillandsias-plan.exe"} \
+        ${ctd:+"$ctd/debug/tillandsias-plan.exe"} \
+        ${ctd:+"$ctd/release/tillandsias-plan"} \
+        ${ctd:+"$ctd/debug/tillandsias-plan"} \
         ./target/release/tillandsias-plan.exe \
         ./target/debug/tillandsias-plan.exe \
         ./target/release/tillandsias-plan \
