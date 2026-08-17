@@ -83,4 +83,15 @@ echo "========================================"
 echo "Validating Squid configuration..."
 squid -k parse
 
-exec squid -N
+# 767-es4w: squid does NOT run as PID 1 any more — squid-supervisor does, with
+# squid as its child. Two reasons, and the second is the one that cost two days:
+#   * a real mid-service crash is now counted, named on both streams, and
+#     restarted under a flap cap instead of leaving the container Exited(139)
+#     with nothing watching;
+#   * squid segfaults inside exit() on EVERY ordered shutdown (measured on 6.9
+#     and 6.12, idle, this host, 2026-08-17 — after it has already logged
+#     "Exiting normally"), so before this wrapper a `podman stop` and a real
+#     death were the same Exited(139). The supervisor names that teardown
+#     crash separately and normalises its exit code to 0, which is what makes
+#     a future Exited(139) on this container mean something again.
+exec /usr/local/bin/squid-supervisor squid squid -N

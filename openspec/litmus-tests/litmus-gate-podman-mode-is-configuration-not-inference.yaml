@@ -1,0 +1,68 @@
+# @trace spec:podman-orchestration
+#
+# Regression pin for order 797-r6tc, the 793-a62g family one level up.
+#
+# build.sh exported TILLANDSIAS_PODMAN_REMOTE_URL whenever
+# ${XDG_RUNTIME_DIR}/podman/podman.sock existed. That socket is present on any
+# host with podman.socket enabled, so the inference fired unconditionally — and
+# only inside the gate. common.sh's remote branch then pinned an EXPORTED
+# TILLANDSIAS_PODMAN_BIN at a generated wrapper, which beats PATH in
+# resolve_podman_bin() and is inherited by every litmus child, so tests
+# declaring `backend: fake` ran real podman against a fake-podman contract.
+# Measured at one commit on macuahuitl 2026-08-17: 302/302 from a bare
+# `scripts/run-litmus-test.sh --phase pre-build --size quick`, 295/302 through
+# `./build.sh --ci-full`. The gate and the bare run disagreed about what they
+# had tested, which is the property this pin defends.
+#
+# 793-a62g's rule, applied here: the podman wrapper is CONFIGURATION, never
+# inference. The single real consumer of remote mode sets the variable itself
+# (packaging/systemd/user/tillandsias.service, ExecStart=tillandsias
+# --headless, enforced by require_headless_service_account) and is untouched.
+name: litmus:gate-podman-mode-is-configuration-not-inference
+spec: podman-orchestration
+phase: pre-build
+description: >
+  Pin that build.sh never infers remote-podman mode from a socket file
+  existing, still passes a caller-supplied TILLANDSIAS_PODMAN_REMOTE_URL
+  through untouched, and that common.sh's two modes keep their distinguishing
+  consequence: local mode leaves TILLANDSIAS_PODMAN_BIN unset so fake-podman
+  PATH injection works, explicit remote mode still pins the wrapper.
+severity: critical
+size: instant
+
+inputs:
+  - build.sh
+  - scripts/common.sh
+  - scripts/test-gate-podman-mode-configuration.sh
+
+preconditions:
+  - workspace contains build.sh and scripts/common.sh
+  - workspace contains scripts/test-gate-podman-mode-configuration.sh
+  - python3 is available (the fixture binds a real AF_UNIX socket)
+
+critical_path:
+  - step: "four-scenario fixture: no inference from a real socket, caller URL passes through, local mode leaves the podman bin unpinned, explicit remote mode still pins the wrapper"
+    command: "bash scripts/test-gate-podman-mode-configuration.sh"
+    timeout_ms: 60000
+    success_pattern: "PASS: gate podman mode is configuration, not inference"
+    failure_pattern: "FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:podman-orchestration"
+  expected_log: "PASS: gate podman mode is configuration, not inference (797-r6tc)"
+  log_fields:
+    spec: "podman-orchestration"
+    test: "gate-podman-mode-is-configuration-not-inference"
+    artifact: "build.sh"
+
+rollback:
+  on_failure: >
+    Scenario 1 red means build.sh started deriving TILLANDSIAS_PODMAN_REMOTE_URL
+    from the presence of a podman socket again — delete the derivation; a caller
+    that wants the gate on a socket exports the variable itself. Scenario 3 red
+    means common.sh's local branch started pinning TILLANDSIAS_PODMAN_BIN, which
+    overrides the PATH injection every `backend: fake` litmus depends on.
+    Scenario 2 or 4 red means the fix over-reached and broke the real remote
+    consumer (packaging/systemd/user/tillandsias.service).
+  command: "grep -n 'TILLANDSIAS_PODMAN_REMOTE_URL' build.sh scripts/common.sh"
