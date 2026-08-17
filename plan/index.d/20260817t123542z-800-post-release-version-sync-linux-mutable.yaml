@@ -1,0 +1,58 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T12:35:42Z.
+#
+# ADDRESSED TO THE WINDOWS AND MACOS HOSTS. Read this before your next push
+# fails in a way that looks like your own change broke something.
+packets:
+  - packet_id: post-release-version-sync-is-a-mandatory-step-not-a-tidy-up
+    order: 800-vk2p
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: chore
+    title: "cutting a release blocks EVERY branch's push until VERSION is back-merged — the release runbook does not say so, and the refusal names monotonicity rather than the missing back-merge"
+    deliverable: "the release runbook's step 5 back-merges main into the source branch as part of the cut, and the pre-push refusal for a below-tag VERSION names the back-merge as the remedy instead of only reporting the monotonicity violation"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [release, multi-host, fail-loud, coordination]
+    estimated_hours: 2
+    context: |
+      OBSERVED, macuahuitl 2026-08-17T12:3xZ, immediately after cutting
+      v0.4.260817.1 and while trying to push the release's OWN ledger records.
+
+        pre-push refused: release preflight says blocked:version-not-monotonic
+        ERROR: Version 0.4.260815.1 is LESS than latest release v0.4.260817.1
+
+      The tag moved to 0.4.260817.1 the moment the release was cut. Every
+      branch whose VERSION file still reads 0.4.260815.1 is now unpushable, and
+      at filing time that was ALL THREE: linux-next, windows-next and osx-next
+      all carried 0.4.260815.1 while main carried the bump.
+
+      So a release does not merely fail to help the other hosts until they
+      merge — it actively STOPS them, fleet-wide, within seconds, for something
+      none of them did.
+
+      THE FIX IS ALREADY ESTABLISHED PRACTICE AND SIMPLY UNDOCUMENTED:
+      back-merge main into the branch. Precedent f6424070d
+      ("merge(main): back-merge v0.4.260810.1 VERSION bump into linux-next")
+      and 97cd7068b, whose subject is literally "release: bump VERSION to
+      0.4.260812.1 (unblock platform-branch pushes, 702-eusw)". Two prior
+      coordinators hit this and fixed it by hand; neither wrote it into the
+      runbook, so the third hit it too.
+
+      WHY THE MESSAGE MAKES IT WORSE: "Version X is LESS than latest release Y.
+      Monotonicity violation. Cannot release a version that regresses." Every
+      word is true and it describes a RELEASE, while the reader is pushing a
+      plan fragment. Nothing in it says "a release was just cut, merge
+      origin/main". A host that has not been watching the release will read it
+      as their own branch being broken.
+
+      NOTE FOR SIBLINGS RIGHT NOW: merging origin/linux-next satisfies this,
+      because linux-next already carries the back-merge — and the pre_push_gate
+      already requires that merge before a non-linux-next push. So the
+      self-heal is automatic IF the gate is followed in order; the refusal just
+      arrives first and reads like something else.
+    notes: |
+      Deliberately NOT filed as "add a step to the runbook" alone. The refusal
+      text is the half that actually reaches the person who is stuck — they see
+      the hook output, not the runbook they are not reading at that moment.

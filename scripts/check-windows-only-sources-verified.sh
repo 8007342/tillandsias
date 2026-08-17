@@ -38,6 +38,10 @@
 #   stale:windows-sources-never-verified:<n>   no stamp on this host yet
 #   skip:no-windows-only-sources               nothing to check (crate moved?)
 #   refused:stamp-needs-evidence:<why>         `stamp` called without a transcript
+#                                              (<why> begins `usage: <argv>` —
+#                                              that argv is copy-pasteable and is
+#                                              executed by the fixture, order
+#                                              801-ajcd)
 #   refused:undeclared-failure:<test>          a red test nobody has declared
 #
 # Exit 0 always: this is a report, not a refusal. Branch on the verdict, and
@@ -120,13 +124,39 @@ case "${1:-check}" in
         # test transcript: any FAILED test not declared known-red refuses the
         # stamp. Without this the subcommand is an honour system, and an honour
         # system is what this whole report was built to replace.
+        # ORDER 801-ajcd — THE REFUSAL MUST PARSE AS THE COMMAND IT DEMANDS.
+        #
+        # This message used to read `pass --from <cargo-test-output>`, where
+        # "pass" was an English verb. Read as what it looks like — an argument
+        # list — obeying it verbatim produces
+        # `… stamp pass --from out.txt`, whose $2 is `pass`, which matches
+        # nothing here, so the refusal repeats identically. A guard whose own
+        # instructions are refused teaches the reader that the guard is broken
+        # rather than that the evidence is missing, and the next move after that
+        # is to route around it.
+        #
+        # Two changes, both directions of the mismatch:
+        #   * the message now prints the EXACT argv after `usage: `, so copying
+        #     it works (the fixture extracts and executes that substring, so the
+        #     text can never drift from the parser again);
+        #   * the parser accepts a leading `pass` token, so anyone who obeyed the
+        #     old wording — or a script written from it during the weeks it was
+        #     live — is answered rather than refused twice.
+        _stamp_args_from=""
         case "${2:-}" in
-            --from) transcript="$(cat "${3:-/dev/null}" 2>/dev/null)" ;;
-            *)
-                echo "refused:stamp-needs-evidence:pass --from <cargo-test-output>; a stamp with no transcript is an assertion, not a verification"
-                exit 1
+            --from) _stamp_args_from="${3:-}" ;;
+            # Tolerate the pre-801-ajcd message taken literally.
+            pass)
+                case "${3:-}" in
+                    --from) _stamp_args_from="${4:-}" ;;
+                esac
                 ;;
         esac
+        if [ -z "$_stamp_args_from" ]; then
+            echo "refused:stamp-needs-evidence:usage: check-windows-only-sources-verified.sh stamp --from <cargo-test-output>; a stamp with no transcript is an assertion, not a verification"
+            exit 1
+        fi
+        transcript="$(cat "$_stamp_args_from" 2>/dev/null)"
         if ! printf '%s' "$transcript" | grep -qE '^test .* \.\.\. (ok|FAILED|ignored)'; then
             echo "refused:stamp-needs-evidence:the transcript contains no test results"
             exit 1

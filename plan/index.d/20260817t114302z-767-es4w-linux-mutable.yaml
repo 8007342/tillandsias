@@ -1,0 +1,297 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17, fork on 767-es4w.
+#
+# The headline is a falsification, not a fix. 767-es4w and both its children
+# were shaped around "deterministic store-teardown corruption under ssl-bump
+# traffic". It is not traffic, and it is not our config. An IDLE squid, given
+# `podman stop`, logs "Exiting normally." and THEN segfaults inside libc
+# exit(). Every one of the 263 SIGSEGVs is a shutdown.
+status:
+  - packet_id: enclave-squid-proxy-chronic-segfaults-unwatched
+    field: status
+    value: implemented
+    ts: "2026-08-17T11:43:02Z"
+    host: linux_mutable
+  # 782-dpby's deliverable was built under this packet in the same cycle. Moved
+  # off `ready` so it is not picked up and built a second time; the progress
+  # event below records exactly what is and is not done.
+  - packet_id: proxy-crash-watcher-loud-restart
+    field: status
+    value: implemented
+    ts: "2026-08-17T11:43:06Z"
+    host: linux_mutable
+
+events:
+  - packet_id: enclave-squid-proxy-chronic-segfaults-unwatched
+    event:
+      type: progress
+      ts: "2026-08-17T11:43:02Z"
+      agent_id: fork-767es4w-20260817T1143Z
+      host: linux_mutable
+      summary: >
+        ROOT CAUSE DECIDED — build, not traffic, and not our config. OBSERVED,
+        all on macuahuitl 2026-08-17. (1) SYMBOLICATION of a THIRD dump (PID
+        3907813, 2026-08-17 03:29 PDT, four weeks after the two 604-vmcg
+        preserved) reproduces the known stack AND adds the two frames that
+        change its meaning: below destroyStoreEntry sit hashFreeItems <-
+        Store::Controller::~Controller <- (libc). There is no main, no event
+        loop, no comm handler anywhere in the trace. Store::Controller is a
+        process-lifetime singleton; its destructor runs from exit(). This is a
+        global-destructor crash at process teardown. (2) REPRODUCED IN 5
+        SECONDS, 100% of the time, on a scratch container built from the SAME
+        images/proxy launcher argv: bring it up, send ZERO requests, `podman
+        stop`. squid logs "Squid Cache (Version 6.9): Exiting normally.",
+        removes its PID file, and the container reports EXITCODE=139. (3) NOT
+        FIXED BY 782-9jfg's BUMP — the squid 6.12 image built by that packet
+        does exactly the same thing: "Squid Cache (Version 6.12): Exiting
+        normally." then EXITCODE=139. (4) NOT OUR CONFIG — four squid.conf
+        variants, each verified to have actually removed the directive, all
+        still 139: cache_dir removed; cache_peer/never_direct removed; the
+        whole store disabled (cache deny all + cache_mem 0); ssl-bump,
+        sslcrtd_program and tls_outgoing_options removed. (5) NOT THE
+        HEALTHCHECK's aborted probes either — with --no-healthcheck and 60s of
+        total idleness, still 139. CONSEQUENCE FOR THE PACKET'S PREMISE: the
+        crash never harms a request. What it harms is legibility — before this
+        change EVERY ordered shutdown of the proxy produced Exited(139), so the
+        container that really was dead for two days was indistinguishable from
+        one somebody had stopped. That, not the segfault, is the outage.
+      evidence_refs:
+        - "gdb bt on PID 3907813: #12 hashFreeItems <- #13 Store::Controller::~Controller <- #14/#15 libc exit; no main frame"
+        - "repro: idle 6.9 container + podman stop -> 'Exiting normally.' + EXITCODE=139"
+        - "repro: idle 6.12 container (782-9jfg image) + podman stop -> EXITCODE=139 — the bump does not fix it"
+        - "config controls: no-cache_dir / no-cache_peer / no-store / no-ssl-bump / no-healthcheck all still EXITCODE=139"
+  - packet_id: enclave-squid-proxy-chronic-segfaults-unwatched
+    event:
+      type: progress
+      ts: "2026-08-17T11:43:03Z"
+      agent_id: fork-767es4w-20260817T1143Z
+      host: linux_mutable
+      summary: >
+        WATCHED — both halves landed, and the design follows from the
+        falsification above. images/proxy/squid-supervisor.sh is now PID 1 with
+        squid as its child (entrypoint.sh execs it; Containerfile COPY+chmod).
+        Because an ordered shutdown genuinely produces a fatal signal here, a
+        naive supervisor would restart the proxy every time somebody stopped it
+        — so the supervisor DISCRIMINATES on whether it forwarded the stop,
+        the same mechanism 767-nkkq uses: (a) unsolicited fatal signal -> ONE
+        machine-grepable fail:proxy-crashed:...:crashes=N:action=restart on BOTH
+        streams, evidence file, bounded restart (5 crashes / 300s cap, 1..30s
+        backoff), and past the cap a fail:...:action=giveup with a TRUTHFUL
+        nonzero exit so the container really dies; (b) fatal signal after a
+        forwarded TERM -> note:proxy-exit-teardown-crash:..., counted
+        SEPARATELY, not restarted, exit code normalised to 0. (b) is what gives
+        Exited(139) its meaning back. HOST SIDE, because a container that dies
+        entirely is invisible to any in-container supervisor: LivenessProbe
+        (crates/tillandsias-headless/src/container_deps.rs) already re-ensured a
+        dead proxy but did it with a bare eprintln and no count — the literal
+        mechanism by which 263 crashes went unnoticed. It now emits
+        fail:managed-service-death:service=..:state=..:exit=..:deaths=N:action=re-ensure
+        on both streams, carrying the exit code, backed by a per-service
+        cumulative counter (LivenessProbe::death_counts, LivenessResult.deaths)
+        and a new container_exit_state helper. LIVE PROOF on real squid, not a
+        fixture: PID 1 = the supervisor; SIGSEGV injected into the squid child
+        INSIDE the container -> fail:proxy-crashed:...:crashes=1:action=restart
+        in podman logs on both streams, crash-count file = 1, container stayed
+        RUNNING, squid respawned; then `podman stop` on that same container ->
+        FINAL EXITCODE=0 with the teardown note. Before: 139 and silence.
+      evidence_refs:
+        - "images/proxy/squid-supervisor.sh + entrypoint.sh exec + Containerfile COPY/chmod"
+        - "scripts/test-squid-supervisor.sh 8/8; litmus:proxy-crash-supervision-shape 3/3 STEPS via the canonical runner; proxy-container suite 5/5 PASS"
+        - "live: SIGSEGV injected in-container -> restart + crash-count=1 + verdict on both streams; then podman stop -> EXITCODE=0"
+        - "crates/tillandsias-headless/src/container_deps.rs death_verdict + death_counts (5 new unit tests, 23/23 green)"
+        - "./build.sh --check rc=0"
+  - packet_id: enclave-squid-proxy-chronic-segfaults-unwatched
+    event:
+      type: note
+      ts: "2026-08-17T11:43:04Z"
+      agent_id: fork-767es4w-20260817T1143Z
+      host: linux_mutable
+      summary: |
+        MUTATION CONTROLS, and WHY IMPLEMENTED RATHER THAN COMPLETED.
+
+        CONTROLS (each: break it, see red, restore, see green).
+          1. Shell. Replaced the supervisor's `if [ "$stop_requested" -eq 1 ]`
+             discrimination with `if [ 0 -eq 1 ]`. Fixture went rc=1 with
+             exactly the predicted damage: scenario 5 red ("ordered shutdown
+             became a restart loop") and scenario 6 red, reporting a plain
+             `podman stop` as fail:proxy-crashed:signal=15. Restored -> 8/8.
+             The restore had to come from a copy, not `git checkout` — the file
+             was untracked, and `git checkout` failed with "did not match any
+             file(s) known to git" while leaving the mutation in place. A
+             control whose restore silently no-ops proves nothing; that near
+             miss is why this is spelled out.
+          2. Rust. Dropped `:exit={exit_code}` from death_verdict. 3 of 5 tests
+             red, 2 green (the counting tests, correctly unaffected). Restored
+             -> 5/5.
+          3. Built into the fixture permanently: scenarios 3 and 5 fire the SAME
+             signal at the SAME supervisor and demand DIFFERENT verdicts, so
+             losing the discrimination can only be red. The wiring scenario
+             carries a stripped-copy negative control.
+
+        HOLD REASONS — what is NOT done.
+          1. NOT DEPLOYED. The supervisor is IMAGE content (the 743-y5wh
+             bake-timing class 767-nkkq held for). The live tillandsias-proxy
+             still runs the unsupervised v0.4.260816.1 / squid 6.9 image.
+             Reaching it needs a proxy-image rebuild plus a stack recreation,
+             which 782-9jfg's 04:37Z sequencing note shows is blocked behind a
+             current-binary install and the pending 702-eusw ruling — and which
+             I was directed not to do while other agents depend on the stack.
+          2. The live proof used an OVERLAY image (FROM the 6.12 image + COPY
+             supervisor + entrypoint), not a from-source `apk add` build of
+             images/proxy/Containerfile. A scratch `podman build` of the real
+             Containerfile could not reach the network from this worktree
+             (containers.conf injects http_proxy=http://proxy:3128 into every
+             build, and `podman build --network tillandsias-enclave` refuses
+             with "cannot use networks as rootless"). The Containerfile delta is
+             two lines (COPY + chmod) and the litmus pins them, but the full
+             image build is unexercised by me and should be confirmed by the
+             next real proxy build.
+          3. "Counter surfaced in --diagnose" is only partly met. --diagnose is
+             a TRAY verb (windows/macos); Linux has --diagnostics, which streams
+             podman logs and therefore carries the supervisor's verdict lines by
+             construction, plus --status-check, which recreates the whole stack
+             and was deliberately not run on a shared host. Adding a typed field
+             to the tray DiagnoseReport means six pinned key tests and a Windows
+             CI gate on a host I cannot build for — left undone on purpose
+             rather than done blind.
+
+        LIVE INCIDENT DURING THIS FORK, recorded because it is the packet's own
+        symptom happening in real time. At 11:16:14Z the production
+        tillandsias-proxy logged the full ordered-shutdown sequence
+        ("Preparing for shutdown after 4 requests" ... "Squid Cache (Version
+        6.9): Exiting normally.") and exited 139, then sat dead for 25 minutes
+        with nothing restarting it and no alarm anywhere. I restored it with a
+        plain `podman start tillandsias-proxy` (not a recreate — that would have
+        re-run the pre-755-qcxh launcher shape 782-9jfg warned about); healthy
+        in 8s. ATTRIBUTION, honestly: I cannot prove it was not me. I issued no
+        command naming tillandsias-proxy, every scratch container was
+        es4w-prefixed, and `podman events` shows tillandsias-dev-inference
+        dying 28s later plus an `image pull-error docker.io/library/squid:6.1`
+        in the same window — neither of which I touched — so another agent's
+        teardown is the likelier actor. Treat the attribution as unresolved and
+        the observation (139 + silence + nobody notices) as solid.
+
+        COREDUMP HYGIENE for whoever reads the sentinel: my repro runs added 11
+        squid SIGSEGV dumps to this host's coredumpctl between 04:05 and 04:35
+        PDT on 2026-08-17. They are MINE, not organic recurrence. Any window
+        that counts dumps must start after 2026-08-17T11:40Z.
+  - packet_id: proxy-squid-version-bump-past-6-9
+    event:
+      type: note
+      ts: "2026-08-17T11:43:05Z"
+      agent_id: fork-767es4w-20260817T1143Z
+      host: linux_mutable
+      summary: >
+        THE 7-DAY SENTINEL IS ALREADY FALSIFIED — do not spend the week. This
+        packet holds at implemented pending "coredumpctl gains NO new squid dump
+        matching the pinned signature for 7 days after deploy". Measured today
+        on the image this packet built (localhost/tillandsias-proxy:v0.4.260815.1,
+        squid 6.12): an idle container given `podman stop` logs "Squid Cache
+        (Version 6.12): Exiting normally." and exits 139, producing exactly such
+        a dump. Reproduced with zero traffic and with cache_dir, the whole
+        store, cache_peer and ssl-bump each removed. The bump was still the
+        right move (three patch releases plus a musl/openssl3 refresh, and this
+        packet's own ChangeLog diligence was exemplary — it refuted the premise
+        it was handed rather than repeating it), but its CLOSURE CRITERION
+        cannot be met by waiting, because the signature will recur on the first
+        ordered shutdown after deploy. Re-shape the criterion before deploying:
+        the honest closure is "6.12 is running and the crash is now correctly
+        classified", which 767-es4w's supervisor provides. The corollary this
+        packet already anticipated is now the live one: "if the signature
+        recurs on 6.12 we have probably found an UNREPORTED upstream bug" —
+        it does, and 798-gq9e is filed to report it.
+  - packet_id: proxy-crash-watcher-loud-restart
+    event:
+      type: progress
+      ts: "2026-08-17T11:43:06Z"
+      agent_id: fork-767es4w-20260817T1143Z
+      host: linux_mutable
+      summary: >
+        status 'implemented' — this packet's deliverable was built under
+        767-es4w this cycle, so it should not be picked up again as ready.
+        Delivered: bounded restart with cap+backoff (5/300s, 1..30s) and a loud
+        record on both streams (images/proxy/squid-supervisor.sh); a crash
+        counter (in-container crash-count / exit-teardown-count files plus
+        LivenessProbe::death_counts host-side); a litmus with a kill-injection
+        fixture proving BOTH halves — restarted AND recorded
+        (litmus:proxy-crash-supervision-shape, scenario 3), plus a live
+        in-container SIGSEGV injection showing restart + crashes=1 + verdict.
+        The interaction note this packet wrote turned out to be exactly right
+        and became the design's spine: restart is correct for infrastructure,
+        silence is the sin. It needs ONE amendment from 767-es4w's measurement
+        — an ordered shutdown of squid ALSO produces a fatal signal, so
+        "restart on abnormal exit" had to become "restart on abnormal exit we
+        did not ask for", or every `podman stop` would have flapped the proxy.
+        NOT DONE, and why this is implemented rather than completed: "crash
+        counter visible in --diagnose". --diagnose is a tray verb; the Linux
+        surface carries the verdict lines through --diagnostics' podman-logs
+        stream but has no typed field, and the tray DiagnoseReport has six
+        pinned key tests behind a Windows CI gate this host cannot build.
+      evidence_refs:
+        - "images/proxy/squid-supervisor.sh — cap 5/300s, backoff 1..30s, both-stream verdict, evidence + counter files"
+        - "scripts/test-squid-supervisor.sh 8/8 incl. kill-injection (restart AND record) and flap-cap giveup"
+        - "live: in-container SIGSEGV -> restart + crash-count=1; podman stop -> EXITCODE=0"
+packets:
+  - packet_id: squid-exit-time-store-controller-segv-report-upstream
+    order: 798-gq9e
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: chore
+    title: "squid segfaults in exit() running Store::Controller's global destructor on EVERY ordered shutdown — 5-second repro, present in 6.9 AND 6.12, no public report found: file it upstream with the preserved dumps"
+    deliverable: "a bugs.squid-cache.org report carrying the minimal repro, the symbolicated backtrace and the eliminated variables, plus the report URL recorded here; or, if an existing report is found first, that URL and the version it is fixed in"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [squid, proxy, upstream, forensics]
+    estimated_hours: 2
+    context: |
+      OBSERVED, macuahuitl 2026-08-17 (767-es4w). Reproduces in about five
+      seconds and needs nothing from this project:
+
+        run the Alpine squid image, send ZERO requests, `podman stop`.
+
+      squid completes an orderly shutdown — writes the clean swap log, closes
+      its logs, removes the PID file, logs "Squid Cache (Version 6.12): Exiting
+      normally." — and THEN dies of a fatal signal. Backtrace (build-id
+      0348aa59… for the 6.9 side, three dumps four weeks apart, all identical):
+
+        HttpHeader::clean  <- HttpReply::clean <- ~HttpReply <- ~MemObject
+        <- StoreEntry::destroyMemObject <- destroyStoreEntry <- hashFreeItems
+        <- Store::Controller::~Controller <- (libc exit)
+
+      then squid's own death() handler reaches an xassert inside
+      storeDirWriteCleanLogs() and aborts. No `main` frame appears anywhere in
+      the trace: this is a global destructor running from exit(), not a fault
+      in the running proxy. storeDirWriteCleanLogs is the DEATH HANDLER, not
+      the fault — old 3.x-era tracker hits on that symbol are a different bug.
+
+      VARIABLES ALREADY ELIMINATED, each with the directive verified removed:
+        * traffic — zero requests, and also zero with --no-healthcheck so not
+          even an aborted TCP probe seeds a StoreEntry;
+        * squid version — 6.9-r0 (Alpine 3.20) and 6.12-r0 (Alpine 3.22);
+        * the disk cache — cache_dir removed;
+        * the store entirely — cache deny all + cache_mem 0;
+        * cache_peer / never_direct;
+        * ssl-bump, sslcrtd_program, tls_outgoing_options.
+
+      NOT YET ELIMINATED, and this is the load-bearing inference to test FIRST
+      because it decides whether the report goes to squid or to Alpine: both
+      builds are musl/Alpine. A glibc build of a 6.x squid, same minimal
+      config, same `podman stop`, is the one experiment that separates "squid
+      static-destruction-order defect" from "musl-specific". It was attempted
+      here and failed for environmental reasons only — containers.conf injects
+      http_proxy=http://proxy:3128 into every podman build, and
+      `podman build --network tillandsias-enclave` refuses with "cannot use
+      networks as rootless" — so a host that can build a Fedora/Debian squid
+      image should run it before filing.
+
+      MATERIAL TO ATTACH: two symbolicated dumps preserved at
+      ~/claudia/tillandsias-forensics/604-vmcg/ on macuahuitl, plus the third
+      (PID 3907813, 2026-08-17) symbolicated under 767-es4w.
+
+      WHY IT IS WORTH FILING EVEN THOUGH IT IS HARMLESS: it is harmless to the
+      DATA (everything is flushed before the crash) and expensive to the
+      OPERATOR — it made every ordered shutdown indistinguishable from a
+      crash on this host and cost a two-day unnoticed outage, 263 coredumps,
+      and three packets. Downgrading the exit status from 139 to 0 is what
+      767-es4w's supervisor does locally; upstream should not need a wrapper.

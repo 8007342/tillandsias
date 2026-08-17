@@ -83,11 +83,12 @@ critical_path:
     # diluting the per-cycle averages. Measured on windows 2026-08-15: one cycle
     # wrote three records and the reporter said cycles=8 over six real cycles.
     # The fixture also pins that the LATER record wins (a retry runs after more
-    # work), that a same-cycle-id row on another host is untouched, and that
-    # omitting cycle= warns rather than silently bucketing.
+    # work), that a same-cycle-id row on another host is untouched, and — order
+    # 801-tpxd — that omitting cycle= MINTS `<host>-<utc>` rather than writing
+    # the sentinel `"cycle":"-"`, which no path may reach any more.
     command: "scripts/test-cycle-flow-emit-idempotency.sh 2>&1 | tail -1"
     timeout_ms: 30000
-    expected_behavior: "ok:cycle-flow-emit-idempotency:7"
+    expected_behavior: "ok:cycle-flow-emit-idempotency:8"
 
 observability:
   traces:
@@ -103,6 +104,7 @@ failure_modes:
   - "overhead_ratio computed as something other than total-commits-per-total-completed"
   - "an unwritable flow log path fails the cycle it was measuring"
   - "a retried finalization appends a duplicate record, so the metric is corrupted by the act of measuring"
+  - "an omitted cycle= writes the sentinel \"cycle\":\"-\", poisoning the rolling view and inviting a global-sed 'repair' that clobbers historical records"
   - "commits_this_cycle counts merged-in sibling commits, inflating the overhead_ratio input on every platform branch that honors the pre-push merge gate"
 
 rollback:

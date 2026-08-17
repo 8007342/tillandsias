@@ -1614,7 +1614,37 @@ PORT="${1:-42420}"
 # (phase=Ready, podman_ready=true). The host arrives over hvsocket to the VM's
 # own CID and never touches loopback, so the probe was asserting a path nobody
 # depends on and failing a healthy system (order 757-4hdt).
-modprobe vsock_loopback 2>/dev/null || true
+#
+# ORDER 798-emje: by the time this runs the module is supposed to ALREADY be
+# there -- provisioning loads it before it starts any unit, and this unit is
+# ordered `After=systemd-modules-load.service`. This modprobe stays as the
+# backstop and is load-bearing (removing it recreates 757-4hdt's false alarm on
+# a guest whose modules-load.d entry was never written), but it is no longer
+# SILENT. It reports the module state it observed BEFORE acting and after, so:
+#
+#   before=loaded  -> the ordering held; the verdict below did not race anything
+#   before=missing -> the ordering did NOT hold and only this backstop saved the
+#                     run. That is a defect regression, and it is now greppable
+#                     in the journal instead of being invisible behind a passing
+#                     probe -- which is precisely how this bug survived from
+#                     735-ewzp through 757-4hdt to 798-emje.
+#
+# A probe that works by winning a race and a probe that works because the
+# dependency was satisfied print the same verdict. These two words are what
+# tell them apart.
+vsock_loopback_state() {
+  if [ -d /sys/module/vsock_loopback ] || grep -q '^vsock_loopback ' /proc/modules; then
+    echo loaded
+  else
+    echo missing
+  fi
+}
+before="$(vsock_loopback_state)"
+if [ "$before" = missing ]; then
+  modprobe vsock_loopback 2>/dev/null || true
+fi
+after="$(vsock_loopback_state)"
+echo "[tillandsias-ready] vsock_loopback before=${before} after=${after}"
 
 # The two failure modes are DISTINGUISHABLE and must not be conflated:
 #   ENETUNREACH "Network is unreachable"  -> no loopback transport; this probe
@@ -1774,10 +1804,34 @@ WantedBy=multi-user.target
         // unbound control wire remains a red signal to anyone looking -- which
         // was 735-ewzp's whole point, and is preserved here rather than traded
         // away for the fix.
+        //
+        // ORDER 798-emje: `After=systemd-modules-load.service` is the whole
+        // deterministic-ordering fix on the boot path, and it is one line
+        // because systemd already owns this problem. The probe connects to
+        // CID 1, which needs `vsock_loopback`; the module arrives from
+        // /etc/modules-load.d/tillandsias-vsock.conf via
+        // systemd-modules-load.service. That service is `Before=sysinit.target`
+        // and this unit is `After=basic.target` by DefaultDependencies, so the
+        // edge is ALREADY implied on a normal boot -- but implied is not
+        // declared, and an implied edge is invisible to the reader, unassertable
+        // by a test, and silently lost the day anyone adds
+        // `DefaultDependencies=no` or socket-activates this. Declaring it costs
+        // nothing at runtime and turns "it happens to work" into "systemd
+        // refuses to run it early".
+        //
+        // `Wants=`, not `Requires=`: if the module genuinely cannot load, the
+        // loader unit fails and THIS unit must still run, so the probe can
+        // report INDETERMINATE (exit 2). Requires= would skip the probe and
+        // collapse the third state into "never ran", which is exactly the
+        // information loss 798-emje forbids -- the third state is a real fact
+        // ("this probe cannot observe the property from here") and neither PASS
+        // nor FAIL is a truthful place to fold it.
         let ready_unit = r#"[Unit]
 Description=Tillandsias control-wire readiness assertion
 After=tillandsias-headless.service
 Wants=tillandsias-headless.service
+After=systemd-modules-load.service
+Wants=systemd-modules-load.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
@@ -1833,6 +1887,45 @@ WantedBy=multi-user.target
         } else {
             tracing::warn!("USERPROFILE not set; skipping home-forge-src.mount injection");
         }
+
+        // Persist vsock_loopback so it survives WSL2 restarts, and load it
+        // HERE -- before the units below are started.
+        // CONFIG_VSOCKETS_LOOPBACK=m (confirmed: WSL2 kernel 6.6.114.1).
+        // Required for Phase 5 (vsock-in-vsock container transport, CID 1).
+        // @trace plan/issues/vsock-kernel-probe-results-2026-06-29.md
+        //
+        // ORDER 798-emje -- THIS MOVED, and the move is the fix on the
+        // clean-room path. This block used to sit at the very END of
+        // inject_bootstrap_logic, ~60 lines AFTER the `systemctl enable --now`
+        // below. So on a first provision the sequence was: start the daemon,
+        // start the readiness assertion, and only THEN write modules-load.d and
+        // modprobe. The probe raced a module load that provisioning had not yet
+        // performed, and the race was in OUR call order, not in the kernel's.
+        //
+        // That is exactly what the truly-cold boot recorded under 757-4hdt: the
+        // guest logged `preflight vsock_loopback missing`, and the module was
+        // loaded 249 ms later. 249 ms is not a kernel being slow, it is these
+        // two statements in the wrong order. Loading before the enable makes
+        // the first-provision path deterministic without any waiting, polling,
+        // or deadline; the boot path is handled by the modules-load.d entry
+        // written here plus the ready unit's `After=systemd-modules-load.service`.
+        //
+        // It CONFIRMS rather than assuming: `modprobe` alone can no-op on a
+        // kernel that lacks the module and leave a silent gap for the probe to
+        // discover minutes later. It does NOT fail provisioning when the module
+        // is unavailable -- that is a legitimate guest configuration, the host
+        // wire (hvsocket) does not use loopback at all, and the correct verdict
+        // for it is the probe's INDETERMINATE, not a dead provision.
+        self.wsl_root_sh(
+            "echo 'vsock_loopback' > /etc/modules-load.d/tillandsias-vsock.conf; \
+             modprobe vsock_loopback 2>/dev/null; \
+             if [ -d /sys/module/vsock_loopback ] || grep -q '^vsock_loopback ' /proc/modules; then \
+               echo '[tillandsias-provision] vsock_loopback=loaded'; \
+             else \
+               echo '[tillandsias-provision] vsock_loopback=unavailable -- the guest-local readiness probe will report INDETERMINATE; host reachability uses hvsocket and is unaffected'; \
+             fi",
+        )
+        .await?;
 
         // Enable AND start the units now. `inject_bootstrap_logic` runs after
         // `configure_recipe_distro` has already flipped wsl.conf to
@@ -1907,16 +2000,6 @@ fi"#,
         // vault_bootstrap::is_running_in_vm checks this marker.
         self.wsl_root_sh("mkdir -p /etc/tillandsias && touch /etc/tillandsias/in-vm")
             .await?;
-
-        // Persist vsock_loopback so it survives WSL2 restarts.
-        // CONFIG_VSOCKETS_LOOPBACK=m (confirmed: WSL2 kernel 6.6.114.1).
-        // Required for Phase 5 (vsock-in-vsock container transport, CID 1).
-        // @trace plan/issues/vsock-kernel-probe-results-2026-06-29.md
-        self.wsl_root_sh(
-            "echo 'vsock_loopback' > /etc/modules-load.d/tillandsias-vsock.conf && \
-             modprobe vsock_loopback 2>/dev/null || true",
-        )
-        .await?;
 
         Ok(())
     }
@@ -2701,6 +2784,67 @@ mod tests {
         assert!(
             source.contains("vsock_listener=NOT-BOUND"),
             "the failure must name the property that is false, not a generic error"
+        );
+
+        // ORDER 798-emje: the module the probe depends on must be present
+        // DETERMINISTICALLY before the probe judges, on both paths.
+        //
+        // These assertions run against the unit LITERAL, not the comment window
+        // above it. `ready_unit` spans the explanatory comments too, and those
+        // comments now discuss `After=systemd-modules-load.service` by name --
+        // so a window-scoped `contains` would keep passing after someone deleted
+        // the directive and left the prose. That is 601-462g exactly, and this
+        // file has already been bitten by it once (the stale ExecStartPost
+        // wording that made a `grep -c` report 1).
+        let ready_unit_literal = ready_unit
+            .split("let ready_unit = r#\"")
+            .nth(1)
+            .and_then(|tail| tail.split("\"#;").next())
+            .expect("ready unit literal");
+        assert!(
+            ready_unit_literal.contains("After=systemd-modules-load.service"),
+            "the readiness assertion must be ORDERED after the module load, not              race it: the probe connects to CID 1, which requires vsock_loopback              (798-emje): {ready_unit_literal}"
+        );
+        assert!(
+            ready_unit_literal.contains("Wants=systemd-modules-load.service")
+                && !ready_unit_literal.contains("Requires=systemd-modules-load.service"),
+            "Wants=, never Requires=: a guest where the module genuinely cannot              load must still RUN the probe so it can report INDETERMINATE (exit 2).              Requires= skips it and collapses the third state into 'never ran'              (798-emje): {ready_unit_literal}"
+        );
+
+        // The clean-room half. Provisioning used to load the module at the END
+        // of inject_bootstrap_logic, ~60 lines AFTER it started the units — so a
+        // first provision started the probe and modprobed afterwards. Measured:
+        // `preflight vsock_loopback missing`, module loaded 249ms later. The
+        // race was in this function's statement order, so the fix is this
+        // function's statement order, and THAT is what this pins.
+        let provision_window = source
+            .split("// 5. home-forge-src.mount")
+            .nth(1)
+            .and_then(|tail| tail.split("// Phase 3d:").next())
+            .expect("provision window");
+        let modprobe_at = provision_window
+            .find("/etc/modules-load.d/tillandsias-vsock.conf")
+            .expect("provisioning must write the modules-load.d entry");
+        let enable_at = provision_window
+            .find("systemctl enable --now podman.socket")
+            .expect("provisioning must enable the units");
+        assert!(
+            modprobe_at < enable_at,
+            "vsock_loopback must be loaded BEFORE the units are started: starting              the readiness assertion first and modprobing afterwards is the              cold-boot race itself (798-emje). modprobe_at={modprobe_at}              enable_at={enable_at}"
+        );
+        // Loading without confirming leaves the same silent gap one statement
+        // later: modprobe no-ops on a kernel without the module and says nothing.
+        assert!(
+            provision_window.contains("[tillandsias-provision] vsock_loopback=loaded"),
+            "provisioning must CONFIRM the module is present, not assume modprobe              worked (798-emje): {provision_window}"
+        );
+        // And the probe must say which state it started from, so a run that
+        // worked because the ordering held is distinguishable from one that
+        // worked because the backstop modprobe won a race. Both print the same
+        // verdict; only this line separates them.
+        assert!(
+            source.contains("[tillandsias-ready] vsock_loopback before=${before} after=${after}"),
+            "the probe must report the module state it OBSERVED before judging,              or a regression of the ordering is invisible behind a passing probe              (798-emje)"
         );
         // The restart bound belongs to [Unit]; under [Service] systemd ignores
         // it silently, which would leave a permanently-broken guest restarting

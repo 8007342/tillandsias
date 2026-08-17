@@ -586,8 +586,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:fake-podman-direct-invocation-safety
+  - litmus:litmus-podman-preflight-diagnosis-shape
   coverage_ratio: 100
-  last_verified: '2026-08-16'
+  last_verified: '2026-08-17'
 - spec_id: macos-native-tray
   status: active
   litmus_tests:
@@ -728,8 +729,9 @@ specs:
   - litmus:concurrent-forge-shared-stack-safety
   - litmus:drain-vs-self-heal
   - litmus:teardown-liveness-shared-scope-agreement
+  - litmus:gate-podman-mode-is-configuration-not-inference
   coverage_ratio: 100
-  last_verified: '2026-07-09'
+  last_verified: '2026-08-17'
 - spec_id: podman-container-spec
   status: active
   litmus_tests:
@@ -786,6 +788,7 @@ specs:
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
   - litmus:podman-egress-control-shape
+  - litmus:proxy-crash-supervision-shape
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
@@ -996,8 +999,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:wsl-daemon-orchestration-shape
+  - litmus:guest-vsock-loopback-ordered-before-readiness-probe
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-08-17'
 - spec_id: wsl-runtime
   status: active
   litmus_tests:
