@@ -58635,6 +58635,12 @@ plan_index:
         not appear inside any `tokio::select!` block in vsock_server.rs.
         Criterion (c) is the one that cannot silently regress.
       events:
+        - type: completed
+          ts: "2026-08-17T09:42:00Z"
+          agent_id: "forge-forge-tillandsias-opencode-20260817t092802z"
+          host: forge
+          summary: |
+            Implemented cancel-safety fix: split stream via tokio::io::split(), spawned dedicated reader task, removed read_envelope from select! arms. 74 ledger fragments compacted. Build gate + clippy clean. 33/33 vsock_server tests pass.
         - type: claim
           ts: "2026-08-17T09:28:02Z"
           agent_id: "forge-forge-tillandsias-opencode-20260817t092802z"
