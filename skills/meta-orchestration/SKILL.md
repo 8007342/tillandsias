@@ -221,9 +221,24 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` files consider `lin
 
 Every host restarts with the prompt "Use the ./skills/meta-orchestration skill",
 so THIS gate is how a restart or a new day gets its maintenance and verification.
-It is idempotent and cheap when already done today — gate it on a
-`.last-daily-maintenance` marker under the cache dir; skip the body if the marker
-is from today. On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
+It is idempotent and cheap when already done today, and the marker that makes it
+so is now REAL and CHECKABLE (order 801-qasc) — run the check, do not eyeball it:
+
+```bash
+scripts/check-daily-maintenance.sh check     # exit 0 = today's gate ran; skip the body
+```
+
+It prints exactly one line matching
+`^(ok:daily-maintenance-(current|stamped):[0-9]{4}-[0-9]{2}-[0-9]{2}|skip:forge-exempt|due:(no-marker|unreadable-marker|stale:[0-9]{4}-[0-9]{2}-[0-9]{2}))$`
+and exits 0 only when today's gate is recorded. **`due:*` means run the body**;
+a corrupt or missing marker is `due:`, never a pass. From 2026-08-13 to
+2026-08-17 the marker this section names existed only as prose — nothing wrote
+it, nothing read it — so "did today's gate run" had no answer at all, one cycle
+inherited a false "already stamped" premise from its brief and skipped the body,
+and the next found nothing to confirm. An unobservable gate is indistinguishable
+from one that never runs, and the cheapest way to satisfy it is to skip it.
+
+On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
 
 1. **Post-restart verification** (only when the stack looks freshly booted — MCP
    experts just rebuilt, images/binary possibly toolchain-bumped): run the durable
@@ -246,8 +261,20 @@ is from today. On a durable bare-metal DEVELOPMENT host (not an ephemeral forge)
    sweep`), and verify the
    dev-environment expert containers are up + fresh (`dev_environment_experts` —
    the same ephemeral RAG experts + commit-hook RAG retraining the forge runs).
-3. Stamp the `.last-daily-maintenance` marker. Ephemeral forges skip this whole
-   gate (they discard their substrate on teardown).
+3. Stamp the marker, NAMING what actually ran — the stamp is refused without
+   `--steps`, because a stamp that records "something happened" without
+   recording what restores the same unfalsifiability one level up:
+
+   ```bash
+   scripts/check-daily-maintenance.sh stamp --host <host> \
+     --steps 'delegate-sweep:<result>,podman-prune:<result>,nix-gc:<result>,cargo-gc:<result>'
+   ```
+
+   Record `skipped-absent` / `deferred-<reason>` honestly for steps this host
+   cannot or did not run; a partial pass that says so is worth more than a
+   green that says nothing. `scripts/check-daily-maintenance.sh show` prints the
+   last claim. Ephemeral forges skip this whole gate (they discard their
+   substrate on teardown) and read `skip:forge-exempt`.
 
 Then favor the expert system for the cycle's work-pull/triage/debug/research
 (methodology `expert_first_work`): ask the experts first; on a gap, fall back
@@ -477,6 +504,37 @@ continue:
   as the rule has always required.
 - `ok:experts-healthy` — say nothing further. The probe is silent by design when
   healthy; a signal that fires every cycle is one nobody reads.
+
+### The handshake is not the surface (order 801-m9tk)
+
+`ok:experts-healthy` means the registered servers answered when the PROBE
+launched them. It does not mean the tools reached YOUR session. For three
+consecutive windows cycles the probe printed `ok:experts-healthy` while not one
+`mcp__forge-plan__*` / `mcp__project-info__*` tool was bound to the agent, so
+every read silently fell back to `./target/release/tillandsias-plan`. A server
+that is up but not exposed is exactly the outage worth catching, and the
+handshake probe calls it healthy — the order-531 shape again.
+
+A script cannot see your tool surface; nothing in this repo can. **You** are the
+only observer of that fact, so the surface half is **attested, not measured** —
+and an unattested cycle reads `unattested:no-surface-claim`, never `ok:`.
+Immediately after the health probe, look at your own tool surface and say so:
+
+```bash
+scripts/check-mcp-surface.sh attest exposed      # mcp__* tools resolved this session
+scripts/check-mcp-surface.sh attest unexposed    # they did not — every read is a fallback
+scripts/check-mcp-surface.sh check               # the joined verdict
+```
+
+`check` joins the measured handshake with the attested surface and prints
+`ok:surface-exposed` / `unexposed:handshake-ok` / `down:<csv>` /
+`absent:not-registered` / `unattested:*` / `skip:no-health-log`. Advisory, never
+a gate — like the probe it extends. `cycle-metrics.sh` folds a fresh `unexposed`
+attestation into `mcp: health=ok-unexposed` and fires the `mcp_outage:` line, so
+the degraded read path reaches the ledger without anyone choosing to write it
+down. An `exposed` attestation leaves `health=ok` unchanged, and a claim older
+than the freshness window labels nothing: a previous cycle's marker never
+vouches for this one.
 
 Do NOT substitute `test -x` or a registration-file check for the handshake. A
 server that exists but wedges on startup is precisely the outage worth catching,
@@ -995,6 +1053,22 @@ Before exit:
    (packet 582-nqw5). The folded view (`tillandsias-plan loop-status`) is the
    status every host sees; `loop-status-compact` folds fragments into the base
    when drift makes it eligible.
+
+   **A long cycle's `--ts` legitimately predates its write, and `--backfill` is
+   the sanctioned path for it (order 801-w4pn).** `--ts` must agree with the
+   host clock within 900s or the write is refused; a cycle that read the clock
+   at Start Of Cycle and appends at Finalization two hours later trips that by
+   construction. Do not widen the window and do not invent a fresh timestamp —
+   the limit is what catches a fabricated hour, and re-reading the clock would
+   silently relabel when the work happened. Pass `--backfill` with the real
+   timestamp, or omit `--ts` entirely when "now" is genuinely the right stamp:
+
+   ```bash
+   tillandsias-plan loop-status-append --host <host> --ts <cycle-start-UTC> --backfill
+   ```
+
+   `--backfill` only reaches BACKWARD (a future `--ts` is still refused), so it
+   waives nothing the limit exists to protect, and the refusal already names it.
 3. Validate touched YAML with a parser, using the one that EXISTS where you are:
    `tillandsias-policy validate-yaml <files>` where built, else
    `yq . <file> >/dev/null`, else `ruby -ryaml -e "YAML.load_file('<file>')"`.
