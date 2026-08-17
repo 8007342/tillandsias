@@ -29,9 +29,35 @@ CALLS_FILE="$TMP_DIR/opencode.calls"
 PROJECT_DIR="$TMP_DIR/project"
 mkdir -p "$PROJECT_DIR"
 
-sed "s|source /usr/local/lib/tillandsias/lib-common.sh|source \"$TMP_DIR/lib-common.sh\"|" \
+# The non-interactive lanes exec through /usr/local/bin/harness-supervisor
+# (order 767-nkkq — the PID-1 crash supervisor). That path is IMAGE content and
+# does not exist on a dev host, so this hermetic fixture redirects it at a stub
+# alongside the lib-common redirect it already does. The stub is a transparent
+# exec, deliberately: this fixture's subject is PROMPT ROUTING — which argv the
+# harness receives — and supervision behaviour has its own fixture
+# (scripts/test-harness-supervisor.sh, 7 scenarios). Staging the real
+# supervisor here would make every routing assertion depend on supervision too,
+# and a fixture that tests two things fails for two reasons.
+sed -e "s|source /usr/local/lib/tillandsias/lib-common.sh|source \"$TMP_DIR/lib-common.sh\"|" \
+    -e "s|/usr/local/bin/harness-supervisor|$TMP_DIR/harness-supervisor-stub|g" \
     "$PROJECT_ROOT/images/default/entrypoint-forge-opencode.sh" > "$ENTRYPOINT_UNDER_TEST"
 chmod +x "$ENTRYPOINT_UNDER_TEST"
+
+cat > "$TMP_DIR/harness-supervisor-stub" <<'EOF'
+#!/usr/bin/env bash
+# Transparent stand-in for the 767-nkkq supervisor: run the harness exactly as
+# the real one does (supervisor stays PID 1, harness is the child) minus the
+# crash-verdict machinery this fixture does not exercise.
+#
+# Argv contract, matching the real supervisor: $1 is the harness NAME (a label
+# for the crash verdict), the command to run starts at $2. Dropping the shift
+# makes this exec the literal string "opencode", which is not on PATH — the
+# first version of this stub did exactly that and the fixture said
+# "exec: opencode: not found", which is the stub being wrong, not the lane.
+shift
+exec "$@"
+EOF
+chmod +x "$TMP_DIR/harness-supervisor-stub"
 
 cat > "$TMP_DIR/opencode-fake" <<'EOF'
 #!/usr/bin/env bash

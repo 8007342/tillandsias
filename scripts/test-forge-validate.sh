@@ -87,6 +87,39 @@ EOF
     exit 1
 }
 
+# BLOCKED IS A NAMED FAULT, NOT INVALID OUTPUT (order 756-2jnj). A forge whose
+# mirror is reachable but not currently write-authorized upstream reports
+# blocked:<reason>; the profile must surface that verdict verbatim so the
+# transcript names the fault (the 2026-08-15 403 state) instead of the
+# generic "invalid-output".
+blocked="$tmp/blocked"
+mkdir -p "$blocked"
+write_stub "$blocked/credential" "blocked:upstream-push-unauthorized" 1
+write_stub "$blocked/push" "dry-run fixture passed" 0
+write_stub "$blocked/workspace" "workspace fixture passed" 0
+write_stub "$blocked/headless" "headless fixture passed" 0
+write_stub "$blocked/services" "skip:not-forge-host" 0
+write_stub "$blocked/eligibility" "eligible" 0
+if blocked_output="$(FORGE_VALIDATE_CHECK_DIR="$blocked" scripts/forge-validate.sh 2>/dev/null)"; then
+    echo "FAIL: blocked credential fixture returned success" >&2
+    exit 1
+fi
+expected_blocked="$(cat <<'EOF'
+FAIL credential-channel blocked:upstream-push-unauthorized
+PASS push-route-dry-run
+PASS workspace-check
+PASS headless-tests
+SKIP service-health skip:not-forge-host
+PASS e2e-eligibility eligible
+SUMMARY pass=4 skip=1 fail=1
+EOF
+)"
+[ "$blocked_output" = "$expected_blocked" ] || {
+    printf 'FAIL: blocked-credential output mismatch\nexpected:\n%s\nactual:\n%s\n' \
+        "$expected_blocked" "$blocked_output" >&2
+    exit 1
+}
+
 # ABSENT IS NOT FAILED. With no branch to push (a detached HEAD), no push is
 # attempted — and this used to print `FAIL push-route-dry-run exit:1`, naming an
 # exit code nothing produced, with empty failure logs. Omitting the push stub

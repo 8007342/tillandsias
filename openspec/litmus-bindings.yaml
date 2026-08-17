@@ -160,6 +160,7 @@ specs:
   - litmus:fragment-closure-evidence-gate-shape
   - litmus:fragment-status-loss-attribution-shape
   - litmus:added-fragment-parse-gate-shape
+  - litmus:fold-incompleteness-typed-shape
   - litmus:release-runbook-external-preconditions-shape
   - litmus:script-exec-bit-shape
   - litmus:sidecar-is-a-build-graph-input
@@ -207,6 +208,7 @@ specs:
 - spec_id: default-image
   status: active
   litmus_tests:
+  - litmus:opencode-render-probe-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
@@ -223,6 +225,7 @@ specs:
   - litmus:forge-agent-result-format
   - litmus:forge-policy-binary-discoverability
   - litmus:npm-harness-install-idempotent-shape
+  - litmus:harness-crash-supervision-shape
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
@@ -235,8 +238,11 @@ specs:
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
   - litmus:cross-target-cfg-gate-check
+  - litmus:no-tracked-binaries-shape
+  - litmus:ensure-toolbox-include-shape
+  - litmus:sidecar-staleness-stamp-shape
   coverage_ratio: 100
-  last_verified: '2026-07-15'
+  last_verified: '2026-08-16'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []
@@ -342,6 +348,7 @@ specs:
   - litmus:onboarding-cold-start-discovery
   - litmus:forge-environment-discoverability-install-shape
   - litmus:mcp-discoverability-shape
+  - litmus:mcp-server-request-fault-isolation
   - litmus:forge-lsp-availability-shape
   - litmus:forge-plan-expert-build-shape
   - litmus:forge-experts-stale-source-honesty
@@ -453,6 +460,12 @@ specs:
   - litmus:forge-config-trust-cross-platform-parity
   - litmus:forge-gitdir-staging-chown
   - litmus:git-mirror-relay-token-expiry
+  - litmus:mirror-sshd-posture-shape
+  - litmus:mirror-host-cert-and-sshd-shape
+  - litmus:mirror-receive-wrapper-shape
+  - litmus:ssh-lane-sidecar-shape
+  - litmus:forge-upstream-auth-gate
+  - litmus:git-mirror-fetch-credential-shape
   coverage_ratio: 83
   last_verified: '2026-07-23'
 - spec_id: github-credential-health
@@ -472,7 +485,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:host-browser-mcp-shape
-  - litmus:host-browser-mcp-frame-shape
+  - litmus:host-browser-mcp-lane-socket-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
 - spec_id: host-chromium
@@ -569,6 +582,13 @@ specs:
   - litmus:user-runtime-checkout-free-install
   coverage_ratio: 100
   last_verified: '2026-05-20'
+- spec_id: litmus-framework
+  status: active
+  litmus_tests:
+  - litmus:fake-podman-direct-invocation-safety
+  - litmus:litmus-podman-preflight-diagnosis-shape
+  coverage_ratio: 100
+  last_verified: '2026-08-17'
 - spec_id: macos-native-tray
   status: active
   litmus_tests:
@@ -586,6 +606,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:methodology-accountability-shape
+  - litmus:agent-identity-canonical-source-shape
   - litmus:no-duplicate-rust-item-defs
   - litmus:integration-strategy-consistency
   - litmus:plan-index-order-uniqueness
@@ -708,8 +729,9 @@ specs:
   - litmus:concurrent-forge-shared-stack-safety
   - litmus:drain-vs-self-heal
   - litmus:teardown-liveness-shared-scope-agreement
+  - litmus:gate-podman-mode-is-configuration-not-inference
   coverage_ratio: 100
-  last_verified: '2026-07-09'
+  last_verified: '2026-08-17'
 - spec_id: podman-container-spec
   status: active
   litmus_tests:
@@ -766,6 +788,7 @@ specs:
   - litmus:proxy-container-shape
   - litmus:agent-egress-allowlist-shape
   - litmus:podman-egress-control-shape
+  - litmus:proxy-crash-supervision-shape
   coverage_ratio: 75
   last_verified: '2026-07-23'
 - spec_id: transparent-https-caching
@@ -1012,6 +1035,12 @@ specs:
   - litmus:chromium-variants-launch-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
+- spec_id: mcp-tool-socket
+  status: active
+  litmus_tests:
+  - litmus:host-browser-mcp-lane-socket-shape
+  coverage_ratio: 100
+  last_verified: '2026-08-16'
 - spec_id: mcp-on-demand
   status: active
   litmus_tests:
@@ -1031,6 +1060,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-metrics-shape
+  - litmus:guest-container-metrics-wire-shape
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: podman-secrets-integration
@@ -1041,6 +1071,7 @@ specs:
   - litmus:opencode-vault-auth-content
   - litmus:git-mirror-vault-agent-auto-auth
   - litmus:forge-secret-capability-contract
+  - litmus:proxy-ca-key-not-world-readable
   coverage_ratio: 75
   last_verified: '2026-07-28'
 - spec_id: tillandsias-vault
@@ -1067,6 +1098,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
+  - litmus:headless-least-privilege-delegation-shape
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: graceful-shutdown
@@ -1108,5 +1140,6 @@ specs:
   litmus_tests:
   - litmus:vsock-handshake
   - litmus:vsock-exec-heartbeat
+  - litmus:vsock-unauthenticated-peer-rejected
   coverage_ratio: 100
   last_verified: '2026-07-14'

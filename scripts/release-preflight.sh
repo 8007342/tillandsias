@@ -70,12 +70,19 @@ fi
 # a pass we did not earn. The two are not equivalent — a source grep cannot see
 # what the built help text actually renders.
 RETIRED_RE='(^|[^a-z-])--(install|without-vault|legacy-keyring-secrets)([^a-z-]|$)'
+# Run-don't-stat (order 770-ifeg): `-x` passes for the OTHER platform's
+# artifact on a shared Windows/WSL checkout, and an un-execable candidate
+# would silently produce an EMPTY --help below — a pass we did not earn.
+# Probe by execution; custom-triple dirs stay listed explicitly because
+# resolve_target_binary only walks target/<profile>/.
+. "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
 bin=""
 for candidate in \
     target/x86_64-unknown-linux-musl/release/tillandsias \
+    target/release/tillandsias.exe \
     target/release/tillandsias \
     target/aarch64-unknown-linux-musl/release/tillandsias; do
-    [[ -x "$candidate" ]] && { bin="$candidate"; break; }
+    target_binary_runs "$candidate" && { bin="$candidate"; break; }
 done
 
 if [[ -n "$bin" ]]; then
@@ -116,13 +123,37 @@ fi
 . "$(dirname "${BASH_SOURCE[0]}")/plan-binary-probe.sh"
 _plan_bin="$(resolve_plan_binary || true)"
 if [[ -n "$_plan_bin" ]]; then
-    if ! out="$("$_plan_bin" check 2>&1)"; then
+    # ORDER 796-4ydb. --strict-fragments HERE, and deliberately not in
+    # build.sh. A fragment the fold cannot read makes every count drawn from
+    # the ledger — burndown, the centicolon signature, the release evidence
+    # bundle — a count over less than the plan, and a release is fixed forward:
+    # the wrong number ships permanently and is superseded, never repaired. A
+    # release cut is also ONE host at ONE moment, so refusing here blocks a
+    # deliberate act rather than every sibling's build (699-dycj).
+    out="$("$_plan_bin" check --strict-fragments 2>&1)" && rc=0 || rc=$?
+    if [[ $rc -eq 3 ]]; then
+        fail "plan ledger is INCOMPLETE — the fold could not read part of the corpus:"
+        fail "$out"
+        fail "repair the fragment before cutting; a release records counts over the whole plan"
+        echo "blocked:plan-ledger-incomplete"
+        exit 1
+    fi
+    if [[ $rc -ne 0 ]]; then
         fail "plan ledger check FAILED:"
         fail "$out"
         echo "blocked:plan-ledger-invalid"
         exit 1
     fi
-    note "plan ledger sound"
+    # LEGACY BACKSTOP, same reasoning as the pre-push lane: a binary predating
+    # 796-4ydb ignores the unknown flag and exits 0, so the refusal above never
+    # fires. A current binary cannot reach here with a skipped fragment.
+    if printf '%s' "$out" | grep -q 'does not parse and was SKIPPED'; then
+        fail "plan ledger is INCOMPLETE and this binary predates --strict-fragments:"
+        printf '%s' "$out" | grep 'does not parse and was SKIPPED' >&2
+        echo "blocked:plan-ledger-incomplete"
+        exit 1
+    fi
+    note "plan ledger sound and complete"
 else
     note "tillandsias-plan not built — ledger gate SKIPPED (build.sh --check covers it)"
 fi

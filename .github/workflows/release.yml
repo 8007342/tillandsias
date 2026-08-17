@@ -137,6 +137,34 @@ jobs:
           nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
           nix build -L .#tillandsias-headless-aarch64-musl  --out-link result-ha
 
+      - name: Assert crane deps derivations are source-stable (order 765-8hc3)
+        # The cache-miss warning below reports that a rebuild was SLOW; it
+        # cannot say WHY. This says why, and is the only signal that
+        # distinguishes "the lockfile legitimately moved" from "an ordinary
+        # source commit now invalidates ~1,000 vendored crates per target".
+        #
+        # Non-blocking by design: it perturbs the tree to measure, so a failure
+        # here means the caching property regressed, not that this release is
+        # unsafe to publish. Loud, and recorded in the step summary.
+        continue-on-error: true
+        run: |
+          set +e
+          VERDICT="$(scripts/check-nix-deps-stability.sh --all 2>/tmp/deps-stability.err)"
+          RC=$?
+          set -e
+          echo "$VERDICT"
+          sed -n '1,20p' /tmp/deps-stability.err || true
+          {
+            echo "### Crane deps-derivation stability"
+            echo ""
+            echo '```'
+            echo "$VERDICT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RC" -ne 0 ]; then
+            echo "::warning::Crane deps churn: $VERDICT — an ordinary source commit now invalidates the dependency derivations, so every release and every --ci-full --install cold-compiles ~1,000 crates per target. See order 765-8hc3 and the ORDER 765-8hc3 comment in flake.nix."
+          fi
+
       - name: Verify release builds use binary-self-hash (no dev seed fallback)
         run: |
           # Release builds must NOT contain the debug DEV_ROOT_SEED. With LTO
@@ -258,6 +286,11 @@ jobs:
           test -f uninstall.sh
           test -f verify.sh
           test -f SHA256SUMS
+          # Order 756-rfdr: the named `test -f` lines above are an allow-list of
+          # things someone remembered. This asserts the PROPERTY over whatever
+          # is actually staged, so an asset added later cannot slip through
+          # unverifiable just because nobody added a line for it.
+          bash ../scripts/check-release-asset-integrity.sh .
           ls -la
 
       - name: Create or update GitHub Release
@@ -643,7 +676,16 @@ jobs:
           # (`sha256sum -c` could not read the merged line). Normalize first.
           [ -s SHA256SUMS-windows ] && [ "$(tail -c1 SHA256SUMS-windows | wc -l)" -eq 0 ] \
             && printf '\n' >> SHA256SUMS-windows
-          sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe >> SHA256SUMS-windows
+          # install-windows.ps1 is published as a standalone curl installer
+          # (parity with install.sh / install-macos.sh). It used to be copied in
+          # AFTER the signing step and was absent from every SHA256SUMS, so the
+          # one asset with the most privilege in the Windows path -- it writes
+          # PATH, registers a WSL2 distro and installs a startup tray -- was the
+          # only asset in the release with no integrity path at all, while
+          # README.md tells users to pipe it straight into their shell
+          # (order 756-rfdr, measured on the published v0.4.260815.1).
+          cp ../scripts/install-windows.ps1 install-windows.ps1
+          sha256sum tillandsias-windows-x64.zip tillandsias-tray.exe install-windows.ps1 >> SHA256SUMS-windows
           # Fail the job rather than publish a checksum file that cannot verify.
           sha256sum -c SHA256SUMS-windows
           echo "Staged version-stable aliases:"
@@ -656,7 +698,15 @@ jobs:
         shell: bash
         run: |
           cd release-artifacts
-          for artifact in tillandsias-tray-*-windows-x64.zip SHA256SUMS-windows; do
+          # `*`, not an allow-list. The old loop named
+          # `tillandsias-tray-*-windows-x64.zip SHA256SUMS-windows` explicitly,
+          # so every asset added later was unsigned by default and nothing said
+          # so -- which is how install-windows.ps1 shipped bare. The Linux job
+          # has always signed `for artifact in *`; this is that shape.
+          for artifact in *; do
+            case "${artifact}" in
+              *.cosign.bundle) continue ;;
+            esac
             echo "::group::Signing ${artifact}"
             cosign sign-blob \
               --yes \
@@ -666,14 +716,19 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Stage install-windows.ps1 as standalone curl installer
-        shell: pwsh
+      - name: Refuse a Windows asset set with an unverifiable file
+        shell: bash
         run: |
-          # Publish install-windows.ps1 as a top-level release artifact so users
-          # can curl-install without downloading the zip first (parity with
-          # install.sh on Linux and install-macos.sh on macOS).
-          Copy-Item scripts\install-windows.ps1 release-artifacts\install-windows.ps1
-          Write-Host "Staged install-windows.ps1 as standalone release artifact"
+          # Order 756-rfdr. install-windows.ps1 shipped in v0.4.260815.1 with no
+          # cosign bundle and named in no SHA256SUMS -- unverifiable by anyone
+          # who downloaded it, and it is the asset README.md tells Windows users
+          # to pipe into their shell. Nothing failed, because nothing looked.
+          #
+          # The check follows the TRANSITIVE path rather than counting unsigned
+          # files: four of the five bundle-less assets in that release were
+          # legitimately covered by a signed manifest, and a gate that flagged
+          # all five would have been switched off after the first false alarm.
+          bash scripts/check-release-asset-integrity.sh release-artifacts
 
       - name: Upload Windows assets to release
         shell: bash

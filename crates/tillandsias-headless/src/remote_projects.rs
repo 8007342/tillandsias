@@ -120,6 +120,34 @@ fn ensure_git_image_available(image: &str, debug: bool) -> Result<(), String> {
     }
 }
 
+/// Proxy-side counterpart of [`ensure_git_image_available`]: inert under
+/// `cfg(test)` for the same reason, and separate from `crate::
+/// ensure_proxy_running` on purpose.
+///
+/// Order 794-57bv. The git preflight above has been test-inert since it was
+/// written, but the proxy preflight called `crate::ensure_proxy_running`
+/// directly, so the same class walked back in through a different door: four
+/// `remote_projects` unit tests reached the real image layer, `squid`'s
+/// 6.9 -> 6.12 bump (782-9jfg) moved the proxy label, `ensure_image_exists`
+/// saw `label_mismatch`, and all four raced the image's atomic rename. The
+/// visible panic named a filesystem operation and never mentioned images.
+///
+/// The indirection is deliberate: `crate::ensure_proxy_running` also backs the
+/// `Service::Proxy` satisfier and the `main.rs` startup chain, so a `cfg(test)`
+/// arm inside IT would silently hollow out those tests too. Only this crate's
+/// remote-project preflight is inert.
+fn ensure_proxy_available(debug: bool) -> Result<(), String> {
+    #[cfg(test)]
+    {
+        let _ = debug;
+        Ok(())
+    }
+    #[cfg(not(test))]
+    {
+        crate::ensure_proxy_running(debug)
+    }
+}
+
 /// Truncate a script body to a single-line preview suitable for an
 /// `eprintln!` debug trace. Keeps roughly 80 chars so the diagnostic stays
 /// glanceable.
@@ -253,7 +281,7 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     // when the proxy is already up. Placed AFTER the lease acquire because
     // vault churn during acquire can tear the proxy down.
     // @trace spec:proxy-container, plan/issues/wire-tray-cloud-attach-2026-07-01.md
-    crate::ensure_proxy_running(debug)?;
+    ensure_proxy_available(debug)?;
     if debug {
         debug_log_podman_invocation("run_git_image_shell", &image, true, script, extra_args);
     }
@@ -582,7 +610,7 @@ exec gh repo clone "$1" "$2"
     // down. The clone egresses through squid, so (re)ensure the proxy as the
     // LAST step before the container runs. Idempotent fast-path when up.
     // @trace spec:proxy-container, plan/issues/wire-tray-cloud-attach-2026-07-01.md
-    crate::ensure_proxy_running(debug)?;
+    ensure_proxy_available(debug)?;
 
     if debug {
         if nwo != repo_url {
@@ -723,6 +751,28 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
+
+    /// Serializes every test below that mutates PATH / TILLANDSIAS_GIT_IMAGE /
+    /// TILLANDSIAS_PODMAN_BIN.
+    ///
+    /// Order 793-a62g. Five tests here rewrite those PROCESS-GLOBAL variables
+    /// and politely restore them afterwards — which is correct in isolation
+    /// and useless in parallel, because cargo runs them as threads in one
+    /// process. Concurrently, one test's restore lands in the middle of
+    /// another's setup, so a test that installed a mock `gh` on PATH suddenly
+    /// resolves the real one. The four `remote_projects` failures that held
+    /// the v0.4.260817.1 release were exactly this, and they passed 11/11 the
+    /// moment they ran alone — which is the signature to recognise: an
+    /// environment-mutating test that only fails when it has company.
+    ///
+    /// The lock is poison-tolerant: a panicking test must not convert one
+    /// failure into a cascade of misleading ones in its siblings.
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
     use tempfile::tempdir;
 
     fn install_podman_mock() -> tempfile::TempDir {
@@ -738,6 +788,7 @@ mod tests {
 
     #[test]
     fn git_image_tag_defaults_to_fully_qualified_versioned_tag() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -758,30 +809,65 @@ mod tests {
     }
 
     #[test]
-    fn remote_project_git_runner_preflights_git_image() {
-        let source = include_str!(concat!(
+    fn remote_project_paths_preflight_git_and_proxy() {
+        let whole = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/src/remote_projects.rs"
         ));
-        let runner = source
-            .split("fn run_git_image_shell")
-            .nth(1)
-            .expect("run_git_image_shell source")
-            .split("fn run_command_with_timeout")
+        // Cut the test module off BEFORE searching. Every needle below also
+        // appears verbatim in this test, and the `clone` slice used to run to
+        // end-of-file — so its assertion was satisfied by the assertion above
+        // it rather than by the function it names, and could not fail. Order
+        // 794-57bv; each of the four assertions was mutation-checked against
+        // the production call site after this bound was added.
+        let source = whole
+            .split("#[cfg(test)]\nmod tests")
             .next()
-            .unwrap_or("");
+            .expect("production source above the test module");
+        assert!(
+            !source.contains("fn remote_project_paths_preflight_git_and_proxy"),
+            "test module leaked into the production slice; the bound above is wrong"
+        );
+
+        // Take ONE item, ending at the first column-0 `}`. The previous bound
+        // was the name of a neighbouring function — `fn run_command_with_timeout`,
+        // which no longer exists in this file, so `split` matched nothing, the
+        // slice ran on past `clone_project_from_github_with_debug`, and the
+        // runner assertion was satisfied by the CLONE function's preflight.
+        // Deleting the runner's own call left the test green.
+        let item = |header: &str| -> &str {
+            let at = source
+                .find(header)
+                .unwrap_or_else(|| panic!("{header} not found in production source"));
+            let rest = &source[at..];
+            let end = rest.find("\n}\n").map(|i| i + 3).unwrap_or(rest.len());
+            &rest[..end]
+        };
+
+        let runner = item("fn run_git_image_shell");
+        assert!(
+            !runner.contains("pub fn clone_project_from_github_with_debug"),
+            "runner slice swallowed the clone function; the end bound is wrong"
+        );
         assert!(
             runner.contains("ensure_git_image_available(&image, debug)?"),
             "remote project listing must build the git image before podman run"
         );
+        assert!(
+            runner.contains("ensure_proxy_available(debug)?"),
+            "remote project listing must preflight the proxy through the \
+             test-inert wrapper, not crate::ensure_proxy_running (794-57bv)"
+        );
 
-        let clone = source
-            .split("pub fn clone_project_from_github_with_debug")
-            .nth(1)
-            .expect("clone_project_from_github_with_debug source");
+        let clone = item("pub fn clone_project_from_github_with_debug");
         assert!(
             clone.contains("ensure_git_image_available(&image, debug)?"),
             "cloud attach clone must build the git image before podman run"
+        );
+        assert!(
+            clone.contains("ensure_proxy_available(debug)?"),
+            "cloud attach clone must preflight the proxy through the \
+             test-inert wrapper, not crate::ensure_proxy_running (794-57bv)"
         );
     }
 
@@ -820,6 +906,7 @@ mod tests {
 
     #[test]
     fn discover_projects_uses_containerized_gh() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -861,6 +948,7 @@ mod tests {
 
     #[test]
     fn clone_project_uses_containerized_gh() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -951,6 +1039,7 @@ mod tests {
     /// `owner/name` form.
     #[test]
     fn clone_normalizes_api_url_to_owner_name() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -1014,6 +1103,7 @@ mod tests {
     /// containers (`build_git_run_args` and friends).
     #[test]
     fn clone_uses_host_parent_bindmount() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that

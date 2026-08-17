@@ -28,6 +28,12 @@ PLAN="$(cd "$(dirname "$PLAN")" && pwd)/$(basename "$PLAN")"
 work="$(mktemp -d "${TMPDIR:-/tmp}/ledger-ts-guard-fixture.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
+# 772-4se9: append-event now REFUSES when no --agent is passed and
+# TILLANDSIAS_AGENT_ID is unset (it used to fabricate agent_id=unknown).
+# These scenarios exercise the TIMESTAMP guard, so identity is provided
+# once here to keep every verdict below about its own subject.
+export TILLANDSIAS_AGENT_ID="ledger-ts-guard-fixture"
+
 index="$work/index.yaml"
 cat >"$index" <<'YAML'
 packets:
@@ -41,7 +47,14 @@ mkdir -p "$work/index.d"
 
 now_iso() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 # Offset the clock by N seconds, in the exact shape the ledger writes.
-iso_offset() { date -u -d "@$(( $(date -u +%s) + $1 ))" +%Y-%m-%dT%H:%M:%SZ; }
+# GNU then BSD (-r). Without the BSD arm every offset came back EMPTY on
+# macOS, every scenario fed `--ts ''`, and the guard's own fixture reported
+# six failures that said nothing about the guard — a fixture for a
+# fail-loud mechanism, failing quietly for the wrong reason (784-dwkh).
+iso_offset() {
+    _e=$(( $(date -u +%s) + $1 ))
+    date -u -d "@${_e}" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -r "${_e}" +%Y-%m-%dT%H:%M:%SZ
+}
 
 failures=()
 

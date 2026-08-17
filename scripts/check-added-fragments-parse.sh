@@ -60,10 +60,14 @@ base_ref="${TILLANDSIAS_FRAGMENT_PARSE_BASE:-origin/linux-next}"
 # `ruby` is absent from the forge image, so prefer the workspace binary and fall
 # back only to tools the environment actually has. python3 is deliberately NOT
 # used: it is forbidden for committed automation (order 63).
+# Run-don't-stat (order 770-ifeg): `-x` passes for the OTHER platform's
+# artifact on a shared Windows/WSL checkout; probe candidates by execution.
+. "$REPO_ROOT/scripts/plan-binary-probe.sh"
 _validator=""
-for cand in "target/release/tillandsias-policy" "target/debug/tillandsias-policy"; do
-    [ -x "$cand" ] && { _validator="$cand validate-yaml"; break; }
-done
+_policy_bin="$(resolve_target_binary tillandsias-policy release "$REPO_ROOT")" \
+    || _policy_bin="$(resolve_target_binary tillandsias-policy debug "$REPO_ROOT")" \
+    || _policy_bin=""
+[ -n "$_policy_bin" ] && _validator="$_policy_bin validate-yaml"
 if [ -z "$_validator" ] && command -v yq >/dev/null 2>&1; then
     _validator="yq ."
 fi

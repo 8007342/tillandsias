@@ -36,6 +36,12 @@ pub(crate) fn classify_nonzero_distro_exec(
     stderr: &str,
     wsl_service_sane: bool,
 ) -> DistroExecProbeClass {
+    // The NUL scrub is DELIBERATELY KEPT after the 2026-08-17 `WSL_UTF8=1`
+    // change removed its siblings. This is the last check before a
+    // DESTRUCTIVE disposition: if a marker fails to match, the caller may
+    // classify a service wedge as distro damage and authorize a reprovision.
+    // The cost of the scrub is one allocation on an error path; the cost of a
+    // missed match is a wiped guest. Asymmetric, so it stays.
     let normalized = stderr.replace('\0', "").to_ascii_uppercase();
     if !wsl_service_sane
         || normalized.contains("WSL/SERVICE")

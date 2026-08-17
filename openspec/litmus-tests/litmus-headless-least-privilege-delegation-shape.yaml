@@ -1,0 +1,67 @@
+name: litmus:headless-least-privilege-delegation-shape
+spec: headless-mode
+description: >
+  Pin the order-309 least-privilege delegation contract (design record:
+  plan/issues/headless-least-privilege-delegation-design-2026-08-16.md).
+  Order 308 removed NoNewPrivileges=yes + CapabilityBoundingSet= from the WSL
+  guest headless unit because a cap-stripped uid-0 headless OWNING the podman
+  store makes podman select rootless mode and wedge (exit-125 loop, tray
+  latched on 'securing vault'). Least privilege returns ONLY via podman
+  API-socket delegation: the hardening directives may ship in the unit
+  template ONLY together with the TILLANDSIAS_PODMAN_REMOTE_URL delegation
+  environment line. Two halves pinned here: the joint template invariant
+  (with a fixture negative control proving the predicate can fail), and a
+  LIVE delegated-client probe — podman as a pure client under
+  NoNewPrivileges=yes through the API socket — which is exactly what ships
+  post-delegation and what the 308 class would have broken. (User managers
+  cannot apply CapabilityBoundingSet= — systemd status 218/CAPABILITIES — so
+  the dev-host probe pins the NNP half; the system manager applies the full
+  set in production.)
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+  - systemd-run and a user podman.socket are available for the live probe (the probe step starts the idempotent user socket)
+
+critical_path:
+  - step: "Req: joint invariant — hardening may ship only WITH the delegation env"
+    # Keyed on the MAINTAINED absence-pin in wsl_lifecycle.rs's own tests
+    # ('!headless_unit.contains(\"NoNewPrivileges=\"'): while that pin exists,
+    # the rendered unit provably carries no hardening (compliant today). The
+    # windows-side delegation edit removes/flips that pin — at which point
+    # this step requires the TILLANDSIAS_PODMAN_REMOTE_URL delegation env in
+    # the same file. Absence-pin gone AND no delegation env = the 308 wedge
+    # shape, refused. (A raw directive grep false-positives on the pin's own
+    # assertion-message strings — this anchor does not.)
+    command: "f=crates/tillandsias-windows-tray/src/wsl_lifecycle.rs; absence=$(grep -c 'headless_unit.contains(\"NoNewPrivileges=\"' \"$f\"); dele=$(grep -E 'TILLANDSIAS_PODMAN_REMOTE_URL' \"$f\" | grep -cv '^ *//'); if [ \"$absence\" -eq 0 ] && [ \"$dele\" -eq 0 ]; then echo 'FAIL: hardening unpinned without delegation (order 308 wedge shape)'; exit 1; fi; echo 'ok: joint invariant holds'"
+    timeout_ms: 10000
+    expected_behavior: "ok: joint invariant holds"
+
+  - step: "NEGATIVE CONTROL: the predicate rejects an unpinned-and-undelegated fixture"
+    command: "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; printf 'writeln(unit, \"NoNewPrivileges=yes\")\\n' > \"$d/unit.rs\"; absence=$(grep -c 'headless_unit.contains(\"NoNewPrivileges=\"' \"$d/unit.rs\"); dele=$(grep -E 'TILLANDSIAS_PODMAN_REMOTE_URL' \"$d/unit.rs\" | grep -cv '^ *//'); if [ \"$absence\" -eq 0 ] && [ \"$dele\" -eq 0 ]; then echo 'ok: fixture violation detected'; else echo 'FAIL: predicate blind to the 308 wedge shape'; exit 1; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: fixture violation detected"
+
+  - step: "LIVE: podman as a pure client under NoNewPrivileges=yes through the API socket"
+    # The delegated-client shape that ships post-delegation. Idempotent user
+    # socket start; CONTAINER_HOST implies remote mode. This succeeding under
+    # NNP is the property whose absence produced the 308 exit-125 loop.
+    command: "command -v systemd-run >/dev/null || { echo 'FAIL: systemd-run unavailable'; exit 1; }; systemctl --user is-active podman.socket >/dev/null 2>&1 || systemctl --user start podman.socket || { echo 'FAIL: cannot start user podman.socket'; exit 1; }; out=$(systemd-run --user --wait --pipe -p NoNewPrivileges=yes --setenv=CONTAINER_HOST=unix://$XDG_RUNTIME_DIR/podman/podman.sock podman info --format '{{.Version.Version}}' 2>&1) && echo \"ok: delegated client works ($(printf '%s' \"$out\" | grep -Eo '[0-9]+\\.[0-9]+\\.[0-9]+' | head -1))\" || { echo \"FAIL: delegated client refused: $out\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: delegated client works"
+
+observability:
+  traces:
+    - "@trace spec:headless-mode"
+    - "@trace spec:podman-orchestration"
+  expected_log: "hardening directives ship only with socket delegation; delegated client works under NoNewPrivileges"
+  log_fields:
+    spec: "headless-mode"
+    test: "headless-least-privilege-delegation-shape"
+    artifact: "crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
+
+rollback:
+  on_failure: "read plan/issues/headless-least-privilege-delegation-design-2026-08-16.md and the 308 forensics (plan/issues/headless-podman-events-watcher-rootless-wedge-2026-07-12.md); hardening without TILLANDSIAS_PODMAN_REMOTE_URL delegation reintroduces the rootless wedge"
+  command: "grep -nE '(NoNewPrivileges|CapabilityBoundingSet|TILLANDSIAS_PODMAN_REMOTE_URL)' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs | head -10"

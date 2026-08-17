@@ -55,30 +55,20 @@ if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
 fi
 
 cargo build --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" -p tillandsias-policy
-POLICY_BIN="${REPO_ROOT}/target/debug/tillandsias-policy"
-if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
-        [[ -x "${CARGO_TARGET_DIR}/debug/tillandsias-policy" ]] && POLICY_BIN="${CARGO_TARGET_DIR}/debug/tillandsias-policy"
-    else
-        [[ -x "${REPO_ROOT}/${CARGO_TARGET_DIR}/debug/tillandsias-policy" ]] && POLICY_BIN="${REPO_ROOT}/${CARGO_TARGET_DIR}/debug/tillandsias-policy"
-    fi
-fi
 args=(check-cheatsheet-tiers --repo-root "${REPO_ROOT}")
 [[ "${QUIET}" == "1" ]] && args+=(--quiet)
 [[ "${STRICT}" == "1" ]] && args+=(--strict)
 
-# Probe runnability before exec (order 672-4nts). On Windows the in-tree
-# target/ holds only stale Linux ELF artifacts (real builds redirect to the
-# WSL2 distro-native CARGO_TARGET_DIR), so a bare exec died with a raw
-# "cannot execute binary file: Exec format error" on every gate run — an
-# ERROR banner that provided zero coverage and trained readers to ignore
-# red gate text. A probe that cannot run on this host is a SKIP, said once.
-# 126 = found but cannot execute (wrong binary format), 127 = not found.
-# Any other exit code means the binary RAN, so the real check may proceed.
-"${POLICY_BIN}" --help >/dev/null 2>&1
-probe=$?
-if [[ "$probe" -eq 126 || "$probe" -eq 127 ]]; then
-    echo "skip:policy-binary-not-host-executable (${POLICY_BIN})"
+# Run-don't-stat via the shared probe (orders 672-4nts + 770-ifeg). This
+# script's own inline `--help` probe was the prototype; resolve_target_binary
+# generalizes it AND tries the runnable `.exe` sibling first, so on Windows
+# the gate now RUNS against the PE cargo just built instead of skipping over
+# the stale Linux ELF at the extensionless path. A probe that cannot run on
+# this host at all remains a SKIP, said once — an "Exec format error" banner
+# provides zero coverage and trains readers to ignore red gate text.
+. "${REPO_ROOT}/scripts/plan-binary-probe.sh"
+if ! POLICY_BIN="$(resolve_target_binary tillandsias-policy debug "${REPO_ROOT}")"; then
+    echo "skip:policy-binary-not-host-executable (no runnable tillandsias-policy under target/debug or CARGO_TARGET_DIR)"
     exit 0
 fi
 exec "${POLICY_BIN}" "${args[@]}"

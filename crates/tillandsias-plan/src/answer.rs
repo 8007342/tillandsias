@@ -219,6 +219,22 @@ pub struct Envelope {
     confidence: Confidence,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     citation_root: Option<String>,
+    /// ORDER 796-4ydb — corpus files the fold COULD NOT READ, repo-relative.
+    ///
+    /// Non-empty means this answer is drawn from a partial corpus: the named
+    /// fragments did not parse, so anything filed in them is missing from the
+    /// ledger the answer was computed against. It is deliberately NOT folded
+    /// into `confidence`. `confidence: exact` is a claim about the CITATION —
+    /// the cited span exists and says what is quoted — and that claim stays
+    /// true; the failure mode here is OMISSION, which needs its own word.
+    /// Collapsing the two would either overstate the citation's weakness or,
+    /// worse, let a caller conclude from `exact` that nothing was missed.
+    ///
+    /// ADDITIVE AND ABSENT WHEN CLEAN: a corpus that parsed whole serializes
+    /// byte-identically to before this field existed, so no consumer pinning
+    /// the envelope shape sees a change until there is something to report.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    skipped_sources: Vec<String>,
 }
 
 impl Envelope {
@@ -244,6 +260,7 @@ impl Envelope {
             freshness,
             confidence,
             citation_root: None,
+            skipped_sources: Vec::new(),
         }
     }
 
@@ -257,7 +274,26 @@ impl Envelope {
             freshness,
             confidence: Confidence::Unsupported,
             citation_root: None,
+            skipped_sources: Vec::new(),
         }
+    }
+
+    /// ORDER 796-4ydb — stamp the corpus files the fold could not read.
+    ///
+    /// Applied at EMISSION, after any downgrade to [`Envelope::unsupported`],
+    /// because the incompleteness is a property of the corpus rather than of
+    /// the answer: a refusal computed from a partial ledger is still a refusal
+    /// computed from a partial ledger, and rebuilding the envelope must not
+    /// drop that. Empty input is a no-op.
+    pub fn with_skipped_sources(mut self, skipped: Vec<String>) -> Self {
+        self.skipped_sources = skipped;
+        self
+    }
+
+    /// The corpus files that did not parse and are therefore absent from this
+    /// answer. Empty means the fold read the whole corpus.
+    pub fn skipped_sources(&self) -> &[String] {
+        &self.skipped_sources
     }
 
     pub fn with_citation_root(mut self, root: &Path) -> Self {
@@ -562,7 +598,14 @@ pub fn classify(ledger: &Ledger, question: &str) -> Option<Intent> {
         || lower.contains("whats next")
         || lower.contains("what is next")
         || lower.contains("work can i do");
-    let wants_ready = lower.contains("ready")
+    // ORDER 757-yi8c: "ready" must match as a TOKEN, not a substring.
+    // `lower.contains("ready")` fired on "alREADY", so the duplicate-detection
+    // question "is there already a packet about the forge image missing the
+    // hostname executable?" — whose only other routing signal was the role
+    // word "forge" — was answered with the entire ready-for-forge listing,
+    // served as exact. A semantically unrelated exact answer is worse than an
+    // honest unsupported (2026-08-15 failed-forge handoff, priority 4).
+    let wants_ready = lower_tokens.iter().any(|t| t == "ready")
         || lower.contains("what can i pick up")
         || lower.contains("work can i pick up");
 
@@ -1324,6 +1367,32 @@ mod tests {
         (ledger, path)
     }
 
+    /// ORDER 757-yi8c. "alREADY" must not trigger the ready listing: a
+    /// duplicate-detection question whose only other signal is a role word
+    /// ("forge") was answered with the entire ready-for-forge listing served
+    /// as exact. The classifier must not read Ready intent out of it; the
+    /// token form still must.
+    #[test]
+    fn already_is_not_a_ready_intent_but_the_ready_token_still_is() {
+        let ledger = live_ledger();
+        let misroute = classify(
+            &ledger,
+            "is there already a packet about the forge image missing the hostname executable?",
+        );
+        assert!(
+            !matches!(
+                misroute,
+                Some(Intent::Ready { .. }) | Some(Intent::Next { .. })
+            ),
+            "'already' + a role word must not route to the ready/next listing, got {misroute:?}"
+        );
+        let token = classify(&ledger, "ready packets for forge");
+        assert!(
+            matches!(token, Some(Intent::Ready { .. })),
+            "the literal 'ready' token must keep routing to the ready listing, got {token:?}"
+        );
+    }
+
     /// EXIT CRITERION (ii). The fixture query returns at least one citation,
     /// its path+range resolves, and — the load-bearing half — the cited span
     /// really contains the packet_id the answer claims.
@@ -1965,5 +2034,61 @@ mod tests {
         ] {
             assert_eq!(iso8601_to_epoch(bad), None, "must refuse {bad:?}");
         }
+    }
+
+    // ---- ORDER 796-4ydb: the envelope reports a partial corpus -----------
+
+    #[test]
+    fn a_whole_corpus_serializes_the_envelope_exactly_as_before() {
+        // The additive half. `skipped_sources` must be ABSENT — not `[]` —
+        // when there is nothing to report, so the field costs nothing to every
+        // consumer pinning this shape until the day it matters.
+        let e = Envelope::unsupported("nothing", fresh());
+        let json = serde_json::to_string(&e).expect("serializes");
+        assert!(
+            !json.contains("skipped_sources"),
+            "clean corpus must not mention it: {json}"
+        );
+    }
+
+    #[test]
+    fn a_partial_corpus_names_what_the_fold_could_not_read() {
+        let e = Envelope::unsupported("nothing", fresh())
+            .with_skipped_sources(vec!["plan/index.d/broken.yaml".to_string()]);
+        assert_eq!(
+            e.skipped_sources(),
+            &["plan/index.d/broken.yaml".to_string()]
+        );
+        let json = serde_json::to_string(&e).expect("serializes");
+        assert!(
+            json.contains("\"skipped_sources\":[\"plan/index.d/broken.yaml\"]"),
+            "a caller must be able to read this without parsing prose: {json}"
+        );
+    }
+
+    #[test]
+    fn incompleteness_is_reported_beside_confidence_not_folded_into_it() {
+        // A DELIBERATE SEPARATION, worth pinning because collapsing it looks
+        // tidier. `confidence: exact` is a claim about the CITATION -- the
+        // cited span exists and says what is quoted -- and a skipped fragment
+        // does not falsify it. The failure mode is OMISSION, which needs its
+        // own word: downgrading to `unsupported` would withhold a correct
+        // answer, and leaving `exact` alone with no other field would let a
+        // caller conclude nothing was missed.
+        let e = Envelope::supported(
+            "alpha is ready",
+            vec![Citation::new(
+                "plan/index.yaml".to_string(),
+                1,
+                2,
+                CitationKind::Plan,
+                BTreeMap::new(),
+            )],
+            Confidence::Exact,
+            fresh(),
+        )
+        .with_skipped_sources(vec!["plan/index.d/broken.yaml".to_string()]);
+        assert_eq!(e.confidence(), Confidence::Exact);
+        assert_eq!(e.skipped_sources().len(), 1);
     }
 }

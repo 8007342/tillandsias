@@ -80,5 +80,27 @@ if [ "$verdict" != "eligible" ]; then
     exit 1
 fi
 
-echo "PASS: e2e-preflight refuses live runtime, allows clean host (order 442)"
+# --- Case 6 (order 769-g2wr): ONLY dev-environment containers running ->
+#            eligible. tillandsias-dev-* are idempotent self-relaunching
+#            services (dev cache squid, dev-inference); treating them as
+#            runtime substrate suppressed the gate on every dev host forever.
+export FAKE_PODMAN_PS=$'tillandsias-dev-inference\ntillandsias-dev-proxy'
+make_fake_podman
+verdict="$(PATH="$FAKE_BIN:$PATH" bash "$PREFLIGHT" eligibility)"
+if [ "$verdict" != "eligible" ]; then
+    echo "FAIL: only dev-environment containers but verdict was '$verdict' (expected eligible)" >&2
+    exit 1
+fi
+
+# --- Case 7 (order 769-g2wr): dev container ALONGSIDE a real forge -> the
+#            forge still refuses (the exclusion must not eat the whole list).
+export FAKE_PODMAN_PS=$'tillandsias-dev-inference\ntillandsias-tillandsias-forge'
+make_fake_podman
+verdict="$(PATH="$FAKE_BIN:$PATH" bash "$PREFLIGHT" eligibility)"
+if [ "$verdict" != "skip:live-runtime-present" ]; then
+    echo "FAIL: dev + live forge but verdict was '$verdict' (expected skip:live-runtime-present)" >&2
+    exit 1
+fi
+
+echo "PASS: e2e-preflight refuses live runtime, allows clean host (order 442; dev-container exclusion 769-g2wr)"
 exit 0

@@ -39,6 +39,7 @@ Tools overlay is now built during initialization, not deferred to first containe
 | 6 | Ensure tools overlay (safety net) | `handlers.rs:handle_attach_here()` | Forge image + proxy + CA | Fast no-op if init already built it |
 | 7 | Start git service | `handlers.rs` | Enclave network | "Git service failed" |
 | 8 | Create git mirror | `handlers.rs` | Git service running | "Mirror creation failed" |
+| 8a | Mirror identity-generation check (666-qbjd) | `main.rs:ensure_shared_git_and_inference_for_launch()` | Reused RUNNING mirror only | A mirror still answering the retired shared aliases (`git-service`/`tillandsias-git`) without the expected per-project identity is RECREATED when no sibling lane is live (named volume survives), or the launch REFUSES with a "mirror upgrade-skew" error naming the sibling lanes — never recreated out from under one (order 443) |
 | 9 | Select profile (bash/claude/opencode) | `runner.rs:451-462` | — | — |
 | 10 | Build podman args + inject CA mounts | `runner.rs:472`, `handlers.rs:inject_ca_chain_mounts()` | CA chain file exists | Missing CA = SSL failures inside forge |
 | 11 | Launch forge container | `runner.rs:523-532` (CLI) or `handlers.rs` (tray) | All above | Container exits immediately |

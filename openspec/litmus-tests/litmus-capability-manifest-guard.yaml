@@ -35,6 +35,13 @@ description: >
   the fail-safe under-report that the MCP wrapper relies on is preserved.
 severity: critical
 size: quick
+# inputs: see order 765-mza8. Builds tillandsias-plan from source, so the whole
+# crate tree and the workspace manifests are inputs.
+inputs:
+  - crates/**
+  - Cargo.toml
+  - Cargo.lock
+  - images/default/lib-expert-capability.sh
 
 preconditions:
   - workspace contains crates/tillandsias-plan/capabilities.txt (the manifest)

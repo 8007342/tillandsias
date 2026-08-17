@@ -565,6 +565,37 @@ impl VaultClient {
         }
     }
 
+    /// Read an SSH secrets engine's CA PUBLIC key (`<mount>/public_key`).
+    ///
+    /// The endpoint is deliberately unauthenticated in Vault; the token
+    /// header is still sent (harmless) so the call shape matches every other
+    /// method here. Returns the plain-text public key line, trimmed —
+    /// exactly what a `known_hosts` `@cert-authority` entry or a
+    /// `TrustedUserCAKeys` file wants.
+    pub async fn read_ssh_ca_public_key(&self, mount: &str) -> Result<String, VaultError> {
+        let url = self.url(&format!("{mount}/public_key"));
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-Vault-Token", &self.token)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() {
+            let body = resp.text().await?;
+            let key = body.trim();
+            if key.is_empty() {
+                return Err(VaultError::Other(format!(
+                    "{mount}/public_key returned an empty body"
+                )));
+            }
+            Ok(key.to_string())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
+    }
+
     /// Create an AppRole role bound to the named policies with the supplied
     /// TTLs (seconds). Idempotent — Vault overwrites the role config on
     /// repeated calls.

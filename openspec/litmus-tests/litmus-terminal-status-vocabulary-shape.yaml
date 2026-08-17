@@ -26,14 +26,14 @@ critical_path:
   - step: "every terminal status satisfies a dependency"
     # The property, checked per value rather than by reading the match arm, so a
     # future narrowing of the vocabulary fails here rather than in a promotion.
-    command: "for s in completed verified done obsoleted; do n=$(./target/release/tillandsias-plan query --status \"$s\" --limit 700 --json 2>/dev/null | jq 'length'); echo \"  $s: ${n:-0} packets\"; done; echo 'ok: terminal vocabulary enumerated'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; for s in completed verified done obsoleted; do n=$(\"$MFPLAN\" query --status \"$s\" --limit 700 --json 2>/dev/null | jq 'length'); echo \"  $s: ${n:-0} packets\"; done; echo 'ok: terminal vocabulary enumerated'"
     timeout_ms: 60000
     expected_behavior: "ok: terminal vocabulary enumerated"
 
   - step: "NEGATIVE CONTROL: a terminal dependency does NOT appear as unsatisfied"
     # The regression that actually happened. Finds any packet whose declared
     # dependency is terminal, and asserts the resolver does not list it.
-    command: "bad=0; for p in $(./target/release/tillandsias-plan query --status ready --limit 700 --json 2>/dev/null | jq -r '.[]|select((.depends_on//[])|length>0)|.packet_id' | head -40); do for d in $(./target/release/tillandsias-plan dependencies-of \"$p\" 2>/dev/null | awk '{print $2}'); do case \"$d\" in completed|verified|done|obsoleted) echo \"FAIL: $p lists a '$d' dependency as unsatisfied\"; bad=1 ;; esac; done; done; [ \"$bad\" -eq 0 ] && echo 'ok: no terminal dependency is reported unsatisfied'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; bad=0; for p in $(\"$MFPLAN\" query --status ready --limit 700 --json 2>/dev/null | jq -r '.[]|select((.depends_on//[])|length>0)|.packet_id' | head -40); do for d in $(\"$MFPLAN\" dependencies-of \"$p\" 2>/dev/null | awk '{print $2}'); do case \"$d\" in completed|verified|done|obsoleted) echo \"FAIL: $p lists a '$d' dependency as unsatisfied\"; bad=1 ;; esac; done; done; [ \"$bad\" -eq 0 ] && echo 'ok: no terminal dependency is reported unsatisfied'"
     timeout_ms: 120000
     expected_behavior: "ok: no terminal dependency is reported unsatisfied"
 
@@ -49,29 +49,39 @@ critical_path:
     # check-fragment-status-loss.sh once accepted done|completed|retired|obsolete
     # while the resolver accepted only completed|obsoleted — a guard laxer (or
     # wider) than the thing it guards is decorative. Compare the SETS exactly.
-    command: "guard=$(grep -oE '^[[:space:]]*(completed\\|[a-z|]+)\\)' scripts/check-fragment-status-loss.sh | head -1 | tr -d ' )' | tr '|' '\\n' | sort | tr '\\n' ' '); code=$(grep -A1 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort | tr '\\n' ' '); if [ -z \"$guard\" ] || [ -z \"$code\" ]; then echo 'FAIL: cannot locate guard or code vocabulary'; exit 1; fi; if [ \"$guard\" != \"$code\" ]; then echo \"FAIL: guard=[$guard] != code=[$code]\"; exit 1; fi; echo 'ok: guard set equals resolver set'"
+    # 2026-08-17: the extraction was pinned to a shell `case` arm
+    # (`completed|verified|done|obsoleted)`). Orders 783-xyk5 and 785-sqe6
+    # rewrote the guard's hot path into a single awk join, so the vocabulary now
+    # reads `want == "completed" || want == "verified" || ...` and the old grep
+    # found NOTHING — which the step correctly refused as
+    # "cannot locate guard or code vocabulary" rather than passing vacuously.
+    # The PROPERTY (the two sets are equal) never broke; only the shape did.
+    # Extraction is now keyed on the comparison itself, so it survives the arm
+    # being a case, an awk expression, or a list — per 634-39ik a step should
+    # assert the property, not how the source happens to be written today.
+    command: "guard=$(grep -oE 'want == \"[a-z-]+\"' scripts/check-fragment-status-loss.sh | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); code=$(grep -A3 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); if [ -z \"$guard\" ] || [ -z \"$code\" ]; then echo 'FAIL: cannot locate guard or code vocabulary'; exit 1; fi; if [ \"$guard\" != \"$code\" ]; then echo \"FAIL: guard=[$guard] != code=[$code]\"; exit 1; fi; echo 'ok: guard set equals resolver set'"
     timeout_ms: 10000
     expected_behavior: "ok: guard set equals resolver set"
 
   - step: "write gate refuses an out-of-vocabulary status (isolated copy)"
-    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); if ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status bogus-word 2>\"$T/err\"; then echo 'FAIL: out-of-vocabulary status was accepted'; rm -rf \"$T\"; exit 1; fi; grep -q 'not in the status vocabulary' \"$T/err\" && echo 'ok: out-of-vocabulary refused'; rm -rf \"$T\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(\"$MFPLAN\" --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); if \"$MFPLAN\" --index \"$T/index.yaml\" set-field \"$P\" status bogus-word 2>\"$T/err\"; then echo 'FAIL: out-of-vocabulary status was accepted'; rm -rf \"$T\"; exit 1; fi; grep -q 'not in the status vocabulary' \"$T/err\" && echo 'ok: out-of-vocabulary refused'; rm -rf \"$T\""
     timeout_ms: 30000
     expected_behavior: "ok: out-of-vocabulary refused"
 
   - step: "write gate refuses a closure-ladder downgrade without --reopen-evidence (isolated copy)"
-    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status completed --limit 1 --json | jq -r '.[0].packet_id'); if ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status ready 2>\"$T/err\"; then echo 'FAIL: ladder downgrade was accepted without falsification evidence'; rm -rf \"$T\"; exit 1; fi; grep -q 'moves DOWN the closure ladder' \"$T/err\" && echo 'ok: downgrade refused'; rm -rf \"$T\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(\"$MFPLAN\" --index \"$T/index.yaml\" query --status completed --limit 1 --json | jq -r '.[0].packet_id'); if \"$MFPLAN\" --index \"$T/index.yaml\" set-field \"$P\" status ready 2>\"$T/err\"; then echo 'FAIL: ladder downgrade was accepted without falsification evidence'; rm -rf \"$T\"; exit 1; fi; grep -q 'moves DOWN the closure ladder' \"$T/err\" && echo 'ok: downgrade refused'; rm -rf \"$T\""
     timeout_ms: 30000
     expected_behavior: "ok: downgrade refused"
 
   - step: "write gate requires --evidence for a closure rung (isolated copy)"
-    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); if ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status completed 2>\"$T/err\"; then echo 'FAIL: closure status accepted without evidence'; rm -rf \"$T\"; exit 1; fi; grep -q 'requires --evidence' \"$T/err\" && echo 'ok: evidence required'; rm -rf \"$T\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(\"$MFPLAN\" --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); if \"$MFPLAN\" --index \"$T/index.yaml\" set-field \"$P\" status completed 2>\"$T/err\"; then echo 'FAIL: closure status accepted without evidence'; rm -rf \"$T\"; exit 1; fi; grep -q 'requires --evidence' \"$T/err\" && echo 'ok: evidence required'; rm -rf \"$T\""
     timeout_ms: 30000
     expected_behavior: "ok: evidence required"
 
   - step: "POSITIVE CONTROL: a compliant closure write succeeds and records evidence (isolated copy)"
     # A broken stack passes every negative test; prove the gate still admits
     # the sanctioned shape and lands the fragment in the COPY's index.d.
-    command: "T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(./target/release/tillandsias-plan --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); ./target/release/tillandsias-plan --index \"$T/index.yaml\" set-field \"$P\" status completed --evidence 'litmus-selftest-ref' >\"$T/out\" || { echo 'FAIL: compliant write refused'; rm -rf \"$T\"; exit 1; }; ls \"$T/index.d\"/*.yaml >/dev/null 2>&1 && grep -rq 'litmus-selftest-ref' \"$T/index.d\" && echo 'ok: compliant write landed in the isolated copy'; rm -rf \"$T\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); cp plan/index.yaml plan/schema.yaml \"$T/\"; P=$(\"$MFPLAN\" --index \"$T/index.yaml\" query --status ready --limit 1 --json | jq -r '.[0].packet_id'); \"$MFPLAN\" --index \"$T/index.yaml\" set-field \"$P\" status completed --evidence 'litmus-selftest-ref' >\"$T/out\" || { echo 'FAIL: compliant write refused'; rm -rf \"$T\"; exit 1; }; ls \"$T/index.d\"/*.yaml >/dev/null 2>&1 && grep -rq 'litmus-selftest-ref' \"$T/index.d\" && echo 'ok: compliant write landed in the isolated copy'; rm -rf \"$T\""
     timeout_ms: 30000
     expected_behavior: "ok: compliant write landed in the isolated copy"
 

@@ -100,13 +100,52 @@ bash scripts/update-convergence-dashboard.sh
 
 if [[ "$run_nix_probe" == "1" ]]; then
     step "Probe Linux release Nix targets locally"
-    if ! command -v nix >/dev/null 2>&1; then
-        echo "nix is required for --nix-probe" >&2
+    # TOOLBOX-FIRST (methodology multi_host_development.toolbox_first_scripts,
+    # order 777-amku). This probe used to require a host `nix` AND, implicitly,
+    # a live nix-daemon: bare `nix build` addresses the daemon socket, so on a
+    # host with the binary but the socket down it failed with "cannot connect
+    # to socket" and the standing remedy was `sudo systemctl enable --now
+    # nix-daemon.socket` — the host-daemon ask the operator withdrew on
+    # 2026-08-16 (606-um5s). scripts/nix-toolbox.sh resolves a usable nix
+    # WITHOUT one: the live daemon if there is one, else a rootless chroot
+    # store under $HOME, else nix inside the tillandsias-nix toolbox. The three
+    # other nix consumers (check-nix-deps-stability.sh, nix-deps-drv-paths.sh,
+    # build-guest-binaries.sh) already take their flags this way; this was the
+    # last one that did not.
+    nix_rung="$(bash "$ROOT/scripts/nix-toolbox.sh" ensure)" || {
+        printf '%s\n' "$nix_rung" >&2
+        echo "--nix-probe: no usable nix lane; see scripts/nix-toolbox.sh" >&2
+        exit 2
+    }
+    echo "  nix lane: $nix_rung"
+
+    # `nix-args` covers the daemon and chroot rungs. It refuses the toolbox
+    # rung on purpose — flake outputs are addressed by CHECKOUT path, which a
+    # container does not share — so say that plainly instead of running a
+    # `nix` that is not there.
+    nix_args=()
+    while IFS= read -r line; do
+        if [[ -n "$line" ]]; then
+            nix_args+=("$line")
+        fi
+    done < <(bash "$ROOT/scripts/nix-toolbox.sh" nix-args 2>/dev/null)
+    if [[ ${#nix_args[@]} -eq 0 ]]; then
+        echo "--nix-probe: rung '$nix_rung' exposes no host nix flags" >&2
+        echo "  the toolbox rung cannot address flake outputs by checkout path;" >&2
+        echo "  run --nix-probe on a host with nix, or extend scripts/nix-toolbox.sh." >&2
         exit 2
     fi
-    nix build -L .#tillandsias-x86_64-musl           --no-link
-    nix build -L .#tillandsias-headless-x86_64-musl  --no-link
-    nix build -L .#tillandsias-headless-aarch64-musl --no-link
+
+    # ${arr[0]+"${arr[@]}"} — bash 3.2 raises "unbound variable" on a bare
+    # "${arr[@]}" for an empty array under set -u (macOS system bash is the
+    # floor here). The guard is redundant after the count check above and kept
+    # anyway so a later edit cannot reintroduce the 3.2 trap.
+    _probe_nix() {
+        nix ${nix_args[0]+"${nix_args[@]}"} "$@"
+    }
+    _probe_nix build -L .#tillandsias-x86_64-musl           --no-link
+    _probe_nix build -L .#tillandsias-headless-x86_64-musl  --no-link
+    _probe_nix build -L .#tillandsias-headless-aarch64-musl --no-link
 fi
 
 step "Release preflight complete"

@@ -16,13 +16,13 @@ if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
 fi
 
 cargo build --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" -p tillandsias-policy
-POLICY_BIN="${REPO_ROOT}/target/debug/tillandsias-policy"
-if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    if [[ "$CARGO_TARGET_DIR" = /* ]]; then
-        [[ -x "${CARGO_TARGET_DIR}/debug/tillandsias-policy" ]] && POLICY_BIN="${CARGO_TARGET_DIR}/debug/tillandsias-policy"
-    else
-        [[ -x "${REPO_ROOT}/${CARGO_TARGET_DIR}/debug/tillandsias-policy" ]] && POLICY_BIN="${REPO_ROOT}/${CARGO_TARGET_DIR}/debug/tillandsias-policy"
-    fi
+# Run-don't-stat (order 770-ifeg): on a shared Windows/WSL checkout the
+# extensionless target/ path can hold the OTHER platform's artifact, and an
+# existence check execs it into "Exec format error". Probe by execution.
+. "${REPO_ROOT}/scripts/plan-binary-probe.sh"
+if ! POLICY_BIN="$(resolve_target_binary tillandsias-policy debug "${REPO_ROOT}")"; then
+    echo "refused:no-runnable-tillandsias-policy (probed target/debug and CARGO_TARGET_DIR by execution)" >&2
+    exit 1
 fi
 exec "${POLICY_BIN}" \
     regenerate-cheatsheet-index --repo-root "${REPO_ROOT}" "$@"

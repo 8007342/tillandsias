@@ -66,15 +66,39 @@ read_seq() {
     return $?
   fi
   if command -v ruby >/dev/null 2>&1; then
-    ruby -ryaml -e "$_rs_rb" "$_rs_file" 2>&1
+    # -rdate: the exprs name Date in permitted_classes. Rubies >= 3.x reach it
+    # because psych itself requires date; macOS system ruby (2.6) does not, so
+    # without the explicit require the constant is uninitialized and this
+    # reader reports index-load-failed on a perfectly loadable index
+    # (762-8yna, found blocking the macOS pre-push gate 2026-08-16).
+    ruby -ryaml -rdate -e "$_rs_rb" "$_rs_file" 2>&1
     return $?
   fi
-  echo "no YAML reader on PATH (tried yq, ruby)"
+  # TOOLBOX TIER (methodology multi_host_development.toolbox_first_scripts,
+  # order 777-amku): host tool preferred, toolbox as the fallback. `ruby` is in
+  # the tillandsias-builder init set, so a Silverblue host with no host ruby
+  # can still read the ledger instead of refusing. This is STRICTLY ADDITIVE —
+  # it is reached only where the two tiers above already gave up and the next
+  # line was a hard refusal. No `ensure_toolbox.sh` include here on purpose:
+  # this script is #!/bin/sh (no BASH_SOURCE), and a check has no business
+  # CREATING a toolbox — it uses one that already exists, or it refuses.
+  if command -v toolbox >/dev/null 2>&1 &&
+     toolbox run --container "${TILLANDSIAS_BUILDER_TOOLBOX:-tillandsias-builder}" \
+        true >/dev/null 2>&1; then
+    toolbox run --container "${TILLANDSIAS_BUILDER_TOOLBOX:-tillandsias-builder}" \
+        ruby -ryaml -rdate -e "$_rs_rb" "$_rs_file" 2>&1
+    return $?
+  fi
+  echo "no YAML reader on PATH (tried yq, ruby, toolbox ruby)"
   return 2
 }
 
-RB_INDEX='d=YAML.safe_load_file(ARGV[0], permitted_classes: [Time, Date]); puts((d.dig("plan_index","default_status_values") || []).join(" "))'
-RB_SCHEMA='d=YAML.safe_load_file(ARGV[0], permitted_classes: [Time, Date]); puts((d["statuses"] || []).join(" "))'
+# safe_load(File.read(...)) rather than safe_load_file: the latter is psych 4
+# (ruby >= 3.1) only, while this form parses identically on every psych >= 3.1
+# — macOS system ruby 2.6 included (762-8yna, same gate-blocking incident as
+# the -rdate require above).
+RB_INDEX='d=YAML.safe_load(File.read(ARGV[0]), permitted_classes: [Time, Date]); puts((d.dig("plan_index","default_status_values") || []).join(" "))'
+RB_SCHEMA='d=YAML.safe_load(File.read(ARGV[0]), permitted_classes: [Time, Date]); puts((d["statuses"] || []).join(" "))'
 
 # Load index
 if ! idx_raw=$(read_seq "$INDEX" '.plan_index.default_status_values // [] | join(" ")' "$RB_INDEX"); then

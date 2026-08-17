@@ -25,6 +25,11 @@ FROM docker.io/library/alpine:3.20
 #   - git, git-daemon: core VCS functionality
 #   - bash: needed for entrypoint scripts (Alpine default is sh)
 #   - openssh-client: for authentication to remote repositories
+#   - openssh-server: mirror-identity ssh push endpoint (order 749-wv4d, design
+#     T3 in plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md). sshd
+#     runs as uid 1000 `git` on port 2222 under `--read-only` + `--cap-drop=ALL`
+#     with writable state confined to the /tmp tmpfs and the /srv/git volume —
+#     proven by litmus:mirror-sshd-posture-shape, never relaxed to make it start.
 #   - github-cli (gh): for authenticated GitHub operations (TRUSTED container only)
 #
 # Step 2: Create unprivileged 'git' user (UID 1000, matches host --userns=keep-id)
@@ -42,6 +47,7 @@ RUN apk add --no-cache \
         git-daemon \
         bash \
         openssh-client \
+        openssh-server \
         github-cli \
         curl \
         jq \
@@ -77,11 +83,42 @@ COPY ensure-mirror-head.sh /usr/local/share/git-service/ensure-mirror-head
 # by the entrypoint so a host direct-push to origin cannot strand forge
 # agents on a stale mirror between launches.
 COPY reconcile-exported-heads.sh /usr/local/share/git-service/reconcile-exported-heads
+
+# @trace spec:git-mirror-service, spec:meta-orchestration
+# Order 756-2jnj: non-mutating upstream WRITE-authorization probe — publishes
+# refs/tillandsias/upstream-auth/<state>/<epoch> at startup and on every
+# reconcile tick, so the forge credential guard can require BOTH mirror
+# reachability AND current upstream push authorization before worker drain.
+COPY probe-upstream-auth.sh /usr/local/share/git-service/probe-upstream-auth
 RUN chmod +x /usr/local/share/git-service/ensure-mirror-head \
-    /usr/local/share/git-service/reconcile-exported-heads
+    /usr/local/share/git-service/reconcile-exported-heads \
+    /usr/local/share/git-service/probe-upstream-auth
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
+
+# @trace spec:git-mirror-service — order 749-54pv (design T4+T5): host-cert
+# issuance/renewal from ssh-host-signer and the CA-only sshd_config renderer.
+# Started by the entrypoint only behind TILLANDSIAS_MIRROR_SSHD=1 until the
+# T11 staged migration flips the lane.
+COPY sshd-identity.sh /usr/local/bin/sshd-identity.sh
+
+# @trace spec:git-mirror-service — order 749-2fqj (design T6): the ForceCommand
+# receive wrapper. Execs git-receive-pack on the FIXED project path — the
+# requested target in SSH_ORIGINAL_COMMAND is ignored by design (§4a M5) —
+# and exports the four TILLANDSIAS_PUSH_* audit variables parsed from the
+# authenticating certificate ($SSH_USER_AUTH, ExposeAuthInfo yes).
+COPY tillandsias-receive.sh /usr/local/bin/tillandsias-receive
+
+# @trace spec:git-mirror-service, spec:tillandsias-vault — order 749-6uby
+# (design T8): the per-lane ssh-agent sidecar. Same image, different
+# entrypoint (the launcher overrides --entrypoint): ssh-agent/ssh-keygen and
+# the vault binary are already here, and a second image would be a second
+# thing to version-skew. Runs ONLY as a separate container the launcher
+# starts behind TILLANDSIAS_MIRROR_SSHD=1; the mirror entrypoint never
+# invokes it.
+COPY ssh-lane-sidecar.sh /usr/local/bin/ssh-lane-sidecar
+RUN chmod +x /usr/local/bin/ssh-lane-sidecar
 
 # @trace spec:tillandsias-vault, spec:git-mirror-service
 COPY vault-agent.hcl /etc/tillandsias/vault-agent.hcl

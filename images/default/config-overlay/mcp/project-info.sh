@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # MCP Server: Project Info for Tillandsias forge containers
+# freshness: updated 2026-08-16 windows-yolanda-fable5-20260816t0921z
 # @trace spec:layered-tools-overlay, spec:forge-environment-discoverability
 # Communicates via JSON-RPC over stdin/stdout (MCP stdio transport)
 #
@@ -21,6 +22,20 @@ for _mcp_log_cand in \
     if [ -r "$_mcp_log_cand" ]; then . "$_mcp_log_cand" 2>/dev/null && break; fi
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
+
+# Dev-vs-runtime environment hook: on the bare-metal DEVELOPMENT host this
+# defaults the inference endpoints to loopback and fires the idempotent
+# dev-inference ensure in the background; inside the forge USER RUNTIME it is
+# a no-op (the enclave owns inference). Guarded source + guarded call keep it
+# `set -e`-safe. See lib-dev-env.sh for the design.
+for _dev_env_cand in \
+    "${BASH_SOURCE[0]%/*}/lib-dev-env.sh" \
+    "/home/forge/.config-overlay/mcp/lib-dev-env.sh"; do
+    if [ -r "$_dev_env_cand" ]; then . "$_dev_env_cand" 2>/dev/null && break; fi
+done
+if command -v tillandsias_dev_env_hook >/dev/null 2>&1; then
+    tillandsias_dev_env_hook "$PWD" || true
+fi
 
 # ── Project type detection ──────────────────────────────────────
 # @trace spec:forge-environment-discoverability
@@ -382,16 +397,40 @@ resolve_plan_index() {
     printf '\n'
 }
 
+# 770-ehym: run-don't-stat, mirroring forge-plan.sh's plan_bin_runs and the
+# shared host probe (721-nyev). `-x` passes on /mnt/c for the OTHER platform's
+# artifact in a shared Windows/WSL checkout; executing `capabilities` is the
+# only test that proves THIS server can actually run the candidate. The
+# TILLANDSIAS_PLAN_BIN override stays existence-checked, not probed (704-zcgi).
+plan_bin_runs() {
+    [ -n "$1" ] && "$1" capabilities >/dev/null 2>&1
+}
+
 resolve_plan_bin() {
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_BIN"
         return 0
     fi
+    # Bare-metal DEV env: the checkout's own artifact outranks a stale
+    # user-level install — same rule and rationale as forge-plan.sh's
+    # resolve_plan_bin (2026-08-15 live repro: a weeks-old ~/.local/bin binary
+    # shadowed the checkout's fresh target/release). Runtime env unchanged.
+    if command -v tillandsias_exec_env >/dev/null 2>&1 \
+        && [ "$(tillandsias_exec_env)" = "dev" ]; then
+        _rpb_idx="$(resolve_plan_index)"
+        if [ -n "$_rpb_idx" ]; then
+            _rpb_root="$(dirname "$(dirname "$_rpb_idx")")"
+            if plan_bin_runs "$_rpb_root/target/release/tillandsias-plan"; then
+                printf '%s\n' "$_rpb_root/target/release/tillandsias-plan"
+                return 0
+            fi
+        fi
+    fi
     for candidate in \
         "$HOME/.local/bin/tillandsias-plan" \
         "/usr/local/bin/tillandsias-plan" \
         "/usr/bin/tillandsias-plan"; do
-        if [ -x "$candidate" ]; then
+        if plan_bin_runs "$candidate"; then
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -400,7 +439,7 @@ resolve_plan_bin() {
     _idx="$(resolve_plan_index)"
     if [ -n "$_idx" ]; then
         _root="$(dirname "$(dirname "$_idx")")"
-        if [ -x "$_root/target/release/tillandsias-plan" ]; then
+        if plan_bin_runs "$_root/target/release/tillandsias-plan"; then
             printf '%s\n' "$_root/target/release/tillandsias-plan"
             return 0
         fi
@@ -641,8 +680,13 @@ _pa_synthesis_refusal() {
 # Read JSON-RPC requests from stdin, respond on stdout
 while IFS= read -r line; do
     [ -n "$line" ] || continue
-    method=$(echo "$line" | jq -r '.method // empty')
-    id_json=$(printf '%s' "$line" | jq -c '.id // null')
+    # `|| true` on both: a malformed line is a client bug, and letting `set -e`
+    # kill the server over it drops every subsequent request too (the same
+    # guard forge-plan.sh already carries — 2026-08-15 the UNGUARDED twin of
+    # this loop died mid-session and deregistered every project-info tool).
+    method=$(echo "$line" | jq -r '.method // empty' 2>/dev/null || true)
+    id_json=$(printf '%s' "$line" | jq -c '.id // null' 2>/dev/null || true)
+    [ -n "$id_json" ] || id_json='null'
 
     case "$method" in
         "initialize")
@@ -665,14 +709,16 @@ while IFS= read -r line; do
                 "file_summary")
                     filepath=$(echo "$args" | jq -r '.path')
                     lines=$(echo "$args" | jq -r '.lines // 5')
-                    if [ -f "$filepath" ]; then
-                        line_count=$(wc -l < "$filepath")
-                        preview=$(head -n "$lines" "$filepath")
+                    if [ -f "$filepath" ] && [ -r "$filepath" ]; then
+                        # Guarded like read_file: an unreadable file or a
+                        # non-numeric `lines` must fail THIS call, not the server.
+                        line_count=$(wc -l < "$filepath" 2>/dev/null || echo 0)
+                        preview=$(head -n "$lines" "$filepath" 2>/dev/null || true)
                         result="Lines: ${line_count}
 --- first ${lines} lines ---
 ${preview}"
                     else
-                        result="File not found: $filepath"
+                        result="File not found or not readable: $filepath"
                     fi
                     ;;
                 "search_code")
@@ -848,25 +894,40 @@ ${preview}"
                     limit=$(echo "$args" | jq -r '.limit // 0')
                     if [ ! -f "$filepath" ]; then
                         result="File not found: $filepath"
+                    elif [ ! -r "$filepath" ]; then
+                        # Named, not fatal: an unreadable file used to kill the
+                        # whole server via `wc -l < file` under `set -e`.
+                        result="File not readable: $filepath"
                     else
-                        line_count=$(wc -l < "$filepath")
+                        line_count=$(wc -l < "$filepath" 2>/dev/null || echo 0)
+                        # ROOT CAUSE 2026-08-15 (live outage, this exact tool):
+                        # `tail -n +32484 plan/index.yaml | head -n 115` — head
+                        # exits after its 115 lines, tail takes SIGPIPE (141),
+                        # and under `set -euo pipefail` the failed command
+                        # substitution killed the SERVER mid-request. The client
+                        # saw "MCP error -32000: Connection closed" and every
+                        # project-info tool deregistered for the session. The
+                        # output is complete when head exits, so the pipeline's
+                        # 141 carries no information — guard it, exactly like
+                        # the `|| true prevents set -e killing the script on
+                        # SIGPIPE` guards search_code/find_files already carry.
                         if [ "$offset" -gt 0 ] && [ "$limit" -gt 0 ]; then
-                            result=$(tail -n +"$offset" "$filepath" | head -n "$limit")
+                            result=$(tail -n +"$offset" "$filepath" 2>/dev/null | head -n "$limit" || true)
                             result="${result}
 ---
 (offset=$offset limit=$limit of $line_count lines)"
                         elif [ "$offset" -gt 0 ]; then
-                            result=$(tail -n +"$offset" "$filepath")
+                            result=$(tail -n +"$offset" "$filepath" 2>/dev/null || true)
                             result="${result}
 ---
 (offset=$offset of $line_count lines)"
                         elif [ "$limit" -gt 0 ]; then
-                            result=$(head -n "$limit" "$filepath")
+                            result=$(head -n "$limit" "$filepath" 2>/dev/null || true)
                             result="${result}
 ---
 (limit=$limit of $line_count lines)"
                         else
-                            result=$(cat "$filepath")
+                            result=$(cat "$filepath" 2>/dev/null || true)
                             result="${result}
 ---
 ($line_count lines total)"

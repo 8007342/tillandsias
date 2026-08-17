@@ -30,6 +30,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - event-driven-basics.md              — Your system has multiple components that react to state changes happening elsew… [pull-on-demand: stub]
 - event-driven-ui-updates.md [DRAFT]  — Implementing event-driven architectures for responsive UIs. [bundled, partial-verify]
 - reactive-streams-spec.md            — You have a **stream** of asynchronous events whose producer might outpace its c… [pull-on-demand: stub]
+- transport-overhead.md               — touching the host↔guest control wire, adding a poll/refresh [bundled, partial-verify]
 
 ## build
 
@@ -66,8 +67,10 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - agent-handoff.md                   — you're an agent picking up work from `plan/`, you need to claim something, chec… [bundled, partial-verify]
 - branches.md                        — starting any work session on any platform host, or any time you're unsure which… [bundled, partial-verify]
 - commit-attribution.md              — deciding how AI-agent / LLM-authored commits are attributed in git [bundled, partial-verify]
+- crdt-ledger-fragments.md           — several hosts or agents must write to the same ledger [bundled, partial-verify]
 - git-mirror-architecture-audit.md   — (2026-07-14). Every [bundled, partial-verify]
 - git-mirror-enterprise-practices.md — designing or debugging the local bare-mirror hop between forge [bundled, partial-verify]
+- git-mirror-managed-alternatives.md — **Answered (do not re-litigate):** should Tillandsias adopt an off-the-shelf [bundled, partial-verify]
 - plan-discipline.md                 — you're writing or updating anything under `plan/`, `methodology/`, `openspec/`,… [bundled, partial-verify]
 
 ## data
@@ -148,6 +151,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - forge-container.md                        — Understanding what the forge container can do, where files live, how to avoid c… [bundled, partial-verify]
 - forge-hot-cold-split.md                   — You need to understand which forge paths are RAM-backed, what the size caps are… [bundled, partial-verify]
 - forge-localization.md [DRAFT]             — Understanding how Tillandsias Forge handles multiple language locales, configur… [bundled, partial-verify]
+- forge-loss-on-shutdown-window.md          — ~/src behind proven transparent push). Sources verified 2026-08-16 on [bundled, partial-verify]
 - forge-paths-ephemeral-vs-persistent.md    — You're an agent (or human) writing files inside the forge container and need to… [pull-on-demand: stub]
 - forge-shared-cache-via-nix.md             — You're trying to share a library across projects without paying the download co… [pull-on-demand: stub]
 - forge-standalone.md                       — You want only the forge container, one mounted project tree, and [bundled, partial-verify]
@@ -166,7 +170,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - macos-vz-gui-research-v2.md [DRAFT]       — Phase 7 design work begins; the macOS user-facing browser story needs a concret… [bundled, partial-verify]
 - networking.md                             — Understanding how the forge accesses external services, what's blocked, what's … [bundled, partial-verify]
 - ollama-model-management.md [DRAFT]        — Pre-pulling LLM models into containers, checking model cache, implementing resu… [bundled, partial-verify]
-- opencode-web-launch.md                    — action, router auth, or the isolated Chromium app window. [bundled, partial-verify]
+- opencode-web-launch.md                    — Use this when changing `tillandsias --opencode-web`, the tray OpenCode Web [bundled, partial-verify]
 - podman-control-plane.md                   — ```text [bundled, partial-verify]
 - podman-idiomatic-patterns.md              — Building container orchestration logic, integrating container events, optimizin… [bundled, partial-verify]
 - podman-in-wsl2.md [DRAFT]                 — running rootless Podman inside a WSL2 distro, especially for Tillandsias' Windo… [pull-on-demand: stub]

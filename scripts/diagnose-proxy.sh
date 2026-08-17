@@ -36,18 +36,20 @@ openssl req -x509 -newkey rsa:2048 -keyout "$CERTS_DIR/intermediate.key" \
     -out "$CERTS_DIR/intermediate.crt" -days 30 -nodes \
     -subj "/CN=tillandsias-proxy" 2>&1 | grep -v "Generating\|Can't load"
 
-# Make files world-readable AND world-executable to work with --userns=keep-id and container user mapping
-chmod 644 "$CERTS_DIR/intermediate.crt" "$CERTS_DIR/intermediate.key"
+# The cert is public material; the PRIVATE key stays owner-only (755-qcxh) —
+# the container receives it as a podman secret, not through file modes.
+chmod 644 "$CERTS_DIR/intermediate.crt"
+chmod 600 "$CERTS_DIR/intermediate.key"
 chmod 755 "$CERTS_DIR"
 
 log_info "Certificate files:"
 ls -lah "$CERTS_DIR/"
 
-# Also copy to /tmp in host so we can use /tmp/... paths (which will be more readable)
+# Also copy the PUBLIC cert to /tmp for convenient host-side inspection. The
+# private key is never copied out or loosened (755-qcxh).
 cp "$CERTS_DIR/intermediate.crt" /tmp/proxy-ca.crt
-cp "$CERTS_DIR/intermediate.key" /tmp/proxy-ca.key
-chmod 644 /tmp/proxy-ca.*
-log_info "Also copied to /tmp/proxy-ca.{crt,key}"
+chmod 644 /tmp/proxy-ca.crt
+log_info "Also copied to /tmp/proxy-ca.crt"
 
 # Create network if needed
 ENCLAVE_NET="tillandsias-enclave"
@@ -62,6 +64,10 @@ podman rm -f "$CONTAINER" 2>/dev/null || true
 
 log_step "Launching proxy container: $CONTAINER"
 log_step "CA cert dir: $CERTS_DIR"
+
+# 755-qcxh: deliver the CA private key as a podman secret (matches the
+# entrypoint's only key path); the public cert stays a bind mount.
+podman secret create --replace --driver=file tillandsias-ca-key "$CERTS_DIR/intermediate.key"
 
 podman run \
     --interactive \
@@ -81,7 +87,7 @@ podman run \
     --tmpfs=/var/spool/squid \
     --tmpfs=/var/lib/squid \
     -v "$CERTS_DIR/intermediate.crt:/etc/squid/certs/intermediate.crt:ro" \
-    -v "$CERTS_DIR/intermediate.key:/etc/squid/certs/intermediate.key:ro" \
+    --secret "tillandsias-ca-key,uid=1000,gid=1000,mode=0400" \
     "$PROXY_IMAGE"
 
 log_info "Proxy diagnostic complete"

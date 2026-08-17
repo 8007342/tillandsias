@@ -732,7 +732,78 @@ impl LaneIdentity {
 /// are actionable JSON-RPC errors, not silent drops.
 ///
 /// @trace spec:host-browser-mcp, spec:subdomain-routing-via-reverse-proxy
-fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<serde_json::Value> {
+/// Per-LINE payload ceiling on the live per-lane NDJSON MCP socket
+/// (order 779-dqsv).
+///
+/// Deliberately the SAME number as the retired `McpFrame` per-variant cap,
+/// re-exported rather than re-invented: the payload ceiling is a property of
+/// what MCP carries (screenshots, large tool results), not of which transport
+/// happens to carry it. Before this, the retired path had a 4 MiB cap and the
+/// LIVE path had none at all — an unbounded base64 screenshot travelled as
+/// one line.
+pub(crate) const MAX_MCP_LINE_BYTES: usize = tillandsias_control_wire::MAX_MCP_FRAME_BYTES;
+
+/// Render one response line, enforcing the OUTBOUND half of the per-line cap
+/// (order 779-dqsv).
+///
+/// This is the half with a live producer: a base64 full-page
+/// `browser.screenshot` can exceed any sane line length, and writing it would
+/// blow the peer's own reader instead of failing here, where the reason is
+/// known and can be said. The oversized result is replaced by a typed error
+/// that keeps the request's `id`, so the client still correlates the failure
+/// to its call.
+///
+/// Pure so the replacement is testable without a tool that can actually
+/// produce megabytes.
+fn cap_response_line(resp: &serde_json::Value) -> String {
+    let rendered = resp.to_string();
+    if rendered.len() <= MAX_MCP_LINE_BYTES {
+        return rendered;
+    }
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": resp.get("id").cloned().unwrap_or(serde_json::Value::Null),
+        "error": {
+            "code": -32000,
+            "message": format!(
+                "ResponseTooLarge: result exceeded the {MAX_MCP_LINE_BYTES}-byte per-line cap"
+            ),
+        }
+    })
+    .to_string()
+}
+
+/// Ask the composed browser server for its tool descriptors (order 779-3trn).
+///
+/// Goes through `handle_request` rather than reaching into the server's
+/// internals, so the advertised list is by construction the same one
+/// `tools/call` dispatches against — the drift this packet exists to close
+/// was precisely a dispatcher advertising a different set than it served.
+fn browser_tool_descriptors(
+    browser: &tillandsias_browser_mcp::BrowserMcpServer,
+    rt: &tokio::runtime::Runtime,
+) -> Vec<serde_json::Value> {
+    let request = tillandsias_browser_mcp::framing::RpcRequest {
+        id: Some(0),
+        method: "tools/list".to_string(),
+        params: serde_json::Value::Object(Default::default()),
+    };
+    match rt.block_on(browser.handle_request(request)) {
+        tillandsias_browser_mcp::framing::RpcResponse::Success { result, .. } => result
+            .get("tools")
+            .and_then(|t| t.as_array())
+            .cloned()
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+fn handle_mcp_jsonrpc(
+    project_label: &str,
+    req: &serde_json::Value,
+    browser: &tillandsias_browser_mcp::BrowserMcpServer,
+    rt: &tokio::runtime::Runtime,
+) -> Option<serde_json::Value> {
     let method = req["method"].as_str().unwrap_or("");
     if method.starts_with("notifications/") {
         return None;
@@ -751,55 +822,66 @@ fn handle_mcp_jsonrpc(project_label: &str, req: &serde_json::Value) -> Option<se
                 }
             }
         }),
-        "tools/list" => serde_json::json!({
-            "result": {
-                "tools": [
-                    {
-                        "name": "publish_local",
-                        "description": "Publish this project's WEB service on the local reverse proxy and return its www.<project>.localhost URL. Idempotent: re-publishing replaces the running container and keeps the same URL.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "category": { "type": "string", "enum": ["WEB"] }
-                            },
-                            "required": ["category"]
-                        }
-                    },
-                    {
-                        "name": "service_status",
-                        "description": "Report the state of this project's published local service.",
-                        "inputSchema": { "type": "object", "properties": {} }
-                    },
-                    {
-                        "name": "service_stop",
-                        "description": "Stop this project's published local service and remove its route.",
-                        "inputSchema": {
-                            "type": "object",
-                            "properties": {
-                                "category": { "type": "string", "enum": ["WEB"] }
-                            },
-                            "required": ["category"]
-                        }
+        // Order 779-3trn: the host-services trio PLUS the browser family.
+        // The browser descriptors come from the composed server itself, so
+        // what is advertised is exactly what `tools/call` will dispatch.
+        "tools/list" => {
+            let mut tools = vec![
+                serde_json::json!({
+                    "name": "publish_local",
+                    "description": "Publish this project's WEB service on the local reverse proxy and return its www.<project>.localhost URL. Idempotent: re-publishing replaces the running container and keeps the same URL.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
                     }
-                ]
-            }
-        }),
+                }),
+                serde_json::json!({
+                    "name": "service_status",
+                    "description": "Report the state of this project's published local service.",
+                    "inputSchema": { "type": "object", "properties": {} }
+                }),
+                serde_json::json!({
+                    "name": "service_stop",
+                    "description": "Stop this project's published local service and remove its route.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "category": { "type": "string", "enum": ["WEB"] }
+                        },
+                        "required": ["category"]
+                    }
+                }),
+            ];
+            tools.extend(browser_tool_descriptors(browser, rt));
+            serde_json::json!({ "result": { "tools": tools } })
+        }
         "tools/call" => {
             let tool_name = req["params"]["name"].as_str().unwrap_or("");
             let args = req["params"]["arguments"].as_object();
 
-            // MULTI-thread runtime is load-bearing: the publish path re-enters
-            // podman_runtime()'s RuntimeOrHandle::block_on, which uses
-            // tokio::task::block_in_place — a PANIC on current-thread runtimes
-            // ("can call blocking only when running on the multi-threaded
-            // runtime"; live repro 2026-07-16, first tray publish_local killed
-            // its connection thread). The deny/handshake paths never hit it,
-            // so only a live publish exposes a regression here.
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(2)
-                .enable_all()
-                .build()
-                .unwrap();
+            // Order 779-3trn: the browser family is served by the composed
+            // BrowserMcpServer, whose project label came from the accepting
+            // listener's LaneIdentity — never from this request, and never
+            // from BrowserMcpServer::new()'s TILLANDSIAS_PROJECT env read.
+            // Attribution stays a property of the socket (order 505).
+            if tool_name.starts_with("browser.") {
+                let request = tillandsias_browser_mcp::framing::RpcRequest {
+                    id: req.get("id").and_then(|i| i.as_u64()),
+                    method: "tools/call".to_string(),
+                    params: req["params"].clone(),
+                };
+                let response = rt.block_on(browser.handle_request(request));
+                return match response {
+                    tillandsias_browser_mcp::framing::RpcResponse::Notification => None,
+                    other => other
+                        .to_line()
+                        .ok()
+                        .and_then(|line| serde_json::from_str(&line).ok()),
+                };
+            }
 
             match tool_name {
                 "publish_local" => {
@@ -918,16 +1000,113 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
     let Ok(read_half) = writer.try_clone() else {
         return;
     };
-    for line in BufReader::new(read_half).lines() {
-        let Ok(line) = line else {
+    let mut reader = BufReader::new(read_half);
+
+    // Order 779-3trn: ONE browser server and ONE runtime for the whole
+    // connection.
+    //
+    // The label is pinned from the accepting listener's LaneIdentity, so
+    // `BrowserMcpServer::new()`'s TILLANDSIAS_PROJECT env read never runs —
+    // reading the environment here would reintroduce exactly the forgeable
+    // attribution order 505 deleted. The per-connection instance is also
+    // what makes the call semaphore mean "per session".
+    //
+    // MULTI-thread runtime is load-bearing and now hoisted out of the
+    // per-call path (it used to be rebuilt on every tools/call): the publish
+    // path re-enters podman_runtime()'s RuntimeOrHandle::block_on, which uses
+    // tokio::task::block_in_place — a PANIC on current-thread runtimes ("can
+    // call blocking only when running on the multi-threaded runtime"; live
+    // repro 2026-07-16, first tray publish_local killed its connection
+    // thread). The deny/handshake paths never hit it, so only a live publish
+    // exposes a regression here.
+    let Ok(rt) = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+    else {
+        warn!(
+            spec = "mcp-tool-socket",
+            "could not build the MCP connection runtime; closing"
+        );
+        return;
+    };
+    let browser = tillandsias_browser_mcp::BrowserMcpServer::with_project_label(
+        tillandsias_browser_mcp::McpServerConfig::default(),
+        &project_label,
+        None,
+    );
+
+    loop {
+        let mut raw = String::new();
+        // BOUNDED read (order 779-dqsv): `.take(MAX + 1)` caps what a single
+        // line can allocate. Reading the line first and measuring afterwards
+        // would let a hostile or looping peer allocate without limit — the
+        // exact hole this cap closes — so the ceiling is applied to the READ,
+        // not to the result.
+        let read = (&mut reader)
+            .take(MAX_MCP_LINE_BYTES as u64 + 1)
+            .read_line(&mut raw);
+        let Ok(byte_count) = read else {
             return;
         };
-        let line = line.trim();
+        if byte_count == 0 {
+            return; // clean EOF
+        }
+        if byte_count > MAX_MCP_LINE_BYTES && !raw.ends_with('\n') {
+            // Oversized: drain to the next newline so the stream resyncs,
+            // answer with a typed error, and keep serving. Draining is itself
+            // bounded — a peer that never sends a newline just closes.
+            let mut discarded = 0usize;
+            loop {
+                let mut sink = String::new();
+                let Ok(n) = (&mut reader)
+                    .take(MAX_MCP_LINE_BYTES as u64)
+                    .read_line(&mut sink)
+                else {
+                    return;
+                };
+                if n == 0 {
+                    return;
+                }
+                discarded += n;
+                if sink.ends_with('\n') {
+                    break;
+                }
+                if discarded > MAX_MCP_LINE_BYTES * 8 {
+                    warn!(
+                        spec = "mcp-tool-socket",
+                        discarded, "peer kept sending an unterminated oversized line; closing"
+                    );
+                    return;
+                }
+            }
+            warn!(
+                spec = "mcp-tool-socket",
+                project = %project_label,
+                limit = MAX_MCP_LINE_BYTES,
+                "MCP request line exceeded the per-line cap; refused"
+            );
+            let too_large = serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": serde_json::Value::Null,
+                "error": {
+                    "code": -32000,
+                    "message": format!(
+                        "RequestTooLarge: one JSON-RPC object per line, at most {MAX_MCP_LINE_BYTES} bytes"
+                    ),
+                }
+            });
+            if writeln!(writer, "{too_large}").is_err() {
+                return;
+            }
+            continue;
+        }
+        let line = raw.trim();
         if line.is_empty() {
             continue;
         }
         let resp = match serde_json::from_str::<serde_json::Value>(line) {
-            Ok(req) => handle_mcp_jsonrpc(&project_label, &req),
+            Ok(req) => handle_mcp_jsonrpc(&project_label, &req, &browser, &rt),
             Err(_) => Some(serde_json::json!({
                 "jsonrpc": "2.0",
                 "id": serde_json::Value::Null,
@@ -937,10 +1116,19 @@ pub fn serve_mcp_connection(stream: UnixStream, identity: Option<LaneIdentity>) 
                 }
             })),
         };
-        if let Some(resp) = resp
-            && writeln!(writer, "{resp}").is_err()
-        {
-            return;
+        if let Some(resp) = resp {
+            let rendered = cap_response_line(&resp);
+            if rendered.len() != resp.to_string().len() {
+                warn!(
+                    spec = "mcp-tool-socket",
+                    project = %project_label,
+                    limit = MAX_MCP_LINE_BYTES,
+                    "MCP response exceeded the per-line cap; replaced with a typed error"
+                );
+            }
+            if writeln!(writer, "{rendered}").is_err() {
+                return;
+            }
         }
     }
 }
@@ -4536,11 +4724,33 @@ mod tests {
     /// NOT process env.
     ///
     /// @trace spec:mcp-tool-socket
+    /// Order 779-3trn test rigs: a hermetic composed browser server (fake
+    /// launch — never spawns chromium) and its runtime. The label is pinned
+    /// exactly as `serve_mcp_connection` pins it from LaneIdentity, so these
+    /// tests exercise the real attribution path.
+    fn test_browser() -> tillandsias_browser_mcp::BrowserMcpServer {
+        tillandsias_browser_mcp::BrowserMcpServer::with_project_label_and_mode(
+            tillandsias_browser_mcp::McpServerConfig::default(),
+            "demo",
+            None,
+            true,
+        )
+    }
+
+    fn test_rt() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("test runtime")
+    }
+
     #[test]
     fn mcp_initialize_and_tools_list_advertise_publish_tool_family() {
         let init =
             serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
-        let resp = handle_mcp_jsonrpc("demo", &init).expect("initialize replies");
+        let resp = handle_mcp_jsonrpc("demo", &init, &test_browser(), &test_rt())
+            .expect("initialize replies");
         assert_eq!(resp["jsonrpc"], "2.0");
         assert_eq!(resp["id"], 1);
         assert_eq!(
@@ -4549,23 +4759,305 @@ mod tests {
         );
 
         let list = serde_json::json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"});
-        let resp = handle_mcp_jsonrpc("demo", &list).expect("tools/list replies");
+        let resp = handle_mcp_jsonrpc("demo", &list, &test_browser(), &test_rt())
+            .expect("tools/list replies");
         let tools: Vec<&str> = resp["result"]["tools"]
             .as_array()
             .expect("tools array")
             .iter()
             .map(|t| t["name"].as_str().expect("tool name"))
             .collect();
+        // Order 779-3trn: the host-services trio still leads (unchanged
+        // ordering for existing consumers), and the browser family is now
+        // advertised alongside it — the wiring gap this packet closed.
         assert_eq!(
-            tools,
-            vec!["publish_local", "service_status", "service_stop"]
+            &tools[..3],
+            &["publish_local", "service_status", "service_stop"],
+            "the host-services trio must keep its identity and order"
         );
+        let browser_tools: Vec<&&str> =
+            tools.iter().filter(|t| t.starts_with("browser.")).collect();
+        assert_eq!(
+            browser_tools.len(),
+            8,
+            "all eight browser.* tools are advertised: {tools:?}"
+        );
+        for expected in [
+            "browser.open",
+            "browser.list_windows",
+            "browser.read_url",
+            "browser.screenshot",
+            "browser.click",
+            "browser.type",
+            "browser.eval",
+            "browser.close",
+        ] {
+            assert!(
+                tools.contains(&expected),
+                "{expected} must be advertised: {tools:?}"
+            );
+        }
+        assert_eq!(tools.len(), 11, "trio + browser family, nothing else");
 
         let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
         assert!(
-            handle_mcp_jsonrpc("demo", &note).is_none(),
+            handle_mcp_jsonrpc("demo", &note, &test_browser(), &test_rt()).is_none(),
             "notifications get no reply"
         );
+    }
+
+    /// Order 779-3trn exit criterion: exercise the composition THROUGH THE
+    /// TRANSPORT, not by calling the dispatcher directly — a real
+    /// `UnixStream::pair()` driven by `serve_mcp_connection` with a pinned
+    /// `LaneIdentity`. That is the only way to prove the per-connection
+    /// server is built with listener-derived attribution and that the
+    /// browser family is reachable by an actual client.
+    ///
+    /// Hermetic: `fake_launch` means no chromium is ever spawned, and the
+    /// `browser.open` below carries a disallowed URL so it is refused by
+    /// policy before any launch decision.
+    ///
+    /// @trace spec:mcp-tool-socket, spec:host-browser-mcp
+    #[test]
+    fn mcp_connection_serves_browser_family_over_the_socket() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        with_empty_project_root(|| {
+            let (client, server) = UnixStream::pair().expect("socketpair");
+            let handle = std::thread::spawn(move || {
+                serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+            });
+
+            let mut writer = client.try_clone().expect("clone client");
+            let mut reader = BufReader::new(client);
+            let mut read_line = || {
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("read reply");
+                serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
+            };
+
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+            )
+            .expect("write initialize");
+            let init = read_line();
+            assert_eq!(
+                init["result"]["serverInfo"]["name"],
+                "tillandsias-host-services"
+            );
+
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+            )
+            .expect("write tools/list");
+            let list = read_line();
+            let tools: Vec<&str> = list["result"]["tools"]
+                .as_array()
+                .expect("tools array")
+                .iter()
+                .map(|t| t["name"].as_str().expect("tool name"))
+                .collect();
+            assert_eq!(
+                tools.len(),
+                11,
+                "over the transport: trio + eight browser tools, got {tools:?}"
+            );
+            assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
+
+            // A disallowed URL must come back as a typed JSON-RPC error from the
+            // composed server — proving browser.* actually ROUTED there rather
+            // than falling through to the -32601 unknown-tool arm.
+            writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"browser.open","arguments":{{"url":"file:///etc/passwd"}}}}}}"#
+        )
+        .expect("write browser.open");
+            let denied = read_line();
+            assert_eq!(denied["id"], 3);
+            // The browser family reports POLICY denials the MCP way — a result
+            // with `isError: true` and the reason in content — whereas the
+            // host-services trio uses JSON-RPC -32000 for its denials. Both are
+            // correct for their layer; what matters here is that the call
+            // reached the composed server at all.
+            assert_eq!(
+                denied["result"]["isError"], true,
+                "a disallowed URL must be refused: {denied}"
+            );
+            let text = denied["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            assert!(
+                text.contains("URL_NOT_ALLOWED"),
+                "the refusal must name the URL policy: {text}"
+            );
+            assert!(
+                denied.get("error").is_none(),
+                "browser.open must route to the composed server, never the -32601 unknown-tool fallback: {denied}"
+            );
+
+            drop(writer);
+            drop(reader);
+            handle.join().expect("connection thread joins");
+        });
+    }
+
+    /// Order 779-dqsv: the per-line cap binds on the INBOUND half. An
+    /// oversized line is refused with a typed error, the stream RESYNCS at
+    /// the next newline (a normal request after it still works), and the
+    /// connection is not killed. Before this cap the live NDJSON path had no
+    /// limit at all while the retired McpFrame path had 4 MiB.
+    ///
+    /// @trace spec:mcp-tool-socket, spec:host-browser-mcp
+    #[test]
+    fn mcp_oversized_request_line_is_refused_and_the_stream_resyncs() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        with_empty_project_root(|| {
+            let (client, server) = UnixStream::pair().expect("socketpair");
+            let handle = std::thread::spawn(move || {
+                serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+            });
+
+            let mut writer = client.try_clone().expect("clone client");
+            let mut reader = BufReader::new(client);
+            let mut read_json = || {
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("read reply");
+                serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
+            };
+
+            // One line just past the cap: valid JSON shape, hostile size.
+            let padding = "x".repeat(MAX_MCP_LINE_BYTES + 1024);
+            writeln!(
+            writer,
+            r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"publish_local","arguments":{{"category":"{padding}"}}}}}}"#
+        )
+        .expect("write oversized line");
+
+            let refused = read_json();
+            assert_eq!(refused["error"]["code"], -32000);
+            let message = refused["error"]["message"].as_str().unwrap_or_default();
+            assert!(
+                message.starts_with("RequestTooLarge:"),
+                "the refusal must name the cap: {message}"
+            );
+
+            // RESYNC: a normal request after the oversized one is still served —
+            // the cap refuses a line, it does not poison the connection.
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+            )
+            .expect("write tools/list");
+            let list = read_json();
+            assert_eq!(list["id"], 2);
+            assert!(
+                list["result"]["tools"]
+                    .as_array()
+                    .is_some_and(|t| !t.is_empty()),
+                "the connection still serves after an oversized line: {list}"
+            );
+
+            drop(writer);
+            drop(reader);
+            handle.join().expect("connection thread joins");
+        });
+    }
+
+    /// Order 779-dqsv: the OUTBOUND half of the cap — the one with a live
+    /// producer, since a base64 full-page `browser.screenshot` can exceed any
+    /// sane line length. An oversized response is replaced by a typed error
+    /// naming the cap, so the failure surfaces here (where the reason is
+    /// known) instead of blowing up the peer's reader.
+    #[test]
+    fn mcp_oversized_response_is_replaced_with_a_typed_error() {
+        // NEGATIVE CONTROL: a normal response passes through byte-identical.
+        let under = serde_json::json!({"jsonrpc": "2.0", "id": 1, "result": {"ok": true}});
+        assert_eq!(
+            cap_response_line(&under),
+            under.to_string(),
+            "a response under the cap must pass through untouched"
+        );
+
+        // A screenshot-sized result IS replaced — with the id preserved, so
+        // the client can still correlate the failure to its call.
+        let huge = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "result": { "content": [{ "type": "text", "text": "A".repeat(MAX_MCP_LINE_BYTES) }] }
+        });
+        let capped = cap_response_line(&huge);
+        assert!(
+            capped.len() <= MAX_MCP_LINE_BYTES,
+            "the replacement itself must fit under the cap"
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&capped).expect("replacement is JSON");
+        assert_eq!(parsed["id"], 7, "the request id survives the replacement");
+        assert_eq!(parsed["error"]["code"], -32000);
+        assert!(
+            parsed["error"]["message"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with("ResponseTooLarge:"),
+            "the error names the cap: {parsed}"
+        );
+        assert!(
+            parsed.get("result").is_none(),
+            "the oversized payload must NOT survive alongside the error"
+        );
+    }
+
+    /// Order 779-dqsv: pin what the lane transport ACTUALLY enforces, now
+    /// that the unreachable 16-call semaphore is gone. The loop reads one
+    /// line, handles it to completion, and only then reads the next — so a
+    /// second request cannot begin before the first response is written.
+    /// This is the guarantee a future concurrent transport would have to
+    /// deliberately break (and would then owe a real, bindable limit).
+    #[test]
+    fn mcp_lane_transport_serializes_one_call_at_a_time() {
+        use std::io::{BufRead, BufReader, Write};
+        use std::os::unix::net::UnixStream;
+
+        with_empty_project_root(|| {
+            let (client, server) = UnixStream::pair().expect("socketpair");
+            let handle = std::thread::spawn(move || {
+                serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+            });
+
+            let mut writer = client.try_clone().expect("clone client");
+            let mut reader = BufReader::new(client);
+
+            // Pipeline three requests without reading anything back.
+            for id in 1..=3 {
+                writeln!(
+                    writer,
+                    r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/list"}}"#
+                )
+                .expect("write pipelined request");
+            }
+
+            // Responses come back in request order, one per line — the
+            // observable signature of a sequential handler.
+            for expected in 1..=3 {
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("read reply");
+                let resp: serde_json::Value =
+                    serde_json::from_str(line.trim()).expect("reply is JSON");
+                assert_eq!(
+                    resp["id"], expected,
+                    "sequential transport answers in request order"
+                );
+            }
+
+            drop(writer);
+            drop(reader);
+            handle.join().expect("connection thread joins");
+        });
     }
 
     /// Order 363 exit criterion: a non-WEB category is refused host-side
@@ -4579,7 +5071,8 @@ mod tests {
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": {"name": "publish_local", "arguments": {"category": "DATABASE"}}
         });
-        let resp = handle_mcp_jsonrpc("demo", &call).expect("deny replies");
+        let resp =
+            handle_mcp_jsonrpc("demo", &call, &test_browser(), &test_rt()).expect("deny replies");
         assert_eq!(resp["id"], 3);
         assert_eq!(resp["error"]["code"], -32000);
         let message = resp["error"]["message"].as_str().expect("error message");
@@ -4592,7 +5085,8 @@ mod tests {
             "jsonrpc": "2.0", "id": 4, "method": "tools/call",
             "params": {"name": "drop_all_containers", "arguments": {}}
         });
-        let resp = handle_mcp_jsonrpc("demo", &forged).expect("unknown tool replies");
+        let resp = handle_mcp_jsonrpc("demo", &forged, &test_browser(), &test_rt())
+            .expect("unknown tool replies");
         assert_eq!(resp["error"]["code"], -32601);
     }
 
@@ -4628,6 +5122,38 @@ mod tests {
         server.join().expect("server thread joined");
     }
 
+    /// Pin TILLANDSIAS_HOST_PROJECT_ROOT to an empty per-test directory for
+    /// the tests that reach serve_mcp_connection's project validation. The
+    /// validator scans the AMBIENT project root, so without this these tests
+    /// pass or fail based on which other test mutated the env first and on
+    /// whether the host's ~/src happens to be empty — the 638-ehzi
+    /// schedule-race class, reproduced 2026-08-16 when newly added tests
+    /// shifted the schedule and a non-empty ~/src (created 08-12) made solo
+    /// runs fail deterministically. An EMPTY root is the deliberate fixture:
+    /// empty-scan-is-valid is the documented open-host behavior these tests
+    /// had been relying on implicitly.
+    fn with_empty_project_root<T>(f: impl FnOnce() -> T) -> T {
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-empty-project-root-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let prev = std::env::var_os(crate::local_projects::HOST_PROJECT_ROOT_ENV);
+        unsafe {
+            std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, &dir);
+        }
+        let out = f();
+        unsafe {
+            match prev {
+                Some(v) => std::env::set_var(crate::local_projects::HOST_PROJECT_ROOT_ENV, v),
+                None => std::env::remove_var(crate::local_projects::HOST_PROJECT_ROOT_ENV),
+            }
+        }
+        out
+    }
+
     /// Order 505: The NDJSON transport round-trips the MCP handshake for an attributed
     /// lane peer — one JSON-RPC object per line, replies in order.
     ///
@@ -4637,41 +5163,46 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        let (server_side, client_side) =
-            UnixStream::pair().expect("UnixStream::pair available on linux");
-        let identity = LaneIdentity::new("demo", "default");
-        let server = std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+        with_empty_project_root(|| {
+            let (server_side, client_side) =
+                UnixStream::pair().expect("UnixStream::pair available on linux");
+            let identity = LaneIdentity::new("demo", "default");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
 
-        let mut writer = client_side.try_clone().expect("clone client side");
-        let mut lines = BufReader::new(client_side).lines();
+            let mut writer = client_side.try_clone().expect("clone client side");
+            let mut lines = BufReader::new(client_side).lines();
 
-        writeln!(
-            writer,
-            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
-        )
-        .expect("write initialize");
-        let resp: serde_json::Value =
-            serde_json::from_str(&lines.next().expect("initialize reply").expect("readable"))
-                .expect("valid JSON");
-        assert_eq!(resp["id"], 1);
-        assert_eq!(
-            resp["result"]["serverInfo"]["name"],
-            "tillandsias-host-services"
-        );
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+            )
+            .expect("write initialize");
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("initialize reply").expect("readable"))
+                    .expect("valid JSON");
+            assert_eq!(resp["id"], 1);
+            assert_eq!(
+                resp["result"]["serverInfo"]["name"],
+                "tillandsias-host-services"
+            );
 
-        writeln!(
-            writer,
-            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
-        )
-        .expect("write tools/list");
-        let resp: serde_json::Value =
-            serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
-                .expect("valid JSON");
-        assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 3);
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+            )
+            .expect("write tools/list");
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("tools/list reply").expect("readable"))
+                    .expect("valid JSON");
+            // Order 779-3trn: the host-services trio plus the eight
+            // browser.* tools now compose on this socket (was 3).
+            assert_eq!(resp["result"]["tools"].as_array().expect("tools").len(), 11);
 
-        drop(writer);
-        drop(lines);
-        server.join().expect("server thread joined");
+            drop(writer);
+            drop(lines);
+            server.join().expect("server thread joined");
+        });
     }
     /// Order 505: per-lane socket location and 0600 permissions.
     /// Asserts $XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/mcp.sock path shape
@@ -4725,43 +5256,46 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        // Set a forged environment variable in the test process
-        unsafe {
-            std::env::set_var("TILLANDSIAS_PROJECT", "attacker-wins");
-        }
+        with_empty_project_root(|| {
+            // Set a forged environment variable in the test process
+            unsafe {
+                std::env::set_var("TILLANDSIAS_PROJECT", "attacker-wins");
+            }
 
-        let (server_side, client_side) =
-            UnixStream::pair().expect("UnixStream::pair available on linux");
-        // Listener context attributes this connection to project "alpha", instance "w1"
-        let identity = LaneIdentity::new("alpha", "w1");
-        let server = std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
+            let (server_side, client_side) =
+                UnixStream::pair().expect("UnixStream::pair available on linux");
+            // Listener context attributes this connection to project "alpha", instance "w1"
+            let identity = LaneIdentity::new("alpha", "w1");
+            let server =
+                std::thread::spawn(move || serve_mcp_connection(server_side, Some(identity)));
 
-        let mut writer = client_side.try_clone().expect("clone client side");
-        let mut lines = BufReader::new(client_side).lines();
+            let mut writer = client_side.try_clone().expect("clone client side");
+            let mut lines = BufReader::new(client_side).lines();
 
-        // Send tools/call for a non-WEB category
-        writeln!(
+            // Send tools/call for a non-WEB category
+            writeln!(
             writer,
             r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"publish_local","arguments":{{"category":"INVALID"}}}}}}"#
         )
         .expect("write tools/call");
 
-        let resp: serde_json::Value =
-            serde_json::from_str(&lines.next().expect("reply").expect("readable"))
-                .expect("valid JSON");
+            let resp: serde_json::Value =
+                serde_json::from_str(&lines.next().expect("reply").expect("readable"))
+                    .expect("valid JSON");
 
-        // The error code is -32000
-        assert_eq!(resp["id"], 1);
-        assert_eq!(resp["error"]["code"], -32000);
+            // The error code is -32000
+            assert_eq!(resp["id"], 1);
+            assert_eq!(resp["error"]["code"], -32000);
 
-        drop(writer);
-        drop(lines);
-        server.join().expect("server thread joined");
+            drop(writer);
+            drop(lines);
+            server.join().expect("server thread joined");
 
-        // Clean up env
-        unsafe {
-            std::env::remove_var("TILLANDSIAS_PROJECT");
-        }
+            // Clean up env
+            unsafe {
+                std::env::remove_var("TILLANDSIAS_PROJECT");
+            }
+        });
     }
 
     /// Order 505: Different lanes have isolated socket subdirectories.

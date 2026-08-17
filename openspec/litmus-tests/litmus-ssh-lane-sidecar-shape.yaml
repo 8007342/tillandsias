@@ -1,0 +1,68 @@
+# @trace spec:git-mirror-service
+name: litmus:ssh-lane-sidecar-shape
+spec: git-mirror-service
+phase: pre-build
+size: quick
+# inputs: see order 765-mza8. Greps headless sources AND rebuilds the git image.
+inputs:
+  - crates/**
+  - Cargo.toml
+  - Cargo.lock
+  - images/git/**
+  - images/default/lib-common.sh
+  - scripts/build-image.sh
+  - scripts/common.sh
+  - scripts/test-ssh-lane-sidecar.sh
+severity: critical
+description: >
+  Order 749-6uby (design T8+T10 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md):
+  the per-lane ssh-agent sidecar is the ONE place a lane's SSH private key
+  exists (D5); the forge receives only the agent socket plus the read-only
+  @cert-authority known_hosts. The sidecar keygens on tmpfs, has its
+  seam-signed USER cert VALIDATED before serving (single principal
+  til:forge-push:<mirror-id>, user-type — negatives refused with named
+  causes), serves it over ssh-agent on the socket, and renews on an
+  overridable interval. §4a M2's exactness is proven against a REAL Vault
+  (in-container dev server): a token holding the minted-shape lane policy
+  signs its OWN ssh-client-signer/sign/<mid> path and gets HTTP 403 from any
+  other. The forge wiring (pushInsteadOf-only redirect Q4, core.sshCommand,
+  flag gating, teardown-together) is pinned by cargo tests
+  (write_forge_gitconfig_wires_ssh_push_lane_when_enabled,
+  ssh_lane_sidecar_wiring_windows); this litmus pins the container half and
+  the source surfaces.
+
+preconditions:
+  - workspace contains images/git/ssh-lane-sidecar.sh
+  - workspace contains scripts/test-ssh-lane-sidecar.sh
+  - podman is available on the host
+
+critical_path:
+  - step: "sidecar script exists, is executable, and parses"
+    command: "test -x images/git/ssh-lane-sidecar.sh && bash -n images/git/ssh-lane-sidecar.sh && echo 'ok: sidecar-parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: sidecar-parses"
+
+  - step: "all sidecar scenarios pass in the real container (ready+fingerprint+agent-serving, negative cert controls, renewal, M2 exact-path 403 against a real Vault)"
+    command: "bash scripts/test-ssh-lane-sidecar.sh all 2>&1 | tail -1"
+    timeout_ms: 420000
+    expected_behavior: "ok: all ssh-lane-sidecar scenarios passed"
+
+  - step: "the Containerfile ships the sidecar entrypoint (same image as the mirror — no second image to skew)"
+    command: "grep -q 'ssh-lane-sidecar.sh /usr/local/bin/ssh-lane-sidecar' images/git/Containerfile && echo 'ok: sidecar-shipped'"
+    timeout_ms: 5000
+    expected_behavior: "ok: sidecar-shipped"
+
+  - step: "launcher wiring stays flag-gated (mirror_ssh_push_lane_enabled) and tears the sidecar down with the stack"
+    command: "grep -q 'fn mirror_ssh_push_lane_enabled' crates/tillandsias-headless/src/main.rs && grep -q 'ensure_ssh_lane_sidecar(' crates/tillandsias-headless/src/main.rs && grep -A20 'fn cleanup_stack_containers' crates/tillandsias-headless/src/main.rs >/dev/null && grep -q 'ssh_lane_sidecar_container_name(project_name)' crates/tillandsias-headless/src/main.rs && echo 'ok: launcher-wired-and-torn-down'"
+    timeout_ms: 5000
+    expected_behavior: "ok: launcher-wired-and-torn-down"
+
+  - step: "the D6 AppRole binds exactly the one minted lane policy (no extra policies by construction)"
+    command: "grep -A12 'pub async fn provision_lane_signer_approle(' crates/tillandsias-headless/src/vault_bootstrap.rs | grep -q 'mirror_lane_signer_policy_name(mirror_id)' && echo 'ok: single-policy-binding'"
+    timeout_ms: 5000
+    expected_behavior: "ok: single-policy-binding"
+
+  - step: "export_ssh_env keeps a set SSH_AUTH_SOCK ahead of every fallback (exit criterion 5 — probe order pinned)"
+    command: "awk '/^export_ssh_env\\(\\)/,/^}/' images/default/lib-common.sh | grep -n 'SSH_AUTH_SOCK\\|run/user\\|id_rsa' | head -3 | tr '\\n' ' ' | grep -qE 'SSH_AUTH_SOCK.*SSH_AUTH_SOCK.*run/user' && echo 'ok: sock-priority-pinned'"
+    timeout_ms: 5000
+    expected_behavior: "ok: sock-priority-pinned"

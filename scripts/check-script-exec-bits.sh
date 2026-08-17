@@ -40,34 +40,74 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
 # Files that EXECUTE things. Prose is deliberately excluded — see above.
-caller_files="$(git ls-files 'scripts/*.sh' 'build.sh' 'skills/*/SKILL.md' 'openspec/litmus-tests/*.yaml' 2>/dev/null)"
+# `.github/workflows/*.yml` joined the set with order 770-dyqr: CI runs scripts
+# by path too, and a bare invocation there fails in a lane no local gate walks.
+# (`.claude/skills/*` needs no entry — those paths are symlinks, mode 120000,
+# pointing at the `skills/*/SKILL.md` already covered here.)
+caller_files="$(git ls-files 'scripts/*.sh' 'build.sh' 'skills/*/SKILL.md' 'openspec/litmus-tests/*.yaml' '.github/workflows/*.yml' 2>/dev/null)"
 if [ -z "$caller_files" ]; then
     echo "ok:script-exec-bits:0 checked"
     echo "  note: no caller files found (not a git checkout?)" >&2
     exit 0
 fi
 
-checked=0
 violations=0
 
+# ── Candidates: tracked 100644, with a shebang ───────────────────────────────
+# The shebang test was `head -c2 "$path" | grep -q '#!'` — two processes for
+# each of 260 tracked files. Bash reads the first line without spawning.
+candidates=()
 while IFS= read -r entry; do
     [ -n "$entry" ] || continue
     mode="${entry%% *}"
     path="${entry##*$'\t'}"
     [ "$mode" = "100644" ] || continue
     [ -f "$path" ] || continue
-    # Only files that are meant to be run at all.
-    head -c2 "$path" 2>/dev/null | grep -q '#!' || continue
+    IFS= read -r first_line < "$path" 2>/dev/null || continue
+    case "$first_line" in '#!'*) ;; *) continue ;; esac
+    candidates+=("$path")
+done <<EOF
+$(git ls-files -s scripts/ 2>/dev/null)
+EOF
+checked="${#candidates[@]}"
 
-    # A BARE invocation: the path at the start of a command, not preceded by an
-    # interpreter (`bash`/`sh`) and not sourced (`source` / `.`).
-    hit="$(printf '%s\n' "$caller_files" \
-        | xargs -r grep -nE "(^|[;&|(]|\\\$\\()[[:space:]]*\"?${path}([[:space:]\"]|$)" 2>/dev/null \
-        | grep -vE "(bash|sh|source|\.)[[:space:]]+\"?${path}" \
-        | grep -v "^${path}:" \
-        | head -1)"
-    checked=$((checked + 1))
-    if [ -n "$hit" ]; then
+# ── One sweep, one filter pass (order 758-jw6v) ──────────────────────────────
+# Was: `xargs grep` over all 612 caller files ONCE PER CANDIDATE (about sixteen
+# thousand file-greps), then a four-process filter chain per candidate. 16.3s
+# standalone, 30s inside ./build.sh --check, which a cycle runs three or four
+# times. The filtering lives in scripts/lib/exec-bits-filter.awk — a FILE,
+# because two inline attempts were broken by shell quoting rather than by
+# logic, once by an apostrophe inside an awk comment.
+_eb_awk="$REPO_ROOT/scripts/lib/exec-bits-filter.awk"
+# REFUSE rather than report zero. Splitting the filter into a second file gave
+# this checker a dependency it did not have before, and a missing dependency
+# that yields "no violations found" is indistinguishable from a clean tree —
+# the exact failure this whole milestone is about. 752-8hqx was the same shape:
+# the push-lane hook gained a dependency on plan-binary-probe.sh and its
+# fixture, which did not copy it, read the resulting fail-closed path as a lane
+# defect. Absent evidence is not evidence of absence.
+if [ ! -f "$_eb_awk" ]; then
+    echo "violation:script-not-executable:0"
+    echo "  REFUSED: $_eb_awk is missing — this checker cannot run and will not" >&2
+    echo "  report a clean tree it never examined." >&2
+    exit 2
+fi
+
+if [ "${#candidates[@]}" -gt 0 ]; then
+    _eb_tmp="$(mktemp -d)" || exit 2
+    trap 'rm -rf "$_eb_tmp"' EXIT
+    printf '%s\n' "${candidates[@]}" > "$_eb_tmp/cands"
+
+    # The sweep pattern is the union over all candidates. Its per-candidate
+    # precision does not matter here — the awk pass re-tests each hit against
+    # each candidate — so this only has to be a superset.
+    alt="$(printf '%s|' "${candidates[@]}")"; alt="${alt%|}"
+    printf '%s\n' "$caller_files" \
+        | xargs -r grep -nHE "((^|[;&|(])[[:space:]]*\"?(${alt}))|(\\\$\\([[:space:]]*\"?(${alt}))|(command:[[:space:]]*\"?(${alt}))" \
+            > "$_eb_tmp/hits" 2>/dev/null
+
+    while IFS=$'\t' read -r path hit; do
+        [ -n "$path" ] || continue
         violations=$((violations + 1))
         {
             echo "REFUSED: $path is invoked by path but tracked as mode 100644 —"
@@ -75,10 +115,9 @@ while IFS= read -r entry; do
             echo "         Fix: git update-index --chmod=+x $path"
             printf '   caller: %s\n' "$(printf '%s' "$hit" | cut -c1-140)"
         } >&2
-    fi
-done <<EOF
-$(git ls-files -s scripts/ 2>/dev/null)
-EOF
+    done < <(awk -f "$REPO_ROOT/scripts/lib/exec-bits-filter.awk" \
+                 "$_eb_tmp/cands" "$_eb_tmp/hits")
+fi
 
 if [ "$violations" -gt 0 ]; then
     echo "violation:script-not-executable:$violations"

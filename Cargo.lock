@@ -3128,6 +3128,7 @@ dependencies = [
  "sha2",
  "signal-hook",
  "tempfile",
+ "tillandsias-browser-mcp",
  "tillandsias-control-wire",
  "tillandsias-core",
  "tillandsias-logging",
@@ -3163,6 +3164,7 @@ dependencies = [
  "tillandsias-secure-channel",
  "tillandsias-vm-layer",
  "tokio",
+ "toml 0.8.2",
  "tracing",
  "windows 0.58.0",
 ]
@@ -3234,6 +3236,7 @@ dependencies = [
  "sysinfo",
  "tempfile",
  "thiserror",
+ "tillandsias-podman",
  "tokio",
  "tracing",
 ]

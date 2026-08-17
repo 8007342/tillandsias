@@ -99,20 +99,34 @@ _log "Removing tillandsias-owned images (preserving allowlisted upstream bases).
 # KEEP_IDS set first, and skipping any ID in it during removal regardless of
 # what a LATER row for that same ID looks like, makes this collision
 # impossible by construction.
-declare -A KEEP_IDS=()
+# Space-delimited string set instead of `declare -A` (761-g36m burndown —
+# bash 3.2 has no associative arrays). Image IDs are hex tokens, so exact
+# membership via a spaced substring match is collision-free; the KEPT count
+# increments only on a genuinely new ID, preserving the assoc-array's
+# dedup-on-insert semantics that make the multi-tag collision impossible.
+KEEP_IDS=" "
+KEPT=0
+_id_is_kept() {
+    case "$KEEP_IDS" in
+        *" $1 "*) return 0 ;;
+    esac
+    return 1
+}
 while IFS=$'\t' read -r repo_tag image_id; do
     [[ -z "$image_id" ]] && continue
     if _is_kept_image "$repo_tag"; then
-        KEEP_IDS["$image_id"]=1
+        if ! _id_is_kept "$image_id"; then
+            KEEP_IDS="${KEEP_IDS}${image_id} "
+            KEPT=$((KEPT + 1))
+        fi
         _log "keeping upstream base: $repo_tag ($image_id)"
     fi
 done < <("$PODMAN" images --format '{{.Repository}}:{{.Tag}}'$'\t''{{.ID}}')
 
 REMOVED=0
-KEPT=${#KEEP_IDS[@]}
 while IFS=$'\t' read -r repo_tag image_id; do
     [[ -z "$image_id" ]] && continue
-    if [[ -n "${KEEP_IDS[$image_id]:-}" ]]; then
+    if _id_is_kept "$image_id"; then
         continue
     fi
     # Anything whose ID isn't in KEEP_IDS is removed — tillandsias-*,

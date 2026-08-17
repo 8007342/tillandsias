@@ -85,7 +85,7 @@ fn exit_status_from_code(code: Option<i32>) -> std::process::ExitStatus {
 #[cfg(target_os = "windows")]
 async fn wsl_distro_exists_async(name: &str) -> bool {
     let out = match {
-        let mut __c = tokio::process::Command::new("wsl.exe");
+        let mut __c = crate::wsl_command_async();
         crate::no_window_async(&mut __c);
         __c
     }
@@ -394,6 +394,7 @@ impl PodmanClient {
                     state: "running".to_string(),
                     image: distro.to_string(),
                     config_hostname: String::new(),
+                    network_aliases: Vec::new(),
                 })
             } else {
                 Err(PodmanError::NotFound(distro.to_string()))
@@ -432,11 +433,25 @@ impl PodmanClient {
                             .as_str()
                             .unwrap_or("")
                             .to_string();
+                        // The aliases are what aardvark-dns actually answers;
+                        // flatten them across networks for the order-666-qbjd
+                        // upgrade-skew membership check. Absent field → empty.
+                        let network_aliases = inspect["NetworkSettings"]["Networks"]
+                            .as_object()
+                            .map(|nets| {
+                                nets.values()
+                                    .filter_map(|n| n["Aliases"].as_array())
+                                    .flatten()
+                                    .filter_map(|a| a.as_str().map(str::to_string))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
                         Ok(ContainerInspect {
                             name: name.to_string(),
                             state,
                             image,
                             config_hostname,
+                            network_aliases,
                         })
                     } else {
                         Err(PodmanError::NotFound(name.to_string()))
@@ -498,7 +513,7 @@ impl PodmanClient {
         #[cfg(target_os = "windows")]
         {
             let output = {
-                let mut __c = tokio::process::Command::new("wsl.exe");
+                let mut __c = crate::wsl_command_async();
                 crate::no_window_async(&mut __c);
                 __c
             }
@@ -881,7 +896,7 @@ impl PodmanClient {
 
             // Unregister the distro.
             let output = {
-                let mut __c = tokio::process::Command::new("wsl.exe");
+                let mut __c = crate::wsl_command_async();
                 crate::no_window_async(&mut __c);
                 __c
             }
@@ -1474,7 +1489,7 @@ impl PodmanClient {
             debug!(distro, %cmd, user, cwd, "Executing command in WSL distro");
 
             let output = {
-                let mut __c = tokio::process::Command::new("wsl.exe");
+                let mut __c = crate::wsl_command_async();
                 crate::no_window_async(&mut __c);
                 __c
             }
@@ -1823,7 +1838,7 @@ async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanErr
 
     // Build the wsl.exe command: wsl.exe -d <distro> --user forge --cd /home/forge --exec env K=V ... <entrypoint> [args...]
     let mut cmd = {
-        let mut __c = tokio::process::Command::new("wsl.exe");
+        let mut __c = crate::wsl_command_async();
         crate::no_window_async(&mut __c);
         __c
     };
@@ -1873,6 +1888,14 @@ pub struct ContainerInspect {
     /// without touching Vault (order 606-bvnp D13). Empty on backends that
     /// cannot read it (WSL stub).
     pub config_hostname: String,
+    /// Every `--network-alias` the container answers as, flattened across its
+    /// networks (`NetworkSettings.Networks.*.Aliases`). The aliases are the
+    /// names aardvark-dns actually resolves, so the mirror upgrade-skew check
+    /// (order 666-qbjd) tests membership here — a retired shared alias
+    /// (`git-service`/`tillandsias-git`) without the expected per-project name
+    /// is positive old-generation evidence. Empty on backends that cannot
+    /// read it (WSL stub) and when the field is absent.
+    pub network_aliases: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

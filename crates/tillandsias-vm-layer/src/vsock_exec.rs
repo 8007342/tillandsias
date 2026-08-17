@@ -669,8 +669,22 @@ where
         .await?;
     }
 
+    // 772-qn6j observability: TILLANDSIAS_VSOCK_EXEC_TRACE=1 prints one
+    // stderr line per received envelope (kind + payload size). The 58-min
+    // wedge survived a 300s PER-ENVELOPE deadline, which proves complete
+    // envelopes kept arriving while zero data was delivered — this trace is
+    // what distinguishes "heartbeats-only arriving" (guest data path silent)
+    // from "data arriving but dropped here" without a guest rebuild.
+    let trace = std::env::var("TILLANDSIAS_VSOCK_EXEC_TRACE").is_ok_and(|v| v == "1");
     loop {
         let env = read_exec_envelope(&mut stream, idle_timeout).await?;
+        if trace {
+            let (kind, size) = match &env.body {
+                ControlMessage::PtyData { bytes, .. } => ("PtyData", bytes.len()),
+                other => (other.kind(), 0),
+            };
+            eprintln!("[exec-trace] recv {kind} bytes={size}");
+        }
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
@@ -774,6 +788,100 @@ where
         }
         other => Err(format!(
             "probe_vm_phase: expected VmStatusReply, got {}",
+            other.kind()
+        )),
+    }
+}
+
+/// Capability token a guest advertises when it can answer
+/// [`ControlMessage::MetricsSnapshotRequest`] (order 333's handler).
+pub const CAP_METRICS_SNAPSHOT: &str = "MetricsSnapshotRequest";
+
+/// Handshake, then fetch the guest metrics snapshot — or report that the
+/// guest cannot serve one (778-n9z2).
+///
+/// `Ok(None)` means the guest handshook fine and did NOT advertise
+/// [`CAP_METRICS_SNAPSHOT`]: an older guest, not a failure. That distinction
+/// is the whole point — feature detection is by CAPABILITY, never by
+/// comparing wire versions, because a version says what a peer IS while a
+/// capability says what it can DO, and this fleet routinely runs a host
+/// newer than the guest binary staged beside it.
+///
+/// Additive on purpose: `Client::handshake` in `tillandsias-host-shell`
+/// discards `server_caps`, and it is shared_logic with Linux and Windows
+/// callers, so widening its return type to reach one macOS field would break
+/// two other platforms for no reason. This helper reads the ack itself.
+///
+/// @trace spec:observability-metrics, spec:vsock-transport
+pub async fn fetch_metrics_snapshot<S>(
+    mut stream: S,
+) -> Result<Option<tillandsias_control_wire::MetricsSnapshotWire>, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "tillandsias-vm-layer::vsock_exec::metrics_snapshot".to_string(),
+                capabilities: vec![],
+                build_version: None,
+            },
+        },
+    )
+    .await?;
+    let ack = read_setup_envelope(&mut stream, exec_idle_timeout()?, "the Hello handshake").await?;
+    let server_caps = match ack.body {
+        ControlMessage::HelloAck {
+            wire_version,
+            server_caps,
+            ..
+        } => {
+            if wire_version != WIRE_VERSION {
+                return Err(format!(
+                    "metrics_snapshot: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
+                ));
+            }
+            server_caps
+        }
+        other => {
+            return Err(format!(
+                "metrics_snapshot: expected HelloAck, got {}",
+                other.kind()
+            ));
+        }
+    };
+    if !server_caps.iter().any(|c| c == CAP_METRICS_SNAPSHOT) {
+        return Ok(None);
+    }
+
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 2,
+            body: ControlMessage::MetricsSnapshotRequest { seq: 2 },
+        },
+    )
+    .await?;
+    let reply = read_setup_envelope(
+        &mut stream,
+        exec_idle_timeout()?,
+        "the MetricsSnapshot reply",
+    )
+    .await?;
+    match reply.body {
+        // The snapshot travels through untouched — no counter is defaulted,
+        // no empty sample is dropped. A `None` counter means "could not be
+        // collected" all the way to the JSON (spec:observability-metrics).
+        ControlMessage::MetricsSnapshotReply { snapshot, .. } => Ok(Some(snapshot)),
+        ControlMessage::Error { message, .. } => {
+            Err(format!("metrics_snapshot: guest error: {message}"))
+        }
+        other => Err(format!(
+            "metrics_snapshot: expected MetricsSnapshotReply, got {}",
             other.kind()
         )),
     }

@@ -8,7 +8,9 @@
 # Overnight loops ran that pipeline several times, sometimes killing the
 # in-forge agent at the step budget — burning provider tokens (BigPickle)
 # on work that was then discarded, and tripping provider rate limits that
-# then masqueraded as forge-lane outages. The full-cycle e2e is allowed at
+# then masqueraded as forge-lane outages. The full-meta e2e (class
+# `full-meta` — there is no class named "full-cycle"; a check against an
+# unrecorded class name ALWAYS allows, see 2026-08-16 finding) is allowed at
 # most once per WINDOW per host; all other runs must downgrade to the cheap
 # smoke prompt (see skills/meta-orchestration/SKILL.md "Smoke Mode").
 #

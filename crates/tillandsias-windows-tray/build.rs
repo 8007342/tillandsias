@@ -47,6 +47,22 @@ fn main() {
     println!("cargo:rerun-if-changed=../../VERSION");
     println!("cargo:rustc-env=WORKSPACE_VERSION={workspace_version}");
 
+    // The staged guest binaries are pulled in with `include_bytes!` from
+    // assets/, and cargo did NOT rebuild when only those files changed.
+    // Measured 2026-08-15: after restaging the x86_64 guest binary, the asset
+    // on disk contained 0.4.260815.1 while the compiled test still asserted
+    // against the previous embed and failed; touching a .rs file fixed it.
+    //
+    // The failure direction is the dangerous one. A developer restages a guest
+    // binary, rebuilds, and ships a tray carrying the PREVIOUS one — and
+    // embedded_guest_headless_matches_workspace_version cannot catch it,
+    // because the stale build is exactly the build that does not recompile the
+    // test either. Declaring the dependency is the fix; the test is the
+    // backstop, not the guard.
+    for arch in ["x86_64", "aarch64"] {
+        println!("cargo:rerun-if-changed=assets/tillandsias-headless-{arch}-unknown-linux-musl");
+    }
+
     // Bake the short git commit SHA the binary was built from so support
     // tooling can correlate a running tray to a specific commit (operators
     // pasting `--diagnose --json` into a bug report make `build_commit`

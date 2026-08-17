@@ -1,0 +1,61 @@
+# @trace spec:litmus-framework
+#
+# Regression pin for order 797-5kqe.
+#
+# The runner's podman preflight was `! timeout 5 podman ps` and announced every
+# non-zero exit as "podman unresponsive (>5s): stalled storage lock or dead
+# runtime — environmental, not a code regression". `timeout` returns 124 only
+# when it actually timed out; otherwise it returns the command's own status. So
+# a podman that failed in three milliseconds was reported as one that stalled
+# for over five seconds, with a named cause and a citation, and the sentence
+# "environmental, not a code regression" told the reader to stop looking. It
+# was attached to a real, reproducible, code-level configuration defect
+# (797-r6tc) and cost roughly four hours and three wrong root causes, while
+# `podman info` answered in 0.07s on 45 consecutive samples taken DURING the
+# run that called podman unresponsive.
+name: litmus:litmus-podman-preflight-diagnosis-shape
+spec: litmus-framework
+phase: pre-build
+description: >
+  Pin that the litmus podman preflight distinguishes a timeout from a failed
+  exec: a podman that exits non-zero instantly is never described as ">5s" nor
+  classified as environmental, its observed status and its own stderr are
+  reported, and a podman that never answers is still reported as a timeout
+  identified by timeout(1)'s exit 124.
+severity: high
+size: quick
+
+inputs:
+  - scripts/run-litmus-test.sh
+  - scripts/test-litmus-podman-preflight-diagnosis.sh
+
+preconditions:
+  - workspace contains scripts/run-litmus-test.sh
+  - workspace contains scripts/test-litmus-podman-preflight-diagnosis.sh
+  - host is Linux (the preflight is Linux-gated by design)
+
+critical_path:
+  - step: "two fixtures against the real runner: an instantly-failing podman is not called a stall, a stalling podman is"
+    command: "bash scripts/test-litmus-podman-preflight-diagnosis.sh"
+    timeout_ms: 180000
+    success_pattern: "PASS: podman preflight distinguishes timeout from immediate failure"
+    failure_pattern: "FAIL:"
+
+observability:
+  traces:
+    - "@trace spec:litmus-framework"
+  expected_log: "PASS: podman preflight distinguishes timeout from immediate failure (797-5kqe)"
+  log_fields:
+    spec: "litmus-framework"
+    test: "litmus-podman-preflight-diagnosis-shape"
+    artifact: "scripts/run-litmus-test.sh"
+
+rollback:
+  on_failure: >
+    The preflight went back to treating every non-zero `timeout 5 podman ps`
+    exit as a five-second stall. Restore the branch that captures the probe's
+    status separately from the assignment, reports 124 as a timeout and any
+    other non-zero status as an immediate failure with podman's own stderr
+    quoted, and classifies neither. A preflight may report what it observed; it
+    must not name a cause it did not diagnose.
+  command: "grep -n '_preflight_rc\\|ENV-FAIL' scripts/run-litmus-test.sh"

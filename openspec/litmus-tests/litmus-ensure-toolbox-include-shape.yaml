@@ -1,0 +1,90 @@
+# @trace spec:dev-build
+#
+# Pins order 777-amku (operator directive 2026-08-16: "use toolboxes for
+# everything; scripts should be idempotent and toolbox friendly"): the
+# default shebang-level include scripts/ensure_toolbox.sh and its contract —
+# ensure-or-noop, no caller option rewrite, single delegated implementation.
+# Canonical statement: methodology/multi-host-development.yaml ->
+# toolbox_first_scripts.
+name: litmus:ensure-toolbox-include-shape
+spec: dev-build
+phase: pre-build
+description: >
+  Assert scripts/ensure_toolbox.sh by BEHAVIOUR, not by source text. The first
+  version of this test pinned shape only — parses, does not rewrite caller
+  options, and two greps confirming the source mentions the delegate and the
+  methodology key. None of that touched the three properties the directive
+  names ("if toolbox doesn't exist, create and init, otherwise noop"), and on
+  a non-Silverblue host the direct-exec step was a tautology: the delegate
+  returns before doing any toolbox work, so an include that did NOTHING passed
+  every step. The property assertions now live in
+  scripts/test-ensure-toolbox-properties.sh, which drives the real include
+  against a hermetic fake `toolbox` and pairs every assertion with a MUTANT
+  that must fail (order 634-39ik: assert properties, carry a negative control).
+severity: high
+size: instant
+
+inputs:
+  - scripts/ensure_toolbox.sh
+  - scripts/with-tillandsias-builder.sh
+  - scripts/test-ensure-toolbox-properties.sh
+
+preconditions:
+  - workspace contains scripts/ensure_toolbox.sh
+  - workspace contains scripts/with-tillandsias-builder.sh
+  - workspace contains scripts/test-ensure-toolbox-properties.sh
+  - shell utilities (bash, grep, sed, awk, cmp) are available in PATH
+
+critical_path:
+  - step: "include exists, is executable, and parses"
+    command: "test -x scripts/ensure_toolbox.sh && bash -n scripts/ensure_toolbox.sh && echo 'ok: include-parses'"
+    timeout_ms: 3000
+    expected_behavior: "ok: include-parses"
+
+  - step: "sourcing under set -euo pipefail preserves the caller's strict options and returns 0"
+    command: "bash -c 'set -euo pipefail; source scripts/ensure_toolbox.sh; case $- in *e*) : ;; *) echo FAIL-e; exit 1;; esac; case $- in *u*) : ;; *) echo FAIL-u; exit 1;; esac; case \"$(set -o | grep pipefail)\" in *on*) echo \"ok: strict-options-preserved\";; *) echo FAIL-pipefail; exit 1;; esac'"
+    timeout_ms: 30000
+    expected_behavior: "ok: strict-options-preserved"
+
+  - step: "sourcing under lax options never arms errexit in the caller (the 731-pc5r class)"
+    command: "bash -c 'set +e; source scripts/ensure_toolbox.sh; case $- in *e*) echo FAIL-leak; exit 1;; *) echo \"ok: no-option-rewrite\";; esac'"
+    timeout_ms: 30000
+    expected_behavior: "ok: no-option-rewrite"
+
+  - step: "direct execution is an ensure-or-noop that exits 0"
+    command: "scripts/ensure_toolbox.sh && echo 'ok: direct-exec'"
+    timeout_ms: 30000
+    expected_behavior: "ok: direct-exec"
+
+  - step: "BEHAVIOUR: creates-if-missing, idempotent, silent off-toolbox, loud on failure, delegating — each with its negative control"
+    # The fixture carries five properties and five mutants. Every mutant is a
+    # scenario where the guard MUST FAIL: an include that never ensures (P1), a
+    # delegate that creates unconditionally (P2), a chatty noop (P3), an include
+    # that swallows the delegate's failure (P4), and an include that runs
+    # `toolbox create` itself instead of delegating (P5). If a mutant passes,
+    # the fixture reports NEG-… as a FAIL rather than a green, because an
+    # assertion its own mutant survives is vacuous. Each mutation is verified to
+    # have actually applied (cmp), so a sed that matched nothing is a loud red,
+    # never a silent pass.
+    command: "scripts/test-ensure-toolbox-properties.sh"
+    timeout_ms: 120000
+    success_pattern: "PASS: ensure_toolbox property fixture"
+    failure_pattern: "FAIL:"
+
+  - step: "the canon entry is ROUTABLE, not merely present (methodology_ask must answer at confidence=exact)"
+    # Was a grep for `toolbox_first_scripts:` in the yaml — which a deleted
+    # rule body or an unparseable file would both survive. Routability is the
+    # property that matters: an entry nothing can retrieve is not documentation.
+    # This asks the same engine the MCP expert asks, in prose, and requires an
+    # exact-confidence answer citing the toolbox rule.
+    command: "out=$(${CARGO_TARGET_DIR:-target}/release/tillandsias-plan methodology-ask --root . 'must scripts route host tools through a toolbox?' 2>/dev/null); test \"$(printf '%s' \"$out\" | jq -r '.confidence')\" = 'exact' || { echo 'FAIL: toolbox-first rule is not routable in prose'; exit 1; }; test \"$(printf '%s' \"$out\" | jq -r '.citations[0].authority.yaml_path')\" = 'multi_host_development.toolbox_first_scripts.rule' || { echo 'FAIL: routed to the wrong path'; exit 1; }; echo 'ok: canon-entry-routable'"
+    timeout_ms: 30000
+    expected_behavior: "ok: canon-entry-routable"
+
+  - step: "the routing table still REFUSES an ambiguous question (the single-token route is not a fallback)"
+    # Negative control for the step above. A router that answered everything
+    # would satisfy it just as well; this proves the exactly-one-match rule
+    # still holds, so `toolbox` is a route and not a catch-all.
+    command: "c=$(${CARGO_TARGET_DIR:-target}/release/tillandsias-plan methodology-ask --root . 'may I file an issue about a toolbox?' 2>/dev/null | jq -r '.confidence'); test \"$c\" = 'unsupported' && echo 'ok: ambiguity-still-refused' || { echo \"FAIL: ambiguous question answered $c\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: ambiguity-still-refused"

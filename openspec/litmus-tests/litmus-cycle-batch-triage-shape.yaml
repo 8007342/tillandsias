@@ -5,6 +5,10 @@ phase: pre-build
 description: One orchestration cycle selects a cohesive, budgeted, minimax-ranked batch with reproducible entropy
 severity: high
 size: instant
+# inputs: see order 765-mza8.
+inputs:
+  - methodology/distributed-work.yaml
+  - scripts/select-work-batch.sh
 
 # Order 626-* (operator directive 2026-08-09). Every step here EXECUTES the
 # selector and asserts a property of its output. None of them grep the script's
@@ -154,7 +158,7 @@ critical_path:
     # Deliberately NOT a check on the `operator-decision` TAG — two ready packets
     # carry that tag as implementation work informed by a ruling, which is
     # legitimately claimable, and blocking them would be a false positive.
-    command: "for r in linux macos windows; do n=$(./target/release/tillandsias-plan query --status ready --claimable-by \"$r\" --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase==\"tlatoani\")]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n operator-gated packet(s) claimable by $r\"; exit 1; fi; done; echo 'ok: operator-gated work is not host-claimable'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; for r in linux macos windows; do n=$(\"$MFPLAN\" query --status ready --claimable-by \"$r\" --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase==\"tlatoani\")]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n operator-gated packet(s) claimable by $r\"; exit 1; fi; done; echo 'ok: operator-gated work is not host-claimable'"
     timeout_ms: 30000
     expected_behavior: "ok: operator-gated work is not host-claimable"
 
@@ -162,7 +166,7 @@ critical_path:
     # `any` must match the WHOLE trimmed field. A pickup_role like "company-lane"
     # contains "any" and is emphatically not claimable by everyone; a substring
     # match would silently widen every host's queue.
-    command: "n=$(./target/release/tillandsias-plan query --status ready --claimable-by zzz-no-such-role --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase|test(\"^any$\")|not)]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n non-any packet(s) matched a nonexistent role\"; exit 1; fi; echo 'ok: any is a whole-field match'"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; n=$(\"$MFPLAN\" query --status ready --claimable-by zzz-no-such-role --limit 400 --json 2>/dev/null | jq '[.[]|select((.pickup_role//\"\")|ascii_downcase|test(\"^any$\")|not)]|length'); if [ \"${n:-0}\" -ne 0 ]; then echo \"FAIL: $n non-any packet(s) matched a nonexistent role\"; exit 1; fi; echo 'ok: any is a whole-field match'"
     timeout_ms: 30000
     expected_behavior: "ok: any is a whole-field match"
 
@@ -204,7 +208,7 @@ critical_path:
     # Asserts the OUTCOME, not the mechanism, so a different future fix satisfies
     # it too: whatever the selector does, it must not offer p3 work while a p0 is
     # claimable.
-    command: "best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); best_ledger=$(./target/release/tillandsias-plan query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '[.[]|(.priority//\"p3\")|sub(\"^p\";\"\")|tonumber]|min'); if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); best_ledger=$(\"$MFPLAN\" query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '[.[]|(.priority//\"p3\")|sub(\"^p\";\"\")|tonumber]|min'); if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
     timeout_ms: 60000
     expected_behavior: "ok: urgency reachable"
 
@@ -235,6 +239,25 @@ critical_path:
     command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: parent-pkt\\n    order: 900-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    split_into:\\n      - \"900-bbbb — child-pkt (slice a)\"\\n  - packet_id: child-pkt\\n    order: 900-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n' > \"$d/open.yaml\"; awk '{ if ($0 ~ /packet_id: child-pkt/) c=1; if (c && $0 ~ /status: ready/) { sub(/status: ready/,\"status: completed\"); c=0 } print }' \"$d/open.yaml\" > \"$d/closed.yaml\"; PLAN=target/release/tillandsias-plan; a=$($PLAN --index \"$d/open.yaml\" select-rows --status ready --claimable-by linux 2>/dev/null); b=$($PLAN --index \"$d/closed.yaml\" select-rows --status ready --claimable-by linux 2>/dev/null); rm -rf \"$d\"; printf '%s' \"$a\" | grep -q 'child-pkt' && ! printf '%s' \"$a\" | grep -q 'parent-pkt' && printf '%s' \"$b\" | grep -q 'parent-pkt' && echo 'ok: split parent suppressed only while a slice is open'"
     timeout_ms: 30000
     expected_behavior: "ok: split parent suppressed only while a slice is open"
+
+  - step: "HOST CAPABILITY: nix-required work is excluded when nix is absent, included when nix is declared"
+    # P3 from the 2026-08-15 failed-forge handoff (sibling of the order
+    # 660-z774 pool-fidelity family). The live selector handed 723-sazx — a p0
+    # whose deliverable is `nix build`, capability_tags [release, ci, nix] —
+    # to a forge where `command -v nix` failed, as directly-completable work;
+    # the miss surfaced hours later as a GitHub 403 on first push.
+    # pickup_role answers "which lane may claim", not "what can this host
+    # run"; the selector now subtracts tool-gated packets (TOOL_CAP_TAGS,
+    # fixture-seamed via TILLANDSIAS_HOST_CAPS) from the pool before scoring.
+    #
+    # TWO-SIDED from one fixture ledger, flipped by the declared capability
+    # set alone. The nix-less side must drop ONLY the nix-tagged packet and
+    # confess the drop in triage; the nix-declared side is the negative
+    # control proving the filter discriminates on the declared set instead of
+    # suppressing tagged work unconditionally.
+    command: "d=$(mktemp -d); printf 'plan_index:\\n  default_status_values: [ready, completed]\\npackets:\\n  - packet_id: nix-required-pkt\\n    order: 910-aaaa\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p0\\n    release_target: caps-epic\\n    capability_tags: [release, nix]\\n  - packet_id: plain-pkt\\n    order: 910-bbbb\\n    status: ready\\n    desired_release: v0.5\\n    pickup_role: linux\\n    priority: p2\\n    release_target: caps-epic\\n    capability_tags: [plan]\\n' > \"$d/ledger.yaml\"; printf '#!/usr/bin/env bash\\nexec \"%s/target/release/tillandsias-plan\" --index \"%s/ledger.yaml\" \"$@\"\\n' \"$PWD\" \"$d\" > \"$d/plan\"; chmod +x \"$d/plan\"; absent=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo\" scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); present=$(TILLANDSIAS_PLAN_BIN=\"$d/plan\" TILLANDSIAS_HOST_CAPS=\"podman cargo nix\" scripts/select-work-batch.sh linux --release v0.5 --budget 5 --seed caps-fixture 2>&1); rm -rf \"$d\"; printf '%s' \"$absent\" | grep -q 'nix-required-pkt' && { echo 'FAIL: nix-required packet offered to a nix-less host'; exit 1; }; printf '%s' \"$absent\" | grep -q \"^packet$(printf '\\t')910-bbbb\" || { echo 'FAIL: nix-less host lost capability-clean work too'; exit 1; }; printf '%s' \"$absent\" | grep -qE '^triage: .* caps_filtered=1$' || { echo 'FAIL: capability drop not confessed in triage'; exit 1; }; printf '%s' \"$present\" | grep -q \"^packet$(printf '\\t')910-aaaa\" || { echo 'FAIL: declared nix did not restore nix-required work'; exit 1; }; echo 'ok: capability filter is two-sided'"
+    timeout_ms: 30000
+    expected_behavior: "ok: capability filter is two-sided"
 
 observability:
   traces:

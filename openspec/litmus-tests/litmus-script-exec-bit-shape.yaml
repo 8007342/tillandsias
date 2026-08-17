@@ -29,14 +29,43 @@ critical_path:
     # One hermetic throwaway repo per scenario. The two negative controls carry
     # the weight: a guard that flagged every shebanged file would satisfy the
     # breach case while condemning most of scripts/.
+    #
+    # Order 770-dyqr added three more: a litmus `command:` bare invocation
+    # (REFUSED), the same naming an interpreter (silent), and a CI-workflow bare
+    # invocation (REFUSED). Those cover the non-shell caller surfaces; the
+    # litmus one is the 2026-08-16 breach itself.
     command: "scripts/test-script-exec-bits.sh"
     success_pattern: "PASS: script-exec-bits fixture"
     timeout_ms: 60000
+
+  - step: "Req: the caller corpus includes the non-shell surfaces that execute (litmus steps, CI workflows)"
+    # The 2026-08-16 breach was NOT a missing file glob — litmus yaml was in the
+    # corpus from the first commit. It was the invocation pattern: a step's path
+    # is preceded by `: "`, which none of the shell lead-ins accepted, so the
+    # form was unreachable. Pin BOTH halves, since either alone leaves the
+    # breach open.
+    command: "grep -q 'openspec/litmus-tests/\\*.yaml' scripts/check-script-exec-bits.sh && grep -q '.github/workflows/\\*.yml' scripts/check-script-exec-bits.sh && grep -q 'yamlcmd' scripts/lib/exec-bits-filter.awk && echo 'ok: non-shell caller surfaces covered'"
+    timeout_ms: 5000
+    expected_behavior: "ok: non-shell caller surfaces covered"
 
   - step: "LIVE: every bare-invoked script in this tree is tracked executable"
     command: "scripts/check-script-exec-bits.sh | grep -qE '^ok:script-exec-bits:[0-9]+ checked$' && echo 'ok: tree clean'"
     timeout_ms: 30000
     expected_behavior: "ok: tree clean"
+
+  - step: "the checker sees a command-substitution invocation, and does not flag prose"
+    # Order 758-jw6v. The single-pattern form ended ([[:space:]\"]|$), which
+    # cannot match $(scripts/x.sh) because the next character is ")" — so this
+    # checker could not see the invocation form named in its OWN header as the
+    # defect it exists for. Widening the class naively then flagged three
+    # COMMENTS containing "(scripts/x.sh)", one of them a sourced library that
+    # must stay non-executable, so ")" is permitted only after "$(".
+    command: "scripts/test-script-exec-bits.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    # 7 -> 10 with order 770-dyqr's non-shell caller scenarios. The count is
+    # pinned deliberately: it is how a wholesale fixture rewrite that drops
+    # coverage gets caught, which already happened once under 758-jw6v.
+    expected_behavior: "ok:script-exec-bits-fixture:10"
 
 observability:
   traces:

@@ -49,13 +49,45 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
-if [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ]]; then
-    _build_runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    _build_remote_socket="${_build_runtime_dir}/podman/podman.sock"
-    if [[ -S "$_build_remote_socket" ]]; then
-        export TILLANDSIAS_PODMAN_REMOTE_URL="unix://${_build_remote_socket}"
-    fi
-fi
+# PODMAN MODE IS THE CALLER'S TO DECLARE — the gate does not guess it.
+#
+# Order 797-r6tc. What used to be here inferred remote podman mode from a FILE
+# EXISTING: if ${XDG_RUNTIME_DIR}/podman/podman.sock was a socket, build.sh
+# exported TILLANDSIAS_PODMAN_REMOTE_URL. That socket is present on any host
+# with podman.socket enabled, which is the ordinary Fedora state, so the
+# inference fired unconditionally and ONLY inside the gate.
+#
+# Sourcing common.sh with that variable set takes its remote branch, which does
+# three things beyond choosing a URL: it generates a wrapper, puts the wrapper
+# directory FIRST on PATH, and pins TILLANDSIAS_PODMAN_BIN to it. That pin wins
+# over PATH in resolve_podman_bin() (crates/tillandsias-podman/src/lib.rs), and
+# it is exported, so it outlives this process into every litmus child. Litmus
+# tests declaring `backend: fake` inject their podman by PATH; an inherited pin
+# silently overrode it and they exercised real podman against a fake-podman
+# contract. Measured on macuahuitl 2026-08-17, same commit, same 302-test set:
+# 302/302 pass from a bare `scripts/run-litmus-test.sh --phase pre-build
+# --size quick`, 295/302 through `./build.sh --ci-full`. A gate that tests a
+# different substrate than every other caller is not a stricter gate, it is a
+# gate whose subject is unknown.
+#
+# PROVENANCE: the export arrived in 4650c8f9f (2026-05-14, "checkpoint(codex):
+# split quiet quit and repeat modes"), incidental to that change, with no
+# rationale and no packet. WHO ACTUALLY WANTS REMOTE MODE, checked before
+# removing it: exactly one caller, and it sets the variable itself —
+# packaging/systemd/user/tillandsias.service, whose ExecStart is
+# `tillandsias --headless` and whose lane require_headless_service_account()
+# hard-requires a unix:// URL for. That lane is unaffected by this deletion
+# because it never routed through build.sh. No macOS or Windows/WSL2 lane sets
+# it (order 309's WSL2 delegation design is filed but unimplemented).
+#
+# So the rule is 793-a62g's, one level up: the podman wrapper is CONFIGURATION,
+# never inference. A caller that wants the gate to reach podman through a
+# socket exports TILLANDSIAS_PODMAN_REMOTE_URL (or CONTAINER_HOST) and says so;
+# common.sh honours it exactly as before. Absent that, the gate uses podman as
+# the operating system provides it — the same podman a bare litmus run uses, so
+# the two agree about what they tested.
+#
+# Pinned by litmus:gate-podman-mode-is-configuration-not-inference.
 
 source "$SCRIPT_DIR/scripts/common.sh"
 
@@ -65,6 +97,11 @@ source "$SCRIPT_DIR/scripts/common.sh"
 # no-op fallback are both `|| true`-guarded.
 . "$SCRIPT_DIR/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# 765-uti9 quick win (velocity audit F2/F10): anchor for the build-preamble
+# record — everything between here and the --check timer (git hooks, podman
+# registries, dev-proxy ensure, sidecar staging) was invisible to timing:,
+# hiding the post-VERSION-bump sidecar rebuild that can dwarf the timed block.
+_PREAMBLE_T0="$(timing_now_ms)"
 
 # Get the actual user's home directory (works with sudo)
 if [[ -n "${SUDO_USER:-}" ]]; then
@@ -101,7 +138,146 @@ NC='\033[0m'
 _info()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${GREEN}[build]${NC} $*"; }
 _warn()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${YELLOW}[build]${NC} $*"; }
 _error() { echo -e "${RED}[build]${NC} $*" >&2; }
-_step()  { [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"; }
+# ── Per-phase timing (order 758-jw6v) ────────────────────────────────────────
+#
+# WHY THIS EXISTS. `./build.sh --check` is the largest fixed cost in a
+# meta-orchestration cycle — ~130s, run three or four times per cycle — and
+# until now the only way to find out WHERE that went was to pipe the gate's
+# output through a timestamper and diff the gaps. I did that, attributed a 58s
+# gap to trace-coverage.sh, fixed trace-coverage.sh from 455s to 20s, and the
+# gate moved 146s -> 130s. The win was real; the attribution was wrong by a
+# factor of three, and wrong in the direction that would have justified more
+# work on the thing already fixed.
+#
+# A number nobody can see is a number nobody checks. So the gate now measures
+# itself: every `_step` closes the previous phase, and the end of the run
+# prints the total plus any phase that took longer than the threshold.
+#
+# QUIET BY DEFAULT, because 45 phases of timing on every commit is the kind of
+# noise that gets a signal ignored (734-sjb3). Only phases over
+# TILLANDSIAS_GATE_SLOW_MS (default 5s) are named; TILLANDSIAS_GATE_PROFILE=1
+# prints all of them.
+_PHASE_NAME=""
+_PHASE_T0=""
+_PHASE_LOG=""
+# Order 785-ibu9. `_PHASE_T0` measures BANNER TO BANNER, which is the phase's
+# wall clock but NOT necessarily the named step's own cost: any work between a
+# step's command and the next banner lands on the previous step's record. That
+# inflated a real reading (783-xyk5 was filed on a step number that bundled
+# work the guard did not do), so the emitted telemetry now carries the step's
+# OWN measured work — the time spent inside `_run`, accumulated here — and
+# falls back to the span only for phases that run no `_run` at all. The
+# fallback is labelled in the record's `phase` field rather than silently
+# mixed in, because an unattributable number that looks attributable is the
+# defect this packet closes.
+_PHASE_WORK_MS=0
+_PHASE_RAN_WORK=0
+# date '+%s%3N' is GNU-only. BSD/macOS date SUCCEEDS while passing %3N
+# through literally ("<secs>3N"), so an exit-code guard never fires and the
+# phase arithmetic explodes ("value too great for base" — first hit: macOS
+# 2026-08-16, 766-class dialect skew). Validate digits; degrade to whole
+# seconds — the report only names phases over TILLANDSIAS_GATE_SLOW_MS
+# (default 5s), so second granularity keeps every consumer meaningful.
+_now_ms() {
+    local t
+    t="$(date +%s%3N 2>/dev/null || true)" # gnu-date: ok (digit-validated below; degrades to seconds)
+    case "$t" in
+        ''|*[!0-9]*)
+            t="$(date +%s 2>/dev/null || true)"
+            case "$t" in
+                ''|*[!0-9]*) t=0 ;;
+                *) t=$((t * 1000)) ;;
+            esac
+            ;;
+    esac
+    printf '%s' "$t"
+}
+
+_phase_close() {
+    [[ -n "$_PHASE_NAME" ]] || return 0
+    local now elapsed work
+    now="$(_now_ms)"
+    elapsed=$(( now - _PHASE_T0 ))
+    [[ "$elapsed" -ge 0 ]] || elapsed=0
+    work="$_PHASE_WORK_MS"
+    [[ "$work" -ge 0 ]] || work=0
+    # span<TAB>work<TAB>name — `work` is -1 when the phase measured no `_run`,
+    # so a consumer can tell "measured zero work" from "nothing to measure".
+    [[ "$_PHASE_RAN_WORK" == 1 ]] || work=-1
+    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}
+"
+    _PHASE_NAME=""
+}
+
+_step()  {
+    _phase_close
+    _PHASE_NAME="$*"
+    _PHASE_T0="$(_now_ms)"
+    _PHASE_WORK_MS=0
+    _PHASE_RAN_WORK=0
+    [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"
+}
+
+# Print the gate's own cost. Called once, at the end of --check.
+_phase_report() {
+    _phase_close
+    [[ -n "$_PHASE_LOG" ]] || return 0
+    local total slow_ms
+    slow_ms="${TILLANDSIAS_GATE_SLOW_MS:-5000}"
+    total="$(printf '%s' "$_PHASE_LOG" | awk -F'\t' '{s+=$1} END {printf "%d", s}')"
+    # 785-ibu9: the report is a WALL-CLOCK view, so it keeps ranking on span —
+    # but when a phase's span materially exceeds the work measured inside it,
+    # the difference is time the named step did not spend, and printing it is
+    # how the unattributed gap stops hiding inside a step's number.
+    if [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]]; then
+        printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' \
+            '{ gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
+               printf "  %6.1fs  %s%s\n", $1/1000, $3, gap }' >&2
+    else
+        printf '%s' "$_PHASE_LOG" | sort -rn \
+            | awk -F'\t' -v lim="$slow_ms" \
+            '$1 > lim { gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
+                        printf "  %6.1fs  %s%s\n", $1/1000, $3, gap }' >&2
+    fi
+    _info "Gate phases totalled $(( total / 1000 ))s (set TILLANDSIAS_GATE_PROFILE=1 for every phase)"
+}
+
+# 765-dfry: flush every closed phase into the 682-emvg timing side-channel, in
+# ONE spawn (per-record emission costs ~15ms x ~45 phases per gate — the
+# audit's empty-suite-floor lesson applied to the telemetry itself). Step name
+# is a stable slug of the phase description, prefixed `step:` so consumers can
+# select the family; per-phase exit is 0 by definition (phase records carry
+# WHERE the time went; the gate's verdict lives on the build-check record).
+# Best-effort like every 682-emvg emission: never alters output or exit codes,
+# and never double-emits (the log is consumed on flush).
+_phase_emit_timing() {
+    _phase_close
+    [[ -n "$_PHASE_LOG" ]] || return 0
+    {
+        printf '%s' "$_PHASE_LOG" | awk -F'\t' \
+            -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" '
+            NF == 3 {
+                name = tolower($3)
+                gsub(/[^a-z0-9]+/, "-", name)
+                gsub(/^-+|-+$/, "", name)
+                if (length(name) > 64) name = substr(name, 1, 64)
+                if (name == "") next
+                # 785-ibu9: prefer the step OWN WORK (measured inside _run) over
+                # the banner-to-banner span. `phase` carries the provenance so a
+                # reader never has to guess which one a number is: `build` means
+                # attributable to the named step, `build-span` means the phase
+                # ran no measurable command and the number is wall clock between
+                # banners. Same `step:` family either way, so the finest-grain
+                # slowest= preference keeps seeing every phase.
+                if ($2 >= 0) { dur = $2; prov = "build" } else { dur = $1; prov = "build-span" }
+                printf "step:%s\t%s\t%s\t0\t%s\n", name, prov, dur, host
+            }' | bash "$SCRIPT_DIR/scripts/cycle-metrics.sh" --emit-timing-batch
+    } 2>/dev/null || true
+    # Consume on flush: combined dispatches (--ci-full --install) flush once
+    # per stage, so a later flush emits only the phases closed since this one.
+    _PHASE_LOG=""
+    return 0
+}
 
 # ---------------------------------------------------------------------------
 # Flag parsing
@@ -311,6 +487,24 @@ _forge_check_only_without_host_podman_setup() {
     return 0
 }
 
+# 765-uti9 quick win (velocity audit F2): a check-only dispatch builds no
+# containers and pulls nothing through the dev proxy, so host podman registry
+# setup and the dev-proxy ensure (15x1s health-wait worst case) are pure
+# preamble tax there — on ANY host kind, not only in-forge. Same flag predicate
+# as above minus the host-kind gate; any other flag reinstates the full
+# preamble. Worst case: a --check with a changed lockfile loses proxy caching
+# for one cargo fetch — slower, never wrong.
+_check_only_dispatch() {
+    [[ "$FLAG_CHECK" == true ]] || return 1
+    [[ "$FLAG_RELEASE" == false ]] || return 1
+    [[ "$FLAG_TEST" == false ]] || return 1
+    [[ "$FLAG_INSTALL" == false ]] || return 1
+    [[ "$FLAG_INIT" == false ]] || return 1
+    [[ "$FLAG_CI" == false ]] || return 1
+    [[ "$FLAG_CI_FULL" == false ]] || return 1
+    return 0
+}
+
 # ---------------------------------------------------------------------------
 # Transparent HTTPS caching setup (dev proxy)
 # ---------------------------------------------------------------------------
@@ -422,6 +616,8 @@ ensure_dev_cache() {
 # @trace spec:podman-registries-config
 if _forge_check_only_without_host_podman_setup; then
     _info "Skipping host Podman registry setup for forge check-only build"
+elif _check_only_dispatch; then
+    _info "Skipping host Podman registry setup for check-only dispatch (765-uti9)"
 elif [[ "$FLAG_INSTALL" != true ]]; then
     "$SCRIPT_DIR/scripts/setup-podman-registries.sh" || {
         _warn "Failed to setup podman registries (non-fatal, build may continue)"
@@ -434,6 +630,8 @@ fi
 # @trace spec:dev-build
 if _forge_check_only_without_host_podman_setup; then
     _info "Skipping host dev cache setup for forge check-only build"
+elif _check_only_dispatch; then
+    _info "Skipping host dev cache setup for check-only dispatch (765-uti9)"
 elif [[ "$FLAG_INSTALL" != true ]]; then
     ensure_dev_cache
 else
@@ -728,9 +926,25 @@ fi
 # Host build execution
 # ---------------------------------------------------------------------------
 
+# Order 785-ibu9: `_run` is the seam where a step's REAL work happens, so it is
+# where the step's own cost can be measured without annotating ~40 call sites
+# (765-dfry's zero-per-site-edit property is the reason its telemetry exists at
+# all, and a fix that required per-step edits would rot). Accumulates rather
+# than assigns: a phase may run several commands, and their sum is the phase's
+# work. `|| _rc=$?` keeps the command "tested" so errexit does not abort before
+# the accounting, and the original status is then returned unchanged — the
+# 682-emvg contract (never alter exit codes or output) is preserved by
+# construction, and a broken clock can only mis-add, never fail the step.
 _run() {
     _require_host_build_tools
-    (cd "$SCRIPT_DIR" && "$@")
+    local _run_t0 _run_rc=0 _run_dt
+    _run_t0="$(_now_ms)"
+    (cd "$SCRIPT_DIR" && "$@") || _run_rc=$?
+    _run_dt=$(( $(_now_ms) - _run_t0 ))
+    [[ "$_run_dt" -ge 0 ]] || _run_dt=0
+    _PHASE_WORK_MS=$(( _PHASE_WORK_MS + _run_dt ))
+    _PHASE_RAN_WORK=1
+    return "$_run_rc"
 }
 
 _run_litmus_phase() {
@@ -766,6 +980,33 @@ _run_litmus_phase() {
 # lesser gate just to be allowed to push. Found by the gate refusing its own
 # release push on 2026-08-04.
 _write_gate_stamp() {
+    # Order 765-mza8 makes the `scope full` paragraph below enforceable rather
+    # than aspirational. run-litmus-test.sh drops this sentinel when it actually
+    # skipped tests under --diff-scope; if it is present, this dispatch did NOT
+    # validate the whole tree and must not say it did.
+    #
+    # Refusing to write ANY stamp is the fail-closed choice, and it is the right
+    # one: no stamp means pre-push asks for a full gate, which is exactly what a
+    # partially-verified tree needs. Downgrading to a scoped stamp would be
+    # worse — this function cannot know WHICH classes the scoped litmus run
+    # actually covered, and inventing a class list is how a stamp starts lying.
+    #
+    # FIRST, before the ghost ratchet and before the gate-stamp.sh existence
+    # check. Both can fail or return early, and either would leave the sentinel
+    # on disk to veto every LATER, legitimately-full run. The sentinel is
+    # one-shot: consuming it here is what bounds the veto to the run that
+    # earned it.
+    local _scoped_sentinel
+    _scoped_sentinel="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-litmus-diff-scoped"
+    if [[ -f "$_scoped_sentinel" ]]; then
+        local _scoped_detail
+        _scoped_detail="$(cat "$_scoped_sentinel" 2>/dev/null || echo 'diff-scope')"
+        rm -f "$_scoped_sentinel" 2>/dev/null || true
+        _warn "NOT writing a gate stamp: this run's litmus lane was diff-scoped (${_scoped_detail})"
+        _warn "  A scoped run cannot vouch for the whole tree. Re-run the gate without --diff-scope before pushing."
+        return 0
+    fi
+
     [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]] || return 0
 
     # Order 584-2qq2: a stamp is authority for the pre-push hook, so it must
@@ -779,6 +1020,11 @@ _write_gate_stamp() {
     # rendering could never express: no annotation references a spec that does
     # not exist. Non-mutating, as before — nothing is written to the worktree,
     # so a stamp can no longer be blocked by evidence the build itself dirtied.
+    # Announced so it is attributable. This ran silently, and the pause it
+    # produced was read as "trace-coverage is slow" when measurement later put
+    # most of the time elsewhere (758-jw6v). A phase with no name cannot be
+    # blamed correctly OR exonerated.
+    _step "Ratcheting ghost traces for the gate stamp (584-2qq2)..."
     local ghost_status
     if ! ghost_status="$("$SCRIPT_DIR/scripts/trace-coverage.sh" --gate 2>&1)"; then
         _error "Ghost-trace ratchet failed — gate stamp NOT recorded"
@@ -786,7 +1032,23 @@ _write_gate_stamp() {
         return 1
     fi
 
-    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1; then
+    # Order 765-dt8h: the stamp records WHICH gate wrote it and WHAT it
+    # validated. Every dispatch here validates the whole tree, so all of them
+    # write `scope full` — the field exists so that a future scoped run (the
+    # diff-scoped litmus / change-class selector packets, all of which depend
+    # on this one) physically cannot write a stamp that overstates its
+    # coverage. `dispatch` is provenance only: --check and --ci-full both
+    # cover everything, but they do not cover it equally, and a reader of a
+    # refused push deserves to know which one ran.
+    local _stamp_dispatch="check"
+    if [[ "$FLAG_CI_FULL" == true ]]; then
+        _stamp_dispatch="ci-full"
+    elif [[ "$FLAG_CI" == true ]]; then
+        _stamp_dispatch="ci"
+    fi
+
+    _step "Writing the gate stamp..."
+    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
     else
         _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
@@ -986,6 +1248,11 @@ if [[ "$FLAG_INSTALL" == true ]]; then
         fi
     fi
 
+    # 765-dfry: flush install-stage phase records (portable-launcher build,
+    # image ensure, status smoke, evidence bundle) so a --ci-full --install
+    # run's wall clock is attributable from the timing records alone.
+    _phase_emit_timing
+
     # If --install is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
         exit 0
@@ -1015,6 +1282,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # including a set -e abort when a sub-step fails — recording the real exit
     # code; it is cancelled at normal completion so a single record is emitted
     # and combined-flag runs do not over-count. NEVER alters the gate's exit.
+    # 765-uti9: emit the preamble duration first — best-effort per the
+    # 682-emvg contract, never alters the gate's exit.
+    timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
     _step "Checking Rust formatting..."
@@ -1024,11 +1294,15 @@ if [[ "$FLAG_CHECK" == true ]]; then
     fi
     _info "Formatting check passed"
 
-    _step "Type-checking workspace..."
-    _run cargo check --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
-    _info "Type-check passed"
-
-    _step "Running clippy (strict)..."
+    # 765-uti9 quick win (velocity audit F3): the dedicated `cargo check
+    # --workspace` step was fully subsumed by the clippy pass below — same
+    # virtual-manifest workspace, a strict SUPERSET of targets (--all-targets),
+    # -D warnings failing on every diagnostic check would report, and
+    # _require_host_build_tools hard-requires clippy-driver so no host can run
+    # check but not clippy. The two also share no fingerprints (clippy drives
+    # its own compiler), so the removed step was a full second frontend pass.
+    # Type errors now surface under the clippy banner.
+    _step "Running clippy (strict; includes the workspace type-check)..."
     _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings 2>&1
     _info "Clippy passed"
 
@@ -1145,6 +1419,20 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # This guard shipped (order 440) but was ORPHANED (invoked by nothing) until
     # the guard-activation audit (599-4wzr) surfaced it; wiring it here activates
     # it as a real --check gate.
+    # Order 761-g36m: a bash-4-only construct in a shared script fails on
+    # Apple's bash 3.2 as a silent bad substitution or an empty verdict —
+    # the class that blocked every macOS push on 2026-08-16
+    # (agent-identity.sh) and emptied the windows sources verdict on
+    # 2026-08-14 (723-b9cn). Scripts must be 3.2-clean, refuse loudly, or
+    # carry the probed-fallback dual marker; the allowlist inside the
+    # checker is a burndown list, never an escape hatch.
+    _step "Checking scripts/ bash dialect (761-g36m)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-bash-dialect.sh" 2>&1; then
+        _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"
+        exit 1
+    fi
+    _info "Bash dialect gate passed"
+
     _step "Checking plan/schema status-vocab divergence (440)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-plan-schema-divergence.sh" 2>&1; then
         # Do NOT restate the cause here: the script emits one of three verdicts
@@ -1254,6 +1542,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # Normal completion: cancel the abort-trap and emit exactly one success
     # record for the whole gate. (packet 682-emvg)
     trap - EXIT
+    _phase_report
+    # 765-dfry: flush per-phase records AFTER the printed report (report reads
+    # the same log; the flush consumes it).
+    _phase_emit_timing
     timing_emit build-check check "$_CHECK_T0" 0
 
     # If --check is the only remaining flag, exit

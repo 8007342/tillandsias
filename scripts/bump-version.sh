@@ -96,6 +96,14 @@ for cargo_toml in \
     "$ROOT/crates/tillandsias-podman/Cargo.toml" \
     "$ROOT/crates/tillandsias-headless/Cargo.toml"; do
     if [[ -f "$cargo_toml" ]]; then
+        # 765-uti9 quick win (audit F6.4): same-day bumps leave SEMVER unchanged,
+        # and an unconditional rewrite still touches the mtime — which feeds the
+        # find -newer staleness probes and forces needless sidecar/workspace
+        # rebuilds. Skip byte-identical rewrites; a real SEMVER change fails
+        # this grep and rewrites exactly as before.
+        if grep -q "^version = \"${SEMVER}\"" "$cargo_toml"; then
+            continue
+        fi
         # Replace version = "x.y.z" in [package] section (first occurrence)
         # BSD sed (macOS) requires '' after -i; GNU sed does not.
         if sed --version 2>/dev/null | grep -q GNU; then

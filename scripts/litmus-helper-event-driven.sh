@@ -16,7 +16,7 @@ case "$MODE" in
     echo "EVENTS_LOG=$EVENTS_LOG" && echo "EVENTS_PID=$EVENTS_PID" && sleep 1 && echo LISTENER_STARTED
     ;;
   launch-container)
-    LAUNCH_TIME=$(date +%s%3N)
+    LAUNCH_TIME=$(date +%s%3N) # gnu-date: ok (log marker only; no arithmetic consumer in or outside this file)
     FORGE_IMAGE="${TILLANDSIAS_FORGE_IMAGE:-$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^tillandsias-forge:' | head -1)}"
     test -n "$FORGE_IMAGE" || FORGE_IMAGE="docker.io/library/alpine:3.20"
     CONTAINER_ID=$(podman run --rm -d --label "$TEST_LABEL" "$FORGE_IMAGE" sleep 60 2>&1 | head -1)
@@ -39,7 +39,7 @@ case "$MODE" in
   stop-container)
     CONTAINER_ID=$(podman ps -q -f "label=$TEST_LABEL" 2>/dev/null | head -1)
     if [ -n "$CONTAINER_ID" ]; then
-      STOP_TIME=$(date +%s%3N)
+      STOP_TIME=$(date +%s%3N) # gnu-date: ok (log marker only; no arithmetic consumer in or outside this file)
       podman stop "$CONTAINER_ID" 2>/dev/null || true
       sleep 1
       echo "STOP_TIME=$STOP_TIME" && echo CONTAINER_STOPPED

@@ -2334,13 +2334,13 @@ fn first_line(s: &str) -> Option<String> {
 /// stdout (locale-as-is — e.g. `"WSL version: 2.7.3.0"` on English hosts,
 /// `"Version WSL : 2.7.3.0"` on French). `None` if `wsl.exe` isn't on
 /// PATH (WSL feature disabled), the command non-zero-exits, or its output
-/// has no non-empty line. `WSL_UTF8=1` forces UTF-8 output on recent
-/// builds (older builds emit UTF-16 LE BOM-prefixed; we tolerate the BOM
-/// via [`first_line`]'s `str::trim` — the BOM survives as `\u{FEFF}` which
-/// `trim` removes as whitespace per Unicode).
+/// has no non-empty line. The shared constructor sets `WSL_UTF8=1`, which
+/// forces UTF-8 output (older builds emit UTF-16 LE BOM-prefixed; we tolerate
+/// the BOM via [`first_line`]'s `str::trim` — the BOM survives as `\u{FEFF}`
+/// which `trim` removes as whitespace per Unicode).
 fn sniff_wsl_version() -> Option<String> {
-    let mut cmd = std::process::Command::new("wsl");
-    cmd.arg("--version").env("WSL_UTF8", "1");
+    let mut cmd = tillandsias_vm_layer::wsl_command_sync();
+    cmd.arg("--version");
     tillandsias_vm_layer::no_window_sync(&mut cmd);
     let output = cmd.output().ok()?;
     if !output.status.success() {
@@ -2354,13 +2354,11 @@ fn sniff_wsl_version() -> Option<String> {
 /// Bypasses the locale-dependent "Aucune distribution en cours d'exécution"
 /// / "No distributions are running" stderr by using `--quiet`, which emits
 /// only distro names on stdout (one per line) and always exit-0 — empty
-/// output means no distros are running. `--quiet` output is UTF-16 on
-/// older WSL builds; `WSL_UTF8=1` forces UTF-8 (we tolerate either by
-/// trimming embedded null bytes from each line).
+/// output means no distros are running. `--quiet` output is UTF-16 unless
+/// `WSL_UTF8=1` is set, which the shared constructor does.
 fn distro_running() -> bool {
-    let mut cmd = std::process::Command::new("wsl");
-    cmd.args(["--list", "--running", "--quiet"])
-        .env("WSL_UTF8", "1");
+    let mut cmd = tillandsias_vm_layer::wsl_command_sync();
+    cmd.args(["--list", "--running", "--quiet"]);
     tillandsias_vm_layer::no_window_sync(&mut cmd);
     let Ok(output) = cmd.output() else {
         return false;
@@ -2368,7 +2366,7 @@ fn distro_running() -> bool {
     let stdout = String::from_utf8_lossy(&output.stdout);
     stdout
         .lines()
-        .map(|line| line.trim().trim_matches('\u{0}').trim())
+        .map(|line| line.trim())
         .any(|name| name == crate::wsl_lifecycle::DISTRO_NAME)
 }
 
@@ -2407,13 +2405,14 @@ fn collect_report() -> DiagnoseReport {
         cmd.output().map(|o| o.status.success()).unwrap_or(false)
     };
 
-    // `wsl.exe -l -q` emits UTF-16LE with a BOM by default; `WSL_UTF8=1` forces
-    // plain UTF-8 so `String::from_utf8_lossy` actually sees readable lines.
-    // Without this, `lines().any(eq DISTRO_NAME)` returned false even on a
-    // registered distro — the bytes parsed as mojibake.
+    // `wsl.exe -l -q` emits UTF-16LE with a BOM by default; the shared
+    // constructor's `WSL_UTF8=1` forces plain UTF-8 so
+    // `String::from_utf8_lossy` actually sees readable lines. Without it,
+    // `lines().any(eq DISTRO_NAME)` returned false even on a registered
+    // distro — the bytes parsed as mojibake.
     let distro_registered = {
-        let mut cmd = std::process::Command::new("wsl.exe");
-        cmd.env("WSL_UTF8", "1").args(["-l", "-q"]);
+        let mut cmd = tillandsias_vm_layer::wsl_command_sync();
+        cmd.args(["-l", "-q"]);
         tillandsias_vm_layer::no_window_sync(&mut cmd);
         cmd.output()
             .map(|o| {
@@ -3711,7 +3710,29 @@ fn launch_open_shell_terminal(action: &MenuAction) {
         return;
     };
     // Default geometry until the tray owns a real terminal surface to size from.
-    let spec = launch_spec(&intent, project.as_deref(), 24, 80);
+    //
+    // A project name that would break out of the guest's single-quoted
+    // `--cloud '<p>'` word is REFUSED here rather than interpolated (E3,
+    // 2026-08-17). For local projects the name comes verbatim off disk, so a
+    // directory called `a'b` used to close the quote. The refusal names the
+    // offending character; it deliberately does not sanitize, because a
+    // silently rewritten name launches a DIFFERENT project than the one
+    // clicked. `tracing::error!` is the loud channel here: this function has no
+    // HWND in scope for a balloon, and ERROR relays to tray.log AND the Windows
+    // Event Log (source "Tillandsias"), which is the surface a GUI-only user is
+    // pointed at by `--logs` and `--diagnose`.
+    let spec = match launch_spec(&intent, project.as_deref(), 24, 80) {
+        Ok(s) => s,
+        Err(refused) => {
+            tracing::error!(
+                refused = %refused,
+                ?intent,
+                project = ?project,
+                "refusing to open a PTY: unsafe project name"
+            );
+            return;
+        }
+    };
     // GitHub Login runs the INJECTED wrapper (bare path, zero shell
     // metacharacters): the inline `bash -lc '<script>'` argv had to survive
     // both std::process MSVC quoting AND wt.exe's own re-parse, and arrived
@@ -3777,9 +3798,10 @@ fn argv_survives_wt_reparse(argv: &[String]) -> bool {
 /// verbatim via CreateProcess — no wt.exe command-line re-parse in the chain.
 /// Used for the login lane; identical to `spawn_wsl_terminal`'s fallback arm.
 fn spawn_wsl_console(distro: &str, in_vm_argv: &[String]) -> std::io::Result<()> {
-    use std::process::Command;
     const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
-    Command::new("wsl.exe")
+    // Encoding policy from the shared constructor; the VISIBLE console is the
+    // deliberate part here, so no no_window_sync.
+    tillandsias_vm_layer::wsl_command_sync()
         .arg("-d")
         .arg(distro)
         .arg("--")
@@ -3864,7 +3886,7 @@ fn spawn_wsl_terminal(distro: &str, title: &str, in_vm_argv: &[String]) -> std::
         Ok(_) => Ok(()),
         Err(_) => {
             // Fallback: bare `wsl.exe` in a fresh console.
-            Command::new("wsl.exe")
+            tillandsias_vm_layer::wsl_command_sync()
                 .arg("-d")
                 .arg(distro)
                 .arg("--")

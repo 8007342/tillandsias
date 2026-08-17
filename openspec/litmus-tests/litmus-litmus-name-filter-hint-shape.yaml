@@ -33,6 +33,16 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: bare typo fails loud with no spurious hint"
 
+  - step: "order 764-8m5j: a BARE test id (no litmus: prefix) also fails loud AND names its owning spec"
+    command: "name=$(grep -hE '^name: litmus:' openspec/litmus-tests/*.yaml | sed -E 's/^name:[[:space:]]*litmus://' | grep -vE '^litmus-' | head -1); f=$(grep -rlE \"^name: litmus:${name}$\" openspec/litmus-tests/ | head -1); want=$(grep -m1 -E '^spec:' \"$f\" | sed -E 's/^spec:[[:space:]]*//'); out=$(NO_COLOR=1 scripts/run-litmus-test.sh \"$name\" --phase pre-build --size instant --compact 2>&1); rc=$?; [ \"$rc\" -ne 0 ] && grep -Fq \"hint: '$name' is a test name; run its spec: scripts/run-litmus-test.sh $want\" <<<\"$out\" && echo 'ok: bare test-name filter fails loud with owning-spec hint'"
+    timeout_ms: 15000
+    expected_behavior: "ok: bare test-name filter fails loud with owning-spec hint"
+
+  - step: "NEGATIVE CONTROL: a BARE name-shaped typo fails loud with NO hint"
+    command: "out=$(NO_COLOR=1 scripts/run-litmus-test.sh 'order-764-no-such-bare-typo' --phase pre-build --size instant --compact 2>&1); rc=$?; [ \"$rc\" -ne 0 ] && grep -Fq \"no litmus tests matched filter 'order-764-no-such-bare-typo'\" <<<\"$out\" && ! grep -Fq 'hint:' <<<\"$out\" && echo 'ok: bare typo fails loud with no spurious hint'"
+    timeout_ms: 10000
+    expected_behavior: "ok: bare typo fails loud with no spurious hint"
+
 observability:
   traces:
     - "@trace spec:spec-traceability"

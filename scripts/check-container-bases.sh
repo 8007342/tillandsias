@@ -63,17 +63,27 @@ expect_base "images/inference/Containerfile" "registry.fedoraproject.org/fedora-
 expect_base "images/chromium/Containerfile.core" "registry.fedoraproject.org/fedora-minimal:44"
 expect_base "images/chromium/Containerfile.framework" 'tillandsias-chromium-core:${CHROMIUM_CORE_TAG}' '${CHROMIUM_CORE_IMAGE}'
 
-expect_base "images/proxy/Containerfile" "docker.io/library/alpine:3.20"
+# order 782-9jfg: proxy alone moves to 3.22 for squid-6.12 (3.20 is frozen at
+# the 6.9 build behind 263 SIGSEGVs). The other Alpine images stay on 3.20
+# deliberately — this is a targeted change, not a fleet-wide base bump, and a
+# per-image pin is exactly what this gate exists to keep honest.
+expect_base "images/proxy/Containerfile" "docker.io/library/alpine:3.22"
 expect_base "images/git/Containerfile" "docker.io/library/alpine:3.20" "docker.io/hashicorp/vault:1.18"
 expect_base "images/web/Containerfile" "docker.io/library/alpine:3.20"
 expect_base "images/router/Containerfile" "docker.io/library/caddy:2-alpine"
 
 latest_hits="$(
     # test-running-image-freshness.sh excluded: fixture must name the freshest local build
+    # The three mirror-identity fixtures (749-54pv/2fqj/6uby) are excluded for
+    # the same reason: each rebuilds and probes the CURRENT local git image.
     grep -RInE 'tillandsias-[a-z0-9_-]+:latest|docker\.io/library/[a-z0-9_-]+:latest|alpine:latest|nixos/nix:latest' \
         --exclude='check-container-bases.sh' \
         --exclude='build-image.sh' \
         --exclude='test-running-image-freshness.sh' \
+        --exclude='test-mirror-host-cert-and-sshd.sh' \
+        --exclude='test-mirror-receive-wrapper.sh' \
+        --exclude='test-mirror-sshd-posture.sh' \
+        --exclude='test-ssh-lane-sidecar.sh' \
         "$ROOT/scripts" \
         "$ROOT/images" \
         "$ROOT/docs/cheatsheets" \

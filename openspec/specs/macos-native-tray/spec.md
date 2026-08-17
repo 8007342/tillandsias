@@ -281,6 +281,27 @@ series so support tooling (`scripts/tray-diagnose.sh`,
 - **AND** the JSON format SHALL omit a `wire` object entirely (no
   field that would lie about a probe the macOS path cannot perform)
 
+#### Scenario: guest metrics are read only by an explicit opt-in verb
+- **GIVEN** the guest advertises `MetricsSnapshotRequest` in its HelloAck
+  `server_caps`
+- **WHEN** `--diagnose --with-metrics` is invoked (a VM-booting one-shot,
+  gated like every other by the order-277 live-tray check)
+- **THEN** the report SHALL carry a `metrics` object read over the control
+  wire, and `metrics_status` SHALL be `ok`
+- **AND** when the guest does NOT advertise that capability the report SHALL
+  set `metrics_status` to `unsupported:guest-lacks-capability` — detection
+  by CAPABILITY, never by comparing wire versions
+- **AND** plain `--diagnose` SHALL NOT boot a VM: it SHALL report
+  `metrics: null` with `metrics_status: unsupported:no-live-wire-handle`,
+  because `scripts/install-macos.sh` runs `--diagnose --json` synchronously
+  during install and a VM boot there would start a guest mid-install
+- **AND** every counter SHALL serialise as `null` when it could not be
+  collected — present-and-null, never omitted and never `0`, so "could not
+  measure" is never readable as "measured zero"
+  (see `spec:observability-metrics`)
+- **AND** a metrics failure SHALL NOT change the `{0,3,2,1}` exit-code
+  contract; it is reported in the document, not in the exit status
+
 ## Invariants
 
 ### Invariant: No Tauri or WebView surface

@@ -42,8 +42,14 @@ critical_path:
     expected_behavior: "skip:smoke-lock-held"
 
   - step: "the probe emits exactly one well-formed verdict line"
+    # 60s, sized for the SLOWEST host: unlike the early-exit skip branches
+    # above, the real-verdict path runs the full podman checks, and MSYS
+    # process-spawn pricing under the harness blew the old 5s budget while
+    # the probe passed standalone in <1s (measured 2026-08-16, windows).
+    # Same treatment as 770-f6u4 in this suite; see plan/issues/
+    # windows-red-meta-orchestration-litmus-2026-08-16.md.
     command: "n=$(bash scripts/e2e-preflight.sh eligibility | grep -cE '^(eligible|skip:[a-z0-9-]+)$'); [ \"$n\" = \"1\" ] && echo \"ok: well-formed verdict ($n line)\" || { echo \"FAIL: $n lines\"; exit 1; }"
-    timeout_ms: 5000
+    timeout_ms: 60000
     expected_behavior: "ok: well-formed verdict"
 
   - step: "the meta-orchestration skill E2E Gates consult the probe"

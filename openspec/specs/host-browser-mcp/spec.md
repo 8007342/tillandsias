@@ -65,48 +65,42 @@ The eight v1 tools are:
 - **AND** the error `message` field begins with `Method not found:`
 - **AND** the connection remains open for further requests
 
-### Requirement: MCP transport rides the existing host control socket
+### Requirement: MCP reaches this server over the per-lane tool socket
 
-The MCP server SHALL NOT bind a new socket. Instead, the JSON-RPC byte
-stream from each forge container SHALL be carried inside a new
-`ControlMessage::McpFrame { session_id: u64, payload: Vec<u8> }` variant
-on the `tray-host-control-socket` postcard envelope. The forge-side
-client (a stdio shim invoked by the agent's MCP runtime) SHALL connect
-to `$TILLANDSIAS_CONTROL_SOCKET`
-(`/run/host/tillandsias/control.sock` inside the container per
-`tray-host-control-socket`), perform the standard `Hello`/`HelloAck`
-exchange, and then bidirectionally relay length-prefixed JSON-RPC frames
-wrapped in `McpFrame` envelopes.
+The browser tool family is served over the per-lane MCP socket, whose
+contract — path shape, `0600` permissions, per-lane mount isolation,
+listener-derived attribution, NDJSON framing, the 4 MiB per-line ceiling, and
+one-request-in-flight ordering — is specified once in `mcp-tool-socket` and
+SHALL NOT be restated here. The forge-side client is the raw stdio bridge
+`images/default/config-overlay/mcp/host-browser.sh` (a `socat` relay to
+`$TILLANDSIAS_CONTROL_SOCKET`); it performs no framing, no handshake, and
+never names the project.
 
-`session_id` SHALL be issued by the tray on the first `McpFrame`
-received over a given control-socket connection and SHALL persist for
-the lifetime of that connection. When the connection drops, the tray
-SHALL discard any per-session in-memory state (the `WindowRegistry`
-holds windows beyond connection lifetime — see the window-survival
-requirement below).
+**Supersedes (order 505, commit `dd8fd63f`):** the earlier requirement that
+MCP ride `ControlMessage::McpFrame` on the shared `tray-host-control-socket`
+and that "no additional socket nodes are created". That design attributed
+frames by reading the peer's `/proc` environ, which is forgeable. `McpFrame`
+arriving on the shared control socket is now REFUSED with
+`ErrorCode::Unsupported` naming the per-lane requirement — a live negative
+that MUST keep refusing, not dead code to delete.
 
-@trace spec:host-browser-mcp, spec:tray-host-control-socket
+@trace spec:host-browser-mcp, spec:mcp-tool-socket
 
-#### Scenario: Forge stub frames JSON-RPC inside McpFrame
+#### Scenario: Forge bridge relays NDJSON over the per-lane socket
 
-- **WHEN** the forge-side stub reads a JSON-RPC line from the agent's
-  stdout
-- **THEN** the stub wraps the line as a `ControlMessage::McpFrame {
-  session_id, payload }` postcard envelope with the existing 4-byte
-  big-endian length prefix
-- **AND** writes the framed envelope to
-  `/run/host/tillandsias/control.sock`
-- **AND** the tray-side reader deserialises the envelope, dispatches the
-  `payload` to the MCP server module, and writes the response back as
-  another `McpFrame` envelope on the same connection
+- **WHEN** the forge-side bridge reads a JSON-RPC line from the agent's stdout
+- **THEN** it writes that line verbatim to
+  `/run/host/tillandsias-mcp/mcp.sock` (no envelope, no length prefix)
+- **AND** the tray's per-lane listener dispatches it and writes the JSON-RPC
+  response back as one line on the same connection
 
-#### Scenario: No new socket node is created on disk
+#### Scenario: A frame on the shared control socket is refused
 
-- **WHEN** the tray starts with `host-browser-mcp` enabled
-- **THEN** no additional Unix-domain socket nodes are created beyond
+- **WHEN** a client sends `ControlMessage::McpFrame` on
   `$XDG_RUNTIME_DIR/tillandsias/control.sock`
-- **AND** an audit of `lsof -U` for the tray PID lists exactly the
-  control socket plus any consumer-accepted streams
+- **THEN** the tray replies `Error { code: Unsupported }` whose message
+  names the per-lane socket requirement
+- **AND** no MCP tool is dispatched from that connection
 
 ### Requirement: Browser provider is bundled Chromium only
 

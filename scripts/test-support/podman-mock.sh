@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# freshness: auditor=linux-yoga-claude-20260816t185912z date=2026-08-16 verdict=updated scope=666-qbjd: run/create arm records --hostname/--network-alias (tracked-file lines 3+), inspect arm replays a real json array for TRACKED containers (State.Status, Config.Hostname, aliases) so inspect_container round-trips; untracked names keep the byte-identical Secrets fallback; full fixture set (1, 2a-2c, 3b) re-run green
 # freshness: auditor=linux-macuahuitl-fable5-20260810t1910z date=2026-08-10 verdict=refreshed scope=closed the 2026-08-03 Windows audit's open ask: behavioral confirmation litmus:podman-build-command-shape EXECUTED on Linux substrate (podman-orchestration instant tier 4/4 PASS, 0 FAIL); all 6 consumers still live (run-litmus-test.sh, test-concurrent-forge-shared-stack.sh, remote_projects.rs, 3 litmus yamls); no stale arm found
 # freshness: auditor=linux-mutable-root-codex-20260806t001750z date=2026-08-05 verdict=refreshed scope=top inventory finding audited on mutable Linux: all live callers re-enumerated; bash syntax passed; stateful run/create/inspect/ps/stop/rm behavior exercised end-to-end by scripts/test-concurrent-forge-shared-stack.sh (fixtures 1, 2a, 2b, 2c PASS); no stale arm found; inventory threshold/0%-rounding defect filed as order 606-vaua
 # freshness: auditor=forge-tillandsias-codex-20260803t214004z date=2026-08-03 verdict=updated scope=re-validated syntax, vault-handover refusal, remote-project preflight, and stateful-container litmus consumers after order-443 tracking; corrected advisory age sorting in local-ci.sh
@@ -8,6 +9,43 @@ set -euo pipefail
 # Minimal Podman test backend for command-shape litmus runs.
 # It records the invocation and returns canned success outputs for the
 # subcommands Tillandsias uses in build/litmus command-contract tests.
+
+# Real podman accepts GLOBAL flags BEFORE the subcommand — `podman --remote
+# --url <u> run ...` is what scripts/common.sh's wrapper branch generates, and
+# TILLANDSIAS_PODMAN_REMOTE_URL in the environment makes the Rust launcher emit
+# the same shape. Skip them so dispatch sees the subcommand rather than a flag.
+#
+# Order 797-p2xa. Without this the `case` below matched nothing for `--remote`
+# and fell through to the final bare `exit 0`: success, no output, nothing
+# done. Callers cannot see that as a mock failure, only as its consequences —
+# four remote_projects tests reported `atomic rename failed: No such file or
+# directory` (the temp checkout the mock never created) and `invalid gh JSON:
+# EOF while parsing a value at line 1 column 0` (the array it never printed).
+# Reproduces in one line: TILLANDSIAS_PODMAN_REMOTE_URL=unix:///x cargo test
+# -p tillandsias-headless --bin tillandsias --features tray remote_projects.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --remote|--syslog|--noout)
+            shift
+            ;;
+        --url|--connection|--identity|--root|--runroot|--tmpdir| \
+        --storage-driver|--storage-opt|--log-level|--cgroup-manager| \
+        --events-backend|--runtime|--conmon|--module)
+            shift
+            # Guard the value shift: `shift 2` with one argument left fails,
+            # and this script runs under `set -e`.
+            if [[ $# -gt 0 ]]; then
+                shift
+            fi
+            ;;
+        --*=*)
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 subcommand="${1:-}"
 if [[ -n "${LITMUS_PODMAN_STATE_DIR:-}" ]]; then
@@ -161,6 +199,40 @@ case "$subcommand" in
                 fi
                 exit 0
             fi
+            # Order 666-qbjd: `inspect <name> --format json` on a TRACKED
+            # container replays a REAL inspect array (State.Status,
+            # Config.Hostname, network aliases) so inspect_container's serde
+            # parse round-trips and the upgrade-skew fixtures can seed
+            # old-generation mirrors. Untracked names keep the byte-identical
+            # Secrets fallback below — the router/other callers that .ok() the
+            # parse failure see exactly what they saw before.
+            wants_json=0
+            previous=""
+            for arg in "$@"; do
+                if [[ "$previous" == "--format" && "$arg" == "json" ]]; then
+                    wants_json=1
+                fi
+                previous="$arg"
+            done
+            inspect_name="${2:-}"
+            if [[ "$wants_json" == 1 && -n "$inspect_name" && -f "$(container_path "$inspect_name")" ]]; then
+                tracked_file="$(container_path "$inspect_name")"
+                state_line="$(sed -n '1p' "$tracked_file")"
+                hostname_line="$(grep '^hostname=' "$tracked_file" | head -1 | cut -d= -f2- || true)"
+                aliases_json=""
+                while IFS= read -r alias_line; do
+                    alias_line="${alias_line#alias=}"
+                    [[ -n "$alias_line" ]] || continue
+                    if [[ -n "$aliases_json" ]]; then
+                        aliases_json="${aliases_json},\"${alias_line}\""
+                    else
+                        aliases_json="\"${alias_line}\""
+                    fi
+                done < <(grep '^alias=' "$tracked_file" || true)
+                printf '[{"State":{"Status":"%s"},"ImageName":"mock-image","Config":{"Hostname":"%s"},"NetworkSettings":{"Networks":{"tillandsias-enclave":{"Aliases":[%s]}}}}]\n' \
+                    "$state_line" "$hostname_line" "$aliases_json"
+                exit 0
+            fi
         fi
         printf '{"Secrets":["vault-token","tillandsias-ca-cert","tillandsias-ca-key"]}\n'
         ;;
@@ -171,6 +243,8 @@ case "$subcommand" in
         if stateful_containers_enabled; then
             container_name=""
             detached=0
+            hostname_value=""
+            alias_values=""
             previous=""
             for arg in "$@"; do
                 if [[ "$previous" == "--name" ]]; then
@@ -178,6 +252,20 @@ case "$subcommand" in
                 fi
                 if [[ "$arg" == --name=* ]]; then
                     container_name="${arg#--name=}"
+                fi
+                # Order 666-qbjd: track the DNS identity flags so the inspect
+                # arm can replay Config.Hostname + network aliases.
+                if [[ "$previous" == "--hostname" ]]; then
+                    hostname_value="$arg"
+                fi
+                if [[ "$arg" == --hostname=* ]]; then
+                    hostname_value="${arg#--hostname=}"
+                fi
+                if [[ "$previous" == "--network-alias" ]]; then
+                    alias_values="${alias_values}${arg}"$'\n'
+                fi
+                if [[ "$arg" == --network-alias=* ]]; then
+                    alias_values="${alias_values}${arg#--network-alias=}"$'\n'
                 fi
                 if [[ "$arg" == "--detach" || "$arg" == "-d" ]]; then
                     detached=1
@@ -192,6 +280,15 @@ case "$subcommand" in
                 fi
                 # Foreground runs stay untracked (see gate comment above).
                 if [[ "$subcommand" == "create" || "$detached" == 1 ]]; then
+                    # DNS identity rides on lines 3+ (line 1 = state, line 2 =
+                    # id, which every existing sed -n '1p'/'2p' reader keeps).
+                    {
+                        printf 'hostname=%s\n' "$hostname_value"
+                        while IFS= read -r alias_line; do
+                            [[ -n "$alias_line" ]] || continue
+                            printf 'alias=%s\n' "$alias_line"
+                        done <<<"$alias_values"
+                    } >>"$(container_path "$container_name")"
                     sed -n '2p' "$(container_path "$container_name")"
                     exit 0
                 fi

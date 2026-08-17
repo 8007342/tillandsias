@@ -23,6 +23,16 @@
 #   ./scripts/run-litmus-test.sh --list              # List all test suites
 #   ./scripts/run-litmus-test.sh --timeout 60        # Custom timeout in seconds
 #   ./scripts/run-litmus-test.sh --ignore SPEC1,SPEC2 # Skip in-progress specs
+#   ./scripts/run-litmus-test.sh --diff-scope origin/linux-next
+#                                                    # Skip tests whose declared
+#                                                    # `inputs:` globs are untouched
+#                                                    # since that ref (order 765-mza8)
+#
+# --diff-scope is advisory and fails CLOSED: an unannotated test, an
+# unresolvable base, a clean tree, or a full-run anchor older than 24h all
+# disable scoping and run EVERYTHING, loudly. A run that actually skipped
+# something also blocks build.sh from writing a gate stamp, because a scoped
+# run cannot vouch for the whole tree.
 #
 # Exit Codes:
 #   0 = all tests pass
@@ -153,8 +163,25 @@ TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
 FILTER_SPEC=""
+# 764-8m5j was REVERTED here on 2026-08-17 and the packet reopened. It made a
+# test-name filter RUN that single test, which is genuinely useful — but
+# litmus-litmus-name-filter-hint-shape pins the opposite contract on purpose
+# (order 300 follow-on): a name-shaped filter FAILS LOUD and names its owning
+# spec. Flipping a fail-loud contract is a deliberate decision that deserves
+# its own packet and its own reasoning, not a drive-by during a release. The
+# safety property was never at risk — the feature still refused unknown names
+# — but "useful" is not the bar for changing a pinned refusal.
+FILTER_TEST_NAME=""
 FILTER_PHASE="all"
 SIZE_FILTER="all"
+# Order 765-mza8 diff-scoped selection. Inert unless --diff-scope is passed AND
+# litmus_resolve_diff_scope accepts the base; every refusal path leaves
+# DIFF_SCOPE_ACTIVE=0, which means "run everything".
+DIFF_SCOPE_BASE=""
+DIFF_SCOPE_ACTIVE=0
+DIFF_SCOPE_BASE_SHA=""
+DIFF_SCOPE_CHANGED=""
+DIFF_SCOPE_SKIPS=0
 COMPACT=0
 STRICT_MODE=0
 STRICT_SPEC_LIST=""
@@ -163,6 +190,11 @@ SPEC_SHORTHAND=""
 
 # Test result tracking
 TESTS_PASSED=0
+# 765-dfry: per-test duration accumulator, tab-separated `dur_ms<TAB>name<TAB>rc`
+# lines. Consumed twice at suite end: a ranked slowest-tests block in compact
+# output, and ONE --emit-timing-batch spawn (per-test spawns would tax an
+# instant suite seconds to measure milliseconds — the empty-suite-floor lesson).
+_PER_TEST_LOG=""
 TESTS_FAILED=0
 TESTS_SKIPPED=0
 TESTS_RUN=0
@@ -426,6 +458,152 @@ get_test_size() {
     fi
 }
 
+# Order 765-mza8. OPTIONAL `inputs:` — the repo paths whose content can change
+# this test's verdict, as a YAML list of globs. ABSENT means "unknown inputs",
+# which must read as "any change could matter", so an unannotated test always
+# runs. That default is the whole safety story: annotation can only ever REMOVE
+# a test from a scoped run, so a missing or wrong annotation costs time, never
+# coverage.
+#
+# Emits one glob per line; empty output means unannotated.
+get_test_inputs() {
+    local file="$1"
+
+    if command -v yq &>/dev/null; then
+        yq eval '.inputs[]? // ""' "$file" 2>/dev/null | grep -v '^$' || true
+    else
+        awk '
+            /^inputs:[[:space:]]*$/ { collecting=1; next }
+            collecting && /^[[:space:]]*-[[:space:]]+/ {
+                line = $0
+                sub(/^[[:space:]]*-[[:space:]]+/, "", line)
+                gsub(/^["'"'"']|["'"'"']$/, "", line)
+                print line
+                next
+            }
+            collecting && /^[^[:space:]]/ { collecting=0 }
+        ' "$file"
+    fi
+}
+
+# Does any changed path match any of this test's declared globs?
+#
+# Pattern matching is bash `[[ == ]]`, NOT pathname expansion, so `*` DOES
+# cross `/`: `crates/*` means "anything under crates/", which is the reading an
+# annotator intends. Stated here because the opposite assumption would silently
+# narrow a glob and skip a test that should have run.
+litmus_inputs_intersect_diff() {
+    local globs="$1" changed="$2"
+    local g p
+    while IFS= read -r g; do
+        [[ -n "$g" ]] || continue
+        while IFS= read -r p; do
+            [[ -n "$p" ]] || continue
+            # shellcheck disable=SC2053
+            if [[ "$p" == $g ]]; then
+                return 0
+            fi
+        done <<<"$changed"
+    done <<<"$globs"
+    return 1
+}
+
+# Order 765-mza8: resolve --diff-scope into an ACTIVE scope or a loud refusal.
+#
+# POLARITY, and it is the opposite of 634-39ik's: that guard only ADDS
+# enforcement, so it may fail open on a missing base ref. This selector REMOVES
+# coverage, so every uncertainty must fail CLOSED — i.e. disable scoping and run
+# the full suite, loudly. The refusals below are therefore not error handling;
+# they are the feature working.
+#
+# Sets DIFF_SCOPE_ACTIVE=1 + DIFF_SCOPE_BASE_SHA + DIFF_SCOPE_CHANGED on success.
+litmus_resolve_diff_scope() {
+    local base="$1"
+    DIFF_SCOPE_ACTIVE=0
+    DIFF_SCOPE_BASE_SHA=""
+    DIFF_SCOPE_CHANGED=""
+
+    if ! git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+        log_warn "diff-scope DISABLED (running FULL): not a git repository"
+        return 0
+    fi
+
+    local sha
+    if ! sha="$(git -C "$PROJECT_ROOT" rev-parse --verify --quiet "${base}^{commit}" 2>/dev/null)" \
+        || [[ -z "$sha" ]]; then
+        log_warn "diff-scope DISABLED (running FULL): base ref '${base}' does not resolve"
+        return 0
+    fi
+
+    # Tracked changes BASE..worktree (not ..HEAD — uncommitted edits must count,
+    # or a scoped run would skip the very test covering what you just typed),
+    # plus untracked files, which are changes the diff cannot see at all.
+    local tracked untracked
+    if ! tracked="$(git -C "$PROJECT_ROOT" diff --name-only "$sha" -- 2>/dev/null)"; then
+        log_warn "diff-scope DISABLED (running FULL): diff against ${sha} is unparseable"
+        return 0
+    fi
+    untracked="$(git -C "$PROJECT_ROOT" ls-files --others --exclude-standard 2>/dev/null || true)"
+
+    local changed
+    changed="$(printf '%s\n%s\n' "$tracked" "$untracked" | grep -v '^$' | sort -u || true)"
+    if [[ -z "$changed" ]]; then
+        # Nothing changed at all. Scoping would skip EVERY annotated test, which
+        # is defensible but indistinguishable from a broken diff — and the
+        # packet forbids a vacuous green. Run full; it is the honest answer to
+        # "verify this tree" when nothing is known to have moved.
+        log_warn "diff-scope DISABLED (running FULL): no changes against ${sha:0:12}"
+        return 0
+    fi
+
+    # 24h full-run ratchet. Skipping forever on a long-lived branch means the
+    # unannotated-but-affected test never runs again; a periodic full anchor
+    # bounds how stale scoped confidence can get.
+    local anchor_file anchor_age now
+    anchor_file="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-litmus-full-anchor"
+    now="$(date -u +%s 2>/dev/null || echo 0)"
+    if [[ -f "$anchor_file" ]]; then
+        anchor_age="$(cat "$anchor_file" 2>/dev/null || echo 0)"
+        case "$anchor_age" in ''|*[!0-9]*) anchor_age=0 ;; esac
+        if [[ "$now" -gt 0 && $((now - anchor_age)) -ge 86400 ]]; then
+            log_warn "diff-scope DISABLED (running FULL): last full quick-tier run is older than 24h (ratchet)"
+            return 0
+        fi
+    else
+        log_warn "diff-scope DISABLED (running FULL): no full-run anchor recorded yet (ratchet)"
+        return 0
+    fi
+
+    DIFF_SCOPE_ACTIVE=1
+    DIFF_SCOPE_BASE_SHA="$sha"
+    DIFF_SCOPE_CHANGED="$changed"
+    local n
+    # wc, not `grep -c .`: grep PRINTS 0 and EXITS 1 on no-match, so the usual
+    # `|| echo 0` fallback would concatenate into "0\n0".
+    n="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
+    log_info "diff-scope ACTIVE against ${sha:0:12} (${n} changed path(s)); unannotated tests still run"
+    return 0
+}
+
+# Record that a FULL quick-tier run completed, feeding the 24h ratchet above.
+litmus_record_full_anchor() {
+    local dir
+    dir="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+    date -u +%s > "$dir/tillandsias-litmus-full-anchor" 2>/dev/null || true
+}
+
+# A scoped run must never be mistaken for a full one by whatever writes the
+# gate stamp. build.sh hardcodes `--scope full`, so without this breadcrumb a
+# scoped lane inside --ci-full would stamp the tree as fully validated — the
+# exact silent-green pivot audit F5 names. The sentinel is consumed and cleared
+# by _write_gate_stamp.
+litmus_mark_scoped_run() {
+    local dir
+    dir="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+    printf 'diff-scope base=%s skips=%s\n' "$DIFF_SCOPE_BASE_SHA" "$1" \
+        > "$dir/tillandsias-litmus-diff-scoped" 2>/dev/null || true
+}
+
 size_matches_filter() {
     local test_size="$1"
     local filter="$2"
@@ -627,10 +805,17 @@ run_rust_queries_for_litmus() {
     local status=0
     printf '  [RUST QUERIES] %s...' "$(basename "$test_file")" >&2
 
+    # Run-don't-stat (order 770-ifeg): `-x` passes for the OTHER platform's
+    # artifact on a shared Windows/WSL checkout; probe by execution via the
+    # shared helper (sourced in a subshell so this large script's namespace
+    # stays untouched).
+    local litmus_rust_bin=""
+    litmus_rust_bin="$(. "$PROJECT_ROOT/scripts/plan-binary-probe.sh" \
+        && resolve_target_binary tillandsias-litmus-rust debug "$PROJECT_ROOT")" || litmus_rust_bin=""
     if command -v tillandsias-litmus-rust >/dev/null 2>&1; then
         output="$(tillandsias-litmus-rust check --litmus "$test_file" 2>&1)" || status=$?
-    elif [[ -x "$PROJECT_ROOT/target/debug/tillandsias-litmus-rust" ]]; then
-        output="$("$PROJECT_ROOT/target/debug/tillandsias-litmus-rust" check --litmus "$test_file" 2>&1)" || status=$?
+    elif [[ -n "$litmus_rust_bin" ]]; then
+        output="$("$litmus_rust_bin" check --litmus "$test_file" 2>&1)" || status=$?
     else
         output="$(cargo run --quiet -p tillandsias-litmus-rust -- check --litmus "$test_file" 2>&1)" || status=$?
     fi
@@ -716,13 +901,40 @@ run_litmus_test_file() {
     # 2026-07-16: macOS's platform gate + windows' tightened trigger
     # (command lines that actually invoke podman, not whole-file mentions)
     # — each lane independently fixed one half of the same over-trigger.
+    # Order 797-5kqe: THE PROBE MUST REPORT WHAT IT SAW, NOT WHAT IT ASSUMED.
+    # This used to be a bare `! timeout 5 podman ps`, and every non-zero exit
+    # was announced as "podman unresponsive (>5s): stalled storage lock or dead
+    # runtime — environmental, not a code regression". `timeout` returns 124
+    # only when it ACTUALLY timed out; for anything else it returns the
+    # command's own status — 127 for a wrapper whose exec target was deleted,
+    # 126, 125, 1. So a podman that failed in three milliseconds was reported
+    # as one that stalled for over five seconds, with a named cause and a
+    # citation. Cost, measured this cycle: roughly four hours and three wrong
+    # root causes, while `podman info` was sampled at 0.07s on 45 consecutive
+    # samples taken DURING the run that called podman unresponsive.
+    # The "environmental, not a code regression" verdict is the worse half: it
+    # is what makes a reader stop looking, and here it was attached to a
+    # genuine code-level configuration defect (797-r6tc). A preflight may
+    # report what it observed; it must not classify a failure it did not
+    # diagnose. Pinned by litmus:litmus-podman-preflight-diagnosis-shape.
     if [ "$(uname -s)" = "Linux" ] \
         && grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$test_file" 2>/dev/null \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
-        && command -v podman >/dev/null 2>&1 \
-        && ! timeout 5 podman ps --format '{{.ID}}' >/dev/null 2>&1; then
-        echo -e "  ${RED}[ENV-FAIL]${NC} podman unresponsive (>5s): stalled storage lock or dead runtime — environmental, not a code regression (plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md)"
-        return 1
+        && command -v podman >/dev/null 2>&1; then
+        local _preflight_err=""
+        local _preflight_rc=0
+        # Assignment first, status captured on the SAME command: a `local
+        # x="$(...)"` one-liner would report local's own status, not the
+        # probe's, which is the exit-code-masking class this file gates for.
+        _preflight_err="$(timeout 5 podman ps --format '{{.ID}}' 2>&1 >/dev/null)" \
+            || _preflight_rc=$?
+        if [ "$_preflight_rc" -eq 124 ]; then
+            echo -e "  ${RED}[ENV-FAIL]${NC} podman did not answer 'podman ps' within 5s (timeout, exit 124) — consistent with a stalled storage lock or a dead runtime (plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md)"
+            return 1
+        elif [ "$_preflight_rc" -ne 0 ]; then
+            echo -e "  ${RED}[ENV-FAIL]${NC} 'podman ps' FAILED IMMEDIATELY with exit ${_preflight_rc} — this is not a timeout and the cause is not diagnosed here. podman resolved to '$(command -v podman)' and said: ${_preflight_err:-(no output)}"
+            return 1
+        fi
     fi
 
     if ! run_rust_queries_for_litmus "$test_file"; then
@@ -1073,20 +1285,58 @@ run_tests_for_spec() {
             continue
         fi
 
+        # Order 765-mza8: diff-scoped skip, LAST of the four selection gates so
+        # a scoped-out test is never confused with a phase/host/size miss.
+        #
+        # Three independent conditions must ALL hold to skip, and each one is a
+        # fail-closed door: scoping resolved, the test declares its inputs, none
+        # of those inputs intersect the diff — and the test's OWN file is
+        # unchanged, because editing a test is the one edit that must always
+        # re-run it (its verdict lives in that file, not only in its inputs).
+        if [[ "$DIFF_SCOPE_ACTIVE" -eq 1 ]]; then
+            local test_inputs test_file_rel
+            test_inputs="$(get_test_inputs "$test_file")"
+            test_file_rel="${test_file#"$PROJECT_ROOT"/}"
+            if [[ -n "$test_inputs" ]] \
+                && ! printf '%s\n' "$DIFF_SCOPE_CHANGED" | grep -qxF "$test_file_rel" \
+                && ! litmus_inputs_intersect_diff "$test_inputs" "$DIFF_SCOPE_CHANGED"; then
+                log_test_result "$spec_id" "$test_name" "SKIP" \
+                    "Diff-scoped: declared inputs untouched since ${DIFF_SCOPE_BASE_SHA:0:12}"
+                DIFF_SCOPE_SKIPS=$((DIFF_SCOPE_SKIPS+1))
+                spec_skipped=1
+                test_count=$((test_count+1))
+                continue
+            fi
+        fi
+
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
         # @trace spec:spec-traceability
         printf '%bℹ%b Executing %s...\n' "${BLUE}" "${NC}" "$test_name" >&2
 
+        # 765-dfry: time every executed test so the quick lane is rankable
+        # test-by-test. Capture is two clock reads; emission is batched at
+        # suite end. Best-effort: a stubbed clock yields t0=0 and the record
+        # is dropped downstream, never poisoned.
+        local _pt_t0 _pt_dur _pt_rc
+        _pt_t0="$(timing_now_ms 2>/dev/null || echo 0)"
         if run_litmus_test_file "$test_file" "$spec_id"; then
+            _pt_rc=0
             log_test_result "$spec_id" "$test_name" "PASS" ""
         else
+            _pt_rc=1
             log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
             spec_failed=1
-            if should_fail_fast_for_spec "$spec_id"; then
-                printf '@trace spec:%s\n' "$spec_id" >&2
-                return 20
-            fi
+        fi
+        if [[ "$_pt_t0" =~ ^[0-9]+$ && "$_pt_t0" -gt 0 ]]; then
+            _pt_dur=$(( $(timing_now_ms 2>/dev/null || echo 0) - _pt_t0 ))
+            [[ "$_pt_dur" -ge 0 && "$_pt_dur" -lt 86400000 ]] || _pt_dur=0
+            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}
+"
+        fi
+        if [[ "$_pt_rc" -ne 0 ]] && should_fail_fast_for_spec "$spec_id"; then
+            printf '@trace spec:%s\n' "$spec_id" >&2
+            return 20
         fi
 
         test_count=$((test_count+1))
@@ -1138,7 +1388,39 @@ print_summary() {
     coverage_text="[$spec_count/$total_specs specs]"
     printf '%bCoverage%b: %d%% %s\n' "${BOLD}" "${NC}" "$covered_specs" "$coverage_text" >&2
     printf '%bPass Rate%b: %d%% (%d/%d executed)\n' "${BOLD}" "${NC}" "$coverage_ratio" "$TESTS_PASSED" "$total_executed" >&2
+
+    # Order 765-mza8: the skip ledger. A scoped run states its cost in coverage
+    # on EVERY run, including when it skipped nothing, because "silent
+    # truncation reads as covered everything" (audit F12) and the reader cannot
+    # tell a scoped green from a full green without being told.
+    if [[ -n "$DIFF_SCOPE_BASE" ]]; then
+        if [[ "$DIFF_SCOPE_ACTIVE" -eq 1 ]]; then
+            printf '%bDiff-scope%b: %d diff-scoped skips against base %s\n' \
+                "${BOLD}" "${NC}" "$DIFF_SCOPE_SKIPS" "${DIFF_SCOPE_BASE_SHA:0:12}" >&2
+        else
+            printf '%bDiff-scope%b: REFUSED — ran FULL (see the reason above)\n' \
+                "${BOLD}" "${NC}" >&2
+        fi
+    fi
     echo "" >&2
+
+    # 765-dfry: per-test durations — ONE batch emission for the whole suite,
+    # plus a ranked slowest-tests block so the compact view names what
+    # dominates the lane (quiet threshold 500ms, top 10 — the full ranking
+    # lives in the timing records; 734-sjb3 noise discipline).
+    if [[ -n "$_PER_TEST_LOG" ]]; then
+        {
+            printf '%s' "$_PER_TEST_LOG" | awk -F'\t' \
+                -v phase="${FILTER_PHASE:-unknown}" \
+                -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" \
+                'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host }' \
+                | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
+        } 2>/dev/null || true
+        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10)"
+        if [[ -n "$_slow_tests" ]]; then
+            printf '%bSlowest tests%b (>=0.5s, top 10; full ranking in the timing records):\n%s\n\n' "${BOLD}" "${NC}" "$_slow_tests" >&2
+        fi
+    fi
 
     # Overall status
     if [[ $TESTS_FAILED -eq 0 ]]; then
@@ -1293,6 +1575,25 @@ parse_args() {
                     shift 2
                 fi
                 ;;
+            --diff-scope|--diff-scope=*)
+                if [[ "$1" == *=* ]]; then
+                    DIFF_SCOPE_BASE="${1#*=}"
+                    shift
+                elif [[ $# -ge 2 && "${2}" != -* ]]; then
+                    DIFF_SCOPE_BASE="$2"
+                    shift 2
+                else
+                    # No value, or the next token is another flag. Do NOT
+                    # `shift 2` past the end: under `set -e` that aborts the
+                    # run outright. Refuse the scope and keep going full — the
+                    # selector's whole polarity is that confusion runs MORE,
+                    # never less. Swallowing `--compact` as a base ref would
+                    # also drop that flag silently.
+                    log_warn "--diff-scope needs a base ref (e.g. --diff-scope origin/linux-next); running FULL"
+                    DIFF_SCOPE_BASE=""
+                    shift
+                fi
+                ;;
             --json)
                 # JSON output (handled at end)
                 shift
@@ -1382,7 +1683,21 @@ main() {
     log_info "Size filter: ${SIZE_FILTER}  (use --size instant|quick|long|e2e|all for more)"
     [[ "$COMPACT" == "1" ]] && log_info "Output mode: compact"
     [[ "$STRICT_MODE" == "1" ]] && log_info "Strict mode: enabled"
+    # Order 765-mza8. Clear any sentinel from a PREVIOUS run first: it must
+    # describe this run or nothing. A stale one would make an honest full gate
+    # refuse to stamp, which fails closed (safe) but would be a mystery to the
+    # operator — and mysteries are how guards get switched off.
+    local _dsdir
+    _dsdir="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null || true)"
+    [[ -n "$_dsdir" ]] && rm -f "$_dsdir/tillandsias-litmus-diff-scoped" 2>/dev/null
+    # Resolved BEFORE any test runs so the banner states the selection regime
+    # up front — a reader must never have to infer from the skip lines whether
+    # this run was scoped.
+    if [[ -n "$DIFF_SCOPE_BASE" ]]; then
+        litmus_resolve_diff_scope "$DIFF_SCOPE_BASE"
+    fi
     echo "" >&2
+
 
     # Determine which specs to test
     local specs_to_test
@@ -1434,6 +1749,20 @@ main() {
         fi
     done <<<"$specs_to_test"
 
+    # Order 765-mza8 bookkeeping, in this order deliberately.
+    #
+    # A run that actually scoped drops a sentinel so whatever writes the gate
+    # stamp cannot claim `scope full` for a tree whose tests did not all run
+    # (audit F5). A run that did NOT scope — including every refusal path — is
+    # a full quick-tier run and refreshes the 24h ratchet anchor. The two are
+    # mutually exclusive by construction: only a full run may extend the window
+    # that permits scoping.
+    if [[ "$DIFF_SCOPE_ACTIVE" -eq 1 && "$DIFF_SCOPE_SKIPS" -gt 0 ]]; then
+        litmus_mark_scoped_run "$DIFF_SCOPE_SKIPS"
+    elif [[ "$DIFF_SCOPE_ACTIVE" -eq 0 && "$SIZE_FILTER" == "quick" && "$FILTER_PHASE" == "pre-build" && -z "$FILTER_SPEC" ]]; then
+        litmus_record_full_anchor
+    fi
+
     # @trace spec:spec-traceability
     # An explicit filter is a requested verification boundary. Treating a
     # typo, renamed spec, or litmus-name-shaped argument as PASS with zero
@@ -1449,14 +1778,47 @@ main() {
         # owning spec so the user can run the intended suite. The failure and
         # its non-zero exit are unchanged: an unmatched explicit filter must
         # still fail (642 semantics).
+        # Order 764-8m5j. A test id typed WITHOUT its litmus: prefix is the same
+        # mistake and matched zero tests just as silently — the hint simply did
+        # not cover it, because the prefix test above is what gated it. Observed
+        # 2026-08-17: `run-litmus-test.sh fake-podman-direct-invocation-safety`
+        # answered "no litmus tests matched filter" with no hint, and the spec
+        # (litmus-framework) had to be found by grepping the corpus by hand.
+        #
+        # The packet's other option — ACCEPTING a test id as a filter and running
+        # it — is deliberately not taken: order 300/642 requires an explicit
+        # filter that matches zero tests to fail loud, and litmus:litmus-name-
+        # filter-hint-shape pins that. Making the refusal more useful is additive;
+        # making it succeed would delete a safety contract.
+        local -a name_candidates=()
         if [[ "$FILTER_SPEC" == litmus:* || "$FILTER_SPEC" == litmus-* ]]; then
-            local name_file owner_spec
-            name_file="$(grep -rlF "name: ${FILTER_SPEC}" "${LITMUS_TESTS_DIR}" 2>/dev/null | head -n 1)"
-            if [[ -n "$name_file" ]]; then
-                owner_spec="$(grep -m1 -F 'spec: ' "$name_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
-                if [[ -n "$owner_spec" ]]; then
-                    log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+            name_candidates+=("$FILTER_SPEC")
+        else
+            name_candidates+=("litmus:${FILTER_SPEC}")
+        fi
+
+        local candidate name_file owner_spec resolved_file resolved_name
+        resolved_file=""
+        for candidate in "${name_candidates[@]}"; do
+            while IFS= read -r name_file; do
+                [[ -n "$name_file" ]] || continue
+                # grep -F "name: x" also matches "name: x-longer", so confirm the
+                # file's declared name is EXACTLY the candidate before hinting.
+                # A hint naming the wrong spec is worse than none.
+                resolved_name="$(grep -m1 -E '^name:[[:space:]]*' "$name_file" 2>/dev/null \
+                    | sed -E 's/^name:[[:space:]]*//; s/[[:space:]]*$//')"
+                if [[ "$resolved_name" == "$candidate" ]]; then
+                    resolved_file="$name_file"
+                    break
                 fi
+            done < <(grep -rlF "name: ${candidate}" "${LITMUS_TESTS_DIR}" 2>/dev/null)
+            [[ -n "$resolved_file" ]] && break
+        done
+
+        if [[ -n "$resolved_file" ]]; then
+            owner_spec="$(grep -m1 -F 'spec: ' "$resolved_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
+            if [[ -n "$owner_spec" ]]; then
+                log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
             fi
         fi
         exit 1

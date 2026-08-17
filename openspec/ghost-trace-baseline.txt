@@ -1,3 +1,8 @@
+# 2026-08-16 union-gate surfacing (767-yrnd): seven pre-existing ghosts from
+# sibling branches, first caught when the macOS host ran the gate on the
+# merged union. All seven were resolved by the 767-yrnd owners and pruned
+# 2026-08-16 (linux_mutable cycle 2) when the ratchet flagged the baseline
+# stale — the gate's may-only-shrink direction enforced exactly this removal.
 enclave-service-catalog
 fat-spec-corpus-index
 forge-git-ergonomics

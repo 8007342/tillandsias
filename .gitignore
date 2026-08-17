@@ -76,6 +76,7 @@ cheatsheet-sources/
 images/default/.cheatsheet-sources/
 images/default/.cheatsheets-meta/
 images/default/.cheatsheets/
+images/router/.sidecar.stamp
 images/router/tillandsias-router-sidecar
 mock-release/
 result
@@ -116,6 +117,17 @@ crates/tillandsias-windows-tray/assets/tillandsias-headless-*
 /tray_output.log
 # Defense-in-depth against the artifact-leak class that put target-musl/** in history:
 # catch Rust/obj artifacts and node_modules even if they ever land OUTSIDE a target*/ dir.
+# 723-ydmk: extended to the executable/linkable extensions actually seen in the
+# leaked history (.so was among them; *.o/*.rlib alone missed every one of the
+# three known leaks). Tracked-file enforcement is scripts/check-no-tracked-binaries.sh —
+# an ignore rule is inert for anything already tracked.
 node_modules/
 *.rlib
 *.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.a
+*.wasm
+*.pdb

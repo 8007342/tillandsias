@@ -1,0 +1,131 @@
+# @trace spec:host-browser-mcp, spec:tray-host-control-socket
+#
+# RETARGETED from litmus:host-browser-mcp-frame-shape (order 779-5ryn,
+# 2026-08-16). The original pinned the `ControlMessage::McpFrame` transport
+# as the LIVE contract — variant shape, the 4 MiB MAX_MCP_FRAME_BYTES cap,
+# and `(McpFrame, UnixSocket) => Handle` — but order 505 (commit dd8fd63f)
+# replaced that transport with per-lane NDJSON sockets, because attributing
+# frames by reading the peer's /proc environ is forgeable. A green litmus
+# guarding a deleted transport is worse than no litmus: it reads as coverage
+# and protects nothing, and it was cited as live evidence during the
+# 616-nm7q scoping that the spec had drifted from the product.
+#
+# What survives here is what is still TRUE and load-bearing:
+#   * McpFrame on the shared control socket must keep being REFUSED — it is
+#     a live negative (the forgeable-attribution path stays closed), not
+#     dead code to delete.
+#   * The per-lane socket wiring (dir -> bind mount -> env) is what makes
+#     attribution listener-derived.
+#   * The vsock side stays Unsupported (host-only surface).
+# The 4 MiB constant's disposition (migrate it to an NDJSON per-line cap,
+# or retire it) is deliberately NOT pinned here — it belongs to packet
+# host-browser-mcp-ndjson-transport-policy (order 779-dqsv), and pinning a
+# number whose owner is mid-decision would just re-create this problem.
+name: litmus:host-browser-mcp-lane-socket-shape
+spec: host-browser-mcp
+phase: pre-build
+description: >
+  Instant-phase drift protection for the LIVE host-browser-mcp transport
+  (order 505): a per-lane NDJSON Unix socket with listener-derived
+  attribution, bind-mounted into the lane container, plus the standing
+  refusal of McpFrame on the shared postcard control socket. Replaces the
+  retired frame-shape litmus, which pinned the deleted McpFrame transport.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/tray/mod.rs
+  - workspace contains crates/tillandsias-headless/src/control_dispatch.rs
+  - workspace contains images/default/config-overlay/mcp/host-browser.sh
+
+critical_path:
+  - step: "LIVE NEGATIVE: McpFrame on the shared control socket is refused as Unsupported"
+    command: "grep -A12 'ControlMessage::McpFrame { .. } =>' crates/tillandsias-headless/src/tray/mod.rs | grep -F 'ErrorCode::Unsupported' && echo 'ok: forgeable-attribution path stays closed'"
+    timeout_ms: 5000
+    expected_behavior: "ok: forgeable-attribution path stays closed"
+
+  - step: "Req: the refusal message names the per-lane requirement (not a bare error)"
+    command: "grep -F 'MCP tool surface requires per-lane socket listener' crates/tillandsias-headless/src/tray/mod.rs && echo 'ok: refusal is diagnostic'"
+    timeout_ms: 5000
+    expected_behavior: "ok: refusal is diagnostic"
+
+  - step: "Req: each lane gets its own socket dir, bind-mounted at /run/host/tillandsias-mcp"
+    command: "grep -F 'mcp_socket_host_dir_for_lane' crates/tillandsias-headless/src/tray/mod.rs >/dev/null && grep -F '/run/host/tillandsias-mcp' crates/tillandsias-headless/src/tray/mod.rs >/dev/null && echo 'ok: per-lane socket wiring present'"
+    timeout_ms: 5000
+    expected_behavior: "ok: per-lane socket wiring present"
+
+  - step: "Req: the lane's control-socket env points at the per-lane mcp.sock"
+    command: "grep -F '/run/host/tillandsias-mcp/mcp.sock' crates/tillandsias-headless/src/tray/mod.rs >/dev/null && grep -F 'TILLANDSIAS_CONTROL_SOCKET' images/default/config-overlay/mcp/host-browser.sh >/dev/null && echo 'ok: bridge and launcher agree on the lane socket'"
+    timeout_ms: 5000
+    expected_behavior: "ok: bridge and launcher agree on the lane socket"
+
+  - step: "Req: the bridge docstring describes the transport it actually uses"
+    # The docstring claimed McpFrame wrapping long after order 505 deleted
+    # that path — a false comment is how the next reader inherits the wrong
+    # model. It must NOT claim to wrap frames.
+    command: "head -20 images/default/config-overlay/mcp/host-browser.sh | grep -qF 'wraps each as a' && { echo 'FAIL: bridge docstring still claims McpFrame wrapping'; exit 1; }; echo 'ok: bridge docstring matches the NDJSON reality'"
+    timeout_ms: 5000
+    expected_behavior: "ok: bridge docstring matches the NDJSON reality"
+
+  - step: "convergence-packet matrix: McpFrame stays Unsupported on Vsock (host-only surface)"
+    command: "grep -F '(McpFrame { .. }, Vsock) => Unsupported' crates/tillandsias-headless/src/control_dispatch.rs"
+    timeout_ms: 5000
+    expected_behavior: "Vsock) => Unsupported"
+
+  - step: "BEHAVIOUR: the per-line cap refuses an oversized request and the stream resyncs"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_oversized_request_line_is_refused_and_the_stream_resyncs -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "BEHAVIOUR: an oversized response is replaced by a typed error that keeps the id"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_oversized_response_is_replaced_with_a_typed_error -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "BEHAVIOUR: the lane transport serializes — pipelined requests answer in order"
+    command: "cargo test -q -p tillandsias-headless --features tray --bin tillandsias tray::tests::mcp_lane_transport_serializes_one_call_at_a_time -- --exact 2>&1 | tail -3"
+    timeout_ms: 300000
+    success_pattern: "test result: ok. 1 passed"
+
+  - step: "Req: no unbindable concurrency limit was left behind (779-dqsv)"
+    # The semaphore could never fire under a sequential transport. If it
+    # comes back WITHOUT a concurrent transport, this fires.
+    # CODE lines only — the doc comment above BrowserMcpServer names
+    # ConcurrentCallLimit precisely to explain why it is gone, and a grep
+    # that cannot tell prose from code would flag its own rationale.
+    command: "if grep -F 'ConcurrentCallLimit' crates/tillandsias-browser-mcp/src/server.rs | grep -qvE '^\\s*(//|/\\*|\\*)'; then echo 'FAIL: unbindable concurrent-call limit reintroduced'; exit 1; fi; echo 'ok: no unbindable limit'"
+    timeout_ms: 10000
+    expected_behavior: "ok: no unbindable limit"
+
+  - step: "NEGATIVE CONTROL: each pin above refuses a fixture where the property is violated"
+    # 634-39ik: a grep pin is only worth its green if it can distinguish
+    # "property violated" from "text merely drifted". Three hermetic
+    # fixtures, one per invariant class — a dispatcher that SERVES McpFrame
+    # instead of refusing it, a launcher with no per-lane socket wiring, and
+    # a bridge that still claims McpFrame wrapping. Each must FAIL the same
+    # predicate the live steps run; if any fixture passes, the pin is
+    # decorative and this step says so.
+    command: "d=$(mktemp -d); trap 'rm -rf \"$d\"' EXIT; printf 'ControlMessage::McpFrame { .. } => { serve_mcp(frame); }\\n' > \"$d/served.rs\"; grep -A12 'ControlMessage::McpFrame { .. } =>' \"$d/served.rs\" | grep -qF 'ErrorCode::Unsupported' && { echo 'FAIL: refusal pin blind to a dispatcher that serves McpFrame'; exit 1; }; printf 'let dir = some_other_dir();\\n' > \"$d/nolane.rs\"; grep -qF 'mcp_socket_host_dir_for_lane' \"$d/nolane.rs\" && { echo 'FAIL: per-lane wiring pin blind to its absence'; exit 1; }; printf '# wraps each as a ControlMessage::McpFrame\\n' > \"$d/bridge.sh\"; head -20 \"$d/bridge.sh\" | grep -qF 'wraps each as a' || { echo 'FAIL: docstring pin blind to the false claim'; exit 1; }; echo 'ok: all three pins fail on a violating fixture'"
+    timeout_ms: 10000
+    expected_behavior: "ok: all three pins fail on a violating fixture"
+
+observability:
+  traces:
+    - "@trace spec:host-browser-mcp"
+    - "@trace spec:tray-host-control-socket"
+  expected_log: "per-lane NDJSON socket wiring present; McpFrame on the shared control socket refused"
+  log_fields:
+    spec: "host-browser-mcp"
+    test: "host-browser-mcp-lane-socket-shape"
+    tray_artifact: "crates/tillandsias-headless/src/tray/mod.rs"
+    bridge_artifact: "images/default/config-overlay/mcp/host-browser.sh"
+
+rollback:
+  on_failure: >
+    The live MCP transport drifted. Attribution MUST stay listener-derived:
+    a per-lane socket under $XDG_RUNTIME_DIR/tillandsias/mcp/<project>-<instance>/,
+    bind-mounted to /run/host/tillandsias-mcp, with McpFrame on the shared
+    control socket still refused as Unsupported (order 505 — environ-based
+    attribution is forgeable and must not return). See
+    openspec/specs/host-browser-mcp/spec.md.
+  command: "grep -nE 'mcp_socket_host_dir_for_lane|tillandsias-mcp|McpFrame' crates/tillandsias-headless/src/tray/mod.rs | head -20"

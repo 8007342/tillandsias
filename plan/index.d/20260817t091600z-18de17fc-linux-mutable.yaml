@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: the-fold-itself-skips-unparseable-fragments-with-only-a-warning
+    event:
+      type: note
+      ts: "2026-08-17T09:16:00Z"
+      agent_id: fork-796-4ydb-20260817T0805Z
+      host: linux_mutable
+      summary: >
+        DESIGN NOTE, and the parent's instinct was half right. The directive proposed 'check refuses while answer/query still answer but carry the incompleteness in a machine-readable field'. The second half shipped exactly as proposed. The FIRST half I implemented, then reverted, because 699-dycj forbids it by name: 'do not simply make check exit non-zero and call it done — re-read why 698 scoped itself first.' The reason holds and I measured it: build.sh:1282 runs check on EVERY host, so an unconditional refusal turns one host's typo into every other host's red build, on a file they did not write. What shipped instead: check ALWAYS names the file (malformed: <path>, stdout) and downgrades its verdict word from ok: to incomplete:, still exit 0; --strict-fragments arms the refusal for callers that cannot tolerate a partial corpus. Gateable is not the same as gated by default, and the deliverable asked for the former.

@@ -39,9 +39,20 @@ eval "$(
          /^opencode_curl_last_good_path()/,/^}/p
          /^opencode_record_curl_last_good()/,/^}/p
          /^opencode_restore_curl_last_good()/,/^}/p
+         /^opencode_render_contract_ok()/,/^}/p
+         /^opencode_render_contract_cached()/,/^}/p
          /^opencode_validate_or_rollback()/,/^}/p' \
         "$LIB"
 )"
+# The two render-contract functions are extracted because harness_probe()
+# calls opencode_render_contract_cached on the opencode branch
+# (images/default/lib-common.sh:2101). Extracting a function without its
+# callees gives a fixture that loads fine and then dies at
+# "command not found" the moment that branch is taken — which is exactly how
+# this fixture broke: it reported line 223 of a 169-line file, because the
+# line number belongs to the eval'd text, not to the script on disk. The
+# sibling fixture scripts/test-opencode-render-probe.sh extracts both for the
+# same reason; keep the two lists in step when lib-common's call graph moves.
 
 for function_name in \
     prepare_opencode_vault_auth \
@@ -91,7 +102,7 @@ printf '%s' "${TEST_GEMINI_KEY:?}"
 STUB
 chmod +x "$WORK/bin/vault-cli.sh"
 export PATH="$WORK/bin:$PATH"
-export TEST_GEMINI_KEY="runtime-gemini-$RANDOM-$$-$(date +%s%N)"
+export TEST_GEMINI_KEY="runtime-gemini-$RANDOM-$$-$(date +%s%N)" # gnu-date: ok (uniqueness seed; BSD's literal-N output is still unique)
 export TILLANDSIAS_OPENCODE_AUTH_EXPECTED=1
 OPENCODE_AUTH_CONTENT="ambient-must-not-win-$RANDOM-$$"
 export OPENCODE_AUTH_CONTENT
@@ -129,6 +140,12 @@ mkdir -p "$WORK/curl/opencode/bin" "$WORK/curl/opencode/last-good"
 cat >"$WORK/good-opencode" <<'GOOD'
 #!/usr/bin/env bash
 case "$*" in
+    # harness_probe -> opencode_render_contract_cached -> ..._ok runs the
+    # binary with --pure and requires real terminal output (alt-screen or
+    # truecolor) as proof the TUI renders. A "good" stub that cannot render
+    # is not good by the CURRENT contract, so last-good restore correctly
+    # refused it and the rollback assertion failed with no hint as to why.
+    *--pure*) printf '\033[?1049h'; exit 0 ;;
     *--version*) echo good; exit 0 ;;
     "run --help") echo "--auto --format"; exit 0 ;;
     "auth list")

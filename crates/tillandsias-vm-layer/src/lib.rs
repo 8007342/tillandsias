@@ -53,6 +53,76 @@ pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Com
     cmd
 }
 
+/// The environment variable that makes `wsl.exe` speak UTF-8 instead of
+/// UTF-16LE. Documented WSL behaviour since WSL 0.64.0.
+pub const WSL_UTF8_ENV: &str = "WSL_UTF8";
+
+/// Build a `wsl.exe` command with `WSL_UTF8=1` already applied.
+///
+/// `wsl.exe` emits **its own** output (help, errors, `--status`, `--version`,
+/// `-l -q`) as UTF-16LE unless `WSL_UTF8` is set. Measured on yolanda
+/// 2026-08-17: `wsl.exe --status` stdout without the variable begins
+/// `68,0,101,0,102,0,97,0,117,0,108,0,116,0` — a NUL after every ASCII byte —
+/// and with `WSL_UTF8=1` begins `68,101,102,97,117,108,116`. Every call site
+/// that read that output used to hand-scrub NUL bytes back out
+/// (`.replace('\u{0}', "")`); six sites set the variable and eleven did not,
+/// and the eleven were indistinguishable by grep from the LEGITIMATE scrubs on
+/// `hcsdiag.exe` and CIM-probe output, which are different binaries that
+/// `WSL_UTF8` does not reach. Constructing the command here removes the choice.
+///
+/// This deliberately applies ONLY the encoding policy. Window policy stays
+/// with the caller ([`no_window_async`] / [`no_window_sync`]) because it
+/// genuinely differs: the debug keepalive and the lane terminals WANT a
+/// visible console.
+///
+/// Note this is one of TWO copies — `tillandsias_podman::wsl_command_async`
+/// is the other, because that crate cannot depend on this one and vice versa.
+/// The single-constructor fix is packet 795-jjw3.
+///
+/// @trace spec:cross-platform, spec:windows-native-tray
+pub fn wsl_command_async() -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new("wsl.exe");
+    cmd.env(WSL_UTF8_ENV, "1");
+    cmd
+}
+
+/// Sync-Command sibling of [`wsl_command_async`].
+/// @trace spec:cross-platform, spec:windows-native-tray
+pub fn wsl_command_sync() -> std::process::Command {
+    let mut cmd = std::process::Command::new("wsl.exe");
+    cmd.env(WSL_UTF8_ENV, "1");
+    cmd
+}
+
+#[cfg(test)]
+mod wsl_command_tests {
+    use super::*;
+
+    /// The whole point of the constructor: nobody can forget the variable.
+    /// If this test is deleted along with the `.env` call, the NUL scrubs
+    /// removed on 2026-08-17 have to come back — see 795-jjw3.
+    #[test]
+    fn wsl_commands_carry_wsl_utf8() {
+        let sync = wsl_command_sync();
+        assert_eq!(sync.get_program(), "wsl.exe");
+        assert!(
+            sync.get_envs()
+                .any(|(k, v)| k == WSL_UTF8_ENV && v == Some("1".as_ref())),
+            "wsl_command_sync must set WSL_UTF8=1"
+        );
+
+        let r#async = wsl_command_async();
+        let std_cmd = r#async.as_std();
+        assert_eq!(std_cmd.get_program(), "wsl.exe");
+        assert!(
+            std_cmd
+                .get_envs()
+                .any(|(k, v)| k == WSL_UTF8_ENV && v == Some("1".as_ref())),
+            "wsl_command_async must set WSL_UTF8=1"
+        );
+    }
+}
+
 // Both wsl and vz modules compile on every target so call sites can hold
 // `WslRuntime` / `VzRuntime` symbols and tests can verify the trait impl
 // shape on Linux. Real backend bodies are cfg-gated inside the modules.

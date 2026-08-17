@@ -88,20 +88,32 @@ entries="$(
         --exclude-dir='target-musl' \
         . 2>/dev/null \
     | grep "spec:" \
-    | while IFS= read -r match; do
-        filepath="${match%%:*}"
-        remainder="${match#*:}"
-        lineno="${remainder%%:*}"
-        annotation="${remainder#*:}"
-        relpath="${filepath#./}"
-        printf '%s' "$annotation" \
-            | grep -oE 'spec:[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)?' \
-            | sed 's/^spec://' \
-            | while IFS= read -r token; do
-                [ -n "$token" ] || continue
-                printf '%s\t%s\t%s\n' "${token%%/*}" "$relpath" "$lineno"
-              done
-      done
+    | awk '
+        # ONE pass. This was a shell `while read` that spawned a grep, a sed
+        # and a subshell FOR EVERY MATCHING LINE -- about 1868 lines in this
+        # repo, so roughly six thousand processes. On windows, where a spawn
+        # costs far more than the work it does, that was the bulk of the 455
+        # seconds this script took. Same defect as the per-spec find walks
+        # below and as the pre-commit hook (734-sjb3): per-item subprocesses.
+        #
+        # Emits exactly what the pipeline did: one <spec>\t<relpath>\t<lineno>
+        # per spec: token per line, the token truncated at any "/" (a
+        # spec:a/b annotation counts against spec "a"), path stripped of "./".
+        {
+            i = index($0, ":");            if (i == 0) next
+            path = substr($0, 1, i - 1);   rest = substr($0, i + 1)
+            j = index(rest, ":");          if (j == 0) next
+            lineno = substr(rest, 1, j - 1)
+            ann = substr(rest, j + 1)
+            sub(/^\.\//, "", path)
+            while (match(ann, /spec:[a-zA-Z0-9_-]+(\/[a-zA-Z0-9_-]+)?/)) {
+                tok = substr(ann, RSTART + 5, RLENGTH - 5)
+                sub(/\/.*/, "", tok)
+                if (tok != "") print tok "\t" path "\t" lineno
+                ann = substr(ann, RSTART + RLENGTH)
+            }
+        }
+    '
 )"
 
 annotations=0
@@ -120,16 +132,52 @@ specs=0
 # Same three-place lookup the generator used: active spec, in-flight change,
 # archive. A spec found in none of them is a GHOST — the annotation asserts a
 # relationship whose other end does not exist.
+# WALK EACH TREE ONCE, not once per referenced spec.
+#
+# This used to run TWO `find` walks PER SPEC: one over openspec/changes (1130
+# files) and one over openspec/changes/archive (1062). With 189 referenced
+# specs that is ~380 deep tree walks across ~1100 files each. Measured on
+# windows: 455 SECONDS standalone, and ~58s inside every `./build.sh --check`
+# — which a cycle runs three or four times, so this one lookup was minutes of
+# fixed per-cycle cost, silently, with no output while it ran.
+#
+# Same defect the pre-commit hook had twice (734-sjb3), one directory over: a
+# per-item subprocess on a host where a spawn costs orders of magnitude more
+# than the work it does. Three walks total now; membership is a bash lookup.
+#
+# The sets are built lazily and once, so --json and --ghosts pay nothing extra
+# and a run that never resolves a spec pays nothing at all.
+_SPEC_SETS_BUILT=""
+_build_spec_sets() {
+    [ -z "$_SPEC_SETS_BUILT" ] || return 0
+    _SPEC_SETS_BUILT=1
+    # Space-delimited string sets, not `declare -gA` (761-g36m class: -g and
+    # associative arrays are both bash>=4; on Apple's 3.2 the declare ERRORS,
+    # the sets never build, and every archived-change spec re-reports as a
+    # ghost — which resurrected all seven 767-yrnd ghosts on macOS an hour
+    # after linux resolved them). Spec names are path components: no spaces.
+    _SPEC_CHANGE=" " _SPEC_ARCHIVE=" "
+    local n
+    # `*/specs/<name>/spec.md` — the name is the second-to-last path element,
+    # which is exactly what the per-spec `-path` glob used to match.
+    while IFS= read -r n; do
+        [ -n "$n" ] && _SPEC_CHANGE="${_SPEC_CHANGE}${n} "
+    done < <(find openspec/changes -maxdepth 4 -path "*/specs/*/spec.md" \
+        ! -path "*/archive/*" 2>/dev/null | awk -F/ '{print $(NF-1)}')
+    while IFS= read -r n; do
+        [ -n "$n" ] && _SPEC_ARCHIVE="${_SPEC_ARCHIVE}${n} "
+    done < <(find openspec/changes/archive -path "*/specs/*/spec.md" 2>/dev/null \
+        | awk -F/ '{print $(NF-1)}')
+}
+
 _locate_spec() {
     local name="$1"
+    # The active check stays a direct stat: one file test is cheaper than any
+    # set, and it must keep precedence over change/archive as before.
     [ -f "openspec/specs/${name}/spec.md" ] && { printf 'active'; return; }
-    if find openspec/changes -maxdepth 4 -path "*/specs/${name}/spec.md" \
-        ! -path "*/archive/*" 2>/dev/null | grep -q .; then
-        printf 'change'; return
-    fi
-    if find openspec/changes/archive -path "*/specs/${name}/spec.md" 2>/dev/null | grep -q .; then
-        printf 'archive'; return
-    fi
+    _build_spec_sets
+    case "$_SPEC_CHANGE" in *" $name "*) printf 'change'; return ;; esac
+    case "$_SPEC_ARCHIVE" in *" $name "*) printf 'archive'; return ;; esac
     printf ''
 }
 

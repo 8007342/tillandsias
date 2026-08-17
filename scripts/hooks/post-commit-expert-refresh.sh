@@ -21,7 +21,19 @@
 set -uo pipefail
 
 HOOK_NAME="post-commit-expert-refresh"
-HOOK_START=$(date +%s%N 2>/dev/null || echo 0)
+# Portable nanosecond clock. `date +%s%N` is GNU-only and BSD SUCCEEDS while
+# emitting a literal "N", so the `|| echo 0` never fired and the arithmetic
+# below ran on a non-numeric value (784-dwkh). Digit-validate, then degrade to
+# whole seconds — this only feeds a latency line, so second granularity is
+# honest where nanoseconds are unavailable.
+_hook_now_ns() {
+    _t="$(date +%s%N 2>/dev/null || true)" # gnu-date: ok (digit-validated below)
+    case "$_t" in
+        '' | *[!0-9]*) _t="$(date +%s 2>/dev/null || echo 0)000000000" ;;
+    esac
+    printf '%s' "$_t"
+}
+HOOK_START=$(_hook_now_ns)
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -f "$REPO_ROOT/plan/index.yaml" ] || exit 0
@@ -35,12 +47,43 @@ HOOK_LOG="${TILLANDSIAS_HOOK_LOG:-/tmp/tillandsias-hooks.log}"
 # The engine reads these files fresh at query time (tillandsias-plan
 # reads plan/index.yaml + methodology/**/*.yaml on every invocation).
 # No index to refresh — answers reflect the working tree instantly.
-# When L1 prose indexes are added, re-index changed corpora here:
+
+# ── L1 prose index: the spec RAG corpus (orders 552, 760-hzi4) ──────
+# This is the slot the comment above reserved for "re-index changed corpora".
 #
-#   l1_files=$(echo "$CHANGED" | grep -E '^plan/|^methodology/' || true)
-#   if [ -n "$l1_files" ]; then
-#       (re-index-corpora "$l1_files") &
-#   fi
+# NOTE WHAT IS *NOT* HERE: a list of corpus paths to match against $CHANGED.
+# The corpus roots are data in ONE place (crates/tillandsias-plan/src/spec.rs
+# CORPUS_ROOTS: openspec/specs, cheatsheets, docs/cheatsheets, methodology), and
+# a second copy in this hook would be a copy that drifts — a root added there
+# would silently stop refreshing here, and the index would go quietly stale
+# rather than loudly absent. Instead the ensure script re-chunks (25ms) and
+# compares a fingerprint of the chunk corpus + embedding model, so it decides
+# for itself whether anything changed. Measured on yoga: 0.05s when the corpus
+# is unchanged, ~12min for a cold 9909-chunk rebuild.
+#
+# That cost is exactly why this is forked and never awaited: a commit must not
+# wait twelve minutes for an embedding pass. The script takes its own lock, so
+# a burst of commits during a spec change starts one builder, not six.
+if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
+    (
+        # The VERDICT is stdout; the explanation is stderr. Folding them with
+        # 2>&1 and taking the last line logs the tail of the prose instead of
+        # the verdict — this hook's first run recorded the literal line
+        # "directory on THIS host, and re-run." as its status. Keep them apart:
+        # verdict for the machine, explanation appended for the human.
+        _si_err="$(mktemp "${TMPDIR:-/tmp}/spec-index-hook.XXXXXX")"
+        _si_out="$(bash "$REPO_ROOT/scripts/spec-index-ensure.sh" 2>"$_si_err" | tail -1)"
+        case "$_si_out" in
+            ok:spec-index:fresh:*) : ;;  # the common path; silence is correct
+            *)
+                echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) spec-index: ${_si_out:-no-verdict}" >> "$HOOK_LOG"
+                [ -s "$_si_err" ] && sed 's/^/    /' "$_si_err" >> "$HOOK_LOG"
+                ;;
+        esac
+        rm -f "$_si_err"
+    ) &
+    disown -a 2>/dev/null || true
+fi
 
 # ── Crate changes → async binary rebuild ────────────────────────────
 # The tillandsias-plan binary changes when its crate sources change.
@@ -92,7 +135,7 @@ fi
 # ── Measure and pin latency budget ──────────────────────────────────
 # The hook itself must add NO perceptible latency to commit/push.
 # Only the fork + changed-file detection runs synchronously.
-HOOK_END=$(date +%s%N 2>/dev/null || echo 0)
+HOOK_END=$(_hook_now_ns)
 if [ "$HOOK_START" -ne 0 ] && [ "$HOOK_END" -ne 0 ]; then
     HOOK_LATENCY_MS=$(( (HOOK_END - HOOK_START) / 1000000 ))
     echo "[$HOOK_NAME] latency=${HOOK_LATENCY_MS}ms budget_commit=<50ms budget_total=<50ms" >> "$HOOK_LOG" 2>/dev/null || true

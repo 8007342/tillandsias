@@ -1,4 +1,5 @@
 # @trace spec:vm-provisioning-lifecycle
+# freshness: auditor=linux-macuahuitl-fable5-20260816t0648z date=2026-08-16 verdict=refreshed scope=all 7 pinned surfaces re-verified live (classifier + 3 signatures, host-disk gate, stderr-carrying import failure, bounded keepalive, spec requirement + invariant) and the 3 cargo behavioral pins named in this header still exist in their sources; no stale arm, no rename drift
 #
 # Order 419 (windows-vm-launch-failure-taxonomy-and-spec): structural
 # pins for the graceful-launch-failure requirement

@@ -508,6 +508,15 @@ pub const CANONICAL_QUESTIONS: &[(&[&str], &str)] = &[
     (&["push", "merge"], "pre_push_gate.rule"),
     (&["obsolete", "close"], "closure_preconditions"),
     (&["dirty", "clean"], "clean_workspace_discipline.rule"),
+    // Order 777-amku. The operator directive of 2026-08-16 ("use toolboxes for
+    // everything; scripts should be idempotent and toolbox friendly") was
+    // canonized as multi_host_development.toolbox_first_scripts, but nothing
+    // could RETRIEVE it in prose: "must scripts route host tools through a
+    // toolbox?" refused as unrouted, so the rule was documentation an agent
+    // could only find by already knowing its path. A single token routes it —
+    // `toolbox` appears in no other entry, so the deterministic
+    // exactly-one-match rule still holds.
+    (&["toolbox"], "toolbox_first_scripts.rule"),
 ];
 
 /// Deterministically route a natural-language discipline question to a path
@@ -1000,6 +1009,64 @@ mod tests {
             assert!(env.citations().is_empty());
             assert!(verify(&env, &repo_root()).is_empty());
         }
+    }
+
+    /// ORDER 777-amku. The toolbox-first rule must be reachable IN PROSE, not
+    /// only by an agent that already knows the YAML path — an entry nothing can
+    /// retrieve is not documentation. Kept separate from the ten-question test
+    /// above, whose `CANONICAL.len() == 10` pins the shape 394c shipped.
+    ///
+    /// The negative half matters as much as the positive one: a single-token
+    /// route is only legitimate while `toolbox` collides with no other entry,
+    /// so a question that reaches two routes must still be REFUSED.
+    #[test]
+    fn the_toolbox_first_rule_is_reachable_in_prose_and_still_refuses_ambiguity() {
+        let corpus = corpus();
+        let root = repo_root();
+        let question = "must scripts route host tools through a toolbox?";
+        let routed = route(question)
+            .unwrap_or_else(|| panic!("{question:?} must route to exactly one path"));
+        assert_eq!(routed, "toolbox_first_scripts.rule");
+
+        let env = answer_question(&corpus, question, None);
+        assert_eq!(
+            env.confidence(),
+            Confidence::Exact,
+            "{question:?} answered: {}",
+            env.answer()
+        );
+        assert!(verify(&env, &root).is_empty(), "{:#?}", verify(&env, &root));
+
+        let c = env
+            .citations()
+            .iter()
+            .find(|c| {
+                c.authority().get("yaml_path").map(String::as_str)
+                    == Some("multi_host_development.toolbox_first_scripts.rule")
+            })
+            .expect("must cite multi_host_development.toolbox_first_scripts.rule");
+
+        // Re-read the cited span off disk: the answer is only worth routing to
+        // if the span carries the governing sentence, not merely the key.
+        let text = std::fs::read_to_string(root.join(c.path())).expect("cited file opens");
+        let lines: Vec<&str> = text.lines().collect();
+        let span = lines[c.line_start() - 1..c.line_end()].join("\n");
+        // Folded-scalar prose is hard-wrapped in the YAML, so a governing
+        // phrase must be quoted SHORT ENOUGH TO FIT ON ONE SOURCE LINE — the
+        // full sentence "Never require a host daemon or host package install"
+        // spans a line break plus six spaces of indent and `contains` will
+        // never find it. Same trap the ten-question test avoids by quoting
+        // fragments.
+        assert!(
+            span.contains("Never require a host daemon"),
+            "the cited span must carry the governing prohibition, got:\n{span}"
+        );
+
+        // Ambiguity is still a refusal, not a first-match win.
+        assert!(
+            route("may I file an issue about a toolbox?").is_none(),
+            "toolbox+issue matches two routes — that is ambiguity, not an answer"
+        );
     }
 
     /// THE INDEX'S OWN FALSIFIABILITY. Every entry must START at a line that

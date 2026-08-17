@@ -7,7 +7,30 @@
 # ---------------------------
 # images/default/cheatsheets/ is not authored: it is a straight copy of the
 # canonical host tree cheatsheets/, regenerated into the podman build context
-# immediately before every forge image build, and listed in .gitignore. A check
+# immediately before every forge image build.
+#
+# IT IS ALSO TRACKED BY GIT, ON PURPOSE (decision 2026-08-16,
+# plan/issues/cheatsheet-derived-tree-tracking-decision-2026-08-16.md).
+# The `.gitignore` entry keeps ad-hoc local regenerations from dirtying the
+# tree; it does NOT mean the tree is untracked, and gitignore is inert against
+# the 230 files that were already tracked when the rule landed. The tracked
+# copy is a BUILD INPUT: crates/tillandsias-headless/build.rs embeds images/
+# recursively into the binary, ./build.sh never stages cheatsheets, and the
+# end-user lane builds the forge image from the EMBEDDED snapshot, where no
+# authored tree and no staging script exist. Untracking this tree therefore
+# ships an image whose `COPY cheatsheets/` has nothing to copy — it would
+# break `tillandsias --init` for every curl-installed user, and turn
+# every_containerfile_copy_source_exists_in_embedded_assets red on a fresh
+# clone. (images/default/skills/ IS safely untracked because build.rs:199
+# explicitly excludes it from asset collection. Cheatsheets have no such
+# exclusion. That asymmetry is the whole story.)
+#
+# NEVER hand-edit the derived tree: the next --stage reverts it. On 2026-07-21
+# commit 79b3e82da edited ONLY the derived copy of
+# runtime/codex-agent-entrypoints.md, so the tracked tree carried
+# `last_verified: 2026-07-21` while its own authored source still said
+# 2026-05-20 — attribution flowing backwards for three days until the next
+# build silently reverted it. A check
 # that merely runs `diff -qr cheatsheets images/default/cheatsheets` therefore
 # asserts "somebody ran a forge build on this host after the last cheatsheet
 # edit" — which is FALSE on a fresh clone, on CI, and on any workstation that
@@ -169,15 +192,39 @@ if ! grep -Fq 'COPY cheatsheets/ /opt/cheatsheets-image/' "$CONTAINERFILE"; then
         "restore the COPY cheatsheets/ /opt/cheatsheets-image/ line"
 fi
 
-# Hygiene advisory (non-fatal): the derived tree is .gitignore'd but some files
-# were force-added in the past, so git still tracks a second, drifting copy of
-# every cheatsheet. Regeneration makes that copy harmless at build time, but it
-# should be dropped from the index (git rm -r --cached images/default/cheatsheets).
+# V6 — the TRACKED derived tree must equal the authored tree.
+#
+# This is the check the previous advisory got backwards. It used to tell the
+# reader to run `git rm -r --cached images/default/cheatsheets`, which would
+# break end-user installs (see the header). The real hazard is the opposite:
+# V3 above repairs the WORKING tree and leaves the INDEX stale, silently, so a
+# tracked copy that is missing files sails through every gate while the binary
+# embeds it and the shipped INDEX.md advertises cheatsheets the image does not
+# contain — an expert that can cite what it cannot open.
+#
+# Compares git's INDEX view of both trees — path + blob hash. The index, not
+# HEAD: a gate that reads HEAD can only report a divergence one commit AFTER
+# it lands, whereas this one refuses while the fix is still `git add`. It is
+# also independent of working-tree staging state, so a fresh clone and a
+# freshly-staged workstation give the same verdict.
+_tree_manifest() {
+    git -C "$ROOT" ls-files -s -- "$1" |
+        awk -F'\t' -v p="$1/" '{ split($1, m, " "); path=$2; sub("^"p, "", path); print m[2], path }' |
+        sort
+}
 if git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     tracked_count="$(git -C "$ROOT" ls-files -- 'images/default/cheatsheets' | wc -l | tr -d ' ')"
-    if [[ "$tracked_count" -gt 0 ]]; then
-        printf 'cheatsheet-image-sync:advisory tracked-derived-tree=%s (gitignored but force-added; drop with: git rm -r --cached images/default/cheatsheets)\n' \
-            "$tracked_count"
+    if [[ "$tracked_count" -eq 0 ]]; then
+        _drift "derived-tree-untracked" \
+            "images/default/cheatsheets/ has no tracked files; the binary embeds this tree and the end-user image build has no other source" \
+            "restore it (git add -f images/default/cheatsheets) — see plan/issues/cheatsheet-derived-tree-tracking-decision-2026-08-16.md"
+    fi
+    if ! diff <(_tree_manifest cheatsheets) <(_tree_manifest images/default/cheatsheets) \
+        >"$PROBE_ROOT/index.diff" 2>&1; then
+        _drift "derived-tree-index-stale" \
+            "the TRACKED derived tree does not equal the authored tree ($(grep -c '^[<>]' "$PROBE_ROOT/index.diff") differing entr(y|ies)):
+$(head -10 "$PROBE_ROOT/index.diff")" \
+            "scripts/stage-image-cheatsheets.sh --stage && git add -f images/default/cheatsheets"
     fi
 fi
 

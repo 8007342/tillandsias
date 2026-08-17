@@ -63,6 +63,11 @@ set +e
 # times each litmus phase; a timing failure must NEVER change local-ci's exit.
 . "$REPO_ROOT/scripts/timing-log.sh" 2>/dev/null || true
 command -v timing_emit >/dev/null 2>&1 || { timing_now_ms() { echo 0; }; timing_emit() { return 0; }; }
+# 765-dfry: per-check duration anchor. Checks run sequentially and each ends
+# in archive_check_log, so "time since the previous archive (or section
+# start)" IS the check's own duration. Re-anchored by log_section and by
+# every archive_check_log call.
+_CHECK_ANCHOR_MS="$(timing_now_ms 2>/dev/null || echo 0)"
 
 # Parse flags
 FAST_MODE=0
@@ -693,6 +698,9 @@ write_convergence_artifacts() {
 log_section() {
     echo ""
     printf '%b%s%b\n' "${BOLD}${BLUE}" "▶ $*" "${NC}"
+    # 765-dfry: a section header starts a fresh check block — re-anchor so the
+    # first check in the section is not billed for inter-section work.
+    _CHECK_ANCHOR_MS="$(timing_now_ms 2>/dev/null || echo 0)"
 }
 
 log_pass() {
@@ -774,6 +782,19 @@ archive_check_log() {
         printf '%s\n' "$status" >"$archived_log"
     fi
 
+    # 765-dfry: per-check duration = time since the previous archive/section
+    # anchor (checks run sequentially and each ends here). A zero/absent
+    # anchor (timing-log stub) records 0 rather than an epoch-sized poison
+    # value; the anchor is always reset so the NEXT check measures cleanly.
+    local _acl_now _acl_dur
+    _acl_now="$(timing_now_ms 2>/dev/null || echo 0)"
+    _acl_dur=0
+    if [[ "${_CHECK_ANCHOR_MS:-0}" =~ ^[0-9]+$ && "${_CHECK_ANCHOR_MS:-0}" -gt 0 && "$_acl_now" =~ ^[0-9]+$ && "$_acl_now" -ge "${_CHECK_ANCHOR_MS}" ]]; then
+        _acl_dur=$((_acl_now - _CHECK_ANCHOR_MS))
+        [[ "$_acl_dur" -lt 86400000 ]] || _acl_dur=0
+    fi
+    _CHECK_ANCHOR_MS="$_acl_now"
+
     jq -nc \
         --arg ci_run_id "$CI_RUN_ID" \
         --arg ci_phase "$CI_PHASE" \
@@ -782,6 +803,7 @@ archive_check_log() {
         --arg source_log "${source_log:-}" \
         --arg archived_log "$archived_log" \
         --arg sha256 "$(sha256_file "$archived_log")" \
+        --argjson duration_ms "$_acl_dur" \
         '{
           ci_run_id:$ci_run_id,
           ci_phase:$ci_phase,
@@ -789,8 +811,21 @@ archive_check_log() {
           status:$status,
           source_log:$source_log,
           archived_log:$archived_log,
-          sha256:$sha256
+          sha256:$sha256,
+          duration_ms:$duration_ms
         }' >>"$CHECK_LOG_INDEX"
+
+    # Mirror into the 682-emvg side-channel so a ci-full run is attributable
+    # from the timing records alone (skipped checks spent no measured time and
+    # would only flatten the rolling averages — not emitted). Best-effort by
+    # timing_emit's own contract; the ~15ms spawn is noise on a minutes-long
+    # phase (the microseconds bound applies to the 8s --check gate, whose
+    # phases batch through --emit-timing-batch instead).
+    if [[ "$status" != "skipped" && "$_acl_dur" -gt 0 ]]; then
+        local _acl_rc=0
+        [[ "$status" == "fail" ]] && _acl_rc=1
+        timing_emit "check:$check_id" "$CI_PHASE" "$((_acl_now - _acl_dur))" "$_acl_rc"
+    fi
 }
 
 
@@ -950,7 +985,12 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # Clippy check
-    if run_rust_on_host cargo clippy --workspace -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
+    # 765-uti9 quick win (audit F4c): --all-targets aligns this lane with
+    # build.sh --check's clippy flavor, so the two share fingerprints instead
+    # of recompiling — and coverage strictly widens (trunk is already held
+    # clean at --all-targets -D warnings by the pre-push gate). The heavy
+    # --all-features flavor below is deliberately untouched.
+    if run_rust_on_host cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tee /tmp/clippy-check.log; then
         log_pass "Clippy checks pass (no warnings)"
         archive_check_log "rust-clippy" "pass" /tmp/clippy-check.log
     else
@@ -1063,6 +1103,118 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
+    # CHECK 6b: No tracked build artifacts (order 723-ydmk)
+    # ============================================================================
+    # A build artifact matching .gitignore but ALREADY TRACKED is invisible to
+    # the ignore rules — the mechanism behind all three historical binary leaks.
+    # git's own binary classification (numstat vs the empty tree) + an
+    # executable-extension lane; image assets pass via a documented prefix
+    # allowlist inside the guard.
+
+    log_section "No Tracked Binaries"
+    if [[ -f "scripts/check-no-tracked-binaries.sh" ]]; then
+        if bash scripts/check-no-tracked-binaries.sh 2>&1 | tee /tmp/no-tracked-binaries.log; then
+            log_pass "No tracked build artifacts outside the image-asset allowlist"
+            archive_check_log "no-tracked-binaries" "pass" /tmp/no-tracked-binaries.log
+        else
+            log_fail_tracked "no-tracked-binaries" "Tracked binary artifact found (see /tmp/no-tracked-binaries.log)"
+            [[ "$VERBOSE" == "1" ]] && cat /tmp/no-tracked-binaries.log >&2
+            archive_check_log "no-tracked-binaries" "fail" /tmp/no-tracked-binaries.log
+        fi
+    else
+        log_fail_missing_guard "no-tracked-binaries" "scripts/check-no-tracked-binaries.sh"
+        archive_check_log "no-tracked-binaries" "skipped"
+    fi
+
+    # ============================================================================
+    # CHECK 6c: guards that shipped 2026-08-16 without an invoker
+    # ============================================================================
+    # The guard-activation audit below caught all three as orphans on the
+    # 2026-08-17 release gate — shipped by sibling hosts, wired by nobody, so
+    # each was a guard that reads as protective and enforces nothing (the
+    # 599-4wzr class the audit exists for). Both were verified passing
+    # before being wired, so activation cannot turn a latent red into a
+    # surprise: check-cheatsheet-frontmatter 221 checked,
+    # check-dev-embed-model-agreement nomic-embed-text.
+    #
+    # A third, check-tracked-config-host-paths.sh, was wired here and is now
+    # DELETED rather than repaired (order 789-nc2s, retired 2026-08-17). It
+    # scanned tracked agent config for one-machine paths, and it passed —
+    # `ok:tracked-config-host-paths:1 scanned` — while /c/Users/bullo/... sat
+    # in .claude/settings.local.json, the very file that motivated it, because
+    # its env-block-only severity split excused everything in the permissions
+    # allowlist. A guard whose scope was narrowed until the offending tree
+    # passes is not protection, it is a green light with a rationale attached.
+    # The class it chased is better made unrepresentable: machine-local agent
+    # settings belong in an untracked .local file, which is what the framework
+    # named it for. See plan/issues/ for the untracking decision.
+    # Invoked LITERALLY, one block each, deliberately. A `for` loop over the
+    # three names is shorter and was the first draft — but the activation
+    # audit resolves invokers by grepping for the literal script path, so a
+    # loop-invoked guard still reports as an orphan. That is the audit being
+    # right: a name assembled at runtime is invisible to `grep` for a human
+    # reader too, and "who calls this guard?" must stay answerable by search.
+    log_section "Recently Landed Guards"
+    # 792-77bt (windows lane). A REPORT, not a pass/fail gate: it prints the
+    # tray string-corpus drift ratio and exits 0 whatever the ratio is, so it
+    # is wired to surface the number, not to fail on it. Wired here because
+    # the activation audit correctly flagged it as an orphan the moment it
+    # landed — an unwired guard is inert, and inert is the 599-4wzr class.
+    # The packet is windows-owned; if they give it a fail threshold, this
+    # block should move to the tracked-failure shape the others use.
+    if [[ -f "scripts/check-tray-string-corpus-drift.sh" ]]; then
+        bash scripts/check-tray-string-corpus-drift.sh 2>&1 | tee /tmp/tray-string-corpus-drift.log || true
+        log_pass "Tray string-corpus drift reported (792-77bt, informational)"
+        archive_check_log "tray-string-corpus-drift" "pass" /tmp/tray-string-corpus-drift.log
+    else
+        log_fail_missing_guard "tray-string-corpus-drift" "scripts/check-tray-string-corpus-drift.sh"
+        archive_check_log "tray-string-corpus-drift" "skipped"
+    fi
+
+    if [[ -f "scripts/check-cheatsheet-frontmatter.sh" ]]; then
+        if bash scripts/check-cheatsheet-frontmatter.sh 2>&1 | tee /tmp/cheatsheet-frontmatter.log; then
+            log_pass "Cheatsheet frontmatter valid"
+            archive_check_log "cheatsheet-frontmatter" "pass" /tmp/cheatsheet-frontmatter.log
+        else
+            log_fail_tracked "cheatsheet-frontmatter" "Cheatsheet frontmatter violations (see /tmp/cheatsheet-frontmatter.log)"
+            archive_check_log "cheatsheet-frontmatter" "fail" /tmp/cheatsheet-frontmatter.log
+        fi
+    else
+        log_fail_missing_guard "cheatsheet-frontmatter" "scripts/check-cheatsheet-frontmatter.sh"
+        archive_check_log "cheatsheet-frontmatter" "skipped"
+    fi
+
+    if [[ -f "scripts/check-dev-embed-model-agreement.sh" ]]; then
+        if bash scripts/check-dev-embed-model-agreement.sh 2>&1 | tee /tmp/dev-embed-model-agreement.log; then
+            log_pass "Dev embed model agrees across surfaces"
+            archive_check_log "dev-embed-model-agreement" "pass" /tmp/dev-embed-model-agreement.log
+        else
+            log_fail_tracked "dev-embed-model-agreement" "Dev embed model disagreement (see /tmp/dev-embed-model-agreement.log)"
+            archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
+        fi
+    else
+        log_fail_missing_guard "dev-embed-model-agreement" "scripts/check-dev-embed-model-agreement.sh"
+        archive_check_log "dev-embed-model-agreement" "skipped"
+    fi
+
+    # Order 765-mza8. Wired here, literally, for the same reason as the two
+    # above. A dead `inputs:` glob is silent by construction: it cannot make a
+    # test run, only skip, so nothing else in this suite would ever go red for
+    # it. Verified passing before wiring: 51 glob(s) across 11 annotated test(s).
+    if [[ -f "scripts/check-litmus-dead-inputs.sh" ]]; then
+        if bash scripts/check-litmus-dead-inputs.sh 2>&1 | tee /tmp/litmus-dead-inputs.log; then
+            log_pass "Every litmus inputs: glob resolves to a tracked file"
+            archive_check_log "litmus-dead-inputs" "pass" /tmp/litmus-dead-inputs.log
+        else
+            log_fail_tracked "litmus-dead-inputs" "Dead litmus inputs glob (see /tmp/litmus-dead-inputs.log)"
+            archive_check_log "litmus-dead-inputs" "fail" /tmp/litmus-dead-inputs.log
+        fi
+    else
+        log_fail_missing_guard "litmus-dead-inputs" "scripts/check-litmus-dead-inputs.sh"
+        archive_check_log "litmus-dead-inputs" "skipped"
+    fi
+
+    # ============================================================================
     # Guard activation audit (order 599-4wzr) — a guard nobody can prove is
     # running is not a guard. Fails loud if any check-*.sh has no invoker.
     # ============================================================================
@@ -1170,7 +1322,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
                     fi
                 fi
             else
-                log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+                log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
                 archive_check_log "podman-path-availability" "fail"
             fi
         else
@@ -1208,7 +1360,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
                     archive_check_log "litmus-pre-build" "fail" /tmp/litmus-pre-build.log
                 fi
             else
-                log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+                log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
                 archive_check_log "podman-path-availability" "fail"
             fi
         else
@@ -1242,7 +1394,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "post-build" ]]; then
                 fi
             fi
         else
-            log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+            log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
             archive_check_log "podman-path-availability" "fail"
         fi
     else
@@ -1286,7 +1438,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "runtime" ]]; then
                 fi
             else
                 printf 'FAIL\n' >"$RUNTIME_STATUS_FILE"
-                log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+                log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
                 archive_check_log "podman-path-availability" "fail"
             fi
         else

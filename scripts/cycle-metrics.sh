@@ -136,6 +136,33 @@ if [ "${1:-}" = "--emit-timing" ]; then
     exit 0
 fi
 
+# ── --emit-timing-batch: append MANY duration records in ONE spawn (765-dfry)
+# stdin lines, tab-separated: step<TAB>phase<TAB>duration_ms<TAB>exit<TAB>host
+# Rationale: each spawn of this script costs ~10-20ms; a --check run closes
+# ~45 phases, so per-record emission would tax the gate ~0.7s to measure 6ms
+# guards — the audit's empty-suite-floor lesson applied to telemetry itself.
+# One spawn amortizes the whole gate. Same grammar and best-effort contract as
+# --emit-timing; the 693-tf79 day bound applies per line; malformed lines are
+# skipped, never written poisoned. Always exits 0.
+if [ "${1:-}" = "--emit-timing-batch" ]; then
+    {
+        etb_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)"
+        awk -F'\t' -v ts="$etb_ts" '
+            NF >= 3 && $1 != "" {
+                step = $1; phase = $2; dur = $3; ec = $4; host = $5
+                if (dur !~ /^[0-9]+$/) dur = 0
+                if (dur + 0 >= 86400000) next
+                if (ec !~ /^[0-9]+$/) ec = 0
+                if (phase == "") phase = "-"
+                if (host == "") host = "-"
+                gsub(/["\\]/, "", step); gsub(/["\\]/, "", phase); gsub(/["\\]/, "", host)
+                printf "{\"ts\":\"%s\",\"host\":\"%s\",\"step\":\"%s\",\"phase\":\"%s\",\"duration_ms\":%d,\"exit\":%d}\n", \
+                    ts, host, step, phase, dur, ec
+            }' >>"$TIMING_LOG"
+    } 2>/dev/null || true
+    exit 0
+fi
+
 # ── --emit-flow: append one per-cycle packet-flow record (packet 682-epud) ────
 # Best-effort by construction, mirroring images/.../mcp-usage-log.sh: the whole
 # append is wrapped so a full disk, a read-only path, or a missing `date` cannot
@@ -428,6 +455,16 @@ printf 'flow: cycles=%s avg_completed_per_cycle=%s avg_commits_per_cycle=%s over
 #   litmus_ms_avg      — step matches ^litmus       (run-litmus-test.sh suite)
 # `slowest` is the single step:ms with the largest duration across ALL records —
 # the one fact to look at first, in the spirit of the verdict line.
+#
+# PROVENANCE (785-ibu9). A `step:` record's duration is the named step's OWN
+# measured work (the time inside build.sh's `_run`), which is what makes it
+# safe to attribute. A phase that runs no measurable command instead carries
+# `phase: "build-span"` and its duration is banner-to-banner wall clock, which
+# may include work the named step did not do; `slowest=` marks those `~span`.
+# Read an unmarked name as "this step costs this much" and a `~span` name as
+# "this much wall clock elapsed around here". The distinction exists because a
+# span was once read as a step cost and a packet was filed on the inflated
+# number (783-xyk5's context, corrected in its own ledger events).
 timing_steps=0
 timing_build_check_avg="-"; timing_litmus_avg="-"; timing_slowest="-:-"
 timing_source="absent"
@@ -447,12 +484,30 @@ if [ -r "$TIMING_LOG" ]; then
         | if $n == 0 then "0 - - -:-"
           else
             ($r | map(select(.step=="build-check") | .duration_ms // 0)) as $bc
-          | ($r | map(select((.step|tostring)|test("^litmus")) | .duration_ms // 0)) as $lm
-          | ($r | max_by(.duration_ms // 0)) as $slow
+          # 765-dfry: scoped EXACTLY to the suite aggregate — per-test records
+          # are `litmus:<name>` and would otherwise pollute this average with
+          # a different grain (the old ^litmus prefix matched both).
+          | ($r | map(select(.step=="litmus-suite") | .duration_ms // 0)) as $lm
+          # 765-dfry: slowest prefers the FINEST grain. Aggregate records
+          # (build-check, build-preamble, litmus-suite, local-ci-phase-*)
+          # contain their own sub-steps, so they always out-size them and the
+          # line would forever name an unattackable total. When per-step
+          # records exist (step:/check:/litmus:), pick slowest among those;
+          # fall back to all records otherwise (pre-765 logs keep working).
+          | ($r | map(select((.step|tostring)|test("^(step:|check:|litmus:)")))) as $fine
+          | ((if ($fine|length) > 0 then $fine else $r end) | max_by(.duration_ms // 0)) as $slow
+          # 785-ibu9: a build-span record is banner-to-banner wall clock, not
+          # the cost of the named step alone, so it can bundle work that step
+          # never did. Suffix it ~span so the one number a reader looks at
+          # first cannot be mistaken for an attributable step cost — a wrong
+          # attribution is what got a packet filed on an inflated reading.
+          # (No apostrophes in this block: it lives inside a single-quoted jq
+          # program, where one would terminate the string.)
+          | (if ($slow.phase // "") == "build-span" then "~span" else "" end) as $prov
           | "\($n) " +
             "\(if ($bc|length)>0 then (($bc|add)/($bc|length)|round) else "-" end) " +
             "\(if ($lm|length)>0 then (($lm|add)/($lm|length)|round) else "-" end) " +
-            "\($slow.step // "-"):\($slow.duration_ms // 0)"
+            "\($slow.step // "-")\($prov):\($slow.duration_ms // 0)"
           end' 2>/dev/null)"
     if [ -n "$timing_stats" ]; then
         read -r timing_steps timing_build_check_avg timing_litmus_avg timing_slowest <<EOF
@@ -498,7 +553,15 @@ if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
 fi
 commits="-"
 if [ -n "$SINCE_REF" ] && git -C "$REPO_ROOT" rev-parse --verify "$SINCE_REF" >/dev/null 2>&1; then
-    commits="$(git -C "$REPO_ROOT" rev-list --count "${SINCE_REF}..HEAD" 2>/dev/null || echo -)"
+    # --first-parent, deliberately (order 769-aqpc). On a platform branch the
+    # cycle's own work is the first-parent chain; a pre-push `git merge
+    # origin/linux-next` pulls in dozens of sibling commits that are NOT this
+    # cycle's output. Measured 2026-08-16 on windows: the plain count reported
+    # 24 where the cycle had made 3 commits + 1 merge — and this number feeds
+    # `--emit-flow commits=`, so the inflation skewed overhead_ratio (the
+    # greedier-batching decision input, 682-yiz7) by 6x for every cycle that
+    # merged. The merge commit itself still counts: making it was cycle work.
+    commits="$(git -C "$REPO_ROOT" rev-list --count --first-parent "${SINCE_REF}..HEAD" 2>/dev/null || echo -)"
 fi
 traces="unknown"
 if [ -x "$REPO_ROOT/scripts/generate-traces.sh" ]; then

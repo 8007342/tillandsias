@@ -1,5 +1,6 @@
 # @trace spec:meta-orchestration
 # @trace order:737-zcj5
+# @trace order:770-f6u4
 #
 # Pins the executable MCP expert health probe (order 737-zcj5). `mcp_first_read_path`
 # has always said "fall back and keep going, THEN RECORD IT" — but named no
@@ -9,15 +10,26 @@
 # trace, the `health=` field that makes an outage distinguishable from silence,
 # the negative control that keeps a healthy cycle quiet, and the wiring that
 # gives the methodology rule a concrete referent.
+#
+# 770-f6u4 raised the probe to TOOL-CALL depth: on 2026-08-16 every tools/call
+# on windows died at exec time while the handshake-only probe said
+# ok:experts-healthy for two full cycles (order-531 shape). A handshake is no
+# longer health: the probe must complete initialize → notifications/initialized
+# → one real tools/call whose PINNED output grammar answers, must separate
+# handshake-dead from tool-call-dead in the JSONL stage token, and on windows
+# must launch the server the way the HARNESS launches it (WindowsApps WSL
+# bash), recording the chosen launcher.
 name: litmus:mcp-expert-health-probe-shape
 spec: meta-orchestration
 phase: pre-build
 description: >
   Pin scripts/check-mcp-expert-health.sh: the falsifiable verdict grammar
   ^(ok:experts-healthy|down:<csv>|absent:not-registered|skip:<reason>)$, the
-  healthy/down/partial/absent branches, the health JSONL trace, the args-honoured
-  regression guard, cycle-metrics.sh's health= field and its mcp_outage: negative
-  control, and the meta-orchestration + methodology wiring to the probe.
+  healthy/down/partial/absent branches, tool-call probe depth with distinct
+  handshake/tool-call stage tokens and launcher-fidelity recording, the health
+  JSONL trace, the args-honoured regression guard, cycle-metrics.sh's health=
+  field and its mcp_outage: negative control, and the meta-orchestration +
+  methodology wiring to the probe.
 severity: high
 size: instant
 
@@ -34,9 +46,15 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: probe-defined"
 
-  - step: "all hermetic scenarios pass (healthy, both-down, partial, absent, grammar, log trace)"
+  - step: "all hermetic scenarios pass (healthy, both-down, partial, absent, depth, stage tokens, launcher, grammar, log trace)"
+    # 180s, sized for the SLOWEST host: the 20-scenario fixture re-invokes the
+    # probe per scenario and each probe costs ~15 process spawns, which windows
+    # prices at ~100x linux (measured 2026-08-16: 98s windows, single-digit
+    # seconds linux). See plan/issues/optimization/
+    # mcp-health-fixture-windows-spawn-tax-2026-08-16.md before trimming
+    # scenarios to buy the budget back.
     command: "scripts/check-mcp-expert-health.sh fixture >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/check-mcp-expert-health.sh fixture; exit 1; }"
-    timeout_ms: 30000
+    timeout_ms: 180000
     expected_behavior: "ok: scenarios-pass"
 
   - step: "a registration naming no expected expert yields absent, not a false healthy"
@@ -52,15 +70,34 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: existing-but-mute-is-down"
 
-  - step: "registration args are honoured (regression: reading .command alone reported healthy experts as down)"
+  - step: "registration args are honoured AND a handshake-only server is DOWN at tool-call depth with the distinct stage token"
     # The frame here MUST be a spec-valid InitializeResult. This step originally
     # used `\"result\":{}`, which the hardened probe correctly rejects — the step
     # had encoded the very weak definition 741-t66e was filed against, and it
     # started failing the moment the definition was strengthened. That is the
     # test doing its job; do not weaken the probe to make a stale fixture pass.
-    command: "d=$(mktemp -d); f='{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"serverInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}'; jq -cn --arg f \"$f\" '{mcpServers:{\"forge-plan\":{command:\"echo\",args:[$f]},\"project-info\":{command:\"echo\",args:[$f]}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; rm -rf \"$d\"; [ \"$rc\" = 0 ] && [ \"$out\" = 'ok:experts-healthy' ] && echo 'ok: args-honoured' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    #
+    # 770-f6u4 strengthened the definition AGAIN, and this step moved with it a
+    # second time: an echo stand-in that serves ONLY the init frame was the
+    # healthy exemplar under handshake-only probing, and is now precisely the
+    # handshake-only outage the depth stage exists to catch. Reaching
+    # stage=tool-call (never stage=handshake) still proves .args were honoured —
+    # a bare-bash probe dies AT the handshake — so this one scenario pins both
+    # the old regression and the new depth. The full healthy path lives in the
+    # fixture scenarios, whose stand-ins serve the whole conversation.
+    command: "d=$(mktemp -d); f='{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"serverInfo\":{\"name\":\"fixture\",\"version\":\"1\"}}}'; jq -cn --arg f \"$f\" '{mcpServers:{\"forge-plan\":{command:\"echo\",args:[$f]},\"project-info\":{command:\"echo\",args:[$f]}}}' > \"$d/r.json\"; out=$(TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" bash scripts/check-mcp-expert-health.sh); rc=$?; ok=1; [ \"$rc\" = 1 ] || ok=0; [ \"$out\" = 'down:forge-plan,project-info' ] || ok=0; grep -q '\"stage\":\"tool-call\"' \"$d/h.jsonl\" || ok=0; grep -q '\"stage\":\"handshake\"' \"$d/h.jsonl\" && ok=0; rm -rf \"$d\"; [ \"$ok\" = 1 ] && echo 'ok: args-honoured-and-handshake-only-is-down' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 8000
-    expected_behavior: "ok: args-honoured"
+    expected_behavior: "ok: args-honoured-and-handshake-only-is-down"
+
+  - step: "launcher fidelity: on windows a registered bare bash is rewritten to the harness launcher and the choice is recorded"
+    # 770-f6u4 second gap: the probe launched `bash` through the probing shell's
+    # PATH, but the agent harness resolves it to the WindowsApps WSL launcher —
+    # so the probe tested a DIFFERENT environment than the sessions' servers.
+    # Forced-OS seam + a stand-in launcher pin the rewrite and its JSONL record;
+    # the healthy end-to-end path through the stand-in lives in the fixture.
+    command: "d=$(mktemp -d); printf '%s\\n' '#!/bin/sh' 'exit 1' > \"$d/fb\"; chmod +x \"$d/fb\"; jq -cn '{mcpServers:{\"forge-plan\":{command:\"bash\",args:[\"/nonexistent\"]},\"project-info\":{command:\"bash\",args:[\"/nonexistent\"]}}}' > \"$d/r.json\"; TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" TILLANDSIAS_MCP_PROBE_TIMEOUT=5 TILLANDSIAS_MCP_PROBE_OS=MINGW64_NT-litmus TILLANDSIAS_MCP_HARNESS_BASH=\"$d/fb\" bash scripts/check-mcp-expert-health.sh >/dev/null; ok=1; grep -q \"\\\"launcher\\\":\\\"$d/fb\\\"\" \"$d/h.jsonl\" || ok=0; rm -rf \"$d\"; [ \"$ok\" = 1 ] && echo 'ok: launcher-rewritten-and-recorded' || { echo 'FAIL: launcher record missing'; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: launcher-rewritten-and-recorded"
 
   - step: "an outage leaves a durable down record in the health log"
     command: "d=$(mktemp -d); printf '%s\\n' '{\"mcpServers\":{\"forge-plan\":{\"command\":\"false\"},\"project-info\":{\"command\":\"false\"}}}' > \"$d/r.json\"; TILLANDSIAS_MCP_REGISTRATION=\"$d/r.json\" TILLANDSIAS_EXPERT_HEALTH_LOG=\"$d/h.jsonl\" TILLANDSIAS_MCP_PROBE_TIMEOUT=5 bash scripts/check-mcp-expert-health.sh >/dev/null; n=$(grep -c '\"state\":\"down\"' \"$d/h.jsonl\"); rm -rf \"$d\"; [ \"$n\" = \"2\" ] && echo 'ok: outage-trace-durable' || { echo \"FAIL: down records=$n\"; exit 1; }"
@@ -97,7 +134,7 @@ critical_path:
     # that cannot distinguish code from the comment documenting its history is
     # not a pin. The adversarial steps above are the real behavioural guard;
     # this one keeps the jq predicate itself from being quietly hollowed out.
-    command: "grep -q 'result.protocolVersion' scripts/check-mcp-expert-health.sh && grep -q 'result.serverInfo.name' scripts/check-mcp-expert-health.sh && grep -q 'jq -e --argjson id' scripts/check-mcp-expert-health.sh && echo 'ok: structural-validation'"
+    command: "grep -q 'result.protocolVersion' scripts/check-mcp-expert-health.sh && grep -q 'result.serverInfo.name' scripts/check-mcp-expert-health.sh && grep -q -- '--argjson id' scripts/check-mcp-expert-health.sh && grep -q 'notifications/initialized' scripts/check-mcp-expert-health.sh && grep -q 'tools/call' scripts/check-mcp-expert-health.sh && grep -q 'probe_tool_text_ok' scripts/check-mcp-expert-health.sh && echo 'ok: structural-validation'"
     timeout_ms: 3000
     expected_behavior: "ok: structural-validation"
 
@@ -145,6 +182,10 @@ rollback:
     ^(ok:experts-healthy|down:[a-z0-9-]+(,[a-z0-9-]+)*|absent:not-registered|skip:[a-z0-9-]+)$
     with exit codes 0/1/2/3, keep it executable, keep server_command joining
     .command with .args (dropping .args reports healthy experts as down), keep
+    the TOOL-CALL depth stage (initialize + notifications/initialized + one
+    pinned-grammar tools/call; handshake success alone is the order-531 false
+    healthy), keep the distinct handshake/tool-call stage tokens and the
+    launcher-fidelity rewrite + JSONL launcher record on windows, keep
     the JSONL trace append, restore cycle-metrics.sh's health= field and its
     CONDITIONAL mcp_outage: line, and restore the probe references in
     skills/meta-orchestration/SKILL.md and methodology/distributed-work.yaml

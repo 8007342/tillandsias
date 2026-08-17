@@ -69,7 +69,70 @@ _is_litmus_path() {
         *target/litmus-podman*|*target/litmus-runtime*)
             return 0
             ;;
+        # Order 797-w8kf. The fake podman the litmus fixtures build lives under
+        # a `mktemp -d`, not under target/ — scripts/test-image-build-
+        # convergence.sh exports LITMUS_FAKE_PODMAN_BIN_DIR="$tmp/fake-podman"
+        # and the guard puts the binary in litmus-fake-podman-bin/ beneath it.
+        # Unrecognized, it read as a legitimate operator podman, so the wrapper
+        # generator baked
+        #   exec "/tmp/tmp.XXXXXX/fake-podman/litmus-fake-podman-bin/podman"
+        # into the ONE SHARED wrapper at $TMPDIR/tillandsias-podman-wrapper.
+        # The tempdir is then removed and the wrapper outlives it, on PATH, for
+        # every later consumer on the host.
+        #
+        # What that cost, measured on macuahuitl 2026-08-17: seven pre-build
+        # litmus failures in every `./build.sh --ci-full`, all seven green when
+        # run outside it, and three of them reported as "podman unresponsive
+        # (>5s): stalled storage lock or dead runtime" while podman answered
+        # `info` in 0.07s on 45 consecutive samples taken DURING the failing
+        # run. The preflight behind that message is `! timeout 5 podman ps`,
+        # which cannot tell a timeout from an exec that failed instantly, so a
+        # wrapper pointing at a deleted file was reported as a stalled daemon.
+        *fake-podman*|*litmus-fake-podman*)
+            return 0
+            ;;
     esac
+    return 1
+}
+
+# Has the CALLER explicitly asked for a private podman store?
+#
+# Order 793-a62g. This used to be inferred from `timeout 5 podman info`: if the
+# probe did not answer within five seconds, the toolchain silently switched to
+# the generated wrapper below — a private graphroot with `driver = "vfs"`.
+# A five-second stopwatch is not a fact about a host, it is a fact about how
+# busy the host was at that instant, so `./build.sh --ci-full` picked its
+# storage backend by coin flip: on yoga (Fedora Silverblue, native overlay)
+# `podman info` answers in 0.07s idle and 0.26s loaded, but a --ci-full run
+# with its lanes in parallel is a different machine than an idle one.
+#
+# Losing that race is expensive and silent: vfs COPIES every layer instead of
+# stacking it (the 30s budget timeouts), and the private graphroot contains
+# none of the host's tillandsias-* images (the "missing image" failures).
+# Worse, the wrapper is written to one FIXED path shared by every concurrent
+# lane, so lanes truncate it while siblings exec it — measured 50/400 = 12.5%
+# ETXTBSY exec failures under concurrent rebuild, which `require_podman` could
+# only report as "podman is not available on PATH", on a host where podman is
+# part of the OS image.
+#
+# So the wrapper is now CONFIGURATION, never inference: it activates when the
+# caller sets a storage override (or points at a remote podman), and otherwise
+# we use podman exactly as the operating system provides it. That is also what
+# every existing caller already wanted — 022226ce3 added the bypass because the
+# wrapper split the image inventory between two stores, and c8ee28dee had to
+# special-case macOS out of it because the flags it generates do not exist
+# there. Both of those escape hatches are deleted by this rule rather than
+# maintained.
+_podman_storage_override_requested() {
+    local _pso
+    for _pso in "${TILLANDSIAS_PODMAN_GRAPHROOT:-}" "${TILLANDSIAS_PODMAN_RUNROOT:-}" \
+                "${TILLANDSIAS_PODMAN_STORAGE_CONF:-}"; do
+        # A litmus-owned path is the harness talking to itself, not an operator
+        # asking for a private store; the wrapper branch already ignores those.
+        if [[ -n "$_pso" ]] && ! _is_litmus_path "$_pso"; then
+            return 0
+        fi
+    done
     return 1
 }
 
@@ -114,24 +177,19 @@ elif [[ -n "${LITMUS_PODMAN_CALLS_FILE:-}" && -n "$_litmus_podman_bin" ]]; then
     PODMAN="$_litmus_podman_bin"
     export TILLANDSIAS_PODMAN_BIN="$_litmus_podman_bin"
 elif [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-${CONTAINER_HOST:-}}" ]] \
-     && { [[ "$(uname -s 2>/dev/null)" == "Darwin" ]] \
-          || timeout 5 "$_podman_bin" info --format '{{.Store.GraphRoot}}' >/dev/null 2>&1; }; then
-    # Direct podman works under the current environment. Skip the wrapper so
-    # shell-script callers and the Rust binary share one storage view; without
-    # this fast-path the wrapper points scripts at a private /tmp graphroot
-    # while the binary keeps using the user's default store, splitting the
-    # tillandsias-* image inventory between two backends and silently breaking
-    # the runtime litmus probe.
+     && ! _podman_storage_override_requested; then
+    # THE DEFAULT: use podman as the operating system provides it, so
+    # shell-script callers and the Rust binary share one storage view. The
+    # wrapper below splits the tillandsias-* image inventory between two
+    # backends (022226ce3) and generates Linux-only --root/--runroot/--tmpdir
+    # flags that Podman on macOS rejects outright with "unknown flag: --root",
+    # masking its own actionable "no machine running" message (c8ee28dee).
     #
-    # macOS unconditionally takes this branch (skipping the `podman info`
-    # probe): Homebrew Podman on macOS is ALWAYS a remote-machine client, even
-    # when a machine happens to be running — it never supports the Linux
-    # local-VFS-storage flags (--root/--runroot/--tmpdir) the else branch
-    # below generates. Routing macOS through that branch produced "Error:
-    # unknown flag: --root" instead of Podman's own actionable "no machine
-    # running" message. Skipping the probe also means a macOS host with no
-    # machine running gets that same honest, actionable error immediately
-    # instead of it being masked behind the wrapper's flag-rejection failure.
+    # Reaching this branch is no longer conditional on a probe answering
+    # quickly enough (see _podman_storage_override_requested). If podman is
+    # genuinely broken here, the callers' own checks now say so honestly
+    # instead of being silently rerouted onto a private vfs store that is
+    # empty, slow, and shared with every parallel lane.
     PODMAN="$_podman_bin"
     # Deliberately UNSET TILLANDSIAS_PODMAN_BIN here instead of pinning it
     # to $_podman_bin. The litmus runner (scripts/run-litmus-test.sh) only
@@ -167,6 +225,23 @@ else
     _podman_wrapper_needs_rebuild=false
     if [[ ! -x "$PODMAN" ]] || [[ "$PODMAN" -ot "$_podman_bin" ]]; then
         _podman_wrapper_needs_rebuild=true
+    fi
+    # Order 797-w8kf. Newer-than-podman is not freshness: the wrapper can be
+    # perfectly recent and exec a path that no longer exists. The litmus
+    # harness builds its fake podman under `mktemp -d` and this file is written
+    # to ONE fixed shared path, so the tempdir is removed while the wrapper
+    # that execs it survives. Every later consumer then gets exit 127 —
+    # "podman EXISTS at ... but did not answer '--version'" — on a host whose
+    # real podman answers `info` in 0.06s. Measured on macuahuitl 2026-08-17:
+    # one evening's leftover wrapper failed the next morning's whole gate, and
+    # deleting it by hand fixed the gate until the next litmus run recreated
+    # it. So ask about the target, not only about the mtime.
+    if [[ "$_podman_wrapper_needs_rebuild" != true ]] && [[ -r "$PODMAN" ]]; then
+        _podman_wrapper_target="$(sed -n 's/^.*exec "\([^"]*\)".*$/\1/p' "$PODMAN" | tail -1)"
+        if [[ -n "$_podman_wrapper_target" ]] && [[ ! -x "$_podman_wrapper_target" ]]; then
+            _podman_wrapper_needs_rebuild=true
+        fi
+        unset _podman_wrapper_target
     fi
     if [[ -n "$_podman_remote_url" ]]; then
         export TILLANDSIAS_PODMAN_REMOTE_URL="$_podman_remote_url"
@@ -289,6 +364,24 @@ require_podman() {
         return 0
     fi
 
-    echo "ERROR: podman must be installed and available on PATH" >&2
-    return 127
+    # An ABSENT podman and a podman that is present but did not answer are
+    # different faults, and reporting the second as the first sent a host
+    # searching PATH while podman sat healthy in /usr/bin (order 793-a62g).
+    # On an immutable host — Fedora Silverblue, where podman ships in the OS
+    # image — "not available on PATH" is not merely unhelpful, it is a claim
+    # the reader can see is false, which costs the whole message its
+    # credibility. A wrong diagnosis is worse than a bare failure (741-2izr).
+    if [[ ! -e "$PODMAN" ]]; then
+        echo "ERROR: podman was not found at '$PODMAN'" >&2
+        return 127
+    fi
+
+    local _rp_err
+    _rp_err="$("$PODMAN" --version 2>&1 >/dev/null)"
+    echo "ERROR: podman EXISTS at '$PODMAN' but did not answer '--version'." >&2
+    echo "       This is not an installation problem — do not go looking at PATH." >&2
+    echo "       podman said: ${_rp_err:-(no output)}" >&2
+    # 126 is the shell's own convention for "found, could not execute", which
+    # is exactly the ETXTBSY case that made this message lie.
+    return 126
 }

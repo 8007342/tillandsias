@@ -9,6 +9,7 @@ description = "Resource metric sampling (CPU, memory, disk) for predictive satur
 # @trace spec:observability-metrics, spec:resource-metric-collection
 
 [dependencies]
+tillandsias-podman = { path = "../tillandsias-podman" }
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1"

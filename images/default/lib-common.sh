@@ -878,7 +878,7 @@ _clone_project_from_mirror_impl() {
                         echo "[forge] The mirror ADVERTISES refs but its HEAD is unset (unborn-HEAD mirror defect)." >&2
                         echo "[forge] Restart/rebuild the tillandsias-git container so ensure-mirror-head repairs it (images/git/ensure-mirror-head.sh)." >&2
                     else
-                        echo "[forge] The mirror is reachable but advertised no cloneable refs — it has not finished seeding from upstream (or upstream is empty)." >&2
+                        echo "[forge] The mirror is reachable but advertised no cloneable refs. Three known causes (777-i7hf): (a) the first seed is still fetching (large repo, slow link); (b) the upstream is genuinely empty; (c) the mirror's upstream fetch cannot AUTHENTICATE (private upstream) — check the tillandsias-git container log for 'Seed fetch failed: UPSTREAM AUTH REFUSED' and repair GitHub Login/Vault before blaming the upstream." >&2
                     fi
                     echo "[forge] Refusing to launch an agent on an empty working tree." >&2
                     exit 1
@@ -963,9 +963,17 @@ clone_project_from_mirror() {
 #     sources -> rebuild and reinstall, converging on the same result.
 #   - Ephemeral: the launch state lives in tmpfs (/dev/shm) and dies with the
 #     container; the installed binary lives in the container-ephemeral
-#     $HOME/.local/bin. The ONLY thing that outlives the container is the
-#     sanctioned cargo cache — and per the research's §7.3 carve-out a compiled
-#     binary in a cache volume is a BUILD ARTIFACT, not expert knowledge.
+#     $HOME/.local/bin. The ONLY things that outlive the container are the
+#     sanctioned cargo cache AND (order 781-6gys) the probed expert artifact
+#     INSIDE it (cargo/prebuilt-plan/) — per the research's §7.3 carve-out a
+#     compiled binary in the build cache is a
+#     BUILD ARTIFACT, not expert knowledge — and the teardown proofs prune
+#     the cargo subtree. Before that
+#     artifact cache, EVERY lane re-entered cargo (the tmpfs stamp and the
+#     installed binary both die with the container), and on a cold or
+#     contended cargo cache that build alone outlives the 600s smoke cap
+#     (FORGE_EXIT=124 twice on windows, 2026-08-16). Warm lanes now restore
+#     in O(cp), no cargo, no target-dir lock.
 #
 # NEVER GATES A LAUNCH
 #   Every failure mode writes a NAMED degraded reason and returns 0, mirroring
@@ -1240,6 +1248,7 @@ start_forge_experts_async() {
 # returns 0, always leaves a named state behind. Intended to be backgrounded.
 ensure_forge_experts() {
     local project_dir crate_dir bin_dst stamp src_hash short_hash target_dir built
+    local cache_dir cache_bin cache_stamp _cache_tmp
     local started rc=0 elapsed=0
     started="$(date +%s 2>/dev/null || echo 0)"
 
@@ -1277,6 +1286,41 @@ ensure_forge_experts() {
         trace_lifecycle "experts" "ready (cached): ${bin_dst} already matches source ${short_hash}"
         _forge_experts_set_state ready
         return 0
+    fi
+
+    # Order 781-6gys: persistent-artifact warm path. The tmpfs stamp and the
+    # installed binary die with the container, so before this branch EVERY
+    # lane re-entered cargo — fresh-clone mtimes dirty the crate fingerprints
+    # and a concurrent agent build holds the shared target-dir lock, so on a
+    # cold or contended cache the build alone outlives the 600s smoke cap
+    # (FORGE_EXIT=124 twice on windows, 2026-08-16). The compiled binary is a
+    # BUILD ARTIFACT under the research's §7.3 carve-out, so it lives INSIDE
+    # the cargo build-cache subtree of the per-project volume ($CARGO_HOME is
+    # $PROJECT_CACHE/cargo) — deliberately: the ephemerality proofs
+    # (litmus:forge-experts-teardown-ephemeral) prune `-name cargo` from
+    # their persistent-surface scans, so placing the artifact THERE keeps the
+    # carve-out exactly as narrow as the scans encode it. The serving surface
+    # stays ephemeral: the artifact is always COPIED OUT into $HOME/.local/bin
+    # and the MCP wrapper never probes the volume. Keyed on the SAME source
+    # hash as the build (a build-cache key, same family as a cargo
+    # fingerprint — never knowledge); the EXEC PROBE — not the stamp — is the
+    # install gate, so image/toolchain drift that breaks the cached binary
+    # falls through to a fresh build instead of installing a dud.
+    # Destroy-safe: deleting the volume costs the next lane one build.
+    cache_dir="${FORGE_EXPERTS_CACHE_DIR:-${TILLANDSIAS_PROJECT_CACHE:-/home/forge/.cache/tillandsias-project}/cargo/prebuilt-plan}"
+    cache_bin="$cache_dir/tillandsias-plan"
+    cache_stamp="$cache_dir/source-hash"
+    if [ "$src_hash" != "unknown" ] && [ -x "$cache_bin" ] && [ -r "$cache_stamp" ] \
+        && [ "$(cat "$cache_stamp" 2>/dev/null || true)" = "$src_hash" ] \
+        && _forge_experts_probe_answer_surface "$cache_bin"; then
+        mkdir -p "$FORGE_EXPERTS_BIN_DIR" 2>/dev/null || true
+        if install -m 0755 "$cache_bin" "$bin_dst" 2>/dev/null; then
+            printf '%s\n' "$src_hash" > "$stamp" 2>/dev/null || true
+            trace_lifecycle "experts" "ready (cache-volume): restored ${bin_dst} from ${cache_bin} (src=${short_hash}) — no cargo"
+            _forge_experts_set_state ready
+            return 0
+        fi
+        trace_lifecycle "experts" "cache-volume restore could not install ${cache_bin} -> ${bin_dst}; falling through to build"
     fi
 
     if ! command -v cargo >/dev/null 2>&1; then
@@ -1336,6 +1380,27 @@ ensure_forge_experts() {
         trace_lifecycle "experts" "degraded (stale-source): built binary lacks the \`answer\` subcommand — checkout predates the expert crate (order 531)"
         _forge_experts_set_state degraded stale-source
         return 0
+    fi
+
+    # Order 781-6gys: publish the PROBED artifact + stamp into the persistent
+    # cache so the next lane restores in O(cp) instead of re-entering cargo.
+    # mktemp-then-rename keeps a concurrent lane from ever reading a torn
+    # binary (rename is atomic within the volume), and two lanes racing here
+    # write identical bytes for identical sources, so the race is idempotent.
+    # Best-effort on every step: a full or read-only volume degrades the warm
+    # path, never the session. Placed AFTER the answer-surface probe so a
+    # stale-source binary is never published for other lanes to restore.
+    if mkdir -p "$cache_dir" 2>/dev/null; then
+        _cache_tmp="$(mktemp "$cache_dir/.tillandsias-plan.XXXXXX" 2>/dev/null || true)"
+        if [ -n "$_cache_tmp" ] \
+            && install -m 0755 "$bin_dst" "$_cache_tmp" 2>/dev/null \
+            && mv -f "$_cache_tmp" "$cache_bin" 2>/dev/null; then
+            { printf '%s\n' "$src_hash" > "$cache_stamp.tmp.$$" \
+                && mv -f "$cache_stamp.tmp.$$" "$cache_stamp"; } 2>/dev/null || true
+            trace_lifecycle "experts" "cached artifact to ${cache_bin} (src=${short_hash}) for warm lanes"
+        else
+            rm -f "$_cache_tmp" 2>/dev/null || true
+        fi
     fi
 
     elapsed=$(( $(date +%s 2>/dev/null || echo 0) - started ))
@@ -1849,6 +1914,84 @@ opencode_auth_contract_ok() {
     return 0
 }
 
+# Positive assertion that the TUI RENDERER actually initializes (order
+# 626-p4xd).
+#
+# WHY. Every existing gate answers "does the binary start and honour our
+# flags?" — `--version`, flag greps, `auth list`. None of them loads the
+# renderer, so a build whose TUI cannot initialize passes all of them, gets
+# installed, and is RECORDED AS LAST-GOOD; the rollback path then re-validates
+# with the same blind probe and can restore-and-certify another broken
+# snapshot. The user meets the failure; the gate never does.
+#
+# POSITIVE ASSERTION, not error-matching. Grepping for an upstream error
+# string ("Failed to initialize OpenTUI") rots the moment upstream rewords it.
+# We require the renderer to PROVE itself: within the budget it must emit an
+# alt-screen switch or a truecolor SGR, and must not have exited nonzero.
+#
+# Measured on this class of binary (yoga, 2026-08-17): no pty is needed —
+# with stdin from /dev/null the renderer still initializes and emits its
+# sequences; first CSI at 521-733ms, strict marker at ~2.6s. The ceiling below
+# is deliberately far above that because the artifact the curl channel ships
+# is a bun single-file executable whose FIRST run pays a cold asset
+# extraction, unlike the ELF those timings came from.
+#
+# `--pure` plus the updater guards keep this inside litmus:harness-byte-cheap,
+# which pins that a probe may not self-update.
+opencode_render_contract_ok() {
+    local bin_path="$1" probe_root out waited=0 status=1
+    local budget="${TILLANDSIAS_RENDER_PROBE_BUDGET_S:-20}"
+    probe_root="$(mktemp -d /tmp/tillandsias-opencode-render-probe.XXXXXX)" || return 1
+    out="$probe_root/out"
+    : > "$out"
+    (
+        XDG_DATA_HOME="$probe_root/data" \
+        XDG_STATE_HOME="$probe_root/state" \
+        XDG_CONFIG_HOME="$probe_root/config" \
+        OPENCODE_DB=:memory: \
+        DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1 \
+        timeout "$budget" "$bin_path" --pure </dev/null >"$out" 2>&1
+    ) &
+    local probe_pid=$!
+    # Poll for the marker rather than sleeping the full budget: a healthy
+    # renderer answers in ~3s and the gate runs three times per launch.
+    while [ "$waited" -lt "$((budget * 10))" ]; do
+        if grep -qa -e $'\033\[?1049h' -e '38;2;' "$out" 2>/dev/null; then
+            status=0
+            break
+        fi
+        kill -0 "$probe_pid" 2>/dev/null || break   # exited before rendering
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    kill "$probe_pid" 2>/dev/null
+    wait "$probe_pid" 2>/dev/null
+    rm -rf -- "$probe_root"
+    if [ "$status" -ne 0 ]; then
+        trace_lifecycle "harness" "opencode RENDER CONTRACT BROKEN — no TUI renderer output within ${budget}s (binary starts and honours flags, but its interface never initializes)"
+        return 1
+    fi
+    return 0
+}
+
+# Cache the render verdict against the binary's identity, so the three probes
+# a launch performs (record-last-good, validate-or-rollback, restore) cost one
+# ~3s render instead of three. Keyed on the hash so a reinstall re-probes: the
+# whole point is to gate a NEW artifact.
+opencode_render_contract_cached() {
+    local bin_path="$1" key stamp
+    key="$( { sha256sum "$bin_path" 2>/dev/null || shasum -a 256 "$bin_path" 2>/dev/null; } | cut -d' ' -f1)"
+    [ -n "$key" ] || { opencode_render_contract_ok "$bin_path"; return $?; }
+    stamp="${HARNESS_CURL_ROOT:-$HOME/.cache/tillandsias-harness}/opencode/.render-ok.$key"
+    [ -f "$stamp" ] && return 0
+    if opencode_render_contract_ok "$bin_path"; then
+        mkdir -p "$(dirname "$stamp")" 2>/dev/null
+        : > "$stamp" 2>/dev/null
+        return 0
+    fi
+    return 1
+}
+
 # Positive assertion for the credential actually injected into this lane. The
 # isolated probe compares OpenCode's reported count and provider IDs with the
 # in-memory JSON, checks both probe and real XDG paths for auth.json, and never
@@ -1953,7 +2096,10 @@ harness_probe() {
     local bin_path="${2:-${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1}"
     [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1 \
         && harness_contract_ok "$1" "$bin_path" \
-        && { [ "$1" != "opencode" ] || opencode_auth_contract_ok "$bin_path"; }
+        && { [ "$1" != "opencode" ] || {
+            opencode_auth_contract_ok "$bin_path" \
+                && opencode_render_contract_cached "$bin_path"
+        }; }
 }
 
 harness_last_good_file() {
@@ -1977,6 +2123,43 @@ harness_record_last_good() {
 # A fresh install that fails the health probe rolls back to the recorded
 # last-good version (order 284).
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+# ── Harness update mutex (order 626-p4xd) ───────────────────────────────────
+#
+# ONE lock, two writers. Both `ensure_forge_harnesses` (backgrounded from the
+# entrypoint) and `require_opencode` (foreground, same entrypoint, same
+# launch) write $HARNESS_CURL_ROOT/opencode/bin/opencode. Only the first one
+# ever took this lock, so the mutex was ONE-SIDED: the guarded background
+# updater could be rewriting the binary underneath the unguarded foreground
+# installer. Extracted here so the second writer can take the SAME lock
+# rather than inventing a second discipline.
+harness_update_lock_path() {
+    echo "$HOME/.cache/tillandsias-project/npm-update.lock"
+}
+
+# Returns 0 when this process now HOLDS the lock, 1 when another live holder
+# has it. Reclaims a leak older than an hour: a real updater finishes in
+# minutes, and these locks live on the PERSISTENT volume, where one leak used
+# to disable updates forever.
+harness_update_lock_acquire() {
+    local lock
+    lock="$(harness_update_lock_path)"
+    mkdir -p "$(dirname "$lock")" 2>/dev/null
+    if mkdir "$lock" 2>/dev/null; then
+        return 0
+    fi
+    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+        trace_lifecycle "harness" "reclaiming stale npm-update lock (leaked pre-fix)"
+        rm -rf "$lock"
+        mkdir "$lock" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+harness_update_lock_release() {
+    rm -rf "$(harness_update_lock_path)" 2>/dev/null || true
+}
+
 ensure_forge_harnesses() {
     # Avoid a concurrent npm join race — only the first process runs npm.
     local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
@@ -2699,9 +2882,27 @@ curl_install_claude() {
 require_opencode() {
     # Curl channel first (order 459); legacy npm as the transition fallback
     # so a half-warm cache from the old channel still launches.
+    #
+    # Order 626-p4xd: take the SAME lock ensure_forge_harnesses takes. Both
+    # run from this entrypoint on one launch — one backgrounded, this one
+    # foreground — and both write $HARNESS_CURL_ROOT/opencode/bin/opencode.
+    # Guarding only the background writer left the mutex one-sided.
+    #
+    # Failing to get the lock is NOT fatal here: the other holder is
+    # installing the same binary, so fall through and use whatever it
+    # produced. Blocking the lane on a harness update would be worse than the
+    # race — this path exists to make the lane launchable.
+    local held=0
+    if harness_update_lock_acquire; then
+        held=1
+    else
+        trace_lifecycle "harness" "opencode install deferring to the in-flight harness updater (shared lock held elsewhere)"
+    fi
     if curl_install_opencode && [ -n "${OC_BIN:-}" ] && [ -x "$OC_BIN" ]; then
+        [ "$held" -eq 1 ] && harness_update_lock_release
         return 0
     fi
+    [ "$held" -eq 1 ] && harness_update_lock_release
     OC_BIN="$(_require_harness opencode opencode-ai opencode)"
     return 0
 }
@@ -3427,6 +3628,18 @@ list_projects() {
 export_ssh_env() {
     local ssh_host_dir="${HOME}/.ssh"
 
+    # Order 749-6uby (exit criterion 5): with the SSH push lane live, the
+    # launcher exports SSH_AUTH_SOCK at the sidecar's mounted socket. This
+    # function is PROVEN HARMLESS against that lane and must stay so:
+    #   - a set SSH_AUTH_SOCK whose socket exists is KEPT (first branch —
+    #     never overridden by the /run/user fallbacks below);
+    #   - a set SSH_AUTH_SOCK whose socket is not there YET (sidecar still
+    #     starting) falls through WITHOUT unsetting the variable, so ssh
+    #     works the moment the socket appears;
+    #   - ~/.ssh in the forge is an empty tmpfs, so the key-file fallback
+    #     can never fabricate an identity (D5: no key material in-forge).
+    # Pinned by litmus:ssh-lane-sidecar-shape — do not reorder the probes.
+
     # No SSH directory on host — nothing to do.
     [ -d "$ssh_host_dir" ] || return 1
 
@@ -3925,6 +4138,19 @@ CONTEXT_EOF
         # demands.
         trace_lifecycle "startup-context" \
             "SKIPPED checkout addendum $addendum — not a readable regular file (FIFO, device, directory or dangling symlink); no warning was delivered"
+    elif git -C "$project_dir" ls-files --error-unmatch images/default/startup-context-addendum.md >/dev/null 2>&1; then
+        # EXPECTED BUT MISSING (747-n52p criterion 1): the addendum is TRACKED
+        # in this checkout yet absent from the working tree — someone deleted
+        # the warning surface. Deliver a placeholder so the agent still learns
+        # a warning was intended, and trace the delivery gap. A git error above
+        # means "not expected here" and stays silent — the off-Tillandsias
+        # negative control criterion 3 demands. Both writes fail-soft.
+        {
+            printf '\n## Checkout addendum — EXPECTED BUT MISSING\n'
+            printf 'images/default/startup-context-addendum.md is tracked in this checkout but absent from the working tree; the warnings it should carry were NOT delivered. Restore it or read it from git history.\n'
+        } >>"$ctx_file" 2>/dev/null || true
+        trace_lifecycle "startup-context" \
+            "PLACEHOLDER written for tracked-but-missing checkout addendum $addendum — expected warnings not delivered" || true
     fi
 
     # Ensure the file is gitignored (idempotent append).

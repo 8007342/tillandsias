@@ -20,15 +20,38 @@ fi
 #   - `gh auth status` succeeds (reachable, unlocked keyring).
 #
 # Emits exactly one line on stdout matching the falsifiable grammar
-#   ^(ok:[a-z0-9-]+|missing:no-credential-channel)$
-# and exits 0 (channel present) or 1 (channel absent).
+#   ^(ok:[a-z0-9-]+|blocked:[a-z0-9-]+|missing:no-credential-channel)$
+# and exits 0 (channel present) or 1 (channel absent or blocked).
 #
 #   ok:gh-credentials-store        repo-local store helper file present + non-empty
 #   ok:gh-token-env                GH_TOKEN set
 #   ok:github-token-env            GITHUB_TOKEN set
 #   ok:gh-keyring                  `gh auth status` green
-#   ok:forge-git-mirror            TILLANDSIAS_HOST_KIND=forge (transparent git mirror)
+#   ok:forge-git-mirror            TILLANDSIAS_HOST_KIND=forge AND the mirror is
+#                                  reachable AND the mirror's published upstream
+#                                  write-authorization verdict is FRESH and
+#                                  authorized (or local-only) — order 756-2jnj
+#   blocked:upstream-push-unauthorized  mirror reachable, but its credential is
+#                                       currently REFUSED by upstream (the
+#                                       2026-08-15 GitHub 403 state)
+#   blocked:upstream-no-credential      mirror reachable, but no upstream
+#                                       credential is readable from Vault
+#   blocked:upstream-auth-stale         mirror's verdict is older than
+#                                       TILLANDSIAS_CRED_AUTH_MAX_AGE (default
+#                                       900s) — yesterday's token epoch proves
+#                                       nothing about today's
+#   blocked:upstream-auth-unpublished   mirror publishes no verdict at all
+#                                       (image predates the probe, or the probe
+#                                       is failing) — authorization unproven
+#   blocked:upstream-auth-error         mirror's probe could not determine
+#                                       authorization (network/transport)
 #   missing:no-credential-channel  none of the above
+#
+# `blocked:*` is distinct from `missing:*` on purpose: the channel EXISTS
+# (forge -> mirror works) but the mirror -> upstream half is not currently
+# write-authorized, so worker drain must not start (order 756-2jnj: on
+# 2026-08-15 a forge lost two commits because this fact surfaced only at the
+# first push, hours in). Both exit 1; forge-validate reports the verdict.
 #
 # NOTE: anonymous reads (`git fetch`/`git ls-remote`) succeeding on a public
 # repo is NOT evidence of a credential channel. This check verifies the
@@ -39,6 +62,110 @@ fi
 # status` probe so a scrubbed-environment fixture fails closed deterministically
 # regardless of the host's ambient gh keyring state (used by
 # litmus:credential-channel-check-shape).
+
+# @trace spec:git-mirror-service
+# Order 756-2jnj: consume the mirror-published upstream write-authorization
+# verdict. The mirror's probe (images/git/probe-upstream-auth.sh) runs a
+# non-mutating `git push --dry-run` against the upstream with the mirror's
+# Vault credential and publishes refs/tillandsias/upstream-auth/<state>/<epoch>
+# in the mirror repo — a namespace the git daemon advertises but clones,
+# sweeps, and relays never touch. Reading it here uses git ls-remote over the
+# SAME transport a push takes, so no new channel is invented.
+#
+# Args: $1 = source to ls-remote for the verdict refs (production: the
+# effective origin; fixtures: TILLANDSIAS_CRED_AUTH_PROBE_URL pointing at a
+# local bare repo). Prints exactly one verdict line and returns its exit code.
+forge_upstream_auth_verdict() {
+  local auth_src="$1"
+  local auth_lines _sha refname rest state epoch best_state best_epoch now age max_age
+  auth_lines="$(timeout 10 git ls-remote "$auth_src" 'refs/tillandsias/upstream-auth/*' 2>/dev/null || true)"
+  best_state=""
+  best_epoch=-1
+  while read -r _sha refname; do
+    [ -n "$refname" ] || continue
+    rest="${refname#refs/tillandsias/upstream-auth/}"
+    [ "$rest" != "$refname" ] || continue
+    state="${rest%%/*}"
+    epoch="${rest##*/}"
+    case "$epoch" in ''|*[!0-9]*) continue ;; esac
+    [ -n "$state" ] || continue
+    if [ "$epoch" -gt "$best_epoch" ]; then
+      best_epoch="$epoch"
+      best_state="$state"
+    fi
+  done <<< "$auth_lines"
+  if [ -z "$best_state" ]; then
+    # Order 783-6rik: DISTINGUISH the two causes, because the obvious
+    # remediation is futile for one of them and every host that follows it
+    # wastes a cycle discovering that.
+    #
+    # If the running mirror image simply has no probe, "rebuild the container"
+    # only works when the rebuild can SEE a probe — i.e. when the running
+    # binary's embedded assets carry one. A host on a release older than the
+    # probe rebuilds from those embedded assets and gets another probe-less
+    # image, overwriting any image built by hand from the checkout (measured
+    # on yoga 2026-08-17: a checkout build was replaced by the tray's within
+    # 30 seconds). Telling that host to rebuild is telling it to repeat what
+    # just failed.
+    #
+    # So probe the image directly and say which case this host is in.
+    _ccc_probe_present="unknown"
+    if command -v podman >/dev/null 2>&1; then
+      _ccc_img="$(podman ps --filter 'name=tillandsias-git' --format '{{.Image}}' 2>/dev/null | head -1)"
+      if [ -n "$_ccc_img" ]; then
+        if podman run --rm --entrypoint ls "$_ccc_img" /usr/local/share/git-service/ 2>/dev/null |
+            grep -q '^probe-upstream-auth'; then
+          _ccc_probe_present="yes"
+        else
+          _ccc_probe_present="no"
+        fi
+      fi
+    fi
+    echo "[check-credential-channel] The git mirror is reachable but publishes NO upstream write-authorization verdict (refs/tillandsias/upstream-auth/*). Authorization is UNPROVEN, so worker drain must not start (order 756-2jnj)." >&2
+    case "$_ccc_probe_present" in
+      no)
+        echo "[check-credential-channel] CAUSE: the running mirror image carries NO probe-upstream-auth, so it CANNOT publish a verdict. If this host runs a published release older than the probe, rebuilding the container does NOT help — the tray rebuilds the image from the assets embedded in the installed binary and overwrites any hand-built image (order 783-6rik). Remedy: install a build/release that contains images/git/probe-upstream-auth.sh. Note the mirror relay still ACCEPTS pushes, so this blocks worker drain, not fail-loud bookkeeping." >&2
+        ;;
+      yes)
+        echo "[check-credential-channel] CAUSE: the running mirror image HAS probe-upstream-auth, so the probe is present but not publishing — it is failing or has not run. Remedy: restart the tillandsias-git container and inspect its logs; if it still publishes nothing, repair the mirror's Vault GitHub token." >&2
+        ;;
+      *)
+        echo "[check-credential-channel] CAUSE: could not inspect the mirror image (no podman, or no running tillandsias-git). Check whether the image carries images/git/probe-upstream-auth.sh before rebuilding anything (order 783-6rik)." >&2
+        ;;
+    esac
+    echo "blocked:upstream-auth-unpublished"
+    return 1
+  fi
+  now="$(date +%s)"
+  age=$((now - best_epoch))
+  max_age="${TILLANDSIAS_CRED_AUTH_MAX_AGE:-900}"
+  if [ "$age" -gt "$max_age" ]; then
+    echo "[check-credential-channel] The mirror's upstream write-authorization verdict is ${age}s old (max ${max_age}s). A stale 'authorized' proves nothing about the CURRENT token epoch — the 2026-08-15 loss happened exactly because authorization was assumed rather than fresh. Check the mirror's probe loop (images/git/entrypoint.sh) before draining workers." >&2
+    echo "blocked:upstream-auth-stale"
+    return 1
+  fi
+  case "$best_state" in
+    authorized|local-only)
+      echo "ok:forge-git-mirror"
+      return 0
+      ;;
+    denied)
+      echo "[check-credential-channel] The mirror is reachable but upstream currently REFUSES its credential (mirror-published verdict: denied). This is the 2026-08-15 403 state: a push at end of cycle WILL fail, so stop BEFORE worker drain. Fix the GitHub credential in Vault (secret/github/token) or its repo permission; do NOT import host credentials." >&2
+      echo "blocked:upstream-push-unauthorized"
+      return 1
+      ;;
+    no-credential)
+      echo "[check-credential-channel] The mirror is reachable but has NO upstream credential readable from Vault (mirror-published verdict: no-credential). A push would fail with 'run GitHub Login' — stop BEFORE worker drain and restore the Vault-provided GitHub token." >&2
+      echo "blocked:upstream-no-credential"
+      return 1
+      ;;
+    *)
+      echo "[check-credential-channel] The mirror's upstream write-authorization probe reported '$best_state' — it could not determine authorization (network/transport failure?). Authorization is unproven; stop BEFORE worker drain and inspect the mirror's [upstream-auth] log." >&2
+      echo "blocked:upstream-auth-error"
+      return 1
+      ;;
+  esac
+}
 
 credential_channel_verdict() {
   local git_dir cred_file
@@ -91,14 +218,35 @@ credential_channel_verdict() {
         ;;
     esac
     if [ "${TILLANDSIAS_CRED_SKIP_MIRROR_PROBE:-0}" = "1" ]; then
-      # Fixture seam: verify URL rewriting first, then skip only the live
-      # network probe so host pre-build litmus does not depend on forge DNS.
+      # Fixture seam: verify URL rewriting first, then skip the live network
+      # probes (reachability AND authorization consult, which both ls-remote
+      # the origin) so host pre-build litmus does not depend on forge DNS.
+      # When a fixture supplies an explicit local verdict source, the
+      # authorization consult still runs against it — that is how
+      # litmus:forge-upstream-auth-gate pins the consult hermetically.
+      if [ -n "${TILLANDSIAS_CRED_AUTH_PROBE_URL:-}" ]; then
+        forge_upstream_auth_verdict "$TILLANDSIAS_CRED_AUTH_PROBE_URL"
+        return $?
+      fi
       echo "ok:forge-git-mirror"
       return 0
     fi
     if timeout 10 git ls-remote "$effective_origin" HEAD >/dev/null 2>&1; then
-      echo "ok:forge-git-mirror"
-      return 0
+      # Order 756-2jnj: reachability is only HALF the channel. The 2026-08-15
+      # incident reached this exact point with a mirror whose credential
+      # GitHub 403'd — 'ok' here let a forge accrete commits it could never
+      # push. Require the mirror's fresh, non-mutating upstream
+      # write-authorization verdict before declaring the channel usable.
+      if [ "${TILLANDSIAS_CRED_SKIP_AUTH_PROBE:-0}" = "1" ]; then
+        # Emergency valve only (e.g. a fleet-wide stale-mirror-image rollout
+        # window): reachability alone, authorization UNVERIFIED. Loud on
+        # stderr so a transcript never mistakes this for the proven state.
+        echo "[check-credential-channel] WARNING: TILLANDSIAS_CRED_SKIP_AUTH_PROBE=1 — upstream write authorization is UNVERIFIED; a push may still 403 (order 756-2jnj)." >&2
+        echo "ok:forge-git-mirror"
+        return 0
+      fi
+      forge_upstream_auth_verdict "${TILLANDSIAS_CRED_AUTH_PROBE_URL:-$effective_origin}"
+      return $?
     fi
     echo "[check-credential-channel] TILLANDSIAS_HOST_KIND=forge but the git mirror is unreachable for this checkout (git ls-remote origin failed): no usable push channel. Fix the mirror export/DNS or provide a forge credential channel; do NOT import host credentials." >&2
     echo "missing:no-credential-channel"

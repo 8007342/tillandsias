@@ -27,6 +27,39 @@ critical_path:
     command: "grep -F '.cosign.bundle' docs/VERIFICATION.md && grep -F 'cosign verify-blob' docs/VERIFICATION.md && grep -F 'Rekor' docs/VERIFICATION.md"
     timeout_ms: 3000
 
+  - step: "an asset with NO integrity path is refused, and transitive coverage is not a false alarm"
+    # Order 756-rfdr. Every step above greps the workflow for the WORDS of
+    # signing. None of them asks whether the resulting asset set is actually
+    # verifiable, which is how install-windows.ps1 shipped in v0.4.260815.1 with
+    # no cosign bundle and named in no SHA256SUMS -- the asset README.md tells
+    # Windows users to pipe into their shell. Two independent causes, neither
+    # of which produced output: the Windows signing loop was an allow-list, and
+    # the step staging the installer ran after it.
+    #
+    # Scenario 3 in the fixture is the load-bearing one: four of the five
+    # bundle-less assets in that release were legitimately covered by a signed
+    # manifest, so a gate that merely counted unsigned files would have cried
+    # wolf four times and been switched off.
+    command: "scripts/test-release-asset-integrity.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:release-asset-integrity-fixture:6"
+
+  - step: "both release jobs run that check over what they actually staged"
+    # The Linux job's `test -f` lines are an allow-list of remembered files;
+    # the check asserts the property over whatever is present.
+    command: "grep -cF 'check-release-asset-integrity.sh' .github/workflows/release.yml | grep -qx 2 && echo 'ok: both jobs gated' || echo 'fail: expected the integrity gate in both release jobs'"
+    timeout_ms: 3000
+    expected_behavior: "ok: both jobs gated"
+
+  # NOT PINNED HERE, deliberately: an earlier draft added a step asserting the
+  # windows signing loop is not an allow-list, by grepping the workflow for the
+  # absence of the old literal. build.sh refused it under 634-39ik -- a new
+  # litmus step must assert a PROPERTY, not pin how source is currently
+  # written -- and the refusal was correct. The property is already covered
+  # behaviourally: if that loop ever becomes an allow-list again, an asset it
+  # skips has no integrity path, and the gate wired into both jobs (step 6)
+  # fails the release. That is the guard; a grep for yesterday's wording is not.
+
 observability:
   traces:
     - "@trace spec:binary-signing"

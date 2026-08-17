@@ -14,6 +14,7 @@
 //! order of the prompt strings in the two files.
 //!
 //! @trace spec:macos-native-tray, spec:gh-auth-script, plan 663-acdw
+// freshness: auditor=linux-macuahuitl-fable5-20260816t0845z date=2026-08-16 verdict=refreshed scope=structural re-validation from linux (test is cfg macos and cannot RUN here): both include_str! targets exist, both sides still carry the CREDENTIAL FIRST markers (diagnose.rs:999, headless main.rs:7834+17103), and the pin's fail-loud absent-marker panic is intact; behavioral run remains the macOS suite's job
 
 #![cfg(target_os = "macos")]
 

@@ -2,6 +2,7 @@
 //!
 //! @trace spec:tillandsias-vault
 //! @cheatsheet runtime/hashicorp-vault-tillandsias.md
+// freshness: auditor=linux-macuahuitl-fable5-20260816t0552z date=2026-08-16 verdict=refreshed scope=re-validated against lib.rs map_response (lines ~177-179): 401/403->Unauthorized, 404->NotFound, 503->Sealed, reqwest->Network, remainder->Other — matches this file's rustdoc exactly; taxonomy still complete for current consumers incl. the 722-hthz kv-v2 cas=0 create-only path (400 cas violations intentionally route through Other with body text); no dead variants; thiserror idiom current
 
 use thiserror::Error;
 

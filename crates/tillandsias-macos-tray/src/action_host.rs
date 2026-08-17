@@ -1253,7 +1253,17 @@ async fn run_pty_attach(
         seed.0, seed.1
     );
 
-    let opts = launch_spec(&intent, project.as_deref(), seed.0, seed.1);
+    // A project name that cannot cross the guest launch path safely is REFUSED
+    // here, before any PTY or socket exists — see `validate_project_name`.
+    let opts = match launch_spec(&intent, project.as_deref(), seed.0, seed.1) {
+        Ok(o) => o,
+        Err(refused) => {
+            eprintln!("[tillandsias-tray] pty-attach: {refused}");
+            let _ = std::fs::remove_file(&sock_path);
+            bridge_join.abort();
+            return Err(refused.to_string());
+        }
+    };
     let session = match PtySession::open(Arc::new(transport), &alloc, &router, &opts) {
         Ok(s) => s,
         Err(e) => {
@@ -2082,7 +2092,7 @@ fn should_poll_fallback(push_stream_healthy: bool) -> bool {
 // 155) and windows (order 154) tick loops cannot drift. Use the shared
 // copies directly; this crate keeps no local duplicate.
 use tillandsias_host_shell::subscription_health::{
-    TickWake, tick_after_wake, wait_tick_or_subscription_drop,
+    TickWake, tick_after_wake, wait_tick_drop_or_request,
 };
 
 /// The exact topic set the dedicated push connection subscribes to. Slice 2
@@ -2775,6 +2785,11 @@ fn spawn_vm_status_poller(
     // points and selects on its transitions while waiting.
     let health = Arc::new(tillandsias_host_shell::subscription_health::SubscriptionHealth::new());
     let mut health_rx = health.subscribe();
+    // Wake source for an explicit fallback-round request while the tick
+    // timer is suppressed (SC-11 / 690-xeda). No macOS site raises it today
+    // — the burst intent is served push-natively (login-transition
+    // CloudRefreshRequest); see the comment at the wait site.
+    let poll_request = tokio::sync::Notify::new();
     tokio::spawn(run_push_listener(
         vz.clone(),
         status_text.clone(),
@@ -2863,8 +2878,31 @@ fn spawn_vm_status_poller(
             // push subscription ends the wait immediately and rewinds to
             // tick 0, so the full fallback round (local + cloud + login
             // above, VmStatus below) runs now instead of up to 300s later.
-            let wake =
-                wait_tick_or_subscription_drop(Duration::from_secs(30), &mut health_rx).await;
+            //
+            // SC-11 / 690-xeda (order 154's tick retirement, macOS
+            // adoption): while the subscription is healthy every fallback
+            // gate in this loop body is closed — should_poll_fallback
+            // suppresses all three slow-cadence polls above AND the
+            // VmStatus poll below — so a timer wake would find nothing to
+            // do. Suppress the timer for exactly that state: the wait then
+            // ends only on a healthy→down transition (or a closed health
+            // channel, which re-arms the timer — see the shared helper's
+            // pins). A fully idle, fully healthy tray no longer wakes
+            // twice a minute to decide to do nothing.
+            //
+            // The `request` wake source is unused on macOS: the windows
+            // fast-poll burst exists to force a confirming FALLBACK round
+            // after a user action, while this tray primes the same intent
+            // push-natively (the login-transition CloudRefreshRequest on
+            // the subscription connection, above). A future raiser plumbs
+            // a reference to this Notify; today nothing signals it.
+            let wake = wait_tick_drop_or_request(
+                Duration::from_secs(30),
+                health.is_healthy(),
+                &mut health_rx,
+                &poll_request,
+            )
+            .await;
             tick = tick_after_wake(tick, &wake);
 
             // SC-07: while the push subscription is delivering, the poll is

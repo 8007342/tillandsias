@@ -205,7 +205,7 @@ const DISTRO_EXEC_PROBE_TIMEOUT_SECS: u64 = 60;
 /// `spawn_wsl_terminal` (CREATE_NEW_CONSOLE) instead, never through this.
 /// @trace spec:no-terminal-flicker
 fn wsl_cmd() -> tokio::process::Command {
-    let mut cmd = tokio::process::Command::new("wsl");
+    let mut cmd = tillandsias_vm_layer::wsl_command_async();
     tillandsias_vm_layer::no_window_async(&mut cmd);
     cmd
 }
@@ -1032,10 +1032,9 @@ impl WslLifecycle {
         match tokio::time::timeout(Duration::from_secs(DISTRO_EXEC_PROBE_TIMEOUT_SECS), fut).await {
             Ok(Ok(output)) if output.status.success() => DistroExecProbeResult::Healthy,
             Ok(Ok(output)) => {
-                let stderr = String::from_utf8_lossy(&output.stderr)
-                    .replace('\0', "")
-                    .trim()
-                    .to_string();
+                // No NUL scrub: `wsl_cmd()` sets WSL_UTF8=1 (2026-08-17), so
+                // wsl.exe's own stderr arrives as UTF-8.
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                 let service_sane = WslRuntime::is_wsl_service_sane().await;
                 match classify_nonzero_distro_exec(&stderr, service_sane) {
                     DistroExecProbeClass::DistroFailure => {
@@ -1171,9 +1170,8 @@ impl WslLifecycle {
         );
         progress.report_message(CHIP_FEATURE_SETUP_WARN);
 
-        let mut cmd = tokio::process::Command::new("wsl");
+        let mut cmd = tillandsias_vm_layer::wsl_command_async();
         cmd.args(["--install", "--no-distribution"])
-            .env("WSL_UTF8", "1")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
@@ -1198,7 +1196,8 @@ impl WslLifecycle {
                 if let Some(out) = stdout {
                     let mut lines = tokio::io::BufReader::new(out).lines();
                     while let Ok(Some(line)) = lines.next_line().await {
-                        let line = line.replace('\u{0}', "").trim().to_string();
+                        // No NUL scrub — the command carries WSL_UTF8=1.
+                        let line = line.trim().to_string();
                         if line.is_empty() {
                             continue;
                         }
@@ -1215,7 +1214,8 @@ impl WslLifecycle {
                 if let Some(err) = stderr {
                     let mut lines = tokio::io::BufReader::new(err).lines();
                     while let Ok(Some(line)) = lines.next_line().await {
-                        let line = line.replace('\u{0}', "").trim().to_string();
+                        // No NUL scrub — the command carries WSL_UTF8=1.
+                        let line = line.trim().to_string();
                         if !line.is_empty() {
                             err_tail = line;
                         }
@@ -1556,28 +1556,108 @@ fi
         // measured working in a live guest before this was written. socat
         // ships in the image built WITH_VSOCK, so no new dependency.
         //
-        // It retries because ExecStartPost races a Type=simple ExecStart: the
-        // process is forked but may not have bound yet. The window is bounded
-        // so a genuinely dead listener still fails rather than hanging.
+        // WHERE THIS RUNS, and why it moved (order 757-4hdt). It was an
+        // ExecStartPost on the daemon's own unit with a 15-second deadline.
+        // That killed clean-room provisioning of the published v0.4.260815.1:
+        // the probe reported NOT-BOUND at fifteen seconds, and because an
+        // ExecStartPost is a control process, systemd STOPPED a perfectly
+        // healthy daemon mid-build. Restart=on-failure began the same
+        // minutes-long work again, and it never converged; measured five
+        // failures with the unit still `activating`.
+        //
+        // WHY THE PROBE SAID NOT-BOUND, corrected (order 795-jeym, measured
+        // 2026-08-17). This comment used to say the daemon "bootstraps Vault
+        // and builds the proxy image -- minutes of work -- BEFORE it binds
+        // 42420". That is not what the code does and never was. The bind is
+        // the FIRST await in the vsock task: `run_headless_async` reaches
+        // `maybe_spawn_vsock_listener` through non-blocking calls only, and
+        // the vault/proxy work is driven by the liveness task, which is gated
+        // on VmPhase::Ready and dispatched through `spawn_blocking`, so it
+        // cannot precede the bind. Measured on four cold boots of this guest:
+        // the listener answers 61ms, 78ms, 90ms and 255ms after daemon start,
+        // and the 255ms case is the genuinely cold one where the vault image
+        // was MISSING and provisioning then ran for a further 24 seconds.
+        // The listener was bound 36ms BEFORE provisioning began.
+        //
+        // The real cause is the one 757-4hdt found later and recorded in its
+        // own verification event: `vsock_loopback` was not loaded on that
+        // boot. This probe connects to CID 1 (VMADDR_CID_LOCAL), which
+        // REQUIRES that module, so it reported the control wire down while
+        // the wire was working. The module load races the probe; the bind
+        // does not. That is why the modprobe and the ENETUNREACH branch
+        // below are the load-bearing half of the fix, and why a shorter
+        // deadline is gated on making the module dependency deterministic
+        // rather than on reordering anything in the daemon.
+        //
+        // Keeping the superseded diagnosis here had a cost: it was read as
+        // current and a p1 release-blocker packet was filed to implement it.
+        //
+        // Raising the deadline in place would not have fixed it: ExecStartPost
+        // BLOCKS activation, so a generous window turns a fast failure into a
+        // ten-minute hang of `systemctl enable --now`. The fault was placing an
+        // assertion where failing it stops the subject. A probe that can kill
+        // the healthy process it measures is not a check.
+        //
+        // So it is now its OWN oneshot unit, ordered after the daemon and
+        // wanted by it. Failing leaves the daemon untouched and shows up in
+        // `systemctl --failed` and the journal -- a signal that is loud without
+        // being lethal. The deadline is generous because nothing waits on it,
+        // and it still retries because it races a Type=exec ExecStart.
         let ready_script = r#"#!/usr/bin/env bash
 set -uo pipefail
 PORT="${1:-42420}"
-DEADLINE=$(( $(date +%s) + 15 ))
+
+# CID 1 is VMADDR_CID_LOCAL, and reaching it requires the vsock_loopback
+# module. A fresh guest does NOT have it loaded -- measured on a clean-room
+# provision of v0.4.260815.1 -- and without it this probe reported the control
+# wire down while the HOST was talking to the guest perfectly happily
+# (phase=Ready, podman_ready=true). The host arrives over hvsocket to the VM's
+# own CID and never touches loopback, so the probe was asserting a path nobody
+# depends on and failing a healthy system (order 757-4hdt).
+modprobe vsock_loopback 2>/dev/null || true
+
+# The two failure modes are DISTINGUISHABLE and must not be conflated:
+#   ENETUNREACH "Network is unreachable"  -> no loopback transport; this probe
+#                                            cannot see the property from here
+#   ECONNREFUSED "Connection refused"     -> transport fine, nothing listening,
+#                                            which is exactly the defect
+#                                            735-ewzp exists to catch
+# Reporting the first as NOT-BOUND is a false alarm about a working system;
+# reporting it as OK would be the always-passes probe 735-ewzp replaced.
+# So it gets its own verdict and its own exit code.
+# The 900s is NOT a bind-latency budget. Measured over four cold boots
+# (order 795-jeym, 2026-08-17) the listener answers 61-255 ms after daemon
+# start, so 900s is ~3500x the worst observed bind. What the window actually
+# covers is the `vsock_loopback` module load racing this probe: the modprobe
+# above is best-effort, and on a boot where systemd-modules-load has not run
+# yet the retry loop is the only thing that converges. Shorten this ONLY
+# after that dependency is made deterministic (ordering the unit after
+# systemd-modules-load.service, or an ExecStartPre modprobe) -- otherwise a
+# short deadline just converts a slow pass into a fast INDETERMINATE.
+DEADLINE=$(( $(date +%s) + ${TILLANDSIAS_READY_TIMEOUT:-900} ))
+last=""
 while :; do
   # The CONNECT address must come FIRST. Written the other way round --
   # `socat -u /dev/null VSOCK-CONNECT:1:$PORT` -- socat reaches EOF on
   # /dev/null and exits 0 BEFORE the connection can fail, so the probe passes
   # against a dead port. That form was measured returning 0 for both a live
   # and a dead port: a readiness check that always succeeds, which is worse
-  # than the signal it replaces. Verified discriminating: exit 0 on a bound
-  # 42420, exit 1 on an unbound 42999.
-  if timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>/dev/null; then
+  # than the signal it replaces.
+  last="$(timeout 8 socat -T1 "VSOCK-CONNECT:1:${PORT}" /dev/null 2>&1)" && {
     echo "[tillandsias-ready] vsock_listener=bound port=${PORT}"
     exit 0
-  fi
+  }
   if [ "$(date +%s)" -ge "$DEADLINE" ]; then
-    echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the process is running but nothing accepts on the control-wire port; the host cannot reach this guest" >&2
-    exit 1
+    case "$last" in
+      *"Network is unreachable"*)
+        echo "[tillandsias-ready] vsock_listener=INDETERMINATE port=${PORT} -- no vsock loopback transport in this guest (vsock_loopback absent), so a guest-local probe cannot observe the listener; this says NOTHING about host reachability, which uses hvsocket. Check the host side with: tillandsias-tray --diagnose --json" >&2
+        exit 2
+        ;;
+      *)
+        echo "[tillandsias-ready] vsock_listener=NOT-BOUND port=${PORT} -- the transport works but nothing accepts on the control-wire port; the host cannot reach this guest. Last error: ${last}" >&2
+        exit 1
+        ;;
+    esac
   fi
   sleep 1
 done
@@ -1645,9 +1725,13 @@ Description=Tillandsias headless (in-VM vsock control wire)
 After=network-online.target podman.socket tillandsias-headless-fetch.service
 Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
-# Bound the restart loop the ExecStartPost readiness probe can create (order
-# 735-ewzp). A guest that can never bind should end in `failed`, loudly and
-# once, not restart every two seconds forever. These are [Unit] directives on
+# Bound the restart loop (order 735-ewzp). A daemon that can never start
+# should end in `failed`, loudly and once, not restart every two seconds
+# forever. This used to say "the restart loop the ExecStartPost readiness
+# probe can create"; that probe is no longer on this unit (757-4hdt) and the
+# stale wording briefly made a `grep -c ExecStartPost` on the generated file
+# report 1 during verification -- a comment answering a check about
+# directives, which is the shape 601-462g names. These are [Unit] directives on
 # modern systemd -- placing them under [Service], where they read more
 # naturally, gets them silently ignored, which would be the same
 # looks-configured-does-nothing shape this packet exists to remove.
@@ -1662,7 +1746,6 @@ Environment=HOME=/root
 Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 {low_power_env}ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
-ExecStartPost=/usr/local/lib/tillandsias/headless-ready.sh 42420
 Restart=on-failure
 RestartSec=2s
 StandardOutput=journal+console
@@ -1674,6 +1757,39 @@ WantedBy=multi-user.target
         self.wsl_root_write(
             "/etc/systemd/system/tillandsias-headless.service",
             &headless_unit,
+            false,
+        )
+        .await?;
+
+        // 4b. tillandsias-headless-ready.service — the readiness ASSERTION,
+        // deliberately a separate unit (order 757-4hdt).
+        //
+        // `Wants=` rather than `Requires=`, and no `Before=` on anything: this
+        // unit must be able to fail without taking the daemon or the boot with
+        // it. That separation IS the fix -- the same script as an ExecStartPost
+        // stopped a healthy daemon on every cold boot.
+        //
+        // It still fails loudly. A failed oneshot is listed by
+        // `systemctl --failed` and its stderr lands in the journal, so an
+        // unbound control wire remains a red signal to anyone looking -- which
+        // was 735-ewzp's whole point, and is preserved here rather than traded
+        // away for the fix.
+        let ready_unit = r#"[Unit]
+Description=Tillandsias control-wire readiness assertion
+After=tillandsias-headless.service
+Wants=tillandsias-headless.service
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/tillandsias/headless-ready.sh 42420
+StandardOutput=journal+console
+StandardError=journal+console
+[Install]
+WantedBy=multi-user.target
+"#;
+        self.wsl_root_write(
+            "/etc/systemd/system/tillandsias-headless-ready.service",
+            ready_unit,
             false,
         )
         .await?;
@@ -1730,7 +1846,18 @@ WantedBy=multi-user.target
         // in `Connecting` until the budget expires.
         // @trace plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md
         self.wsl_root_sh(
+            // tillandsias-headless-ready.service is enabled but NOT started
+            // here, and the distinction is load-bearing (order 757-4hdt).
+            // `--now` on the assertion would block this command until the
+            // listener binds -- minutes on a cold boot -- and then fail the
+            // whole provisioning step if it timed out, which is precisely the
+            // coupling that broke v0.4.260815.1. `enable` alone writes the
+            // WantedBy symlink so it runs on the next boot, and it is started
+            // detached below so a cold boot still gets the assertion without
+            // provisioning waiting on it.
             "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service && \
+             systemctl enable tillandsias-headless-ready.service && \
+             { systemctl start --no-block tillandsias-headless-ready.service 2>/dev/null || true; } && \
              { systemctl enable --now home-forge-src.mount 2>/dev/null || true; }",
         )
         .await?;
@@ -2478,16 +2605,59 @@ mod tests {
             headless_unit.contains("ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh")
         );
 
-        // ORDER 735-ewzp: the unit must ASSERT A BOUND LISTENER after start,
-        // not merely reach `active`. A guest binary built without the
-        // listen-vsock feature satisfied every existing signal here — the
-        // preflight passed, the process logged app.started, systemd held the
-        // unit active — while nothing accepted on 42420 and the host saw a
-        // seven-and-a-half minute timeout.
+        // ORDER 735-ewzp: something must ASSERT A BOUND LISTENER after start,
+        // not merely that the unit reached `active`. A guest binary built
+        // without the listen-vsock feature satisfied every existing signal
+        // here — the preflight passed, the process logged app.started, systemd
+        // held the unit active — while nothing accepted on 42420 and the host
+        // saw a seven-and-a-half minute timeout.
+        //
+        // ORDER 757-4hdt: that assertion must NOT live on the daemon's unit.
+        // As an ExecStartPost with a 15s deadline it stopped a healthy daemon
+        // on every cold boot, because the daemon spends minutes building images
+        // before it binds. Both properties are pinned together here: the probe
+        // exists, and it is not wired anywhere that failing it kills the
+        // daemon.
         assert!(
-            headless_unit
-                .contains("ExecStartPost=/usr/local/lib/tillandsias/headless-ready.sh 42420"),
-            "the unit must probe the port after start: {headless_unit}"
+            !headless_unit.contains("ExecStartPost="),
+            "the daemon unit must have no ExecStartPost: a control process that              fails there STOPS the service it was measuring (757-4hdt): {headless_unit}"
+        );
+        let ready_unit = source
+            .split("// 4b. tillandsias-headless-ready.service")
+            .nth(1)
+            .and_then(|tail| tail.split("// 5. home-forge-src.mount").next())
+            .expect("ready unit window");
+        assert!(
+            ready_unit.contains("ExecStart=/usr/local/lib/tillandsias/headless-ready.sh 42420"),
+            "the readiness assertion must still run, just not on the daemon's unit: {ready_unit}"
+        );
+        assert!(
+            ready_unit.contains("Type=oneshot"),
+            "the assertion is a oneshot, not a service that gets restarted: {ready_unit}"
+        );
+        // `Wants=`, never `Requires=`: a failed assertion must not drag the
+        // daemon down, which is the entire point of moving it.
+        assert!(
+            ready_unit.contains("Wants=tillandsias-headless.service")
+                && !ready_unit.contains("Requires=tillandsias-headless.service"),
+            "the assertion must be able to fail alone: {ready_unit}"
+        );
+        // Provisioning must not BLOCK on the assertion either -- `--now` on it
+        // would hang `systemctl enable` for the whole cold-boot image build and
+        // then fail the provisioning step, recreating the coupling.
+        // Scoped to the provisioning window, NOT the whole file: `include_str!`
+        // pulls in this test too, so a whole-source `!contains` would match the
+        // assertion's own literal and fail against itself. That trap has bitten
+        // this file's checks before.
+        let enable_window = source
+            .split("// Enable AND start the units now.")
+            .nth(1)
+            .and_then(|tail| tail.split("// Phase 3d:").next())
+            .expect("enable window");
+        assert!(
+            enable_window.contains("systemctl enable tillandsias-headless-ready.service")
+                && !enable_window.contains("enable --now tillandsias-headless-ready.service"),
+            "provisioning must enable the assertion without waiting on it (757-4hdt): {enable_window}"
         );
         // The script it names must actually be installed, or the unit fails on
         // a missing file and the diagnosis is about the wrong thing.
@@ -2498,6 +2668,26 @@ mod tests {
         assert!(
             source.contains("VSOCK-CONNECT:1:"),
             "readiness must connect to the port (CID 1 = VMADDR_CID_LOCAL), not test /dev/vsock"
+        );
+        // ORDER 757-4hdt: CID 1 needs the vsock_loopback module, which a fresh
+        // guest does NOT have loaded. Without these three properties the probe
+        // reported the wire down while the host was talking to the guest
+        // happily (phase=Ready, podman_ready=true) — a false alarm about a
+        // working system. Verified by execution in a live guest: module absent
+        // -> loads it and reports bound (exit 0); transport up with nothing
+        // listening -> NOT-BOUND (exit 1); no loopback transport at all ->
+        // INDETERMINATE (exit 2).
+        assert!(
+            source.contains("modprobe vsock_loopback"),
+            "the probe must load the transport CID 1 depends on before judging"
+        );
+        assert!(
+            source.contains("vsock_listener=INDETERMINATE"),
+            "an absent loopback transport must get its own verdict, not be              reported as an unbound listener"
+        );
+        assert!(
+            source.contains("Network is unreachable"),
+            "the probe must branch on ENETUNREACH (no transport) versus a              refused connection (nothing listening) — conflating them is how it              failed a healthy system"
         );
         // The connect address must be socat's FIRST argument. With /dev/null
         // first, socat hits EOF and exits 0 before the connection can fail --

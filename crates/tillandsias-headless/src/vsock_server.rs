@@ -27,10 +27,11 @@ use tillandsias_control_wire::transport::{
 };
 use tillandsias_control_wire::{
     CAP_PTY_ATTACH_V1, CAP_PTY_HEARTBEAT_V1, CAP_PTY_HEARTBEAT_V2, CloudProjectEntry,
-    ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase,
-    WIRE_VERSION, decode, encode,
+    ContainerMetricWire, ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry,
+    MAX_MESSAGE_BYTES, MetricsSnapshotWire, MountIoMetricWire, VmPhase, WIRE_VERSION, decode,
+    encode,
 };
-use tillandsias_secure_channel::{HopId, channel_psk, server_handshake};
+use tillandsias_secure_channel::{HopId, channel_psk, server_handshake_or_reclaim};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc, watch};
 use tracing::{debug, info, warn};
@@ -105,10 +106,32 @@ fn secure_control_wire_mode() -> Result<SecureControlWireMode, String> {
     .clone()
 }
 
+/// Wrap `stream` per the secure-control-wire `mode`: `Off` passes the
+/// plaintext stream through, `On` runs the version-bound Noise responder
+/// handshake and returns the encrypted stream.
+///
+/// The mode is a PARAMETER (resolved by the caller via
+/// [`secure_control_wire_mode`]) rather than read here: the env gate caches
+/// through a `OnceLock`, so a unit test could never exercise the gated-ON
+/// path without process-wide env mutation if this function consulted the
+/// gate itself (order 137, vsock-exec-chain-authn-authz).
+///
+/// A FAILED gated-ON handshake RETURNS the raw stream with the error
+/// (`server_handshake_or_reclaim`): the order-137 cutover contract ("send
+/// Error{code: Unauthorized} and close",
+/// plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md) needs the
+/// still-plaintext connection for the rejection notice, and giving the
+/// stream back keeps every value owned — no borrow reaches across the
+/// caller's success/failure split.
+#[allow(clippy::type_complexity)]
 async fn maybe_secure_stream(
+    mode: SecureControlWireMode,
     stream: Box<dyn AsyncReadWrite + Unpin + Send>,
-) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
-    match secure_control_wire_mode().map_err(io::Error::other)? {
+) -> Result<
+    Box<dyn AsyncReadWrite + Unpin + Send>,
+    (Box<dyn AsyncReadWrite + Unpin + Send>, io::Error),
+> {
+    match mode {
         SecureControlWireMode::Off => Ok(stream),
         SecureControlWireMode::On => {
             let psk = channel_psk(
@@ -116,11 +139,79 @@ async fn maybe_secure_stream(
                 WIRE_VERSION,
                 HopId::HostGuest,
             );
-            let secure = server_handshake(stream, &psk).await?;
-            Ok(Box::new(secure))
+            match server_handshake_or_reclaim(stream, &psk).await {
+                Ok(secure) => Ok(Box::new(secure)),
+                Err((raw, err)) => Err((raw, err)),
+            }
         }
     }
 }
+
+/// Hot paths sampled for per-mount I/O on every `MetricsSnapshotRequest`
+/// (order 333, deliverable
+/// `plan/issues/guest-container-metrics-over-control-wire-2026-07-13.md`):
+/// the forge worktree, the pull cache, the cheatsheet overlay, the git-mirror
+/// store, and the proxy cache. A path whose backing device is not visible in
+/// `/proc/diskstats` (tmpfs, virtiofs, overlay) reports `error: unavailable:
+/// <fstype>` rather than a fabricated zero — that is the point of naming them
+/// explicitly instead of sampling whatever happens to be mounted.
+const METRICS_MOUNT_PATHS: &[&str] = &[
+    "/home/forge/src",
+    "/var/cache/tillandsias",
+    "/opt/cheatsheets",
+    "/srv/git",
+    "/var/spool/squid",
+];
+
+/// Convert sampler types into their wire counterparts (order 333). The wire
+/// crate deliberately owns standalone structs so sidecar consumers need no
+/// dependency on `tillandsias-metrics`; this is the one place the two shapes
+/// meet, and it is a pure field-for-field move — `None` and `error` travel
+/// through unchanged, so the no-fabrication contract cannot be lost in
+/// translation.
+fn metrics_snapshot_wire(
+    containers: Vec<tillandsias_metrics::ContainerMetric>,
+    mounts: Vec<tillandsias_metrics::MountIoMetric>,
+) -> MetricsSnapshotWire {
+    MetricsSnapshotWire {
+        sampled_at_unix: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+        containers: containers
+            .into_iter()
+            .map(|c| ContainerMetricWire {
+                name: c.name,
+                cpu_usec: c.cpu_usec,
+                memory_current_bytes: c.memory_current_bytes,
+                blkio_read_bytes: c.blkio_read_bytes,
+                blkio_write_bytes: c.blkio_write_bytes,
+                blkio_read_ops: c.blkio_read_ops,
+                blkio_write_ops: c.blkio_write_ops,
+                error: c.error,
+            })
+            .collect(),
+        mounts: mounts
+            .into_iter()
+            .map(|m| MountIoMetricWire {
+                path: m.path,
+                device: m.device,
+                read_bytes: m.read_bytes,
+                write_bytes: m.write_bytes,
+                read_ops: m.read_ops,
+                write_ops: m.write_ops,
+                error: m.error,
+            })
+            .collect(),
+    }
+}
+
+/// Bound on the best-effort plaintext `Unauthorized` notice written to a
+/// peer that failed the secure-channel handshake (order 137). Best-effort by
+/// design: a peer that never reads must not be able to pin this handler —
+/// the notice is a courtesy diagnostic, the fail-closed `return` is the
+/// contract.
+const UNAUTHORIZED_NOTICE_TIMEOUT: Duration = Duration::from_millis(500);
 
 /// Shared lifecycle state that the in-VM headless updates as it progresses
 /// through provisioning → ready → drain. The vsock listener reads from this
@@ -173,6 +264,15 @@ pub struct VmStateHandle {
     push_seq: Arc<std::sync::atomic::AtomicU64>,
     /// Last event message.
     last_event: Arc<RwLock<String>>,
+    /// Order 690-xeda: waker for the steady-state probe loops. The periodic
+    /// login-state and local-projects tasks PARK (no timer at all) while
+    /// they have zero subscribers; `subscribe_login_state` /
+    /// `subscribe_local_projects` fire this so a parked loop wakes when the
+    /// first listener arrives. `notify_waiters` carries no stored permit, so
+    /// a subscribe landing between a loop's gate check and its `notified()`
+    /// await can be missed — every parked loop therefore pairs the wait with
+    /// a bounded backstop timeout rather than trusting the wake alone.
+    subscriber_nudge: Arc<tokio::sync::Notify>,
 }
 
 /// Last observed login state shared between the handle clones: `None` until
@@ -222,7 +322,15 @@ impl VmStateHandle {
             local_projects: Arc::new(RwLock::new(None)),
             push_seq: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             last_event: Arc::new(RwLock::new(SERVER_NAME.to_string())),
+            subscriber_nudge: Arc::new(tokio::sync::Notify::new()),
         }
+    }
+
+    /// Order 690-xeda: clone of the subscriber-arrival waker. Probe loops
+    /// that are subscriber-gated park on `notified()` (with a bounded
+    /// backstop) instead of ticking on a timer nobody is listening to.
+    pub fn subscriber_nudge(&self) -> Arc<tokio::sync::Notify> {
+        Arc::clone(&self.subscriber_nudge)
     }
 
     /// Subscribe to the `VmStatus` push topic. Each call returns an
@@ -235,8 +343,13 @@ impl VmStateHandle {
 
     /// Subscribe to the `LoginState` push topic (order 230). Same
     /// independent-receiver semantics as [`subscribe_vm_status`].
+    /// Order 690-xeda: also wakes the parked login-state probe loop so the
+    /// first subscriber gets a fresh observation without waiting out the
+    /// backstop.
     pub fn subscribe_login_state(&self) -> broadcast::Receiver<ControlMessage> {
-        self.login_state_tx.subscribe()
+        let rx = self.login_state_tx.subscribe();
+        self.subscriber_nudge.notify_waiters();
+        rx
     }
 
     /// Subscribe to the `CloudProjects` push topic (order 231). Same
@@ -309,8 +422,13 @@ impl VmStateHandle {
 
     /// Subscribe to the `LocalProjects` push topic (order 260). Same
     /// independent-receiver semantics as [`subscribe_vm_status`].
+    /// Order 690-xeda: also wakes the parked rescan loop so the first
+    /// subscriber gets a scan immediately instead of waiting out the
+    /// backstop.
     pub fn subscribe_local_projects(&self) -> broadcast::Receiver<ControlMessage> {
-        self.local_projects_tx.subscribe()
+        let rx = self.local_projects_tx.subscribe();
+        self.subscriber_nudge.notify_waiters();
+        rx
     }
 
     /// True when at least one connection is subscribed to `LocalProjects`.
@@ -667,25 +785,94 @@ async fn serve_listener(listener: &mut Listener, shutdown: Arc<AtomicBool>, stat
 async fn handle_connection(
     stream: Box<dyn AsyncReadWrite + Unpin + Send>,
     state: VmStateHandle,
+    shutdown: watch::Receiver<bool>,
+) {
+    // The gate is resolved HERE (OnceLock-cached env read) and passed down so
+    // the gated-ON body stays unit-testable without env mutation (order 137).
+    handle_connection_with_mode(secure_control_wire_mode(), stream, state, shutdown).await
+}
+
+async fn handle_connection_with_mode(
+    mode: Result<SecureControlWireMode, String>,
+    raw_stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+    state: VmStateHandle,
     mut shutdown: watch::Receiver<bool>,
 ) {
-    let mut stream = match tokio::select! {
-        result = maybe_secure_stream(stream) => result,
-        _ = connection_shutdown(&mut shutdown) => return,
-    } {
-        Ok(secured) => {
-            info!(
-                spec = "vsock-transport",
-                "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
-            );
-            secured
-        }
+    let mode = match mode {
+        Ok(mode) => mode,
         Err(err) => {
-            warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
+            // Misconfigured gate (unknown flag value): fail closed without
+            // serving anything. No Unauthorized notice here — the parse error
+            // is an operator misconfiguration, not a peer-authorization
+            // verdict.
+            warn!(
+                spec = "vsock-transport",
+                error = %err,
+                "secure control wire misconfigured; closing connection"
+            );
             return;
         }
     };
+    // Every value stays OWNED across the success/failure split: a failed
+    // gated-ON handshake hands the raw stream BACK (server_handshake_or_reclaim),
+    // so no borrow of it has to span this match — the earlier borrowing
+    // draft was NLL-rejected (E0499, drop-liveness of the Ok box).
+    let handshake = tokio::select! {
+        result = maybe_secure_stream(mode, raw_stream) => result,
+        _ = connection_shutdown(&mut shutdown) => return,
+    };
+    let (mut refused_stream, err) = match handshake {
+        Ok(stream) => {
+            if mode == SecureControlWireMode::On {
+                info!(
+                    spec = "vsock-transport",
+                    "secure control wire handshake succeeded (TILLANDSIAS_SECURE_CONTROL_WIRE=on)"
+                );
+            }
+            serve_ready_stream(stream, state, shutdown).await;
+            return;
+        }
+        Err((raw, err)) => (raw, err),
+    };
+    // Reached only when a gated-ON handshake FAILED (Off cannot fail).
+    // Order-137 cutover contract: "send Error{code: Unauthorized} and
+    // close", never a silent close. Best-effort and time-bounded: the write
+    // result is ignored so an unauthenticated peer that never reads cannot
+    // pin this handler.
+    // @trace plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md
+    if mode == SecureControlWireMode::On {
+        let unauthorized = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 0,
+            body: ControlMessage::Error {
+                seq_in_reply_to: None,
+                code: ErrorCode::Unauthorized,
+                message: "secure control wire required: the version-bound \
+                          secure-channel handshake failed; plaintext or \
+                          mismatched-version peers are not served"
+                    .to_string(),
+            },
+        };
+        let _ = tokio::time::timeout(
+            UNAUTHORIZED_NOTICE_TIMEOUT,
+            write_envelope(&mut refused_stream, &unauthorized),
+        )
+        .await;
+    }
+    warn!(spec = "vsock-transport", error = %err, "secure control wire handshake failed");
+}
 
+/// The post-handshake serving loop — everything after a connection is
+/// cleared to be served (the plaintext stream when the secure control wire
+/// is Off, the encrypted stream when On). Factored out of
+/// `handle_connection_with_mode` (order 137) so the success path can
+/// consume the secured stream inside its own match arm while the failure
+/// path keeps the reclaimed raw stream for the Unauthorized notice.
+async fn serve_ready_stream(
+    mut stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+    state: VmStateHandle,
+    mut shutdown: watch::Receiver<bool>,
+) {
     let first = match tokio::select! {
         result = read_envelope(&mut stream) => result,
         _ = connection_shutdown(&mut shutdown) => return,
@@ -734,6 +921,9 @@ async fn handle_connection(
                 "CloudRefreshRequest".into(),
                 "VmShutdownRequest".into(),
                 "GithubLoginStatusRequest".into(),
+                // Order 333: advertise guest metrics so a tray can feature-
+                // detect instead of probing a version table.
+                "MetricsSnapshotRequest".into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],
@@ -746,10 +936,35 @@ async fn handle_connection(
             build_version: Some(tillandsias_secure_channel::workspace_version().to_string()),
         },
     };
-    if let Err(err) = write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await {
+    if let Err(err) = write_envelope(&mut stream, &ack).await {
         warn!(spec = "vsock-transport", error = %err, "failed to write HelloAck");
         return;
     }
+
+    // Split the stream into independent read/write halves so the read side
+    // can be owned by a dedicated task. This eliminates the cancel-safety
+    // bug where `read_envelope` (which uses `read_exact`, not cancellation-
+    // safe) was raced against six other `select!` arms — a preempted partial
+    // frame was silently discarded, desynchronizing the wire (795-57y6).
+    let (read_half, mut write_half) = tokio::io::split(stream);
+
+    // Spawn a dedicated reader task that owns the read half. The read is
+    // never a select! branch, so cancellation cannot interrupt it mid-frame.
+    // Completed envelopes are sent through the channel to the main loop.
+    let (inbound_tx, mut inbound_rx) = mpsc::channel::<io::Result<ControlEnvelope>>(8);
+    tokio::spawn(async move {
+        let mut reader = read_half;
+        loop {
+            let result = read_envelope(&mut reader).await;
+            let is_err = result.is_err();
+            if inbound_tx.send(result).await.is_err() {
+                break; // main loop dropped the receiver
+            }
+            if is_err {
+                break; // EOF or parse error — reader is done
+            }
+        }
+    });
 
     // Per-connection PTY session store (l3: control-wire-pty-attach Tasks 4.x).
     // The pump tasks for each PTY session push envelopes into `pty_outbound`;
@@ -786,12 +1001,16 @@ async fn handle_connection(
     'connection: loop {
         tokio::select! {
             _ = connection_shutdown(&mut shutdown) => {
+                // Drop the write half so the peer sees EOF; the reader
+                // task will exit when its read half errors or the stream
+                // closes.
+                drop(write_half);
                 break 'connection;
             }
             // Outbound PTY frame (PtyData{ToHost} from a pump or PtyClose
             // from child reap).
             Some(env) = pty_rx.recv() => {
-                if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                     debug!(spec = "vsock-transport", "vsock write failed during PTY outbound; closing connection");
                     break 'connection;
                 }
@@ -819,7 +1038,7 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during VmStatusPush; closing connection");
                             break 'connection;
                         }
@@ -849,7 +1068,7 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LoginStatePush; closing connection");
                             break 'connection;
                         }
@@ -878,7 +1097,7 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during CloudProjectsPush; closing connection");
                             break 'connection;
                         }
@@ -907,7 +1126,7 @@ async fn handle_connection(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LocalProjectsPush; closing connection");
                             break 'connection;
                         }
@@ -918,12 +1137,20 @@ async fn handle_connection(
                 }
                 continue;
             }
-            // Inbound frame.
-            result = read_envelope(&mut stream) => {
+            // Inbound frame — received from the dedicated reader task via
+            // channel. The reader owns the read half and never appears in a
+            // select! branch, so cancellation cannot interrupt it mid-frame
+            // (795-57y6).
+            result = inbound_rx.recv() => {
                 let env = match result {
-                    Ok(env) => env,
-                    Err(err) => {
+                    Some(Ok(env)) => env,
+                    Some(Err(err)) => {
                         debug!(spec = "vsock-transport", error = %err, "vsock connection closed");
+                        break 'connection;
+                    }
+                    None => {
+                        // Reader task exited (stream closed or dropped).
+                        debug!(spec = "vsock-transport", "inbound reader task exited; closing connection");
                         break 'connection;
                     }
                 };
@@ -960,7 +1187,7 @@ async fn handle_connection(
                                 ),
                             },
                         };
-                        if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &err, &mut shutdown).await.is_err() {
                             break 'connection;
                         }
                         continue;
@@ -983,7 +1210,7 @@ async fn handle_connection(
                                 ),
                             },
                         };
-                        if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &err, &mut shutdown).await.is_err() {
                             break 'connection;
                         }
                         continue;
@@ -1006,7 +1233,7 @@ async fn handle_connection(
                         last_event: state.last_event(),
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1031,7 +1258,7 @@ async fn handle_connection(
                     seq: env.seq,
                     body: ControlMessage::SubscribeAck,
                 };
-                if write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1051,7 +1278,7 @@ async fn handle_connection(
                         entries,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1082,7 +1309,7 @@ async fn handle_connection(
                         projects,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1112,7 +1339,60 @@ async fn handle_connection(
                         handle,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
+                    break 'connection;
+                }
+            }
+            ControlMessage::MetricsSnapshotRequest { seq } => {
+                // Order 333: per-container cgroup counters + per-mount I/O,
+                // sampled in the GUEST and returned over the control wire so
+                // macOS/Windows trays never need a TCP path into the VM.
+                // spawn_blocking because the samplers read /sys and /proc and
+                // shell out to `podman ps` (bounded).
+                //
+                // The no-fabrication contract rides in the DATA, not in the
+                // control flow: a failed sample travels as `error` with the
+                // values `None` (spec:observability-metrics), so this arm
+                // always replies — an empty-but-healthy-looking snapshot is
+                // exactly what the packet forbids, and the samplers never
+                // produce one.
+                let snapshot = tokio::task::spawn_blocking(|| {
+                    let containers = tillandsias_metrics::sample_containers();
+                    let mounts = tillandsias_metrics::sample_mount_io(METRICS_MOUNT_PATHS);
+                    (containers, mounts)
+                })
+                .await;
+                let (containers, mounts) = match snapshot {
+                    Ok(sampled) => sampled,
+                    Err(err) => {
+                        // The blocking pool itself failed — report it as a
+                        // sample-level error rather than an empty snapshot.
+                        warn!(
+                            spec = "observability-metrics",
+                            error = %err,
+                            "metrics sampling task failed"
+                        );
+                        (
+                            vec![tillandsias_metrics::ContainerMetric::error_only(
+                                "sampler",
+                                format!("metrics sampling task failed: {err}"),
+                            )],
+                            Vec::new(),
+                        )
+                    }
+                };
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::MetricsSnapshotReply {
+                        seq_in_reply_to: seq,
+                        snapshot: metrics_snapshot_wire(containers, mounts),
+                    },
+                };
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown)
+                    .await
+                    .is_err()
+                {
                     break 'connection;
                 }
             }
@@ -1154,7 +1434,7 @@ async fn handle_connection(
                             message: format!("PtyOpen rejected: {err}"),
                         },
                     };
-                    if write_envelope_with_shutdown(&mut stream, &err_env, &mut shutdown).await.is_err() {
+                    if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown).await.is_err() {
                         break 'connection;
                     }
                 }
@@ -1232,7 +1512,7 @@ async fn handle_connection(
                         success: true,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1279,7 +1559,7 @@ async fn handle_connection(
                         root_token,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1307,7 +1587,7 @@ async fn handle_connection(
                         ),
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &err, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1512,6 +1792,89 @@ mod tests {
         assert!(parse_secure_control_wire_mode(Ok("yes".to_string())).is_err());
         assert!(parse_secure_control_wire_mode(Ok("1".to_string())).is_err());
         assert!(parse_secure_control_wire_mode(Ok("true".to_string())).is_err());
+    }
+
+    /// Order 137 (vsock-exec-chain-authn-authz): a gated-ON responder that
+    /// receives a plaintext `Hello` — an unauthenticated / legacy peer, the
+    /// exact client shape `plaintext_peer_is_rejected` models in
+    /// tillandsias-secure-channel — must answer with a plaintext
+    /// `Error{code: Unauthorized}` envelope naming the secure-channel
+    /// requirement, must NEVER send `HelloAck`, and must then close the
+    /// connection (fail-closed). The mode is injected via
+    /// `handle_connection_with_mode` because `secure_control_wire_mode()`
+    /// caches through a OnceLock and env mutation is process-wide.
+    /// @trace plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md
+    #[tokio::test]
+    async fn gated_on_plaintext_peer_gets_unauthorized_error_not_helloack() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        let server_task = tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::On),
+            Box::new(server),
+            state,
+            shutdown_rx,
+        ));
+
+        // A plaintext Hello: exactly what a pre-secure-channel client (or a
+        // probe replaying one) opens with.
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: "plaintext-legacy-client".to_string(),
+                    capabilities: Vec::new(),
+                    build_version: None,
+                },
+            },
+        )
+        .await
+        .expect("plaintext client writes Hello");
+
+        let reply = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("gated-ON responder must answer the rejected peer, not hang")
+            .expect("responder sends one well-formed plaintext envelope before closing");
+        match reply.body {
+            ControlMessage::Error {
+                code,
+                message,
+                seq_in_reply_to,
+            } => {
+                assert_eq!(
+                    code,
+                    ErrorCode::Unauthorized,
+                    "the rejection envelope must carry ErrorCode::Unauthorized"
+                );
+                assert!(
+                    message.contains("secure control wire required"),
+                    "the message must name the secure-channel requirement, got {message:?}"
+                );
+                assert_eq!(seq_in_reply_to, None, "no plaintext frame was accepted");
+            }
+            ControlMessage::HelloAck { .. } => {
+                panic!("gated-ON responder must never HelloAck an unauthenticated peer")
+            }
+            other => panic!("expected Error{{Unauthorized}}, got {other:?}"),
+        }
+
+        // Fail-closed: nothing is served after the notice — the next read
+        // must observe the connection closing, never a HelloAck or any
+        // other envelope.
+        let after = tokio::time::timeout(Duration::from_secs(2), read_envelope(&mut client))
+            .await
+            .expect("connection must close after the Unauthorized notice");
+        assert!(
+            after.is_err(),
+            "no envelope may follow the Unauthorized rejection, got {after:?}"
+        );
+
+        tokio::time::timeout(Duration::from_secs(2), server_task)
+            .await
+            .expect("handler must exit fail-closed")
+            .expect("handler must not panic");
     }
 
     /// Default is `Starting` (gap-6 contract). The vsock listener can
@@ -2162,6 +2525,31 @@ mod tests {
         assert!(!state.has_login_state_subscribers());
     }
 
+    /// Order 690-xeda: a probe loop parked on `subscriber_nudge` wakes when
+    /// the first subscriber arrives (both nudging topics), so parking idle
+    /// loops costs no subscriber-visible latency beyond the documented
+    /// backstop.
+    #[tokio::test]
+    async fn subscriber_nudge_wakes_parked_waiter_on_subscribe() {
+        use std::time::Duration;
+        for topic in ["login_state", "local_projects"] {
+            let state = VmStateHandle::new();
+            let nudge = state.subscriber_nudge();
+            let parked = tokio::spawn(async move { nudge.notified().await });
+            // Let the waiter actually park before nudging: notify_waiters
+            // wakes only CURRENT waiters (no stored permit).
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            let _rx = match topic {
+                "login_state" => state.subscribe_login_state(),
+                _ => state.subscribe_local_projects(),
+            };
+            tokio::time::timeout(Duration::from_secs(2), parked)
+                .await
+                .unwrap_or_else(|_| panic!("{topic} subscribe must wake the parked waiter"))
+                .expect("parked waiter task must not panic");
+        }
+    }
+
     #[test]
     fn vm_state_handle_podman_ready_checks_socket_path() {
         let mut state = VmStateHandle::new();
@@ -2301,5 +2689,144 @@ mod tests {
             "/this/dir/intentionally/does/not/exist/under/tillandsias",
         ));
         assert!(entries.is_empty());
+    }
+
+    /// Order 333: the sampler → wire conversion is field-for-field, and the
+    /// no-fabrication contract must survive it. A failed sample arrives on
+    /// the wire with its `error` intact and every counter still `None` —
+    /// never rewritten into a healthy-looking zero.
+    #[test]
+    fn metrics_wire_conversion_preserves_errors_and_none_counters() {
+        let containers = vec![
+            tillandsias_metrics::ContainerMetric {
+                name: "tillandsias-proxy".to_string(),
+                cpu_usec: Some(1234),
+                memory_current_bytes: Some(4096),
+                blkio_read_bytes: Some(10),
+                blkio_write_bytes: Some(20),
+                blkio_read_ops: Some(1),
+                blkio_write_ops: Some(2),
+                error: None,
+            },
+            tillandsias_metrics::ContainerMetric::error_only("podman", "spawn failed"),
+        ];
+        let mounts = vec![tillandsias_metrics::MountIoMetric {
+            path: "/opt/cheatsheets".to_string(),
+            device: None,
+            read_bytes: None,
+            write_bytes: None,
+            read_ops: None,
+            write_ops: None,
+            error: Some("unavailable: tmpfs".to_string()),
+        }];
+
+        let wire = metrics_snapshot_wire(containers, mounts);
+
+        assert_eq!(wire.containers.len(), 2);
+        assert_eq!(wire.containers[0].name, "tillandsias-proxy");
+        assert_eq!(wire.containers[0].cpu_usec, Some(1234));
+        assert_eq!(wire.containers[0].blkio_write_ops, Some(2));
+        assert!(wire.containers[0].error.is_none());
+
+        let failed = &wire.containers[1];
+        assert_eq!(failed.error.as_deref(), Some("spawn failed"));
+        assert!(
+            failed.cpu_usec.is_none()
+                && failed.memory_current_bytes.is_none()
+                && failed.blkio_read_bytes.is_none()
+                && failed.blkio_write_bytes.is_none()
+                && failed.blkio_read_ops.is_none()
+                && failed.blkio_write_ops.is_none(),
+            "a failed container sample must carry NO fabricated counters: {failed:?}"
+        );
+
+        assert_eq!(wire.mounts.len(), 1);
+        assert_eq!(wire.mounts[0].path, "/opt/cheatsheets");
+        assert_eq!(wire.mounts[0].error.as_deref(), Some("unavailable: tmpfs"));
+        assert!(
+            wire.mounts[0].read_bytes.is_none() && wire.mounts[0].write_ops.is_none(),
+            "an unavailable mount must carry NO fabricated counters"
+        );
+    }
+
+    /// Order 333: a `MetricsSnapshotRequest` over a live duplex connection
+    /// gets a `MetricsSnapshotReply` correlated to its seq. Exercises the
+    /// real handler arm end to end (samplers included — on a host with no
+    /// cgroup/podman visibility they return error-carrying samples, which is
+    /// precisely the contract being asserted: a reply, never a hang or a
+    /// silent empty).
+    #[tokio::test]
+    async fn metrics_snapshot_request_gets_a_correlated_reply() {
+        let state = VmStateHandle::new();
+        let (mut client, server) = tokio::io::duplex(256 * 1024);
+        let (_shutdown_tx, shutdown_rx) = watch::channel(false);
+        tokio::spawn(handle_connection_with_mode(
+            Ok(SecureControlWireMode::Off),
+            Box::new(server),
+            state,
+            shutdown_rx,
+        ));
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::Hello {
+                    from: "metrics-test-client".to_string(),
+                    capabilities: Vec::new(),
+                    build_version: None,
+                },
+            },
+        )
+        .await
+        .expect("client writes Hello");
+        let ack = read_envelope(&mut client).await.expect("HelloAck");
+        match ack.body {
+            ControlMessage::HelloAck { server_caps, .. } => assert!(
+                server_caps.iter().any(|c| c == "MetricsSnapshotRequest"),
+                "guest must advertise MetricsSnapshotRequest: {server_caps:?}"
+            ),
+            other => panic!("expected HelloAck, got {other:?}"),
+        }
+
+        write_envelope(
+            &mut client,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 7,
+                body: ControlMessage::MetricsSnapshotRequest { seq: 7 },
+            },
+        )
+        .await
+        .expect("client writes MetricsSnapshotRequest");
+
+        let reply = tokio::time::timeout(Duration::from_secs(30), read_envelope(&mut client))
+            .await
+            .expect("guest must answer a metrics request, not hang")
+            .expect("well-formed reply envelope");
+        match reply.body {
+            ControlMessage::MetricsSnapshotReply {
+                seq_in_reply_to,
+                snapshot,
+            } => {
+                assert_eq!(
+                    seq_in_reply_to, 7,
+                    "reply must correlate to the request seq"
+                );
+                assert_eq!(
+                    snapshot.mounts.len(),
+                    METRICS_MOUNT_PATHS.len(),
+                    "every named hot path is reported (available or error-carrying)"
+                );
+                for mount in &snapshot.mounts {
+                    assert!(
+                        mount.error.is_some() || mount.device.is_some(),
+                        "a mount sample is either resolved or explains itself: {mount:?}"
+                    );
+                }
+            }
+            other => panic!("expected MetricsSnapshotReply, got {other:?}"),
+        }
     }
 }

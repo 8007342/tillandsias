@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # MCP Server: Forge Plan + Methodology Query Tools
+# freshness: updated 2026-08-16 windows-yolanda-fable5-20260816t0921z
 # @trace order:456, order:394b, order:394c, spec:spec-traceability, invariant:plan_is_queried_via_mcp_server_avoiding_heuristic_parsing
 # Communicates via JSON-RPC over stdin/stdout (MCP stdio transport)
 #
@@ -187,6 +188,21 @@ for _mcp_log_cand in \
 done
 command -v mcp_log_usage >/dev/null 2>&1 || mcp_log_usage() { return 0; }
 
+# Dev-vs-runtime environment hook: on the bare-metal DEVELOPMENT host this
+# defaults the inference endpoints to loopback and fires the idempotent
+# dev-inference ensure in the background, so the semantic lanes (plan_answer's
+# 706-f7mq fallback, spec_answer) have an endpoint to reach; inside the forge
+# USER RUNTIME it is a no-op (the enclave owns inference). Guarded source +
+# guarded call keep it `set -e`-safe. See lib-dev-env.sh for the design.
+for _dev_env_cand in \
+    "${BASH_SOURCE[0]%/*}/lib-dev-env.sh" \
+    "/home/forge/.config-overlay/mcp/lib-dev-env.sh"; do
+    if [ -r "$_dev_env_cand" ]; then . "$_dev_env_cand" 2>/dev/null && break; fi
+done
+if command -v tillandsias_dev_env_hook >/dev/null 2>&1; then
+    tillandsias_dev_env_hook "$PWD" || true
+fi
+
 # record_expert_call <tool> <result-text> <unknown-flag>
 # Outcome vocabulary (CLOSED SET):
 #   answered     — a cited envelope, or a non-envelope tool that produced output
@@ -277,16 +293,52 @@ resolve_plan_index() {
 # artifact ensure_forge_experts just produced and is the one the launch state
 # reports on, so preferring a possibly-stale target/release there would make the
 # experts state line lie about which binary is answering.
+# 770-ehym: an executable BIT is a claim; RUNNING the binary is evidence
+# (order 721-nyev, scripts/plan-binary-probe.sh — the shared host probe this
+# mirrors). On a shared Windows/WSL checkout the shared target/ path can hold
+# the OTHER platform's artifact: `-x` passes on /mnt/c for a Windows PE this
+# WSL-hosted server cannot exec, so every tool call died at exec time while
+# the initialize handshake stayed green (2026-08-16, forge-plan.sh line 417,
+# plan/issues/windows-host-tooling-hits-linux-elves-in-target-2026-08-16.md).
+# `capabilities` is the probe subcommand for the same reason the host probe
+# uses it: it exits 0 only on a binary modern enough to serve this wrapper.
+# The TILLANDSIAS_PLAN_BIN override stays existence-checked, not probed — an
+# explicit override is the caller naming the binary, not a candidate to be
+# judged (704-zcgi, first corpus run).
+plan_bin_runs() {
+    [ -n "$1" ] && "$1" capabilities >/dev/null 2>&1
+}
+
 resolve_plan_bin() {
     if [ -n "${TILLANDSIAS_PLAN_BIN:-}" ] && [ -x "${TILLANDSIAS_PLAN_BIN}" ]; then
         printf '%s\n' "$TILLANDSIAS_PLAN_BIN"
         return 0
     fi
+    # Bare-metal DEV env: the checkout's own fresh artifact OUTRANKS a stale
+    # user-level install. Reproduced live 2026-08-15: ~/.local/bin/tillandsias-plan
+    # (installed Aug 12) refused "what is the current Direction?" with the
+    # tokens-refusal while the checkout's target/release answered it CITED —
+    # the host session was served weeks-old behaviour by the canonical-install
+    # preference below, and no capability gap fired because the staleness was
+    # behavioural, not a missing subcommand. This is 682-z5h8's stale-clone
+    # lesson applied to the BINARY. Inside the forge runtime the installed
+    # canonical path still wins (it IS the fresh artifact there).
+    if command -v tillandsias_exec_env >/dev/null 2>&1 \
+        && [ "$(tillandsias_exec_env)" = "dev" ]; then
+        _rpb_idx="$(resolve_plan_index)"
+        if [ -n "$_rpb_idx" ]; then
+            _rpb_root="$(dirname "$(dirname "$_rpb_idx")")"
+            if plan_bin_runs "$_rpb_root/target/release/tillandsias-plan"; then
+                printf '%s\n' "$_rpb_root/target/release/tillandsias-plan"
+                return 0
+            fi
+        fi
+    fi
     for candidate in \
         "$PLAN_BIN_CANONICAL" \
         "/usr/local/bin/tillandsias-plan" \
         "/usr/bin/tillandsias-plan"; do
-        if [ -x "$candidate" ]; then
+        if plan_bin_runs "$candidate"; then
             printf '%s\n' "$candidate"
             return 0
         fi
@@ -297,7 +349,7 @@ resolve_plan_bin() {
     _idx="$(resolve_plan_index)"
     if [ -n "$_idx" ]; then
         _root="$(dirname "$(dirname "$_idx")")"
-        if [ -x "$_root/target/release/tillandsias-plan" ]; then
+        if plan_bin_runs "$_root/target/release/tillandsias-plan"; then
             printf '%s\n' "$_root/target/release/tillandsias-plan"
             return 0
         fi
@@ -672,7 +724,28 @@ spec_answer_envelope() {
         return 0
     fi
     if [ ! -s "$SPEC_INDEX_DIR/chunks.jsonl" ] || [ ! -s "$SPEC_INDEX_DIR/vectors.jsonl" ]; then
-        unsupported_envelope "the spec RAG index is not built at ${SPEC_INDEX_DIR} (need chunks.jsonl + vectors.jsonl). Build it: tillandsias-plan spec-index --root <repo> --out ${SPEC_INDEX_DIR}, then embed each chunk's text via ${embed_ep:-\$TILLANDSIAS_EMBED_ENDPOINT}/embeddings into vectors.jsonl (order 552 does this at launch/commit)."
+        # Order 799-j4xd. Two things this refusal got wrong, both measured.
+        #
+        # (1) It RECITED the build as prose — chunk, then embed each chunk via
+        #     /embeddings into vectors.jsonl. A real producer exists now
+        #     (scripts/spec-index-ensure.sh, orders 552 / 760-hzi4). Reciting an
+        #     algorithm instead of naming a command is precisely how the
+        #     embedding step stayed unimplemented on EVERY host for weeks: 552
+        #     found it "existed on no host in any language -- only as English
+        #     prose inside forge-plan.sh's refusal string". This string.
+        #
+        # (2) When FORGE_SPEC_INDEX_DIR points somewhere unreachable here,
+        #     "build it at <path>" is impossible advice that reads as a merely
+        #     missing index. Observed on macuahuitl 2026-08-17: a LINUX session
+        #     answered with /mnt/c/Users/.../target/spec-index, inherited from a
+        #     tracked config that 2b1f8d188 had already fixed — a fix in a file
+        #     does not reach a process that already read it. The env override is
+        #     invisible in the message, so the reader debugs the index.
+        local _si_note=""
+        if [ -n "${FORGE_SPEC_INDEX_DIR:-}" ] && [ ! -d "$(dirname "$SPEC_INDEX_DIR")" ]; then
+            _si_note=" NOTE: that location came from FORGE_SPEC_INDEX_DIR in this process's environment and its parent does not exist on this host, so the override is stale rather than the index missing. Unset it (or restart the server) to use the default ${FORGE_EXPERTS_STATE_DIR}/spec-index."
+        fi
+        unsupported_envelope "the spec RAG index is not built at ${SPEC_INDEX_DIR} (need chunks.jsonl + vectors.jsonl). Build it: scripts/spec-index-ensure.sh (orders 552, 760-hzi4).${_si_note}"
         return 0
     fi
     if [ -z "$embed_ep" ]; then

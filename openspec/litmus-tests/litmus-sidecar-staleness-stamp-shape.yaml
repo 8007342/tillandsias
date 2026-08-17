@@ -1,0 +1,71 @@
+# @trace spec:dev-build
+#
+# Order 765-5efu. build-sidecar.sh runs before EVERY compiling dispatch, so its
+# staleness decision is paid on every gate on every host. It used to be a
+# `find -newer` probe against the staged binary's mtime, which has two
+# defects that this litmus pins the fix for:
+#
+#   VELOCITY — a `git merge`/`checkout` rewrites mtimes on byte-identical
+#   files, so the probe rebuilt for a timestamp. Measured on linux_mutable
+#   2026-08-17: touching one sidecar source cost a 12.3s rebuild whose output
+#   was byte-identical to what was already staged; churning the whole input
+#   set cost 8.7s. Both are now 0.07s.
+#
+#   CORRECTNESS — mtime says nothing about WHICH bytes are staged, so a
+#   tampered, corrupted, or wrong-target artifact with a fresh timestamp was
+#   served to every later build as "up-to-date". That hazard is named in
+#   build-sidecar.sh's own 723-b9cn comment. The stamp records the digest of
+#   the artifact as well as of the inputs, so an unrecorded artifact is
+#   rebuilt rather than trusted.
+#
+# Pinned BEHAVIOURALLY (order 634-39ik): the steps drive the real script in a
+# hermetic sandbox and assert whether a build was invoked, rather than
+# grepping for how the source is currently written.
+name: litmus:sidecar-staleness-stamp-shape
+spec: dev-build
+phase: pre-build
+description: >
+  Pin the router-sidecar staleness contract: content-addressed evaluation
+  (inputs digest + staged-artifact digest) so mtime churn cannot trigger a
+  rebuild and an unrecorded artifact cannot be trusted, while every genuine
+  change — source, VERSION, input-set membership, toolchain, target — still
+  rebuilds.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/build-sidecar.sh
+  - workspace contains scripts/test-sidecar-staleness-stamp.sh
+  - shell utilities (bash, find, sort, sha256sum or shasum) are available in PATH
+
+critical_path:
+  - step: "the hermetic staleness fixture passes end to end"
+    # 11 scenarios driving the REAL script against a stub cargo that counts
+    # invocations: cold build, unchanged-inputs skip, mtime-churn skip, and the
+    # six negatives (real source change, VERSION bump, added input file,
+    # tampered artifact, missing stamp, unreadable stamp) plus the force
+    # override and the skip that follows it.
+    command: "bash scripts/test-sidecar-staleness-stamp.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:sidecar-staleness-stamp-fixture:11"
+
+  - step: "mtime churn on byte-identical inputs does not cost a build"
+    # The velocity property in isolation — this is the one that regresses if
+    # anyone reverts the digest to a timestamp comparison.
+    command: "bash scripts/test-sidecar-staleness-stamp.sh 2>&1 | grep -c '^ok: mtime churn on identical content skips the build$'"
+    timeout_ms: 60000
+    expected_behavior: "1"
+
+  - step: "a tampered staged artifact is rebuilt rather than trusted"
+    # The correctness property in isolation (723-b9cn's named hazard).
+    command: "bash scripts/test-sidecar-staleness-stamp.sh 2>&1 | grep -c '^ok: a tampered staged artifact is rebuilt, not trusted$'"
+    timeout_ms: 60000
+    expected_behavior: "1"
+
+  - step: "the evaluation stamp is a gitignored build artifact, never tracked"
+    # Same discipline as the staged binary itself (710-w9kc): a stamp that
+    # entered the tree would dirty every build and could carry one host's
+    # digests to another.
+    command: "git check-ignore -q images/router/.sidecar.stamp && echo 'ok: stamp-gitignored'"
+    timeout_ms: 5000
+    expected_behavior: "ok: stamp-gitignored"

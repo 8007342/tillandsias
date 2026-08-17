@@ -1,0 +1,60 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl). A second, freshly-observed instance of
+# the 797-qm4t class, caught on this cycle's own closure a few minutes after
+# the first one was filed.
+events:
+  - packet_id: fragment-status-loss-guard-cannot-see-unrecognized-shapes
+    event:
+      type: note
+      ts: "2026-08-17T11:16:40Z"
+      agent_id: linux-macuahuitl-opus5-20260817T105735Z
+      host: linux_mutable
+      summary: |
+        SECOND INSTANCE, and this one is worse than the first because every
+        validator answered affirmatively.
+
+        Closing 696-6byc I wrote the fragment with the packet_id
+        `set-field-evidence-stamps-terminal-event-for-every-status`. The real
+        id is `setfield-evidence-emits-completed-event-for-any-status`. It was
+        a plausible reconstruction from the title, and it names nothing.
+
+        What the tooling said about a fragment declaring a terminal status for
+        a packet that does not exist:
+
+          tillandsias-plan fragment-terminal-events <frag>
+            -> printed the (phantom) packet_id, as if it had found a closure
+          tillandsias-plan closure-evidence-check <frag>
+            -> ok:closure-evidence:1 checked
+          scripts/check-fragment-status-loss.sh
+            -> ok:no-fragment-status-loss:24 checked, rc 0
+          ./build.sh --check
+            -> rc 0
+          tillandsias-plan status 696-6byc
+            -> implemented
+
+        Four green signals and the work was not recorded. Only the last
+        command, which I ran out of habit rather than because anything demanded
+        it, showed the closure had not landed.
+
+        MECHANISM: the loss guard's join skips any declared pid that is not in
+        the fold (`if (!(pid in st)) next`). That skip is correct for its
+        original question — you cannot compare a declaration against a fold
+        entry that does not exist — but it means the guard's blind spot is
+        exactly "this fragment refers to nothing". The G-Set has no notion of a
+        typo either: an unknown packet_id is just a packet nobody has declared
+        much about yet.
+
+        WHY IT BELONGS TO 797-qm4t: that packet says the guard cannot see a
+        declaration it did not RECOGNIZE (wrong shape). This is the same hole
+        entered from the other side — a declaration in a perfectly good shape
+        that RESOLVES to nothing. Both produce "ok" from a checker whose stated
+        job is catching lost closures. Whoever takes 797-qm4t should treat
+        unknown-packet_id as the second required verdict, not a follow-up:
+        a fragment naming an id the fold has never heard of is either a typo or
+        work filed against a deleted packet, and both are worth one line of
+        output.
+
+        CHEAP AND SPECIFIC FIX, since the data is already in hand at that point
+        in the join: emit `unknown packet_id '<pid>' (declared <status>, no
+        such packet)` as a distinct verdict line. It costs nothing at runtime
+        and would have failed my fragment in the second I wrote it.
