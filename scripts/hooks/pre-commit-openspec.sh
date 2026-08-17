@@ -28,6 +28,18 @@
 # No set -e — we handle errors ourselves. This hook must never abort (except in --ci-mode).
 set -uo pipefail
 
+# Portable nanosecond clock. `date +%s%N` is GNU-only and BSD SUCCEEDS while
+# emitting a literal "N", so a `|| echo 0` guard never fires and the per-check
+# elapsed arithmetic runs on a non-numeric value (784-dwkh). Digit-validate,
+# then degrade to whole seconds — this feeds a budget warning only.
+_hook_now_ns() {
+    _t="$(date +%s%N 2>/dev/null || true)" # gnu-date: ok (digit-validated below)
+    case "$_t" in
+        '' | *[!0-9]*) _t="$(date +%s 2>/dev/null || echo 0)000000000" ;;
+    esac
+    printf '%s' "$_t"
+}
+
 CI_MODE=false
 [[ "${1:-}" == "--ci-mode" ]] && CI_MODE=true
 
@@ -158,17 +170,24 @@ zero_trace_check() {
         | sed 's/^spec://' \
         | sort -u)" || true
 
-    local -A is_referenced=()
+    # Space-delimited string sets, not `local -A` (784-dwkh): associative
+    # arrays are bash>=4 and Apple ships 3.2, so on macOS line 173 raised
+    # `local: -A: invalid option` and BOTH membership sets stayed empty —
+    # every spec then looked unreferenced and un-retired. Spec names are path
+    # components (no spaces), so a spaced-token match is exact. This keeps
+    # 734-sjb3's discipline intact: concatenation and `case` are builtins, so
+    # there is still no subprocess per item.
+    local is_referenced=" "
     local tok
     while IFS= read -r tok; do
-        [[ -n "$tok" ]] && is_referenced["$tok"]=1
+        [[ -n "$tok" ]] && is_referenced="${is_referenced}${tok} "
     done <<<"$referenced"
 
     # Deferred or obsolete specs are retired contracts. They remain in the tree
     # for traceability but are excluded from active zero-trace scoring. The
     # Status block runs from `## Status` to the next `## ` heading; this is the
     # same window the two-sed pipeline read, expressed once over all files.
-    local -A is_retired=()
+    local is_retired=" "
     local retired
     retired="$(awk '
         FNR == 1 { inblock = 0 }
@@ -181,7 +200,7 @@ zero_trace_check() {
         }
     ' "$SPECS_DIR"/*/spec.md 2>/dev/null)" || true
     while IFS= read -r tok; do
-        [[ -n "$tok" ]] && is_retired["$tok"]=1
+        [[ -n "$tok" ]] && is_retired="${is_retired}${tok} "
     done <<<"$retired"
 
     for spec_dir in "$SPECS_DIR"/*/; do
@@ -189,8 +208,8 @@ zero_trace_check() {
         local spec_name="${spec_dir%/}"
         spec_name="${spec_name##*/}"
 
-        [[ -n "${is_retired[$spec_name]:-}" ]] && continue
-        [[ -n "${is_referenced[$spec_name]:-}" ]] && continue
+        case "$is_retired" in *" $spec_name "*) continue ;; esac
+        case "$is_referenced" in *" $spec_name "*) continue ;; esac
 
         echo "  ◌ OpenSpec: spec '$spec_name' has no @trace annotations in code" >&2
         zero_trace_warnings=$((zero_trace_warnings + 1))
@@ -241,7 +260,12 @@ staleness_check() {
 
         # Parse date to epoch
         local created_epoch
-        created_epoch="$(date -d "$created_date" +%s 2>/dev/null)" || continue
+        # GNU then BSD. `date -d` is GNU-only and its failure lands on a
+        # `|| continue`, so on macOS this whole staleness check silently
+        # skipped EVERY change — a warning that could never fire, which is
+        # indistinguishable from "nothing is stale" (784-dwkh).
+        created_epoch="$(date -d "$created_date" +%s 2>/dev/null \
+            || date -j -u -f '%Y-%m-%d' "${created_date%%T*}" +%s 2>/dev/null)" || continue
 
         local age_days=$(( (today_epoch - created_epoch) / 86400 ))
 
@@ -337,9 +361,9 @@ run_phase() {
     if [[ -t 2 ]]; then
         printf '  … OpenSpec: %s (expected ~%sms)\r' "$fn" "$budget" >&2
     fi
-    started="$(date +%s%N 2>/dev/null || echo 0)"
+    started="$(_hook_now_ns)"
     "$fn"
-    ended="$(date +%s%N 2>/dev/null || echo 0)"
+    ended="$(_hook_now_ns)"
     elapsed=$(( (ended - started) / 1000000 ))
     if [[ -t 2 ]]; then
         printf '\033[2K\r' >&2

@@ -5,24 +5,24 @@
 # corrects ANY field (642-fedr). Re-declaring the packet under
 # `packets:` would be a G-Set no-op and would silently do nothing.
 status:
-  - packet_id: host-browser-mcp-compose-tool-families-in-dispatcher
+  - packet_id: forge-preflight-races-the-async-launch-build
     field: status
     value: completed
-    ts: "2026-08-16T21:34:22Z"
+    ts: "2026-08-17T01:28:51Z"
     host: linux-immutable
 
 events:
-  - packet_id: host-browser-mcp-compose-tool-families-in-dispatcher
+  - packet_id: forge-preflight-races-the-async-launch-build
     event:
       type: completed
-      ts: "2026-08-16T21:34:22Z"
+      ts: "2026-08-17T01:28:51Z"
       host: linux-immutable
       summary: >
-        status 'completed' with evidence_refs: 907659956 + cargo test -p tillandsias-headless --features tray 448 passed 0 failed + transport-level UnixStream test
-  - packet_id: host-browser-mcp-compose-tool-families-in-dispatcher
+        status 'completed' with evidence_refs: 7a30ff140 + scripts/test-plan-binary-probe.sh 5/5 with negative control + 8 callers re-verified
+  - packet_id: forge-preflight-races-the-async-launch-build
     event:
       type: note
-      ts: "2026-08-16T21:34:22Z"
+      ts: "2026-08-17T01:28:51Z"
       host: linux-immutable
       summary: >
-        779-3trn closed by linux-yoga-claude-20260816t185912z
+        783-jdeh closed by linux-yoga-claude-20260816t185912z; root cause was a path assumption, not only a race

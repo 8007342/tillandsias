@@ -151,7 +151,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 - forge-container.md                        — Understanding what the forge container can do, where files live, how to avoid c… [bundled, partial-verify]
 - forge-hot-cold-split.md                   — You need to understand which forge paths are RAM-backed, what the size caps are… [bundled, partial-verify]
 - forge-localization.md [DRAFT]             — Understanding how Tillandsias Forge handles multiple language locales, configur… [bundled, partial-verify]
-- forge-loss-on-shutdown-window.md [DRAFT]  — ~/src behind proven transparent push). Sources verified 2026-08-16 on
+- forge-loss-on-shutdown-window.md          — ~/src behind proven transparent push). Sources verified 2026-08-16 on [bundled, partial-verify]
 - forge-paths-ephemeral-vs-persistent.md    — You're an agent (or human) writing files inside the forge container and need to… [pull-on-demand: stub]
 - forge-shared-cache-via-nix.md             — You're trying to share a library across projects without paying the download co… [pull-on-demand: stub]
 - forge-standalone.md                       — You want only the forge container, one mounted project tree, and [bundled, partial-verify]

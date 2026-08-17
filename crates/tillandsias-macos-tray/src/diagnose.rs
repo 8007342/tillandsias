@@ -1074,12 +1074,23 @@ pub fn github_login_main() -> i32 {
                 //   1. Remove any exited proxy container from a prior attempt so
                 //      `ensure_proxy_running` can `podman run --name tillandsias-proxy`
                 //      without "name already in use".
-                //   2. Ensure the ephemeral CA key is group/world-readable (0o644)
-                //      so Squid (uid 1000) can read it. headless currently sets 0o600;
-                //      if the file already exists with correct perms the openssl block
-                //      is skipped (ca_bundle_needs_refresh returns false for fresh files).
-                // TODO(linux-next): remove once headless sets 0o640 and rm-on-reuse
-                // is fixed in ensure_proxy_running.
+                //   2. Clamp the ephemeral CA key to 0o600 and heal an existing
+                //      widened key DOWN (772-shi9).
+                //      This block used to chmod 644 "so Squid (uid 1000) can read
+                //      it". That reason is FALSE since 755-qcxh: the key reaches
+                //      the proxy as the `tillandsias-ca-key` podman secret
+                //      (uid=1000,gid=1000,mode=0400 — main.rs
+                //      PROXY_CA_KEY_SECRET_OPTS), and images/proxy/entrypoint.sh
+                //      reads ONLY /run/secrets/tillandsias-ca-key, exiting 1 when
+                //      it is absent. Nothing in the guest reads this file's mode:
+                //      the headless that writes and re-reads it runs as root
+                //      (vz.rs writes the unit with no User=).
+                //      The heal is UNCONDITIONAL, outside the `test -s` guard,
+                //      because an already-present 0644 key skips the openssl block
+                //      entirely — and `ensure_proxy_running` early-returns when the
+                //      proxy is already up, BEFORE the ensure_ca_bundle call that
+                //      would otherwise heal it, so the widened key would survive
+                //      for the VM's lifetime.
                 "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                  export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
                  install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
@@ -1090,8 +1101,9 @@ pub fn github_login_main() -> i32 {
                      -keyout /tmp/tillandsias-ca/intermediate.key \
                      -out /tmp/tillandsias-ca/intermediate.crt \
                      -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                   chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
+                   chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
                  fi; \
+                 chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
                  exec /usr/local/bin/tillandsias-headless --github-login",
             ],
             expects,
@@ -1279,10 +1291,10 @@ pub fn list_cloud_projects_main() -> i32 {
             };
         eprintln!("[list-cloud-projects] control wire ready; fetching remote projects…");
 
-        // Same CA cert + exited-proxy workaround as github_login_main.
-        // ensure_proxy_running (called by headless --list-cloud-projects) needs
-        // a 0o644 key so squid (uid 1000) can read it, and no leftover exited
-        // container blocking `podman run --name tillandsias-proxy`.
+        // Same CA cert + exited-proxy workaround as github_login_main, including
+        // the 0o600 clamp and the unconditional heal-down (772-shi9 — see the
+        // reasoning at that site: the proxy gets the key as a 0400 podman
+        // secret, so no reader ever needed this file widened).
         let cmd = "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                    export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
                    install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
@@ -1293,8 +1305,9 @@ pub fn list_cloud_projects_main() -> i32 {
                        -keyout /tmp/tillandsias-ca/intermediate.key \
                        -out /tmp/tillandsias-ca/intermediate.crt \
                        -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                     chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
+                     chmod 600 /tmp/tillandsias-ca/intermediate.key || true; \
                    fi; \
+                   chmod 600 /tmp/tillandsias-ca/intermediate.key 2>/dev/null || true; \
                    exec /usr/local/bin/tillandsias-headless --list-cloud-projects";
 
         let result = exec_over_stream_with_input_streaming(
@@ -1701,6 +1714,56 @@ mod tests {
             !source.contains(raw_stream_type),
             "diagnose.rs must not name the raw macOS stream type directly"
         );
+    }
+
+    /// 772-shi9: neither guest exec preamble may widen the CA PRIVATE key.
+    ///
+    /// Both preambles once ran `chmod 644` on it, justified by "so Squid
+    /// (uid 1000) can read it" — false since 755-qcxh made the key travel as a
+    /// 0400 podman secret. The widened mode also persisted, because a
+    /// preamble that finds the key present skips the openssl block and
+    /// `ensure_proxy_running` early-returns before the heal.
+    ///
+    /// Two mechanics are load-bearing. The key path is assembled with
+    /// `concat!` so this test's own literals are not present verbatim in the
+    /// scanned source (the same dodge as the raw-stream-type pin above);
+    /// without it the negative assertions match themselves. And every
+    /// negative is anchored to the KEY path — `intermediate.crt` is
+    /// deliberately world-readable, so a bare `chmod 644` scan would forbid
+    /// the correct thing.
+    #[test]
+    fn guest_ca_preflight_never_widens_the_private_key() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let key = concat!("/tmp/tillandsias-ca/inter", "mediate.key");
+
+        for signature in [
+            "pub fn github_login_main() -> i32",
+            "pub fn list_cloud_projects_main() -> i32",
+        ] {
+            let window = source_window(source, signature);
+            assert!(
+                window.contains(&format!("chmod 600 {key}")),
+                "{signature}: preflight must clamp the CA private key to 0600"
+            );
+            // The heal must sit OUTSIDE the `test -s` guard: an existing 0644
+            // key never reaches the openssl block.
+            let guarded = window
+                .split("fi; \\")
+                .next()
+                .expect("preamble must contain the test -s guard block");
+            let after_guard = &window[guarded.len()..];
+            assert!(
+                after_guard.contains(&format!("chmod 600 {key}")),
+                "{signature}: the heal-down must run unconditionally, after the guard"
+            );
+        }
+
+        for wide in ["644", "640", "664", "666", "755", "777"] {
+            assert!(
+                !source.contains(&format!("chmod {wide} {key}")),
+                "no code path may chmod the CA private key to {wide} (755-qcxh / 772-shi9)"
+            );
+        }
     }
 
     // ────────────────────────────────────────────────────────────────
