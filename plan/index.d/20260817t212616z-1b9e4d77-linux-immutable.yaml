@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: expert-rag-corpus-excludes-the-code-it-is-most-often-asked-about
+    event:
+      type: claim
+      ts: "2026-08-17T21:26:16Z"
+      agent_id: linux-yoga-claude-20260817t212616z
+      host: linux-immutable
+      summary: >
+        linux-immutable takes 803-su4n: syntactic code chunker (rust fn/impl, shell functions) + corpus roots, measured on the host with the fastest embed lane (61 ms/chunk)
