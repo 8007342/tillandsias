@@ -197,6 +197,13 @@ critical_path:
     timeout_ms: 15000
     expected_behavior: "ok: argument errors precede environment probes"
 
+  # The ledger side must exclude PARKED packets or it measures a population the
+  # selector is right to refuse. Measured 2026-08-17: this step failed with
+  # "batch best is p1 while the ledger offers p0", and the only p0 it counted was
+  # 722-uern, whose depends_on includes mirror-identity-lane-sidecar-and-sshd --
+  # status BLOCKED. The selector correctly omitted an unworkable packet and the
+  # gate called that a regression. `query --status ready` does not evaluate
+  # dependencies, so the comparison now subtracts `parked-blocks`.
   - step: "URGENCY OVERRIDE: the batch's best priority matches the ledger's best"
     # Order 645-n3h6. Epic selection happens BEFORE priority and UNGROUPED is
     # demoted whenever a real epic exists, so an ungrouped packet was unreachable
@@ -208,7 +215,7 @@ critical_path:
     # Asserts the OUTCOME, not the mechanism, so a different future fix satisfies
     # it too: whatever the selector does, it must not offer p3 work while a p0 is
     # claimable.
-    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); best_ledger=$(\"$MFPLAN\" query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '[.[]|(.priority//\"p3\")|sub(\"^p\";\"\")|tonumber]|min'); if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; best_batch=$(scripts/select-work-batch.sh linux 2>/dev/null | grep \"^packet$(printf '\\t')\" | cut -f4 | sed 's/^p//' | sort -n | head -1); pk=\"$(mktemp)\"; \"$MFPLAN\" parked-blocks 2>/dev/null | cut -f1 | sort -u > \"$pk\"; best_ledger=$(\"$MFPLAN\" query --status ready --claimable-by linux --release v0.5 --limit 400 --json 2>/dev/null | jq -r '.[]|[(.packet_id//\"-\"),((.priority//\"p3\")|sub(\"^p\";\"\"))]|@tsv' | grep -vFf \"$pk\" | cut -f2 | sort -n | head -1); rm -f \"$pk\"; if [ \"${best_batch:-9}\" -gt \"${best_ledger:-9}\" ]; then echo \"FAIL: batch best is p${best_batch} while the ledger offers p${best_ledger}\"; exit 1; fi; echo \"ok: urgency reachable batch=p${best_batch} ledger=p${best_ledger}\""
     timeout_ms: 60000
     expected_behavior: "ok: urgency reachable"
 
