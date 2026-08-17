@@ -2973,6 +2973,19 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
     // cold proxy image ensure inside.
     let _proxy_lock = resource_lock::acquire("proxy", std::time::Duration::from_secs(300), debug)?;
     if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+        // Heal the CA private key BEFORE returning (772-shi9 / 795-zshi).
+        //
+        // `ensure_ca_bundle` below also clamps the mode, but this early
+        // return skips it — so on the commonest path of all (the proxy is
+        // already up) a key left group- or world-readable stayed that way
+        // for the VM's lifetime. That gap is precisely why the macOS host
+        // preambles carry their own `chmod`, and why those preambles need a
+        // shell at all: the host was compensating for guest housekeeping
+        // that the guest declined to do on this path.
+        //
+        // Best-effort: an unreadable or absent key is not a reason to refuse
+        // a proxy that is already serving.
+        let _ = enforce_ca_key_mode(&PathBuf::from(CA_DIR).join("intermediate.key"));
         if debug {
             eprintln!("[tillandsias] enclave proxy already running");
         }
@@ -17163,6 +17176,39 @@ mod tests {
         assert!(
             !args.iter().any(|a| a.contains("intermediate.key")),
             "CA private key must not be bind-mounted: {args:?}"
+        );
+    }
+
+    /// 772-shi9 / 795-zshi: the heal must run on the ALREADY-RUNNING path,
+    /// which is the commonest path of all.
+    ///
+    /// `ensure_proxy_running` returns early when the proxy is up, and the
+    /// mode clamp inside `ensure_ca_bundle` sits after that return — so a
+    /// widened key survived for the VM's lifetime on exactly the path that
+    /// happens most. That gap is why the macOS host preambles carry their
+    /// own `chmod`, and therefore why they need a shell at all: the host was
+    /// compensating for guest housekeeping the guest skipped.
+    ///
+    /// Asserted by source window rather than by running the function,
+    /// because `ensure_proxy_running` needs a live podman. The window is the
+    /// function head up to its first `return Ok(())` — i.e. the early-return
+    /// block itself.
+    #[test]
+    fn proxy_already_running_path_still_heals_the_ca_key() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let start = source
+            .find("fn ensure_proxy_running(")
+            .expect("ensure_proxy_running must exist");
+        let tail = &source[start..];
+        let end = tail
+            .find("return Ok(());")
+            .expect("the early-return block must exist");
+        let early_return_block = &tail[..end];
+        assert!(
+            early_return_block.contains("enforce_ca_key_mode("),
+            "the proxy-already-running early return must heal the CA key mode \
+             before returning, or a widened key survives the VM's lifetime \
+             (772-shi9); block was: {early_return_block}"
         );
     }
 

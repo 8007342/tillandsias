@@ -58521,6 +58521,12 @@ plan_index:
         which is how this subsystem got here.
       events:
         - type: progress
+          ts: "2026-08-17T20:24:46Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t1923z"
+          host: macos
+          summary: |
+            SLICE 3 — attacked what actually forces the macOS preambles to BE shell scripts, which is the real blocker on deleting the five workarounds. Traced it: the tray preambles do two pieces of guest housekeeping before exec — a podman rm and a chmod of the CA key — and both exist because ensure_proxy_running SKIPS them on its commonest path. Its early return fires when the proxy is already up, and both the podman rm and the ensure_ca_bundle mode clamp sit AFTER that return. The host was compensating with a shell for guest work the guest declined to do. FIXED GUEST-SIDE: the CA key heal now runs BEFORE the early return, so a widened key no longer survives the VMs lifetime on the path that happens most — which also strengthens 772-shi9 beyond what that packet could reach from the host. Pinned by proxy_already_running_path_still_heals_the_ca_key, a source-window assertion over the early-return block (ensure_proxy_running needs a live podman, so running it is not an option), HAND-FALSIFIED: deleting the heal fails the pin with the intended message, restoring it returns green. The OTHER half is already redundant and needs no change: the preambles podman rm duplicates the podman rm --ignore that ensure_proxy_running performs itself — the preamble comment TODO(linux-next): remove once rm-on-reuse is fixed in ensure_proxy_running describes a fix that HAS landed. NOT DONE, and deliberately: deleting the two workarounds from the macOS preambles. A new tray talking to an OLD guest would lose the heal entirely, so host-side deletion must be gated on CAP_EXEC_ARGV_VECTOR (or an equivalent capability), exactly the mixed-version rule this packet already carries for the argv arm itself. That gating is the next slice and it is a host change, not a guest one. Verified: 369 bins tests green, clippy 0.
+        - type: progress
           ts: "2026-08-17T18:26:01Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t1723z"
           host: macos
