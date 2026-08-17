@@ -164,6 +164,20 @@ on a VRAM field that does not apply.**
 
 ## Measurement 3 — the order-552 budget
 
+> **SUPERSEDED 2026-08-17 (cycle 10).** Every input below was a proxy: the chunk
+> count was an estimate (`816k tokens / 512`), the per-chunk cost was measured
+> against a **synthetic** ~500-token chunk, and the endpoint was the bare-metal
+> Windows ollama the operator has since removed. Re-measured with the real
+> chunker on the sanctioned endpoint: the corpus is **9,909 chunks, not 1,592**
+> (p50 236 chars, not 512 tokens) and costs **698 ms/chunk, not ~2,900**. Full
+> rebuild is **115 min** (worse than stated below); a 10-chunk delta is **7.0 s**
+> (4x better). Most importantly the conclusion's REASON was wrong: delta
+> re-embed is **free on 96% of commits** (they never touch
+> `openspec/specs`/`cheatsheets`/`methodology`) and costs **~15-45 s on the other
+> 4%** — a bimodal cost, so async is needed for the TAIL, not for throughput.
+> Full measurement:
+> `plan/issues/research/order-552-real-reembed-cost-measured-2026-08-17.md`.
+
 Operator's threshold: ~1-2 s is invisible to a user; tens of seconds is
 unusable and wasteful.
 

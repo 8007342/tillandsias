@@ -79,6 +79,19 @@ retrieval down; it silently narrows what you think to ask.**
 
 ## Consequence worth recording: the Vulkan lane is unreachable here
 
+> **CORRECTED 2026-08-17 (cycle 9): the conclusion in this section is WRONG.**
+> `/dev/dri` is indeed absent and always will be — that part stands — but it was
+> never the only route. WSL2 exposes `/dev/dxg`, and Mesa's `dzn` driver maps
+> Vulkan onto D3D12 over it. Yolanda had already measured that path on AMD the
+> previous day (793-zumy); reproduced here on Intel, the iGPU binds at 100%
+> offload from inside `tillandsias-build` and delivers **2.16x prefill** over
+> CPU. The enablement is three Fedora packages, not "separate, unbuilt work".
+> This section inferred "unreachable" from one missing device node instead of
+> asking what the present one affords — **absence of the expected interface is
+> not absence of the capability.** Full measurement:
+> `plan/issues/research/intel-igpu-dzn-in-wsl2-measured-2026-08-17.md`.
+> The rest of this file (the revert, the removal, the operator decision) stands.
+
 `/dev/dri` is **ABSENT** in the WSL2 distro (confirmed again this cycle). WSL2
 exposes the GPU as `/dev/dxg` with D3D12 libraries, not as a DRI device, and no
 Mesa `dzn` (Vulkan-on-D3D12) driver is installed.

@@ -1,0 +1,52 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Appends an event to 794-kmqe (windows-lane WSL2 hardware exposure). Written as
+# a NEW fragment rather than editing the original, per plan/index.d/README.md.
+events:
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: progress
+      ts: "2026-08-17T07:52:45Z"
+      agent_id: windows-esmeraldinha-opus5-20260817
+      host: windows
+      summary: |
+        WL-EXPOSURE answered from the Intel side, which also WITHDRAWS the
+        premise this packet was filed on. The packet asked Yolanda whether a
+        discrete GPU/NPU exposes into WSL2 differently than an iGPU, because
+        this host had concluded from an absent /dev/dri that no accelerator was
+        reachable in-guest. That conclusion was wrong, and Yolanda's 793-zumy
+        had already shown why the day before: WSL2 exposes /dev/dxg, and Mesa's
+        dzn driver maps Vulkan onto D3D12 over it.
+
+        Reproduced here on INTEL, which is the new fact — 793-zumy proved the
+        path on AMD and vendor generality was unmeasured. dzn enumerates
+        vendorID 0x8086 deviceID 0x46d1 as "Microsoft Direct3D12 (Intel(R) UHD
+        Graphics)", DRIVER_ID_MESA_DOZEN, and ollama binds it at size_vram ==
+        size (100% offload, verified not assumed). So 793-a8e7's three-package
+        enablement is a FLEET option across both GPU vendors the fleet has, not
+        an AMD special case.
+
+        Numbers (qwen2.5:0.5b, in tillandsias-build, unique prompt per rep,
+        dev-inference on 11434 untouched): CPU prefill 88.31 / decode 28.67;
+        dzn prefill ~190.6 (5 reps inside 0.8 tok/s) / decode 15.26. GPU 2.16x
+        prefill, CPU 1.88x decode. The decode penalty is markedly WORSE than
+        Yolanda's 1.23x on the 860M, as a fixed-per-dispatch-cost model
+        predicts for a weaker part — and 793-zumy's decode crossover at 3B does
+        NOT appear here (this host's 3.8B measurement still had CPU ahead), so
+        a routing policy keyed on model size alone would be wrong on 24 EUs.
+
+        Cold-dispatch trap for the routing work: the first TWO prefills after
+        model load read 86.00 and 189.03 before settling at ~190.6. The first
+        dzn prefill pays pipeline compilation and reads as CPU-SPEED, so an
+        un-warmed benchmark understates dzn ~2.2x and yields a plausible-looking
+        CPU number rather than an obvious outlier — the mirror image of the
+        prompt-cache trap 793-zumy already documented.
+
+        Two of Yolanda's warnings re-tested: the lavapipe trap CONFIRMED (an
+        unpinned loader also offers DRIVER_ID_MESA_LLVMPIPE); the
+        "loader install silently flips every host to GPU decode" risk does NOT
+        reproduce here — the running dev-inference server stayed at 0% and a
+        fresh unpinned server still chose library=cpu (their ollama 0.32.9 with
+        OLLAMA_VULKAN:true vs this host's 0.32.14), so that risk is
+        config/version dependent rather than universal.
+
+        Detail: plan/issues/research/intel-igpu-dzn-in-wsl2-measured-2026-08-17.md

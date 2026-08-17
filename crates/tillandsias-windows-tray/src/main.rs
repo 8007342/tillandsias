@@ -44,6 +44,61 @@ mod notify_icon;
 #[path = "stubs/wsl_lifecycle.rs"]
 mod wsl_lifecycle;
 
+/// Every flag this binary understands.
+///
+/// Kept as ONE list, deliberately, because the refusal below is only as good
+/// as this set: a mode added to `main` without a line here becomes an
+/// immediate hard error, which is the loud direction. (A mode added here
+/// without a `help_text()` entry is caught by
+/// `help_text_documents_all_cli_modes`.)
+///
+/// `--tail`'s VALUE is not flag-shaped, so it needs no entry.
+const KNOWN_FLAGS: &[&str] = &[
+    // modes (each exits the process)
+    "--help",
+    "-h",
+    "--version",
+    "-V",
+    "--provision-once",
+    "--reset-guest",
+    "--status-once",
+    "--diagnose",
+    "--logs",
+    // mode modifiers
+    "--json",
+    "--tail",
+    "--bak",
+    // the one option that modifies GUI mode and must reach `notify_icon::run`
+    "--no-provision",
+];
+
+/// The first flag-shaped argument that is not in [`KNOWN_FLAGS`], if any.
+///
+/// WHY THIS EXISTS (E4, 2026-08-17). Before this, `main` dispatched its known
+/// modes and then FELL THROUGH to the GUI tray for anything else. The
+/// 2026-08-16 build-install smoke invoked `--provision` — the mode is
+/// `--provision-once` — so no arm matched, the binary became a resident GUI
+/// tray, and the harness read a healthy provision as a hang. Its
+/// `03-provision.log` has 528 lines and ZERO `[provision]` lines, which is
+/// proof `provision_once()` never ran; the run then filed a PHANTOM finding
+/// asking whether resident-after-Ready was the intended SC-07 design. It cost
+/// 10 minutes, one kill, and a false FAIL verdict.
+///
+/// macOS has refused unknown flags since `tillandsias-macos-tray`'s
+/// `args.iter().skip(1).find(|a| a.starts_with('-'))` check, and
+/// `plan/archive/build-install-smoke-e2e-findings-2026-06-14.md` prescribed the
+/// policy for BOTH trays. Windows never implemented it. This is that.
+///
+/// Pure and not cfg-gated, so the Linux dev box's test run evaluates it too.
+///
+/// @trace spec:windows-native-tray
+fn unknown_flag(args: &[String]) -> Option<&str> {
+    args.iter()
+        .skip(1)
+        .find(|a| a.starts_with('-') && !KNOWN_FLAGS.contains(&a.as_str()))
+        .map(String::as_str)
+}
+
 #[cfg(target_os = "windows")]
 fn main() {
     // Headless diagnostic: provision the VM to Ready, print progress, exit with
@@ -117,6 +172,26 @@ fn main() {
         let bak = std::env::args().any(|a| a == "--bak");
         std::process::exit(notify_icon::logs(tail, bak));
     }
+
+    // Every recognized mode above exits the process. Anything flag-shaped that
+    // reaches here is unknown, and falling through would launch the full GUI
+    // tray — which provisions, takes the WSL singleton, and goes resident. An
+    // unattended caller waiting on process exit then reads a healthy tray as a
+    // hang. That is exactly what happened to the 2026-08-16 build-install
+    // smoke, which typed `--provision` for `--provision-once` and filed a
+    // phantom SC-07 design question about it. Refuse loudly instead; macOS has
+    // done this since its own equivalent. See `unknown_flag`.
+    if let Some(unknown) = unknown_flag(&std::env::args().collect::<Vec<_>>()) {
+        eprintln!(
+            "Error: unknown flag {unknown}\n\
+             Run `tillandsias-tray.exe --help` for the supported flags.\n\
+             Note: the one-shot provisioning mode is `--provision-once`, not \
+             `--provision`; `--no-provision` is the GUI option that SKIPS \
+             provisioning."
+        );
+        std::process::exit(2);
+    }
+
     // windows-260722-3: stable, version-free shell identity BEFORE any UI
     // exists. Without an explicit AppUserModelID Windows derives identity
     // from the exe path/heuristics, and identity churn across updates is
@@ -174,6 +249,103 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use super::{KNOWN_FLAGS, unknown_flag};
+
+    fn argv(rest: &[&str]) -> Vec<String> {
+        std::iter::once("tillandsias-tray.exe")
+            .chain(rest.iter().copied())
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// E4, 2026-08-17: an unrecognized flag must be REFUSED, not silently
+    /// turned into a GUI-tray launch.
+    ///
+    /// `--provision` is the literal string the 2026-08-16 build-install smoke
+    /// typed. It is first in the list on purpose.
+    #[test]
+    fn unknown_flags_are_refused() {
+        for bad in [
+            "--provision", // the exact 2026-08-16 smoke typo
+            "--provision-now",
+            "--with-token", // a tillandsias-headless flag with no tray meaning
+            "--staus-once", // transposition
+            "--Diagnose",   // wrong case
+            "-x",
+            "--",
+        ] {
+            assert_eq!(
+                unknown_flag(&argv(&[bad])),
+                Some(bad),
+                "{bad:?} must be refused"
+            );
+        }
+        // It refuses even when a VALID flag comes first, so `--diagnose --oops`
+        // cannot smuggle a typo past the check.
+        assert_eq!(
+            unknown_flag(&argv(&["--diagnose", "--oops"])),
+            Some("--oops")
+        );
+    }
+
+    /// NEGATIVE CONTROL (bar-raise 634-39ik). "Fail loud" must not degrade
+    /// into "refuse everything": the bare GUI launch and every legitimate
+    /// flag combination still pass. `--no-provision` is the load-bearing one —
+    /// it is the ONLY flag that must survive this check and reach
+    /// `notify_icon::run`, and `scripts/build-and-install-windows-local.ps1`
+    /// puts it on the Start Menu shortcut by default.
+    #[test]
+    fn known_flags_and_bare_gui_launch_are_accepted() {
+        assert_eq!(unknown_flag(&argv(&[])), None, "bare GUI launch must work");
+        for good in [
+            vec!["--no-provision"],
+            vec!["--help"],
+            vec!["-h"],
+            vec!["--version"],
+            vec!["-V"],
+            vec!["--provision-once"],
+            vec!["--reset-guest"],
+            vec!["--status-once"],
+            vec!["--status-once", "--json"],
+            vec!["--diagnose"],
+            vec!["--diagnose", "--json"],
+            vec!["--logs"],
+            vec!["--logs", "--tail", "50"],
+            vec!["--logs", "--bak"],
+        ] {
+            assert_eq!(
+                unknown_flag(&argv(&good)),
+                None,
+                "{good:?} must be accepted"
+            );
+        }
+    }
+
+    /// The refusal is only as strong as `KNOWN_FLAGS`, and `main` is the only
+    /// place that consumes them. Pin the correspondence so a mode added to one
+    /// and not the other is a test failure rather than a runtime surprise in
+    /// either direction (an undispatched allowlist entry silently launches the
+    /// GUI; an unlisted dispatch is refused before it can run).
+    #[test]
+    fn known_flags_match_the_dispatch_in_main() {
+        let main_src = include_str!("main.rs");
+        for flag in KNOWN_FLAGS {
+            assert!(
+                main_src.matches(&format!("\"{flag}\"")).count() >= 2,
+                "{flag} must appear in KNOWN_FLAGS *and* be consumed by main"
+            );
+        }
+        // And the refusal itself is wired in, not merely defined.
+        assert!(
+            main_src.contains("if let Some(unknown) = unknown_flag("),
+            "main must call unknown_flag and refuse"
+        );
+        assert!(
+            main_src.contains("std::process::exit(2)"),
+            "an unknown flag must exit non-zero (2), never launch the tray"
+        );
+    }
+
     /// Guest crash-loop DETECTION wiring pin. `notify_icon.rs` is
     /// `cfg(target_os = "windows")` and so is NOT compiled on the Linux dev box
     /// where `cargo check -p tillandsias-windows-tray` runs — a behavioral test

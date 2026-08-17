@@ -205,7 +205,7 @@ const DISTRO_EXEC_PROBE_TIMEOUT_SECS: u64 = 60;
 /// `spawn_wsl_terminal` (CREATE_NEW_CONSOLE) instead, never through this.
 /// @trace spec:no-terminal-flicker
 fn wsl_cmd() -> tokio::process::Command {
-    let mut cmd = tokio::process::Command::new("wsl");
+    let mut cmd = tillandsias_vm_layer::wsl_command_async();
     tillandsias_vm_layer::no_window_async(&mut cmd);
     cmd
 }
@@ -1032,10 +1032,9 @@ impl WslLifecycle {
         match tokio::time::timeout(Duration::from_secs(DISTRO_EXEC_PROBE_TIMEOUT_SECS), fut).await {
             Ok(Ok(output)) if output.status.success() => DistroExecProbeResult::Healthy,
             Ok(Ok(output)) => {
-                let stderr = String::from_utf8_lossy(&output.stderr)
-                    .replace('\0', "")
-                    .trim()
-                    .to_string();
+                // No NUL scrub: `wsl_cmd()` sets WSL_UTF8=1 (2026-08-17), so
+                // wsl.exe's own stderr arrives as UTF-8.
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                 let service_sane = WslRuntime::is_wsl_service_sane().await;
                 match classify_nonzero_distro_exec(&stderr, service_sane) {
                     DistroExecProbeClass::DistroFailure => {
@@ -1171,9 +1170,8 @@ impl WslLifecycle {
         );
         progress.report_message(CHIP_FEATURE_SETUP_WARN);
 
-        let mut cmd = tokio::process::Command::new("wsl");
+        let mut cmd = tillandsias_vm_layer::wsl_command_async();
         cmd.args(["--install", "--no-distribution"])
-            .env("WSL_UTF8", "1")
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
@@ -1198,7 +1196,8 @@ impl WslLifecycle {
                 if let Some(out) = stdout {
                     let mut lines = tokio::io::BufReader::new(out).lines();
                     while let Ok(Some(line)) = lines.next_line().await {
-                        let line = line.replace('\u{0}', "").trim().to_string();
+                        // No NUL scrub — the command carries WSL_UTF8=1.
+                        let line = line.trim().to_string();
                         if line.is_empty() {
                             continue;
                         }
@@ -1215,7 +1214,8 @@ impl WslLifecycle {
                 if let Some(err) = stderr {
                     let mut lines = tokio::io::BufReader::new(err).lines();
                     while let Ok(Some(line)) = lines.next_line().await {
-                        let line = line.replace('\u{0}', "").trim().to_string();
+                        // No NUL scrub — the command carries WSL_UTF8=1.
+                        let line = line.trim().to_string();
                         if !line.is_empty() {
                             err_tail = line;
                         }

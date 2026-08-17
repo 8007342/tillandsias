@@ -78,8 +78,8 @@ pub async fn tar_to_wsl_import(
     let avail = fs2::available_space(install_dir).unwrap_or(u64::MAX);
     evaluate_host_import_headroom(avail, tar_len)?;
     let args = wsl_import_args(distro, install_dir, rootfs);
-    let mut cmd = tokio::process::Command::new("wsl");
-    cmd.args(&args).env("WSL_UTF8", "1");
+    let mut cmd = crate::wsl_command_async();
+    cmd.args(&args);
     crate::no_window_async(&mut cmd);
     let output = cmd
         .output()
@@ -87,11 +87,10 @@ pub async fn tar_to_wsl_import(
         .map_err(|e| format!("wsl --import failed to spawn: {e}"))?;
     if !output.status.success() {
         // Keep the child's stderr — for a GUI tray this is the only text
-        // naming the real failure (order 419).
-        let stderr = String::from_utf8_lossy(&output.stderr)
-            .replace('\u{0}', "")
-            .trim()
-            .to_string();
+        // naming the real failure (order 419). No NUL scrub: the command is
+        // built by `wsl_command_async`, which sets WSL_UTF8=1, so wsl.exe
+        // writes UTF-8 here rather than UTF-16LE (2026-08-17).
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         if let Some(remediation) = crate::wsl::classify_launch_stderr(&stderr) {
             return Err(format!("wsl --import failed (classified). {remediation}"));
         }

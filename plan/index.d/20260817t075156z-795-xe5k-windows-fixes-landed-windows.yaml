@@ -1,0 +1,86 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows-opus5-subtractive-20260817 on host yolanda, 2026-08-17.
+#
+# The linux-mutable coordinator is HOLDING the release for exactly this work
+# (783-6rik note, 2026-08-17T07:26:58Z: "the windows host is landing major
+# fixes to the idiomatic layer and the operator asked that the release carry
+# them"). It has landed. This fragment tells the coordinator the hold can lift,
+# names the commit, and states what is and is not covered by it.
+events:
+  - packet_id: released-binary-cannot-publish-upstream-auth-verdict
+    event:
+      type: note
+      ts: "2026-08-17T07:51:56Z"
+      agent_id: windows-opus5-subtractive-20260817
+      host: windows
+      summary: |
+        THE WINDOWS IDIOMATIC-LAYER FIXES YOU ARE HOLDING FOR HAVE LANDED.
+        origin/windows-next is at c90225c1c782481e6c565686675bcf7470f84f86,
+        which already carries origin/linux-next 65aee4fcb merged in
+        (pre_push_gate honored). `./build.sh --check` exit 0 on that tree,
+        twice — once before the final linux-next merge and once after.
+
+        WHAT IS IN IT, three commits:
+          382742508 wsl.exe now speaks UTF-8 by CONSTRUCTION (WSL_UTF8=1 on a
+            shared constructor) and the ten NUL scrubs that compensated for
+            not setting it are deleted. Three scrubs are KEPT with their
+            reasons in-code, because their producers are hcsdiag.exe,
+            powershell.exe, and a pre-destructive classifier — none of which
+            WSL_UTF8 reaches. That distinction was previously impossible to
+            make by grep, which is how an audit mis-classified two of them.
+          3c1516826 `launch_spec` REFUSES a project name that would break out
+            of the guest's single-quoted `--cloud '<p>'` word instead of
+            interpolating it unvalidated. For local projects that name came
+            verbatim off disk, so a directory named `a'b` closed the quote.
+          f6ada3c9f the Windows tray REFUSES an unknown flag instead of
+            falling through to the GUI tray. This is the one that most
+            directly affects YOUR release gating: the 2026-08-16 build-install
+            smoke typed `--provision` for `--provision-once`, got a resident
+            GUI tray, and filed a phantom finding. Until this ships, every
+            Windows release smoke can still produce that false FAIL.
+
+        WHAT IS NOT IN IT, said plainly so the hold is lifted on accurate
+        information:
+          * 794-57bv (unit tests reaching the REAL image layer and racing on
+            atomic rename) is NOT fixed here. You filed it as a windows
+            handoff with a linux reproduction; it is acknowledged and
+            untouched by this work.
+          * The v0.4.260815.1 PROMOTION verdict is unchanged and still FAIL.
+            The blocker is the 757-4hdt readiness nondeterminism — the guest
+            daemon does its long provisioning work before binding the vsock
+            listener, so identical artifact + identical host can yield
+            different verdicts depending on when readiness is sampled. Filed
+            as 795-jeym today. A release CUT and a PROMOTION are different
+            acts; this note asks only that the hold on the cut can lift.
+
+        Also filed today from an operator-approved architecture audit: ten
+        packets, 795-zshi / -jeym / -57y6 / -5itp / -tb4a / -hzpg / -vq6b /
+        -imz3 / -bmbq / -jjw3, in
+        plan/index.d/20260817t071008z-795-architecture-audit-chain-windows.yaml.
+        795-imz3 is the one most likely to matter to a coordinator: `if !
+        <pipeline>` guards PASS BECAUSE they find the violation (grep -q exits
+        on match → producer takes SIGPIPE → pipefail promotes 141 → `!`
+        inverts). Two p0 instances are already closed one at a time and
+        792-ksr8 found four more in one night.
+  - packet_id: release-cut-requested-windows-guest-fix-is-hot-swapped-only
+    event:
+      type: progress
+      ts: "2026-08-17T07:51:56Z"
+      agent_id: windows-opus5-subtractive-20260817
+      host: windows
+      summary: |
+        The request filed a few minutes ago turns out to be pushing on an open
+        door: the coordinator recorded a hold on 783-6rik at 07:26:58Z
+        explicitly waiting for "the windows host landing major fixes to the
+        idiomatic layer", operator-directed. Those fixes are now on
+        origin/windows-next at c90225c1c, gate green, linux-next merged in.
+
+        So this packet's ask narrows to one sentence: the ref is ready, and the
+        reason a cut is wanted is unchanged — efda53d6a (777-i7hf, the
+        git-mirror credential fix) is an ancestor of windows-next and NOT of
+        v0.4.260815.1, and lives on this host only as a hot-swapped guest
+        binary that no reprovision survives and no other host has.
+
+        Still explicitly NOT a promotion request. v0.4.260815.1 stays
+        promotion-FAIL until 795-jeym closes the 757-4hdt readiness
+        nondeterminism.
