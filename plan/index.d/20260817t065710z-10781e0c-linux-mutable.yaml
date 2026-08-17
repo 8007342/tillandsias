@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: litmus-runner-cannot-filter-by-litmus-id
+    field: status
+    value: ready
+    ts: "2026-08-17T06:57:10Z"
+    host: linux_mutable
+
+events:
+  - packet_id: litmus-runner-cannot-filter-by-litmus-id
+    event:
+      type: falsified
+      ts: "2026-08-17T06:57:10Z"
+      host: linux_mutable
+      summary: >
+        falsified 'completed' claim; evidence: FALSIFIED at the v0.4.260817.1 release gate: litmus:litmus-name-filter-hint-shape STEP 1 went RED because it pins the OPPOSITE contract on purpose (order 300 follow-on) — a test-name filter must FAIL LOUD and name its owning spec, not run that test. The closure evidence cited four working filter modes but never ran spec-traceability's own suite, so the contradiction was invisible at closure. Implementation reverted from run-litmus-test.sh; spec-traceability now 8/8 PASS. Re-land must make the CONTRACT CHANGE the subject: update hint-shape step 1 with reasoning (the runner can now run a single test, so hint-then-refuse is worse UX than run-exactly-that-test), keep the unknown-name refusal pinned, review it as a fail-loud change. Two set -e traps found and fixed en route, worth avoiding on re-land: '[[ test ]] && assign' returns non-zero under errexit and kills the script, and a no-match 'grep | head' under pipefail does the same in an assignment. — status set to 'ready', new attempt epoch

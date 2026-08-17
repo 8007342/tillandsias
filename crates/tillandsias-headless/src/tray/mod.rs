@@ -4806,12 +4806,6 @@ mod tests {
         );
     }
 
-    /// Order 363 exit criterion: a non-WEB category is refused host-side
-    /// with an actionable JSON-RPC error. The deny happens BEFORE any
-    /// podman call — this test runs without podman.
-    ///
-    /// @trace spec:mcp-tool-socket, spec:subdomain-routing-via-reverse-proxy
-    #[test]
     /// Order 779-3trn exit criterion: exercise the composition THROUGH THE
     /// TRANSPORT, not by calling the dispatcher directly — a real
     /// `UnixStream::pair()` driven by `serve_mcp_connection` with a pinned
@@ -4829,84 +4823,86 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        let (client, server) = UnixStream::pair().expect("socketpair");
-        let handle = std::thread::spawn(move || {
-            serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
-        });
+        with_empty_project_root(|| {
+            let (client, server) = UnixStream::pair().expect("socketpair");
+            let handle = std::thread::spawn(move || {
+                serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+            });
 
-        let mut writer = client.try_clone().expect("clone client");
-        let mut reader = BufReader::new(client);
-        let mut read_line = || {
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("read reply");
-            serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
-        };
+            let mut writer = client.try_clone().expect("clone client");
+            let mut reader = BufReader::new(client);
+            let mut read_line = || {
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("read reply");
+                serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
+            };
 
-        writeln!(
-            writer,
-            r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
-        )
-        .expect("write initialize");
-        let init = read_line();
-        assert_eq!(
-            init["result"]["serverInfo"]["name"],
-            "tillandsias-host-services"
-        );
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":1,"method":"initialize","params":{{}}}}"#
+            )
+            .expect("write initialize");
+            let init = read_line();
+            assert_eq!(
+                init["result"]["serverInfo"]["name"],
+                "tillandsias-host-services"
+            );
 
-        writeln!(
-            writer,
-            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
-        )
-        .expect("write tools/list");
-        let list = read_line();
-        let tools: Vec<&str> = list["result"]["tools"]
-            .as_array()
-            .expect("tools array")
-            .iter()
-            .map(|t| t["name"].as_str().expect("tool name"))
-            .collect();
-        assert_eq!(
-            tools.len(),
-            11,
-            "over the transport: trio + eight browser tools, got {tools:?}"
-        );
-        assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+            )
+            .expect("write tools/list");
+            let list = read_line();
+            let tools: Vec<&str> = list["result"]["tools"]
+                .as_array()
+                .expect("tools array")
+                .iter()
+                .map(|t| t["name"].as_str().expect("tool name"))
+                .collect();
+            assert_eq!(
+                tools.len(),
+                11,
+                "over the transport: trio + eight browser tools, got {tools:?}"
+            );
+            assert!(tools.contains(&"browser.open") && tools.contains(&"publish_local"));
 
-        // A disallowed URL must come back as a typed JSON-RPC error from the
-        // composed server — proving browser.* actually ROUTED there rather
-        // than falling through to the -32601 unknown-tool arm.
-        writeln!(
+            // A disallowed URL must come back as a typed JSON-RPC error from the
+            // composed server — proving browser.* actually ROUTED there rather
+            // than falling through to the -32601 unknown-tool arm.
+            writeln!(
             writer,
             r#"{{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{{"name":"browser.open","arguments":{{"url":"file:///etc/passwd"}}}}}}"#
         )
         .expect("write browser.open");
-        let denied = read_line();
-        assert_eq!(denied["id"], 3);
-        // The browser family reports POLICY denials the MCP way — a result
-        // with `isError: true` and the reason in content — whereas the
-        // host-services trio uses JSON-RPC -32000 for its denials. Both are
-        // correct for their layer; what matters here is that the call
-        // reached the composed server at all.
-        assert_eq!(
-            denied["result"]["isError"], true,
-            "a disallowed URL must be refused: {denied}"
-        );
-        let text = denied["result"]["content"][0]["text"]
-            .as_str()
-            .unwrap_or_default()
-            .to_string();
-        assert!(
-            text.contains("URL_NOT_ALLOWED"),
-            "the refusal must name the URL policy: {text}"
-        );
-        assert!(
-            denied.get("error").is_none(),
-            "browser.open must route to the composed server, never the -32601 unknown-tool fallback: {denied}"
-        );
+            let denied = read_line();
+            assert_eq!(denied["id"], 3);
+            // The browser family reports POLICY denials the MCP way — a result
+            // with `isError: true` and the reason in content — whereas the
+            // host-services trio uses JSON-RPC -32000 for its denials. Both are
+            // correct for their layer; what matters here is that the call
+            // reached the composed server at all.
+            assert_eq!(
+                denied["result"]["isError"], true,
+                "a disallowed URL must be refused: {denied}"
+            );
+            let text = denied["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string();
+            assert!(
+                text.contains("URL_NOT_ALLOWED"),
+                "the refusal must name the URL policy: {text}"
+            );
+            assert!(
+                denied.get("error").is_none(),
+                "browser.open must route to the composed server, never the -32601 unknown-tool fallback: {denied}"
+            );
 
-        drop(writer);
-        drop(reader);
-        handle.join().expect("connection thread joins");
+            drop(writer);
+            drop(reader);
+            handle.join().expect("connection thread joins");
+        });
     }
 
     /// Order 779-dqsv: the per-line cap binds on the INBOUND half. An
@@ -4921,54 +4917,56 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        let (client, server) = UnixStream::pair().expect("socketpair");
-        let handle = std::thread::spawn(move || {
-            serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
-        });
+        with_empty_project_root(|| {
+            let (client, server) = UnixStream::pair().expect("socketpair");
+            let handle = std::thread::spawn(move || {
+                serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+            });
 
-        let mut writer = client.try_clone().expect("clone client");
-        let mut reader = BufReader::new(client);
-        let mut read_json = || {
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("read reply");
-            serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
-        };
+            let mut writer = client.try_clone().expect("clone client");
+            let mut reader = BufReader::new(client);
+            let mut read_json = || {
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("read reply");
+                serde_json::from_str::<serde_json::Value>(line.trim()).expect("reply is JSON")
+            };
 
-        // One line just past the cap: valid JSON shape, hostile size.
-        let padding = "x".repeat(MAX_MCP_LINE_BYTES + 1024);
-        writeln!(
+            // One line just past the cap: valid JSON shape, hostile size.
+            let padding = "x".repeat(MAX_MCP_LINE_BYTES + 1024);
+            writeln!(
             writer,
             r#"{{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{{"name":"publish_local","arguments":{{"category":"{padding}"}}}}}}"#
         )
         .expect("write oversized line");
 
-        let refused = read_json();
-        assert_eq!(refused["error"]["code"], -32000);
-        let message = refused["error"]["message"].as_str().unwrap_or_default();
-        assert!(
-            message.starts_with("RequestTooLarge:"),
-            "the refusal must name the cap: {message}"
-        );
+            let refused = read_json();
+            assert_eq!(refused["error"]["code"], -32000);
+            let message = refused["error"]["message"].as_str().unwrap_or_default();
+            assert!(
+                message.starts_with("RequestTooLarge:"),
+                "the refusal must name the cap: {message}"
+            );
 
-        // RESYNC: a normal request after the oversized one is still served —
-        // the cap refuses a line, it does not poison the connection.
-        writeln!(
-            writer,
-            r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
-        )
-        .expect("write tools/list");
-        let list = read_json();
-        assert_eq!(list["id"], 2);
-        assert!(
-            list["result"]["tools"]
-                .as_array()
-                .is_some_and(|t| !t.is_empty()),
-            "the connection still serves after an oversized line: {list}"
-        );
+            // RESYNC: a normal request after the oversized one is still served —
+            // the cap refuses a line, it does not poison the connection.
+            writeln!(
+                writer,
+                r#"{{"jsonrpc":"2.0","id":2,"method":"tools/list"}}"#
+            )
+            .expect("write tools/list");
+            let list = read_json();
+            assert_eq!(list["id"], 2);
+            assert!(
+                list["result"]["tools"]
+                    .as_array()
+                    .is_some_and(|t| !t.is_empty()),
+                "the connection still serves after an oversized line: {list}"
+            );
 
-        drop(writer);
-        drop(reader);
-        handle.join().expect("connection thread joins");
+            drop(writer);
+            drop(reader);
+            handle.join().expect("connection thread joins");
+        });
     }
 
     /// Order 779-dqsv: the OUTBOUND half of the cap — the one with a live
@@ -5025,40 +5023,48 @@ mod tests {
         use std::io::{BufRead, BufReader, Write};
         use std::os::unix::net::UnixStream;
 
-        let (client, server) = UnixStream::pair().expect("socketpair");
-        let handle = std::thread::spawn(move || {
-            serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+        with_empty_project_root(|| {
+            let (client, server) = UnixStream::pair().expect("socketpair");
+            let handle = std::thread::spawn(move || {
+                serve_mcp_connection(server, Some(LaneIdentity::new("demo", "default")));
+            });
+
+            let mut writer = client.try_clone().expect("clone client");
+            let mut reader = BufReader::new(client);
+
+            // Pipeline three requests without reading anything back.
+            for id in 1..=3 {
+                writeln!(
+                    writer,
+                    r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/list"}}"#
+                )
+                .expect("write pipelined request");
+            }
+
+            // Responses come back in request order, one per line — the
+            // observable signature of a sequential handler.
+            for expected in 1..=3 {
+                let mut line = String::new();
+                reader.read_line(&mut line).expect("read reply");
+                let resp: serde_json::Value =
+                    serde_json::from_str(line.trim()).expect("reply is JSON");
+                assert_eq!(
+                    resp["id"], expected,
+                    "sequential transport answers in request order"
+                );
+            }
+
+            drop(writer);
+            drop(reader);
+            handle.join().expect("connection thread joins");
         });
-
-        let mut writer = client.try_clone().expect("clone client");
-        let mut reader = BufReader::new(client);
-
-        // Pipeline three requests without reading anything back.
-        for id in 1..=3 {
-            writeln!(
-                writer,
-                r#"{{"jsonrpc":"2.0","id":{id},"method":"tools/list"}}"#
-            )
-            .expect("write pipelined request");
-        }
-
-        // Responses come back in request order, one per line — the
-        // observable signature of a sequential handler.
-        for expected in 1..=3 {
-            let mut line = String::new();
-            reader.read_line(&mut line).expect("read reply");
-            let resp: serde_json::Value = serde_json::from_str(line.trim()).expect("reply is JSON");
-            assert_eq!(
-                resp["id"], expected,
-                "sequential transport answers in request order"
-            );
-        }
-
-        drop(writer);
-        drop(reader);
-        handle.join().expect("connection thread joins");
     }
 
+    /// Order 363 exit criterion: a non-WEB category is refused host-side
+    /// with an actionable JSON-RPC error. The deny happens BEFORE any
+    /// podman call — this test runs without podman.
+    ///
+    /// @trace spec:mcp-tool-socket, spec:subdomain-routing-via-reverse-proxy
     #[test]
     fn mcp_tools_call_non_web_category_denied_loud() {
         let call = serde_json::json!({

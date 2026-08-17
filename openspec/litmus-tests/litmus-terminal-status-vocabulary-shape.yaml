@@ -49,7 +49,17 @@ critical_path:
     # check-fragment-status-loss.sh once accepted done|completed|retired|obsolete
     # while the resolver accepted only completed|obsoleted — a guard laxer (or
     # wider) than the thing it guards is decorative. Compare the SETS exactly.
-    command: "guard=$(grep -oE '^[[:space:]]*(completed\\|[a-z|]+)\\)' scripts/check-fragment-status-loss.sh | head -1 | tr -d ' )' | tr '|' '\\n' | sort | tr '\\n' ' '); code=$(grep -A1 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort | tr '\\n' ' '); if [ -z \"$guard\" ] || [ -z \"$code\" ]; then echo 'FAIL: cannot locate guard or code vocabulary'; exit 1; fi; if [ \"$guard\" != \"$code\" ]; then echo \"FAIL: guard=[$guard] != code=[$code]\"; exit 1; fi; echo 'ok: guard set equals resolver set'"
+    # 2026-08-17: the extraction was pinned to a shell `case` arm
+    # (`completed|verified|done|obsoleted)`). Orders 783-xyk5 and 785-sqe6
+    # rewrote the guard's hot path into a single awk join, so the vocabulary now
+    # reads `want == "completed" || want == "verified" || ...` and the old grep
+    # found NOTHING — which the step correctly refused as
+    # "cannot locate guard or code vocabulary" rather than passing vacuously.
+    # The PROPERTY (the two sets are equal) never broke; only the shape did.
+    # Extraction is now keyed on the comparison itself, so it survives the arm
+    # being a case, an awk expression, or a list — per 634-39ik a step should
+    # assert the property, not how the source happens to be written today.
+    command: "guard=$(grep -oE 'want == \"[a-z-]+\"' scripts/check-fragment-status-loss.sh | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); code=$(grep -A3 'pub fn is_terminal_status' crates/tillandsias-plan/src/lib.rs | grep -oE '\"[a-z-]+\"' | tr -d '\"' | sort -u | tr '\\n' ' '); if [ -z \"$guard\" ] || [ -z \"$code\" ]; then echo 'FAIL: cannot locate guard or code vocabulary'; exit 1; fi; if [ \"$guard\" != \"$code\" ]; then echo \"FAIL: guard=[$guard] != code=[$code]\"; exit 1; fi; echo 'ok: guard set equals resolver set'"
     timeout_ms: 10000
     expected_behavior: "ok: guard set equals resolver set"
 

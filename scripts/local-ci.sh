@@ -1127,6 +1127,63 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     fi
 
     # ============================================================================
+    # CHECK 6c: guards that shipped 2026-08-16 without an invoker
+    # ============================================================================
+    # The guard-activation audit below caught all three as orphans on the
+    # 2026-08-17 release gate — shipped by sibling hosts, wired by nobody, so
+    # each was a guard that reads as protective and enforces nothing (the
+    # 599-4wzr class the audit exists for). All three were verified passing
+    # before being wired, so activation cannot turn a latent red into a
+    # surprise: check-cheatsheet-frontmatter 221 checked,
+    # check-dev-embed-model-agreement nomic-embed-text,
+    # check-tracked-config-host-paths 1 scanned.
+    # Invoked LITERALLY, one block each, deliberately. A `for` loop over the
+    # three names is shorter and was the first draft — but the activation
+    # audit resolves invokers by grepping for the literal script path, so a
+    # loop-invoked guard still reports as an orphan. That is the audit being
+    # right: a name assembled at runtime is invisible to `grep` for a human
+    # reader too, and "who calls this guard?" must stay answerable by search.
+    log_section "Recently Landed Guards"
+    if [[ -f "scripts/check-cheatsheet-frontmatter.sh" ]]; then
+        if bash scripts/check-cheatsheet-frontmatter.sh 2>&1 | tee /tmp/cheatsheet-frontmatter.log; then
+            log_pass "Cheatsheet frontmatter valid"
+            archive_check_log "cheatsheet-frontmatter" "pass" /tmp/cheatsheet-frontmatter.log
+        else
+            log_fail_tracked "cheatsheet-frontmatter" "Cheatsheet frontmatter violations (see /tmp/cheatsheet-frontmatter.log)"
+            archive_check_log "cheatsheet-frontmatter" "fail" /tmp/cheatsheet-frontmatter.log
+        fi
+    else
+        log_fail_missing_guard "cheatsheet-frontmatter" "scripts/check-cheatsheet-frontmatter.sh"
+        archive_check_log "cheatsheet-frontmatter" "skipped"
+    fi
+
+    if [[ -f "scripts/check-dev-embed-model-agreement.sh" ]]; then
+        if bash scripts/check-dev-embed-model-agreement.sh 2>&1 | tee /tmp/dev-embed-model-agreement.log; then
+            log_pass "Dev embed model agrees across surfaces"
+            archive_check_log "dev-embed-model-agreement" "pass" /tmp/dev-embed-model-agreement.log
+        else
+            log_fail_tracked "dev-embed-model-agreement" "Dev embed model disagreement (see /tmp/dev-embed-model-agreement.log)"
+            archive_check_log "dev-embed-model-agreement" "fail" /tmp/dev-embed-model-agreement.log
+        fi
+    else
+        log_fail_missing_guard "dev-embed-model-agreement" "scripts/check-dev-embed-model-agreement.sh"
+        archive_check_log "dev-embed-model-agreement" "skipped"
+    fi
+
+    if [[ -f "scripts/check-tracked-config-host-paths.sh" ]]; then
+        if bash scripts/check-tracked-config-host-paths.sh 2>&1 | tee /tmp/tracked-config-host-paths.log; then
+            log_pass "No host-specific paths in tracked config"
+            archive_check_log "tracked-config-host-paths" "pass" /tmp/tracked-config-host-paths.log
+        else
+            log_fail_tracked "tracked-config-host-paths" "Host path in tracked config (see /tmp/tracked-config-host-paths.log)"
+            archive_check_log "tracked-config-host-paths" "fail" /tmp/tracked-config-host-paths.log
+        fi
+    else
+        log_fail_missing_guard "tracked-config-host-paths" "scripts/check-tracked-config-host-paths.sh"
+        archive_check_log "tracked-config-host-paths" "skipped"
+    fi
+
+    # ============================================================================
     # Guard activation audit (order 599-4wzr) — a guard nobody can prove is
     # running is not a guard. Fails loud if any check-*.sh has no invoker.
     # ============================================================================
