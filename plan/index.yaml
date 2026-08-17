@@ -55967,6 +55967,18 @@ plan_index:
             Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
 
       events:
+        - type: note
+          ts: "2026-08-17T05:33:17Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            CORRECTION to the third-sighting note I appended minutes earlier. I read the lane's log while it was still running (40 lines) and recorded that it 'refused before any committable work'. That was true at that instant and WRONG as a description of the run. The lane went on to complete: it filed the blocker, committed the opsx sync dirt, pushed three commits, and emitted MO-FULL: COMPLETE f4d8f4972 — which is on origin/linux-next and is now this branch's history. Reading a background job mid-flight and reporting it as final is the mistake; the log was 697 lines, not 40. WHAT THE CORRECTED PICTURE MEANS FOR THIS PACKET, which is more interesting than the error: the guard blocks WORKER DRAIN, not the cycle. An in-forge agent can still do the fail-loud bookkeeping — file the blocker, push it, attest — because the mirror relay ACCEPTS pushes. The in-forge agent said so in its own words: pushes succeed even though the verdict ref is unpublished. So the exposure is narrower than 'forge lanes are dead on released hosts': they cannot DRAIN WORK, but they are not silent and they do not lose findings. That distinction matters for how urgent a release is. Second observation: the in-forge agent's smallest-next-action was 'rebuild the tillandsias-git container image' — the same remediation this packet already proved futile on a released host, because the tray rebuilds the image from its embedded assets and overwrites the rebuild within seconds. The advice keeps being regenerated because the GUARD'S OWN MESSAGE says it, which is exactly why this packet's first exit criterion is to fix that message rather than to explain the workaround again.
+        - type: note
+          ts: "2026-08-17T05:27:47Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            THIRD SIGHTING, prediction confirmed (yoga 2026-08-17T05:25Z, evidence target/smoke-e2e/11-forge-lane.log). This packet predicted that forge lanes stay blocked on released hosts until a release containing probe-upstream-auth.sh ships. Re-checked before running: still no new release (daily channel resolves v0.4.260815.1, installed binary reports the same), and the versioned git image still contains no probe. The lane duly returned blocked:upstream-auth-unpublished and refused before any committable work — the same verdict as the 20:22Z and 00:24Z lanes, four and five hours apart, across an intervening local image rebuild that the tray overwrote. Nothing on a released host can clear this; the packet's exit criteria stand unchanged. Recording the third data point rather than re-diagnosing: the mechanism is settled and the remaining action is a release, which is the operator's to cut.
         - type: discovered
           ts: "2026-08-17T01:00:00Z"
           agent_id: linux-yoga-claude-20260816t185912z

@@ -112,14 +112,41 @@ So the correct tier policy for a shared-memory iGPU host is *not* "GPU or CPU"
 — it is **GPU for prefill-dominated expert queries, CPU for generation-heavy
 work**.
 
-### There is a model-size crossover, and it is below 1B
+### The iGPU is not universally better — but the "crossover below 1B" is WITHDRAWN
 
-The iGPU is NOT universally better. Embedding `nomic-embed-text` (137M params)
-was **worse** on Vulkan: 4287 ms/chunk vs ~2714 ms/chunk on CPU (**-58%**).
-Together with T0 also losing, this indicates a crossover: below roughly 1B
-parameters the Vulkan dispatch overhead dominates and the CPU wins; from
-1.1B-3.8B the iGPU wins prefill. **Any tier policy that routes all models to
-one engine is wrong on this host.**
+**CORRECTED 2026-08-17 (cycle 5).** This section originally concluded a
+model-size crossover: "below roughly 1B parameters the Vulkan dispatch overhead
+dominates and the CPU wins." That was built on T0's Vulkan prefill of
+17.87 tok/s — **the very figure this document flags below as a suspected
+shader-compilation artifact**. It was an artifact, and the conclusion should not
+have been drawn from it.
+
+Measured warm, with prompt caching defeated and offload verified via `/api/ps`:
+
+| `qwen2.5:0.5b` | prefill tok/s | generation tok/s |
+|---|---:|---:|
+| CPU | ~91 | ~28.9 |
+| Vulkan iGPU | **~296 (3.2x faster)** | ~20 (~30% slower) |
+
+**The iGPU wins prefill at 0.5B too.** The prefill half of the crossover claim
+is wrong and is withdrawn.
+
+What survives, restated precisely:
+
+- **The iGPU wins compute-bound prefill and loses bandwidth-bound generation**,
+  and that pattern holds at 0.5B, 1.1B and 3.8B alike — it is not size-gated in
+  the range measured.
+- **The embedding loss is real and stands**: `nomic-embed-text` (137M) was 58%
+  slower on Vulkan (4287 ms/chunk vs 2714). But that is a different workload
+  shape — one forward pass, no generation phase — so it is evidence about
+  *embedding*, not about a parameter-count threshold. Whether a true crossover
+  exists between 137M and 500M is **unmeasured** and must not be asserted again
+  without measuring it.
+- **Any tier policy that routes all models to one engine is still wrong here** —
+  but the axis is *workload shape* (prefill-heavy vs generation-heavy vs
+  embedding), not parameter count.
+
+Full detail: `plan/issues/research/engine-parity-ollama-vs-llamacpp-2026-08-17.md`.
 
 ### The detector gap is ~10 lines
 
