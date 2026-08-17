@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: release-gate-nondeterministic-under-podman-lock-contention
+    event:
+      type: progress
+      ts: "2026-08-17T07:33:33Z"
+      agent_id: linux-yoga-claude-20260817t072732z
+      host: linux-immutable
+      summary: >
+        REFUTED the inferred podman-sqlite-contention mechanism; root cause is scripts/common.sh. The gate picks its podman storage backend by racing 'timeout 5 podman info' (common.sh:118). Under --ci-full load a HEALTHY podman that merely answers slowly loses that race, so the lane silently falls into the legacy wrapper branch: private graphroot + driver=vfs (common.sh:255). Reproduced deterministically on yoga with a podman that only sleeps 6s on 'info' -> PODMAN switches to the generated wrapper with driver=vfs. The wrapper is written to a FIXED SHARED path $TMPDIR/tillandsias-podman-wrapper/podman, so parallel gate lanes truncate it while siblings exec it: measured 50/400 = 12.5% exec failures (ETXTBSY 'Text file busy') under concurrent rebuild. That is the false 'podman is not available on PATH' -- require_podman only tests $PODMAN --version, and an ETXTBSY exec is indistinguishable from absence to it. vfs also explains the 30s budget timeouts (layer copies) and the missing tillandsias-* images (separate graphroot). Podman on this host: native overlay, info 0.07s idle / 0.26s loaded. Fix direction per operator: REMOVE the stopwatch-driven activation, make the wrapper explicit opt-in config.

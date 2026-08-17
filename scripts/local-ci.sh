@@ -1132,11 +1132,22 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # The guard-activation audit below caught all three as orphans on the
     # 2026-08-17 release gate — shipped by sibling hosts, wired by nobody, so
     # each was a guard that reads as protective and enforces nothing (the
-    # 599-4wzr class the audit exists for). All three were verified passing
+    # 599-4wzr class the audit exists for). Both were verified passing
     # before being wired, so activation cannot turn a latent red into a
     # surprise: check-cheatsheet-frontmatter 221 checked,
-    # check-dev-embed-model-agreement nomic-embed-text,
-    # check-tracked-config-host-paths 1 scanned.
+    # check-dev-embed-model-agreement nomic-embed-text.
+    #
+    # A third, check-tracked-config-host-paths.sh, was wired here and is now
+    # DELETED rather than repaired (order 789-nc2s, retired 2026-08-17). It
+    # scanned tracked agent config for one-machine paths, and it passed —
+    # `ok:tracked-config-host-paths:1 scanned` — while /c/Users/bullo/... sat
+    # in .claude/settings.local.json, the very file that motivated it, because
+    # its env-block-only severity split excused everything in the permissions
+    # allowlist. A guard whose scope was narrowed until the offending tree
+    # passes is not protection, it is a green light with a rationale attached.
+    # The class it chased is better made unrepresentable: machine-local agent
+    # settings belong in an untracked .local file, which is what the framework
+    # named it for. See plan/issues/ for the untracking decision.
     # Invoked LITERALLY, one block each, deliberately. A `for` loop over the
     # three names is shorter and was the first draft — but the activation
     # audit resolves invokers by grepping for the literal script path, so a
@@ -1168,19 +1179,6 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "dev-embed-model-agreement" "scripts/check-dev-embed-model-agreement.sh"
         archive_check_log "dev-embed-model-agreement" "skipped"
-    fi
-
-    if [[ -f "scripts/check-tracked-config-host-paths.sh" ]]; then
-        if bash scripts/check-tracked-config-host-paths.sh 2>&1 | tee /tmp/tracked-config-host-paths.log; then
-            log_pass "No host-specific paths in tracked config"
-            archive_check_log "tracked-config-host-paths" "pass" /tmp/tracked-config-host-paths.log
-        else
-            log_fail_tracked "tracked-config-host-paths" "Host path in tracked config (see /tmp/tracked-config-host-paths.log)"
-            archive_check_log "tracked-config-host-paths" "fail" /tmp/tracked-config-host-paths.log
-        fi
-    else
-        log_fail_missing_guard "tracked-config-host-paths" "scripts/check-tracked-config-host-paths.sh"
-        archive_check_log "tracked-config-host-paths" "skipped"
     fi
 
     # ============================================================================
