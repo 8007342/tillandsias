@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: cheatsheet-template-cannot-satisfy-its-own-canon
+    event:
+      type: completed
+      ts: "2026-08-17T00:30:54Z"
+      agent_id: linux-yoga-claude-20260816t185912z
+      host: linux-immutable
+      summary: >
+        TEMPLATE.md now opens with a complete annotated frontmatter block (each field labelled with what reads it and why); the prose Provenance section is removed because it duplicated sources: and duplicated provenance is how the two drift. runtime/forge-loss-on-shutdown-window.md — the live instance whose HTML-comment provenance was invisible to every frontmatter gate — gains frontmatter following the established project-derived convention (repo paths in sources:, per architecture/transport-overhead.md), keeping its comment block for the line-level citations a path list cannot carry. New scripts/check-cheatsheet-frontmatter.sh enforces it on the AUTHORED tree only (the derived copy inherits by construction and is guarded for equality by stage-image-cheatsheets.sh): 221 files pass, INDEX.md exempt as generated, TEMPLATE.md deliberately NOT exempt. Its --selftest carries the control that matters — a horizontal rule further down the file must NOT count as frontmatter, so the check keys on line 1 exactly (3/3 cases). NOTE for the operator: an unresolved canon tension remains — cheatsheets.provenance.rule says project-local inference is NOT provenance and must be labelled derived, yet the established convention puts repo paths directly in sources: with authority: high. I followed the convention rather than invent a third form mid-cycle; deciding which is canonical is worth an operator ruling.

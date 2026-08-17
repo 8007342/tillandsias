@@ -1,0 +1,127 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: linux-immutable (yoga) meta-orchestration cycle 6, 2026-08-17.
+# Evidence: target/smoke-e2e/06-forge-lane.log (before rebuild),
+#           target/smoke-e2e/06b-forge-lane-after-rebuild.log (after).
+packets:
+  - packet_id: released-binary-cannot-publish-upstream-auth-verdict
+    release_target: stable-milestone-v1
+    order: 783-6rik
+    status: ready
+    desired_release: v0.5
+    kind: bug
+    pickup_role: linux
+    priority: p1
+    tags:
+      - forge
+      - git-mirror
+      - release
+      - credential
+      - fail-loud
+      - v0.5
+    title: |
+      Every forge lane on the PUBLISHED release is structurally blocked: the credential guard requires a verdict ref that only a post-release probe can publish, and the tray re-materializes its own probe-less image.
+    context: |
+      Measured on yoga 2026-08-17 with two forge lanes, before and after a
+      local image rebuild.
+
+      THE STRUCTURE:
+      1. `scripts/check-credential-channel.sh` (checkout-side, current) refuses
+         a forge cycle unless the mirror publishes
+         `refs/tillandsias/upstream-auth/<state>/<epoch>` (order 756-2jnj).
+      2. That ref is published by `images/git/probe-upstream-auth.sh`, which
+         lives in the git IMAGE.
+      3. The running tray builds its images from EMBEDDED assets, materialized
+         from the installed binary — release v0.4.260815.1, whose tag points at
+         commit 0548ee1f2 (2026-08-14).
+      4. `images/git/probe-upstream-auth.sh` landed 2026-08-15 — AFTER that
+         commit. Verified: `podman run --rm --entrypoint ls
+         localhost/tillandsias-git:v0.4.260815.1 /usr/local/share/git-service/`
+         lists no probe.
+
+      So the guard shipped in a release whose git image cannot satisfy it. Every
+      forge lane on the published artifact fail-closes at
+      `blocked:upstream-auth-unpublished` — observed twice, four hours apart.
+
+      THE REMEDIATION TEXT IS WRONG FOR THIS CASE, and that is the sharp edge.
+      The guard says "restart/rebuild the tillandsias-git container". I did
+      exactly that from the current checkout (`scripts/build-image.sh git`,
+      12s) and the rebuilt image DID carry the probe. Thirty seconds later the
+      tray's own on-demand ensure rebuilt the image from its embedded assets
+      and re-pointed the `v0.4.260815.1` tag at a probe-less layer:
+        - checkout build  -> image ddd7223f609b, tag ...6b0fd28 (has probe)
+        - tray rebuild    -> image 53e7cd7ec992, tag sha256-0f1d7a3f (no probe)
+        - `v0.4.260815.1` now resolves to 53e7cd7ec992; running container uses it.
+      This is NOT a 702-griq regression: the digest-aware ensure behaved
+      correctly, hashing ITS OWN embedded sources. The point is that a host
+      running the released binary CANNOT repair this locally — the release's
+      embedded assets always win.
+    exit_criteria:
+      - |
+          The credential guard's remediation distinguishes the two cases: on a host running a RELEASE whose image predates the probe, rebuilding the container is futile and the message says so (pointing at a release containing the probe, or a locally-built binary), instead of prescribing an action that cannot work.
+      - |
+          A litmus or check detects the mismatch directly — the installed binary's embedded git image lacking probe-upstream-auth while the checkout's guard requires its verdict — so the condition is reported as a version-skew rather than rediscovered by each host as an auth failure.
+      - |
+          Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
+    events:
+      - type: discovered
+        ts: "2026-08-17T01:00:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Two forge lanes on the published release; local image rebuild proved
+          the remedy futile because the tray overwrote it within 30s.
+
+  - packet_id: forge-preflight-races-the-async-launch-build
+    release_target: forge-local-experts-milestone
+    order: 783-jdeh
+    status: ready
+    desired_release: v0.5
+    kind: bug
+    pickup_role: linux
+    priority: p2
+    tags:
+      - forge
+      - experts
+      - preflight
+      - race
+      - v0.5
+    title: |
+      In-forge cycle-preflight returns a terminal blocked:preflight:plan:capabilities-refused when the async launch build has not yet produced target/release/tillandsias-plan.
+    context: |
+      Observed on yoga 2026-08-17, second forge lane
+      (target/smoke-e2e/06b-forge-lane-after-rebuild.log:32,188). The in-forge
+      agent ran `scripts/cycle-preflight.sh`, which returned
+      `blocked:preflight:plan:capabilities-refused`. Its own diagnosis:
+
+        $ ./target/release/tillandsias-plan --version
+        bash: ./target/release/tillandsias-plan: No such file or directory
+        $ ls -la ./target/release/
+        ls: cannot access './target/release/': No such file or directory
+
+      There was no binary and no target/ directory at all — the forge's async
+      launch build had not delivered it yet. The agent then correctly refused
+      to start the cycle, because the skill says a `blocked:preflight:*`
+      verdict means the instrument is unverified.
+
+      But the expert-capability contract already distinguishes this exact case:
+      `skew=pending-build` means WAIT AND RETRY ("the async launch build will
+      deliver it in this session"), as opposed to `relaunch-required` where
+      retrying is futile. Preflight collapses both into one terminal refusal,
+      so a lane that merely started early is indistinguishable from a lane
+      whose instrument can never appear — and the cheap, correct action
+      (wait a few seconds and re-probe) is never taken.
+
+      Cost is a whole forge cycle per occurrence: this lane did zero work.
+    exit_criteria:
+      - |
+          cycle-preflight distinguishes "binary absent but a launch build is in flight" from "binary cannot be produced", waiting-and-retrying the former within a bounded window and only then refusing, with the two verdicts named differently.
+      - |
+          A test drives the absent-binary-with-pending-build case and asserts preflight waits rather than refusing terminally; the futile case still refuses immediately.
+    events:
+      - type: discovered
+        ts: "2026-08-17T01:00:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Second forge lane of cycle 6 lost its entire cycle to this race;
+          the first lane (same host, 40 minutes earlier) got past preflight.
