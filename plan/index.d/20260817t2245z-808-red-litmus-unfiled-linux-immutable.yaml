@@ -1,0 +1,62 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-17T22:45:00Z.
+#
+# Found while bounding the blast radius of 797-p2xa's fail-closed change. These
+# two are NOT that change's fallout — verified by stashing it and re-running,
+# where both still fail — they are pre-existing reds that no packet mentions.
+status:
+  - packet_id: two-red-instant-litmus-with-no-packet
+    field: status
+    value: ready
+    ts: "2026-08-17T22:45:00Z"
+    host: linux_immutable
+
+packets:
+  - packet_id: two-red-instant-litmus-with-no-packet
+    order: 808-euam
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "two instant-tier litmus are red on linux-immutable and no packet references either — a failing gate nobody has recorded"
+    deliverable: "each of the two steps either passes, or is retired with a reason; and whichever is a genuine defect gets its own packet"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [litmus, fail-loud, ci]
+    estimated_hours: 3
+    context: |
+      MEASURED on yoga 2026-08-17, `scripts/run-litmus-test.sh --phase pre-build
+      --size instant --compact`: 243/246, three failures. One
+      (skills-canonical-and-mcp-first-shape) is a docs assertion. The other two
+      are negative controls that have stopped controlling:
+
+      1. litmus:added-fragment-parse-gate-shape, STEP 3/8
+         "NEGATIVE CONTROL: an unquoted timestamp in an added fragment is
+         REFUSED (720-24u6)"
+           expected = "ok: bare timestamp refused"
+           output   = (empty)
+         The step produced NO OUTPUT at all. An empty result from a negative
+         control is the worst shape it can take: the control exists to prove
+         the gate refuses bad input, and an empty answer neither refuses nor
+         admits — it just fails to speak. Note the irony worth recording: this
+         is the same failure mode as the mock this cycle just fixed, in the
+         guard that polices fragments.
+
+      2. litmus:forge-clone-reachability-probe-shape, STEP 1/4
+         "DOA CLASS: an unresolvable alias fast-fails (return 1) and names the
+         alias-unresolvable remedy"
+           output = "FAIL: unresolvable alias did not fast-fail"
+         So an unresolvable alias does NOT fast-fail. That is the DOA class the
+         step was written to keep closed, currently open.
+
+      NOT MY CHANGE, and checked rather than assumed: I stashed this cycle's
+      podman-mock edits and re-ran both litmus in isolation; both still fail
+      (exit 1), so they are pre-existing. Neither litmus touches podman.
+
+      WHY THIS IS FILED SEPARATELY rather than fixed here: they belong to two
+      different specs (ci-release and git-mirror-service), the second is a
+      DNS/alias behaviour that wants the host that owns the mirror, and this
+      cycle's budget went to 797-p2xa. What matters is that they stop being
+      invisible: `grep -rl` across plan/index.d finds no packet naming either,
+      so the fleet has been running with two red instant-tier steps and no
+      record of them.
