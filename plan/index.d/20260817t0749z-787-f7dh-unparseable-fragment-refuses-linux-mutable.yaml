@@ -1,0 +1,112 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written in set-field shape: worktree isolation refuses both the compound
+# invocation and the `env`-prefixed one the CLI needs from here.
+status:
+  - packet_id: malformed-fragment-makes-the-closure-event-pass-silently-empty
+    field: status
+    value: implemented
+    ts: "2026-08-17T07:49:37Z"
+    host: linux_mutable
+
+events:
+  - packet_id: malformed-fragment-makes-the-closure-event-pass-silently-empty
+    event:
+      type: implemented
+      ts: "2026-08-17T07:49:37Z"
+      agent_id: "fork-787f7dh-20260817t0749z"
+      host: linux_mutable
+      summary: >
+        The closure-event pass can no longer answer "ok" over a fragment it
+        could not read. Two changes, one on each side of the boundary.
+        BINARY (crates/tillandsias-plan/src/main.rs, the
+        fragment-terminal-events arm): a parse failure used to print a stderr
+        note and return 0 — the same exit and the same empty stdout as "parsed
+        fine, declares nothing". It now exits 3 (EXIT_FRAGMENT_UNPARSEABLE)
+        with the serde_yaml error naming the file, line and column, and stdout
+        stays empty so no caller can mistake the failure for a set of
+        declarations. GUARD (scripts/check-fragment-status-loss.sh): the event
+        collection was a single command substitution with 2>/dev/null, which
+        both discarded the note and threw away the per-file exit code. It now
+        loops per file, captures rc, and treats EVERY non-zero rc as an
+        unexamined fragment — not just 3, because the property that matters is
+        "this fragment was not read", not why it was not read. Stderr is no
+        longer redirected, so the parse error reaches the operator. The refusal
+        block sits ABOVE the 785-sqe6 independence check on purpose, so an
+        unreadable fragment refuses whether or not anything else in the set
+        declared a status; what it might be hiding is unknowable by
+        construction. It reuses the existing violation grammar rather than
+        inventing a third verdict word, following this script's own precedent
+        when the binary cannot be resolved at all — "I could not examine the
+        ledger" and "the ledger is wrong" are both refusals, and answering ok
+        to the first is this packet's defect. The message names the file, gives
+        the near universal cause (an unquoted colon-space in a summary or
+        title) and both remedies (quote it, or use a block scalar).
+  - packet_id: malformed-fragment-makes-the-closure-event-pass-silently-empty
+    event:
+      type: note
+      ts: "2026-08-17T07:50:00Z"
+      agent_id: "fork-787f7dh-20260817t0749z"
+      host: linux_mutable
+      summary: >
+        THE DELEGATION WAS AN ASSUMPTION, AND IT WAS UNSOUND. The old comment
+        justified returning 0 on the grounds that parse failures are the
+        sibling added-fragments-parse gate's job. That gate (698-7n6q) is
+        DIFF-SCOPED. A malformed fragment that arrives by merge, by hand edit,
+        from a sibling platform branch, or that was already present before that
+        gate landed is never seen by it. The packet asked for the distinction
+        at the point of use OR for the dependency to be asserted rather than
+        assumed; asserting a diff-scoped gate as a whole-tree guarantee is not
+        possible, so the point-of-use fix was the only honest option.
+        A SECOND SIGNAL WAS ALREADY THERE AND NOBODY GATED ON IT. The mutation
+        run surfaced that the fold itself already prints "warning — ledger
+        fragment X does not parse and was SKIPPED, its contents are not in the
+        answers below". That warning has presumably been correct and ignored
+        for as long as it has existed, because it is a warning on stderr with
+        exit 0 and no gate reads it. Worth a follow-up packet — this fix hardens
+        one consumer of unparseable fragments (the event pass); the fold's own
+        skip is a second, wider one, and the same argument applies to it.
+        BLAST RADIUS CHECKED BEFORE CHANGING THE EXIT CODE. Every caller and
+        pin of fragment-terminal-events was grepped. Only
+        check-fragment-status-loss.sh calls it in production;
+        litmus fragment-status-loss-attribution-shape feeds it only valid
+        fragments; the fixture's stub binary returns 0 unconditionally. No
+        existing caller feeds a malformed file and expects 0. All 46 live
+        fragments were scanned through yq first — zero unparseable — so making
+        the guard refuse could not red the real tree, and the live run confirms
+        it at ok:no-fragment-status-loss:28 checked.
+  - packet_id: malformed-fragment-makes-the-closure-event-pass-silently-empty
+    event:
+      type: note
+      ts: "2026-08-17T07:50:30Z"
+      agent_id: "fork-787f7dh-20260817t0749z"
+      host: linux_mutable
+      summary: >
+        NON-VACUITY, PROVEN NOT ASSERTED. scripts/test-fragment-status-loss.sh
+        goes from 12 to 14 scenarios and 16 assertions. Scenario 13 is the
+        mutation control and reproduces the actual accident rather than
+        describing it — a fragment whose summary carries an unquoted
+        colon-space, invalidating its own YAML, while declaring a completed
+        event for a packet the fold still calls ready. Scenario 4 would refuse
+        that fragment on the merits; before this change the parser never got
+        far enough to see it and the guard printed ok. Scenario 14 is the
+        negative control and is the SAME fragment with the summary quoted, so
+        parseability is the only variable — it must be judged on its merits
+        (the scenario-4 refusal naming the packet) and must never be reported
+        unparseable. That twin is what stops the mutation control from being
+        satisfiable by a guard that simply refuses everything.
+        THE PROOF. With the refusal block neutered to a constant false, exactly
+        one assertion goes red — "MUTATION unparseable fragment hiding a
+        closure refuses", rc=0 where 1 was wanted — and the other fifteen stay
+        green. Restored, 16/16. The names-the-file sub-assertion deliberately
+        stays green under mutation because the fold's own skip warning also
+        names the file; the litmus pins the stronger claim instead, keying on
+        the violation verdict and the UNPARSEABLE word together.
+        The same pair is pinned behaviourally in
+        litmus:fragment-status-loss-attribution-shape (hermetic sandbox, not a
+        source grep, matching how 785-sqe6 pinned its own property so it
+        survives a rewrite of how the passes are sequenced). ci-release instant
+        pre-build suite 19 PASS 0 FAIL. ok:bash-dialect-clean for bash 3.2.
+        ./build.sh --check rc=0 captured unmasked, 53s of gate phases, tree
+        clean afterwards with no regenerated files to restore.
+        HELD AT IMPLEMENTED. The claim stays with the parent, which owns the
+        live closure; this fork did not touch it.

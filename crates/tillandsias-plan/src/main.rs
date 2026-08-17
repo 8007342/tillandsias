@@ -2412,9 +2412,26 @@ fn main() {
             // disable or widen the check.
             //
             // Prints one packet_id per line (sorted, deduplicated), nothing else
-            // on stdout, exit 0. An unparseable fragment is the sibling
-            // added-fragments-parse gate's job, so here it is a pass-through
-            // exactly as in closure-evidence-check.
+            // on stdout, exit 0.
+            //
+            // ORDER 787-f7dh. An unparseable fragment used to `return` here —
+            // a stderr note and exit 0, on the reasoning that parse failures
+            // are the sibling added-fragments-parse gate's job. That made
+            // "this fragment declares no terminal events" and "this fragment
+            // could not be read" the SAME answer to the caller: empty stdout,
+            // exit 0. The caller (check-fragment-status-loss.sh) additionally
+            // sent stderr to /dev/null, so the note reached nobody and a
+            // fragment carrying an undelivered closure passed the gate green.
+            // Found when the 785-sqe6 fixture wrote `": "` into a summary,
+            // silently invalidating its own YAML.
+            //
+            // The delegation was also an ASSUMPTION rather than a guarantee:
+            // added-fragments-parse is DIFF-SCOPED (698-7n6q), so a malformed
+            // fragment arriving by merge, hand edit, sibling branch, or one
+            // already present before that gate landed is never seen by it.
+            // Exit 3 makes the two cases distinguishable at the point of use;
+            // silence from a parser is not evidence of absence.
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
             let Some(path) = args.get(1) else {
                 eprintln!("usage: tillandsias-plan fragment-terminal-events <fragment.yaml>");
                 std::process::exit(2);
@@ -2428,11 +2445,13 @@ fn main() {
             };
             let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
                 Ok(d) => d,
-                Err(_) => {
+                Err(e) => {
+                    // Distinguishable, and stdout stays EMPTY so no caller can
+                    // mistake a parse failure for a set of declarations.
                     eprintln!(
-                        "note: {path} did not parse — status-loss event pass skipped (see added-fragments-parse)"
+                        "unparseable:{path}: {e} — the closure-event pass cannot read this fragment, so any terminal event it declares is UNEXAMINED (787-f7dh)"
                     );
-                    return;
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
                 }
             };
             // A `declares` entry: the event carries `type: completed`, or nests
