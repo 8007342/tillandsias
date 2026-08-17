@@ -369,6 +369,65 @@ out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
 assert "empty fragment directory passes as 0 checked" 0 \
     "ok:no-fragment-status-loss:0 checked" "$rc" "$out"
 
+# ── 13. 787-f7dh MUTATION: an UNPARSEABLE fragment hiding a closure ─────────
+# The exact accident, reproduced rather than described: an unquoted colon-space
+# inside `summary` invalidates the YAML. The fragment declares a `completed`
+# event for a packet the fold still calls `ready`, so scenario 4 would refuse
+# it — but the parser never gets that far. Before this packet the guard printed
+# `ok` here, because "no events found" and "could not read the file" were the
+# same answer.
+S="$TDIR/unparseable"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: alpha-packet
+    order: 900
+    status: ready
+    title: "carries a closure the parser never reaches"
+    events:
+      - type: completed
+        ts: "2026-08-17T03:12:00Z"
+        host: fixture
+        summary: broke the parse: an unquoted colon-space does it
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "MUTATION unparseable fragment hiding a closure refuses" 1 \
+    "violation:fragment-status-loss:1" "$rc" "$out"
+# The refusal must NAME the file — "something failed" sends the reader hunting.
+if ! printf '%s' "$out" | grep -qF 'plan/index.d/a.yaml'; then
+    echo "FAIL: the refusal did not name the unparseable file; out=$out" >&2
+    fail=1
+else
+    echo "ok: the refusal names the unparseable fragment"
+fi
+
+# ── 14. 787-f7dh NEGATIVE CONTROL: a VALID fragment with no events is quiet ──
+# Distinguishes "refuses unreadable input" from "refuses input". Same shape as
+# scenario 13 with the summary quoted, so the ONLY difference is parseability;
+# here the closure is real and visible, so the correct answer is the scenario-4
+# refusal naming the packet — not an unparseable verdict.
+S="$TDIR/parseable-twin"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: alpha-packet
+    order: 900
+    status: ready
+    title: "same fragment, summary quoted"
+    events:
+      - type: completed
+        ts: "2026-08-17T03:12:00Z"
+        host: fixture
+        summary: "broke the parse: an unquoted colon-space does it"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "the parseable twin is read and judged on its merits" 1 \
+    "alpha-packet" "$rc" "$out"
+if printf '%s' "$out" | grep -qF 'UNPARSEABLE'; then
+    echo "FAIL: a valid fragment was reported unparseable; out=$out" >&2
+    fail=1
+else
+    echo "ok: a valid fragment is never reported unparseable"
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fragment-status-loss scenarios passed"
     exit 0

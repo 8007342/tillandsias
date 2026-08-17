@@ -96,11 +96,42 @@ declared="$(awk '
 # for the fold. The per-file loop keeps the 598-kibt file-boundary isolation
 # by construction: each fragment is read alone, so the last packet of one file
 # can never inherit the first closure marker of the next.
+#
+# ORDER 787-f7dh — AN UNREADABLE FRAGMENT IS NOT AN EMPTY ONE. This loop used
+# to be `"$PLAN" fragment-terminal-events "$f" 2>/dev/null` inside a command
+# substitution, which discarded BOTH halves of the only signal available: the
+# subcommand's exit status (never inspected, because the pipeline's status is
+# `sort`'s) and its stderr. A fragment that failed to parse therefore produced
+# exactly what a fragment with no closure events produces — no output, no
+# complaint — and the guard printed `ok`. That is this guard's own failure
+# class: an unexamined ledger reported as clean, which 785-sqe6 closed for
+# "the pass never ran" and this closes for "the pass ran and could not read".
+#
+# Delegating parse failures to added-fragments-parse (698-7n6q) was an
+# ASSUMPTION, not a guarantee: that gate is DIFF-SCOPED, so a malformed
+# fragment arriving by merge, by hand edit, from a sibling branch, or already
+# present before it landed is never seen by it. Checked at the point of use
+# instead. stderr is deliberately NOT redirected now — the parse error names
+# the file and line, and it is the operator's fastest path to the fix.
+unparseable_fragments=""
 if plan_binary_has "$PLAN" fragment-terminal-events; then
-    declared_events="$(for f in "$FRAG_DIR"/*.yaml; do
+    _events_seen=""
+    for f in "$FRAG_DIR"/*.yaml; do
         [ -f "$f" ] || continue
-        "$PLAN" fragment-terminal-events "$f" 2>/dev/null
-    done | sort -u)"
+        _ev_out="$("$PLAN" fragment-terminal-events "$f")"
+        _ev_rc=$?
+        case "$_ev_rc" in
+            0) [ -n "$_ev_out" ] && _events_seen="${_events_seen}${_ev_out}
+" ;;
+            # 3 is the typed unparseable verdict; anything else non-zero (a
+            # read error, a killed process) is equally an unread fragment.
+            # Both are counted, because the property that matters is "this
+            # fragment was not examined", not why.
+            *) unparseable_fragments="${unparseable_fragments}  ${f} (exit ${_ev_rc})
+" ;;
+        esac
+    done
+    declared_events="$(printf '%s' "$_events_seen" | sort -u)"
 else
     # ORDER 702-68zj: a binary that predates the rule is STALE HOST STATE, not
     # a ledger defect. The `declared` pass still runs (it only needs the fold);
@@ -110,6 +141,29 @@ else
     # 752. Rebuild to enable the pass.
     declared_events=""
     echo "  note: $PLAN predates fragment-terminal-events — closure-event pass SKIPPED (rebuild with 'cargo build --release -p tillandsias-plan')" >&2
+fi
+
+# ── AN UNREADABLE FRAGMENT REFUSES (order 787-f7dh) ─────────────────────────
+#
+# Placed ABOVE the independence check on purpose: an unparseable fragment must
+# refuse whether or not anything else in the set declared a status, because
+# what it might be hiding is unknowable by construction. The verdict reuses
+# the `violation:` grammar rather than inventing a third word — the same
+# choice this script already makes when the binary cannot be resolved at all
+# (see the `violation:fragment-status-loss:0` exit above): "I could not
+# examine the ledger" and "the ledger is wrong" are both refusals, and a
+# guard that answers `ok` to the first is the defect.
+if [ -n "$unparseable_fragments" ]; then
+    n_unparseable="$(printf '%s' "$unparseable_fragments" | grep -c .)"
+    echo "violation:fragment-status-loss:${n_unparseable}"
+    echo "  UNPARSEABLE fragment(s) — the closure-event pass could not read these," >&2
+    echo "  so any terminal event they declare is UNEXAMINED, not absent:" >&2
+    printf '%s' "$unparseable_fragments" >&2
+    echo "  CAUSE: almost always an unquoted colon-space inside a summary or title." >&2
+    echo "         Quote the value, or write it as a block scalar (summary: >)." >&2
+    echo "  NOTE: added-fragments-parse (698-7n6q) is diff-scoped, so it does not" >&2
+    echo "        see a malformed fragment that arrived by merge or hand edit." >&2
+    exit 1
 fi
 
 # ── THE TWO PASSES ARE INDEPENDENT (order 785-sqe6) ─────────────────────────
