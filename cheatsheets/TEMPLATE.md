@@ -61,6 +61,24 @@ committed_for_project: true
 
 [3–10 traps — wrong defaults, deprecated flags, gotchas]
 
+## Provenance
+
+<!-- REQUIRED. cheatsheet-source-layer "Provenance binding": every cited URL
+     that has been FETCHED carries a `local:` line immediately after it,
+     pointing at the verbatim on-disk copy, so a maintainer can re-verify
+     offline with `cat`. An off-allowlist URL with no committed copy stays
+     bare (no `local:`) but still needs its sidecar in cheatsheet-sources/.
+     Project-local inference is NOT provenance (methodology/cheatsheets.yaml
+     -> provenance.rule): label derived notes as derived, or move the claim
+     into the owning spec. Restored 2026-08-17 — 782-avtk removed this
+     section while making the template "satisfy the canon", which reded
+     litmus:cheatsheet-source-layer-shape STEP 6 and
+     litmus:cheatsheet-tooling-structure STEP 2 fleet-wide. -->
+
+- <https://upstream.example.org/docs/thing>
+  local: `cheatsheet-sources/upstream.example.org/docs/thing`
+- <https://off-allowlist.example.com/reference> (do-not-bundle; sidecar only)
+
 ## See also
 
 - `<category>/<other-cheatsheet>.md`

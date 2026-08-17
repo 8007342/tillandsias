@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: release-gate-nondeterministic-under-podman-lock-contention
+    event:
+      type: progress
+      ts: "2026-08-17T07:07:12Z"
+      agent_id: linux-macuahuitl-opus5-20260817T070712Z
+      host: linux_mutable
+      summary: >
+        THIRD REPRODUCTION, and the release is now formally held on this packet. Final gate run on a deliberately idle machine, after every real defect was fixed: same two failures — podman-path-availability plus the four remote_projects tests. Control taken immediately after, same host, same binary: podman ps 21ms rc=0, and those exact four tests pass 11/11 in isolation (cargo test remote_projects::tests). So the gate fails only while the gate runs, which is the contention signature this packet describes. Decision recorded rather than worked around: I did NOT merge. The release runbook says a failed gate means do not merge and do not tag, and re-running until green is indistinguishable from not having a gate — the exact reasoning this packet uses to argue its own p1. PR #98 stays open with all eight real defects fixed on linux-next; the v0.4.260817.1 tag is not cut. Whoever fixes this unblocks 783-6rik (fleet-wide forge-write) as a side effect, which is the strongest possible argument for its priority.

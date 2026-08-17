@@ -1,0 +1,55 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-17. HANDOFF: the operator says
+# the windows host is already working the idiomatic-layer half of this. Filed
+# as linux-side EVIDENCE for that work, not as a competing fix.
+packets:
+  - packet_id: unit-tests-reach-the-real-image-layer-and-race-each-other
+    order: 794-57bv
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "cargo unit tests trigger REAL image builds through the idiomatic layer and then race on the atomic rename — a label change anywhere turns the test suite into a build farm"
+    deliverable: "the image-ensure layer is inert under cfg(test) the way ensure_git_image_available already is, or unit tests reach it only through an injected seam; either way a unit test never builds, pulls, or renames a real image"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [idiomatic-layers, testing, images, podman, flakiness]
+    estimated_hours: 4
+    context: |
+      OBSERVED on macuahuitl 2026-08-17, during the v0.4.260817.1 release gate
+      (evidence /tmp/tray-check.log, and the gate log cifull6):
+
+        ---- remote_projects::tests::clone_normalizes_api_url_to_owner_name ----
+        [tillandsias] building image proxy
+            (localhost/tillandsias-proxy:v0.4.260815.1, label_mismatch);
+            this may take several minutes
+        Pulling image proxy [##########] 100%
+        panicked at remote_projects.rs:1006:
+          containerized clone with API URL:
+          "atomic rename failed: No such file or directory (os error 2)"
+
+      Two facts make this a real defect rather than a slow test:
+        1. A UNIT test built a container image. remote_projects.rs already
+           knows this is wrong — ensure_git_image_available() is
+           #[cfg(test)] -> Ok(()) precisely so tests do not build the GIT
+           image. Nothing does the equivalent for the proxy path, so the
+           same class walked back in through a different door.
+        2. Four such tests ran in PARALLEL and collided on the image's
+           atomic rename, so the visible error names a filesystem operation
+           and says nothing about images at all.
+
+      TRIGGER, worth knowing because it will recur: the proxy image label
+      changed when 782-9jfg bumped squid 6.9 -> 6.12 tonight, so
+      ensure_image_exists saw label_mismatch and started rebuilding. Any
+      future image change re-arms this. Building the image once by hand
+      quiets it until the next label change, which is a workaround, not a fix.
+
+      SEPARATE AND ALREADY FIXED, do not conflate: the earlier failures in
+      these same tests were parallel env races on TILLANDSIAS_PODMAN_BIN /
+      PATH, fixed under 793-a62g with a mutex in each test binary. That fix
+      is real and holds; this is what was hiding behind it.
+
+      HANDOFF: pickup_role windows because the operator states the windows
+      host is already reworking the idiomatic layer this belongs to. Linux
+      is not taking it — this packet exists so the linux-side reproduction,
+      the exact error, and the label-change trigger are on the record for
+      whoever lands that work.

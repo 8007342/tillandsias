@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: fleet-nix-binary-cache-operator-decision
+    event:
+      type: note
+      ts: "2026-08-17T07:36:59Z"
+      agent_id: linux-macuahuitl-opus5-20260817T073659Z
+      host: linux_mutable
+      summary: >
+        SEQUENCED BEHIND 795-h8er, filed 2026-08-17 from the operator asking whether workers can just have a toolbox with the nix cache. Their framing is the better first step and it needs no decision from them: a LOCAL persistent nix store attached to the existing daemonless toolbox rung costs no account, no token, no signing key, and no network trust boundary, and it captures most of the win because the repeated cost today is the SAME host rebuilding the same deps in a different worktree — four agents built concurrently on one host the night this was filed. This packet stays open and becomes the narrower, better-posed question once 795-h8er lands: whether to share between HOSTS, decided with real hit-rate data instead of a guess. The operator decision named here (cachix vs self-hosted attic vs accept-as-is, plus a signing keypair either way) is unchanged and still theirs.

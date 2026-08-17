@@ -370,6 +370,26 @@ pub fn classify_retry(output: &CommandOutput) -> RetryClass {
 mod tests {
     use super::*;
 
+    /// Serializes the tests that point `TILLANDSIAS_PODMAN_BIN` at a stub.
+    ///
+    /// Order 793-a62g. Both stub-driven tests below mutate that ONE
+    /// process-global variable, and cargo runs tests in parallel threads
+    /// inside a single process — so the "SAFETY: single-threaded test process"
+    /// comment they used to carry was simply untrue. The interleaving is
+    /// exact and reproducible under load: the prompt test installs its
+    /// instant `echo ok` stub, the stalled test overwrites the same variable
+    /// with a `sleep 600` stub, and the prompt test then runs the SLEEPING
+    /// binary and blows its 30s budget. That is precisely the failure the
+    /// v0.4.260817.1 release gate hit — reported as
+    /// `podman ps exceeded its 30s budget`, which reads like a sick host and
+    /// is really two tests sharing a variable. Measured against it: podman
+    /// answered in 21ms immediately after every such failure, and these tests
+    /// pass 11/11 in isolation.
+    ///
+    /// A tokio mutex rather than std: these are `#[tokio::test]`s and the
+    /// guard must be held across the `.await` that runs the stub.
+    static PODMAN_BIN_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     /// Order 690-7adz, the packet's fourth exit criterion: drive a deliberately
     /// STALLED podman stand-in and assert the failure is bounded and named.
     ///
@@ -382,6 +402,7 @@ mod tests {
         use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
 
+        let _env_guard = PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-stalled-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");
@@ -393,7 +414,7 @@ mod tests {
             writeln!(f, "#!/bin/sh\nsleep 600").expect("write stub");
         }
         std::fs::set_permissions(&stub, std::fs::Permissions::from_mode(0o755)).expect("chmod");
-        // SAFETY: single-threaded test process env mutation before any spawn.
+        // SAFETY: the env mutation is serialized by PODMAN_BIN_ENV_LOCK above.
         unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", &stub) };
 
         let budget = Duration::from_millis(300);
@@ -445,6 +466,7 @@ mod tests {
         use std::io::Write;
         use std::os::unix::fs::PermissionsExt;
 
+        let _env_guard = PODMAN_BIN_ENV_LOCK.lock().await;
         let dir =
             std::env::temp_dir().join(format!("tillandsias-prompt-podman-{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("fixture dir");

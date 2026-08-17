@@ -1,0 +1,50 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-17, during the v0.4.260817.1
+# release gate — this class cost the release four extra full-gate runs.
+packets:
+  - packet_id: release-gate-nondeterministic-under-podman-lock-contention
+    order: 793-a62g
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "./build.sh --ci-full is non-deterministic: podman-backed checks fail on lock contention the gate itself creates, and one failure reports the false message 'podman is not available on PATH'"
+    deliverable: "the podman-backed gate lanes are serialized (or the budget/backoff is contention-aware), and the availability probe stops reporting a TIMEOUT as an absence — a stalled podman and an uninstalled podman are different faults and must read differently"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [podman, gates, flakiness, release, fail-loud]
+    estimated_hours: 4
+    context: |
+      OBSERVED across four consecutive --ci-full runs on 2026-08-17 while
+      cutting v0.4.260817.1 (all real defects already fixed between runs):
+
+        run 3: podman-path-availability FAILED + 4 remote_projects tests failed
+        run 4: identical, on a machine that started idle
+        pre-build lane: backend::tests::a_prompt_podman_still_succeeds_under_the_same_budget
+                        FAILED — "podman ps exceeded its 30s budget and was killed"
+
+      Measured DIRECTLY, immediately after each failure, on the same host:
+        podman --version   14 ms
+        podman ps          22-23 ms
+        podman info        0.07 s, unchanged under six parallel cargo builds
+
+      So podman is healthy; it stalls only WHILE the gate runs. The plausible
+      mechanism (INFERRED, not yet proven — whoever takes this should prove or
+      refute it first): the rust test lane runs tests in parallel threads that
+      each shell out to podman, and rootless podman serializes on its sqlite
+      state, so the suite creates its own contention. Same family as
+      plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md.
+
+      TWO SEPARATE DEFECTS, and the second is the cheaper fix:
+      1. The contention itself (serialize the podman-touching lanes, or make
+         the 30s budget contention-aware).
+      2. The MESSAGE. require_podman runs `$PODMAN --version`; when that
+         times out the gate prints "podman is not available on PATH" — which
+         is FALSE and sent this host looking at PATH for a while. A timeout is
+         not an absence. Same 741-2izr shape: a wrong diagnosis is worse than
+         a bare failure because it directs the reader away from the cause.
+
+      WHY p1: this is a RELEASE BLOCKER in practice. Every re-run costs ~8
+      minutes, and a gate that fails randomly teaches every host to re-run
+      until green — which is indistinguishable from not having a gate. The
+      release that surfaced it (783-6rik, the fleet-wide forge-write unblock)
+      was delayed by four such runs.
