@@ -1,0 +1,51 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+events:
+  - packet_id: litmus-ledger-node-claim-step5-writes-out-txt-into-the-checkout
+    event:
+      type: progress
+      ts: "2026-08-17T10:30:00Z"
+      agent_id: windows-yolanda-opus5-20260817T0930Z
+      host: windows
+      summary: |
+        VERIFIED UNDER THE EXACT FAILURE MODE, which is better evidence than a
+        green run would have been.
+
+        Re-ran `scripts/run-litmus-test.sh meta-orchestration --phase pre-build
+        --size instant` on windows/Yolanda after the fix. STEP 5 TIMED OUT AGAIN
+        at its 5000ms budget — the same condition that produced the original
+        report:
+
+          [STEP 5/6] every verdict line is well-formed against the grammar
+                     (timeout: 5s)... [TIMEOUT]
+
+        And `out.txt` was NOT created. `git status --porcelain` after the run
+        shows only this cycle's own intended files; the repository root is
+        clean.
+
+        That is the property the packet asked for, demonstrated in the failing
+        case rather than inferred from a passing one: the step is killed
+        mid-execution, no cleanup path runs, and nothing is stranded — because
+        the capture file now lives under `$(mktemp)` rather than at a relative
+        path. Had this been verified only on a host where the step passes, the
+        evidence would have been worthless, since the success path always
+        cleaned up correctly even before the fix.
+
+        RESIDUAL, STATED PLAINLY SO IT IS NOT MISTAKEN FOR GREEN. STEP 5 is
+        still RED on this host, and this packet does not make it green. Its
+        deliverable was the redirect target, and its own text scopes the budget
+        out ("the budget resize is a separate, cosmetic concern"). The step
+        exceeds 5000ms here because five `claim-ledger-node.sh` invocations plus
+        two greps cost more per spawn on Windows than the budget assumes — the
+        same high-spawn-cost class as 758-jw6v (exec-bits, 16.3s -> 1.3s). The
+        budget was deliberately NOT raised in this cycle: raising a timeout to
+        turn a red green is a decision that should be taken on its own merits by
+        whoever owns the suite's budgets, not folded into a hygiene fix.
+
+        Two OTHER reds in the same suite run are pre-existing and separately
+        owned, recorded here only so this run's output is not misread as a
+        regression from this change:
+          - litmus:credential-channel-check-shape STEP 8/9 — the fixture pins
+            `env PATH=/usr/bin:/bin` and `git` is on neither on this host
+            (already named in plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md)
+          - litmus:*-skills-cache STEP 5/5 (canonical skills invalidate the
+            forge image cache key)
