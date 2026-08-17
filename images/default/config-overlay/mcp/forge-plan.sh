@@ -724,7 +724,28 @@ spec_answer_envelope() {
         return 0
     fi
     if [ ! -s "$SPEC_INDEX_DIR/chunks.jsonl" ] || [ ! -s "$SPEC_INDEX_DIR/vectors.jsonl" ]; then
-        unsupported_envelope "the spec RAG index is not built at ${SPEC_INDEX_DIR} (need chunks.jsonl + vectors.jsonl). Build it: tillandsias-plan spec-index --root <repo> --out ${SPEC_INDEX_DIR}, then embed each chunk's text via ${embed_ep:-\$TILLANDSIAS_EMBED_ENDPOINT}/embeddings into vectors.jsonl (order 552 does this at launch/commit)."
+        # Order 799-j4xd. Two things this refusal got wrong, both measured.
+        #
+        # (1) It RECITED the build as prose — chunk, then embed each chunk via
+        #     /embeddings into vectors.jsonl. A real producer exists now
+        #     (scripts/spec-index-ensure.sh, orders 552 / 760-hzi4). Reciting an
+        #     algorithm instead of naming a command is precisely how the
+        #     embedding step stayed unimplemented on EVERY host for weeks: 552
+        #     found it "existed on no host in any language -- only as English
+        #     prose inside forge-plan.sh's refusal string". This string.
+        #
+        # (2) When FORGE_SPEC_INDEX_DIR points somewhere unreachable here,
+        #     "build it at <path>" is impossible advice that reads as a merely
+        #     missing index. Observed on macuahuitl 2026-08-17: a LINUX session
+        #     answered with /mnt/c/Users/.../target/spec-index, inherited from a
+        #     tracked config that 2b1f8d188 had already fixed — a fix in a file
+        #     does not reach a process that already read it. The env override is
+        #     invisible in the message, so the reader debugs the index.
+        local _si_note=""
+        if [ -n "${FORGE_SPEC_INDEX_DIR:-}" ] && [ ! -d "$(dirname "$SPEC_INDEX_DIR")" ]; then
+            _si_note=" NOTE: that location came from FORGE_SPEC_INDEX_DIR in this process's environment and its parent does not exist on this host, so the override is stale rather than the index missing. Unset it (or restart the server) to use the default ${FORGE_EXPERTS_STATE_DIR}/spec-index."
+        fi
+        unsupported_envelope "the spec RAG index is not built at ${SPEC_INDEX_DIR} (need chunks.jsonl + vectors.jsonl). Build it: scripts/spec-index-ensure.sh (orders 552, 760-hzi4).${_si_note}"
         return 0
     fi
     if [ -z "$embed_ep" ]; then
