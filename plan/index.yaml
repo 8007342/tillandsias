@@ -55170,6 +55170,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-17T02:31:31Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0223z"
+          host: macos
+          summary: |
+            CRITERIA 1 AND 2 DISCHARGED (criterion 3 remains, attended by its own wording). Criterion 1: --diagnose --json now carries metrics + metrics_status, and a new OPT-IN verb --diagnose --with-metrics boots the VM, handshakes, and reads a MetricsSnapshotReply. Feature detection is by CAPABILITY — a new additive vm-layer helper fetch_metrics_snapshot reads HelloAck server_caps and returns Ok(None) when MetricsSnapshotRequest is absent (an older guest, not a fault) — with NO change to the shared Client::handshake signature, which is shared_logic with linux and windows callers. Criterion 2: the wire types travel through untouched, so an uncollected counter serialises as JSON null with the sample error preserved. Pinned by two tests, and the no-fabrication pin was HAND-FALSIFIED by adding skip_serializing_if to ContainerMetricWire.cpu_usec — the exact tempting cleanup — which made it fail with "counters must be PRESENT-and-null, never omitted"; reverted, control-wire byte-identical. THE DEFAULT PATH DELIBERATELY DOES NOT BOOT: install-macos.sh runs --diagnose --json synchronously during install, so plain --diagnose reports metrics_status unsupported:no-live-wire-handle and starts nothing (verified live: the release build prints exactly that and no VM appears). Exit-code contract untouched. Spec scenario added to macos-native-tray (the existing wire-omission scenario is not violated — this path DECLARES that the probe was not performed rather than faking one); cheatsheet documents both keys and the grammar. Verified: 88/88 tray bins, 59/59 control-wire, clippy clean, litmus macos-tray-diagnose-cli-surface PASS, build.sh --check green.
+        - type: progress
           ts: "2026-08-17T01:55:52Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
           host: macos
