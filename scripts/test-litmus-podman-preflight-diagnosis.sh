@@ -75,10 +75,7 @@ _run_runner() {
 # ---------------------------------------------------------------------------
 # Fixture A — instant non-zero exit.
 # ---------------------------------------------------------------------------
-a_start="$(date +%s)"
 out_a="$(_run_runner "$SANDBOX/instant-fail")"
-a_end="$(date +%s)"
-a_elapsed=$(( a_end - a_start ))
 
 if ! grep -Fq '[ENV-FAIL]' <<<"$out_a"; then
     _fail "fixture A did not reach the podman preflight at all — the fixture is not exercising the gate. Output: $out_a"
@@ -117,12 +114,23 @@ else
         _fail "fixture A: podman's own stderr is not quoted: $out_a"
     fi
 
-    # An instant failure must also be reported instantly. Five seconds of
-    # elapsed time would mean the probe waited out its deadline anyway.
-    if [ "$a_elapsed" -lt 5 ]; then
-        _ok "fixture A returned in ${a_elapsed}s (no deadline was waited out)"
+    # DELIBERATELY NOT ASSERTED HERE: a wall-clock bound on "the probe failed
+    # fast". A first draft timed this whole child invocation and refused it
+    # above five seconds. That is not the probe's duration — the child runs the
+    # spec's entire instant bucket, five tests, of which exactly one reaches the
+    # preflight. It went red at 10s on a host whose load average had gone to 12
+    # under an unrelated llama-server, while the preflight itself was answering
+    # correctly. An assertion that reports how busy the machine was, wearing the
+    # name of a property, is the same defect this packet exists to remove
+    # (793-a62g chose a storage backend with a stopwatch; the message this
+    # fixture pins invented a five-second stall it never measured). The
+    # falsifiable property is the WORDING, and the four checks above plus
+    # fixture B's mirror below carry all of it: a probe that had waited out its
+    # deadline would report 124 and say "within 5s", and it says neither.
+    if grep -Fq 'within 5s' <<<"$out_a"; then
+        _fail "fixture A: an instant failure was reported with the timeout wording"
     else
-        _fail "fixture A took ${a_elapsed}s — the probe is not failing fast"
+        _ok "instant failure is not reported with the timeout wording"
     fi
 fi
 
