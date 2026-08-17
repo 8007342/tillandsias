@@ -82,8 +82,19 @@ marker_date() {
     [ -f "$MARKER" ] || return 1
     # `date=YYYY-MM-DD` on any line. Tolerant of extra fields and of ordering so
     # the record can grow without breaking readers.
-    sed -n 's/.*\bdate=\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\).*/\1/p' \
-        "$MARKER" 2>/dev/null | grep -m1 . || return 1
+    #
+    # Split on spaces and anchor the field name, rather than approximating a
+    # field boundary with `\b` (order 803-bqte). `\b` is a GNU sed extension:
+    # BSD sed does not implement it, the substitution silently matches NOTHING,
+    # and this reader fails closed — so on macOS every `stamp` succeeded while
+    # every `check` answered `due:unreadable-marker`. The marker was write-only
+    # and the gate permanently due, which is indistinguishable from the
+    # never-stamped state this file exists to make visible. The fixture caught
+    # it the first time it ran on a BSD userland; nothing had run it there.
+    # Anchoring is also strictly more precise than `\b` was.
+    tr ' ' '\n' < "$MARKER" 2>/dev/null \
+        | sed -n 's/^date=\([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\)$/\1/p' \
+        | grep -m1 . || return 1
 }
 
 case "${1:-check}" in

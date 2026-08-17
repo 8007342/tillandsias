@@ -1426,6 +1426,18 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # 2026-08-14 (723-b9cn). Scripts must be 3.2-clean, refuse loudly, or
     # carry the probed-fallback dual marker; the allowlist inside the
     # checker is a burndown list, never an escape hatch.
+    # Order 309: the guest headless unit forks podman, and order 308 proved a
+    # cap-stripped uid-0 podman selects ROOTLESS mode and wedges every ensure.
+    # Re-adding confinement without the listener/orchestrator split reproduces
+    # that outage, so the absence of those directives is now enforced rather
+    # than merely true.
+    _step "Checking guest headless unit hardening (309)..."
+    if ! _run bash "$SCRIPT_DIR/scripts/check-guest-unit-hardening.sh" 2>&1; then
+        _error "the guest headless unit carries confinement directives that wedge podman — see the verdict above (309)"
+        exit 1
+    fi
+    _info "Guest unit hardening guard passed"
+
     _step "Checking scripts/ bash dialect (761-g36m)..."
     if ! _run bash "$SCRIPT_DIR/scripts/check-bash-dialect.sh" 2>&1; then
         _error "a shared script carries an unguarded bash-4-only construct — see the verdict line above (761-g36m)"

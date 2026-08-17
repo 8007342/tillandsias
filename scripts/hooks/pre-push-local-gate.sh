@@ -446,10 +446,18 @@ attempt_plan_only_lane() {
     for i in "${!files[@]}"; do
         echo "plan-only lane: validated ${files[$i]}" >&2
     done
+    # bash 3.2 (the project floor, and the macOS system bash) treats
+    # "${arr[@]}" on an EMPTY array as an unbound variable under `set -u`;
+    # bash 4.4 fixed it. LANE_NOTES is empty on the happy path — notes are only
+    # appended when a checker was ABSENT and got skipped — so this loop aborted
+    # the hook precisely when every check had run, and took the push with it.
+    # Guard on the length, which is well-defined for an empty array everywhere.
     local note
-    for note in "${LANE_NOTES[@]}"; do
-        echo "plan-only lane: note: $note" >&2
-    done
+    if [ "${#LANE_NOTES[@]}" -gt 0 ]; then
+        for note in "${LANE_NOTES[@]}"; do
+            echo "plan-only lane: note: $note" >&2
+        done
+    fi
     echo "${GRN}✓ local gate: plan-only lane clean (${#files[@]} fragment file(s) validated; build stamp not required for this push)${RST}" >&2
     return 0
 }

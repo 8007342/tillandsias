@@ -85,6 +85,19 @@ pub const CAP_PTY_HEARTBEAT_V2: &str = "pty.heartbeat@v2";
 /// Maximum permitted MCP payload size — 4 MiB, sized for screenshots and
 /// large tool responses.
 ///
+/// Capability a guest advertises when its exec allowlist accepts a VERBATIM
+/// argv vector — an absolute, non-shell `argv[0]` with its arguments passed
+/// through untouched (order 795-zshi).
+///
+/// Hosts MUST feature-detect on this before sending that shape: a guest
+/// predating it refuses the request, and this fleet routinely runs a host
+/// newer than the guest binary staged beside it. The detection path is the
+/// one metrics already uses — read `HelloAck.server_caps`, never compare
+/// wire versions.
+///
+/// @trace spec:vsock-exec-authz
+pub const CAP_EXEC_ARGV_VECTOR: &str = "ExecArgvVector";
+
 /// Order 779-dqsv: this number OUTLIVED the transport it was written for.
 /// It was the per-variant cap on `McpFrame`, which order 505 retired (that
 /// path is now refused; see `host-browser-mcp` spec). The live MCP transport

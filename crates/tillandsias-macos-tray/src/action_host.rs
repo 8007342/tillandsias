@@ -1390,6 +1390,37 @@ async fn run_start(
     }
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
 
+    // 690-cb62 criterion 2 — tray-mode serial routing, DECIDED (2026-08-17).
+    //
+    // The flag was previously left unset here, which routed the guest's
+    // virtio-console stream to this process's stderr for the life of the VM.
+    // The stated rationale for that default was "keep the getty's
+    // terminal-probe escapes off the user's terminal" — but in tray mode there
+    // is no such terminal, and the destination turns out not to exist:
+    //
+    //   * the tray ships as an LSUIElement .app (status_item.rs:56) launched
+    //     from Finder or a LaunchAgent, so it has no controlling terminal;
+    //   * nothing on this side ever writes a log file. Every `tray.log`
+    //     writer in the tree belongs to tillandsias-windows-tray
+    //     (notify_icon.rs:533-552, with its own rotation); the macOS tray has
+    //     no equivalent, and no StandardErrorPath is set anywhere;
+    //   * MenuAction::OpenLog (:1508-1518) opens ~/Library/Logs/Tillandsias,
+    //     a directory that does not exist on a host that has been running
+    //     this tray — confirmed absent on the filing host.
+    //
+    // So the default sent the guest's entire boot and getty stream somewhere
+    // unreadable, while console.log — which 690-cb62 criterion 1 had just
+    // bounded to two generations of 4 MiB with rotation (vz.rs:1398-1415) —
+    // stayed empty in precisely the mode users run. The reason to defer this
+    // was that the log was unbounded; that reason is gone.
+    //
+    // Routing it to the rotated log therefore loses nothing and makes the one
+    // artifact a macOS user can actually be asked for ("send me console.log")
+    // the one that contains the boot. Bounded by construction, so it cannot
+    // grow without limit, and best-effort on the VM start path: a logging
+    // failure must never stop a VM booting.
+    vz.set_serial_to_log(true);
+
     // First-launch flow (m9 Fedora pivot): if no rootfs.img is present
     // yet, fetch Fedora's official Cloud qcow2 via the bundled manifest
     // and convert it to the raw disk image VZ boots. The macOS tray
