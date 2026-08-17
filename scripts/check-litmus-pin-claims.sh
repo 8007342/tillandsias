@@ -75,13 +75,47 @@ while IFS= read -r hit; do
             *"litmus:$tok") case "$tok" in *-) wrapped=$((wrapped + 1)); continue ;; esac ;;
         esac
         checked=$((checked + 1))
-        if ! printf '%s\n' "$existing" | grep -qx "$tok"; then
+        # SPAWN-FREE MEMBERSHIP (order 792-*, 2026-08-17). This was
+        # `printf … | grep -qx "$tok"`, i.e. TWO process spawns per claim
+        # token — and the `if !` treated EVERY non-zero status as "the name
+        # does not exist". grep exits 1 for no-match but >1 for an error, and
+        # under fleet load (four agents building concurrently on this host,
+        # load average 8.5) a spawn that fails to fork is indistinguishable
+        # from a genuine miss. Measured: with the name index and the scanned
+        # corpus both provably STABLE (357 names, 67 claim lines, 280 files
+        # across five consecutive samples), successive runs of this guard on
+        # an unchanged tree returned 1, 5, 2 and 3 violations — and it is a
+        # PUSH-BLOCKING trunk gate, so the false reds blocked real work.
+        #
+        # Same family as 702-pwhc / 723-b9cn / 731-pc5r: a pipeline's exit
+        # status deciding a guard's verdict for reasons unrelated to the
+        # guard's question. The newline-delimited `case` below is the house
+        # idiom (freshness-inventory.sh, check-no-tracked-binaries.sh), is
+        # bash-3.2 clean, and cannot fail for reasons of load because it
+        # spawns nothing.
+        _found=0
+        case "
+$existing
+" in
+            *"
+$tok
+"*) _found=1 ;;
+        esac
+        if [ "$_found" -eq 0 ]; then
             unresolvable=$((unresolvable + 1))
             echo "REFUSED: $file claims litmus:$tok — no litmus test declares that name." >&2
             echo "         The claim reads as verification and supplies none." >&2
             continue
         fi
-        if [ -n "$bound" ] && ! printf '%s\n' "$bound" | grep -qx "$tok"; then
+        _bound_found=0
+        case "
+$bound
+" in
+            *"
+$tok
+"*) _bound_found=1 ;;
+        esac
+        if [ -n "$bound" ] && [ "$_bound_found" -eq 0 ]; then
             unbound=$((unbound + 1))
             echo "REFUSED: $file claims litmus:$tok — the test exists but no spec binds it in" >&2
             echo "         $BINDINGS, so it executes in no suite. Add it to a spec's litmus_tests." >&2
