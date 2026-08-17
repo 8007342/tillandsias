@@ -64,6 +64,20 @@ declared="$(awk '
     /^    status:/    { if (pid != "" && st == "") { st = $2; print pid "\t" st; pid = "" } }
 ' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
 
+# ORDER 797-qm4t. The LWW `status:` block, scanned ONLY to ask "does this
+# packet_id name anything?". Loss on this channel is not a concern — the comment
+# above is right that it works — but a terminal status declared here for a
+# packet that does not exist creates nothing and silently records nothing. That
+# is how a closure was written against an invented packet_id and collected four
+# green signals. Section-scoped, because `  - packet_id:` also appears under
+# `packets:` and `events:`.
+declared_lww="$(awk '
+    /^status:[[:space:]]*$/ { in_s = 1; pid = ""; next }
+    /^[a-z_]+:[[:space:]]*$/ { in_s = 0; pid = "" }
+    in_s && /^  - packet_id:/ { pid = $3; next }
+    in_s && /^    value:/ { if (pid != "") { print pid "\t" $2; pid = "" } }
+' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
+
 # NOTE (order 785-sqe6): there is deliberately NO early exit here. See the
 # independence guard below the event pass for why an empty `declared` must not
 # short-circuit this script.
@@ -240,6 +254,7 @@ fi
 # POSIX awk arrays only: bash stays 3.2-clean (no associative arrays, 761-g36m).
 join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
                printf '%s\n' "$declared"        | sed 's/^/D\t/'
+               printf '%s\n' "$declared_lww"    | sed 's/^/L\t/'
                printf '%s\n' "$declared_events" | sed 's/^/E\t/'; } \
     | awk -F'\t' -v q="'" '
         $1 == "M" { if ($2 != "") st[$2] = $3; next }
@@ -247,6 +262,10 @@ join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
             pid = $2; want = $3
             if (pid == "") next
             if (!(pid in seen)) { seen[pid] = 1; checked++ }
+            # A `packets:` entry CREATES the packet in the fold, so an
+            # unknown pid is unreachable on this path — verified with a control
+            # that produced no violation. The unknown-pid checks live on the L
+            # and E paths below, which declare without creating.
             if (!(pid in st)) next
             got = st[pid]
             if (got == want) next
@@ -258,11 +277,27 @@ join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
                 dv = dv sprintf("%s: declared %s%s%s in a fragment, folds as %s%s%s\n", pid, q, want, q, q, got, q)
             next
         }
+        $1 == "L" {
+            pid = $2; want = $3
+            if (pid == "") next
+            if (!(pid in seen)) { seen[pid] = 1; checked++ }
+            # ONLY the unknown-packet question on this channel.
+            if (pid in st) next
+            if (want == "completed" || want == "verified" || want == "done" || want == "obsoleted")
+                dv = dv sprintf("%s: declared %s%s%s in a fragment status block but NO SUCH PACKET is in the fold (typo, or filed against a deleted packet)\n", pid, q, want, q)
+            next
+        }
         $1 == "E" {
             pid = $2
             if (pid == "") next
             if (!(pid in seen)) { seen[pid] = 1; checked++ }
-            if (!(pid in st)) next
+            if (!(pid in st)) {
+                # Same hole from the event side, and here it needs no
+                # terminal-status test: a `completed` EVENT for a packet the
+                # fold has never heard of is wrong however it got there.
+                ev = ev sprintf("%s: has a %scompleted%s EVENT but NO SUCH PACKET is in the fold (typo, or filed against a deleted packet)\n", pid, q, q)
+                next
+            }
             got = st[pid]
             # A completed EVENT legitimately pairs with ANY closure-ladder
             # terminal: per 650-dq6u the event may set status to completed, or
