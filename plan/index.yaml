@@ -54167,6 +54167,12 @@ plan_index:
             A pin (unit test or litmus step reachable from the macOS lane) fails if a chmod wider than 0600 on intermediate.key returns to the crate.
 
       events:
+        - type: completed
+          ts: "2026-08-17T01:55:18Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
+          host: macos
+          summary: |
+            All three criteria discharged on osx-next. (1) Both preambles clamp to 0600, and each now carries an UNCONDITIONAL heal-down OUTSIDE the test -s guard — the load-bearing half: an existing 0644 key skips the openssl block entirely, and ensure_proxy_running early-returns at main.rs:2975-2980 when the proxy is already up, BEFORE the ensure_ca_bundle heal at :2991, so without it a widened key survived the VM's lifetime. (2) Verified STATICALLY, and recorded as static rather than claimed live: images/proxy/entrypoint.sh:42-52 reads ONLY /run/secrets/tillandsias-ca-key and exits 1 without it; the key travels as PROXY_CA_KEY_SECRET_OPTS uid=1000,gid=1000,mode=0400 (main.rs:2899/2930), so no proxy reader ever consulted the guest file's mode; the in-guest headless that writes and re-reads it runs as root (vz.rs unit has no User=). The stated justification in-tree ('so Squid (uid 1000) can read it') was FALSE since 755-qcxh and is rewritten with the real reason. No guest boot was performed, so no live claim is made. (3) Pin guest_ca_preflight_never_widens_the_private_key added to diagnose.rs's existing source-scanning mod tests; reachable from the macOS lane, unlike litmus-proxy-ca-key-not-world-readable.yaml whose stat -c %a is GNU-only and errors on BSD. HAND-FALSIFIED: reverting one chmod to 644 makes it fail with 'no code path may chmod the CA private key to 644'; restored, 86/86 green, clippy clean. First attempt at that negative control was itself a false pass — a BSD sed expression silently matched nothing, so the 'reverted' build was never reverted; caught by re-reading the file rather than trusting the runner.
         - type: filed
           ts: "2026-08-16T19:25:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
@@ -54259,6 +54265,12 @@ plan_index:
             Verdict recorded on 273: either the agent TUI paints (273 is MOOT — was the disk; obsolete it with the capture as evidence) or the login flow still appears with a built forge image (273's dispatch bug is REAL; unblock it and attach the fresh capture as the new founding evidence).
 
       events:
+        - type: progress
+          ts: "2026-08-17T01:55:52Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
+          host: macos
+          summary: |
+            SCOPING (macOS, cycle 22 triage — no work claimed): NOT cycle-sized as written, and half of it is already answered by evidence on disk. Criterion 1 needs three things this host cannot do unattended today: (a) the installed bundle (Aug 14) and staged guest binary (Aug 16 11:25) both PREDATE order 270 (b99a5726 12:44, bf29595d 13:10), so a rebuild+install is a precondition; (b) the first-use forge-base build at VERSION 0.4.260815.1 measured >>300s on this host (macos-opencode-firstuse-silent-build-idle-timeout-2026-07-13.md) on a substrate cold-provisioned Aug 14; (c) scripts/macos-tray-ax-smoke.sh ax_click iterates TOP-LEVEL menu items only and cannot descend into a project submenu to reach the agent leaf. ALSO: do NOT substitute a CLI --opencode one-shot for the capture — diagnose.rs sends ExecOneShot without --cloud and without the PTY bridge, so it exercises neither the argv 273 blames (host-shell pty/mod.rs:242-245, unchanged at HEAD) nor the tee the criterion names; treating them as equivalent would manufacture a false MOOT. WHAT IS ALREADY ANSWERED: the 250G fix 058c63c6 is an ancestor of 374cb0b8, so every macOS session from 2026-07-12 ran on the healthy substrate — and on it the tray-menu OpenCode leaf launched and ran a full in-forge cycle on retry (macos-opencode-first-attach-blank-lane-2026-07-12.md), the 07-16 in-forge MO smoke PASSED, and by 07-25 the open macOS defects presuppose a painting TUI. Proposed verdict for the linux-owned 273: MOOT-pending-tee. Not flipped from here — 273 is pickup_role linux.
         - type: filed
           ts: "2026-08-16T19:46:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
@@ -55157,6 +55169,12 @@ plan_index:
             Evidence from a booted guest: the diagnose JSON shows at least one real per-container sample and the named hot-path mounts, captured on an attended macOS smoke.
 
       events:
+        - type: progress
+          ts: "2026-08-17T01:55:52Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
+          host: macos
+          summary: |
+            SCOPING (macOS, cycle 22 triage — no work claimed): premise CONFIRMED — the guest serves MetricsSnapshotRequest (vsock_server.rs:1309-1359, advertised in HelloAck server_caps :926, landed 2008ff59) and the macOS tray consumes nothing (zero 'metrics' hits anywhere under crates/tillandsias-macos-tray/src/). Two structural facts the packet does not state, both of which shape the fix: (1) a standalone --diagnose holds NO VM handle — VZ vsock is per-VM-handle and there is no host-side tray control socket, so a live read requires either an opt-in flag that boots its own VM (the list_cloud_projects_main template) or the tray persisting a snapshot the way crashloop.state is; and --diagnose has no require_no_live_tray gate while install-macos.sh runs it synchronously during install, so a default-path boot would start a VM mid-install. (2) the host Client::handshake() DISCARDS server_caps (host-shell vsock_client.rs:157-195), so feature detection needs a NEW helper, never a signature change to that shared-logic crate. Criterion 3 is additionally blocked here: the staged guest binary has 0 hits for MetricsSnapshotRequest (3 for VmStatusRequest) — it predates the handler by ~3h — and 'at least one real per-container sample' needs podman ps non-empty, i.e. a full enclave bring-up, not just a boot. Cycle-sized slice = criteria 1+2 only (additive Option<MetricsBlock> + metrics_status grammar defaulting to unsupported:no-live-wire-handle, opt-in boot flag behind require_no_live_tray, counters stay Option<u64> — never unwrap_or(0), which spec:observability-metrics forbids).
         - type: filed
           ts: "2026-08-16T22:05:00Z"
           agent_id: linux-yoga-claude-20260816t185912z

@@ -44,7 +44,12 @@ PAT_PRINTF_T='%\([^)]*\)T'
 # Line-level exemption: a raw-line comment `# gnu-date: ok (<reason>)` for
 # digit-validated fallbacks (build.sh _now_ms is the exemplar) or sites
 # where garbage output is provably harmless.
-PAT_GNUDATE='(^|[^A-Za-z0-9_])date[^|;&()]*\+[^ "]*%-?[0-9]*N|(^|[^A-Za-z0-9_])date +(-d|--date)[ =]'
+# The -d arm allows INTERVENING flags: the first cut required -d to be date's
+# first flag, so `date -u -d "@$epoch"` slipped through — and did, in
+# scripts/test-ledger-ts-guard.sh, where it returned empty on BSD and made the
+# whole fixture for the ledger timestamp guard fail silently on macOS
+# (found by the cycle-22 freshness audit, 784-dwkh).
+PAT_GNUDATE='(^|[^A-Za-z0-9_])date[^|;&()]*\+[^ "]*%-?[0-9]*N|(^|[^A-Za-z0-9_])date( +-[A-Za-z-]+)* +(-d|--date)[ =]'
 GNUDATE_EXEMPT='# gnu-date: ok'
 
 in_allowlist() {
@@ -111,9 +116,19 @@ for f in $SCAN_FILES; do
     while IFS= read -r _h; do
       [ -n "$_h" ] || continue
       _ln="${_h%%:*}"
-      # A same-line BSD arm (date -v / -jf / -r) makes the line
-      # self-portable — the GNU form fails on BSD and the chain catches it.
-      if printf '%s' "$_h" | grep -qE 'date +-(v|jf|r)'; then
+      # A BSD arm (date -v / -j / -jf / -r / -f) on the same LOGICAL command
+      # makes the line self-portable — the GNU form fails on BSD and the
+      # `||` chain catches it. Three things the first cut got wrong, all
+      # found against the real corpus (784-dwkh):
+      #   - intervening flags: `date -j -u -f '%s' …`, `date -u -r "$e"`
+      #   - attached values:   `date -v-30d +%s`
+      #   - CONTINUATION LINES: the arm often sits on the next line after a
+      #     trailing backslash, so a strictly same-line search flagged three
+      #     already-portable files and buried the one real defect.
+      # Scanning a small following window is deliberately generous: a lint
+      # that cries wolf gets muted, and the true positive is what matters.
+      if sed -n "${_ln},$((_ln + 2))p" "$f" 2>/dev/null \
+           | grep -qE 'date( +-[A-Za-z-]+)* +-(v|j|jf|r|f)'; then
         continue
       fi
       if sed -n "${_ln}p" "$f" | grep -qF "$GNUDATE_EXEMPT"; then

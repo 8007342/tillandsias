@@ -66,9 +66,15 @@ printf '#!/usr/bin/env bash\nt="$(date +%%s%%3N)" # gnu-date: ok (digit-validate
 rm "$TMP/gnudate.sh"
 expect "exempted-gnu-date-passes" "ok:bash-dialect-clean" 0
 
+# date -d with INTERVENING flags is caught (the gap that let
+# test-ledger-ts-guard.sh's `date -u -d "@epoch"` ship broken on BSD).
+printf '#!/usr/bin/env bash\nt=$(date -u -d "@123" +%%s)\necho "$t"\n' > "$TMP/dated-u.sh"
+rm "$TMP/gnudate-ok.sh"
+expect "date-u-d-refused" "blocked:bash4-unguarded:1" 1
+rm "$TMP/dated-u.sh"
+
 # date -d (GNU relative-date form) is caught too.
 printf '#!/usr/bin/env bash\ndate -d yesterday +%%Y\n' > "$TMP/dated.sh"
-rm "$TMP/gnudate-ok.sh"
 expect "date-d-refused" "blocked:bash4-unguarded:1" 1
 rm "$TMP/dated.sh"
 
@@ -84,5 +90,5 @@ if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 11/11 scenarios green"
+echo "PASS: check-bash-dialect fixture 12/12 scenarios green"
 exit 0
