@@ -936,10 +936,35 @@ async fn serve_ready_stream(
             build_version: Some(tillandsias_secure_channel::workspace_version().to_string()),
         },
     };
-    if let Err(err) = write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await {
+    if let Err(err) = write_envelope(&mut stream, &ack).await {
         warn!(spec = "vsock-transport", error = %err, "failed to write HelloAck");
         return;
     }
+
+    // Split the stream into independent read/write halves so the read side
+    // can be owned by a dedicated task. This eliminates the cancel-safety
+    // bug where `read_envelope` (which uses `read_exact`, not cancellation-
+    // safe) was raced against six other `select!` arms — a preempted partial
+    // frame was silently discarded, desynchronizing the wire (795-57y6).
+    let (read_half, mut write_half) = tokio::io::split(stream);
+
+    // Spawn a dedicated reader task that owns the read half. The read is
+    // never a select! branch, so cancellation cannot interrupt it mid-frame.
+    // Completed envelopes are sent through the channel to the main loop.
+    let (inbound_tx, mut inbound_rx) = mpsc::channel::<io::Result<ControlEnvelope>>(8);
+    tokio::spawn(async move {
+        let mut reader = read_half;
+        loop {
+            let result = read_envelope(&mut reader).await;
+            let is_err = result.is_err();
+            if inbound_tx.send(result).await.is_err() {
+                break; // main loop dropped the receiver
+            }
+            if is_err {
+                break; // EOF or parse error — reader is done
+            }
+        }
+    });
 
     // Per-connection PTY session store (l3: control-wire-pty-attach Tasks 4.x).
     // The pump tasks for each PTY session push envelopes into `pty_outbound`;
@@ -976,12 +1001,16 @@ async fn serve_ready_stream(
     'connection: loop {
         tokio::select! {
             _ = connection_shutdown(&mut shutdown) => {
+                // Drop the write half so the peer sees EOF; the reader
+                // task will exit when its read half errors or the stream
+                // closes.
+                drop(write_half);
                 break 'connection;
             }
             // Outbound PTY frame (PtyData{ToHost} from a pump or PtyClose
             // from child reap).
             Some(env) = pty_rx.recv() => {
-                if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                     debug!(spec = "vsock-transport", "vsock write failed during PTY outbound; closing connection");
                     break 'connection;
                 }
@@ -1009,7 +1038,7 @@ async fn serve_ready_stream(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during VmStatusPush; closing connection");
                             break 'connection;
                         }
@@ -1039,7 +1068,7 @@ async fn serve_ready_stream(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LoginStatePush; closing connection");
                             break 'connection;
                         }
@@ -1068,7 +1097,7 @@ async fn serve_ready_stream(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during CloudProjectsPush; closing connection");
                             break 'connection;
                         }
@@ -1097,7 +1126,7 @@ async fn serve_ready_stream(
                 match push {
                     Some(body) => {
                         let env = ControlEnvelope { wire_version: WIRE_VERSION, seq: 0, body };
-                        if write_envelope_with_shutdown(&mut stream, &env, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &env, &mut shutdown).await.is_err() {
                             debug!(spec = "vsock-transport", "vsock write failed during LocalProjectsPush; closing connection");
                             break 'connection;
                         }
@@ -1108,12 +1137,20 @@ async fn serve_ready_stream(
                 }
                 continue;
             }
-            // Inbound frame.
-            result = read_envelope(&mut stream) => {
+            // Inbound frame — received from the dedicated reader task via
+            // channel. The reader owns the read half and never appears in a
+            // select! branch, so cancellation cannot interrupt it mid-frame
+            // (795-57y6).
+            result = inbound_rx.recv() => {
                 let env = match result {
-                    Ok(env) => env,
-                    Err(err) => {
+                    Some(Ok(env)) => env,
+                    Some(Err(err)) => {
                         debug!(spec = "vsock-transport", error = %err, "vsock connection closed");
+                        break 'connection;
+                    }
+                    None => {
+                        // Reader task exited (stream closed or dropped).
+                        debug!(spec = "vsock-transport", "inbound reader task exited; closing connection");
                         break 'connection;
                     }
                 };
@@ -1150,7 +1187,7 @@ async fn serve_ready_stream(
                                 ),
                             },
                         };
-                        if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &err, &mut shutdown).await.is_err() {
                             break 'connection;
                         }
                         continue;
@@ -1173,7 +1210,7 @@ async fn serve_ready_stream(
                                 ),
                             },
                         };
-                        if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                        if write_envelope_with_shutdown(&mut write_half, &err, &mut shutdown).await.is_err() {
                             break 'connection;
                         }
                         continue;
@@ -1196,7 +1233,7 @@ async fn serve_ready_stream(
                         last_event: state.last_event(),
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1221,7 +1258,7 @@ async fn serve_ready_stream(
                     seq: env.seq,
                     body: ControlMessage::SubscribeAck,
                 };
-                if write_envelope_with_shutdown(&mut stream, &ack, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &ack, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1241,7 +1278,7 @@ async fn serve_ready_stream(
                         entries,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1272,7 +1309,7 @@ async fn serve_ready_stream(
                         projects,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1302,7 +1339,7 @@ async fn serve_ready_stream(
                         handle,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1352,7 +1389,7 @@ async fn serve_ready_stream(
                         snapshot: metrics_snapshot_wire(containers, mounts),
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown)
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown)
                     .await
                     .is_err()
                 {
@@ -1397,7 +1434,7 @@ async fn serve_ready_stream(
                             message: format!("PtyOpen rejected: {err}"),
                         },
                     };
-                    if write_envelope_with_shutdown(&mut stream, &err_env, &mut shutdown).await.is_err() {
+                    if write_envelope_with_shutdown(&mut write_half, &err_env, &mut shutdown).await.is_err() {
                         break 'connection;
                     }
                 }
@@ -1475,7 +1512,7 @@ async fn serve_ready_stream(
                         success: true,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1522,7 +1559,7 @@ async fn serve_ready_stream(
                         root_token,
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &reply, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &reply, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
@@ -1550,7 +1587,7 @@ async fn serve_ready_stream(
                         ),
                     },
                 };
-                if write_envelope_with_shutdown(&mut stream, &err, &mut shutdown).await.is_err() {
+                if write_envelope_with_shutdown(&mut write_half, &err, &mut shutdown).await.is_err() {
                     break 'connection;
                 }
             }
