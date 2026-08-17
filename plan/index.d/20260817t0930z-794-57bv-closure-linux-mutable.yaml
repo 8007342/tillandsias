@@ -1,0 +1,224 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17.
+#
+# ROLE CHANGE, stated up front: this packet was filed with pickup_role windows
+# on the operator's statement that the windows host was reworking the idiomatic
+# layer it belongs to. The windows host then said in writing, in
+# 20260817t075156z-795-xe5k-windows-fixes-landed-windows.yaml, that 794-57bv is
+# "NOT fixed here ... acknowledged and untouched". It is simultaneously the
+# gate failure blocking the release that THAT SAME HOST is requesting. Linux
+# took it rather than hold a release on a packet nobody had claimed. No
+# duplicate-work risk: the declining host named the decline explicitly.
+events:
+  - packet_id: unit-tests-reach-the-real-image-layer-and-race-each-other
+    event:
+      type: status
+      ts: "2026-08-17T09:30:00Z"
+      agent_id: linux-macuahuitl-opus5-20260817
+      host: linux_mutable
+      from: ready
+      to: completed
+      summary: |
+        The proxy preflight in remote_projects.rs now goes through a local
+        ensure_proxy_available() that is cfg(test)-inert, mirroring the
+        ensure_git_image_available() precedent that has sat directly above it
+        since it was written.
+
+        EVIDENCE, against the deliverable "a unit test never builds, pulls, or
+        renames a real image":
+          * before: 446 passed / 4 FAILED in 15.20s, each failure preceded by
+            "building image proxy (localhost/tillandsias-proxy:v0.4.260815.1,
+            label_mismatch)".
+          * after:  450 passed / 0 failed in 2.58s, and `grep -c "building
+            image"` over the whole run is 0. That count is the deliverable
+            restated as a measurement — the tests do not merely pass, they no
+            longer reach the image layer at all.
+
+        WHY A LOCAL WRAPPER AND NOT A cfg(test) ARM INSIDE
+        crate::ensure_proxy_running: that function also backs the
+        Service::Proxy satisfier in container_deps.rs and the main.rs startup
+        chain. A cfg(test) arm inside it is crate-wide, so it would have
+        hollowed out those tests too — silently, and in the same shape as the
+        defect being fixed. The indirection is the fix, not overhead.
+  - packet_id: unit-tests-reach-the-real-image-layer-and-race-each-other
+    event:
+      type: note
+      ts: "2026-08-17T09:35:00Z"
+      agent_id: linux-macuahuitl-opus5-20260817
+      host: linux_mutable
+      summary: |
+        CORRECTION TO THIS PACKET'S OWN FILED CONTEXT, made before the closure
+        was committed, under the rule 788-mj37 put in methodology this cycle.
+
+        The packet asserted that the four tests "collided on the image's
+        atomic rename", presenting one causal story for both halves of what
+        was seen. The first half is confirmed: the tests did build the proxy
+        image, and stopping that is what this closure delivers. The second
+        half is FALSIFIED. `atomic rename failed` is emitted at
+        remote_projects.rs:721 by `std::fs::rename(&tmp_dir, target_path)` in
+        the CLONE path — moving a temp checkout into place. It is not an image
+        operation and has no connection to ensure_image_exists.
+
+        The test that removed the image builds is what falsified it: with zero
+        image builds in the run, the identical rename error still appeared.
+        Had the causal story been right, it would have gone away with them.
+
+        What is actually happening is recorded in 797-vv3n below, with the
+        parts that are measured kept separate from the part that is still a
+        hypothesis.
+  - packet_id: unit-tests-reach-the-real-image-layer-and-race-each-other
+    event:
+      type: note
+      ts: "2026-08-17T09:35:00Z"
+      agent_id: linux-macuahuitl-opus5-20260817
+      host: linux_mutable
+      summary: |
+        NEGATIVE CONTROLS, and this note exists because the first set was
+        WRONG and said so.
+
+        The guard is remote_project_paths_preflight_git_and_proxy (renamed
+        from remote_project_git_runner_preflights_git_image), which reads this
+        file's own source and asserts both preflights are present at both call
+        sites. Four mutations, each DELETING one production call site:
+
+          delete runner-git   -> FAIL
+          delete runner-proxy -> FAIL
+          delete clone-git    -> FAIL
+          delete clone-proxy  -> FAIL
+          baseline            -> pass
+
+        Getting there took two corrections, both the class 634-39ik exists for:
+
+        1. The first mutation pass COMMENTED each call site out, and all four
+           still passed. That was a broken control, not a broken test: `//
+           MUTANT ensure_proxy_available(debug)?;` still contains the needle,
+           because `contains` is a substring search over source text. A
+           mutation control that does not remove the thing it claims to remove
+           proves nothing, and it fails in the reassuring direction.
+
+        2. Re-running with real deletion exposed a genuine PRE-EXISTING
+           vacuity. The runner slice was bounded by `.split("fn
+           run_command_with_timeout")` — a function that no longer exists in
+           this file. `split` on an absent needle does not error and does not
+           yield nothing; it yields ONE piece, the whole remainder. The slice
+           therefore ran past clone_project_from_github_with_debug, and the
+           runner's assertion was being satisfied by the CLONE function's
+           preflight. Deleting the runner's own call left the test green. That
+           assertion had been unable to fail for as long as its bound has been
+           missing.
+
+        Both slices are now taken by extracting ONE item, ending at the first
+        column-0 `}`, plus an assertion that the runner slice does not contain
+        the clone function's header. The production source is also cut at the
+        test module before any search, because every needle appears verbatim
+        in the test that searches for it.
+packets:
+  - packet_id: remote-project-clone-tests-fail-in-a-batch-under-machine-load
+    order: 797-vv3n
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "the four remote_projects clone tests fail as a BATCH under machine load, with two error shapes that both mean 'podman produced nothing' — the 793-a62g mutex did not close this"
+    deliverable: "the four tests are green under sustained parallel load (the reproduction below), or they no longer depend on process-global PATH / TILLANDSIAS_PODMAN_BIN at all; either way the gate stops being load-sensitive"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [testing, flakiness, podman, env-races]
+    estimated_hours: 4
+    context: |
+      OBSERVED, macuahuitl 2026-08-17. Measurements only in this section.
+
+        * Two full `./build.sh --ci-full` runs, both with background fork
+          agents compiling concurrently: tray-contract FAILED both times, the
+          same four tests each time (clone_normalizes_api_url_to_owner_name,
+          clone_project_uses_containerized_gh, clone_uses_host_parent_bindmount,
+          discover_projects_uses_containerized_gh). The podman-path-availability
+          check ALSO failed in both runs.
+        * Eight consecutive parallel runs of the same cargo invocation on an
+          idle machine: 0 failures. Three serial runs (--test-threads=1): 0
+          failures, 8.1-8.3s each.
+        * One parallel run DID fail on a machine that still had one fork
+          compiling: 449 passed / 1 failed.
+        * Immediately after the gate runs, `podman version` answered 5.8.4 in
+          well under a second and `podman ps` listed a healthy container. So
+          podman was not down; it was slow or contended at gate time.
+
+      THE TWO ERROR SHAPES, which are the useful clue:
+        * three tests: `atomic rename failed: No such file or directory` —
+          fs::rename(tmp_dir -> target) at remote_projects.rs:721, meaning the
+          mock never ran its `mkdir -p "$target_path/.git"`.
+        * one test:   `invalid gh JSON: EOF while parsing a value at line 1
+          column 0` — meaning empty stdout where the mock emits a JSON array.
+      Both are "the podman invocation reported success and did nothing".
+
+      INFERRED, NOT MEASURED — test this before building on it. A stub that
+      exits 0 with no output would produce EXACTLY both shapes, so the leading
+      hypothesis is that the four tests sometimes run against something other
+      than scripts/test-support/podman-mock.sh: they prepend a temp dir to
+      PATH and `remove_var("TILLANDSIAS_PODMAN_BIN")`, and both of those are
+      process-global while cargo runs tests as threads in one process. What
+      argues AGAINST it, and why it is only a hypothesis: the four tests hold
+      BOTH remote_projects' module-local env_lock and the shared
+      runtime_assets::env_lock, and a grep for other writers of
+      TILLANDSIAS_PODMAN_BIN in this binary finds only these tests' own
+      save/restore code. So the racing writer, if there is one, has not been
+      identified — do not assume it exists.
+
+      A SECOND HYPOTHESIS worth eliminating first because it is cheaper: every
+      test restores PATH at the END of its body rather than on drop, and the
+      locks are deliberately poison-tolerant ("one test's unrelated panic must
+      not cascade-fail every test that acquires the lock afterward"). So ONE
+      panic anywhere in a test holding modified PATH leaves it modified for
+      everything after it, and poison-tolerance lets the rest proceed against
+      the corruption. That mechanism predicts batch failure — which is what is
+      observed — where an ordinary race predicts scattered singletons.
+
+      REPRODUCTION to use, since an idle machine will not show it: run the
+      suite with the machine loaded, e.g. a parallel `cargo build` of the
+      workspace in another shell, and repeat. Load is the variable that
+      separates every failing run here from every passing one.
+
+      DO NOT close this by rerunning until green. The gate hit it 2/2 under
+      load; a green idle run is not evidence.
+  - packet_id: source-pinning-guards-bounded-by-neighbour-names-fail-open
+    order: 797-8dzt
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: chore
+    title: "audit every source-pinning guard whose slice is bounded by another item's NAME — split() on an absent bound returns the whole remainder, so the assertion silently widens instead of failing"
+    deliverable: "each source-reading assertion in the tree either extracts a bounded item or carries a mutation control proving it can fail; the ones that cannot fail are fixed or deleted"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [fail-loud, testing, expression-pinning]
+    estimated_hours: 3
+    context: |
+      OBSERVED while closing 794-57bv, 2026-08-17, and proven by mutation
+      rather than by reading. In remote_projects.rs the guard
+      remote_project_git_runner_preflights_git_image bounded its slice with
+      `.split("fn run_command_with_timeout")`. That function is not in the
+      file. `str::split` on an absent needle yields one piece — the entire
+      remainder — so the slice ran past the next function and the runner's
+      assertion was satisfied by a DIFFERENT function's identical preflight
+      call. Deleting the exact line the guard existed to protect left it
+      green. After re-bounding the slice to a single item, the same deletion
+      FAILS.
+
+      WHY THIS IS A CLASS. 634-39ik already requires new litmus steps to
+      assert properties rather than pin source literals unless they carry a
+      negative control. This is that ratchet's predicted failure arriving
+      through Rust unit tests instead of litmus YAML, so its coverage has a
+      hole exactly where nobody was looking. Note also that the pin itself was
+      not the problem — the unfalsifiable BOUND was.
+
+      SUGGESTED SHAPE, from the fix that worked: cut the test module off the
+      source before searching (every needle appears verbatim in the test that
+      searches for it), extract one item ending at the first column-0 `}`, and
+      assert the slice does not contain the NEXT item's header. That last
+      assertion is what converts a silent widening into a failure.
+
+      START HERE: `grep -rn 'include_str!' --include=*.rs crates/` finds the
+      guards that read their own source. Judge each by deleting what it
+      protects. A guard that survives that deletion should be fixed or
+      removed — leaving it is worse than having none, because it reads as
+      coverage.
