@@ -13154,6 +13154,12 @@ pub(crate) fn spawn_terminal_and_reap(mut child: Command) -> Result<(), String> 
     }
 }
 
+/// Order 795-zshi. Declared unconditionally for the same reason
+/// `pty_input_probe` below is: the exec allowlist is a PURE decision and the
+/// security boundary of the whole exec wire, so it must be testable on every
+/// host — `pty_handler` is gated on the `listen-vsock`+unix combo that order
+/// 254 recorded as never linted or tested in CI.
+pub mod exec_allowlist;
 #[cfg(all(feature = "listen-vsock", unix))]
 mod pty_handler;
 /// Order 723-54zj. Declared unconditionally: the classification half is pure
