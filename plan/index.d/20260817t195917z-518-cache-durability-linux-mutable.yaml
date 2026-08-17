@@ -1,0 +1,159 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T19:59:17Z.
+#
+# Product of an adversarial verification the operator's question triggered. The
+# question was "shouldn't the inference container have a durable model cache?"
+# The mount turned out to be durable already; the CACHE is not, for reasons
+# that have nothing to do with the mount.
+events:
+  - packet_id: inference-deferred-model-pulls-litmus-destructive-and-red
+    event:
+      type: note
+      ts: "2026-08-17T19:59:17Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      summary: |
+        STILL LIVE AT THIS HEAD, AND ABOUT TO GET MUCH MORE EXPENSIVE. Filed
+        2026-07-29, status ready, unfixed. Re-confirmed today with the exact
+        selection chain, and with one CORRECTION to how widely it fires.
+
+        THE MECHANISM, verified statically end to end:
+          build.sh:1212-1215  --ci-full runs the post-build phase at --size e2e
+          run-litmus-test.sh:618-621  size `long` is matched by the `e2e` filter
+          litmus-inference-deferred-model-pulls.yaml  declares size: long,
+            phase: post-build, and its FIRST critical_path step is
+              CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models"
+              rm -rf "$CACHE_DIR/.tools" "$CACHE_DIR/manifests" "$CACHE_DIR/blobs"
+          openspec/litmus-bindings.yaml:508  the binding is live
+        No gate spares it: the file carries no host_kind (defaults to `any`),
+        the runner evaluates no preconditions, and diff-scoping is inert
+        because build.sh never passes --diff-scope.
+
+        THE CORRECTION, and it is worth having: this does NOT fire on every
+        `--ci-full`. The post-build block sits inside the --install branch, so
+        `./build.sh --ci-full` alone never reaches it. MEASURED: six --ci-full
+        runs on this host tonight, and the cache blobs still carry their
+        original mtimes of 2026-08-16 03:20-03:37, 1.5 GB intact. The command
+        that DOES fire it is `./build.sh --ci-full --install` — which is listed
+        in CLAUDE.md under Common Commands and is Step 1 of the
+        build-install-and-smoke-test-e2e skill.
+
+        WHY IT MATTERS MORE FROM TODAY. Order 408 landed this session and the
+        inference container now runs on the GPU tier (24 GiB A5000, CUDA runner
+        confirmed). The whole point of that lane is to stop serving a 0.5B
+        model. The moment a real synthesis model is resident, this step stops
+        costing 1.5 GB and starts costing tens of GB per e2e run — over the
+        proxy, on every host that runs the skill. The packet's own body already
+        records 9.2 GB lost on the host that filed it.
+
+        DIRECT INTERACTION WITH THIS WEEK'S WORK: the destructive e2e has been
+        deferred three cycles running for unrelated reasons (forks holding
+        podman). When it finally runs, its Step 1 is exactly the command that
+        wipes the cache — so the first thing the long-awaited e2e will do is
+        re-download every model. Worth fixing BEFORE that cycle, not after.
+
+        SHAPE OF THE FIX, since the packet does not state one: the litmus wants
+        a COLD cache to exercise the deferred-pull path, which is legitimate.
+        What it must not do is achieve that by emptying the operator's real
+        one. Point CACHE_DIR at a scratch directory and run the container
+        against that for the duration, or gate the step behind an explicit
+        opt-in the e2e skill sets deliberately. Note also a latent divergence
+        the fix should resolve: the litmus resolves
+        ${XDG_CACHE_HOME:-$HOME/.cache} while the Rust launcher hardcodes
+        `.cache` (main.rs:4014), so on a host with XDG_CACHE_HOME set they are
+        different directories — the litmus would wipe one the container never
+        uses, and the cold path it thinks it is testing would not be cold.
+  - packet_id: inference-deferred-model-pulls-litmus-destructive-and-red
+    event:
+      type: note
+      ts: "2026-08-17T19:59:17Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      summary: |
+        WHAT IS GENUINELY DURABLE, recorded so nobody re-solves the wrong half.
+
+        The MOUNT is not the problem and needs no work. Verified in source and
+        live: build_inference_run_args (main.rs:4014, :4140-4145) mounts the
+        absolute host path $HOME/.cache/tillandsias/models at
+        /home/ollama/.ollama/models:rw — a bind, not a named volume. All five
+        runtime launch sites use that one builder, and the dev endpoint mounts
+        the same host directory, so both share one physical cache. Live:
+        `bind /home/tlatoani/.cache/tillandsias/models -> /home/ollama/.ollama/models`,
+        1.5 GB, blobs/manifests/.preloaded/.tools present.
+
+        podman's own storage is /home/tlatoani/.local/share/containers/storage,
+        disjoint from that path, so `podman rm`, `--replace` (used on every
+        launch) and `podman system reset --force` cannot reach the models. The
+        product already asserts this deliberately: main.rs:7284-7299 says the
+        model cache is "deliberately preserved" by the guest reset, pinned by
+        the test reset_guest_wipe_paths_exclude_model_cache (main.rs:22780).
+        Also checked and NOT found: any `podman rm -v`, anonymous-volume
+        removal, or volume prune anywhere in scripts/ crates/ images/.
+
+        SO THE EARLIER CLAIM THAT THE RUNTIME CACHE WAS A PODMAN VOLUME WIPED
+        BY RESET WAS WRONG — mine, asserted without checking, and corrected
+        here. openspec/specs/inference-container/spec.md:32 has said the right
+        thing all along: models live at ~/.cache/tillandsias/models ON THE
+        HOST, with a "Model persists across restarts" scenario.
+
+        THREE PLACES WHERE DURABILITY GENUINELY DOES NOT HOLD, none of them the
+        mount: (1) order 518 above; (2) the uninstall path, filed as 804-wfcu
+        below; (3) the non-Linux lanes — on Windows the headless runs in the
+        WSL2 distro with HOME=/root, so the models sit in the VHDX and
+        `wsl --unregister` takes them, and on macOS the guest HOME is inside
+        rootfs.img while vz.rs shares only home-src, so deleting the VM dir
+        takes them. Both of those deletions are steps in the e2e skill itself.
+
+        NOT PINNED: no test asserts the models bind. The source-shape tests
+        over build_inference_run_args (main.rs:15115, 15153, 18539, 18557)
+        check --replace, the CDI/tier env and the backend pin, but none checks
+        the -v models argument. A refactor could turn it into a
+        container-internal path and the suite would stay green — the property
+        is correct today and unprotected, which is the same shape as most of
+        what this milestone has collected.
+packets:
+  - packet_id: uninstall-deletes-the-model-cache-then-reports-it-preserved
+    order: 804-wfcu
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "`tillandsias-uninstall` without --wipe deletes the service account's whole home — models included — and then prints 'Cache preserved. Use --wipe to remove everything.'"
+    deliverable: "the uninstaller's report matches what it did: either it stops removing the service home outside --wipe, or it says plainly that the model cache went with it and how large it was"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [uninstall, packaging, fail-loud, inference]
+    estimated_hours: 2
+    context: |
+      OBSERVED by source audit during the 2026-08-17 model-cache verification.
+
+      scripts/uninstall.sh:112-117, OUTSIDE the --wipe guard, root branch:
+            userdel -r "$SERVICE_USER" 2>/dev/null || true
+            groupdel "$SERVICE_GROUP" 2>/dev/null || true
+            rm -rf "$SERVICE_HOME"
+      and then :144 prints
+            "Cache preserved. Use --wipe to remove everything."
+
+      SERVICE_HOME is /var/lib/tillandsias (uninstall.sh:24, and
+      packaging/sysusers.d/tillandsias.conf declares the account with that
+      home). The headless resolves the model cache from its process HOME
+      (main.rs:4013), and uninstall.sh:86 shows the runtime shape explicitly:
+      `runuser -u "$SERVICE_USER" -- env HOME="$SERVICE_HOME" ...`. So under the
+      packaged service account the models are at
+      /var/lib/tillandsias/.cache/tillandsias/models — inside the directory that
+      gets removed, and `userdel -r` alone would take it regardless.
+
+      THE DEFECT IS THE SENTENCE, not only the deletion. An operator who reads
+      "Cache preserved" has been told the opposite of what happened, and will
+      not think to check before a reinstall re-downloads everything. That is
+      the same class this milestone keeps finding — a confident verdict that
+      was never true — and it is the reason this is p1 despite being two lines.
+
+      SCOPE HONESTLY STATED: I found no installer that actually provisions the
+      service account (grep over scripts/install*.sh for sysusers /
+      /var/lib/tillandsias / SERVICE_USER returns nothing), so the supervised
+      shape may be packaging-only today and not yet reachable from the shipped
+      installer. The uninstaller tears it down unconditionally on root either
+      way, and the message is wrong whenever that account exists. Whoever picks
+      this up should confirm the deployment shape first rather than trusting
+      that summary.

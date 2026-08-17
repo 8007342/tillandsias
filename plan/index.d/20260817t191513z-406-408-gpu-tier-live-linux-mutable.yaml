@@ -1,0 +1,131 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T19:15:13Z.
+#
+# The GPU lane is live on the fat cuda host. Closes 408 (generate + wire the CDI
+# spec, no second sudo) and the dev-endpoint half of 406.
+status:
+  - packet_id: gpu-passthrough-auto-enablement
+    field: status
+    value: completed
+    ts: "2026-08-17T19:15:13Z"
+    host: linux_mutable
+
+events:
+  - packet_id: gpu-passthrough-auto-enablement
+    event:
+      type: completed
+      ts: "2026-08-17T19:15:13Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. scripts/nvidia-cdi-ensure.sh generates and
+        keeps CURRENT the per-user CDI spec, rootless, no sudo, no rpm — which is this
+        packet's whole ask. MEASURED END TO END: before, the dev inference container had
+        HostConfig.Devices [] and reported `tuning: tier=cpu ... vram_mb=24564` — it SAW
+        24 GiB and chose CPU, because entrypoint.sh:165 reads TILLANDSIAS_INFERENCE_TIER
+        and nothing set it. After, the same container reports `tier=gpu-cuda flash_attn=1
+        kv_cache=q8_0 num_parallel=4 vram_mb=24564`, /dev/nvidia* is present inside, and
+        ollama's own scheduler logs the decisive line: runner.inference="[{ID:0
+        Library:CUDA}]" with runner.vram="308.2 MiB" — the model resident in VRAM,
+        computing on CUDA. Note the tuning policy changed ITSELF with the tier
+        (flash_attn 0->1, kv_cache f16->q8_0, num_parallel 1->4, max_loaded 3): that
+        policy was already written and was simply never reached on this host.
+        FRESHNESS, not mere presence, is the contract: a CDI spec pins VERSIONED library
+        paths, so the script stamps the driver it generated for and regenerates when the
+        live driver moves — the 797-w8kf lesson (a wrapper judged fresh by mtime while
+        the binary it exec'd had been deleted) applied before it could bite.
+      evidence_refs:
+        - "scripts/nvidia-cdi-ensure.sh: rootless generate + driver-version freshness stamp"
+        - "scripts/dev-inference-ensure.sh: asks the product for the tier, passes --device=nvidia.com/gpu=all, falls back to cpu loudly"
+        - "before: tuning tier=cpu, Devices []; after: tier=gpu-cuda, /dev/nvidia* present"
+        - "ollama sched: runner.inference=[{ID:0 Library:CUDA}] runner.vram=308.2 MiB"
+        - "tillandsias --capabilities: accel_class=workstation-gpu accel_gpu=usable legacy_tier=gpu-cuda"
+  - packet_id: inference-cuda-bringup-fat-host
+    event:
+      type: progress
+      ts: "2026-08-17T19:15:13Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      host_note: dev-endpoint half done; runtime/stack half unverified
+      summary: |
+        THE DEV ENDPOINT IS ON THE GPU TIER. The runtime/stack inference
+        container is believed already wired — build_inference_run_args passes
+        nvidia.com/gpu=all and exports the effective tier, pinned by the unit
+        test order 433 added — and it needed only the CDI spec, which now
+        exists. But BELIEVED IS NOT MEASURED: I did not bring the full stack up
+        to watch it, because the destructive e2e that would prove it wipes the
+        image store and this host is shared. So this packet stays open on
+        exactly one question: does `tillandsias --init` produce an inference
+        container with tier=gpu-cuda and a CUDA runner? One stack launch
+        answers it.
+
+        TWO FAIL-OPEN BEHAVIOURS FOUND WHILE DOING THIS, both worth knowing
+        before someone else meets them:
+
+        1. `nvidia-ctk cdi generate --output=<EXISTING FILE>` logs "Generated
+           CDI spec with version 0.7.0", exits 0, and leaves the file at ZERO
+           BYTES. Exit status alone certifies an empty spec. That matters more
+           than it looks: nvidia_cdi_available() only checks for a file named
+           nvidia*.yaml, so an empty spec would have promoted the tier to
+           gpu-cuda on the strength of a file with nothing in it, and the
+           container would then fail or silently lose the device. The ensure
+           script therefore tests for a NON-EMPTY file and generates into a
+           fresh directory.
+
+        2. Host-side `nvidia-smi --query-compute-apps` shows NOTHING for a
+           containerised runner — PID namespacing hides it — and a spot sample
+           of utilization.gpu read 0% while the GPU was genuinely serving
+           embeddings, because a 308 MiB model answers faster than the sample
+           interval. Anyone verifying accelerator use from the host alone will
+           conclude the GPU is idle when it is not. The authoritative signal is
+           the runner's own `Library:CUDA` line, not host utilisation.
+packets:
+  - packet_id: npu-lane-has-no-engine-so-the-tier-can-never-be-chosen
+    order: 802-2536
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: enhancement
+    title: "the NPU probes as present-unusable with reason engine-missing on every host that has one — so the CPU/NPU/GPU balance the fleet needs cannot be measured, let alone chosen"
+    deliverable: "an NPU execution lane that can actually run an embedding or small-model workload (engine + runtime in the inference image), so accel_npu goes usable; plus a same-workload benchmark across cpu/npu/gpu recording tokens-per-second and latency, because a threshold cannot be picked from a capability flag"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [npu, inference, accel, benchmarking, fleet]
+    estimated_hours: 10
+    context: |
+      OBSERVED, macuahuitl 2026-08-17, from the canonical probe:
+
+        accel_class=workstation-gpu accel_gpu=usable accel_gpu_name=NVIDIA_RTX_A5000
+        accel_npu=present-unusable accel_npu_name=Intel_NPU accel_reason=engine-missing
+
+      The Intel NPU at /dev/accel/accel0 is DETECTED and honestly reported
+      unusable: order 480's probe does exactly what spec:accel-capability-probe
+      says — "a device being present says nothing about it being usable". The
+      missing half is an engine. Order 481 plumbs /dev/accel passthrough; it
+      does not put a runtime inside the image that can execute on it.
+
+      WHY THIS BLOCKS SOMETHING REAL RATHER THAN BEING A NICE-TO-HAVE. The
+      operator's requirement is a DYNAMIC tier balance across a heterogeneous
+      fleet — yolanda, esmeraldinha, macOS, and Silverblue hosts where the
+      right lane genuinely varies. On this host the answer is probably always
+      the GPU. On a host with an NPU and a weak or absent discrete GPU it is
+      probably not, and nobody can say where the crossover is, because:
+        * no host can currently EXECUTE on the NPU lane, and
+        * there is no measurement that would locate a threshold if one could.
+
+      So the router will keep making a correct decision from an incomplete
+      option set, forever, and it will look like it is working.
+
+      WHAT THE MEASUREMENT HAS TO BE, or the threshold will be folklore: the
+      SAME workload (an embedding batch and a small-model generation are the
+      two the expert system actually issues) run on each available lane on each
+      host, recording tokens/s, wall latency, and whether the lane completed at
+      all. spec:accel-capability-probe already defines MeasurementRecord and
+      the capability document is already the "sole input surface" the router
+      reads — so the results have a home and a consumer. This is filling in a
+      structure that exists, not inventing one.
+
+      CROSS-HOST BY CONSTRUCTION: the numbers only mean something as a matrix.
+      Coordinate with yolanda and esmeraldinha so every host runs the identical
+      workload and publishes into the same capability document shape; a
+      per-host benchmark with per-host methodology is three anecdotes.
