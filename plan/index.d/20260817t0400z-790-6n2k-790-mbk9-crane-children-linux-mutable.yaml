@@ -1,0 +1,81 @@
+# Filed by the 765-8hc3 implementation fork (linux_mutable, macuahuitl),
+# 2026-08-17: the two halves that packet could not close here, each shaped with
+# the exact decision or budget its owner needs.
+packets:
+  - packet_id: fleet-nix-binary-cache-operator-decision
+    order: 790-6n2k
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: build-velocity+infra
+    title: "Fleet nix binary cache: hosts still cold-compile ~1,000 crates because nothing substitutes release-built artifacts — needs one operator decision before any wiring"
+    deliverable: "a substituter every host can pull from (and release.yml pushes to), plus the substituter+public-key wiring in scripts/nix-toolbox.sh's chroot rung and build-guest-binaries.sh's nix lane"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [build, velocity, nix, infra]
+    estimated_hours: 3
+    context: |
+      Split out of 765-8hc3. That packet's half 1 (deps-derivation stability)
+      turned out to be ALREADY TRUE and is now guarded
+      (scripts/check-nix-deps-stability.sh). This half is the part that is
+      genuinely missing and genuinely blocked.
+
+      OBSERVED: release.yml caches the nix store only via
+      nix-community/cache-nix-action keyed on flake.lock (:36-45) — a
+      GitHub-Actions-scoped cache. Nothing is published for LOCAL hosts, so
+      macuahuitl/yoga/macOS/WSL each cold-compile the same dependency closure
+      independently. On this host the local nix rung is a CHROOT store
+      (~/.local/share/tillandsias/nix-store, no daemon), which starts empty and
+      repopulates from substituters — so it is exactly the consumer a cache
+      would serve, and today it has nothing but cache.nixos.org (which does not
+      carry pkgsCross musl artifacts).
+
+      THE OPERATOR DECISION, which is why this is not just implemented: a
+      binary cache needs a home and an identity, and both are outside an
+      agent's authority to create.
+        (a) cachix — an account + auth token in GitHub secrets. Public cache =
+            the dependency closure is world-readable (source is already public;
+            still an explicit call).
+        (b) self-hosted attic on the LAN — no third party, but needs a host
+            that is up when other hosts build, plus storage.
+        (c) do nothing — accept per-host cold builds.
+      Whichever is chosen also needs a SIGNING KEYPAIR: the private half in CI
+      secrets, the public half committed so hosts can trust it.
+      Do not invent any of this. Bring the operator the choice, then wire it.
+  - packet_id: build-guest-binaries-nix-lane-ignores-the-toolbox
+    order: 790-mbk9
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: fix
+    title: "build-guest-binaries.sh gates on `command -v nix` then runs bare `nix build` — on a daemonless host that attempt always fails and silently degrades to the cargo fallback"
+    deliverable: "the nix lane routes through scripts/nix-toolbox.sh (ensure + nix-args) like the 765-8hc3 checks do, so the chroot rung is used instead of a doomed daemon call; the fallback stays, but it stops being reached for a reason the host can fix"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [build, nix, toolbox, velocity]
+    estimated_hours: 2
+    context: |
+      Found by the 765-8hc3 fork while routing its own nix calls, and squarely
+      inside the operator's toolbox directive (777-amku: "we agreed to use
+      toolboxes for everything; never require a host daemon when a toolbox can
+      carry the tool").
+
+      OBSERVED at scripts/build-guest-binaries.sh:187-201: `build_with_nix()`
+      admits any host where `command -v nix` succeeds, then runs
+      `nix build -L .#tillandsias-headless-{x86_64,aarch64}-musl` with no
+      store argument. On macuahuitl nix IS installed and the daemon is NOT
+      running (deliberately, and permanently — the operator's ruling), so the
+      gate passes, both builds fail, `build_with_nix` returns 1, and the caller
+      falls back to cargo. The result is correct but the route is wrong: the
+      host pays a failed attempt on every `--ci-full --install`, and never uses
+      the working chroot rung that `scripts/nix-toolbox.sh` reports as
+      `ok:nix-toolbox:chroot`.
+
+      INFERRED, and the reason this is filed rather than fixed: the chroot
+      store changes where `--out-link` results live, so the two `install -m
+      0755 .nix-output/result-*/bin/tillandsias` lines need re-verification
+      against a real chroot-store build. That build is the ~1,000-crate cold
+      compile this packet family is about (10-30 min, per the audit), which is
+      why it wants a claimed cycle with a time budget rather than a drive-by
+      edit to the release-critical guest-binary lane. Verify the installed
+      binaries with the existing `verify_binaries` path before closing.

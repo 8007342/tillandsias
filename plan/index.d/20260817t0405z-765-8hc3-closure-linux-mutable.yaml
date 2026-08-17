@@ -1,0 +1,82 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written in `set-field` shape: worktree isolation refuses the compound
+# invocation the CLI needs, and this worktree has no built binary.
+status:
+  - packet_id: crane-deps-stability-and-binary-cache
+    field: status
+    value: completed
+    ts: "2026-08-17T04:05:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: crane-deps-stability-and-binary-cache
+    event:
+      type: completed
+      ts: "2026-08-17T04:05:00Z"
+      agent_id: fork-765-8hc3
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: HALF 1's PREMISE IS FALSIFIED and the
+        property it asked for is now GUARDED instead of re-implemented. Audit finding F7
+        inferred from `commonCraneArgs.src = craneSrc` that all four buildDepsOnly calls
+        churn on any file change; measured on this host via `nix derivation show` through
+        the daemonless chroot rung, crane's mkDummySrc already normalizes the deps input,
+        so: source-only edit -> top-level drv CHANGED (bmqz1x0s -> bxp3c40b) while deps drv
+        UNCHANGED (7ncgvch2 both sides); Cargo.toml metadata edit -> deps UNCHANGED (crane
+        normalizes); Cargo.lock edit -> deps CHANGED (wyfpz7f->2xqcaa9, 7ncgvch->qfb9vfc),
+        proving the probe is non-vacuous. Exit criterion 1 therefore already HELD and was
+        merely unverified and unprotected; criterion 3 (over-narrow filter fails loud) is
+        moot because adding a depsOnlySrc filter would be a risk-bearing no-op and was
+        deliberately NOT done — flake.nix now carries an ORDER 765-8hc3 comment saying so,
+        with the three measurements, so the next reader does not "fix" it again.
+        DELIVERED: scripts/check-nix-deps-stability.sh, a host-independent PROPERTY test
+        (perturb a tracked source file, assert deps drv is unchanged) rather than a
+        committed .drv baseline, which would drift with nixpkgs/crane/nix and false-red on
+        healthy hosts (741-2izr). It ENFORCES NON-VACUITY: if the perturbation fails to move
+        the top-level drv it reports violation:nix-deps-probe-vacuous instead of a
+        meaningless ok. Grammar ok:nix-deps-stable:<n> checked / violation:nix-deps-churn /
+        violation:nix-deps-probe-vacuous / skip:*, 2s for one output. Two MUTATION CONTROLS,
+        both verified: adding `dummySrc = craneSrc` to a buildDepsOnly (the realistic
+        regression) -> `violation:nix-deps-churn:tillandsias-headless-x86_64-musl` rc=1;
+        adding main.rs to craneSrc's filter so the perturbation is invisible ->
+        `violation:nix-deps-probe-vacuous:...` rc=1; both revert to
+        `ok:nix-deps-stable:1 checked` rc=0. Criterion 2 delivered: release.yml gains an
+        `--all` assertion step (continue-on-error, step-summary + ::warning) that explains
+        WHY a rebuild was slow, which the existing cache-miss warning at :181 cannot.
+        Also delivered: scripts/nix-deps-drv-paths.sh, the resolver behind it, handling both
+        the `.inputs.drvs` and legacy `.inputDrvs` schemas so a schema guess cannot produce
+        a silent false negative. All nix calls route through scripts/nix-toolbox.sh per the
+        operator toolbox directive; no host daemon was used or asked for.
+  - packet_id: crane-deps-stability-and-binary-cache
+    event:
+      type: note
+      ts: "2026-08-17T04:05:00Z"
+      agent_id: fork-765-8hc3
+      host: linux_mutable
+      summary: >
+        Criteria 4 and 5 (a second host substituting dependency artifacts; measured
+        --ci-full --install no longer cold-rebuilding) are NOT claimed and are split out,
+        because both need infrastructure that does not exist yet and one operator decision:
+        790-6n2k (fleet binary cache — cachix vs self-hosted attic vs accept, plus a signing
+        keypair; nothing is published for local hosts today, and the chroot store starts
+        empty) and 790-mbk9 (build-guest-binaries.sh gates on `command -v nix` then runs a
+        bare `nix build`, so on this daemonless host every --ci-full --install pays a doomed
+        attempt before falling back to cargo — a toolbox-directive 777-amku gap, filed
+        rather than fixed because re-pointing --out-link at the chroot store needs the
+        ~1,000-crate cold build to verify the install paths).
+  - packet_id: nix-supported-release-and-crane-migration
+    event:
+      type: note
+      ts: "2026-08-17T04:05:00Z"
+      agent_id: fork-765-8hc3
+      host: linux_mutable
+      summary: >
+        TOOLBOX-NIX LANE PROVEN END TO END on macuahuitl, which is the evidence this packet
+        has been waiting on: `scripts/nix-toolbox.sh ensure` -> ok:nix-toolbox:chroot, and
+        real flake evaluation (`nix derivation show` against all four musl outputs, repeated
+        across tree perturbations) ran through it with NO nix-daemon and NO privileges. So
+        this packet's "Nix-capable host" precondition is satisfiable by the toolbox rung
+        exactly as the operator's 2026-08-16 directive requires — the withdrawn host-daemon
+        ask needs no replacement. Not yet exercised through the toolbox rung: a full `nix
+        build` realization (evaluation only so far); the cold ~1,000-crate compile is the
+        remaining unknown for the release lane, and 790-mbk9 is where that gets measured.
