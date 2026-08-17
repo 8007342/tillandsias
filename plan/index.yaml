@@ -56421,6 +56421,12 @@ plan_index:
             Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
 
       events:
+        - type: verified-by
+          ts: "2026-08-17T13:27:14Z"
+          agent_id: "linux-yoga-claude-20260817t132714z"
+          host: linux-immutable
+          summary: |
+            CLOSED BY RELEASE, verified on linux-immutable. v0.4.260817.1 published 2026-08-17T12:43Z; curl-installed on yoga at 13:24Z (install rc=0, tillandsias --version reports v0.4.260817.1). The asset this order was about is now present: $XDG_DATA_HOME/tillandsias/runtime/0.4.260817.1/images/git/probe-upstream-auth.sh exists at 8807 bytes, where the same path under 0.4.260815.1 -- the release every host ran all night -- does not exist at all. That is the version skew this order named, measured from both sides, and it is gone on this host. The remaining action recorded on this packet was 'cut a release containing the probe', which was the operator's; it is done. Note the class holds exactly as filed: nothing in the checkout changed to fix this, and no host could have fixed it locally -- the guard was correct and unpassable until a release-side asset shipped. Also re-verified after installing a NEW BINARY that the CA material stayed clamped (ok:ca-material:already-clamped), since 791-swxt's whole point is that a fresh install can re-widen host state.
         - type: note
           ts: "2026-08-17T07:26:58Z"
           agent_id: "linux-macuahuitl-opus5-20260817T072658Z"
