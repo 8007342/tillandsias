@@ -1,0 +1,235 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-17, from an OPERATOR FIELD SESSION on the
+# freshly curl-installed published release v0.4.260817.1.
+#
+# The operator drove four real lanes back to back — GitHub login, Antigravity on
+# a fresh cloud project, OpenCode on another, Claude on a third — and hit a
+# distinct defect in each. None of these are reachable by the e2e smoke as
+# written: the smoke stops at `--diagnose` exit 0, and every one of these fires
+# only when a human actually attaches an agent to a project.
+#
+# TWO OF THEM SHARE A SHAPE: a correct fix for a loud bug silently removed a
+# capability nobody re-tested. 805-ek9e's conhost fallback fixed a real quoting
+# crash and cost every project lane its clickable links and working paste.
+# 805-yzhw's harness mutex was made two-sided on ACQUIRE while the install stayed
+# unconditional, so the lock records a race it does not prevent.
+
+packets:
+  - packet_id: opencode-lane-runs-two-concurrent-vendor-installs-into-a-256m-tmpfs
+    order: 805-yzhw
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "every OpenCode lane launch runs the vendor installer twice concurrently; two 127MB extractions do not fit the 256MB /tmp tmpfs, both fail with ENOSPC, neither cleans up, and the lane dies at a 'Press any key to exit' prompt that reads as a hang"
+    deliverable: "the harness-update lock actually gates the install (not just its release), so a lane performs at most one concurrent vendor install; plus cleanup of the vendor installer's leaked /tmp/opencode_install_* directory on the failure path"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [forge, opencode, containers, shell, fail-loud]
+    context: |
+      OBSERVED 2026-08-17T20:28Z, operator-reported as "OpenCode hung", on the
+      published v0.4.260817.1. It was not hung and it was not an update in
+      progress — it had already FAILED and was blocked on a keypress:
+
+        entrypoint-forge-opencode.sh: line 151: echo: write error: No space left on device
+        ERROR: forge agent launch failed (exit code: 1)
+        Press any key to exit...
+
+      NOT A DISK PROBLEM. Windows C: had 265GB free, the guest root 945GB, the
+      container overlay 945GB. Exactly one filesystem was full:
+
+        tmpfs  256M  256M  0  100%  /tmp
+
+      WHAT FILLED IT — two vendor install trees, same second, both partial:
+
+        127M  /tmp/opencode_install_131   20:28:57.306211963
+        127M  /tmp/opencode_install_316   20:28:57.306211963
+
+      and both install logs end identically:
+
+        tar: opencode: Wrote only 2560 of 10240 bytes
+        tar: Exiting with failure status due to previous errors
+
+      The suffixes are PIDs, so these are two concurrent runs of the opencode.ai
+      installer inside one container, each extracting ~127MB of opencode 1.18.18
+      into a shared 256MB tmpfs. One fits. Two do not.
+
+      MECHANISM, both call sites in one launch:
+        images/default/entrypoint-forge-opencode.sh:56
+            ensure_forge_harnesses >>/tmp/forge-lifecycle.log &   <- BACKGROUNDED
+        images/default/entrypoint-forge-opencode.sh:71
+            require_opencode                                      <- foreground
+      ensure_forge_harnesses calls curl_install_opencode at lib-common.sh:2206;
+      require_opencode calls it again at lib-common.sh:2901.
+
+      THE LOCK DOES NOT PREVENT THIS, AND ITS OWN COMMENT SAYS SO.
+      lib-common.sh:2896-2905 acquires harness_update_lock into `held`, logs
+      "opencode install deferring to the in-flight harness updater" when it
+      cannot get it — and then runs `if curl_install_opencode ...`
+      UNCONDITIONALLY. `held` gates only the release calls. The comment above it
+      records a previous fix: "Guarding only the background writer left the mutex
+      one-sided." The acquire was made two-sided; the ACTION never was. So the
+      lock now faithfully records a race it still permits.
+
+      WHY IT SURFACED NOW (hypothesis, not asserted): 2 x 127MB = 254MB against a
+      256MB cap is a 2MB margin. Any growth in the opencode release tips it. That
+      also predicts the failure is load/timing sensitive — if the two installs
+      serialize, each succeeds and the vendor installer cleans up after itself;
+      only overlap produces the two leaked partial trees seen here.
+
+      WHY ONLY THIS LANE: the Antigravity lane on the same host, same session,
+      installed its CLI fine (/tmp/forge-lifecycle.log shows "Antigravity CLI
+      installed successfully"), and the persistent per-project cache volume
+      tillandsias-forge-cache-lakanoa carries a good harness-curl/opencode while
+      tillandsias-forge-cache-visual-chess's is empty. Only the OpenCode
+      entrypoint calls require_opencode in the FOREGROUND on top of the
+      backgrounded ensure_forge_harnesses, so only it races against itself.
+
+      TWO SECONDARY DEFECTS IN THE SAME TRACE, worth fixing with it:
+      - The vendor installer's /tmp/opencode_install_$$ tree is never cleaned on
+        the failure path. curl_install_opencode removes its own $tmp and $errlog
+        (lib-common.sh:2549-2566) but knows nothing about the directory the
+        vendor script creates, so a failed install permanently poisons /tmp for
+        the container's remaining life — no retry inside that container can
+        recover.
+      - entrypoint line 151 guards with `if [ -w "$(dirname "$OPENCODE_INIT_PROMPT")" ]`,
+        which tests WRITABILITY, not free space. On a full tmpfs the guard passes
+        and the write then fails, converting a disk-space condition into a bare
+        "echo: write error" with no mention of /tmp.
+    verifiable_closure: "a test that runs the opencode entrypoint's install path with the harness lock already held and asserts exactly one vendor install tree exists under /tmp — red today"
+    evidence:
+      - "podman logs tillandsias-visual-chess-forge: 'line 151: echo: write error: No space left on device'"
+      - "df inside the lane: tmpfs 256M 256M 0 100% /tmp while overlay had 945G free"
+      - "two /tmp/opencode_install_<pid> trees, identical mtime 20:28:57.306211963, both with truncated tar"
+
+  - packet_id: project-lanes-always-fall-back-to-legacy-conhost-losing-paste-and-clickable-links
+    order: 805-ek9e
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "every project lane opens in a legacy conhost window because its inline `bash -lc` argv can never pass argv_survives_wt_reparse — so device-code logins cannot be completed: the URL is not clickable and NOTHING pastes the token back"
+    deliverable: "project lanes launch through an INJECTED guest wrapper taking bare, quote-free arguments (the pattern GithubLogin already uses), so argv_survives_wt_reparse passes and the lane opens in Windows Terminal with working paste and hyperlinks"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [windows, tray, rust, ux, auth]
+    context: |
+      OBSERVED 2026-08-17T20:19-20:35Z across THREE lanes in one operator
+      session, on published v0.4.260817.1.
+
+      Claude (`--cloud '8007342/tillandsias' --claude`): login flow launched, the
+      operator could not click the auth URL and had to retype it into a browser;
+      then could not paste the returned token back by ANY means — Ctrl+V,
+      Shift+Insert, trackpad double-tap, right-click -> Edit -> Paste. Enter with
+      an empty field failed authentication and closed the terminal. The lane is
+      therefore UNUSABLE, not merely awkward.
+
+      Antigravity (`--cloud '8007342/lakanoa' --antigravity'`): same two
+      symptoms, "can't click on link, can't paste with Ctrl+V, had to double tap
+      the trackpad".
+
+      MECHANISM. notify_icon.rs:3764-3769 chooses the spawn:
+
+        if matches!(intent, PtyIntent::GithubLogin) || !argv_survives_wt_reparse(&argv) {
+            spawn_wsl_console(...)      // legacy conhost, CREATE_NEW_CONSOLE
+        } else {
+            spawn_wsl_terminal(...)     // wt.exe
+        }
+
+      argv_survives_wt_reparse (:3788) admits only tokens made entirely of
+      [A-Za-z0-9 / \ . - _ : =]. Every project lane's argv is a single inline
+      script token, verbatim from tray.log:
+
+        /bin/bash -lc "export HOME=\"${HOME:-/root}\" && export XDG_RUNTIME_DIR=...
+         && exec tillandsias-headless --cloud '8007342/tillandsias' --claude"
+
+      containing spaces, double and single quotes, $, {, }, &. It can never pass.
+      So the `!argv_survives_wt_reparse` arm is not a fallback for project
+      lanes — it is the ONLY path they ever take. conhost has no hyperlink
+      support and no working Ctrl+V, which is precisely both reported symptoms.
+
+      `wt_present: true` in this host's own --diagnose output: Windows Terminal
+      is installed and available. The lane simply never reaches it.
+
+      THIS IS A SILENT COST OF A CORRECT FIX. The conhost route was widened from
+      GithubLogin to all quote-carrying argv on 2026-08-09 to stop two real field
+      crashes (unbalanced quote through wt's re-parse -> "unexpected EOF while
+      looking for matching '\"'", exit 2 on every project click;
+      plan/issues/windows-github-login-blank-terminal-2026-08-09.md). That fix is
+      right and must not be reverted. What went unnoticed is that it moved every
+      project lane onto a terminal that cannot paste — invisible until a human
+      tried to complete a device-code login, which no automated gate does.
+
+      THE FIX ALREADY EXISTS IN THE SAME FILE. GithubLogin does not pass an
+      inline script at all: notify_icon.rs:3743-3744 substitutes the bare path
+      /usr/local/lib/tillandsias/github-login.sh, injected into the guest by
+      inject_bootstrap_logic, and the comment at :3736-3742 explains exactly why.
+      Generalising that to project lanes — one injected wrapper taking bare
+      agent + project arguments, e.g.
+      `/usr/local/lib/tillandsias/lane.sh claude 8007342/tillandsias` — makes the
+      argv quote-free, so argv_survives_wt_reparse passes and the lane gets
+      Windows Terminal WITHOUT reopening the quoting hole. Both crashes stay
+      fixed and paste comes back.
+    verifiable_closure: "a unit test asserting the project-lane argv the tray actually builds passes argv_survives_wt_reparse (red today for every agent), plus the existing quoting regression tests staying green"
+    evidence:
+      - "tray.log 20:32:54Z Attach{Claude} and 20:19:14Z Attach{Antigravity} — both log the wsl.exe console path with the full inline bash -lc argv"
+      - "operator: could not click the URL and no paste method worked in either lane"
+      - "--diagnose wt_present=true on the same host"
+
+  - packet_id: github-sign-in-state-flaps-after-a-successful-device-login
+    order: 805-yc3r
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "after a successful GitHub device login the tray's sign-in state flips signed-in -> signed-out -> signed-in within 35s, so the icon does not settle and the operator re-runs a login that already succeeded"
+    deliverable: "sign-in state resolution is monotonic across a successful login — a transient probe failure must not publish signed-out while a valid token is present"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [windows, tray, ux, auth]
+    context: |
+      OBSERVED 2026-08-17, tray.log, verbatim:
+
+        20:17:42.490  github sign-in state resolved from="signed-out" to="signed-in"
+        20:17:45.222  github sign-in state resolved from="signed-in"  to="signed-out"   <- 2.7s later
+        20:18:15.145  cloud projects resolved count=24                                   <- token WORKS
+        20:18:17.566  github sign-in state resolved from="signed-out" to="signed-in"
+
+      The login had genuinely succeeded — `cloud projects resolved count=24`
+      proves the token was valid throughout the signed-out window. The operator
+      saw an icon that did not refresh, clicked GitHub Login again (20:18:18),
+      got a second login flow which then listed remote projects, and terminated
+      that popup manually.
+
+      Two costs, both real: a successful login looks failed, and the re-click
+      leaves a leaked login container behind (see 805-r5ik).
+    verifiable_closure: "a test driving a successful login followed by one failed probe and asserting no signed-out transition is published"
+
+  - packet_id: github-login-container-leaks-when-the-operator-closes-the-terminal
+    order: 805-r5ik
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "closing the GitHub-login terminal leaves tillandsias-github-login-<pid> running and unhealthy indefinitely; nothing reaps it"
+    deliverable: "the login container is tied to its terminal's lifetime (or reaped by the next lane launch / a lifecycle sweep) so a closed popup cannot leave an unhealthy container behind"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [windows, containers, lifecycle]
+    context: |
+      OBSERVED 2026-08-17. The operator closed the second (redundant) GitHub
+      login popup at ~20:19. At 20:38 `podman ps` still showed:
+
+        tillandsias-github-login-143113   Up 19 minutes (unhealthy)
+
+      It was still there, still unhealthy, through four subsequent lane launches,
+      and had to be removed by hand. `unhealthy` is the honest state — the login
+      it was serving is gone — but nothing acts on it.
+
+      Related intake, same session, filed here rather than lost: the operator
+      reported that on clicking GitHub Login "the token flow went first and was
+      ignored, then device login worked fine". Worth confirming whether
+      --with-token is attempted ahead of the device flow on an interactive
+      click; if so it should be skipped when no token is piped, since it costs a
+      visible failed step in the operator's face before the flow that works.
+    verifiable_closure: "no tillandsias-github-login-* container survives the exit of its terminal (asserted by a lifecycle test)"
