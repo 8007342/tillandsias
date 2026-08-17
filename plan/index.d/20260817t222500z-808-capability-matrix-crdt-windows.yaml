@@ -29,7 +29,11 @@ packets:
     pickup_role: any
     release_target: forge-local-experts-milestone
     capability_tags: [fleet, accel, crdt, plan, architecture]
-    depends_on: [808-43mw]
+    # depends_on resolves by packet_id, NOT by order token — the first draft
+    # wrote [808-43mw] and the ledger check refused it with
+    # "depends_on -> unresolved reference '808-43mw'". The order token is a
+    # human convenience; packet_id is the identity.
+    depends_on: [capability-document-cannot-say-which-host-it-describes]
     context: |
       THE MECHANISM ALREADY EXISTS AND IS PROVEN. plan/index.d/README.md
       declares three channels with CRDT semantics: `packets:` a G-Set keyed by
