@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    event:
+      type: progress
+      ts: "2026-08-17T10:26:20Z"
+      agent_id: linux-yoga-claude-20260817t102620z
+      host: linux-immutable
+      summary: >
+        FIRST QUESTION ANSWERED, and one claim in this packet's own context CORRECTED. WHERE THE EXECUTED OPENCODE COMES FROM: the npm harness path, not the curl one. images/default/lib-common.sh:1531 exports NPM_CONFIG_PREFIX=$PROJECT_CACHE/npm/global and :1550 puts $NPM_CONFIG_PREFIX/bin first on PATH; the ensure path runs 'npm install -g opencode-ai@latest' and resolves to ${NPM_CONFIG_PREFIX}/bin/opencode (:2430), which is the line that emits 'install | opencode: available (1.18.18)' (:2436). Confirmed on disk inside volume tillandsias-forge-cache-tillandsias: /c/npm/global/bin/opencode and /c/npm/global/lib/node_modules/opencode-ai both exist, while /c/harness-curl/opencode/bin is empty after three cold launches. So there are TWO parallel provisioning mechanisms for opencode -- npm, which delivers, and curl, which never does -- and the curl installer short-circuits precisely BECAUSE npm already put 1.18.18 on PATH, which is what 'Version 1.18.18 already installed' means. The curl path works for claude (harness-curl/claude/bin/claude and last-good.version are both populated), so it is opencode-specific. CORRECTION TO THIS PACKET'S CONTEXT, which I wrote an hour ago and overreached on: I claimed the render probe 'guards a binary the harness neither installed nor version-controls'. That is WRONG. harness_probe (:2096) defaults bin_path to ${NPM_CONFIG_PREFIX}/bin/$1 and harness_last_good_file (:2109) writes last-good-<bin>.version into the SAME npm prefix, so the auth contract, the render contract and last-good all apply to the npm binary -- the one that actually runs, installed and version-controlled by the harness. 626-p4xd's machinery is NOT guarding thin air. The defect is narrower and still real: a second, opencode-specific provisioning path fails on every cold start, announces 'rolling back to last-good' against a curl-side last-good that was never recorded, and is invisible without --debug. SO THE DISPOSITION IS NOW A CHOICE WITH EVIDENCE, not an open question: either retire curl_install_opencode (npm already delivers, and the short-circuit shows the two mechanisms actively conflict), or make it fail loudly instead of at trace level. Retiring is the smaller tree and matches the operator's 2026-08-17 direction to remove a workaround rather than maintain it -- but it should be checked against why the curl path exists for opencode at all, since it demonstrably predates and duplicates the npm one.
