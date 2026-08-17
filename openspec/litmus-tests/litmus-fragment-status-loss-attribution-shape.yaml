@@ -92,6 +92,28 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: batch has a loud fallback"
 
+  # ORDER 785-sqe6. An early exit ("no `packets:` declaration, nothing to
+  # check") sat above the closure-event pass and made it UNREACHABLE on the one
+  # fragment shape most likely to carry the defect it was written for: a pure
+  # `events:` append, which is exactly what `append-event` writes. The gate
+  # printed `0 checked` and exit 0 while pass two had never run — this gate's
+  # own failure class, reintroduced by a short-circuit. Pinned BEHAVIOURALLY in
+  # a hermetic sandbox (not as a source grep) so the property survives any
+  # future rewrite of how the two passes are sequenced.
+  - step: "the closure-event pass runs on a fragment that declares no status at all"
+    command: "T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp ./target/release/tillandsias-plan \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'events:\\n  - packet_id: alpha-packet\\n    event:\\n      type: completed\\n      ts: \"2026-08-17T03:10:00Z\"\\n      host: fixture\\n      summary: closed with no packets block\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: events-only fragment was not examined: rc=$rc out=$out\"; exit 1; fi; echo \"$out\" | grep -q \"has a 'completed' EVENT but folds as 'ready'\" && echo 'ok: events-only fragment is examined' || { echo \"FAIL: wrong verdict: $out\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: events-only fragment is examined"
+
+  # NEGATIVE CONTROL for the step above: genuinely-nothing must still be a fast
+  # silent pass. The early exit was not wrong to exist, only wrong to key on
+  # `declared`; a gate that refused every events-only fragment on sight would
+  # satisfy the step above while being useless.
+  - step: "a fragment set with neither declarations nor closure events still passes as 0 checked"
+    command: "T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp ./target/release/tillandsias-plan \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'events:\\n  - packet_id: alpha-packet\\n    event:\\n      type: progress\\n      ts: \"2026-08-17T03:12:00Z\"\\n      host: fixture\\n      summary: progress is not a closure\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 0 ]; then echo \"FAIL: nothing-to-examine refused: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in 'ok:no-fragment-status-loss:0 checked') echo 'ok: nothing to examine stays quiet';; *) echo \"FAIL: unexpected verdict: $out\"; exit 1;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: nothing to examine stays quiet"
+
 observability:
   traces:
     - "@trace spec:ci-release"
