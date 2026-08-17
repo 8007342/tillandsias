@@ -412,6 +412,37 @@ distributed_work:
     purpose: >
       Keep multi-agent work large enough to make progress between recurrent
       prompts while still being safe to claim, checkpoint, review, and hand off.
+    observed_vs_inferred:
+      # Order 788-mj37. Filed after five inferred causes were falsified by the
+      # forks implementing them in a single night (2026-08-16/17).
+      rule: >
+        A packet's context MUST distinguish what was OBSERVED from what was
+        INFERRED. Tag the claims: OBSERVED for what was measured or seen, with
+        the command or artifact; INFERRED for the causal story that explains
+        it. Where an inference is load-bearing, the deliverable SHOULD name it
+        as the first thing the implementer tests.
+      why: >
+        Prose has no marker for "this is the part I did not test", so an
+        untested causal story reads exactly like a measurement and the
+        implementer inherits it as a premise. The cost is real and was paid
+        repeatedly: 783-xyk5 asserted a guard was 60% of the gate from a step
+        record that spanned banner-to-banner; 771-wwzi asserted a fork had
+        retired the parent's boundary when per-worktree git-dirs make that
+        impossible; 782-9jfg assumed the squid 6.x line had fixed the crash
+        upstream when the ChangeLogs show it did not; 765-8hc3 inherited audit
+        finding F7's claim that crane rebuilt deps on every commit when crane
+        already normalizes them; 793-a62g blamed podman lock contention for a
+        gate flake that was two tests racing one environment variable.
+      what_it_is_not: >
+        This is not a bar on inference — every one of those packets was worth
+        doing, and four of the five fixes were right. It is a bar on
+        inference PRESENTED AS FACT. An implementer who knows which sentence
+        is a hypothesis tests it in minutes; one who does not spends part of
+        its budget disproving the filer, and a less careful one builds on it.
+      symmetry_with_closure: >
+        The closure ladder already demands evidence before a status may rise
+        (650-dq6u). This is the same discipline applied at the intake end:
+        evidence-marking on the way in, evidence-requiring on the way out.
     packet_size:
       preferred: >
         A normal implementation packet should take roughly one or two recurrent

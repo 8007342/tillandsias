@@ -16,6 +16,10 @@ description: >-
   string, which would rot the moment upstream rewords it.
 severity: high
 size: instant
+# inputs: see order 765-mza8.
+inputs:
+  - images/default/**
+  - scripts/test-opencode-render-probe.sh
 
 preconditions:
   - workspace contains images/default/lib-common.sh

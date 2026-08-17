@@ -1,0 +1,122 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written in `set-field` shape: worktree isolation refuses the compound
+# invocation the CLI needs, and this worktree has no built binary.
+status:
+  - packet_id: persistent-nix-store-for-worker-toolboxes
+    field: status
+    value: completed
+    ts: "2026-08-17T08:57:13Z"
+    host: linux_mutable
+
+events:
+  - packet_id: persistent-nix-store-for-worker-toolboxes
+    event:
+      type: completed
+      ts: "2026-08-17T08:57:13Z"
+      agent_id: fork-795h8er-20260817T0857Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs. THE PACKET'S PREMISE IS HALF FALSIFIED and
+        the real defect is its inverse. Premise said the chroot store starts EMPTY per
+        worktree so every fork pays a cold dependency build. MEASURED on macuahuitl at
+        c121bd435 — CHROOT_STORE was already anchored in $HOME, not in the worktree, so it
+        was ALREADY shared by every worktree and already survived toolbox recreation, and it
+        already held 5.8 GiB over 4,478 paths including rust toolchains, the vendored cargo
+        set and realized tillandsias outputs. Persistence was never missing. What was missing
+        was ROOTING and RECLAMATION, and the two together were a live data-loss hazard.
+        DEFECT 1 — the entire 5.8 GiB was GARBAGE by nix's reckoning. All four GC roots were
+        `auto` indirect roots pointing into fork worktree agent-a883eab132890c733, which had
+        already been deleted (verified absent). Meanwhile methodology build_cache_hygiene and
+        skills/meta-orchestration both PRESCRIBE a bare `nix store gc` on the daily lane, so
+        the documented maintenance step would have deleted the whole cache it was meant to
+        prune, with no symptom except builds quietly getting slow again. DEFECT 2 — growth is
+        driven by LOCK churn, not source churn. The deps closure moves whenever Cargo.lock or
+        flake.lock moves (three times in the two days prior, git-confirmed) and each move
+        orphans the previous multi-GiB closure forever. At measurement time FIVE stale deps
+        closures were resident and ZERO current ones. DELIVERED — scripts/nix-toolbox.sh
+        gains store-path / store-status [--deps] / pin / gc, on the policy PIN WHAT IS
+        CURRENT, COLLECT THE REST, ONLY ABOVE A CEILING. `pin` roots the four crane deps
+        closures at <store>/nix/var/nix/gcroots/tillandsias/, INSIDE the store and never in a
+        worktree, which is exactly what defect 1 was; roots must target the LOGICAL
+        /nix/store path (the 790-mbk9 --out-link trap generalizes — a root on the physical
+        path is not recognized, verified by probe). Only deps closures are pinned, never
+        top-level outputs, which move every commit and would accumulate one dead closure per
+        commit. `gc` pins BEFORE collecting and carries a safety interlock — when flake
+        evaluation cannot say what is current it refuses with
+        blocked:nix-store-gc:unresolved-deps rc=1 rather than collecting, because with
+        nothing resolvable nothing gets pinned and every path looks like garbage. Ceiling 20
+        GiB (TILLANDSIAS_NIX_STORE_CEILING_GIB), sized against the sibling 40 GiB target/
+        trigger; under it `gc` is a no-op reporting under-ceiling. `ensure` is byte-identical
+        and its anchored grammar untouched — cold/warm moved to `store-status --deps` because
+        deciding it honestly costs a flake evaluation and `ensure` must stay cheap.
+  - packet_id: persistent-nix-store-for-worker-toolboxes
+    event:
+      type: note
+      ts: "2026-08-17T08:57:13Z"
+      agent_id: fork-795h8er-20260817T0857Z
+      host: linux_mutable
+      summary: >
+        EVIDENCE, exit criterion by exit criterion. REUSE ACROSS CHECKOUTS (criterion 1),
+        the 765-8hc3 evidence shape — worktree A agent-a269fc831b0fa9178 at c121bd435,
+        deps_drv 44ajqra4ng6asvfw2g2jlwxjrkygn6p2, deps_out 3psp2z059i88rm7mmi77yv667slz3wif,
+        present_before=no, build_rc=0, wall_seconds=31, present_after=yes; a SECOND independent
+        checkout of the same commit in a different directory resolved the IDENTICAL deps_drv
+        and deps_out, present_before=yes, build_rc=0, wall_seconds=0. 31s to 0s, same store,
+        same hashes. Worktree A was dirty with this packet's own edits while checkout B was
+        clean at HEAD and the deps hash still matched, which independently re-confirms the
+        765-8hc3 content-stability property. HONEST CAVEAT on the 31s — it is the INCREMENTAL
+        cold cost of the deps derivation against an already-warm toolchain and vendor store
+        (the build log shows only 3 derivations built), NOT a from-scratch figure. A true
+        from-scratch measurement would mean deleting the shared 5.8 GiB store on a host
+        running concurrent agents, which was refused as destructive. 20 cores, 214 MiB of
+        artifacts. DELETION SAFETY (criterion 2) — pinned by fixture scenario 7, delete the
+        store then `store-status` reports skip:nix-store:no-store and the next `ensure`
+        recreates it and reports the same rung. CONCURRENCY (criterion 3) — eight concurrent
+        builders of one derivation all exited 0 producing one output path; eight concurrent
+        writers racing a simultaneous `nix store gc` gave zero failures and
+        `nix store verify --all` exited 0 (re-measured unmasked after a `| tail` first hid
+        the real exit code). The residual hazard is recorded rather than hidden — a collection
+        concurrent with a build CAN evict a freshly written path nothing has rooted yet, which
+        is a second reason `gc` pins first. GC POLICY (criterion 4) — methodology
+        build_cache_hygiene.nix_store_policy, with the bare-`nix store gc` prohibition and its
+        measured justification; the three sites that prescribed the dangerous command
+        (methodology rule, start_of_day_maintenance, meta-orchestration SKILL.md) now route to
+        `scripts/nix-toolbox.sh gc`. VERDICT CONTRACT (criterion 5) — extended, not replaced.
+        GATES — scripts/test-nix-toolbox.sh 5/5 to 9/9 rc=0, `./build.sh --check` rc=0 in 91s
+        captured unmasked, `scripts/check-nix-deps-stability.sh` ok:nix-deps-stable:1 checked
+        rc=0 (the directed sanity check on the load-bearing content-stability fact — it HOLDS,
+        so no stop-and-report was triggered).
+  - packet_id: persistent-nix-store-for-worker-toolboxes
+    event:
+      type: note
+      ts: "2026-08-17T08:57:13Z"
+      agent_id: fork-795h8er-20260817T0857Z
+      host: linux_mutable
+      summary: >
+        NEGATIVE CONTROLS, because an unexercised guard is not a guard and this codebase has
+        been burned by vacuous probes (765-8hc3 probe-vacuous, 741-2izr). Fixture scenario 8
+        (a pinned path survives gc, an unrooted one does not) — with the `ln -sfn` that
+        creates the root removed, the fixture FAILS with 'gc deleted a PINNED path', so the
+        assertion is live rather than passing for free. Fixture scenario 9 (the interlock) —
+        run against a copy of the script with no flake.nix beside it and the ceiling FORCED to
+        0 so the interlock is the only thing that can stop a collection, `gc` returned
+        blocked:nix-store-gc:unresolved-deps rc=1 and a seeded unrooted path SURVIVED, proving
+        the refusal actually gates the collection rather than merely printing a verdict after
+        the fact. Both controls are encoded in the fixture, not just run once by hand.
+  - packet_id: crane-deps-stability-and-binary-cache
+    event:
+      type: note
+      ts: "2026-08-17T08:57:13Z"
+      agent_id: fork-795h8er-20260817T0857Z
+      host: linux_mutable
+      summary: >
+        Two open unknowns this packet's closure notes left behind are now answered. (1) 'the
+        chroot store starts empty' — no longer true and structurally never was per-worktree;
+        the store is $HOME-anchored and was holding 5.8 GiB when 795-h8er measured it, so the
+        premise under which criteria 4 and 5 were split out has moved. (2) 'a full nix build
+        realization through the toolbox rung, the cold ~1,000-crate compile, is the remaining
+        unknown' — realized through the chroot rung with no daemon and no privileges, build_rc
+        0, 214 MiB of artifacts, 31s incremental against a warm toolchain and vendor store.
+        This does NOT settle 790-6n2k, which is about sharing between HOSTS and still needs the
+        operator decision; it does mean that question can now be posed with local hit-rate data
+        rather than in the abstract.

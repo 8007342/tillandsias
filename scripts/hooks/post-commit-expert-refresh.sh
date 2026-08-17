@@ -47,12 +47,43 @@ HOOK_LOG="${TILLANDSIAS_HOOK_LOG:-/tmp/tillandsias-hooks.log}"
 # The engine reads these files fresh at query time (tillandsias-plan
 # reads plan/index.yaml + methodology/**/*.yaml on every invocation).
 # No index to refresh — answers reflect the working tree instantly.
-# When L1 prose indexes are added, re-index changed corpora here:
+
+# ── L1 prose index: the spec RAG corpus (orders 552, 760-hzi4) ──────
+# This is the slot the comment above reserved for "re-index changed corpora".
 #
-#   l1_files=$(echo "$CHANGED" | grep -E '^plan/|^methodology/' || true)
-#   if [ -n "$l1_files" ]; then
-#       (re-index-corpora "$l1_files") &
-#   fi
+# NOTE WHAT IS *NOT* HERE: a list of corpus paths to match against $CHANGED.
+# The corpus roots are data in ONE place (crates/tillandsias-plan/src/spec.rs
+# CORPUS_ROOTS: openspec/specs, cheatsheets, docs/cheatsheets, methodology), and
+# a second copy in this hook would be a copy that drifts — a root added there
+# would silently stop refreshing here, and the index would go quietly stale
+# rather than loudly absent. Instead the ensure script re-chunks (25ms) and
+# compares a fingerprint of the chunk corpus + embedding model, so it decides
+# for itself whether anything changed. Measured on yoga: 0.05s when the corpus
+# is unchanged, ~12min for a cold 9909-chunk rebuild.
+#
+# That cost is exactly why this is forked and never awaited: a commit must not
+# wait twelve minutes for an embedding pass. The script takes its own lock, so
+# a burst of commits during a spec change starts one builder, not six.
+if [ -x "$REPO_ROOT/scripts/spec-index-ensure.sh" ]; then
+    (
+        # The VERDICT is stdout; the explanation is stderr. Folding them with
+        # 2>&1 and taking the last line logs the tail of the prose instead of
+        # the verdict — this hook's first run recorded the literal line
+        # "directory on THIS host, and re-run." as its status. Keep them apart:
+        # verdict for the machine, explanation appended for the human.
+        _si_err="$(mktemp "${TMPDIR:-/tmp}/spec-index-hook.XXXXXX")"
+        _si_out="$(bash "$REPO_ROOT/scripts/spec-index-ensure.sh" 2>"$_si_err" | tail -1)"
+        case "$_si_out" in
+            ok:spec-index:fresh:*) : ;;  # the common path; silence is correct
+            *)
+                echo "[$HOOK_NAME] $(date -u +%Y-%m-%dT%H:%M:%SZ) spec-index: ${_si_out:-no-verdict}" >> "$HOOK_LOG"
+                [ -s "$_si_err" ] && sed 's/^/    /' "$_si_err" >> "$HOOK_LOG"
+                ;;
+        esac
+        rm -f "$_si_err"
+    ) &
+    disown -a 2>/dev/null || true
+fi
 
 # ── Crate changes → async binary rebuild ────────────────────────────
 # The tillandsias-plan binary changes when its crate sources change.

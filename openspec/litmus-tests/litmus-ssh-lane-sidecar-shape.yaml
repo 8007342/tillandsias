@@ -3,6 +3,16 @@ name: litmus:ssh-lane-sidecar-shape
 spec: git-mirror-service
 phase: pre-build
 size: quick
+# inputs: see order 765-mza8. Greps headless sources AND rebuilds the git image.
+inputs:
+  - crates/**
+  - Cargo.toml
+  - Cargo.lock
+  - images/git/**
+  - images/default/lib-common.sh
+  - scripts/build-image.sh
+  - scripts/common.sh
+  - scripts/test-ssh-lane-sidecar.sh
 severity: critical
 description: >
   Order 749-6uby (design T8+T10 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md):

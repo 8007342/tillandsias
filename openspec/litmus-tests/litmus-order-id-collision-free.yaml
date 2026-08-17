@@ -27,6 +27,16 @@ description: >
   sentinel stays exempt, and that existing integer orders keep resolving.
 severity: high
 size: quick
+# inputs: see order 765-mza8. The ledger is a real input: the legacy-order step
+# resolves `status 322` against it, so a plan-only edit CAN change this verdict.
+inputs:
+  - crates/**
+  - Cargo.toml
+  - Cargo.lock
+  - methodology/distributed-work.yaml
+  - skills/**
+  - plan/index.yaml
+  - plan/index.d/**
 
 preconditions:
   - cargo toolchain available (the steps run the plan CLI)

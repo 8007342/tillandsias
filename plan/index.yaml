@@ -52947,6 +52947,12 @@ plan_index:
 
       events:
         - type: progress
+          ts: "2026-08-17T09:05:53Z"
+          agent_id: "linux-yoga-claude-20260817t090553z"
+          host: linux-immutable
+          summary: |
+            BOTH EXIT CRITERIA MET on this host; the missing piece was the EMBEDDING STEP, which existed on no host in any language -- only as English prose inside forge-plan.sh's refusal string. tillandsias-plan spec-index (the chunker, order 547) already worked: 9909 chunks in 25ms. spec-retrieve already read chunks+vectors. Nothing in between wrote vectors.jsonl. scripts/spec-index-ensure.sh is that producer. CRITERION 1: spec_answer now returns confidence=retrieved with 6 citations instead of the index-not-built refusal, verified end to end over real MCP JSON-RPC (initialize + tools/call) against images/default/config-overlay/mcp/forge-plan.sh, question 'how does the forge stay isolated from the host and control outbound network access?' citing openspec/specs/forge-offline:45-49, enclave-network:43-47, security-privacy-isolation:66-70 and three cheatsheets -- semantically right. CRITERION 2: refresh on commit, wired into scripts/hooks/post-commit-expert-refresh.sh in the exact slot its header reserved for 'L1 prose indexes (future): re-indexes changed corpora here'. Deliberately NO corpus path list in the hook: CORPUS_ROOTS is data in one place (crates/tillandsias-plan/src/spec.rs) and a second copy would drift silently, so the ensure re-chunks and compares a fingerprint of corpus+model instead and decides for itself. MEASURED: 0.05s warm (fingerprint hit), 12m19s cold for 9909 chunks -- which is why the hook forks and never awaits, and why the script takes a mkdir lock so a burst of commits starts one builder not six (verified against a LIVE holder: skip:spec-index:already-building; and a dead holder is reclaimed). The estimate of 3h was written believing the index existed; the earlier note's 'order of magnitude' correction was right about size and wrong about speed -- I measured 10 short strings at 1s and extrapolated, but real spec chunks are far longer. TWO DEFECTS FOUND BY BUILDING IT: (1) the script first embedded all 9909 chunks and THEN failed to create the index dir; it now proves the destination is writable first, which cost 12 minutes to learn. (2) The reason it could not write: FORGE_SPEC_INDEX_DIR was still exported into this session as a /mnt/c path even though 2b1f8d188 removed it from the tracked config -- recorded on 789-nc2s; a fix in a file does not reach a process that already read it. HONEST LIMIT: the synthesis step falls back to the documented cited-digest floor (retrieval_only) with qwen2.5:0.5b, both with and without TILLANDSIAS_SPEC_EXPERT_MODEL set. That is by design in forge-plan.sh (zero model tokens, always verifies) and the answer stays cited and verifiable; prose synthesis quality is a model-capability question, not a defect, and is NOT claimed as delivered here.
+        - type: progress
           ts: "2026-08-17T03:30:38Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
           host: linux-immutable
@@ -53016,6 +53022,13 @@ plan_index:
         - 'The post-VERSION-bump sidecar rebuild appears as a named slowest-step candidate in the timing: rolling line'
         - No gate exit code changes under fault injection (timing sink unwritable)
 
+      events:
+        - type: note
+          ts: "2026-08-17T08:32:33Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T083232Z"
+          host: linux_mutable
+          summary: |
+            Measurement-discipline lesson from the 765-mza8 fork, recorded against the telemetry packet because it is about how to READ these records. That fork ranked annotation targets by MAX duration across telemetry history and was misled: mirror-sshd-posture-shape ranked second at 79.7s, but that sample was a cold run rebuilding the git image and its steady-state cost is 1.9s, so annotating it bought almost nothing. Rank by a percentile, not a maximum — a max is a measurement of the worst environment the test ever met, not of the test. Related and already recorded on 785-ibu9: the same trap in the other direction, where a step record spanned banner-to-banner and looked like one step-s cost.
     - packet_id: gate-stamp-scope-awareness
       order: 765-dt8h
       status: ready
@@ -53064,6 +53077,13 @@ plan_index:
         - 'Measured: in-loop --ci-full pre-build litmus drops from ~254s to a diff-proportional cost on a plan-only tree, with the skip ledger naming every scoped-out test'
         - e2e/runtime tests remain unannotated (their input is the built product)
 
+      events:
+        - type: note
+          ts: "2026-08-17T08:32:32Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T083232Z"
+          host: linux_mutable
+          summary: |
+            Integrated on linux-next 2026-08-17, with the two tests scoping HID re-checked: cycle-batch-triage-shape and guest-container-metrics-wire-shape both pass 100% now, so they were transient (the plus-or-minus-3 FAIL variance this fork itself flagged), not standing trunk reds. That does not soften the finding — scoping hid genuinely-red tests on its first measured use, which is exactly the cost this mechanism trades for speed, and it is why the gate-stamp veto and the 24h full-run ratchet are load-bearing rather than belt-and-braces. Verified here: diff-scope fixtures green, dead-inputs guard ok at 51 globs across 11 annotated tests, and the veto lives at build.sh:973 as the FIRST statement of the stamp function (the fork caught its own ordering bug there — placed after the ghost-trace ratchet, an early return would have stranded the one-shot sentinel and wedged the gate for every later full run). Also wired check-tray-string-corpus-drift.sh, which arrived orphaned via the same merge (792-77bt, windows-owned): it is a REPORT that exits 0 whatever the ratio, so it is wired to surface the number rather than fail on it; activation audit back to 47/47, orphan 0.
     - packet_id: build-check-stamp-memoization
       order: 765-tkq2
       status: ready

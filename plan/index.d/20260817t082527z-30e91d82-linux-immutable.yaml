@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: mcp-json-launcher-host-kind-compatibility
+    event:
+      type: verified-by
+      ts: "2026-08-17T08:25:27Z"
+      agent_id: linux-yoga-claude-20260817t082527z
+      host: linux-immutable
+      summary: >
+        host-kind linux-immutable (Fedora Silverblue 44, yoga) reports HK-RESOLVE, HK-EXPERTS, HK-OPTIONS. HK-RESOLVE: 'bash' resolves to /usr/bin/bash, GNU bash 5.3.9; 'type -a bash' finds exactly one; /bin/bash and /usr/bin/bash are the same 1551104-byte file via the usr-merge symlink. There is no second interpreter to lose the PATH race to -- the Git-Bash/WSL split that breaks ESMERALDINHA cannot exist on this host kind. HK-EXPERTS: healthy. check-mcp-expert-health.sh = ok:experts-healthy, and plan_answer 'what is the current Direction?' returns the operator's Direction text with confidence=retrieved, citing plan/loop_status.md:6731-6753, source_commit ce865d40f == git rev-parse HEAD, citation_root /var/home/tlatoani/claudia/tillandsias. CARGO_TARGET_DIR is unset here and target/release/tillandsias-plan is a native ELF, so the runtime that launches the server is the runtime that owns the binary. HK-OPTIONS: A compatible (no-op here; nothing to fix, but it leaves the fleet inconsistency undeclared and the next new host rediscovers it). B compatible ONLY if 'name the interpreter' means a per-platform resolver and NOT a hardcoded absolute path -- /usr/bin/bash is right here and wrong on macOS, where /bin/bash is 3.2 and this project's scripts assume bash 4+/5 (scripts/check-bash-dialect.sh). C compatible and specifically a NO-OP on this host kind: the binary is already executable in the launching runtime, so no re-exec branch is ever taken and the JSON-RPC stdio risk cannot manifest here; that makes C the cheapest option to accept from this host's side. D not-applicable: one runtime, one artifact, nothing to build twice -- neither helps nor harms here. CONSTRAINT FOUND, relevant to any option that drops the 'bash' wrapper and relies on the shebang instead: images/default/config-overlay/mcp/forge-plan.sh is mode 0644 (NOT executable) while project-info.sh beside it is 0755. Today that is harmless because .mcp.json invokes them as arguments to bash, but it silently rules out the shebang route for one of the two servers, and it is an asymmetry nobody declared.

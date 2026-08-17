@@ -235,9 +235,15 @@ is from today. On a durable bare-metal DEVELOPMENT host (not an ephemeral forge)
    reinstall per-checkout git hooks; ensure the router sidecar is staged as a
    build artifact (710-w9kc).
 2. **Daily maintenance** (methodology `development_environment_lifecycle.start_of_day_maintenance`):
-   build-cache GC per `build_cache_hygiene` (cargo clean + nix gc when bloated/
-   stale), `nix store gc`/`podman image prune` of superseded versioned images,
-   reap defunct delegate handles (`delegate-outcome.sh sweep`), and verify the
+   build-cache GC per `build_cache_hygiene` (cargo clean when bloated/stale),
+   `scripts/nix-toolbox.sh gc` — never a bare `nix store gc`, which would
+   delete the whole persistent cache rather than prune it
+   (`build_cache_hygiene.nix_store_policy`) — `podman image prune` of
+   superseded versioned images,
+   the nix-lane guards on hosts with nix (`scripts/test-nix-toolbox.sh`,
+   `scripts/check-nix-deps-stability.sh` — daily, not per-commit: each is a
+   flake evaluation), reap defunct delegate handles (`delegate-outcome.sh
+   sweep`), and verify the
    dev-environment expert containers are up + fresh (`dev_environment_experts` —
    the same ephemeral RAG experts + commit-hook RAG retraining the forge runs).
 3. Stamp the `.last-daily-maintenance` marker. Ephemeral forges skip this whole

@@ -23,6 +23,11 @@ description: >
        behaviourally (conversion + live duplex round trip), not by grep.
 severity: high
 size: instant
+# inputs: see order 765-mza8. Pure Rust-source wire-shape assertions.
+inputs:
+  - crates/**
+  - Cargo.toml
+  - Cargo.lock
 phase: pre-build
 
 preconditions:

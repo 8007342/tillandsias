@@ -23,6 +23,16 @@
 #   ./scripts/run-litmus-test.sh --list              # List all test suites
 #   ./scripts/run-litmus-test.sh --timeout 60        # Custom timeout in seconds
 #   ./scripts/run-litmus-test.sh --ignore SPEC1,SPEC2 # Skip in-progress specs
+#   ./scripts/run-litmus-test.sh --diff-scope origin/linux-next
+#                                                    # Skip tests whose declared
+#                                                    # `inputs:` globs are untouched
+#                                                    # since that ref (order 765-mza8)
+#
+# --diff-scope is advisory and fails CLOSED: an unannotated test, an
+# unresolvable base, a clean tree, or a full-run anchor older than 24h all
+# disable scoping and run EVERYTHING, loudly. A run that actually skipped
+# something also blocks build.sh from writing a gate stamp, because a scoped
+# run cannot vouch for the whole tree.
 #
 # Exit Codes:
 #   0 = all tests pass
@@ -164,6 +174,14 @@ FILTER_SPEC=""
 FILTER_TEST_NAME=""
 FILTER_PHASE="all"
 SIZE_FILTER="all"
+# Order 765-mza8 diff-scoped selection. Inert unless --diff-scope is passed AND
+# litmus_resolve_diff_scope accepts the base; every refusal path leaves
+# DIFF_SCOPE_ACTIVE=0, which means "run everything".
+DIFF_SCOPE_BASE=""
+DIFF_SCOPE_ACTIVE=0
+DIFF_SCOPE_BASE_SHA=""
+DIFF_SCOPE_CHANGED=""
+DIFF_SCOPE_SKIPS=0
 COMPACT=0
 STRICT_MODE=0
 STRICT_SPEC_LIST=""
@@ -438,6 +456,152 @@ get_test_size() {
             }
         ' "$file"
     fi
+}
+
+# Order 765-mza8. OPTIONAL `inputs:` — the repo paths whose content can change
+# this test's verdict, as a YAML list of globs. ABSENT means "unknown inputs",
+# which must read as "any change could matter", so an unannotated test always
+# runs. That default is the whole safety story: annotation can only ever REMOVE
+# a test from a scoped run, so a missing or wrong annotation costs time, never
+# coverage.
+#
+# Emits one glob per line; empty output means unannotated.
+get_test_inputs() {
+    local file="$1"
+
+    if command -v yq &>/dev/null; then
+        yq eval '.inputs[]? // ""' "$file" 2>/dev/null | grep -v '^$' || true
+    else
+        awk '
+            /^inputs:[[:space:]]*$/ { collecting=1; next }
+            collecting && /^[[:space:]]*-[[:space:]]+/ {
+                line = $0
+                sub(/^[[:space:]]*-[[:space:]]+/, "", line)
+                gsub(/^["'"'"']|["'"'"']$/, "", line)
+                print line
+                next
+            }
+            collecting && /^[^[:space:]]/ { collecting=0 }
+        ' "$file"
+    fi
+}
+
+# Does any changed path match any of this test's declared globs?
+#
+# Pattern matching is bash `[[ == ]]`, NOT pathname expansion, so `*` DOES
+# cross `/`: `crates/*` means "anything under crates/", which is the reading an
+# annotator intends. Stated here because the opposite assumption would silently
+# narrow a glob and skip a test that should have run.
+litmus_inputs_intersect_diff() {
+    local globs="$1" changed="$2"
+    local g p
+    while IFS= read -r g; do
+        [[ -n "$g" ]] || continue
+        while IFS= read -r p; do
+            [[ -n "$p" ]] || continue
+            # shellcheck disable=SC2053
+            if [[ "$p" == $g ]]; then
+                return 0
+            fi
+        done <<<"$changed"
+    done <<<"$globs"
+    return 1
+}
+
+# Order 765-mza8: resolve --diff-scope into an ACTIVE scope or a loud refusal.
+#
+# POLARITY, and it is the opposite of 634-39ik's: that guard only ADDS
+# enforcement, so it may fail open on a missing base ref. This selector REMOVES
+# coverage, so every uncertainty must fail CLOSED — i.e. disable scoping and run
+# the full suite, loudly. The refusals below are therefore not error handling;
+# they are the feature working.
+#
+# Sets DIFF_SCOPE_ACTIVE=1 + DIFF_SCOPE_BASE_SHA + DIFF_SCOPE_CHANGED on success.
+litmus_resolve_diff_scope() {
+    local base="$1"
+    DIFF_SCOPE_ACTIVE=0
+    DIFF_SCOPE_BASE_SHA=""
+    DIFF_SCOPE_CHANGED=""
+
+    if ! git -C "$PROJECT_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+        log_warn "diff-scope DISABLED (running FULL): not a git repository"
+        return 0
+    fi
+
+    local sha
+    if ! sha="$(git -C "$PROJECT_ROOT" rev-parse --verify --quiet "${base}^{commit}" 2>/dev/null)" \
+        || [[ -z "$sha" ]]; then
+        log_warn "diff-scope DISABLED (running FULL): base ref '${base}' does not resolve"
+        return 0
+    fi
+
+    # Tracked changes BASE..worktree (not ..HEAD — uncommitted edits must count,
+    # or a scoped run would skip the very test covering what you just typed),
+    # plus untracked files, which are changes the diff cannot see at all.
+    local tracked untracked
+    if ! tracked="$(git -C "$PROJECT_ROOT" diff --name-only "$sha" -- 2>/dev/null)"; then
+        log_warn "diff-scope DISABLED (running FULL): diff against ${sha} is unparseable"
+        return 0
+    fi
+    untracked="$(git -C "$PROJECT_ROOT" ls-files --others --exclude-standard 2>/dev/null || true)"
+
+    local changed
+    changed="$(printf '%s\n%s\n' "$tracked" "$untracked" | grep -v '^$' | sort -u || true)"
+    if [[ -z "$changed" ]]; then
+        # Nothing changed at all. Scoping would skip EVERY annotated test, which
+        # is defensible but indistinguishable from a broken diff — and the
+        # packet forbids a vacuous green. Run full; it is the honest answer to
+        # "verify this tree" when nothing is known to have moved.
+        log_warn "diff-scope DISABLED (running FULL): no changes against ${sha:0:12}"
+        return 0
+    fi
+
+    # 24h full-run ratchet. Skipping forever on a long-lived branch means the
+    # unannotated-but-affected test never runs again; a periodic full anchor
+    # bounds how stale scoped confidence can get.
+    local anchor_file anchor_age now
+    anchor_file="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-litmus-full-anchor"
+    now="$(date -u +%s 2>/dev/null || echo 0)"
+    if [[ -f "$anchor_file" ]]; then
+        anchor_age="$(cat "$anchor_file" 2>/dev/null || echo 0)"
+        case "$anchor_age" in ''|*[!0-9]*) anchor_age=0 ;; esac
+        if [[ "$now" -gt 0 && $((now - anchor_age)) -ge 86400 ]]; then
+            log_warn "diff-scope DISABLED (running FULL): last full quick-tier run is older than 24h (ratchet)"
+            return 0
+        fi
+    else
+        log_warn "diff-scope DISABLED (running FULL): no full-run anchor recorded yet (ratchet)"
+        return 0
+    fi
+
+    DIFF_SCOPE_ACTIVE=1
+    DIFF_SCOPE_BASE_SHA="$sha"
+    DIFF_SCOPE_CHANGED="$changed"
+    local n
+    # wc, not `grep -c .`: grep PRINTS 0 and EXITS 1 on no-match, so the usual
+    # `|| echo 0` fallback would concatenate into "0\n0".
+    n="$(printf '%s\n' "$changed" | wc -l | tr -d ' ')"
+    log_info "diff-scope ACTIVE against ${sha:0:12} (${n} changed path(s)); unannotated tests still run"
+    return 0
+}
+
+# Record that a FULL quick-tier run completed, feeding the 24h ratchet above.
+litmus_record_full_anchor() {
+    local dir
+    dir="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+    date -u +%s > "$dir/tillandsias-litmus-full-anchor" 2>/dev/null || true
+}
+
+# A scoped run must never be mistaken for a full one by whatever writes the
+# gate stamp. build.sh hardcodes `--scope full`, so without this breadcrumb a
+# scoped lane inside --ci-full would stamp the tree as fully validated — the
+# exact silent-green pivot audit F5 names. The sentinel is consumed and cleared
+# by _write_gate_stamp.
+litmus_mark_scoped_run() {
+    local dir
+    dir="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null)" || return 0
+    printf 'diff-scope base=%s skips=%s\n' "$DIFF_SCOPE_BASE_SHA" "$1" \
+        > "$dir/tillandsias-litmus-diff-scoped" 2>/dev/null || true
 }
 
 size_matches_filter() {
@@ -1094,6 +1258,30 @@ run_tests_for_spec() {
             continue
         fi
 
+        # Order 765-mza8: diff-scoped skip, LAST of the four selection gates so
+        # a scoped-out test is never confused with a phase/host/size miss.
+        #
+        # Three independent conditions must ALL hold to skip, and each one is a
+        # fail-closed door: scoping resolved, the test declares its inputs, none
+        # of those inputs intersect the diff — and the test's OWN file is
+        # unchanged, because editing a test is the one edit that must always
+        # re-run it (its verdict lives in that file, not only in its inputs).
+        if [[ "$DIFF_SCOPE_ACTIVE" -eq 1 ]]; then
+            local test_inputs test_file_rel
+            test_inputs="$(get_test_inputs "$test_file")"
+            test_file_rel="${test_file#"$PROJECT_ROOT"/}"
+            if [[ -n "$test_inputs" ]] \
+                && ! printf '%s\n' "$DIFF_SCOPE_CHANGED" | grep -qxF "$test_file_rel" \
+                && ! litmus_inputs_intersect_diff "$test_inputs" "$DIFF_SCOPE_CHANGED"; then
+                log_test_result "$spec_id" "$test_name" "SKIP" \
+                    "Diff-scoped: declared inputs untouched since ${DIFF_SCOPE_BASE_SHA:0:12}"
+                DIFF_SCOPE_SKIPS=$((DIFF_SCOPE_SKIPS+1))
+                spec_skipped=1
+                test_count=$((test_count+1))
+                continue
+            fi
+        fi
+
         # Execute test and capture result
         # Always show which test is executing to prevent user-perceived hangs
         # @trace spec:spec-traceability
@@ -1173,6 +1361,20 @@ print_summary() {
     coverage_text="[$spec_count/$total_specs specs]"
     printf '%bCoverage%b: %d%% %s\n' "${BOLD}" "${NC}" "$covered_specs" "$coverage_text" >&2
     printf '%bPass Rate%b: %d%% (%d/%d executed)\n' "${BOLD}" "${NC}" "$coverage_ratio" "$TESTS_PASSED" "$total_executed" >&2
+
+    # Order 765-mza8: the skip ledger. A scoped run states its cost in coverage
+    # on EVERY run, including when it skipped nothing, because "silent
+    # truncation reads as covered everything" (audit F12) and the reader cannot
+    # tell a scoped green from a full green without being told.
+    if [[ -n "$DIFF_SCOPE_BASE" ]]; then
+        if [[ "$DIFF_SCOPE_ACTIVE" -eq 1 ]]; then
+            printf '%bDiff-scope%b: %d diff-scoped skips against base %s\n' \
+                "${BOLD}" "${NC}" "$DIFF_SCOPE_SKIPS" "${DIFF_SCOPE_BASE_SHA:0:12}" >&2
+        else
+            printf '%bDiff-scope%b: REFUSED — ran FULL (see the reason above)\n' \
+                "${BOLD}" "${NC}" >&2
+        fi
+    fi
     echo "" >&2
 
     # 765-dfry: per-test durations — ONE batch emission for the whole suite,
@@ -1346,6 +1548,25 @@ parse_args() {
                     shift 2
                 fi
                 ;;
+            --diff-scope|--diff-scope=*)
+                if [[ "$1" == *=* ]]; then
+                    DIFF_SCOPE_BASE="${1#*=}"
+                    shift
+                elif [[ $# -ge 2 && "${2}" != -* ]]; then
+                    DIFF_SCOPE_BASE="$2"
+                    shift 2
+                else
+                    # No value, or the next token is another flag. Do NOT
+                    # `shift 2` past the end: under `set -e` that aborts the
+                    # run outright. Refuse the scope and keep going full — the
+                    # selector's whole polarity is that confusion runs MORE,
+                    # never less. Swallowing `--compact` as a base ref would
+                    # also drop that flag silently.
+                    log_warn "--diff-scope needs a base ref (e.g. --diff-scope origin/linux-next); running FULL"
+                    DIFF_SCOPE_BASE=""
+                    shift
+                fi
+                ;;
             --json)
                 # JSON output (handled at end)
                 shift
@@ -1435,6 +1656,19 @@ main() {
     log_info "Size filter: ${SIZE_FILTER}  (use --size instant|quick|long|e2e|all for more)"
     [[ "$COMPACT" == "1" ]] && log_info "Output mode: compact"
     [[ "$STRICT_MODE" == "1" ]] && log_info "Strict mode: enabled"
+    # Order 765-mza8. Clear any sentinel from a PREVIOUS run first: it must
+    # describe this run or nothing. A stale one would make an honest full gate
+    # refuse to stamp, which fails closed (safe) but would be a mystery to the
+    # operator — and mysteries are how guards get switched off.
+    local _dsdir
+    _dsdir="$(git -C "$PROJECT_ROOT" rev-parse --absolute-git-dir 2>/dev/null || true)"
+    [[ -n "$_dsdir" ]] && rm -f "$_dsdir/tillandsias-litmus-diff-scoped" 2>/dev/null
+    # Resolved BEFORE any test runs so the banner states the selection regime
+    # up front — a reader must never have to infer from the skip lines whether
+    # this run was scoped.
+    if [[ -n "$DIFF_SCOPE_BASE" ]]; then
+        litmus_resolve_diff_scope "$DIFF_SCOPE_BASE"
+    fi
     echo "" >&2
 
 
@@ -1487,6 +1721,20 @@ main() {
             exit "$status"
         fi
     done <<<"$specs_to_test"
+
+    # Order 765-mza8 bookkeeping, in this order deliberately.
+    #
+    # A run that actually scoped drops a sentinel so whatever writes the gate
+    # stamp cannot claim `scope full` for a tree whose tests did not all run
+    # (audit F5). A run that did NOT scope — including every refusal path — is
+    # a full quick-tier run and refreshes the 24h ratchet anchor. The two are
+    # mutually exclusive by construction: only a full run may extend the window
+    # that permits scoping.
+    if [[ "$DIFF_SCOPE_ACTIVE" -eq 1 && "$DIFF_SCOPE_SKIPS" -gt 0 ]]; then
+        litmus_mark_scoped_run "$DIFF_SCOPE_SKIPS"
+    elif [[ "$DIFF_SCOPE_ACTIVE" -eq 0 && "$SIZE_FILTER" == "quick" && "$FILTER_PHASE" == "pre-build" && -z "$FILTER_SPEC" ]]; then
+        litmus_record_full_anchor
+    fi
 
     # @trace spec:spec-traceability
     # An explicit filter is a requested verification boundary. Treating a

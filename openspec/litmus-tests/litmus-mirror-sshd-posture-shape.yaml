@@ -3,6 +3,15 @@ name: litmus:mirror-sshd-posture-shape
 spec: git-mirror-service
 phase: pre-build
 size: quick
+# inputs: paths whose change can change this verdict (order 765-mza8).
+# Consumed only by `run-litmus-test.sh --diff-scope`. Over-declare: a path
+# missing here is a test that silently does not run. Includes build-image.sh
+# and common.sh because the posture fixture rebuilds the git image.
+inputs:
+  - images/git/**
+  - scripts/build-image.sh
+  - scripts/common.sh
+  - scripts/test-mirror-sshd-posture.sh
 severity: critical
 description: >
   Order 749-wv4d (design T3 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md,
