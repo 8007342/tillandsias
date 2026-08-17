@@ -136,12 +136,25 @@ What survives, restated precisely:
 - **The iGPU wins compute-bound prefill and loses bandwidth-bound generation**,
   and that pattern holds at 0.5B, 1.1B and 3.8B alike — it is not size-gated in
   the range measured.
-- **The embedding loss is real and stands**: `nomic-embed-text` (137M) was 58%
-  slower on Vulkan (4287 ms/chunk vs 2714). But that is a different workload
-  shape — one forward pass, no generation phase — so it is evidence about
-  *embedding*, not about a parameter-count threshold. Whether a true crossover
-  exists between 137M and 500M is **unmeasured** and must not be asserted again
-  without measuring it.
+- ~~**The embedding loss is real and stands**: `nomic-embed-text` (137M) was 58%
+  slower on Vulkan (4287 ms/chunk vs 2714).~~
+  **WITHDRAWN 2026-08-17 (cycle 12).** That figure had two defects this loop
+  only learned about later: it was taken with **no warm-up**, before cycle 9
+  established that the first dispatch on a Vulkan/dzn path pays pipeline
+  compilation and reads at roughly CPU speed; and it used a **synthetic
+  ~2,000-char chunk against a real corpus p50 of 254 chars**, so it did not
+  measure the workload it was used to reason about. Re-measured on real chunks
+  with warm-up and interleaved repetitions: the iGPU is **~22% FASTER**
+  (460.3 vs 586.6 ms/chunk, offload verified 100% vs 0%).
+  This is the expected answer, not a surprise: an embedding is one forward pass
+  with **no decode phase**, i.e. prefill-shaped work — the shape the iGPU wins.
+  Note this section previously survived the cycle-5 correction *because* it was
+  called out as the exception that stands; preserving it preserved the
+  measurement error. See
+  `plan/issues/research/embeddings-are-prefill-shaped-igpu-wins-2026-08-17.md`.
+  The unified rule replacing both exceptions: **route by workload shape** —
+  prefill-shaped work (prompt processing, embeddings) to the iGPU,
+  decode-shaped work to the CPU on this class of part.
 - **Any tier policy that routes all models to one engine is still wrong here** —
   but the axis is *workload shape* (prefill-heavy vs generation-heavy vs
   embedding), not parameter count.

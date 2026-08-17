@@ -77,3 +77,60 @@ the step-8 output above.
   10s -> 90s (same 9.4s fixture), claim step 2 8s -> 60s. Expected windows
   steady state after this slice: 13 PASS / 2 FAIL (item-2 fixture
   portability + item-4 seam), both owned elsewhere.
+
+## Observation (cycle 10, 2026-08-17) — predicted steady state confirmed, plus ONE new red that DIRTIES THE CHECKOUT
+
+Measured at 5e1905781 (windows/Yolanda, same suite/phase/size). Result was
+**3 FAIL**, not the predicted 2. The two predicted reds reproduced exactly as
+owned elsewhere:
+
+- item 4 — `litmus:credential-channel-check-shape` STEP 8, `FAIL: rc=1
+  out=missing:no-credential-channel`. ROOT CAUSE NOW NAMED: the fixture pins
+  `env PATH=/usr/bin:/bin`, and on this host `git` is on neither
+  (`env PATH=/usr/bin:/bin bash -c 'command -v git'` → not found). The seam is
+  not "gh-less environment" sensitive — it simply has no `git` to run, so every
+  probe branch falls through to the missing verdict. Hand this one line to the
+  756-2jnj owner; it is a one-line fixture fix (add the host's git dir, or
+  resolve git before restricting PATH), not an engine gap.
+- item 2 — `litmus:meta-orchestration-dirty-tree-safety` STEP 5, now failing
+  with the LOGIC message `FAIL: forge hash depends on checkout location`
+  (no longer masked by the 10s timeout, as cycle 5 predicted). Stays with
+  `hash-image-sources-fixture-windows-portability-2026-08-16.md`.
+
+### NEW: `litmus:ledger-node-claim-shape` STEP 5 leaves `out.txt` in the repo root
+
+STEP 5 ("every verdict line is well-formed against the grammar") TIMEOUT at
+5s — the one step of that test cycle 5 did not resize (it resized STEP 2).
+Two facts make this worth more than another budget line:
+
+1. **The step's logic is correct.** Its own artifact, recovered from the
+   checkout after the timeout, contains exactly the 5 well-formed lines it
+   asserts: `claimed:a/b`, `in-flight:a/b`, `in-flight:a/b`, `released:a/b`,
+   `free:a/b` → `tot=5 good=5`, which is a PASS. Only the 5000ms budget
+   expired, mid-step, before the trailing `rm -f out.txt`.
+2. **It writes into the checkout, not a temp dir.** The command does
+   `... > out.txt 2>/dev/null` with the harness cwd at the repository root,
+   then `rm -f out.txt` at the end. So the cleanup is on the success path
+   only: any timeout or non-zero exit strands `out.txt` as an untracked file
+   in the working tree.
+
+That second half is a cross-host hazard, not a windows one. A stranded
+`out.txt` is exactly the "status-visible untracked file" the
+meta-orchestration startup boundary treats as sibling/operator work, so a
+litmus run before a cycle's `snapshot` can hand that cycle a dirty-start
+refusal, and a run after it can fail the Finalization `verify`. On linux the
+step finishes fast, self-cleans, and nobody ever sees it; the defect is
+latent everywhere and only *observable* where spawn cost is high. This cycle
+hit it: the file appeared at 01:43 local during the suite run and had to be
+removed by hand before the exit contract could be satisfied.
+
+Fix shape (smallest verifiable slice): redirect the artifact into a
+`mktemp -d` alongside the lease root the step already creates, so no path
+inside the checkout is ever written — then the budget resize is a separate,
+purely-cosmetic concern. A test that dirties the tree it is validating should
+fail its own review, so the constraint worth pinning is "no litmus step
+writes a relative path into the checkout", which is greppable.
+
+Filed as its own packet rather than appended to the resize slice, because the
+temp-dir fix is a correctness change with a different owner surface than the
+windows step budgets.
