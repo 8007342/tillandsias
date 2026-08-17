@@ -1,0 +1,102 @@
+# @trace spec:ci-release
+name: litmus:fold-incompleteness-typed-shape
+spec: ci-release
+phase: pre-build
+description: A fragment the fold cannot parse is a typed condition — named on stdout, verdict says incomplete not ok, refused only under --strict-fragments with its own exit code — while a clean corpus is byte-identical to before
+severity: high
+size: instant
+
+# Order 796-4ydb. The fold has always SKIPPED an unparseable fragment so one bad
+# file cannot make the whole plan unreadable. What it did not do was let anyone
+# act on the skip: the only signal was a stderr sentence beside exit 0, so
+# plan_answer, plan_next, the batch selector, burndown and every closure check
+# answered from a ledger they had been told was partial, at full confidence.
+#
+# THE SPLIT THIS PINS, and why it is not simply "make check exit non-zero" —
+# 699-dycj forbids that by name, because build.sh runs `check` on every host and
+# a fleet-wide refusal turns one host's typo into every other host's red build:
+#
+#   * ALWAYS: the file is named on stdout (`malformed: <path>`) and the verdict
+#     word changes from `ok:` to `incomplete:`. Exit stays 0.
+#   * ON REQUEST: `--strict-fragments` refuses, with exit 3 — distinct from
+#     exit 1's "ledger unsound", because "incomplete" and "wrong" are different
+#     findings and a caller that blurs them repairs the wrong thing.
+#   * ALWAYS: `answer`/`next` keep answering and carry `skipped_sources` in the
+#     envelope, so degrading does not mean lying.
+#
+# Every step seeds an ISOLATED fixture ledger. Nothing here reads the branch
+# diff or the live plan, so the assertions cannot go quiet when the tree is
+# clean — which is the state the tree is in almost always.
+
+preconditions:
+  - a built tillandsias-plan binary is reachable
+
+critical_path:
+  - step: "POSITIVE CONTROL: a corpus that parses whole still says ok: and exits 0"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: gamma\\n    order: 101\\n    status: ready\\n' > \"$T/plan/index.d/20260817t0100z-a-h.yaml\"; out=$(\"$MFPLAN\" --index \"$T/plan/index.yaml\" check 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -q '^ok: ' && ! printf '%s' \"$out\" | grep -q 'malformed:' && echo 'ok: clean corpus unchanged' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: clean corpus unchanged"
+
+  - step: "an unparseable fragment is NAMED on stdout and the verdict is incomplete, not ok"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; printf 'packets: [unclosed\\n' > \"$T/plan/index.d/20260817t0200z-b-h.yaml\"; out=$(\"$MFPLAN\" --index \"$T/plan/index.yaml\" check 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -q 'malformed:.*20260817t0200z-b-h.yaml' && printf '%s' \"$out\" | grep -q '^incomplete: ' && ! printf '%s' \"$out\" | grep -q '^ok: ' && echo 'ok: named and downgraded, still exit 0' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: named and downgraded, still exit 0"
+
+  - step: "--strict-fragments REFUSES the same tree, with exit 3 not exit 1"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; printf 'packets: [unclosed\\n' > \"$T/plan/index.d/20260817t0200z-b-h.yaml\"; \"$MFPLAN\" --index \"$T/plan/index.yaml\" check --strict-fragments >/dev/null 2>&1; rc=$?; rm -rf \"$T\"; [ \"$rc\" = 3 ] && echo 'ok: strict refuses with the incompleteness code' || { echo \"FAIL: expected exit 3, got $rc\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: strict refuses with the incompleteness code"
+
+  # NEGATIVE CONTROL for the step above. Without this, a --strict-fragments that
+  # refused unconditionally would pass every step so far while red-gating clean
+  # trees — the fleet outage 699-dycj exists to prevent, arrived from the other
+  # side.
+  - step: "NEGATIVE CONTROL: --strict-fragments admits a clean corpus"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: gamma\\n    order: 101\\n    status: ready\\n' > \"$T/plan/index.d/20260817t0100z-a-h.yaml\"; \"$MFPLAN\" --index \"$T/plan/index.yaml\" check --strict-fragments >/dev/null 2>&1; rc=$?; rm -rf \"$T\"; [ \"$rc\" = 0 ] && echo 'ok: clean corpus is not refused' || { echo \"FAIL: strict refused a clean corpus, rc=$rc\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: clean corpus is not refused"
+
+  - step: "the answer envelope carries skipped_sources instead of only stderr prose"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; printf 'packets: [unclosed\\n' > \"$T/plan/index.d/20260817t0200z-b-h.yaml\"; out=$(\"$MFPLAN\" --index \"$T/plan/index.yaml\" answer 'status of alpha' 2>/dev/null); rc=$?; rm -rf \"$T\"; [ \"$rc\" = 0 ] && printf '%s' \"$out\" | grep -q 'skipped_sources' && printf '%s' \"$out\" | grep -q '20260817t0200z-b-h.yaml' && echo 'ok: envelope reports the partial corpus' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: envelope reports the partial corpus"
+
+  # NEGATIVE CONTROL for the step above, and the one that keeps the field cheap:
+  # absent, not `[]`, when there is nothing to report. Every consumer pinning the
+  # envelope shape must be unable to tell this build from the previous one until
+  # the day a fragment actually breaks.
+  - step: "NEGATIVE CONTROL: a clean corpus emits no skipped_sources key at all"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; out=$(\"$MFPLAN\" --index \"$T/plan/index.yaml\" answer 'status of alpha' 2>/dev/null); rm -rf \"$T\"; printf '%s' \"$out\" | grep -q 'skipped_sources' && { echo 'FAIL: clean corpus mentioned skipped_sources'; exit 1; }; echo 'ok: field absent when clean'"
+    timeout_ms: 15000
+    expected_behavior: "ok: field absent when clean"
+
+  # THE ORIGINAL LOSS, stated as the fixture the packet describes: a closure the
+  # fold cannot see. `alpha` is completed according to a fragment nobody can
+  # read, and the ledger keeps saying ready. That is correct behaviour — the
+  # declaration genuinely did not fold — and the point is that it is now SAID.
+  - step: "a closure hidden in an unreadable fragment stays unapplied AND is reported"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; printf 'status:\\n  - packet_id: alpha\\n    field: status\\n    value: completed\\n    ts: \"2026-08-17T09:00:00Z\"\\n    host: h\\n    [unclosed\\n' > \"$T/plan/index.d/20260817t0900z-c-h.yaml\"; st=$(\"$MFPLAN\" --index \"$T/plan/index.yaml\" status alpha 2>/dev/null); ck=$(\"$MFPLAN\" --index \"$T/plan/index.yaml\" check 2>/dev/null); rm -rf \"$T\"; printf '%s' \"$st\" | grep -q 'ready' && printf '%s' \"$ck\" | grep -q '^incomplete: ' && echo 'ok: invisible closure is visible as incompleteness' || { echo \"FAIL: st=$st ck=$ck\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: invisible closure is visible as incompleteness"
+
+  # THE FLEET-SAFETY PROPERTY THE WHOLE SPLIT RESTS ON, and 699-dycj's second
+  # exit criterion: "that signal does NOT block the push of a host that did not
+  # author the fragment, and a test proves an inherited malformed fragment still
+  # lets an unrelated change through". Without this step, the report-vs-gate
+  # choice is an argument in a comment; with it, it is a measurement. A future
+  # editor who "tidies" the default into a hard refusal reds here.
+  - step: "a malformed fragment INHERITED from a sibling blocks nobody, while --strict-fragments still refuses"
+    command: "MFPLAN=\"$(mf_plan_binary)\" || { echo 'FAIL: no runnable tillandsias-plan'; exit 1; }; R=$PWD; T=$(mktemp -d); mkdir -p \"$T/plan/index.d\" \"$T/scripts\" \"$T/target/release\"; cp \"$R/scripts/check-added-fragments-parse.sh\" \"$R/scripts/plan-binary-probe.sh\" \"$T/scripts/\"; cp \"$MFPLAN\" \"$T/target/release/tillandsias-plan\"; cp \"$MFPLAN\" \"$T/target/release/tillandsias-plan.exe\"; printf 'plan_index:\\n  steps:\\n    - packet_id: alpha\\n      order: 100\\n      status: ready\\n' > \"$T/plan/index.yaml\"; printf 'packets: [unclosed\\n' > \"$T/plan/index.d/20260817t0100z-sibling-h.yaml\"; cd \"$T\" || exit 1; git init -q .; git config user.email t@t; git config user.name t; git add -A; git commit -qm base >/dev/null 2>&1; BASE=$(git rev-parse HEAD); printf 'unrelated\\n' > note.txt; git add -A; git commit -qm unrelated >/dev/null 2>&1; g=$(TILLANDSIAS_FRAGMENT_PARSE_BASE=\"$BASE\" bash scripts/check-added-fragments-parse.sh 2>/dev/null); grc=$?; \"$MFPLAN\" --index plan/index.yaml check >/dev/null 2>&1; crc=$?; \"$MFPLAN\" --index plan/index.yaml check --strict-fragments >/dev/null 2>&1; src=$?; cd /; rm -rf \"$T\"; [ \"$grc\" = 0 ] && [ \"$crc\" = 0 ] && [ \"$src\" = 3 ] && echo 'ok: inherited fragment blocks nobody, strict still refuses' || { echo \"FAIL: author-gate=$grc check=$crc strict=$src guard-said=$g\"; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: inherited fragment blocks nobody, strict still refuses"
+
+observability:
+  traces:
+    - "@trace spec:ci-release"
+  expected_log: "fold incompleteness: unreadable fragments named on stdout, verdict downgraded to incomplete, refused only under --strict-fragments with exit 3, envelope carries skipped_sources"
+  log_fields:
+    spec: "ci-release"
+    test: "fold-incompleteness-typed-shape"
+
+rollback:
+  on_failure: "restore Ledger::skipped_fragments, the check --strict-fragments arm, and the Envelope skipped_sources field from git history"

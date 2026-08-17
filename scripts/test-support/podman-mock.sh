@@ -10,6 +10,43 @@ set -euo pipefail
 # It records the invocation and returns canned success outputs for the
 # subcommands Tillandsias uses in build/litmus command-contract tests.
 
+# Real podman accepts GLOBAL flags BEFORE the subcommand — `podman --remote
+# --url <u> run ...` is what scripts/common.sh's wrapper branch generates, and
+# TILLANDSIAS_PODMAN_REMOTE_URL in the environment makes the Rust launcher emit
+# the same shape. Skip them so dispatch sees the subcommand rather than a flag.
+#
+# Order 797-p2xa. Without this the `case` below matched nothing for `--remote`
+# and fell through to the final bare `exit 0`: success, no output, nothing
+# done. Callers cannot see that as a mock failure, only as its consequences —
+# four remote_projects tests reported `atomic rename failed: No such file or
+# directory` (the temp checkout the mock never created) and `invalid gh JSON:
+# EOF while parsing a value at line 1 column 0` (the array it never printed).
+# Reproduces in one line: TILLANDSIAS_PODMAN_REMOTE_URL=unix:///x cargo test
+# -p tillandsias-headless --bin tillandsias --features tray remote_projects.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --remote|--syslog|--noout)
+            shift
+            ;;
+        --url|--connection|--identity|--root|--runroot|--tmpdir| \
+        --storage-driver|--storage-opt|--log-level|--cgroup-manager| \
+        --events-backend|--runtime|--conmon|--module)
+            shift
+            # Guard the value shift: `shift 2` with one argument left fails,
+            # and this script runs under `set -e`.
+            if [[ $# -gt 0 ]]; then
+                shift
+            fi
+            ;;
+        --*=*)
+            shift
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
+
 subcommand="${1:-}"
 if [[ -n "${LITMUS_PODMAN_STATE_DIR:-}" ]]; then
     state_dir="$LITMUS_PODMAN_STATE_DIR"

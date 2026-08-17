@@ -1,0 +1,60 @@
+# Filed by linux_immutable (yoga), 2026-08-17, from three deliberate cold-cache
+# forge launches run to satisfy 626-p4xd criterion 3.
+packets:
+  - packet_id: opencode-curl-install-never-populates-its-cache
+    order: 797-t9m7
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "the opencode curl-install path fails on every cold cache and is MASKED: the installer short-circuits with 'already installed', nothing lands in the harness cache, and the launch succeeds anyway on a binary found elsewhere"
+    deliverable: "either the harness cache is genuinely populated by the curl-install path, or the path is retired and the real provenance of the opencode binary is declared — plus a loud failure when last-good rollback targets a cache that is empty"
+    pickup_role: linux
+    release_target: forge-local-experts-milestone
+    capability_tags: [forge, harness, opencode, fail-loud]
+    estimated_hours: 3
+    context: |
+      MEASURED, three cold launches on yoga 2026-08-17 (09:25Z, 09:40Z, 09:50Z).
+      Before each, $HARNESS_CURL_ROOT/opencode and harness-update-stamp were
+      deleted from volume tillandsias-forge-cache-tillandsias.
+
+      Every launch traced, verbatim:
+
+        [lifecycle] harness | opencode refresh FAILED auth contract — rolling back to last-good
+        [lifecycle] harness | opencode curl-install FAILED, no cached binary: Version 1.18.18 already installed
+        [lifecycle] harness | opencode curl refresh failed (using cache)
+        ...
+        [lifecycle] install | opencode: available (1.18.18)
+
+      And after all three, `harness-curl/opencode/bin` is still EMPTY — the
+      directory is recreated on each launch and never receives a binary.
+
+      THE MECHANISM. The upstream opencode installer is idempotent against its
+      OWN notion of installed: it finds 1.18.18 present (somewhere that is not
+      the harness cache), prints "Version 1.18.18 already installed", and
+      declines to install. The harness reads that as a failed install with no
+      cached binary, rolls back to a "last-good" that does not exist in that
+      cache, and continues. The lane then works, because opencode is resolvable
+      by some other path — so the failure is invisible in normal operation.
+
+      WHY IT MATTERS RATHER THAN BEING COSMETIC. Order 626-p4xd built
+      last-good recording, validate-or-rollback and a render-contract probe
+      wired into all three consumers, precisely so a broken opencode can never
+      be certified as last-good. That machinery is predicated on the
+      curl-install path putting a binary in the cache. If the cache is never
+      populated, the rollback target is empty and the probe is guarding a
+      binary the harness did not install and does not control the version of.
+      A guard whose subject is absent is the 599-4wzr class from the other
+      side.
+
+      ALSO: the failure is announced twice per launch (once before the git
+      clone, once after) but only ever at `trace_lifecycle` level, which is
+      silent unless --debug is passed. In normal operation this fails
+      completely quietly.
+
+      FIRST QUESTION FOR WHOEVER TAKES IT — do not skip it: where does the
+      opencode binary the forge actually executes come from? It is NOT in the
+      forge image (`command -v opencode` inside
+      localhost/tillandsias-forge:sha256-ec7e6611 returns nothing) and NOT in
+      the harness cache. Until that is answered, neither retiring nor repairing
+      the curl path is safe.

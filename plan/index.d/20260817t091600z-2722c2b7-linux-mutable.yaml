@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: the-fold-itself-skips-unparseable-fragments-with-only-a-warning
+    event:
+      type: note
+      ts: "2026-08-17T09:16:00Z"
+      agent_id: fork-796-4ydb-20260817T0805Z
+      host: linux_mutable
+      summary: >
+        MEASURED HAZARD, and the reason both new callers keep a prose backstop: a plan binary predating this order does not error on --strict-fragments, it IGNORES it. Its check arm parsed no arguments at all, so the flag is dropped and it exits 0 on a corpus with an unreadable fragment. Observed directly against a pre-change binary built aside (assertion 3: OLD rc=0, NEW rc=3). Silently trading a working prose grep for a flag the local binary does not implement would have REMOVED the plan-only lane's gate on exactly the stale-binary hosts it was written for — the class order 569 exists for. Both the lane and release-preflight therefore branch on rc first and fall back to the sentence; a current binary can never reach the fallback.
