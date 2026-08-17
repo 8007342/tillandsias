@@ -39,24 +39,37 @@ critical_path:
     # unloaded; MSYS process-spawn pricing, not lease contention. Correctness
     # (1 winner / 7 in-flight) reproduces at that speed. Same treatment as
     # 770-f6u4; see plan/issues/windows-red-meta-orchestration-litmus-2026-08-16.md.
-    command: "r=$(mktemp -d)/leases; out=$(for i in $(seq 1 8); do TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\" bash scripts/claim-ledger-node.sh claim shared/node & done; wait); c=$(printf '%s\\n' \"$out\" | grep -c '^claimed:'); f=$(printf '%s\\n' \"$out\" | grep -c '^in-flight:'); rr=$(printf '%s\\n' \"$out\" | grep -c '^reclaimed:'); [ \"$c\" = 1 ] && [ \"$f\" = 7 ] && [ \"$rr\" = 0 ] && echo 'ok: single-winner' || { echo \"FAIL: claimed=$c in-flight=$f reclaimed=$rr\"; exit 1; }"
+    command: "r=$(mktemp -d)/leases; fx=$(mktemp -d)/plan; mkdir -p \"$fx\"; printf 'plan_index:\\n  packets:\\n    - packet_id: shared/node\\n      order: 900-aaaa\\n      status: ready\\n' > \"$fx/index.yaml\"; export TILLANDSIAS_LEDGER_CLAIM_INDEX=\"$fx/index.yaml\"; out=$(for i in $(seq 1 8); do TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\" bash scripts/claim-ledger-node.sh claim shared/node & done; wait); c=$(printf '%s\\n' \"$out\" | grep -c '^claimed:'); f=$(printf '%s\\n' \"$out\" | grep -c '^in-flight:'); rr=$(printf '%s\\n' \"$out\" | grep -c '^reclaimed:'); [ \"$c\" = 1 ] && [ \"$f\" = 7 ] && [ \"$rr\" = 0 ] && echo 'ok: single-winner' || { echo \"FAIL: claimed=$c in-flight=$f reclaimed=$rr\"; exit 1; }"
     timeout_ms: 60000
     expected_behavior: "ok: single-winner"
 
   - step: "a held node reports in-flight on status, and release frees it"
-    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; bash scripts/claim-ledger-node.sh claim n/x >/dev/null; s1=$(bash scripts/claim-ledger-node.sh status n/x); bash scripts/claim-ledger-node.sh release n/x >/dev/null; s2=$(bash scripts/claim-ledger-node.sh status n/x); rc=$?; [ \"$s1\" = 'in-flight:n/x' ] && [ \"$s2\" = 'free:n/x' ] && [ \"$rc\" = 1 ] && echo 'ok: status-and-release' || { echo \"FAIL: s1=$s1 s2=$s2 rc=$rc\"; exit 1; }"
+    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; fx=$(mktemp -d)/plan; mkdir -p \"$fx\"; printf 'plan_index:\\n  packets:\\n    - packet_id: n/x\\n      order: 900-bbbb\\n      status: ready\\n' > \"$fx/index.yaml\"; export TILLANDSIAS_LEDGER_CLAIM_INDEX=\"$fx/index.yaml\"; bash scripts/claim-ledger-node.sh claim n/x >/dev/null; s1=$(bash scripts/claim-ledger-node.sh status n/x); bash scripts/claim-ledger-node.sh release n/x >/dev/null; s2=$(bash scripts/claim-ledger-node.sh status n/x); rc=$?; [ \"$s1\" = 'in-flight:n/x' ] && [ \"$s2\" = 'free:n/x' ] && [ \"$rc\" = 1 ] && echo 'ok: status-and-release' || { echo \"FAIL: s1=$s1 s2=$s2 rc=$rc\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: status-and-release"
 
   - step: "an expired lease is reclaimed by the next claimant (exit 0)"
-    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; TILLANDSIAS_LEDGER_LEASE_TTL_SECS=0 bash scripts/claim-ledger-node.sh claim n >/dev/null; sleep 1; out=$(bash scripts/claim-ledger-node.sh claim n); rc=$?; [ \"$out\" = 'reclaimed:n' ] && [ \"$rc\" = 0 ] && echo 'ok: expired-reclaimed' || { echo \"FAIL: out=$out rc=$rc\"; exit 1; }"
+    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; fx=$(mktemp -d)/plan; mkdir -p \"$fx\"; printf 'plan_index:\\n  packets:\\n    - packet_id: n\\n      order: 900-cccc\\n      status: ready\\n' > \"$fx/index.yaml\"; export TILLANDSIAS_LEDGER_CLAIM_INDEX=\"$fx/index.yaml\"; TILLANDSIAS_LEDGER_LEASE_TTL_SECS=0 bash scripts/claim-ledger-node.sh claim n >/dev/null; sleep 1; out=$(bash scripts/claim-ledger-node.sh claim n); rc=$?; [ \"$out\" = 'reclaimed:n' ] && [ \"$rc\" = 0 ] && echo 'ok: expired-reclaimed' || { echo \"FAIL: out=$out rc=$rc\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: expired-reclaimed"
 
   - step: "every verdict line is well-formed against the grammar"
-    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; { bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh status a/b; bash scripts/claim-ledger-node.sh release a/b; bash scripts/claim-ledger-node.sh status a/b; } > out.txt 2>/dev/null; tot=$(grep -c . out.txt); good=$(grep -cE '^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$' out.txt); rm -f out.txt; [ \"$tot\" = 5 ] && [ \"$good\" = 5 ] && echo \"ok: grammar ($good/$tot)\" || { echo \"FAIL: $good/$tot well-formed\"; exit 1; }"
+    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; fx=$(mktemp -d)/plan; mkdir -p \"$fx\"; printf 'plan_index:\\n  packets:\\n    - packet_id: a/b\\n      order: 900-dddd\\n      status: ready\\n' > \"$fx/index.yaml\"; export TILLANDSIAS_LEDGER_CLAIM_INDEX=\"$fx/index.yaml\"; { bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh claim a/nope; bash scripts/claim-ledger-node.sh status a/b; bash scripts/claim-ledger-node.sh release a/b; } > out.txt 2>/dev/null; tot=$(grep -c . out.txt); good=$(grep -cE '^(claimed|reclaimed|in-flight|released|free|unknown):[a-z0-9._/-]+$' out.txt); rm -f out.txt; [ \"$tot\" = 5 ] && [ \"$good\" = 5 ] && echo \"ok: grammar ($good/$tot)\" || { echo \"FAIL: $good/$tot well-formed\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: grammar"
+
+  - step: "a claim on an id that names no packet is REFUSED and leases nothing (790-u8x6)"
+    # The bug this pins: `claim` answered `claimed:<id>` for any string, so a
+    # cycle that mistyped an id held a phantom lease while the real packet
+    # stayed claimable by every sibling — zero coordination reported as
+    # success. The fixture runs the REAL script against a committed-shape
+    # fixture ledger (never the live one, so it cannot rot when the ledger
+    # changes — 680-zphp), and carries its own negative control: a real
+    # packet_id, a real order token and a slashed real id must all still
+    # claim, so "refuse everything" cannot satisfy it.
+    command: "bash scripts/test-ledger-node-claim-resolution.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:ledger-node-claim-resolution-fixture:8"
 
   - step: "the meta-orchestration skill consults the claim probe before node closure"
     command: "grep -q 'claim-ledger-node.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-probe'"

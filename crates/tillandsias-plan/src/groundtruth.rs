@@ -90,6 +90,30 @@ pub struct QuerySet {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    /// The ledger THIS SET must be graded against, repo-relative (order
+    /// 786-kjke). Absent (the common case) means "whatever `--index` the run
+    /// supplies", which is the live ledger by default.
+    ///
+    /// THIS DOES NOT WEAKEN THE MODULE'S no-corpus INVARIANT, and the
+    /// distinction is the whole reason it is safe. That invariant is about
+    /// [`Expect`]: an expectation may never name a corpus, so a second corpus
+    /// cannot quietly lower the bar, and [`grade_envelope`] still takes
+    /// `(&Envelope, &Expect, &Path)` and nothing else. This field is not an
+    /// expectation and the grader never reads it — it only tells the RUNNER
+    /// which ledger to hand the engine, which is exactly the fact that
+    /// previously lived in a file-header comment no machine could read.
+    ///
+    /// WHY IT EXISTS. `grade openspec/litmus-tests/groundtruth/*.yaml` — the
+    /// obvious invocation — graded the two fixture-backed sets against the
+    /// LIVE ledger and reported `pass=22 fail=6`, every one of those six a
+    /// FALSE red (observed 2026-08-17; correctly graded the true state is
+    /// 28/28). The contract was documented only in each file's header, so the
+    /// tool cheerfully did the wrong thing and blamed the expert. That is the
+    /// 741-2izr shape — a false red trains readers to discount the signal —
+    /// landing on the accuracy harness the fleet's `expert_accuracy:` metric
+    /// rests on.
+    #[serde(default)]
+    pub corpus: Option<String>,
     pub cases: Vec<Case>,
 }
 

@@ -316,6 +316,18 @@ critical_path:
     timeout_ms: 300000
     expected_behavior: "ok: groundtruth-unit-pins-green"
 
+  - step: "ORDER 786-kjke: the obvious glob invocation grades every set against ITS OWN corpus"
+    # The bug: `grade groundtruth/*.yaml` graded the two fixture-backed sets
+    # against the LIVE ledger and reported six FALSE reds, because the corpus
+    # contract lived only in each file's header. A false red on the accuracy
+    # harness is the 741-2izr shape aimed at the instrument the fleet's
+    # expert_accuracy: line rests on. The fixture carries its own negative
+    # control — a genuinely wrong expectation must still FAIL under a declared
+    # corpus — so this cannot be satisfied by making everything green.
+    command: "bash scripts/test-groundtruth-corpus-declaration.sh 2>&1 | tail -1"
+    timeout_ms: 120000
+    expected_behavior: "ok:groundtruth-corpus-declaration-fixture:6"
+
   - step: "NO NEW DEPENDENCY, no interpreter, and the query set is DATA not code"
     # The ratified §5 constraints of the 394 family, carried into slice 4. The
     # dependency count is asserted, not inspected: three workspace deps, the

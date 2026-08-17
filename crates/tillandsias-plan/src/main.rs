@@ -1051,10 +1051,14 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
             return 2;
         }
     };
-    let selected: Vec<&groundtruth::Case> = query_sets
+    // Each case carries its owning set's declared corpus (order 786-kjke), so
+    // a fixture-backed set is graded against the ledger it was written for
+    // instead of whatever `--index` the run happened to supply. The pairing is
+    // what makes the declaration honourable per-set in a single run.
+    let selected: Vec<(&groundtruth::QuerySet, &groundtruth::Case)> = query_sets
         .iter()
-        .flat_map(|q| q.cases.iter())
-        .filter(|c| only_case.as_deref().is_none_or(|id| c.id == id))
+        .flat_map(|q| q.cases.iter().map(move |c| (q, c)))
+        .filter(|(_, c)| only_case.as_deref().is_none_or(|id| c.id == id))
         .collect();
     if selected.is_empty() {
         eprintln!(
@@ -1108,8 +1112,8 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
                 // is exactly the order-456 dead-on-arrival regression this
                 // harness exists to catch.
                 outcomes.push(groundtruth::Outcome {
-                    id: selected[0].id.clone(),
-                    engine: format!("{} (captured envelope)", selected[0].engine),
+                    id: selected[0].1.id.clone(),
+                    engine: format!("{} (captured envelope)", selected[0].1.engine),
                     failures: vec![format!("input is not an answer envelope: {e}")],
                 });
                 report(&outcomes, &sets, started);
@@ -1117,25 +1121,81 @@ fn run_grade(args: &[String], index: &Path) -> i32 {
             }
         };
         outcomes.push(groundtruth::Outcome {
-            id: selected[0].id.clone(),
-            engine: format!("{} (captured envelope)", selected[0].engine),
-            failures: groundtruth::grade_envelope(&envelope, &selected[0].expect, &root),
+            id: selected[0].1.id.clone(),
+            engine: format!("{} (captured envelope)", selected[0].1.engine),
+            failures: groundtruth::grade_envelope(&envelope, &selected[0].1.expect, &root),
         });
     } else {
-        let index_rel = citation_path(&index, &root);
-        let mut harness = groundtruth::Harness::new(root.clone(), index.clone(), index_rel);
-        for case in &selected {
-            let envelope = match harness.run(case) {
+        // One harness PER RESOLVED CORPUS, cached: a set that declares its own
+        // ledger is graded against that ledger, everything else against the
+        // run's `--index`. Caching matters because Harness memoizes a loaded
+        // ledger, and rebuilding it per case would re-read a 22k-line file.
+        //
+        // A declared corpus fixes BOTH the index and the ROOT for that set.
+        // `--index` already implies a root (root_for), because citations are
+        // resolved and re-read relative to it — so honouring the index while
+        // leaving the root pointing at the checkout would make every fixture
+        // citation unresolvable, which is a different false red in place of
+        // the one this fixes. The declaration is resolved against the CHECKOUT
+        // root, computed independently of `--index` for exactly the same
+        // reason: with `--index <fixture>` the run's own root is already the
+        // fixture's.
+        let checkout_root = root_for(Path::new("plan/index.yaml"));
+        let mut harnesses: Vec<(PathBuf, PathBuf, groundtruth::Harness)> = Vec::new();
+        let mut announced: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        for (set, case) in &selected {
+            let set_index = match &set.corpus {
+                Some(rel) => checkout_root.join(rel),
+                None => index.clone(),
+            };
+            let set_root = match &set.corpus {
+                Some(_) => root_for(&set_index),
+                None => root.clone(),
+            };
+            // Say so when a set's declared corpus is not the run's index. The
+            // previous behaviour was to grade against the wrong ledger in
+            // silence and report the mismatch as six ordinary FAILs.
+            if set_index != index && announced.insert(set.name.clone()) {
+                eprintln!(
+                    "note: query set {:?} declares corpus {} — grading it against that, not {}",
+                    set.name,
+                    citation_path(&set_index, &root),
+                    citation_path(&index, &root),
+                );
+            }
+            if !set_index.exists() {
+                eprintln!(
+                    "HARNESS ERROR: query set {:?} declares corpus {} which does not exist",
+                    set.name,
+                    citation_path(&set_index, &root),
+                );
+                return 2;
+            }
+            let slot = harnesses.iter().position(|(p, _, _)| *p == set_index);
+            let slot = match slot {
+                Some(s) => s,
+                None => {
+                    let rel = citation_path(&set_index, &set_root);
+                    harnesses.push((
+                        set_index.clone(),
+                        set_root.clone(),
+                        groundtruth::Harness::new(set_root.clone(), set_index.clone(), rel),
+                    ));
+                    harnesses.len() - 1
+                }
+            };
+            let envelope = match harnesses[slot].2.run(case) {
                 Ok(e) => e,
                 Err(e) => {
                     eprintln!("HARNESS ERROR: {e}");
                     return 2;
                 }
             };
+            let grade_root = harnesses[slot].1.clone();
             outcomes.push(groundtruth::Outcome {
                 id: case.id.clone(),
                 engine: case.engine.clone(),
-                failures: groundtruth::grade_envelope(&envelope, &case.expect, &root),
+                failures: groundtruth::grade_envelope(&envelope, &case.expect, &grade_root),
             });
         }
     }
