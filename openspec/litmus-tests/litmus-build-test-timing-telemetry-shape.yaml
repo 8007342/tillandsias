@@ -86,6 +86,23 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: per-step emitters wired"
 
+  - step: "785-ibu9: a step record measures the step's OWN work, not the banner-to-banner span that can bundle other work"
+    # Behavioural, not a source grep: the fixture sources build.sh's real
+    # tracker, runs a fast named step followed by slow UNNAMED work, and
+    # asserts the fast step's record stays fast. Reverting the fix makes it
+    # report the adjacent second instead — the defect that got a packet filed
+    # on an inflated reading.
+    command: "bash scripts/test-build-step-timing-attribution.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:build-step-timing-attribution-fixture:9"
+
+  - step: "785-ibu9: a phase with no measurable work is labelled build-span and slowest= marks it ~span"
+    # The honesty half: when there is no attributable number, the wall-clock
+    # fallback must announce itself rather than pose as a step cost.
+    command: "bash scripts/test-slowest-span-marker.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:slowest-span-marker-fixture:3"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"

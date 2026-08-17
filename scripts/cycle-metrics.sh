@@ -455,6 +455,16 @@ printf 'flow: cycles=%s avg_completed_per_cycle=%s avg_commits_per_cycle=%s over
 #   litmus_ms_avg      — step matches ^litmus       (run-litmus-test.sh suite)
 # `slowest` is the single step:ms with the largest duration across ALL records —
 # the one fact to look at first, in the spirit of the verdict line.
+#
+# PROVENANCE (785-ibu9). A `step:` record's duration is the named step's OWN
+# measured work (the time inside build.sh's `_run`), which is what makes it
+# safe to attribute. A phase that runs no measurable command instead carries
+# `phase: "build-span"` and its duration is banner-to-banner wall clock, which
+# may include work the named step did not do; `slowest=` marks those `~span`.
+# Read an unmarked name as "this step costs this much" and a `~span` name as
+# "this much wall clock elapsed around here". The distinction exists because a
+# span was once read as a step cost and a packet was filed on the inflated
+# number (783-xyk5's context, corrected in its own ledger events).
 timing_steps=0
 timing_build_check_avg="-"; timing_litmus_avg="-"; timing_slowest="-:-"
 timing_source="absent"
@@ -486,10 +496,18 @@ if [ -r "$TIMING_LOG" ]; then
           # fall back to all records otherwise (pre-765 logs keep working).
           | ($r | map(select((.step|tostring)|test("^(step:|check:|litmus:)")))) as $fine
           | ((if ($fine|length) > 0 then $fine else $r end) | max_by(.duration_ms // 0)) as $slow
+          # 785-ibu9: a build-span record is banner-to-banner wall clock, not
+          # the cost of the named step alone, so it can bundle work that step
+          # never did. Suffix it ~span so the one number a reader looks at
+          # first cannot be mistaken for an attributable step cost — a wrong
+          # attribution is what got a packet filed on an inflated reading.
+          # (No apostrophes in this block: it lives inside a single-quoted jq
+          # program, where one would terminate the string.)
+          | (if ($slow.phase // "") == "build-span" then "~span" else "" end) as $prov
           | "\($n) " +
             "\(if ($bc|length)>0 then (($bc|add)/($bc|length)|round) else "-" end) " +
             "\(if ($lm|length)>0 then (($lm|add)/($lm|length)|round) else "-" end) " +
-            "\($slow.step // "-"):\($slow.duration_ms // 0)"
+            "\($slow.step // "-")\($prov):\($slow.duration_ms // 0)"
           end' 2>/dev/null)"
     if [ -n "$timing_stats" ]; then
         read -r timing_steps timing_build_check_avg timing_litmus_avg timing_slowest <<EOF
