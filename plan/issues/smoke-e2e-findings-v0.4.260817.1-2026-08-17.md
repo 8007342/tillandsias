@@ -24,8 +24,10 @@ that lane is Linux/Podman per the skill's §0.1.
 - **Step 2 destructive reset**: tray stopped, `wsl --terminate tillandsias` +
   `wsl --unregister tillandsias` (exit 0), then purged
   `%LOCALAPPDATA%\tillandsias\{wsl,cache\rootfs,state}` — including the 34.9 GB
-  `ext4.vhdx` and the cached `fedora-44-wsl-75200f5752a7` rootfs, so this was a
-  **truly cold** run, not a warm-cache one. `tillandsias-build` (this host's
+  `ext4.vhdx` and the cached `fedora-44-wsl-75200f5752a7` rootfs. This was
+  described here as a **truly cold** run — **that claim is CORRECTED below
+  (see "Correction"): the host-side Windows Credential Manager entries survived,
+  and they turned out to matter.** `tillandsias-build` (this host's
   Linux-artifact lane, Running at the time) was left untouched — see
   finding `smoke-finding/windows-substrate-reset-uses-global-wsl-shutdown`.
 - **Step 3 cold provision**: `--provision-once` exit **0** in **67 s** from the
@@ -227,3 +229,56 @@ podman_ready=true` on the first poll and `--diagnose` exit 0.
     ts: `2026-08-17T18:04:00Z`
     agent_id: `windows-yolanda-opus5-20260817t1757z`
     host: windows
+
+---
+
+## Correction, 2026-08-17T19:00Z — the run was NOT a clean room, and the release DOES have a release-grade defect
+
+Filed after the operator clicked "GitHub login" on this very install ~40 minutes
+after the PASS above was recorded, and it failed. Packets: **803-49re** (p1,
+product) and **804-ckst** (p2, these runbooks).
+
+**The PASS verdict stands for what it measured** — install, substrate reset,
+cold provision and post-condition health were all genuinely green, and remain
+so. What was wrong is the *scope* claim attached to Step 2.
+
+**What I got wrong.** Step 2 called the run "truly cold" on the strength of
+purging the 34.9 GB `ext4.vhdx` and the rootfs cache. Both were purged; neither
+is the whole substrate. The Windows tray treats **Windows Credential Manager**
+as the authoritative source for the Vault unseal share
+(`installation_uuid.rs:155-171`), and nothing in the product, the installer's
+`-Purge`, `--reset-guest`, or this runbook ever clears it. So the "clean room"
+silently carried the previous install's vault identity forward.
+
+**Why that produced a false green.** The smoke's own post-condition
+(`--diagnose` exit 0) is honest and still passes: Vault unseals fine, because
+the guest's *podman secret* holds the correct key. The stale host share only
+bites on the first operation that needs `generate-root` — which is the first
+real thing an operator does. So the release looked healthy to the gate and
+broke on first use. A post-condition after the last mutating step was not
+enough here; the failure needed the first *user* action, which no step of this
+runbook performs.
+
+**This is the keychain↔volume resync brick the skill's own §2 warns about**
+("if init bricks, that is a finding, not a failure to hide"). It did brick. The
+warning names the macOS keychain and Linux Vault volume; the Windows equivalent
+was not covered, and the Windows lane is where it fired.
+
+**Amendment to Step 2 for future Windows runs** — clear the host credential
+store as part of the destructive reset, preserving the installation UUID:
+
+```powershell
+cmdkey /delete:vault-shamir-share-v1
+cmdkey /delete:vault-root-token-v1
+# do NOT delete tillandsias-vm-uuid — that is the installation identity
+```
+
+Do **not** try to repair these with `cmdkey` write: `read_credential_string`
+parses the blob as UTF-8 and `cmdkey` stores UTF-16.
+
+**Recovery applied on this host** (non-destructive; vault storage untouched,
+exactly as the product's error text demanded): stop tray → delete the two stale
+credentials → rewrite the guest fallback share from the podman secret → relaunch
+tray. Verified after: share survives a tray restart, Credential Manager
+re-populated from the guest, `root generation finished` replacing `aborted`,
+cached root token authenticates (`display_name=root`), zero aborts in 90 s.
