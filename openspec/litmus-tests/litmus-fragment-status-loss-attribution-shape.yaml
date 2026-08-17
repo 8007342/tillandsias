@@ -127,6 +127,29 @@ critical_path:
     timeout_ms: 30000
     expected_behavior: "ok: nothing to examine stays quiet"
 
+  # ORDER 787-f7dh. The closure-event pass asked the binary for each fragment's
+  # terminal events and read an empty answer as "declares none". An unparseable
+  # fragment produced that same empty answer, so "could not be read" and "has
+  # nothing to hide" were the SAME result, and the gate printed `ok` over a
+  # fragment it had never examined. The delegation to the added-fragments-parse
+  # gate (698-7n6q) was an ASSUMPTION, not a guarantee — that gate is
+  # diff-scoped, so a malformed fragment arriving by merge, hand edit, or
+  # sibling branch never reaches it. Pinned here at the point of use.
+  - step: "MUTATION CONTROL: an UNPARSEABLE fragment refuses instead of passing as 'no events'"
+    command: "T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp ./target/release/tillandsias-plan \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: alpha-packet\\n    order: 900\\n    status: ready\\n    title: carries a closure the parser never reaches\\n    events:\\n      - type: completed\\n        ts: 2026-08-17T03:12:00Z\\n        host: fixture\\n        summary: broke the parse: an unquoted colon-space does it\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: unparseable fragment passed the event pass: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in *violation:fragment-status-loss:1*) ;; *) echo \"FAIL: wrong verdict: $out\"; exit 1;; esac; case \"$out\" in *UNPARSEABLE*) echo 'ok: an unreadable fragment refuses loudly';; *) echo \"FAIL: the refusal never said the fragment was unreadable: $out\"; exit 1;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: an unreadable fragment refuses loudly"
+
+  # NEGATIVE CONTROL for the step above: the SAME fragment with its summary
+  # quoted. The only difference is parseability, which is what keeps the step
+  # above from being satisfied by a gate that simply refuses everything. Here
+  # the closure is real and readable, so the correct answer is the ordinary
+  # attribution refusal naming the packet — never an unparseable verdict.
+  - step: "NEGATIVE CONTROL: the parseable twin is read and judged on its merits"
+    command: "T=$(mktemp -d); mkdir -p \"$T/scripts\" \"$T/plan/index.d\" \"$T/target/release\"; cp scripts/check-fragment-status-loss.sh scripts/plan-binary-probe.sh \"$T/scripts/\"; cp ./target/release/tillandsias-plan \"$T/target/release/\"; printf 'plan_index:\\n  version: v1\\n  root: plan/\\n  steps:\\n    - packet_id: alpha-packet\\n      order: 900\\n      title: \"alpha\"\\n      status: ready\\n      kind: fix\\n      depends_on: []\\n' > \"$T/plan/index.yaml\"; printf 'packets:\\n  - packet_id: alpha-packet\\n    order: 900\\n    status: ready\\n    title: same fragment with the summary quoted\\n    events:\\n      - type: completed\\n        ts: 2026-08-17T03:12:00Z\\n        host: fixture\\n        summary: \\\"broke the parse: an unquoted colon-space does it\\\"\\n' > \"$T/plan/index.d/a.yaml\"; out=$(cd \"$T\" && bash scripts/check-fragment-status-loss.sh 2>&1); rc=$?; rm -rf \"$T\"; if [ $rc -ne 1 ]; then echo \"FAIL: the parseable twin was not judged: rc=$rc out=$out\"; exit 1; fi; case \"$out\" in *UNPARSEABLE*) echo \"FAIL: a valid fragment was reported unparseable: $out\"; exit 1;; esac; case \"$out\" in *alpha-packet*) echo 'ok: the parseable twin is judged on its merits';; *) echo \"FAIL: wrong verdict: $out\"; exit 1;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok: the parseable twin is judged on its merits"
+
 observability:
   traces:
     - "@trace spec:ci-release"

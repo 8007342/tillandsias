@@ -1,0 +1,90 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows-opus5-housekeep-20260816 (housekeeping pass landing the
+# uncommitted findings of the aborted MO cycle 7), 2026-08-16 local.
+#
+# Host is UTC-7: all `ts` below are UTC, all clock times quoted in prose are
+# windows/Yolanda LOCAL and labelled as such.
+#
+# Second unexplained tray death on windows/Yolanda the same local day. The
+# issue file plan/issues/enhancement/tray-host-process-silent-death-2026-08-16.md
+# was already filed for death 1; this fragment files the packet, because
+# death 2 showed the failure is recurrent AND total (guest + enclave go with
+# the tray), which an unattended host cannot survive.
+packets:
+  - packet_id: windows-tray-host-process-dies-silently-unsupervised
+    release_target: stable-milestone-v1
+    order: 783-eeii
+    status: ready
+    desired_release: v0.5
+    kind: fix
+    pickup_role: windows
+    priority: p2
+    tags:
+      - windows
+      - tray
+      - fail-loud
+      - supervision
+      - unattended
+      - v0.5
+    title: |
+      The Windows tray process no longer dies silently and unsupervised: exit-path logging leaves a trace, and an unattended host surfaces the death instead of losing every lane with it.
+    context: |
+      TWO unexplained deaths of tillandsias-tray.exe on windows/Yolanda in a
+      single local day (2026-08-16), both discovered only because a human
+      noticed a missing icon. Clock times below are LOCAL (host is UTC-7).
+
+      Death 1: process absent sometime between ~05:00 local (post-e2e
+      relaunch, cycle 4) and 13:27 local. Manual relaunch succeeded
+      immediately (PID 8768, StartTime 13:27:33 local).
+
+      Death 2: PID 8768 confirmed running through the attended lane work at
+      ~14:05 local; at 23:08 local (2026-08-17T06:08Z) `Get-Process
+      tillandsias-tray` returns nothing. No crash dialog, no restart, no
+      operator action in between — identical signature to death 1.
+
+      Death 2 exposed the blast radius: the `tillandsias` runtime distro was
+      `State=Stopped` and the enclave had gone down with it (vault, proxy,
+      router, git-java all absent). The tray's vsock control-wire session is
+      the guest's ACCIDENTAL VM pin (see
+      plan/issues/enhancement/wsl-guest-vm-unpinned-when-tray-down-2026-08-16.md),
+      so a silent tray death is not a GUI-availability nicety: an unattended
+      host whose tray dies cannot run lanes at all, and nothing reports it.
+
+      594-u6zy built crashloop detection for the GUEST; the host tray has no
+      analog. Nothing supervises the host tray process and no log line, dump
+      or event record explaining either death has been located yet.
+
+      Full forensics:
+      plan/issues/enhancement/tray-host-process-silent-death-2026-08-16.md.
+    exit_criteria:
+      - |
+          The tray logs its own exit path (reason + timestamp + PID) on every
+          termination route it can observe, so the next death leaves a trace
+          instead of only an absent process.
+      - |
+          The two known death windows (local 2026-08-16 ~05:00-13:27, and
+          ~14:05 through 23:08 for PID 8768) are searched in Windows Event
+          Log / WER and the cause is either attributed or recorded as
+          not-attributable with the queries used, so the next investigator
+          does not repeat the search from scratch.
+      - |
+          A silently dead tray is SURFACED rather than silent on an
+          unattended host: the death is detectable without a human noticing a
+          missing icon, and a lane launcher that cannot reach the tray fails
+          loud naming the dead tray as the cause rather than failing as a
+          generic guest/enclave error.
+    events:
+      - type: filed
+        ts: "2026-08-17T06:15:00Z"
+        agent_id: windows-opus5-housekeep-20260816
+        host: windows
+        summary: |
+          Filed on the SECOND unexplained tray death of the local day,
+          observed at 23:08 local / 06:08Z: tillandsias-tray absent, runtime
+          distro tillandsias State=Stopped, enclave (vault/proxy/router/
+          git-java) down with it. Death 1 was already documented in the issue
+          file; the recurrence plus the observed guest/enclave blast radius
+          is what promotes this from an observability gap to v0.5 fix work —
+          an unattended host whose tray dies silently cannot run lanes at
+          all. Observed only; the tray and runtime distro were deliberately
+          NOT restarted (operator active on the host).

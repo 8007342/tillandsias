@@ -140,18 +140,24 @@ if [ -x "$ROOT/scripts/clamp-ca-material.sh" ]; then
     bash "$ROOT/scripts/clamp-ca-material.sh" --fix >/dev/null 2>&1 || true
 fi
 
-# Guard/asset version skew (order 783-6rik). ADVISORY and stderr-only: it says
-# nothing on the happy path and never touches the verdict line. When it does
-# speak, it saves a host the cycle it would otherwise spend discovering that a
-# checkout-side guard cannot pass until a release ships the asset it needs —
-# three forge lanes were lost to exactly that in one night, and each one
-# re-derived the same futile "rebuild the container" remedy.
-if [ -x "$ROOT/scripts/check-guard-asset-skew.sh" ]; then
-    _cp_skew="$(bash "$ROOT/scripts/check-guard-asset-skew.sh" 2>/dev/null | tail -1)"
-    case "$_cp_skew" in
-        skew:*) printf '[cycle-preflight] %s — a checkout guard needs an asset this host has not installed; see order 783-6rik\n' "$_cp_skew" >&2 ;;
-    esac
-fi
+# A guard/asset skew advisory used to run here (783-6rik,
+# scripts/check-guard-asset-skew.sh). RETIRED 2026-08-17, deleted not disabled.
+#
+# It compared the checkout's images/ against the tree materialized from the
+# installed binary and announced at cycle start that a checkout guard needed an
+# asset this host had not installed. The message was true and useless: it named
+# the same fact scripts/check-credential-channel.sh already names AT THE POINT
+# OF FAILURE, where a reader is actually looking, and with more precision (that
+# guard probes the running mirror image and distinguishes probe-absent from
+# probe-present-but-silent). Announcing it earlier and vaguer bought nothing,
+# and it knew about exactly one asset, so it could only ever repeat that one
+# message.
+#
+# The lesson is worth more than the script: THREE layers were built here in one
+# night — a message fix, then a detector for the message, then a blocker doc —
+# and not one of them let a lane drain. Version skew between a checkout and an
+# installed release is fixed by installing a release, not by detecting it more
+# eloquently. A detector for staleness is not a substitute for freshness.
 
 # Inference is a REPORT, not a gate: the deterministic expert tiers work without
 # it, and a cycle that cannot reach a model is degraded, not broken. Blocking

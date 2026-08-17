@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: codex-lane-mirror-wait-unbounded
+    event:
+      type: progress
+      ts: "2026-08-16T23:35:46Z"
+      agent_id: windows-fable5-mo-cycle7-20260816T2320Z
+      host: windows
+      summary: >
+        777-k88g next-action DONE (cycle 7, windows): guest journal pulled for the offending window (local 13:52-14:05 = 20:52-21:05Z, 2026-08-16). VERDICT: the stale-forge-image theory (683-g7p6 family) is REFUTED — there was NO offending container. Evidence: (1) 274 daemon-logged 'fatal: the remote end hung up unexpectedly' lines on tillandsias-git-java at ~2.5s cadence, 13:52:03 through 14:04:46 local, then silence (ended by operator interrupt, far under any attempt bound); (2) journal container-create count in the storm window 13:54:30-14:04:50 is ZERO, and the only lane containers that session were the OpenCode java sets (git+inference+forge) whose forge image was localhost/tillandsias-forge:v0.4.260815.1 source-digest sha256:ec7e6611e26dfc8fc2d74d668a89c9c81c9e54297f282c1c5dbfb475cd360094 — the same image whose OpenCode lanes died LOUD with the 12-attempt FATAL (777-i7hf repro), so that image demonstrably carries the bounded clone loop; (3) the last forge container died 13:52:35, BEFORE the storm bulk — the retrying git:// client ran in no container at all. The launcher-side wait_for_git_mirror_ready gate probes via podman exec (no git:// traffic), so it is not that gate either. RESHAPE: the unbounded ~2.5s clone/ls-remote loop lives in the codex lane path OUTSIDE both the forge entrypoint and the bounded launcher gate — guest- or host-side codex CLI wrapper. Smallest next action: trace the codex flow from run_forge_agent_cli_mode (ForgeAgentMode::Codex) and the host codex re-exec (tray codex launch) for the direct git client loop; an image-staleness guard packet is NOT warranted for this instance.
