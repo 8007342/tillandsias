@@ -1253,7 +1253,17 @@ async fn run_pty_attach(
         seed.0, seed.1
     );
 
-    let opts = launch_spec(&intent, project.as_deref(), seed.0, seed.1);
+    // A project name that cannot cross the guest launch path safely is REFUSED
+    // here, before any PTY or socket exists — see `validate_project_name`.
+    let opts = match launch_spec(&intent, project.as_deref(), seed.0, seed.1) {
+        Ok(o) => o,
+        Err(refused) => {
+            eprintln!("[tillandsias-tray] pty-attach: {refused}");
+            let _ = std::fs::remove_file(&sock_path);
+            bridge_join.abort();
+            return Err(refused.to_string());
+        }
+    };
     let session = match PtySession::open(Arc::new(transport), &alloc, &router, &opts) {
         Ok(s) => s,
         Err(e) => {
