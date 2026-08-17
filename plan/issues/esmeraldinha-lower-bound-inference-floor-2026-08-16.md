@@ -230,10 +230,17 @@ Related WSL2 substrate facts measured here:
 
 ## Host-config hazards recorded at onboarding
 
-- **No `%USERPROFILE%\.wslconfig`** — WSL2 takes ~50% of RAM (~8 GB) and all 4
-  logical processors, uncapped, and cgroup v2 is not enabled. **Any podman
-  `--memory`/`--cpus` flag is a silent no-op on this host until that changes**,
-  which is an ordering constraint for all memory-budget work.
+- **No `%USERPROFILE%\.wslconfig`** — WSL2 takes ~50% of RAM (~8 GB, measured
+  `MemTotal 8016488 kB`) and all 4 logical processors, uncapped.
+  **CORRECTED 2026-08-17**: this entry originally added "and cgroup v2 is not
+  enabled, so any podman `--memory`/`--cpus` flag is a silent no-op until that
+  changes." **That is false**, and the claim came from an onboarding survey
+  rather than from measurement. Measured directly in BOTH distros, before any
+  `.wslconfig` existed: `stat -fc %T /sys/fs/cgroup` -> `cgroup2fs`, with
+  `cgroup.controllers` = `cpuset cpu io memory hugetlb pids rdma`. The `memory`
+  controller is present, so podman resource limits are already enforceable and
+  the claimed ordering constraint on memory-budget work does not exist. See
+  `plan/issues/optimization/wslconfig-mirrored-resolves-endpoint-ambiguity-2026-08-17.md`.
   Separately, `cheatsheets/runtime/wsl2-isolation-boundary.md:113` claims
   `tillandsias --init` writes `.wslconfig` — **no Rust does**; `wsl.rs:288-317`
   only reads it as a remediation hint. That is a live cheatsheet defect.
