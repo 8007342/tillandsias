@@ -280,15 +280,45 @@ The honest summary: the acceleration decision and the networking decision *are*
 coupled, but the coupling points at a single-port firewall exception, not at
 mirrored networking.
 
-## 8. Residue left on the host, and how to remove it
+## 8. The host was put back — and why the packages were NOT left installed
 
-Confined to `tillandsias-build`:
+**The three Vulkan packages of §3 were removed again after the measurements.**
+This was deliberate, not tidiness.
 
-- The three Vulkan packages of §3 (`dnf remove` to reverse).
-- `/root/accel-experiment/` — logs, and an **isolated** model store containing
-  `qwen2.5:3b` (~1.9 GB, pulled there deliberately so the dev-inference store was
-  not modified). `rm -rf /root/accel-experiment` to reverse.
+ollama 0.32.9 defaults `OLLAMA_VULKAN=true` and only failed to find a GPU because
+no loader was installed (§6). Leaving `vulkan-loader` + `mesa-vulkan-drivers` in
+the distro would therefore have moved the **dev-inference endpoint onto the iGPU
+at its next restart, silently** — and for `qwen2.5:0.5b`, the model this host
+actually serves, that is a measured **1.23x decode regression**. Acceleration has
+to be an opt-in with a measured crossover (793-a8e7), so shipping it as a side
+effect of a research pass would have been exactly the wrong precedent.
+
+Verified after removal:
+
+```
+rpm -qa | grep -E '^(vulkan|mesa)'   -> (empty)
+/usr/lib64/libvulkan.so.1            -> No such file or directory
+/usr/share/vulkan/icd.d/             -> No such file or directory
+curl 127.0.0.1:11434/api/version     -> {"version":"0.32.9"}
+serve.log last device line           -> inference compute id=cpu library=cpu
+```
+
+To reproduce the experiment, one command restores it:
+
+```bash
+dnf install -y --setopt=install_weak_deps=False \
+  vulkan-loader vulkan-tools mesa-vulkan-drivers
+```
+
+Remaining residue, all inert:
+
+- `/root/accel-experiment/` (1.8 GB) — run logs plus an **isolated** model store
+  holding `qwen2.5:3b`, pulled there deliberately so the dev-inference store was
+  never modified (the isolation pattern 518 wants). Kept so a follow-up can
+  re-measure without re-pulling 1.9 GB. `rm -rf /root/accel-experiment` to clear.
 - The dev-inference model store is **unchanged**: still exactly
-  `nomic-embed-text` and `qwen2.5` (verified after the run). Disk went 28G -> 30G
-  of 1007G.
-- No Windows-side change was made. The two test HTTP listeners were killed.
+  `nomic-embed-text` and `qwen2.5`, verified after the run.
+- The runtime distro `tillandsias` was never started or modified; the tray was
+  not touched; no e2e gate was run.
+- **No Windows-side change was made.** The two test HTTP listeners were killed;
+  no firewall rule was added; no NPU software was installed.
