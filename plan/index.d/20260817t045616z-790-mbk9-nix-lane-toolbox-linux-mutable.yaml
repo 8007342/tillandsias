@@ -1,0 +1,107 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written in `set-field` shape: worktree isolation refuses the compound
+# invocation the CLI needs, and no plan binary is built in this worktree.
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr).
+status:
+  - packet_id: build-guest-binaries-nix-lane-ignores-the-toolbox
+    field: status
+    value: completed
+    ts: "2026-08-17T04:56:16Z"
+    host: linux_mutable
+
+events:
+  - packet_id: build-guest-binaries-nix-lane-ignores-the-toolbox
+    event:
+      type: completed
+      ts: "2026-08-17T04:56:16Z"
+      agent_id: fork-790mbk9-20260817T042000Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: DEFECT REPRODUCED FIRST — bare
+        `nix build` on this daemonless host exits 1 with "cannot connect to
+        socket at '/nix/var/nix/daemon-socket/socket'", while `command -v nix`
+        succeeds, which is exactly the gate-passes-then-both-builds-fail shape
+        the packet describes. FIX: build_with_nix now asks
+        scripts/nix-toolbox.sh which rung actually works (ensure + nix-args)
+        and takes its flags, instead of inferring capability from presence —
+        the 721-nyev principle, the same one nix-toolbox.sh itself learned when
+        it replaced `nix eval` with `store ping`. The cargo fallback stays but
+        is now reached only with a NAMED reason printed immediately above it.
+        THE PACKET'S INFERRED RISK WAS REAL AND IS NOW OBSERVED: with
+        `--store <dir>`, `nix build --out-link L` writes a symlink to the
+        LOGICAL store path, not to the bytes. Measured —
+        `.nix-probe-hx -> /nix/store/a2qmpfw70…` with
+        `test -f .nix-probe-hx/bin/tillandsias` rc=1 (dangles), while
+        `<store>/nix/store/a2qmpfw70…/bin/tillandsias` is 13849840 bytes. So
+        the pre-existing `install .nix-output/result-hx/bin/tillandsias` line
+        could NEVER have worked on the chroot rung: routing alone would have
+        converted a silent cargo degradation into a loud failure. Added
+        resolve_out_link, which prefers the link when it resolves (daemon rung
+        untouched, logical == physical) and otherwise prefixes the store root
+        onto the logical path. END-TO-END PROOF, real script, real cold builds
+        of both targets through the chroot rung: rc=0,
+        "Building guest binaries using Nix (ok:nix-toolbox:chroot)", no
+        DEGRADED line, both binaries staged, and verify_binaries green —
+        "x86_64 version check passed: Tillandsias v0.4.260815.1",
+        "aarch64 strings version check passed", "Verification SUCCESS". New
+        fixture scripts/test-guest-binaries-nix-lane.sh 15/15
+        (ok:guest-binaries-nix-lane-fixture:15) covering chroot routing,
+        daemon-not-diverted, blocked-rung named refusal + named degradation +
+        cargo actually reached + nix never called, toolbox-rung refused by
+        name, chroot dangling-link staged from the store root, and a genuinely
+        absent artifact failing loud. MUTATION CONTROL: disabling the store-root
+        translation turns exactly the two translation scenarios red and leaves
+        the other 13 green. Bound as a behavioural step on
+        litmus:guest-binary-embed-integrity (PASS via the canonical runner);
+        deliberately behavioural rather than a source grep, per 634-39ik.
+        ok:bash-dialect-clean.
+  - packet_id: build-guest-binaries-nix-lane-ignores-the-toolbox
+    event:
+      type: note
+      ts: "2026-08-17T04:56:16Z"
+      agent_id: fork-790mbk9-20260817T042000Z
+      host: linux_mutable
+      summary: >
+        SCOPE NOTE on the toolbox rung. `nix-toolbox.sh nix-args` serves the
+        daemon and chroot rungs only; for the toolbox rung it exits 1, because
+        nix there runs INSIDE a container whose paths are not this checkout's.
+        build_with_nix now refuses that rung BY NAME ("serves no host-side
+        store arguments") and degrades to cargo rather than guessing a path
+        mapping — staging from a container path would fail in the silent,
+        stale-binary way this script's own 689-gipe/620-duta history is about.
+        A host with neither a daemon nor a chroot store therefore still builds
+        via cargo, which is correct; wiring the toolbox rung properly wants its
+        own packet with a container-path verification, not a guess here.
+  - packet_id: build-guest-binaries-nix-lane-ignores-the-toolbox
+    event:
+      type: note
+      ts: "2026-08-17T04:56:16Z"
+      agent_id: fork-790mbk9-20260817T042000Z
+      host: linux_mutable
+      summary: >
+        BLOCKING OBSERVATION, OUT OF SCOPE, needs its own packet — the pre-push
+        gate is NON-DETERMINISTIC on this tree for reasons unrelated to this
+        change. scripts/check-litmus-pin-claims.sh (order 721-77yu) returns a
+        different verdict on every run of an UNCHANGED tree: three consecutive
+        runs gave violation:litmus-pin-unresolvable:6, :3, :4; two further runs
+        each produced 17 REFUSED lines with DIFFERENT MEMBER SETS. The refusals
+        are demonstrably FALSE — it refuses litmus:guest-binary-embed-integrity
+        and litmus:no-tracked-binaries-shape as "no litmus test declares that
+        name" while those files exist, declare exactly those names, and execute
+        green through the canonical runner. Two further symptoms for whoever
+        claims it: the SAME claim flips between "no litmus test declares that
+        name" and "the test exists but no spec binds it" across runs, and
+        identical refusal lines are emitted 2-3 times within a single run.
+        Falsified hypothesis, recorded so it is not re-tried: subprocess
+        exhaustion under load. The membership test was stressed 400x against a
+        known-existing token under load average 16-18 and failed 0/400, so
+        `grep -qx` is not the flake. The `existing` set is stable too (356
+        names on repeated computation). The instability is therefore in the
+        claims scan or the loop that consumes it, not in the lookup. Impact:
+        `./build.sh --check` passes or fails at random fleet-wide, which makes
+        the trunk's only gate untrustworthy in BOTH directions — and "run it
+        again until it is green" is precisely the habit a fail-loud gate exists
+        to prevent. This fork's own files are clean: they claim no litmus pins
+        and appear in no refusal set across runs.

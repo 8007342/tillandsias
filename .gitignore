@@ -76,6 +76,7 @@ cheatsheet-sources/
 images/default/.cheatsheet-sources/
 images/default/.cheatsheets-meta/
 images/default/.cheatsheets/
+images/router/.sidecar.stamp
 images/router/tillandsias-router-sidecar
 mock-release/
 result

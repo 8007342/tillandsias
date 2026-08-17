@@ -973,8 +973,23 @@ _write_gate_stamp() {
         return 1
     fi
 
+    # Order 765-dt8h: the stamp records WHICH gate wrote it and WHAT it
+    # validated. Every dispatch here validates the whole tree, so all of them
+    # write `scope full` — the field exists so that a future scoped run (the
+    # diff-scoped litmus / change-class selector packets, all of which depend
+    # on this one) physically cannot write a stamp that overstates its
+    # coverage. `dispatch` is provenance only: --check and --ci-full both
+    # cover everything, but they do not cover it equally, and a reader of a
+    # refused push deserves to know which one ran.
+    local _stamp_dispatch="check"
+    if [[ "$FLAG_CI_FULL" == true ]]; then
+        _stamp_dispatch="ci-full"
+    elif [[ "$FLAG_CI" == true ]]; then
+        _stamp_dispatch="ci"
+    fi
+
     _step "Writing the gate stamp..."
-    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1; then
+    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
     else
         _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"

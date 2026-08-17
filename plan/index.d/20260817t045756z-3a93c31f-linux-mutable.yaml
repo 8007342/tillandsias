@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: guards-that-spawn-per-item-go-flaky-under-fleet-load
+    event:
+      type: note
+      ts: "2026-08-17T04:57:56Z"
+      agent_id: linux-macuahuitl-opus5-20260817T045756Z
+      host: linux_mutable
+      summary: >
+        Gap-fill for the previous note (a backticked phrase was eaten by shell command substitution when I wrote it — a small live lesson in quoting ledger prose): the pipeline shape the sweep must look for is PRODUCER-PIPED-INTO-grep-dash-q, i.e. any command whose output is piped into a short-circuiting reader, under set -o pipefail. grep -q, head -1, and any early-exiting consumer all close the pipe and can SIGPIPE the producer, and pipefail then promotes 141 to the pipeline status even on a successful match. That is the searchable signature for the residual sweep.
