@@ -49,13 +49,45 @@ if [[ -d "$HOME/.cargo/bin" ]]; then
     export PATH="$HOME/.cargo/bin:$PATH"
 fi
 
-if [[ -z "${TILLANDSIAS_PODMAN_REMOTE_URL:-}" ]]; then
-    _build_runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-    _build_remote_socket="${_build_runtime_dir}/podman/podman.sock"
-    if [[ -S "$_build_remote_socket" ]]; then
-        export TILLANDSIAS_PODMAN_REMOTE_URL="unix://${_build_remote_socket}"
-    fi
-fi
+# PODMAN MODE IS THE CALLER'S TO DECLARE — the gate does not guess it.
+#
+# Order 797-r6tc. What used to be here inferred remote podman mode from a FILE
+# EXISTING: if ${XDG_RUNTIME_DIR}/podman/podman.sock was a socket, build.sh
+# exported TILLANDSIAS_PODMAN_REMOTE_URL. That socket is present on any host
+# with podman.socket enabled, which is the ordinary Fedora state, so the
+# inference fired unconditionally and ONLY inside the gate.
+#
+# Sourcing common.sh with that variable set takes its remote branch, which does
+# three things beyond choosing a URL: it generates a wrapper, puts the wrapper
+# directory FIRST on PATH, and pins TILLANDSIAS_PODMAN_BIN to it. That pin wins
+# over PATH in resolve_podman_bin() (crates/tillandsias-podman/src/lib.rs), and
+# it is exported, so it outlives this process into every litmus child. Litmus
+# tests declaring `backend: fake` inject their podman by PATH; an inherited pin
+# silently overrode it and they exercised real podman against a fake-podman
+# contract. Measured on macuahuitl 2026-08-17, same commit, same 302-test set:
+# 302/302 pass from a bare `scripts/run-litmus-test.sh --phase pre-build
+# --size quick`, 295/302 through `./build.sh --ci-full`. A gate that tests a
+# different substrate than every other caller is not a stricter gate, it is a
+# gate whose subject is unknown.
+#
+# PROVENANCE: the export arrived in 4650c8f9f (2026-05-14, "checkpoint(codex):
+# split quiet quit and repeat modes"), incidental to that change, with no
+# rationale and no packet. WHO ACTUALLY WANTS REMOTE MODE, checked before
+# removing it: exactly one caller, and it sets the variable itself —
+# packaging/systemd/user/tillandsias.service, whose ExecStart is
+# `tillandsias --headless` and whose lane require_headless_service_account()
+# hard-requires a unix:// URL for. That lane is unaffected by this deletion
+# because it never routed through build.sh. No macOS or Windows/WSL2 lane sets
+# it (order 309's WSL2 delegation design is filed but unimplemented).
+#
+# So the rule is 793-a62g's, one level up: the podman wrapper is CONFIGURATION,
+# never inference. A caller that wants the gate to reach podman through a
+# socket exports TILLANDSIAS_PODMAN_REMOTE_URL (or CONTAINER_HOST) and says so;
+# common.sh honours it exactly as before. Absent that, the gate uses podman as
+# the operating system provides it — the same podman a bare litmus run uses, so
+# the two agree about what they tested.
+#
+# Pinned by litmus:gate-podman-mode-is-configuration-not-inference.
 
 source "$SCRIPT_DIR/scripts/common.sh"
 

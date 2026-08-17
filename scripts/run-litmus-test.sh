@@ -901,13 +901,40 @@ run_litmus_test_file() {
     # 2026-07-16: macOS's platform gate + windows' tightened trigger
     # (command lines that actually invoke podman, not whole-file mentions)
     # — each lane independently fixed one half of the same over-trigger.
+    # Order 797-5kqe: THE PROBE MUST REPORT WHAT IT SAW, NOT WHAT IT ASSUMED.
+    # This used to be a bare `! timeout 5 podman ps`, and every non-zero exit
+    # was announced as "podman unresponsive (>5s): stalled storage lock or dead
+    # runtime — environmental, not a code regression". `timeout` returns 124
+    # only when it ACTUALLY timed out; for anything else it returns the
+    # command's own status — 127 for a wrapper whose exec target was deleted,
+    # 126, 125, 1. So a podman that failed in three milliseconds was reported
+    # as one that stalled for over five seconds, with a named cause and a
+    # citation. Cost, measured this cycle: roughly four hours and three wrong
+    # root causes, while `podman info` was sampled at 0.07s on 45 consecutive
+    # samples taken DURING the run that called podman unresponsive.
+    # The "environmental, not a code regression" verdict is the worse half: it
+    # is what makes a reader stop looking, and here it was attached to a
+    # genuine code-level configuration defect (797-r6tc). A preflight may
+    # report what it observed; it must not classify a failure it did not
+    # diagnose. Pinned by litmus:litmus-podman-preflight-diagnosis-shape.
     if [ "$(uname -s)" = "Linux" ] \
         && grep -qE '^[[:space:]]*command:.*(^|[ ;|&(])podman[[:space:]]' "$test_file" 2>/dev/null \
         && ! grep -q '^backend: fake' "$test_file" 2>/dev/null \
-        && command -v podman >/dev/null 2>&1 \
-        && ! timeout 5 podman ps --format '{{.ID}}' >/dev/null 2>&1; then
-        echo -e "  ${RED}[ENV-FAIL]${NC} podman unresponsive (>5s): stalled storage lock or dead runtime — environmental, not a code regression (plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md)"
-        return 1
+        && command -v podman >/dev/null 2>&1; then
+        local _preflight_err=""
+        local _preflight_rc=0
+        # Assignment first, status captured on the SAME command: a `local
+        # x="$(...)"` one-liner would report local's own status, not the
+        # probe's, which is the exit-code-masking class this file gates for.
+        _preflight_err="$(timeout 5 podman ps --format '{{.ID}}' 2>&1 >/dev/null)" \
+            || _preflight_rc=$?
+        if [ "$_preflight_rc" -eq 124 ]; then
+            echo -e "  ${RED}[ENV-FAIL]${NC} podman did not answer 'podman ps' within 5s (timeout, exit 124) — consistent with a stalled storage lock or a dead runtime (plan/issues/podman-sqlite-lock-zombie-cascade-2026-07-15.md)"
+            return 1
+        elif [ "$_preflight_rc" -ne 0 ]; then
+            echo -e "  ${RED}[ENV-FAIL]${NC} 'podman ps' FAILED IMMEDIATELY with exit ${_preflight_rc} — this is not a timeout and the cause is not diagnosed here. podman resolved to '$(command -v podman)' and said: ${_preflight_err:-(no output)}"
+            return 1
+        fi
     fi
 
     if ! run_rust_queries_for_litmus "$test_file"; then
