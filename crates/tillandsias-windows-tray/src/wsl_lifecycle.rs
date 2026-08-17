@@ -1559,18 +1559,38 @@ fi
         // WHERE THIS RUNS, and why it moved (order 757-4hdt). It was an
         // ExecStartPost on the daemon's own unit with a 15-second deadline.
         // That killed clean-room provisioning of the published v0.4.260815.1:
-        // on a COLD first boot the daemon bootstraps Vault and builds the proxy
-        // image -- minutes of work, logged as "this may take several minutes" --
-        // before it binds 42420. The probe reported NOT-BOUND at fifteen
-        // seconds, and because an ExecStartPost is a control process, systemd
-        // STOPPED a perfectly healthy daemon mid-build. Restart=on-failure
-        // began the same minutes-long work again, and it never converged;
-        // measured five failures with the unit still `activating`.
+        // the probe reported NOT-BOUND at fifteen seconds, and because an
+        // ExecStartPost is a control process, systemd STOPPED a perfectly
+        // healthy daemon mid-build. Restart=on-failure began the same
+        // minutes-long work again, and it never converged; measured five
+        // failures with the unit still `activating`.
         //
-        // I verified 735-ewzp against an already-provisioned guest, where the
-        // listener binds in about a second and fifteen seconds looks generous.
-        // The probe was only ever wrong in the state my testing never entered
-        // and a release smoke always creates.
+        // WHY THE PROBE SAID NOT-BOUND, corrected (order 795-jeym, measured
+        // 2026-08-17). This comment used to say the daemon "bootstraps Vault
+        // and builds the proxy image -- minutes of work -- BEFORE it binds
+        // 42420". That is not what the code does and never was. The bind is
+        // the FIRST await in the vsock task: `run_headless_async` reaches
+        // `maybe_spawn_vsock_listener` through non-blocking calls only, and
+        // the vault/proxy work is driven by the liveness task, which is gated
+        // on VmPhase::Ready and dispatched through `spawn_blocking`, so it
+        // cannot precede the bind. Measured on four cold boots of this guest:
+        // the listener answers 61ms, 78ms, 90ms and 255ms after daemon start,
+        // and the 255ms case is the genuinely cold one where the vault image
+        // was MISSING and provisioning then ran for a further 24 seconds.
+        // The listener was bound 36ms BEFORE provisioning began.
+        //
+        // The real cause is the one 757-4hdt found later and recorded in its
+        // own verification event: `vsock_loopback` was not loaded on that
+        // boot. This probe connects to CID 1 (VMADDR_CID_LOCAL), which
+        // REQUIRES that module, so it reported the control wire down while
+        // the wire was working. The module load races the probe; the bind
+        // does not. That is why the modprobe and the ENETUNREACH branch
+        // below are the load-bearing half of the fix, and why a shorter
+        // deadline is gated on making the module dependency deterministic
+        // rather than on reordering anything in the daemon.
+        //
+        // Keeping the superseded diagnosis here had a cost: it was read as
+        // current and a p1 release-blocker packet was filed to implement it.
         //
         // Raising the deadline in place would not have fixed it: ExecStartPost
         // BLOCKS activation, so a generous window turns a fast failure into a
@@ -1605,6 +1625,15 @@ modprobe vsock_loopback 2>/dev/null || true
 # Reporting the first as NOT-BOUND is a false alarm about a working system;
 # reporting it as OK would be the always-passes probe 735-ewzp replaced.
 # So it gets its own verdict and its own exit code.
+# The 900s is NOT a bind-latency budget. Measured over four cold boots
+# (order 795-jeym, 2026-08-17) the listener answers 61-255 ms after daemon
+# start, so 900s is ~3500x the worst observed bind. What the window actually
+# covers is the `vsock_loopback` module load racing this probe: the modprobe
+# above is best-effort, and on a boot where systemd-modules-load has not run
+# yet the retry loop is the only thing that converges. Shorten this ONLY
+# after that dependency is made deterministic (ordering the unit after
+# systemd-modules-load.service, or an ExecStartPre modprobe) -- otherwise a
+# short deadline just converts a slow pass into a fast INDETERMINATE.
 DEADLINE=$(( $(date +%s) + ${TILLANDSIAS_READY_TIMEOUT:-900} ))
 last=""
 while :; do
