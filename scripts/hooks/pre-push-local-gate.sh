@@ -337,29 +337,47 @@ attempt_plan_only_lane() {
     # Fragment schema over the folded ledger, plus the fold-discard trap check.
     # Both need the tillandsias-plan binary; in-forge it exists. Absent, note
     # the skip honestly (yq already parsed every blob above).
-    local out
+    local out rc
     if [[ $have_plan -eq 1 ]]; then
-        if ! out="$("$plan_bin" check 2>&1)"; then
-            echo "plan-only lane: validation FAILED — tillandsias-plan check refused the folded ledger (full gate required):" >&2
-            echo "$out" | head -6 | sed 's/^/  /' >&2
+        # A fragment `check` could not PARSE is skipped, and plain `check` still
+        # exits ZERO on purpose (measured on windows 2026-08-15, order 753-*):
+        # build.sh runs that command on every host, so a fleet-wide refusal
+        # would make one host's typo every host's red build (699-dycj).
+        #
+        # This lane is different, and that is why it opts IN. Without yq it
+        # DELEGATES its YAML parse to this command (see the LANE_NOTES above),
+        # so a `packets: [unclosed` fragment sailed onto the trunk on the fast
+        # lane while the lane printed "validated <path>" — this file's own
+        # stated worst case, a gate vouching for evidence it did not gather.
+        # --strict-fragments (796-4ydb) makes the skip the refusal the default
+        # declines to make, and exit 3 distinguishes "corpus incomplete" from
+        # exit 1's "ledger unsound" WITHOUT reading prose, which is what this
+        # block used to do.
+        # `&& rc=0 || rc=$?` rather than a bare assignment plus `rc=$?`: this
+        # file is `set -uo pipefail` today, but a non-zero exit is now the
+        # EXPECTED path here, and that shape stays correct if `-e` is ever added.
+        out="$("$plan_bin" check --strict-fragments 2>&1)" && rc=0 || rc=$?
+        if [[ $rc -eq 3 ]]; then
+            echo "plan-only lane: validation FAILED — tillandsias-plan check could not PARSE a pushed fragment and skipped it (full gate required):" >&2
+            printf '%s\n' "$out" | grep -E 'malformed:|does not parse and was SKIPPED' | head -6 | sed 's/^/  /' >&2
             return 1
         fi
-        # A fragment `check` could not PARSE is skipped with a warning and an
-        # exit code of ZERO (measured on windows 2026-08-15, order 753-*):
-        #
-        #   warning: ledger fragment plan/index.d/<f> does not parse and was
-        #            SKIPPED — its contents are not in the answers below
-        #   ok: 0 packets, ids unique, live references sound
-        #
-        # Without yq this lane DELEGATES its YAML parse to that command (see the
-        # LANE_NOTES above), so a `packets: [unclosed` fragment sailed onto the
-        # trunk on the fast lane while the lane printed "validated <path>". That
-        # is this file's own stated worst case -- a gate vouching for evidence it
-        # did not gather -- so the skip is read here as the refusal `check`
-        # declines to make. The deeper question of whether `check` itself should
-        # exit non-zero is filed separately; it has callers on three hosts.
+        if [[ $rc -ne 0 ]]; then
+            echo "plan-only lane: validation FAILED — tillandsias-plan check refused the folded ledger (full gate required):" >&2
+            printf '%s\n' "$out" | head -6 | sed 's/^/  /' >&2
+            return 1
+        fi
+        # LEGACY BACKSTOP, and it must stay until every host is past 796-4ydb.
+        # A binary predating that order has no --strict-fragments; its `check`
+        # arm ignores unknown trailing args entirely, so it exits 0 and the
+        # typed refusal above never fires. Stale plan binaries on other hosts
+        # are the normal case here (that is why order 569 exists), and silently
+        # trading a working prose grep for a flag the local binary does not
+        # implement would REMOVE this gate on exactly the hosts it was written
+        # for. A current binary can never reach this line with a skipped
+        # fragment, so this only ever catches an old one.
         if printf '%s' "$out" | grep -q 'does not parse and was SKIPPED'; then
-            echo "plan-only lane: validation FAILED — tillandsias-plan check could not PARSE a pushed fragment and skipped it (full gate required):" >&2
+            echo "plan-only lane: validation FAILED — tillandsias-plan check could not PARSE a pushed fragment and skipped it, and this binary predates --strict-fragments (full gate required):" >&2
             printf '%s' "$out" | grep 'does not parse and was SKIPPED' | head -6 | sed 's/^/  /' >&2
             return 1
         fi
