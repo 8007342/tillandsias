@@ -120,15 +120,19 @@ fi
 echo "ok case5: memo re-probes when the binary changes"
 
 # ── CASE 6: the memo actually memoizes (cost control) ───────────────────────
+# Asserted by BEHAVIOUR, not by a stopwatch. Prime the cache, then strip the
+# execute bit: the content — and therefore the sha256 the memo is keyed on —
+# is unchanged, so a memoized verdict must still return 0 while a live probe
+# could not possibly run the file. A timing threshold would have been both
+# flakier and non-portable (`date +%s%N` is a GNU-ism that BSD date answers
+# with garbage rather than an error; caught by check-bash-dialect, 761-g36m).
 opencode_render_contract_cached "$tmp/opencode-good" >/dev/null 2>&1 \
-    || fail "case6: good binary refused"
-start=$(date +%s%N)
-opencode_render_contract_cached "$tmp/opencode-good" >/dev/null 2>&1 \
-    || fail "case6: cached verdict not honoured"
-elapsed_ms=$(( ( $(date +%s%N) - start ) / 1000000 ))
-if [ "$elapsed_ms" -gt 500 ]; then
-    fail "case6: second probe took ${elapsed_ms}ms — memo not used"
+    || fail "case6: good binary refused on first probe"
+chmod -x "$tmp/opencode-good"
+if ! opencode_render_contract_cached "$tmp/opencode-good" >/dev/null 2>&1; then
+    fail "case6: cached verdict not honoured — the memo re-probed a binary it had already cleared"
 fi
-echo "ok case6: repeat probe served from memo in ${elapsed_ms}ms"
+chmod +x "$tmp/opencode-good"
+echo "ok case6: repeat probe served from memo (no re-execution)"
 
 echo "PASS: opencode render-probe fixture (order 626-p4xd) 6/6"
