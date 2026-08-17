@@ -723,6 +723,28 @@ mod tests {
     use super::*;
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
+
+    /// Serializes every test below that mutates PATH / TILLANDSIAS_GIT_IMAGE /
+    /// TILLANDSIAS_PODMAN_BIN.
+    ///
+    /// Order 793-a62g. Five tests here rewrite those PROCESS-GLOBAL variables
+    /// and politely restore them afterwards — which is correct in isolation
+    /// and useless in parallel, because cargo runs them as threads in one
+    /// process. Concurrently, one test's restore lands in the middle of
+    /// another's setup, so a test that installed a mock `gh` on PATH suddenly
+    /// resolves the real one. The four `remote_projects` failures that held
+    /// the v0.4.260817.1 release were exactly this, and they passed 11/11 the
+    /// moment they ran alone — which is the signature to recognise: an
+    /// environment-mutating test that only fails when it has company.
+    ///
+    /// The lock is poison-tolerant: a panicking test must not convert one
+    /// failure into a cascade of misleading ones in its siblings.
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
     use tempfile::tempdir;
 
     fn install_podman_mock() -> tempfile::TempDir {
@@ -738,6 +760,7 @@ mod tests {
 
     #[test]
     fn git_image_tag_defaults_to_fully_qualified_versioned_tag() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -820,6 +843,7 @@ mod tests {
 
     #[test]
     fn discover_projects_uses_containerized_gh() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -861,6 +885,7 @@ mod tests {
 
     #[test]
     fn clone_project_uses_containerized_gh() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -951,6 +976,7 @@ mod tests {
     /// `owner/name` form.
     #[test]
     fn clone_normalizes_api_url_to_owner_name() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that
@@ -1014,6 +1040,7 @@ mod tests {
     /// containers (`build_git_run_args` and friends).
     #[test]
     fn clone_uses_host_parent_bindmount() {
+        let _env = env_lock();
         // Recover from poison rather than panic: this mutex only serializes
         // access to shared env vars across tests in this module, so one
         // test's unrelated panic must not cascade-fail every test that

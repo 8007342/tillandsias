@@ -36,6 +36,15 @@ windows = { version = "0.58", features = [
     "Win32_Security",
 ] }
 
+# 792-cf5x: parse locales/*.toml at BUILD time only — the strings are baked
+# into the binary as consts, so this never becomes a runtime dependency and
+# the Windows cross-build stays lean (toml is pure Rust and is already in
+# this crate's graph via tillandsias-core, so this adds 0 crates).
+# `workspace = true` is load-bearing: Cargo.lock carries both toml 0.8.2 and
+# toml 1.1.2, and a bare version here would pull the wrong one.
+[build-dependencies]
+toml = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util", "net", "test-util"] }

@@ -35375,6 +35375,12 @@ plan_index:
         Foundation packet. Can run in parallel with 628-p5tj. Blocks 628-h4nx and 628-w9sm.
       events:
         - type: progress
+          ts: "2026-08-17T07:29:47Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0723z"
+          host: macos
+          summary: |
+            SEQUENCING FINDING that closes out the proposed "convert the already-matching keys first" slice: it is NOT executable as a safe first step, and the reason is where the matches live rather than how many there are. All FIVE production matches at HEAD sit in crates with heavy source-scan test coverage — app.name in macos-tray, menu.attach_here / menu.build.chip_maintenance / menu.unhealthy_environment in headless/tray, menu.status.separator in windows-tray. ZERO are in tillandsias-host-shell, which is the one crate with no source-scan assertion sites and therefore the crate the measurement said to convert FIRST. So the safe crate has nothing to convert and the convertible strings are all in unsafe crates (headless alone carries 82 include_str assertion sites that assert on file TEXT, so even a byte-identical runtime refactor turns them red). One of the five is also the known semantic trap: chip_maintenance byte-matches while the semantically correct key is menu.maintenance. CONSEQUENCE: the string layer cannot become load-bearing by converting existing matches. It becomes load-bearing only after 628-w9sm rules on the drift and the corpus is regenerated from the shipped literals — which is what 792-77bt already routed. Recording this so the next host does not re-derive it and start converting in headless.
+        - type: progress
           ts: "2026-08-17T04:38:23Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0423z"
           host: macos
@@ -35585,6 +35591,12 @@ plan_index:
       notes: |
         GOVERNANCE: reconciling drift CHANGES a user-visible string on whichever platform loses, which spec:tray-ux forbids without recorded operator approval for the exact surface. The claiming agent brings the inventory and PROPOSED canonical spellings to the operator and waits — including for cases where one side is obviously a typo. `🔑 GitHubLogin` vs `🔑 GitHub Login` is exactly such a case and still needs the ruling.
       events:
+        - type: progress
+          ts: "2026-08-17T06:26:15Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0623z"
+          host: macos
+          summary: |
+            DRIFT ENTRIES ROUTED HERE, as 628-c7qd requires (never fixed in passing, spec:tray-ux). The machine-checked report is plan/issues/tray-string-corpus-drift-2026-08-17.md, regenerable with scripts/check-tray-string-corpus-drift.sh --list: 150 of 168 en.toml values appear NOWHERE in any tray source. The count is deliberately generous to matches (comments and cfg(test) modules are in the haystack), so 150 is a FLOOR; a stricter production-only measurement the same day put verbatim matches at 9 rather than 18. Representative entries needing a ruling: en.toml maintenance uses a pickaxe emoji where the tray renders a wrench; quit lacks the leading X the tray renders; no_projects says "No projects detected" where the tray says "(no projects yet)". en.toml also carries whole surfaces no tray has (Blooming, Seedlings, Serve Here, Settings) and lacks every agent the tray lists (Agents, Claude, OpenCode, Codex, Antigravity, Observatorium). Each is a UX decision, not a refactor detail — which is exactly why they are here rather than in the string-layer slices.
         - type: filed
           ts: "2026-08-09T08:51:57Z"
           agent_id: windows-claude-fable-metaorch-20260809t063000z
@@ -55967,6 +55979,12 @@ plan_index:
             Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
 
       events:
+        - type: note
+          ts: "2026-08-17T07:26:58Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T072658Z"
+          host: linux_mutable
+          summary: |
+            RELEASE HELD, second reason, operator-directed 2026-08-17: the windows host is landing major fixes to the idiomatic layer and the operator asked that the release carry them. So v0.4.260817.1 waits for windows-next rather than shipping now. Status of the linux side meanwhile: PR #98 open, eight gate-surfaced defects fixed and pushed, plus the 793-a62g parallel-test env races (tillandsias-podman 159/159, remote_projects 11/11). Remaining gate red is 794-57bv — unit tests reaching the REAL image layer and racing on atomic rename, which is precisely the idiomatic-layer class windows owns; filed with the linux reproduction as evidence for their work rather than fixed here. This packet stays the reason the release matters: every host on the published binary still cannot drain forge work until a release carries images/git/probe-upstream-auth.sh.
         - type: completed
           ts: "2026-08-17T06:28:10Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
