@@ -1167,26 +1167,26 @@ mod tests {
     fn launch_spec_refuses_hostile_project_names() {
         // The four names from the audit, plus the traversal and flag shapes.
         for hostile in [
-            "a'b",           // closes the single-quoted word
-            "a b",           // splits across std::process / wt.exe quoting
-            "a$(id)b",       // command substitution
-            "a;b",           // statement separator (and a wt.exe separator)
-            "a\"b",          // double quote
-            "a`id`b",        // backtick substitution
-            "a|b",           // pipeline
-            "a&b",           // background / and-list
-            "a\nb",          // newline: a second command line
-            "..",            // path traversal against the projects root
-            ".",             // ditto
-            ".hidden",       // hidden path, not a project
-            "-rf",           // reads as a flag at the far end
-            "a/b/c",         // more than one '/'
-            "owner/",        // empty component
-            "/repo",         // empty component
-            "",              // empty name
-            "a\u{0}b",       // embedded NUL
-            "café",          // non-ASCII: outside the allowed set
-            "a\\b",          // backslash
+            "a'b",     // closes the single-quoted word
+            "a b",     // splits across std::process / wt.exe quoting
+            "a$(id)b", // command substitution
+            "a;b",     // statement separator (and a wt.exe separator)
+            "a\"b",    // double quote
+            "a`id`b",  // backtick substitution
+            "a|b",     // pipeline
+            "a&b",     // background / and-list
+            "a\nb",    // newline: a second command line
+            "..",      // path traversal against the projects root
+            ".",       // ditto
+            ".hidden", // hidden path, not a project
+            "-rf",     // reads as a flag at the far end
+            "a/b/c",   // more than one '/'
+            "owner/",  // empty component
+            "/repo",   // empty component
+            "",        // empty name
+            "a\u{0}b", // embedded NUL
+            "café",    // non-ASCII: outside the allowed set
+            "a\\b",    // backslash
         ] {
             let err = launch_spec(&PtyIntent::Shell, Some(hostile), 24, 80)
                 .expect_err(&format!("{hostile:?} must be refused, not launched"));
