@@ -1,0 +1,211 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_immutable (yoga), 2026-08-17T21:30:00Z.
+#
+# The CPU arm of 802-2536's benchmark, measured with the windows host's
+# methodology; plus two blockers found by trying to run the GPU arm. Both
+# proposals below are FLEET-GATED: they change a shared image or a shared
+# script, so they ask hosts to approve or reject with reasons rather than
+# landing unilaterally (operator directive 2026-08-17).
+status:
+  - packet_id: npu-lane-has-no-engine-so-the-tier-can-never-be-chosen
+    field: status
+    value: ready
+    ts: "2026-08-17T21:30:00Z"
+    host: linux_immutable
+
+events:
+  - packet_id: npu-lane-has-no-engine-so-the-tier-can-never-be-chosen
+    event:
+      type: progress
+      ts: "2026-08-17T21:30:00Z"
+      agent_id: linux-yoga-claude-20260817T210500Z
+      host: linux_immutable
+      host_note: CPU arm measured; GPU arm blocked on a missing userspace driver; NPU unchanged
+      summary: |
+        THE CPU ARM, on the fleet's own methodology (284513c22), so it is
+        comparable rather than a fourth anecdote: 40 real spec-index chunks,
+        p50 298 chars, warm-up discarded, 3 reps, 0 failed requests.
+
+          embed    nomic-embed-text   61 / 60 / 62 ms per chunk   median 61
+          decode   qwen2.5:0.5b       98.2 / 109.1 / 121.2 tok/s
+          prefill  qwen2.5:0.5b       4351 / 4463 / 4764 tok/s
+
+        FOR SCALE, against the windows host's numbers on the same workload
+        shape: their CPU lane measured 586.6 ms/chunk and their iGPU (dzn)
+        460.3 ms/chunk on p50 254-char chunks. This host's CPU lane is ~7.5x
+        faster than their best lane, on slightly LARGER chunks. Do not read
+        that as "native Linux is 7.5x": the parts differ (Ryzen AI 5 340 with
+        AVX-512 VNNI/BF16 vs theirs) and theirs ran inside WSL2. The
+        attribution between part, ISA and virtualization layer is NOT
+        established by this measurement and should not be claimed from it.
+
+        WHAT IT DOES ESTABLISH, and it matters for 552: at 61 ms/chunk a full
+        9909-chunk re-embed is ~10 minutes here (measured end to end at 12m19s
+        including HTTP and jq overhead) against the ~90-115 min estimated on
+        the windows host. If a full corpus re-embed runs anywhere in the fleet,
+        it should run here.
+
+        BLOCKER 1 — THE GPU ARM CANNOT RUN, and the reason is NOT the one
+        order 408 solved for CUDA. Measured: the dev inference container has
+        HostConfig.Devices [] and runner.vram="0 B", i.e. CPU-only, exactly the
+        pre-fix state macuahuitl described. Cause: dev-inference-ensure.sh:167
+        gates accelerator passthrough on `legacy_tier = gpu-cuda`, and this
+        host probes `gpu-rocm`, so no branch matches and no device is passed.
+        But adding the device is NOT sufficient — I tested it. A throwaway
+        container with `--device /dev/dri` sees both nodes (renderD128 is mode
+        666, so no group membership is needed) and still reports
+        `GPU: CPU only`, `initial_count=0`. Inside the image there is no
+        /usr/share/vulkan/icd.d, no libvulkan loader, and no
+        libvulkan_radeon.so: it ships llama-server's vulkan BACKEND with none
+        of the vulkan USERSPACE DRIVER stack. NVIDIA needed a CDI spec to
+        inject host driver libraries; Mesa/RADV is the opposite shape — the
+        driver is open source and belongs IN the image. Proposed as 805-3egx
+        rather than done, because it changes a shared image.
+
+        BLOCKER 2 — MeasurementRecord HAS NO WRITER, so "record into the
+        existing MeasurementRecord" is not yet actionable for anyone. The
+        struct exists (crates/tillandsias-headless/src/accel_probe.rs:60-70:
+        device, engine, prefill_tps, decode_tps, joules_per_token, degraded,
+        degraded_reason) but run_probe() hard-codes `let measurements =
+        Vec::new();` (accel_probe.rs:127) under a comment asserting
+        "Microbenchmarks run on demand" — and no such path exists anywhere:
+        no construction site, no CLI flag, no input file the probe reads. The
+        capability document IS persisted (capabilities.json), and this host's
+        copy carries a fresh timestamp, three enumerated devices, and
+        `"measurements": []`. So the empty array means NOTHING WRITES, not
+        that nothing has run. Note also the schema mismatch this creates: the
+        struct is tokens-per-second only, with no latency, no timestamp and no
+        workload identifier, so ms-per-chunk — the statistic the fleet's own
+        embedding comparison is built on — has nowhere to live in it. Filed as
+        805-wgbb.
+
+        SCRIPT: scripts/bench-accel-lane.sh is the workload, so every host runs
+        the identical one. It carries the windows host's hard-won methodology
+        as executable code rather than prose — real corpus chunks (a synthetic
+        2000-char chunk against a real p50 of 254 is what invalidated the first
+        attempt), a discarded warm-up (the first Vulkan dispatch pays pipeline
+        compilation), all reps reported, and the arm labelled by what the lane
+        REPORTED rather than by what was requested, because an arm labelled by
+        intent is how a GPU server that failed to start got recorded as a GPU
+        result. Timing is curl's %{time_total}, not `date +%s%3N`, which the
+        dialect gate caught: BSD date SUCCEEDS with garbage, so a macOS host
+        would have produced confident nonsense.
+
+packets:
+  - packet_id: amd-vulkan-userspace-missing-from-inference-image
+    order: 805-3egx
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: decision
+    title: "the inference image ships llama-server's vulkan backend with no vulkan userspace driver, so every AMD/iGPU host is CPU-only — proposal, fleet-gated"
+    deliverable: "a fleet decision on shipping mesa vulkan userspace (loader + RADV ICD) in the inference image and passing /dev/dri for non-CUDA GPU tiers, with per-host approve/reject and reasons"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [inference, accel, podman, images, fleet, decision]
+    estimated_hours: 4
+    context: |
+      MEASURED ON yoga (Fedora Silverblue, AMD Ryzen AI 5 340, Radeon 840M):
+
+        tillandsias --capabilities -> accel_class=workstation-gpu
+                                     accel_gpu=usable accel_gpu_name=Vulkan_GPU
+                                     legacy_tier=gpu-rocm
+        dev inference container      -> HostConfig.Devices [], runner.vram "0 B"
+
+      Two independent gaps, both needed:
+
+      1. PASSTHROUGH. scripts/dev-inference-ensure.sh:167 passes a device only
+         when legacy_tier = gpu-cuda. gpu-rocm gets nothing.
+
+      2. USERSPACE DRIVER. Adding `--device /dev/dri` alone does NOT work — I
+         tested it. The container sees renderD128 (mode 666, no group needed)
+         and ollama still reports `GPU: CPU only`, `initial_count=0`, because
+         the image has no /usr/share/vulkan/icd.d, no libvulkan loader and no
+         libvulkan_radeon.so. The vulkan BACKEND is present
+         (`engine: set=core+vulkan backends=[vulkan] llama-server=ok`); the
+         DRIVER is not.
+
+      This is the mirror image of order 408. NVIDIA's userspace must match the
+      host driver, hence a CDI spec injecting host libraries. Mesa/RADV is
+      open source and version-independent of the kernel driver, so it belongs
+      IN the image — a package addition, not a host-state generator.
+
+      WHY THIS IS A PROPOSAL AND NOT A COMMIT. The windows host DELETED exactly
+      these packages from tillandsias-build (c6df04f17) after measuring, because
+      ollama defaults OLLAMA_VULKAN=true and their presence silently moved
+      dev-inference onto the iGPU for a 1.23x decode regression. Re-adding them
+      to a shared image without the fleet's agreement would re-create the
+      condition they removed. Two things have changed since, and the fleet
+      should weigh them:
+        * They then WITHDREW the embedding half of that reasoning (284513c22):
+          embeddings are prefill-shaped, so the iGPU WINS them — 460 vs 587
+          ms/chunk. The unified rule they arrived at is route by WORKLOAD
+          SHAPE, not by host: prefill-shaped work to the iGPU, decode-shaped
+          work to the CPU on this class of part.
+        * A decode regression is only a regression if the lane is chosen for
+          decode. If the image carries the driver but the ROUTER keeps decode
+          on the CPU, both results hold simultaneously.
+      So the question for each host is narrower than "vulkan yes/no": is it
+      acceptable to ship the driver in the image while routing by workload
+      shape, given OLLAMA_VULKAN=true means presence alone changes placement
+      unless something pins it?
+
+      OPEN AND HONESTLY UNKNOWN: whether this host's iGPU beats its CPU for
+      embeddings at all. The windows iGPU won at 587 ms/chunk CPU; this host's
+      CPU is at 61 ms/chunk, roughly ten times faster, and a Radeon 840M shares
+      system RAM. The crossover that holds there may well invert here. I cannot
+      measure it until the driver exists, which is precisely why this is a
+      proposal rather than a conclusion — and why "just enable it" is the wrong
+      instinct on a host whose CPU lane is this strong.
+
+    exit_criteria:
+      - |
+          Each host kind records approve or reject WITH A REASON, specifically
+          on: shipping mesa vulkan userspace in the inference image, and
+          passing /dev/dri when the tier is a non-CUDA GPU tier.
+      - |
+          If approved, yoga measures the iGPU arm with scripts/bench-accel-lane.sh
+          and publishes it beside the CPU arm, so the crossover is decided by the
+          matrix and not by either host's intuition.
+      - |
+          If rejected, yoga's local fix stays fleet-compatible: the host runs
+          CPU-only, which is the current behaviour, and 802-2536 records that
+          the AMD lane is unmeasurable by fleet decision rather than by defect.
+
+  - packet_id: measurement-record-has-no-writer
+    order: 805-wgbb
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "MeasurementRecord is defined, persisted-adjacent and never written — 802-2536 asks hosts to record into a struct nothing can populate"
+    deliverable: "either a writer that lands benchmark results in the capability document, or MeasurementRecord retired in favour of the shape the benchmark actually produces"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [accel, benchmarking, fail-loud]
+    estimated_hours: 4
+    context: |
+      crates/tillandsias-headless/src/accel_probe.rs:60-70 defines
+      MeasurementRecord { device, engine, prefill_tps, decode_tps,
+      joules_per_token, degraded, degraded_reason }. run_probe() at
+      accel_probe.rs:127 assigns `let measurements = Vec::new();` with the
+      comment "Microbenchmarks run on demand / bounded". There is no on-demand
+      path: no construction site of MeasurementRecord anywhere in the tree, no
+      CLI flag that triggers or ingests a measurement, and no file the probe
+      reads for one. The capability document itself IS written
+      (capabilities.json, via load_or_probe) and this host's copy has a fresh
+      timestamp and three fully enumerated devices beside `"measurements": []`.
+
+      So `[]` means nothing writes, not that nothing has run — and 802-2536's
+      instruction to record "into the existing MeasurementRecord" cannot be
+      followed by any host today. Worth catching now rather than after three
+      hosts have each invented a private results file.
+
+      SCHEMA MISMATCH TO SETTLE AT THE SAME TIME: the struct is
+      tokens-per-second only. It has no latency field, no timestamp and no
+      workload identifier, so ms-per-chunk — the statistic the fleet's own
+      embedding comparison (284513c22) is built on, and the one that decides
+      the embed lane — has nowhere to live. Either the struct grows a latency
+      and workload dimension, or the benchmark's own JSON becomes the record
+      and the struct is retired. Picking one is cheaper than maintaining a
+      struct nobody can write into.
