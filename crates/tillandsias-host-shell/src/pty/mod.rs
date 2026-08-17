@@ -112,6 +112,111 @@ fn vm_login_shell_argv(exec_tail: &str) -> Vec<String> {
     vec!["/bin/bash".to_string(), "-lc".to_string(), script]
 }
 
+/// A project name that must not be handed to the guest.
+///
+/// Carries the offending name and the exact reason, because a refusal that
+/// only says "invalid" sends the operator to guess which of their directories
+/// is at fault.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectNameRefused {
+    pub name: String,
+    pub reason: String,
+}
+
+impl std::fmt::Display for ProjectNameRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "refusing to launch project {:?}: {}. Project names may contain \
+             ASCII letters, digits, '-', '_' and '.', with at most one '/' \
+             separating owner from repo.",
+            self.name, self.reason
+        )
+    }
+}
+
+impl std::error::Error for ProjectNameRefused {}
+
+/// Refuse a project name that cannot safely cross the guest launch path.
+///
+/// WHY THIS EXISTS. [`launch_spec`] interpolates the project name into a
+/// SINGLE-QUOTED shell word — `exec tillandsias-headless --cloud '<p>' …` —
+/// which the guest then runs through `/bin/bash -lc`. Until 2026-08-17 that
+/// interpolation had no escaping and no validation, and for LOCAL projects the
+/// name is a directory name read verbatim off disk by
+/// `tillandsias_headless::local_projects::scan_project_root` (`file_name()`).
+/// A directory literally named `a'b` closes the quote and everything after it
+/// is bash source. The same string also crosses `std::process` MSVC quoting and
+/// (on Windows) wt.exe's own re-parser, both of which have already produced
+/// field crashes — see plan/issues/windows-github-login-blank-terminal-2026-08-09.md
+/// and plan/issues/wt-github-login-semicolons-2026-06-30.md.
+///
+/// REFUSE, DO NOT SANITIZE. A silently rewritten name launches the WRONG
+/// project, which is worse than not launching: the operator clicked one thing
+/// and got another, with nothing saying so.
+///
+/// THE CHARACTER SET. The guest's own `podman exec` arm
+/// (`tillandsias_headless::pty_handler`) allows `is_ascii_alphanumeric() || '-'`.
+/// That rule is correct for a container name but too narrow here, because this
+/// path also carries legitimate GitHub `owner/repo` slugs and local directory
+/// names: GitHub repository names allow `.` and `_`, owners allow `-`. So the
+/// set is `[A-Za-z0-9._-]` plus at most ONE `/`. Every character outside it —
+/// including every shell metacharacter, every quote, and whitespace — is
+/// refused.
+///
+/// THIS IS A GUARD, NOT THE FIX. The real fix is to stop flattening argv into
+/// a shell string at all; that is packet 795-zshi.
+///
+/// @trace spec:host-shell-architecture, spec:remote-projects
+pub fn validate_project_name(name: &str) -> Result<(), ProjectNameRefused> {
+    let refuse = |reason: &str| {
+        Err(ProjectNameRefused {
+            name: name.to_string(),
+            reason: reason.to_string(),
+        })
+    };
+
+    if name.is_empty() {
+        return refuse("the name is empty");
+    }
+    // Generous but finite. Longer than any real repo slug, short enough that a
+    // pathological name cannot be used to build an enormous command line.
+    if name.len() > 128 {
+        return refuse("the name is longer than 128 bytes");
+    }
+    if let Some(bad) = name
+        .chars()
+        .find(|c| !(c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/')))
+    {
+        return refuse(&format!(
+            "it contains {bad:?}, which is not an allowed project-name character"
+        ));
+    }
+
+    let segments: Vec<&str> = name.split('/').collect();
+    if segments.len() > 2 {
+        return refuse("it contains more than one '/'; expected `owner/repo` or a bare name");
+    }
+    for segment in &segments {
+        if segment.is_empty() {
+            return refuse("it has an empty component around '/'");
+        }
+        // `.` and `..` would resolve against the projects root as path
+        // traversal in `resolve_cloud_project_checkout`, which takes the last
+        // `/`-separated component and joins it to the root.
+        if *segment == "." || *segment == ".." {
+            return refuse("'.' and '..' are path traversal, not project names");
+        }
+        if segment.starts_with('-') {
+            return refuse("a component starting with '-' would be read as a flag");
+        }
+        if segment.starts_with('.') {
+            return refuse("a component starting with '.' is a hidden path, not a project");
+        }
+    }
+    Ok(())
+}
+
 fn agent_flag(agent: SelectedAgent) -> &'static str {
     match agent {
         SelectedAgent::Claude => "--claude",
@@ -179,7 +284,19 @@ pub fn intent_for_action(
 ///
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping),
 /// plan/issues/tray-convergence-coordination.md (Open Shell / agent target)
-pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u16) -> PtyOpenOpts {
+pub fn launch_spec(
+    intent: &PtyIntent,
+    project: Option<&str>,
+    rows: u16,
+    cols: u16,
+) -> Result<PtyOpenOpts, ProjectNameRefused> {
+    // Fail BEFORE building anything. `project` is interpolated into a
+    // single-quoted shell word below and the name may come verbatim off disk;
+    // see `validate_project_name` for the full reasoning. Refusal is loud and
+    // names the offending character — this is deliberately not a sanitizer.
+    if let Some(p) = project {
+        validate_project_name(p)?;
+    }
     let inner: Vec<String> = match intent {
         PtyIntent::Shell => vec!["/bin/bash".to_string(), "-l".to_string()],
         PtyIntent::GithubLogin => {
@@ -250,7 +367,7 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
         // No project: bare VM (Shell = debug escape hatch; gh login = user-level).
         None => inner,
     };
-    PtyOpenOpts {
+    Ok(PtyOpenOpts {
         rows,
         cols,
         argv,
@@ -279,7 +396,7 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             ("LANG".to_string(), "C.UTF-8".to_string()),
         ],
         cwd: None,
-    }
+    })
 }
 
 /// Outbound side of the control wire: wrap `body` in a `ControlEnvelope`
@@ -912,13 +1029,13 @@ mod tests {
     fn launch_spec_maps_intents_to_in_vm_argv() {
         // No project => bare VM command (debug escape hatch / pre-attach login).
         assert_eq!(
-            launch_spec(&PtyIntent::Shell, None, 24, 80).argv,
+            launch_spec(&PtyIntent::Shell, None, 24, 80).unwrap().argv,
             vec!["/bin/bash", "-l"]
         );
         // GitHub login runs the orchestrated subcommand through a LOGIN shell.
         // Exact script is tested via invariants below (wrapper b64 makes the
         // string too long for a readable literal assert_eq!).
-        let gl = launch_spec(&PtyIntent::GithubLogin, None, 24, 80);
+        let gl = launch_spec(&PtyIntent::GithubLogin, None, 24, 80).unwrap();
         assert_eq!(gl.argv[0], "/bin/bash");
         assert_eq!(gl.argv[1], "-lc");
         let github_cmd = &gl.argv[2];
@@ -939,15 +1056,19 @@ mod tests {
         assert!(github_cmd.contains("https://vault:8200"));
         assert!(github_cmd.contains("exec tillandsias-headless --github-login"));
         assert_eq!(
-            launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80).argv,
+            launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80)
+                .unwrap()
+                .argv,
             vec!["tillandsias", "--opencode"]
         );
         assert_eq!(
-            launch_spec(&PtyIntent::Agent(SelectedAgent::Claude), None, 24, 80).argv,
+            launch_spec(&PtyIntent::Agent(SelectedAgent::Claude), None, 24, 80)
+                .unwrap()
+                .argv,
             vec!["tillandsias", "--claude"]
         );
         // Size is carried; TERM is set; cwd left to the in-VM default.
-        let s = launch_spec(&PtyIntent::Shell, None, 30, 100);
+        let s = launch_spec(&PtyIntent::Shell, None, 30, 100).unwrap();
         assert_eq!((s.rows, s.cols), (30, 100));
         assert!(
             s.env
@@ -963,7 +1084,7 @@ mod tests {
         // The wire trays reach it via the orchestrated headless flow (resolve/
         // clone + enclave bring-up + attach) — never a bare `podman exec` into
         // a forge that nothing provisioned (e2e failure 2026-07-02).
-        let sh = launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80);
+        let sh = launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80).unwrap();
         assert_eq!(&sh.argv[0..2], &["/bin/bash", "-lc"]);
         assert!(sh.argv[2].contains("exec tillandsias-headless --cloud 'myapp' --bash"));
         let ag = launch_spec(
@@ -971,7 +1092,8 @@ mod tests {
             Some("octo-repo"),
             24,
             80,
-        );
+        )
+        .unwrap();
         assert_eq!(&ag.argv[0..2], &["/bin/bash", "-lc"]);
         assert!(
             ag.argv[2].contains("exec tillandsias-headless --cloud 'octo-repo' --claude"),
@@ -995,7 +1117,8 @@ mod tests {
             Some("8007342/visual-chess"),
             24,
             80,
-        );
+        )
+        .unwrap();
         assert_eq!(spec.argv[0], "/bin/bash");
         assert_eq!(spec.argv[1], "-lc");
         let script = &spec.argv[2];
@@ -1016,7 +1139,7 @@ mod tests {
         assert!(script.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
 
         // Maintenance shell on a cloud project takes the same path, --bash kind.
-        let sh = launch_spec(&PtyIntent::Shell, Some("owner/repo"), 24, 80);
+        let sh = launch_spec(&PtyIntent::Shell, Some("owner/repo"), 24, 80).unwrap();
         assert_eq!(sh.argv[1], "-lc");
         assert!(sh.argv[2].contains("--cloud 'owner/repo' --bash"));
 
@@ -1027,8 +1150,101 @@ mod tests {
             Some("myapp"),
             24,
             80,
-        );
+        )
+        .unwrap();
         assert!(local.argv[2].contains("--cloud 'myapp' --opencode"));
+    }
+
+    /// E3, 2026-08-17. `launch_spec` interpolates the project name into a
+    /// SINGLE-QUOTED shell word, and for local projects that name is a
+    /// directory name read verbatim off disk. A directory called `a'b` closed
+    /// the quote and turned the rest of the script into attacker-chosen bash.
+    ///
+    /// The refusal must be LOUD and must NAME the reason — a sanitizer that
+    /// quietly rewrote `a'b` to `ab` would launch a different project than the
+    /// one clicked, with nothing saying so.
+    #[test]
+    fn launch_spec_refuses_hostile_project_names() {
+        // The four names from the audit, plus the traversal and flag shapes.
+        for hostile in [
+            "a'b",           // closes the single-quoted word
+            "a b",           // splits across std::process / wt.exe quoting
+            "a$(id)b",       // command substitution
+            "a;b",           // statement separator (and a wt.exe separator)
+            "a\"b",          // double quote
+            "a`id`b",        // backtick substitution
+            "a|b",           // pipeline
+            "a&b",           // background / and-list
+            "a\nb",          // newline: a second command line
+            "..",            // path traversal against the projects root
+            ".",             // ditto
+            ".hidden",       // hidden path, not a project
+            "-rf",           // reads as a flag at the far end
+            "a/b/c",         // more than one '/'
+            "owner/",        // empty component
+            "/repo",         // empty component
+            "",              // empty name
+            "a\u{0}b",       // embedded NUL
+            "café",          // non-ASCII: outside the allowed set
+            "a\\b",          // backslash
+        ] {
+            let err = launch_spec(&PtyIntent::Shell, Some(hostile), 24, 80)
+                .expect_err(&format!("{hostile:?} must be refused, not launched"));
+            assert_eq!(err.name, hostile);
+            assert!(
+                !err.reason.is_empty(),
+                "{hostile:?} refusal must name a reason"
+            );
+            // The rendered message must be actionable: it names the offending
+            // value so the operator can find the directory.
+            assert!(
+                err.to_string().contains("refusing to launch project"),
+                "refusal must be loud: {err}"
+            );
+        }
+    }
+
+    /// NEGATIVE CONTROL for the refusal (bar-raise 634-39ik): the legitimate
+    /// names still launch. A guard that refuses everything is not a guard.
+    #[test]
+    fn launch_spec_still_accepts_legitimate_project_names() {
+        for ok in [
+            "myapp",
+            "octo-repo",
+            "my_app",
+            "foo.js",
+            "8007342/visual-chess",
+            "owner/repo.name-1_2",
+            "a",
+        ] {
+            let spec = launch_spec(&PtyIntent::Shell, Some(ok), 24, 80)
+                .unwrap_or_else(|e| panic!("{ok:?} must still launch: {e}"));
+            assert!(
+                spec.argv[2].contains(&format!("--cloud '{ok}' --bash")),
+                "{ok:?} must reach the guest unchanged: {}",
+                spec.argv[2]
+            );
+        }
+        // The guard must not touch the no-project intents at all.
+        assert!(launch_spec(&PtyIntent::GithubLogin, None, 24, 80).is_ok());
+        assert!(launch_spec(&PtyIntent::Shell, None, 24, 80).is_ok());
+    }
+
+    /// The refusal is a GUARD on the argv-join defect, not a replacement for
+    /// fixing it (795-zshi). Pin the character set itself so a future widening
+    /// is a deliberate edit here rather than an accident somewhere else.
+    #[test]
+    fn validate_project_name_character_set_is_pinned() {
+        for c in 0u8..=127 {
+            let ch = c as char;
+            let name = format!("a{ch}b");
+            let allowed = ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '/');
+            assert_eq!(
+                validate_project_name(&name).is_ok(),
+                allowed,
+                "character {ch:?} (0x{c:02x}) acceptance must match the pinned set"
+            );
+        }
     }
 
     #[test]

@@ -79,7 +79,7 @@ pub const WSL_UTF8_ENV: &str = "WSL_UTF8";
 ///
 /// Window policy stays with the caller, deliberately: some `wsl.exe` spawns
 /// want a visible console.
-/// @trace spec:cross-platform, spec:windows-wsl-runtime
+/// @trace spec:cross-platform
 pub fn wsl_command_async() -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new("wsl.exe");
     cmd.env(WSL_UTF8_ENV, "1");
