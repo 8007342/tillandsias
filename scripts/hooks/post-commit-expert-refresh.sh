@@ -21,7 +21,19 @@
 set -uo pipefail
 
 HOOK_NAME="post-commit-expert-refresh"
-HOOK_START=$(date +%s%N 2>/dev/null || echo 0)
+# Portable nanosecond clock. `date +%s%N` is GNU-only and BSD SUCCEEDS while
+# emitting a literal "N", so the `|| echo 0` never fired and the arithmetic
+# below ran on a non-numeric value (784-dwkh). Digit-validate, then degrade to
+# whole seconds — this only feeds a latency line, so second granularity is
+# honest where nanoseconds are unavailable.
+_hook_now_ns() {
+    _t="$(date +%s%N 2>/dev/null || true)" # gnu-date: ok (digit-validated below)
+    case "$_t" in
+        '' | *[!0-9]*) _t="$(date +%s 2>/dev/null || echo 0)000000000" ;;
+    esac
+    printf '%s' "$_t"
+}
+HOOK_START=$(_hook_now_ns)
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -f "$REPO_ROOT/plan/index.yaml" ] || exit 0
@@ -92,7 +104,7 @@ fi
 # ── Measure and pin latency budget ──────────────────────────────────
 # The hook itself must add NO perceptible latency to commit/push.
 # Only the fork + changed-file detection runs synchronously.
-HOOK_END=$(date +%s%N 2>/dev/null || echo 0)
+HOOK_END=$(_hook_now_ns)
 if [ "$HOOK_START" -ne 0 ] && [ "$HOOK_END" -ne 0 ]; then
     HOOK_LATENCY_MS=$(( (HOOK_END - HOOK_START) / 1000000 ))
     echo "[$HOOK_NAME] latency=${HOOK_LATENCY_MS}ms budget_commit=<50ms budget_total=<50ms" >> "$HOOK_LOG" 2>/dev/null || true

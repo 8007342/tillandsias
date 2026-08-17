@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: gnu-date-lint-missed-intervening-flags-and-broke-the-ledger-guard-fixture
+    event:
+      type: progress
+      ts: "2026-08-17T02:01:53Z"
+      agent_id: macos-tlatoanis-macbook-air-fable5-20260817t0139z
+      host: macos
+      summary: >
+        SCOPE GREW TWICE MORE, both found by the widening itself, both real. (1) The lint scanned scripts/*.sh only — never scripts/hooks/, scripts/test-support/, scripts/fixtures/. Widened to subdirectories, and scripts/hooks/ is where a dialect bug hurts most: pre-commit-openspec.sh had a GNU date -d whose failure landed on an "or continue", so its change-staleness warning could NEVER fire on macOS and looked exactly like "nothing is stale". Fixed with a BSD arm. Two hook timing sites (post-commit-expert-refresh, pre-commit-openspec) used date +%s%N, whose literal-N output on BSD fed integer arithmetic — both now digit-validated with the build.sh _now_ms shape. (2) THE WORST ONE: pre-commit-openspec.sh used local -A for two membership sets. On bash 3.2 that declaration ERRORS and the lookup degenerates to index 0 — which the fill loop had set — so EVERY spec looked referenced and the zero-trace check silently passed everything on this host. Converted to builtin string sets, preserving 734-sjb3 no-subprocess-per-item discipline (concatenation and case are builtins). NEGATIVE CONTROL RUN: a temporary unreferenced spec now yields exactly 1 warning where the broken form yielded 0; probe removed, worktree verified clean. PAT_ASSOC widened to declare|local|typeset|readonly so the shape is refused fleet-wide; fixture 14/14 (local-A-refused + local-r-passes added); live gate ok:bash-dialect-clean over the full tree including subdirectories. CORRECTED IN FLIGHT: my first attempt at the exemption markers used a perl one-liner that prepended the marker BEFORE the shebang on line 1 of both hooks — caught by re-reading the files, repaired, both re-verified with bash -n and a live run.

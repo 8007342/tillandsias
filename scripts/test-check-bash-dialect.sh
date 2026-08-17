@@ -86,9 +86,18 @@ rm "$TMP/assoc.sh"
 expect "declare-a-passes" "ok:bash-dialect-clean" 0
 rm "$TMP/indexed.sh"
 
+# `local -A` inside a function is the same bash-4 feature and the form that
+# actually hid in scripts/hooks/ (784-dwkh); plain `local -r` must still pass.
+printf '#!/usr/bin/env bash\nf() { local -A m=(); m[x]=1; }\nf\n' > "$TMP/localassoc.sh"
+expect "local-A-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nf() { local -r x=1; echo "$x"; }\nf\n' > "$TMP/localr.sh"
+rm "$TMP/localassoc.sh"
+expect "local-r-passes" "ok:bash-dialect-clean" 0
+rm "$TMP/localr.sh"
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 12/12 scenarios green"
+echo "PASS: check-bash-dialect fixture 14/14 scenarios green"
 exit 0

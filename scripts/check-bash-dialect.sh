@@ -35,7 +35,12 @@ PAT_BUILTIN='(^|[^A-Za-z0-9_])(mapfile|readarray)([^A-Za-z0-9_]|$)'
 # -A (assoc, 4.0), -g (global, 4.2), -n (nameref, 4.3) — including combined
 # flags like -gA, which slipped past the earlier literal 'declare -A' and
 # crashed trace-coverage.sh on this host (766-tdij follow-on).
-PAT_ASSOC='declare +-[a-zA-Z]*[Agn]'
+# `local -A` and `typeset -A` are the same bash-4 feature as `declare -A`, and
+# `local` is how it actually appears inside functions — which is where it hid:
+# scripts/hooks/pre-commit-openspec.sh used `local -A`, so on bash 3.2 the
+# declaration errored and the lookups degenerated to index 0 (always set), and
+# the zero-trace check silently passed EVERY spec (784-dwkh).
+PAT_ASSOC='(declare|local|typeset|readonly) +-[a-zA-Z]*[Agn]'
 PAT_PRINTF_T='%\([^)]*\)T'
 # GNU-date-only forms (766-tdij). BSD date SUCCEEDS on an unknown %-format,
 # passing it through literally, so exit-code guards never fire — the 765
@@ -80,8 +85,15 @@ unguarded=0
 allowlisted_hits=0
 # build.sh carries the gate's own phase telemetry, so it is scanned too
 # (766-tdij) — unless a fixture redirects the scan dir.
+# Subdirectories too (784-dwkh): scripts/hooks/, scripts/test-support/ and
+# scripts/fixtures/ were invisible to the first cut, and scripts/hooks/ is
+# where a dialect bug hurts most — pre-commit-openspec.sh's `date -d` failure
+# landed on a `|| continue`, so its staleness warning could never fire on
+# macOS and looked exactly like "nothing is stale".
 SCAN_FILES=""
-for _c in "$SCAN_DIR"/*.sh; do SCAN_FILES="$SCAN_FILES $_c"; done
+for _c in "$SCAN_DIR"/*.sh "$SCAN_DIR"/*/*.sh; do
+  [ -f "$_c" ] && SCAN_FILES="$SCAN_FILES $_c"
+done
 if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -f build.sh ]; then
   SCAN_FILES="$SCAN_FILES build.sh"
 fi
