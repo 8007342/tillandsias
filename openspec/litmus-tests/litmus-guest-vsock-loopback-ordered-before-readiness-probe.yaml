@@ -1,0 +1,122 @@
+# @trace spec:wsl-daemon-orchestration
+#
+# Pins order 798-emje: the guest readiness probe connects to CID 1
+# (VMADDR_CID_LOCAL), which REQUIRES the `vsock_loopback` kernel module, and
+# until this landed the module load RACED the probe. That race is the actual
+# cold-boot nondeterminism 757-4hdt recorded as one FAIL and one PASS of the
+# SAME published tag on the SAME host: its two runs differ only in
+# `preflight vsock_loopback missing` versus `... loaded`.
+#
+# 795-jeym blamed the daemon's bind ordering instead and was refuted by
+# measurement (bind is 61-255ms after daemon start over four cold boots; on the
+# truly-cold boot the listener answered 36ms BEFORE provisioning began — see
+# plan/issues/guest-vsock-bind-ordering-refuted-2026-08-17.md). The defect was
+# never in the daemon.
+#
+# Two independent paths had to become deterministic, and this test pins both,
+# because fixing either one alone leaves the other racing:
+#
+#   BOOT PATH        the ready unit must be ORDERED after
+#                    systemd-modules-load.service, which consumes the
+#                    /etc/modules-load.d/tillandsias-vsock.conf entry.
+#   CLEAN-ROOM PATH  provisioning must load the module BEFORE it starts the
+#                    units. It used to modprobe at the END of
+#                    inject_bootstrap_logic, ~60 lines AFTER `systemctl enable
+#                    --now`, so a first provision started the probe and loaded
+#                    the module afterwards. Measured on the truly-cold boot:
+#                    `preflight vsock_loopback missing`, module present 249ms
+#                    later. The race was in our own statement order.
+#
+# What this test must NOT allow anyone to "fix": the three-state verdict.
+# INDETERMINATE (exit 2, "this probe cannot observe the property from here") is
+# a REAL third state and is not PASS and not FAIL. Folding it either way
+# reproduces a defect that has already shipped once in each direction —
+# 735-ewzp (a probe that always passes) and 757-4hdt (a probe that killed the
+# healthy daemon it measured). So the assertions below pin the ordering AND the
+# survival of all three exit codes, together.
+name: litmus:guest-vsock-loopback-ordered-before-readiness-probe
+spec: wsl-daemon-orchestration
+phase: pre-build
+description: >
+  Pin the deterministic vsock_loopback ordering the guest readiness probe
+  depends on: tillandsias-headless-ready.service declares
+  After=/Wants=systemd-modules-load.service (never Requires=), provisioning
+  writes modules-load.d and modprobes BEFORE `systemctl enable --now`, the load
+  is CONFIRMED rather than assumed, the probe reports the module state it
+  observed before judging, and the three-state verdict (bound 0 / NOT-BOUND 1 /
+  INDETERMINATE 2) survives intact.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+  - shell utilities (grep, awk, bash) are available in PATH
+
+critical_path:
+  - step: "the ready unit LITERAL declares the module-load ordering edge"
+    command: "awk 'index($0,\"let ready_unit = r#\\\"\"){i=index($0,\"let ready_unit = r#\\\"\")+length(\"let ready_unit = r#\\\"\"); print substr($0,i); f=1; next} f&&/^\"#;$/{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs | grep -q '^After=systemd-modules-load.service$' && echo 'ok: ordered-after-module-load'"
+    timeout_ms: 5000
+    expected_behavior: "ok: ordered-after-module-load"
+
+  - step: "the edge is Wants=, never Requires= — a guest that cannot load the module must still RUN the probe so it can report INDETERMINATE"
+    command: "u=$(awk 'index($0,\"let ready_unit = r#\\\"\"){i=index($0,\"let ready_unit = r#\\\"\")+length(\"let ready_unit = r#\\\"\"); print substr($0,i); f=1; next} f&&/^\"#;$/{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs); echo \"$u\" | grep -q '^Wants=systemd-modules-load.service$' && ! echo \"$u\" | grep -q '^Requires=systemd-modules-load.service$' && echo 'ok: wants-not-requires'"
+    timeout_ms: 5000
+    expected_behavior: "ok: wants-not-requires"
+
+  - step: "provisioning loads the module BEFORE it starts the units (the clean-room race was our own statement order)"
+    command: "w=$(awk '/\\/\\/ 5\\. home-forge-src\\.mount/{f=1} /\\/\\/ Phase 3d:/{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs); m=$(echo \"$w\" | grep -n '/etc/modules-load.d/tillandsias-vsock.conf' | head -1 | cut -d: -f1); e=$(echo \"$w\" | grep -n 'systemctl enable --now podman.socket' | head -1 | cut -d: -f1); [ -n \"$m\" ] && [ -n \"$e\" ] && [ \"$m\" -lt \"$e\" ] && echo \"ok: module-load-precedes-unit-start ($m<$e)\" || { echo \"FAIL: modprobe_line=$m enable_line=$e\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: module-load-precedes-unit-start"
+
+  - step: "provisioning CONFIRMS the load instead of assuming modprobe worked"
+    command: "grep -q '\\[tillandsias-provision\\] vsock_loopback=loaded' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && grep -q 'vsock_loopback=unavailable' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && echo 'ok: load-confirmed-both-ways'"
+    timeout_ms: 3000
+    expected_behavior: "ok: load-confirmed-both-ways"
+
+  - step: "the probe reports the module state it OBSERVED before judging, so a run that won a race is distinguishable from one that did not"
+    command: "grep -q 'vsock_loopback before=\\${before} after=\\${after}' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && echo 'ok: probe-reports-observed-state'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-reports-observed-state"
+
+  - step: "the backstop modprobe SURVIVES — removing it recreates 757-4hdt's false alarm on a guest whose modules-load.d entry was never written"
+    command: "grep -q 'modprobe vsock_loopback' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && echo 'ok: backstop-retained'"
+    timeout_ms: 3000
+    expected_behavior: "ok: backstop-retained"
+
+  - step: "all THREE verdicts survive: bound / NOT-BOUND / INDETERMINATE are distinct, and the ENETUNREACH branch that separates them is intact"
+    command: "for t in 'vsock_listener=bound' 'vsock_listener=NOT-BOUND' 'vsock_listener=INDETERMINATE' 'Network is unreachable'; do grep -q \"$t\" crates/tillandsias-windows-tray/src/wsl_lifecycle.rs || { echo \"FAIL: missing $t\"; exit 1; }; done; echo 'ok: three-state-verdict-intact'"
+    timeout_ms: 5000
+    expected_behavior: "ok: three-state-verdict-intact"
+
+  - step: "the assertion still cannot kill the daemon it measures (757-4hdt): no ExecStartPost anywhere, and no advisory `-` escape hatch on one"
+    command: "grep -q 'ExecStartPost=-' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs && { echo 'FAIL: advisory ExecStartPost prefix is the forbidden lazy escape (757-4hdt)'; exit 1; }; awk '/\\/\\/ 4\\. tillandsias-headless\\.service/{f=1} /\\/\\/ Enable AND start the units now\\./{f=0} f' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs | grep -q '^ExecStartPost=' && { echo 'FAIL: daemon unit regained an ExecStartPost'; exit 1; }; echo 'ok: probe-cannot-stop-its-subject'"
+    timeout_ms: 5000
+    expected_behavior: "ok: probe-cannot-stop-its-subject"
+
+observability:
+  traces:
+    - "@trace spec:wsl-daemon-orchestration"
+  expected_log: "vsock_loopback ordered before the readiness probe on both the boot path and the clean-room provisioning path, with the three-state verdict intact"
+  log_fields:
+    spec: "wsl-daemon-orchestration"
+    test: "guest-vsock-loopback-ordered-before-readiness-probe"
+    artifact: "crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
+    order: "798-emje"
+
+rollback:
+  on_failure: >
+    The vsock_loopback ordering drifted and the readiness probe is racing a
+    module load again. Restore, in
+    crates/tillandsias-windows-tray/src/wsl_lifecycle.rs: (1)
+    `After=systemd-modules-load.service` + `Wants=systemd-modules-load.service`
+    in the tillandsias-headless-ready.service literal, never `Requires=`; (2)
+    the modules-load.d write + confirmed modprobe BEFORE the
+    `systemctl enable --now` call in inject_bootstrap_logic; (3) the
+    `[tillandsias-provision] vsock_loopback=loaded` / `=unavailable`
+    confirmation; (4) the probe's `vsock_loopback before=/after=` report; (5)
+    the backstop modprobe inside headless-ready.sh; (6) all three verdicts
+    (bound / NOT-BOUND / INDETERMINATE) and the ENETUNREACH branch. Do NOT
+    "simplify" by collapsing INDETERMINATE into PASS or FAIL, and do NOT make
+    an ExecStartPost advisory with a `-` prefix — both are shapes this project
+    has already shipped and had to withdraw.
+  command: "grep -nE 'systemd-modules-load.service|modules-load.d/tillandsias-vsock.conf|vsock_loopback before=|vsock_listener=(bound|NOT-BOUND|INDETERMINATE)' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs | head -20"

@@ -996,8 +996,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:wsl-daemon-orchestration-shape
+  - litmus:guest-vsock-loopback-ordered-before-readiness-probe
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-08-17'
 - spec_id: wsl-runtime
   status: active
   litmus_tests:
