@@ -1228,6 +1228,58 @@ if [[ "$FLAG_CHECK" == true ]]; then
     timing_emit build-preamble check "${_PREAMBLE_T0:-$(timing_now_ms)}" 0 || true
     _CHECK_T0="$(timing_now_ms)"
     trap 'timing_emit build-check check "$_CHECK_T0" $?' EXIT
+
+    # ── Stamp memoization (order 765-tkq2) ────────────────────────────────
+    #
+    # `--check` runs 2-5x per cycle and the 2nd..5th are usually against an
+    # identical tree: a cycle re-runs the gate after a ledger-only commit,
+    # after the attestation commit, after a rebase. The gate is a pure
+    # function of (tree bytes, toolchain), and the stamp already records
+    # exactly that pair — so when both match a PASSING run, re-running cannot
+    # produce a different verdict.
+    #
+    # WHY THE WHOLE GATE AND NOT THE EXPENSIVE STEPS. Memoizing individual
+    # steps (clippy is ~17s of a ~20s gate) needs each step's INPUT SET —
+    # which files that step's verdict depends on. The stamp makes no such
+    # claim and cannot: it vouches for the tree as a whole. Inventing
+    # per-step input sets here would duplicate the change-class taxonomy
+    # 765-xpct is building and would be a scope claim with no verification
+    # behind it. So this memo asserts exactly what the stamp already proves,
+    # and nothing more; partial credit on a CHANGED tree stays with 765-xpct.
+    #
+    # This is the same trust pre-push already places in the stamp — it skips
+    # the entire gate on a fresh one. Extending that trust to the gate's own
+    # entry point is consistency, not a new assumption.
+    #
+    # SAFETY, in the order the failure modes matter:
+    #   * only a GREEN run writes a stamp (_write_gate_stamp is reached only
+    #     after every check passes), so a red gate can never be memoized;
+    #   * memo-check is fail-closed on every unknown — legacy stamp, absent
+    #     toolchain, scoped stamp, different dispatch, any digest drift;
+    #   * combined dispatches never memoize: the guard below is the SAME
+    #     "only flag" condition this block uses to decide whether to exit, so
+    #     `--check --install` still runs the full gate and still installs;
+    #   * TILLANDSIAS_FORCE_CHECK=1 bypasses unconditionally.
+    #
+    # The record is emitted as `build-check-memoized`, NOT `build-check`:
+    # folding sub-second skips into the build-check series would drag
+    # build_check_ms_avg down and misreport the gate's real cost, which is
+    # the metric the velocity work steers by.
+    if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]] &&
+        [[ "${TILLANDSIAS_FORCE_CHECK:-0}" != "1" ]] &&
+        [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]]; then
+        _memo_verdict="$(bash "$SCRIPT_DIR/scripts/gate-stamp.sh" memo-check check 2>/dev/null)" || _memo_verdict=""
+        case "$_memo_verdict" in
+            "ok:gate-fresh "*)
+                _info "ok:gate-fresh (stamped ${_memo_verdict#ok:gate-fresh }; TILLANDSIAS_FORCE_CHECK=1 to re-run)"
+                _info "  Tree bytes and toolchain are unchanged since that passing gate; nothing re-run."
+                trap - EXIT
+                timing_emit build-check-memoized check "$_CHECK_T0" 0 || true
+                exit 0
+                ;;
+        esac
+    fi
+
     _step "Checking Rust formatting..."
     if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
         _error "Rust code not formatted: run 'cargo fmt --all'"

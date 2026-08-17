@@ -192,6 +192,15 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "ok: stamp is local machine state"
 
+  # Order 765-tkq2. Behavioural, not a source grep: the memo decides whether a
+  # gate runs at all, so what must be pinned is the DECISION under real
+  # stamps — including every fail-closed refusal and the negative control that
+  # keeps "refuse everything" from satisfying them.
+  - step: "gate-stamp memoization decides correctly and fails closed (765-tkq2)"
+    command: "bash scripts/test-gate-stamp-memoization.sh 2>&1 | tail -1"
+    timeout_ms: 900000
+    expected_behavior: "ok:gate-stamp-memoization-fixture:14"
+
 failure_modes:
   - "a validation is deleted from release.yml and never lands locally, trading cost for coverage"
   - "the preflight exists but cannot refuse, so it reports green on a broken release"
@@ -199,6 +208,9 @@ failure_modes:
   - "the installer writes .git/hooks while core.hooksPath points elsewhere, reporting success for guards Git never executes"
   - "the pre-push hook reverts to appended `bash <script>` lines, masking a failing guard's exit code behind a later passing one"
   - "the stamp becomes time-based instead of content-based, so reverting an edit no longer restores freshness"
+  - "memoization skips the gate on a stamp that predates the toolchain in use, hiding the new compiler's lints"
+  - "memoization trusts a scoped or foreign-dispatch stamp and skips checks that stamp never ran"
+  - "a red gate leaves a stamp behind, so the next run memoizes a failure as green"
   - "the gate stamp gets committed, making one machine's local state look authoritative to every other host"
   - "the stamp follows a tracked skill symlink into its directory and therefore cannot record any real Tillandsias checkout"
   - "a new workflow is added to .github/workflows and quietly resumes burning cloud minutes"
