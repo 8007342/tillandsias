@@ -1,11 +1,37 @@
 # @trace spec:proxy-container, spec:reverse-proxy-internal
 # MITM caching HTTP/HTTPS forward proxy for Tillandsias enclave network.
 # Built on Alpine + squid — minimal footprint (~15-20MB).
-# DISTRO: Alpine 3.20 — busybox sh default, bash installed explicitly.
+# DISTRO: Alpine 3.22 — busybox sh default, bash installed explicitly.
 #         Health checks use wget (busybox built-in, NOT curl).
 #         CA bundle at /etc/ssl/certs/ca-certificates.crt (NOT Fedora's /etc/pki/).
 #         User creation: adduser -D (NOT useradd).
-FROM docker.io/library/alpine:3.20
+#
+# WHY 3.22 AND NOT 3.20 (order 782-9jfg): Alpine pins squid per release and
+# 3.20 is frozen at squid-6.9-r0 — the exact build (build-id 0348aa59…) that
+# produced 263 SIGSEGVs between 2026-06-30 and 2026-08-12, two of them
+# symbolicated to one deterministic stack: HttpHeader::clean() <-
+# HttpReply::clean() <- ~HttpReply() <- ~MemObject() <-
+# StoreEntry::destroyMemObject() <- destroyStoreEntry(), then an xassert in
+# storeDirWriteCleanLogs() inside squid's own death() handler (767-es4w).
+# 3.22 carries squid-6.12-r0.
+#
+# HONEST LABEL: this is a bump-plus-toolchain-refresh, NOT a targeted fix.
+# The 6.10/6.11/6.12 ChangeLogs were read in full and contain NOTHING matching
+# this crash family — 6.10 is libTrie/ESI/clang build work, 6.11 is
+# Kerberos/DNS/ACL, 6.12 is Digest-auth validation and build portability. So
+# the packet's premise that "the 6.x line fixed store/SslBump lifecycle
+# defects through 6.10 and 6.12" is NOT supported by the upstream record. What
+# this buys: three patch releases of general hardening plus a rebuild against
+# Alpine 3.22's musl and openssl3, which is a plausible lever on a
+# memory-corruption bug and is cheap. If the crash recurs on 6.12 we have
+# likely found an UNREPORTED upstream bug and should report it with the two
+# preserved dumps (~/claudia/tillandsias-forensics/604-vmcg/).
+#
+# Squid 7.x deliberately NOT taken: Alpine 3.24 has squid-7.6-r0, but a major
+# version moves ssl_bump/config surface and would change many variables at
+# once while chasing a memory bug. If 6.12 does not stop it, evaluate 7.x as
+# its own packet.
+FROM docker.io/library/alpine:3.22
 
 # @trace spec:proxy-container, spec:reverse-proxy-internal
 # Squid + SSL for MITM proxy; squid + openssl for SSL bump support
