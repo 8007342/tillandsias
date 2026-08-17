@@ -140,6 +140,19 @@ if [ -x "$ROOT/scripts/clamp-ca-material.sh" ]; then
     bash "$ROOT/scripts/clamp-ca-material.sh" --fix >/dev/null 2>&1 || true
 fi
 
+# Guard/asset version skew (order 783-6rik). ADVISORY and stderr-only: it says
+# nothing on the happy path and never touches the verdict line. When it does
+# speak, it saves a host the cycle it would otherwise spend discovering that a
+# checkout-side guard cannot pass until a release ships the asset it needs —
+# three forge lanes were lost to exactly that in one night, and each one
+# re-derived the same futile "rebuild the container" remedy.
+if [ -x "$ROOT/scripts/check-guard-asset-skew.sh" ]; then
+    _cp_skew="$(bash "$ROOT/scripts/check-guard-asset-skew.sh" 2>/dev/null | tail -1)"
+    case "$_cp_skew" in
+        skew:*) printf '[cycle-preflight] %s — a checkout guard needs an asset this host has not installed; see order 783-6rik\n' "$_cp_skew" >&2 ;;
+    esac
+fi
+
 # Inference is a REPORT, not a gate: the deterministic expert tiers work without
 # it, and a cycle that cannot reach a model is degraded, not broken. Blocking
 # here would strand work on a host with no network — the same reasoning that
