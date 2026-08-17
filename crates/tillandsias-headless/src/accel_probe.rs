@@ -261,6 +261,33 @@ fn enumerate_cpu() -> DeviceRecord {
 }
 
 // @trace spec:accel-capability-probe
+/// The WSL2 paravirtual-GPU decision, as a pure function so every combination
+/// is testable without a matching host (order 806-2r4s).
+///
+/// WSL2 presents the GPU as `/dev/dxg` with the D3D12 userspace in
+/// `/usr/lib/wsl/lib`, and exposes NO DRI render node. With no branch for that
+/// shape the probe emits nothing at all, and `accel_envelope` then reports
+/// `accel_gpu=none` — making a machine with a healthy GPU indistinguishable
+/// from one that has none. Those are different engineering problems ("buy
+/// hardware" versus "ship a lane"), and the fleet capability matrix cannot tell
+/// them apart from the envelope alone.
+///
+/// The device is real and present; it is only unreachable by the engines we
+/// ship today. That is exactly the present-unusable state `accel_envelope`
+/// already renders — this function supplies the record it needs, and adds no
+/// new vocabulary.
+///
+/// Returns `None` (emit nothing) unless the shape is unambiguously WSL2's:
+/// `/dev/dxg` present, no DRI render node, and no better GPU already found.
+/// `/dev/dxg` does not exist on bare-metal Linux, and a WSL2 host that DOES
+/// expose a render node is handled by the `/dev/dri` arm, so this cannot
+/// manufacture a phantom device off-WSL2.
+// @trace spec:accel-capability-probe
+#[cfg(target_os = "linux")]
+fn wsl2_paravirtual_gpu(dxg_present: bool, dri_present: bool, already_found: bool) -> bool {
+    dxg_present && !dri_present && !already_found
+}
+
 fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
     let mut gpus = Vec::new();
 
@@ -360,6 +387,36 @@ fn enumerate_gpus(effective_tier: &str) -> Vec<DeviceRecord> {
                     system_ram_gb: None,
                 });
             }
+        }
+
+        if wsl2_paravirtual_gpu(
+            Path::new("/dev/dxg").exists(),
+            Path::new("/dev/dri").exists(),
+            !gpus.is_empty(),
+        ) {
+            gpus.push(DeviceRecord {
+                device_class: "gpu".to_string(),
+                // /dev/dxg is vendor-AGNOSTIC: Intel, AMD and NVIDIA all present
+                // through it under WSL2 (measured on two Windows hosts, an Intel
+                // UHD and an AMD Radeon 860M). Naming a vendor here would be a
+                // guess, and a wrong vendor in the fleet matrix is worse than an
+                // honest "unknown".
+                vendor: "unknown".to_string(),
+                name: "WSL2 paravirtual GPU (/dev/dxg)".to_string(),
+                device_node: Some("/dev/dxg".to_string()),
+                fw_version: None,
+                driver: None,
+                usable: false,
+                unusable_reason: Some("wsl2-no-dri-render-node".to_string()),
+                // No lane: unreachable from the container AND from host-native
+                // code in the guest, because there is no render node to open.
+                lanes: vec![],
+                memory_bandwidth_gbps: None,
+                memory_bandwidth_source: "unknown".to_string(),
+                cpu_flags: None,
+                cpu_cores: None,
+                system_ram_gb: None,
+            });
         }
     }
 
@@ -843,6 +900,79 @@ mod tests {
         assert!(env.contains("accel_class=cpu-only"), "{env}");
         assert!(env.contains("accel_gpu=none"), "{env}");
         assert!(env.contains("accel_npu=none"), "{env}");
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    // @trace spec:accel-capability-probe
+    fn wsl2_paravirtual_gpu_fires_only_on_the_unambiguous_wsl2_shape() {
+        // The whole decision table. The one true case: /dev/dxg present, no DRI
+        // render node, nothing better already found.
+        assert!(wsl2_paravirtual_gpu(true, false, false), "the WSL2 shape");
+
+        // Bare-metal Linux has no /dev/dxg — this must never manufacture a
+        // phantom device there, which is what
+        // envelope_on_a_bare_cpu_host_is_cpu_only_with_no_phantom_devices pins.
+        assert!(!wsl2_paravirtual_gpu(false, false, false), "no dxg, no dri");
+        assert!(
+            !wsl2_paravirtual_gpu(false, true, false),
+            "bare-metal with DRI"
+        );
+        assert!(
+            !wsl2_paravirtual_gpu(false, true, true),
+            "bare-metal, gpu found"
+        );
+        assert!(
+            !wsl2_paravirtual_gpu(false, false, true),
+            "no dxg, gpu found"
+        );
+
+        // A WSL2 host that DOES expose a render node is the /dev/dri arm's job;
+        // emitting here too would double-count one GPU.
+        assert!(
+            !wsl2_paravirtual_gpu(true, true, false),
+            "dxg with a DRI node"
+        );
+        assert!(
+            !wsl2_paravirtual_gpu(true, true, true),
+            "dxg, DRI, gpu found"
+        );
+
+        // nvidia-smi answered first (a WSL2 host with a CUDA passthrough), so a
+        // better record already exists and this must defer to it.
+        assert!(
+            !wsl2_paravirtual_gpu(true, false, true),
+            "defers to a found gpu"
+        );
+    }
+
+    #[test]
+    // @trace spec:accel-capability-probe
+    fn a_wsl2_paravirtual_gpu_renders_as_present_unusable_never_as_none() {
+        // The point of 806-2r4s: this host has a healthy AMD Radeon 860M that
+        // WSL2 exposes only as /dev/dxg. Before the probe emitted this record
+        // the envelope read `accel_gpu=none accel_reason=-`, which is
+        // indistinguishable from a machine with no GPU at all — and the fleet
+        // capability matrix cannot be built on that.
+        let mut gpu = device(
+            "gpu",
+            "WSL2 paravirtual GPU (/dev/dxg)",
+            &[],
+            Some("wsl2-no-dri-render-node"),
+        );
+        gpu.usable = false;
+
+        let env = accel_envelope(&doc_with(vec![
+            device("cpu", "CPU", &["container"], None),
+            gpu,
+        ]));
+
+        assert!(env.contains("accel_gpu=present-unusable"), "{env}");
+        assert!(!env.contains("accel_gpu=none"), "{env}");
+        assert!(env.contains("wsl2-no-dri-render-node"), "{env}");
+        // Capacity is still cpu-only — an unreachable GPU must not inflate the
+        // class, or a scheduler would place GPU work on a host that cannot run it.
+        assert!(env.contains("accel_class=cpu-only"), "{env}");
     }
 
     #[test]
