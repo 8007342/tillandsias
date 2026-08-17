@@ -35585,6 +35585,12 @@ plan_index:
       notes: |
         GOVERNANCE: reconciling drift CHANGES a user-visible string on whichever platform loses, which spec:tray-ux forbids without recorded operator approval for the exact surface. The claiming agent brings the inventory and PROPOSED canonical spellings to the operator and waits — including for cases where one side is obviously a typo. `🔑 GitHubLogin` vs `🔑 GitHub Login` is exactly such a case and still needs the ruling.
       events:
+        - type: progress
+          ts: "2026-08-17T06:26:15Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0623z"
+          host: macos
+          summary: |
+            DRIFT ENTRIES ROUTED HERE, as 628-c7qd requires (never fixed in passing, spec:tray-ux). The machine-checked report is plan/issues/tray-string-corpus-drift-2026-08-17.md, regenerable with scripts/check-tray-string-corpus-drift.sh --list: 150 of 168 en.toml values appear NOWHERE in any tray source. The count is deliberately generous to matches (comments and cfg(test) modules are in the haystack), so 150 is a FLOOR; a stricter production-only measurement the same day put verbatim matches at 9 rather than 18. Representative entries needing a ruling: en.toml maintenance uses a pickaxe emoji where the tray renders a wrench; quit lacks the leading X the tray renders; no_projects says "No projects detected" where the tray says "(no projects yet)". en.toml also carries whole surfaces no tray has (Blooming, Seedlings, Serve Here, Settings) and lacks every agent the tray lists (Agents, Claude, OpenCode, Codex, Antigravity, Observatorium). Each is a UX decision, not a refactor detail — which is exactly why they are here rather than in the string-layer slices.
         - type: filed
           ts: "2026-08-09T08:51:57Z"
           agent_id: windows-claude-fable-metaorch-20260809t063000z

@@ -94,6 +94,90 @@ mod locale_strings_tests {
         assert_eq!(locale_strings::MENU_STATUS_READY_ONE, "{image} OK");
     }
 
+    /// 792-77bt: en.toml describes a UI that does not ship, and that fact
+    /// must not be able to change silently in either direction.
+    ///
+    /// 628-c7qd asks for a BYTE-IDENTICAL refactor resolving every tray
+    /// string from en.toml. That is only possible if en.toml already holds
+    /// what the trays render — and it does not: the overwhelming majority of
+    /// its values appear NOWHERE in any tray source. So the corpus has to be
+    /// regenerated FROM the shipped literals; adopting it as written would
+    /// restyle the tray wholesale and needs operator sign-off under
+    /// spec:tray-ux.
+    ///
+    /// This asserts the DIRECTION, not an exact count, so ordinary edits do
+    /// not churn it — but a real convergence (or a further collapse) trips it
+    /// and forces the packet family to be re-read rather than assumed.
+    /// Counting is deliberately generous to matches (comments and test
+    /// modules included), so the unmatched majority it reports is a floor.
+    #[test]
+    fn en_corpus_does_not_describe_the_shipped_tray() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let en = std::fs::read_to_string(root.join("locales/en.toml"))
+            .expect("locales/en.toml must be readable");
+
+        let mut haystack = String::new();
+        for dir in [
+            "crates/tillandsias-macos-tray/src",
+            "crates/tillandsias-windows-tray/src",
+            "crates/tillandsias-host-shell/src",
+            "crates/tillandsias-headless/src/tray",
+        ] {
+            collect_rs(&root.join(dir), &mut haystack);
+        }
+        assert!(
+            haystack.len() > 100_000,
+            "tray sources did not load — the measurement would be vacuous"
+        );
+
+        let (mut total, mut rendered) = (0usize, 0usize);
+        for line in en.lines() {
+            let line = line.trim();
+            if line.starts_with('#') || line.starts_with('[') || !line.contains(" = ") {
+                continue;
+            }
+            let Some((_, raw)) = line.split_once(" = ") else {
+                continue;
+            };
+            let Some(value) = raw.strip_prefix('"').and_then(|v| v.strip_suffix('"')) else {
+                continue;
+            };
+            if value.is_empty() {
+                continue;
+            }
+            total += 1;
+            if haystack.contains(value) {
+                rendered += 1;
+            }
+        }
+
+        assert!(total > 100, "en.toml parsed to only {total} values");
+        let pct = rendered * 100 / total;
+        assert!(
+            pct < 50,
+            "en.toml now matches {pct}% of what the trays render ({rendered}/{total}). \
+             If the corpora genuinely converged, 628-c7qd's byte-identical refactor may \
+             finally be possible — re-read 792-77bt and retire this test deliberately \
+             rather than loosening it."
+        );
+    }
+
+    fn collect_rs(dir: &std::path::Path, out: &mut String) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_rs(&path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
+                && let Ok(src) = std::fs::read_to_string(&path)
+            {
+                out.push_str(&src);
+            }
+        }
+    }
+
     /// 792-cf5x: a SPARSE locale must not fail the build — only an EXTRA key
     /// may. 14 of the 17 locales are ~25 keys behind `en` and fall back to
     /// it; a gate that demanded full coverage would fail on day one and be
