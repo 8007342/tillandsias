@@ -53921,6 +53921,13 @@ plan_index:
         chain). Multi-agent single-host operation is now the NORMAL pattern
         (five fork integrations tonight); the guard predates it.
 
+      events:
+        - type: note
+          ts: "2026-08-17T02:51:27Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T025127Z"
+          host: linux_mutable
+          summary: |
+            PREMISE FALSIFIED — and it was MINE. I filed this packet from inference after a real symptom (my Finalization verify answered blocked:boundary-state-missing mid-cycle while forks were running) and named concurrency as the cause without testing it. The fork demonstrated with a real linked worktree that a fork CANNOT retire the parent's boundary: stamps live under git rev-parse --git-dir, which for a linked worktree is .git/worktrees/<name>, so the two are isolated by construction. The actual cause was same-worktree: a second snapshot (re-baselining after dirt — which I did that cycle) retires the first BY DESIGN per 725-bu54, while the caller still held the stale pointer; verify then reported boundary-state-missing naming a path it had never seen, which reads as sabotage. Defect was DIAGNOSTIC, and is now fixed as such: snapshot records what it retired, verify answers blocked:boundary-superseded:<current> naming both paths and the cause, with a never-was-a-boundary negative control. The cross-worktree scenarios were kept as regression pins that would go red if anyone moved the stamp to the common dir — i.e. if my inferred bug were ever made real.
     - packet_id: meta-orchestration-ghost-spec-author-or-repoint
       order: 771-icf2
       status: ready
