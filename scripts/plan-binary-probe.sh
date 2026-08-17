@@ -42,6 +42,31 @@ resolve_plan_binary() {
         printf '%s\n' "${TILLANDSIAS_PLAN_BIN}"
         return 0
     fi
+    # CARGO_TARGET_DIR FIRST, when set. scripts/with-wsl2-builder.sh points it at
+    # a distro-native path on Windows precisely so target/ never lands on 9p
+    # ("9p-backed target/ makes cargo crawl"), which means the binary cycle-
+    # preflight just built is not under ./target at all. Probing only ./target
+    # made preflight build the instrument successfully and then refuse it:
+    # `blocked:preflight:plan:capabilities-refused` on a host whose binary ran
+    # fine and declared 35 capabilities — the cycle could never start.
+    #
+    # This is the same family as the four earlier instances, with the cause
+    # inverted: those re-implemented the probe and looked in the right place the
+    # wrong way; this one uses the shared probe correctly and the shared probe
+    # looks in the wrong place. Hence the fix belongs here, not at the call site.
+    if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+        for candidate in \
+            "$CARGO_TARGET_DIR/release/tillandsias-plan.exe" \
+            "$CARGO_TARGET_DIR/debug/tillandsias-plan.exe" \
+            "$CARGO_TARGET_DIR/release/tillandsias-plan" \
+            "$CARGO_TARGET_DIR/debug/tillandsias-plan"; do
+            [ -f "$candidate" ] || continue
+            if "$candidate" capabilities >/dev/null 2>&1; then
+                printf '%s\n' "$candidate"
+                return 0
+            fi
+        done
+    fi
     for candidate in \
         ./target/release/tillandsias-plan.exe \
         ./target/debug/tillandsias-plan.exe \
