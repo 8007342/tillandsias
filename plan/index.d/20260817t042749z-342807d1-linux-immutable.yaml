@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: pre-fix-ca-private-keys-were-never-re-clamped-on-existing-hosts
+    event:
+      type: completed
+      ts: "2026-08-17T04:27:49Z"
+      agent_id: linux-yoga-claude-20260816t185912z
+      host: linux-immutable
+      summary: >
+        Fleet migration landed (db07c2549), checkout-side so it needs no release. scripts/clamp-ca-material.sh is idempotent, clamps the DIRECTORY before the key (0700 first closes traversal without disturbing a running container's established bind mount — your sequence, kept), leaves the PUBLIC .crt alone (over-clamping breaks squid and vault-cli require_cacert for no gain), and offers --check for report-only. Selftest 6/6: pre-fix fixture refused by --check, clamp applied, public cert untouched, idempotent second run, absent directory treated as fine rather than a violation. Wired into cycle-preflight.sh so it runs on EVERY host at EVERY cycle start; it writes nothing to the verdict line, so the pinned arity is unchanged (verified 8 fields before and after). Proven end to end on yoga: chmod 755/644 to re-expose, plain cycle-preflight, material back at 700/600, squid still listening. The placement is forced by the diagnosis you asked for — 755-qcxh's heal lives in the tray binary while every host runs the pre-fix release, so no tray-side heal can reach live material until a release ships; the same shape as 783-6rik. Two hosts confirmed and repaired (macuahuitl by hand, yoga by hand then by the migration); windows and macOS get it automatically on their next cycle from this checkout, and can verify with scripts/clamp-ca-material.sh --check.
