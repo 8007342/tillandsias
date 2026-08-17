@@ -105,6 +105,41 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
         exit 1
     fi
 
+    # Order 799-m2vk. The instrument this step rebuilds is the one under
+    # ./target/release. The MCP experts the harness actually queries exec a
+    # DIFFERENT copy — $HOME/.local/bin/tillandsias-plan, the PLAN_BIN_CANONICAL
+    # of images/default/config-overlay/mcp/forge-plan.sh. Rebuilding one and
+    # reading the other is how a cycle opens with a fresh binary and a stale
+    # expert, and "rebuild the instrument before using it" quietly stops being
+    # true for every read that goes through MCP — which CLAUDE.md makes the
+    # DEFAULT read path.
+    #
+    # Measured on macuahuitl 2026-08-17: the installed expert was ~9h old, so
+    # methodology_ask answered `unsupported` for a rule that had just landed and
+    # that the freshly built binary routed at confidence=exact. Nothing was
+    # broken and nothing said so.
+    #
+    # The Windows lane below already acts on exactly this principle for its WSL
+    # copy (770-f6u4 / 770-ehym). This is the same fix for the local copy.
+    #
+    # Conservative by construction: only refreshes a path that ALREADY exists,
+    # so a host that does not install the expert is untouched; installs the
+    # binary that just passed resolve_plan_binary, never a hardcoded path
+    # (704-zcgi); and never blocks — a failed refresh is a report, because a
+    # stale expert is bad but refusing to start the cycle is worse.
+    expert_bin="${HOME}/.local/bin/tillandsias-plan"
+    expert_report="absent"
+    if [ -e "$expert_bin" ]; then
+        if cmp -s "$plan_bin" "$expert_bin"; then
+            expert_report="current"
+        elif install -m0755 "$plan_bin" "$expert_bin" 2>/dev/null; then
+            expert_report="refreshed"
+        else
+            expert_report="refresh-failed"
+        fi
+    fi
+    plan_verdict="${plan_verdict}+expert-${expert_report}"
+
     # Windows: the WSL-side expert lifecycle is part of the instrument too
     # (770-f6u4 cadence decision; mechanism 770-ehym). Advisory — the ensure
     # script always exits 0 — and its verdict is folded into the plan segment
