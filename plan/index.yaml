@@ -55962,6 +55962,12 @@ plan_index:
 
       events:
         - type: note
+          ts: "2026-08-17T05:33:17Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            CORRECTION to the third-sighting note I appended minutes earlier. I read the lane's log while it was still running (40 lines) and recorded that it 'refused before any committable work'. That was true at that instant and WRONG as a description of the run. The lane went on to complete: it filed the blocker, committed the opsx sync dirt, pushed three commits, and emitted MO-FULL: COMPLETE f4d8f4972 — which is on origin/linux-next and is now this branch's history. Reading a background job mid-flight and reporting it as final is the mistake; the log was 697 lines, not 40. WHAT THE CORRECTED PICTURE MEANS FOR THIS PACKET, which is more interesting than the error: the guard blocks WORKER DRAIN, not the cycle. An in-forge agent can still do the fail-loud bookkeeping — file the blocker, push it, attest — because the mirror relay ACCEPTS pushes. The in-forge agent said so in its own words: pushes succeed even though the verdict ref is unpublished. So the exposure is narrower than 'forge lanes are dead on released hosts': they cannot DRAIN WORK, but they are not silent and they do not lose findings. That distinction matters for how urgent a release is. Second observation: the in-forge agent's smallest-next-action was 'rebuild the tillandsias-git container image' — the same remediation this packet already proved futile on a released host, because the tray rebuilds the image from its embedded assets and overwrites the rebuild within seconds. The advice keeps being regenerated because the GUARD'S OWN MESSAGE says it, which is exactly why this packet's first exit criterion is to fix that message rather than to explain the workaround again.
+        - type: note
           ts: "2026-08-17T05:27:47Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
           host: linux-immutable
