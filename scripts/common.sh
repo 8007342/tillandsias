@@ -69,6 +69,28 @@ _is_litmus_path() {
         *target/litmus-podman*|*target/litmus-runtime*)
             return 0
             ;;
+        # Order 797-w8kf. The fake podman the litmus fixtures build lives under
+        # a `mktemp -d`, not under target/ — scripts/test-image-build-
+        # convergence.sh exports LITMUS_FAKE_PODMAN_BIN_DIR="$tmp/fake-podman"
+        # and the guard puts the binary in litmus-fake-podman-bin/ beneath it.
+        # Unrecognized, it read as a legitimate operator podman, so the wrapper
+        # generator baked
+        #   exec "/tmp/tmp.XXXXXX/fake-podman/litmus-fake-podman-bin/podman"
+        # into the ONE SHARED wrapper at $TMPDIR/tillandsias-podman-wrapper.
+        # The tempdir is then removed and the wrapper outlives it, on PATH, for
+        # every later consumer on the host.
+        #
+        # What that cost, measured on macuahuitl 2026-08-17: seven pre-build
+        # litmus failures in every `./build.sh --ci-full`, all seven green when
+        # run outside it, and three of them reported as "podman unresponsive
+        # (>5s): stalled storage lock or dead runtime" while podman answered
+        # `info` in 0.07s on 45 consecutive samples taken DURING the failing
+        # run. The preflight behind that message is `! timeout 5 podman ps`,
+        # which cannot tell a timeout from an exec that failed instantly, so a
+        # wrapper pointing at a deleted file was reported as a stalled daemon.
+        *fake-podman*|*litmus-fake-podman*)
+            return 0
+            ;;
     esac
     return 1
 }

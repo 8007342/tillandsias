@@ -428,6 +428,52 @@ else
     echo "ok: a valid fragment is never reported unparseable"
 fi
 
+# ── 696-6byc: the remedy must match the class that actually fired ──────────
+# Before this, one cause and one remedy printed whichever class had fired, and
+# both described the declared-under-`packets:` class. An author whose terminal
+# EVENT disagreed with a non-terminal status was told to write a `status:`
+# entry — which pushes the packet to completed rather than resolving the
+# contradiction. Each scenario below carries its own cross-class negative
+# control, because "prints a remedy" is satisfied by printing BOTH, and a gate
+# that always prints both is exactly the misdirection being removed.
+S="$TDIR/remedy-event"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+events:
+  - packet_id: alpha-packet
+    event:
+      type: completed
+      ts: "2026-08-17T11:20:00Z"
+      host: fixture
+      summary: "terminal event, no status transition — the EVENT class"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "event-class violation prints the event remedy" 1 "REMEDY (event):" "$rc" "$out"
+case "$out" in
+    *"REMEDY (declared):"*)
+        echo "FAIL: event-class violation also printed the DECLARED remedy; out=$out" >&2
+        fail=1
+        ;;
+    *) echo "ok: event-class violation does not print the declared remedy" ;;
+esac
+
+S="$TDIR/remedy-declared"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: alpha-packet
+    order: 900
+    status: completed
+    title: "terminal status declared under packets: and discarded by the G-Set"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "declared-class violation prints the declared remedy" 1 "REMEDY (declared):" "$rc" "$out"
+case "$out" in
+    *"REMEDY (event):"*)
+        echo "FAIL: declared-class violation also printed the EVENT remedy; out=$out" >&2
+        fail=1
+        ;;
+    *) echo "ok: declared-class violation does not print the event remedy" ;;
+esac
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fragment-status-loss scenarios passed"
     exit 0
