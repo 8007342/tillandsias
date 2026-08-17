@@ -399,3 +399,57 @@ fn logs_bak_when_missing_exits_1_with_pointer_to_live_file() {
         "stderr should point operator at the live-file fallback path: {stderr}"
     );
 }
+
+/// E4, 2026-08-17: an unknown flag REFUSES on the real binary — it does not
+/// launch the GUI tray.
+///
+/// The unit tests in `main.rs` pin the pure predicate; this pins the actual
+/// process behaviour, which is what the release smoke observes. `--provision`
+/// is the literal string the 2026-08-16 build-install smoke typed for
+/// `--provision-once`: no arm matched, the binary became a resident GUI tray,
+/// and the harness's 600s cap killed it post-Ready. That run then filed a
+/// phantom "is resident-after-Ready the intended SC-07 design?" finding whose
+/// own evidence directory refuted it — `03-provision.log`, 528 lines, zero
+/// `[provision]` lines.
+///
+/// The assertion is deliberately on the EXIT CODE and not on captured stdout:
+/// the tray is a GUI-subsystem binary and PowerShell pipe capture of its
+/// stdout is unreliable (see the module note above), so an exit code is the
+/// only signal an unattended caller can trust.
+#[test]
+fn unknown_flag_refuses_instead_of_launching_the_tray() {
+    for bad in ["--provision", "--with-token", "-x"] {
+        let output = Command::new(TRAY_EXE)
+            .arg(bad)
+            .output()
+            .unwrap_or_else(|e| panic!("run {bad}: {e}"));
+        assert_eq!(
+            output.status.code(),
+            Some(2),
+            "{bad} must exit 2, not launch the tray (got {:?})",
+            output.status
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(bad),
+            "stderr must name the offending flag {bad}: {stderr}"
+        );
+        assert!(
+            stderr.contains("--help"),
+            "stderr must point at --help: {stderr}"
+        );
+    }
+
+    // NEGATIVE CONTROL, on the real binary: a KNOWN flag still works and still
+    // exits 0. Without this, "refuse unknown flags" could regress into
+    // "refuse everything" and the test above would still pass.
+    let ok = Command::new(TRAY_EXE)
+        .arg("--version")
+        .output()
+        .expect("run --version");
+    assert!(
+        ok.status.success(),
+        "--version must still exit 0 after the unknown-flag refusal: {:?}",
+        ok.status
+    );
+}

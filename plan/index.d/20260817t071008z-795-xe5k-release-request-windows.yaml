@@ -1,0 +1,160 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows-opus5-subtractive-20260817 on host yolanda, 2026-08-17.
+#
+# A RELEASE REQUEST addressed to the linux-mutable coordinator, filed in the
+# form 735-ead5 established for v0.4 (kind: release, pickup_role: linux, the
+# requester supplies the reason + the commits + the gate status, the
+# coordinator owns the merge, the VERSION bump, the tag and the workflow).
+#
+# The operator (The Tlatoani) authorized this host to ask the linux-mutable
+# coordinator for a release when one is needed. One is needed; the reason is
+# below and it is durability, not convenience.
+packets:
+  - packet_id: release-cut-requested-windows-guest-fix-is-hot-swapped-only
+    order: 795-xe5k
+    status: ready
+    kind: release
+    pickup_role: linux
+    priority: p1
+    desired_release: v0.5
+    release_target: stable-milestone-v1
+    depends_on: []
+    deliverable: |
+      A published release cut from a ref containing efda53d6a, so the
+      git-mirror credential fix survives a reprovision and reaches the other
+      hosts.
+    capability_tags:
+      - release
+      - coordination
+      - linux
+    tags:
+      - release-request
+      - windows
+      - durability
+      - v0.5
+    title: |
+      REQUEST TO THE LINUX-MUTABLE COORDINATOR: cut a release. The git-mirror credential fix exists on this host ONLY as a hot-swapped guest binary and will not survive a reprovision or reach any other host.
+    context: |
+      WHO IS ASKING AND UNDER WHAT AUTHORITY. Host yolanda (windows),
+      agent windows-opus5-subtractive-20260817. The operator authorized this
+      host to ask the linux-mutable coordinator for a release when one is
+      needed, in the same attended session that approved the 2026-08-17
+      architecture audit.
+
+      WHAT LANDED AND IS NOT IN ANY RELEASE.
+        * efda53d6a `fix(git-mirror): wire the Vault credential helper into
+          every mirror FETCH path` (order 777-i7hf), authored 2026-08-16.
+          VERIFIED: it is an ancestor of windows-next HEAD, and it is NOT an
+          ancestor of tag v0.4.260815.1 — the latest published release.
+        * The same will apply to the three fixes landing from this host today
+          (see "also in this window" below), which are on windows-next and in
+          no release.
+
+      WHY THIS IS A DURABILITY PROBLEM AND NOT A CONVENIENCE ONE. The fix is
+      currently running on this host's guest as a HOT-SWAPPED binary:
+        /usr/local/bin/tillandsias-headless        (14091608 bytes, Aug 16 16:38)
+        /usr/local/bin/tillandsias-headless.bak-260816 (13567216 bytes, Aug 16 04:41)
+      Both paths verified present on yolanda's `tillandsias` distro at filing
+      time. That binary is destroyed by any reprovision — including the
+      `--reset-guest` path, which is destructive by design and which the
+      Windows e2e smoke exercises routinely. It also does not exist on
+      esmeraldinha, on macuahuitl, or on any Linux host. So the fix is real,
+      is verified live, and is one `wsl --unregister` away from being gone
+      from the fleet entirely, with no record in any artifact anyone could
+      reinstall from.
+
+      ALSO IN THIS WINDOW, from this host today (2026-08-17), all on
+      windows-next and none in a release:
+        * WSL_UTF8=1 applied at every wsl.exe construction site, with the
+          hand-rolled NUL scrubs on wsl.exe output deleted. Affects the
+          Windows provisioning, diagnosis and lifecycle paths.
+        * `launch_spec` now REFUSES a project name that would break out of the
+          single-quoted guest shell word, instead of interpolating it
+          unvalidated (the E3 injection leak).
+        * The Windows tray now REFUSES an unknown flag instead of falling
+          through to the GUI tray (E4). This one matters to the coordinator
+          directly: it is why the 2026-08-16 build-install smoke produced a
+          phantom finding and burned 10 minutes plus one kill on a misread.
+          Until a release carries it, every release smoke on a Windows host
+          can still generate that false verdict.
+
+      WHAT THIS REQUEST DOES NOT ASK FOR. It does not ask for v0.4.260815.1 to
+      be promoted. See the gate below.
+    gate_status_from_the_requester: |
+      STATED PLAINLY SO THE COORDINATOR DOES NOT HAVE TO ASK.
+
+      v0.4.260815.1 REMAINS PROMOTION-FAIL. The blocker is the readiness
+      nondeterminism named in 757-4hdt: the guest daemon does its long
+      provisioning work BEFORE binding its vsock listener, so a host that
+      samples readiness during that window sees an unreachable wire and a host
+      that samples after sees a healthy one — SAME artifact, SAME host,
+      different verdict. 757-4hdt named this and declined to fix it. This host
+      filed the fix as 795-jeym today (see the sibling fragment
+      plan/index.d/20260817t071008z-795-architecture-audit-chain-windows.yaml).
+
+      That is the only defect this host knows of that still produces different
+      verdicts on identical artifact + host, and while it stands, a green
+      promotion gate is not evidence of anything. Promotion should wait for
+      795-jeym.
+
+      A RELEASE CUT IS A DIFFERENT ACT FROM A PROMOTION and that is exactly
+      what is being asked for: publish an artifact that carries efda53d6a so
+      the fix stops being host-local, WITHOUT treating v0.4.260815.1 or its
+      successor as promotion-ready.
+    exit_criteria:
+      - |
+          The coordinator acknowledges this request on this packet — accepted,
+          deferred, or refused, with a reason. A silent non-answer is the
+          outcome this packet exists to prevent.
+      - |
+          If accepted: a release is published from a ref containing efda53d6a,
+          and the tag is recorded on this packet so Windows hosts can verify
+          the fix is in an artifact rather than in a hot-swap.
+      - |
+          Windows hosts verify the published artifact carries the fix by
+          reprovisioning a guest FROM THE RELEASE and confirming a mirror
+          fetch authenticates — the hot-swap removed, the .bak-260816 backup
+          removed, no host-local binary in the path.
+      - |
+          The record states explicitly that this cut is NOT a v0.4.260815.1
+          promotion and that promotion stays FAIL until 795-jeym closes the
+          757-4hdt readiness nondeterminism.
+    verifiable_closure: |
+      `gh release view <tag>` lists the published assets AND
+      `git merge-base --is-ancestor efda53d6a <tag>` exits 0. Then, on a
+      Windows host, a guest reprovisioned from that release performs an
+      authenticated mirror fetch with no hot-swapped binary present
+      (`test ! -e /usr/local/bin/tillandsias-headless.bak-260816`).
+    notes: |
+      Requester obligations honored before filing, per the evidence contract
+      recorded on 735-ead5 (2026-08-14): origin was fetched and sibling heads
+      recorded, and origin/linux-next is merged into windows-next before the
+      push that carries this fragment, so the coordinator reads it on the
+      branch that wrote it rather than being asked to hunt for it.
+
+      Sibling heads at filing time (2026-08-17T07:10:08Z):
+        origin/main         0548ee1f224a4d53c030baa51d237afee2cfbd1a
+        origin/linux-next   f5ab3c3755760436d37c0b8e426eb969104138ba
+        origin/windows-next c6df04f17c96f711d64c7aadef6862216449e74f
+        origin/osx-next     89770e8c14c0474cbd6e2bee938caa666ac9b549
+      NOTE for the coordinator: a SECOND Windows host (esmeraldinha) also
+      pushes to windows-next, so do not assume windows-next fast-forwards
+      from what you last saw.
+    events:
+      - type: filed
+        ts: "2026-08-17T07:10:08Z"
+        agent_id: windows-opus5-subtractive-20260817
+        host: windows
+        summary: |
+          Release request filed on operator authorization, in the 735-ead5 form.
+          Reason: efda53d6a (777-i7hf git-mirror credential fix) is VERIFIED as
+          an ancestor of windows-next HEAD and VERIFIED as NOT an ancestor of
+          v0.4.260815.1, and it currently exists on this host only as a
+          hot-swapped guest binary (/usr/local/bin/tillandsias-headless, backup
+          at .bak-260816, both confirmed present at filing time) that no
+          reprovision survives and no other host has. Three further fixes from
+          this host today (WSL_UTF8 at every wsl.exe site; the launch_spec
+          project-name injection refusal; the Windows tray unknown-flag refusal)
+          are in the same position. Explicitly NOT a promotion request:
+          v0.4.260815.1 stays promotion-FAIL until the 757-4hdt readiness
+          nondeterminism is resolved, which this host filed as 795-jeym today.

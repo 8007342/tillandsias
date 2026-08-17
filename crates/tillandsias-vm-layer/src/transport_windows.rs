@@ -58,8 +58,16 @@ fn is_guid(s: &str) -> bool {
 /// tooling can emit UTF-16 when stdout is a pipe from a GUI-subsystem
 /// parent, and a NUL-interleaved `W\0S\0L` row never matches — the
 /// 2026-07-12 operator session saw 3 minutes of "no running WSL utility
-/// VM" while the VM was demonstrably up and held by the keepalive. Same
-/// discipline as `WslRuntime::wsl_list_quiet`'s NUL strip.
+/// VM" while the VM was demonstrably up and held by the keepalive.
+///
+/// THE SCRUB STAYS, and this is the reason. On 2026-08-17 the sibling scrubs
+/// on `wsl.exe`'s own output were deleted in favour of `WSL_UTF8=1`
+/// ([`crate::wsl_command_async`]). That variable is read by **wsl.exe**.
+/// `hcsdiag.exe` is a different binary and has no such switch, so its
+/// UTF-16LE behaviour is untouched and this scrub is the only thing
+/// protecting the parse. An audit that session listed this site among the
+/// "now-unnecessary" ones; it is not, and deleting it would restore the
+/// 2026-07-12 failure.
 pub fn parse_wsl_vm_id(hcsdiag_list: &str) -> Option<String> {
     let cleaned = hcsdiag_list.replace('\u{0}', "");
     for line in cleaned.lines() {
@@ -384,15 +392,15 @@ impl tokio::io::AsyncRead for WslStdioBridge {
             if let Ok(Some(status)) = self.child.try_wait()
                 && !status.success()
             {
+                // No NUL scrub: this buffer holds wsl.exe's own stderr (built
+                // by `wsl_command_async`, WSL_UTF8=1 → UTF-8) and socat's,
+                // which is UTF-8 already — wsl.exe passes child bytes through
+                // verbatim (measured 2026-08-17: 64 KiB of urandom out through
+                // `wsl.exe -- cat`, SHA256 identical both sides).
                 let captured = self
                     .stderr_buf
                     .lock()
-                    .map(|b| {
-                        String::from_utf8_lossy(&b)
-                            .replace('\u{0}', "")
-                            .trim()
-                            .to_string()
-                    })
+                    .map(|b| String::from_utf8_lossy(&b).trim().to_string())
                     .unwrap_or_default();
                 return std::task::Poll::Ready(Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
@@ -444,7 +452,7 @@ pub async fn open_wsl_stdio_bridge(port: u32) -> io::Result<WslStdioBridge> {
     use std::process::Stdio;
 
     let distro = wsl_distro_name();
-    let mut cmd = tokio::process::Command::new("wsl.exe");
+    let mut cmd = crate::wsl_command_async();
     cmd.args(socat_bridge_argv(&distro, port));
     // no_window: spawned from the GUI tray on every connect attempt — same
     // console-flicker discipline as the hcsdiag path (order 311).
@@ -493,14 +501,11 @@ pub async fn open_wsl_stdio_bridge(port: u32) -> io::Result<WslStdioBridge> {
 
     tokio::time::sleep(BRIDGE_STARTUP_GRACE).await;
     if let Some(status) = child.try_wait()? {
+        // No NUL scrub — see the sibling capture in `poll_read`: WSL_UTF8=1 on
+        // the constructor, and child bytes are passed through verbatim.
         let captured = stderr_buf
             .lock()
-            .map(|b| {
-                String::from_utf8_lossy(&b)
-                    .replace('\u{0}', "")
-                    .trim()
-                    .to_string()
-            })
+            .map(|b| String::from_utf8_lossy(&b).trim().to_string())
             .unwrap_or_default();
         return Err(io::Error::other(format!(
             "wsl stdio bridge (`wsl.exe -d {distro} -- socat STDIO VSOCK-CONNECT:1:{port}`) \
@@ -662,16 +667,43 @@ mod tests {
         );
     }
 
-    /// UTF-16LE piped output arrives as NUL-interleaved lossy UTF-8; the
-    /// parser must still find the WSL row (2026-07-12 operator session:
-    /// 3 min of false "no running WSL utility VM" during handshake).
+    /// `hcsdiag.exe` UTF-16LE piped output arrives as NUL-interleaved lossy
+    /// UTF-8; the parser must still find the WSL row (2026-07-12 operator
+    /// session: 3 min of false "no running WSL utility VM" during handshake).
+    ///
+    /// DELIBERATELY KEPT after the 2026-08-17 `WSL_UTF8=1` change, which
+    /// deleted the equivalent tolerance from every reader of **wsl.exe**'s own
+    /// output. The producer here is `hcsdiag.exe` — a different binary, with
+    /// no `WSL_UTF8` switch — so nothing about that change reaches this path
+    /// and the tolerance is still load-bearing rather than defensive.
+    /// Both halves are asserted below so the distinction cannot rot.
     #[test]
-    fn parse_wsl_vm_id_tolerates_utf16_nul_interleaving() {
+    fn parse_wsl_vm_id_tolerates_hcsdiag_utf16_nul_interleaving() {
         let clean = "VM,\tRunning, A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA, WSL\n";
+        assert_eq!(
+            parse_wsl_vm_id(clean).as_deref(),
+            Some("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA"),
+            "clean UTF-8 hcsdiag output must parse"
+        );
         let interleaved: String = clean.chars().flat_map(|c| [c, '\u{0}']).collect();
         assert_eq!(
             parse_wsl_vm_id(&interleaved).as_deref(),
-            Some("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA")
+            Some("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA"),
+            "hcsdiag has no WSL_UTF8 equivalent; UTF-16LE tolerance stays"
+        );
+    }
+
+    /// The wsl.exe encoding policy is set by CONSTRUCTION, not by each call
+    /// site remembering. This pins the constructor the stdio bridge uses; if
+    /// it regresses, the NUL scrubs deleted on 2026-08-17 must come back.
+    #[test]
+    fn wsl_stdio_bridge_command_sets_wsl_utf8() {
+        let cmd = crate::wsl_command_async();
+        assert!(
+            cmd.as_std()
+                .get_envs()
+                .any(|(k, v)| k == crate::WSL_UTF8_ENV && v == Some("1".as_ref())),
+            "the wsl.exe constructor must set WSL_UTF8=1"
         );
     }
 

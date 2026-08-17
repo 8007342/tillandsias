@@ -161,6 +161,13 @@ pub fn classify_wsl_platform(p: &WslPlatformProbes) -> WslPlatformVerdict {
 /// Parse the two `True`/`False` lines the CIM probe prints (HypervisorPresent
 /// then VirtualizationFirmwareEnabled). Pure for unit-testing; tolerant of
 /// CRLF, NULs, and missing lines.
+///
+/// THE NUL TOLERANCE STAYS. The producer is **powershell.exe** (see
+/// `collect_wsl_platform_probes`), whose output encoding is governed by
+/// `$OutputEncoding` / the console code page, NOT by `WSL_UTF8`. The
+/// 2026-08-17 change that removed the equivalent scrubs from readers of
+/// `wsl.exe`'s own output does not reach this path; an audit that session
+/// listed this site as now-unnecessary and was wrong about it.
 pub fn parse_cim_bool_lines(s: &str) -> (Option<bool>, Option<bool>) {
     let mut lines = s
         .replace('\u{0}', "")
@@ -343,7 +350,7 @@ fn evaluate_guest_root_headroom(avail_kib: u64) -> Result<Option<String>, String
 /// The deliberately-interactive debug keepalive is the one exemption.
 #[cfg(target_os = "windows")]
 fn wsl_cmd() -> tokio::process::Command {
-    let mut cmd = tokio::process::Command::new("wsl");
+    let mut cmd = crate::wsl_command_async();
     crate::no_window_async(&mut cmd);
     cmd
 }
@@ -355,13 +362,16 @@ fn wsl_cmd() -> tokio::process::Command {
 pub fn collect_wsl_platform_probes() -> WslPlatformProbes {
     let mut probes = WslPlatformProbes::default();
 
-    let mut status_cmd = std::process::Command::new("wsl");
+    let mut status_cmd = crate::wsl_command_sync();
     status_cmd.arg("--status");
     crate::no_window_sync(&mut status_cmd);
     if let Ok(out) = status_cmd.output() {
         probes.wsl_status_ok = out.status.success();
-        let mut text = String::from_utf8_lossy(&out.stdout).replace('\u{0}', "");
-        text.push_str(&String::from_utf8_lossy(&out.stderr).replace('\u{0}', ""));
+        // No NUL scrub: `wsl_command_sync` sets WSL_UTF8=1, so `wsl --status`
+        // writes UTF-8. Measured on yolanda 2026-08-17 — without the variable
+        // stdout begins 68,0,101,0,102,0,…; with it, 68,101,102,…
+        let mut text = String::from_utf8_lossy(&out.stdout).into_owned();
+        text.push_str(&String::from_utf8_lossy(&out.stderr));
         probes.wsl_status_output = text;
     }
 
@@ -419,11 +429,11 @@ impl WslRuntime {
                 String::from_utf8_lossy(&output.stderr)
             ));
         }
-        // WSL emits UTF-16LE on some Windows builds; tolerate either by
-        // dropping invalid bytes. Distro names are ASCII in practice.
-        Ok(String::from_utf8_lossy(&output.stdout)
-            .replace('\u{0}', "")
-            .to_string())
+        // `wsl --list` output is wsl.exe's OWN, and `wsl_cmd()` sets
+        // WSL_UTF8=1, so it arrives as UTF-8 rather than UTF-16LE. The former
+        // NUL scrub here was the workaround for not setting the variable
+        // (2026-08-17).
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
     }
 
     fn distro_listed(listing: &str, distro: &str) -> bool {
@@ -574,7 +584,7 @@ impl WslRuntime {
             return Err(format!(
                 "wsl root sh (stdin) exited {}: {}",
                 output.status,
-                String::from_utf8_lossy(&output.stderr).replace('\u{0}', "")
+                String::from_utf8_lossy(&output.stderr)
             ));
         }
         Ok(())
@@ -601,7 +611,10 @@ impl WslRuntime {
                 String::from_utf8_lossy(&output.stderr)
             ));
         }
-        let stdout = String::from_utf8_lossy(&output.stdout).replace('\u{0}', "");
+        // Guest `df` bytes cross wsl.exe verbatim — measured 2026-08-17: 64 KiB
+        // of urandom through `wsl.exe -- cat`, SHA256 identical both sides. The
+        // NUL scrub that used to be here never had anything to remove.
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         parse_df_avail_kib(&stdout)
             .ok_or_else(|| format!("guest df output unparseable: {stdout:?}"))
     }
@@ -700,8 +713,10 @@ impl WslRuntime {
     pub fn spawn_keepalive(&self, debug: bool) -> Result<tokio::process::Child, VmError> {
         // Deliberate wsl_cmd() exemption: the debug keepalive IS an
         // interactive console (titled journalctl follow) — only the
-        // non-debug variant must stay windowless.
-        let mut cmd = tokio::process::Command::new("wsl");
+        // non-debug variant must stay windowless. The exemption is from the
+        // WINDOW policy only; the encoding policy still comes from the
+        // shared constructor.
+        let mut cmd = crate::wsl_command_async();
         cmd.arg("--distribution")
             .arg(&self.distro_name)
             .kill_on_drop(true);
@@ -944,7 +959,6 @@ impl VmRuntime for WslRuntime {
                     .arg("--exec")
                     .arg("echo")
                     .arg("ready")
-                    .env("WSL_UTF8", "1")
                     .output(),
             )
             .await;
@@ -958,10 +972,7 @@ impl VmRuntime for WslRuntime {
                         // Order 419: keep the stderr — a GUI tray otherwise
                         // discards the only text naming the real launch
                         // failure (kernel out of date, HCS refusal, disk).
-                        let stderr = String::from_utf8_lossy(&output.stderr)
-                            .replace('\u{0}', "")
-                            .trim()
-                            .to_string();
+                        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
                         tracing::warn!(
                             attempt,
                             status = %output.status,
@@ -1291,19 +1302,22 @@ mod tests {
 
         // S1 stub-only: locale-stable aka.ms/wslinstall marker (captured:
         // "You can install by running 'wsl.exe --install'", exit 50/1).
+        //
+        // The fixture is CLEAN UTF-8 as of 2026-08-17. It used to be
+        // NUL-interleaved with a scrub applied here to model
+        // `collect_wsl_platform_probes` stripping NULs; that scrub is gone
+        // because `wsl_command_sync()` sets WSL_UTF8=1 and `wsl --status`
+        // now writes UTF-8 (measured on yolanda: stdout begins 68,101,102,…
+        // with the variable and 68,0,101,0,102,0,… without it). Modelling a
+        // strip that no longer happens would make this test assert the
+        // opposite of production.
         let s1 = WslPlatformProbes {
             wsl_status_ok: false,
-            wsl_status_output: "W\u{0}S\u{0}L\u{0} … https://aka.ms/wslinstall".to_string(),
+            wsl_status_output: "WSL … https://aka.ms/wslinstall".to_string(),
             ..Default::default()
         };
-        // NOTE: collect strips NULs before classify; classifier sees clean
-        // text in production — this asserts the marker match itself.
-        let s1_clean = WslPlatformProbes {
-            wsl_status_output: s1.wsl_status_output.replace('\u{0}', ""),
-            ..s1
-        };
         assert_eq!(
-            classify_wsl_platform(&s1_clean),
+            classify_wsl_platform(&s1),
             WslPlatformVerdict::WslPlatformAbsent
         );
 
