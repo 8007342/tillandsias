@@ -74,7 +74,22 @@ read_seq() {
     ruby -ryaml -rdate -e "$_rs_rb" "$_rs_file" 2>&1
     return $?
   fi
-  echo "no YAML reader on PATH (tried yq, ruby)"
+  # TOOLBOX TIER (methodology multi_host_development.toolbox_first_scripts,
+  # order 777-amku): host tool preferred, toolbox as the fallback. `ruby` is in
+  # the tillandsias-builder init set, so a Silverblue host with no host ruby
+  # can still read the ledger instead of refusing. This is STRICTLY ADDITIVE —
+  # it is reached only where the two tiers above already gave up and the next
+  # line was a hard refusal. No `ensure_toolbox.sh` include here on purpose:
+  # this script is #!/bin/sh (no BASH_SOURCE), and a check has no business
+  # CREATING a toolbox — it uses one that already exists, or it refuses.
+  if command -v toolbox >/dev/null 2>&1 &&
+     toolbox run --container "${TILLANDSIAS_BUILDER_TOOLBOX:-tillandsias-builder}" \
+        true >/dev/null 2>&1; then
+    toolbox run --container "${TILLANDSIAS_BUILDER_TOOLBOX:-tillandsias-builder}" \
+        ruby -ryaml -rdate -e "$_rs_rb" "$_rs_file" 2>&1
+    return $?
+  fi
+  echo "no YAML reader on PATH (tried yq, ruby, toolbox ruby)"
   return 2
 }
 
