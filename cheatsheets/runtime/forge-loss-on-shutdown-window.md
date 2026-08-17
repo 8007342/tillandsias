@@ -1,3 +1,19 @@
+---
+tags: [forge, durability, teardown, git-mirror, ephemeral, push, shutdown]
+languages: [bash]
+since: 2026-08-16
+last_verified: 2026-08-16
+sources:
+  - images/git/pre-receive-hook.sh
+  - images/git/entrypoint.sh
+  - plan/issues/macos-forge-349-closing-run-2026-08-16.md
+authority: high
+status: current
+tier: bundled
+summary_generated_by: "macos meta-orchestration cycle, order 776-jcf3 criterion 2"
+bundled_into_image: true
+committed_for_project: true
+---
 # Forge loss-on-shutdown window — what survives a lane teardown, and why
 
 <!-- provenance: 776-jcf3 criterion 2 (operator directive 2026-08-16: retire
@@ -5,7 +21,10 @@
      macOS: images/git/pre-receive-hook.sh (header + exit contract),
      images/git/entrypoint.sh:168-174 (receive.denyDeletes/denyNonFastForwards),
      plan/issues/macos-forge-349-closing-run-2026-08-16.md (live relayed-push
-     proof), 756-2jnj events (verdict machinery + linux token blocker). -->
+     proof), 756-2jnj events (verdict machinery + linux token blocker).
+     The frontmatter above is the machine-readable form of this note (added
+     2026-08-16, order 782-avtk); this comment is kept because it carries the
+     line-level citations the frontmatter's path list cannot. -->
 <!-- freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=776-jcf3 authoring -->
 
 The ephemeral path (cloud ↔ ephemeral git-mirror ↔ ephemeral forge) makes one
