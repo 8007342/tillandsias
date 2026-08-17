@@ -1155,6 +1155,22 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # right: a name assembled at runtime is invisible to `grep` for a human
     # reader too, and "who calls this guard?" must stay answerable by search.
     log_section "Recently Landed Guards"
+    # 792-77bt (windows lane). A REPORT, not a pass/fail gate: it prints the
+    # tray string-corpus drift ratio and exits 0 whatever the ratio is, so it
+    # is wired to surface the number, not to fail on it. Wired here because
+    # the activation audit correctly flagged it as an orphan the moment it
+    # landed — an unwired guard is inert, and inert is the 599-4wzr class.
+    # The packet is windows-owned; if they give it a fail threshold, this
+    # block should move to the tracked-failure shape the others use.
+    if [[ -f "scripts/check-tray-string-corpus-drift.sh" ]]; then
+        bash scripts/check-tray-string-corpus-drift.sh 2>&1 | tee /tmp/tray-string-corpus-drift.log || true
+        log_pass "Tray string-corpus drift reported (792-77bt, informational)"
+        archive_check_log "tray-string-corpus-drift" "pass" /tmp/tray-string-corpus-drift.log
+    else
+        log_fail_missing_guard "tray-string-corpus-drift" "scripts/check-tray-string-corpus-drift.sh"
+        archive_check_log "tray-string-corpus-drift" "skipped"
+    fi
+
     if [[ -f "scripts/check-cheatsheet-frontmatter.sh" ]]; then
         if bash scripts/check-cheatsheet-frontmatter.sh 2>&1 | tee /tmp/cheatsheet-frontmatter.log; then
             log_pass "Cheatsheet frontmatter valid"
@@ -1179,6 +1195,23 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     else
         log_fail_missing_guard "dev-embed-model-agreement" "scripts/check-dev-embed-model-agreement.sh"
         archive_check_log "dev-embed-model-agreement" "skipped"
+    fi
+
+    # Order 765-mza8. Wired here, literally, for the same reason as the two
+    # above. A dead `inputs:` glob is silent by construction: it cannot make a
+    # test run, only skip, so nothing else in this suite would ever go red for
+    # it. Verified passing before wiring: 51 glob(s) across 11 annotated test(s).
+    if [[ -f "scripts/check-litmus-dead-inputs.sh" ]]; then
+        if bash scripts/check-litmus-dead-inputs.sh 2>&1 | tee /tmp/litmus-dead-inputs.log; then
+            log_pass "Every litmus inputs: glob resolves to a tracked file"
+            archive_check_log "litmus-dead-inputs" "pass" /tmp/litmus-dead-inputs.log
+        else
+            log_fail_tracked "litmus-dead-inputs" "Dead litmus inputs glob (see /tmp/litmus-dead-inputs.log)"
+            archive_check_log "litmus-dead-inputs" "fail" /tmp/litmus-dead-inputs.log
+        fi
+    else
+        log_fail_missing_guard "litmus-dead-inputs" "scripts/check-litmus-dead-inputs.sh"
+        archive_check_log "litmus-dead-inputs" "skipped"
     fi
 
     # ============================================================================

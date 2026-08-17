@@ -434,12 +434,76 @@ on_demand_experts:
       NOT on every cycle (a full `cargo clean` forces a full rebuild next cycle,
       so it must be rare). Trigger (whichever first): target/ exceeds 40 GiB, OR
       a `.last-build-cache-sweep` marker under the cache dir is older than 14
-      days. Action: `cargo clean` (+ `nix-collect-garbage --delete-older-than
-      14d` / `nix store gc` when nix is present), then stamp the marker. END of
+      days. Action: `cargo clean` (+ `scripts/nix-toolbox.sh gc` when nix is
+      present — NOT a bare `nix store gc`, see nix_store_policy), then stamp
+      the marker. END of
       cycle, not beginning, so the reclaim happens after the cycle's work and
       the cost (a fuller next-build) is paid during the idle gap. Ephemeral
       forges are EXEMPT — their target/ dies with the container. Implemented +
       litmus-pinned by the ledger packet build-cache-sweep-on-durable-hosts.
+    nix_store_policy:
+      authority: "The Tlatoāni, 2026-08-17 (operator question) — implemented by order 795-h8er"
+      rule: >
+        The persistent nix store (`scripts/nix-toolbox.sh store-path`, by
+        default ~/.local/share/tillandsias/nix-store) is a CACHE, and the two
+        halves of that word pull in opposite directions: it must survive
+        toolbox and worktree recreation, and it must not grow without bound.
+        The policy is PIN WHAT IS CURRENT, COLLECT THE REST, ONLY ABOVE A
+        CEILING. Run `scripts/nix-toolbox.sh gc` from the daily lane; it pins
+        first and collects second, and never touches the host's own /nix.
+      why_bare_nix_gc_is_forbidden: >
+        Do NOT run a bare `nix store gc` or `nix-collect-garbage` against this
+        store. Measured on macuahuitl 2026-08-17: the store held 5.8 GiB over
+        4,478 paths and every one of them was GARBAGE by nix's reckoning,
+        because its only four GC roots were `auto` indirect roots pointing into
+        a fork worktree that had already been deleted. A bare collection would
+        have deleted the entire cache the lane was meant to be pruning — the
+        failure would have looked like nothing at all, just builds quietly
+        getting slow again. `nix-toolbox.sh gc` exists so the lane cannot make
+        that mistake: it establishes roots BEFORE it collects, and refuses to
+        collect at all when flake evaluation could not tell it what to protect.
+      what_is_pinned: >
+        The crane deps closures for the four musl flake outputs, and only
+        those. They are the expensive artifact and they are content-stable
+        under source-only change (order 765-8hc3, guarded by
+        scripts/check-nix-deps-stability.sh), so a small fixed set of roots
+        buys most of the hit rate. Top-level outputs are deliberately NOT
+        pinned: they move on every commit, so rooting them would accumulate one
+        dead closure per commit — the very growth this policy bounds. Roots
+        live at <store>/nix/var/nix/gcroots/tillandsias/, INSIDE the store,
+        never inside a worktree.
+      ceiling: >
+        20 GiB by default, override with TILLANDSIAS_NIX_STORE_CEILING_GIB.
+        Under the ceiling, `gc` is a no-op and reports `under-ceiling` — the
+        cache is allowed to be large, it is only not allowed to be unbounded.
+        Above it, the excess is freed with `nix store gc --max`, which cannot
+        touch the pinned deps closures. Sized against the 40 GiB target/
+        trigger above: one generation of deps closures across the four outputs
+        is a few GiB, so 20 holds the current set plus a couple of in-flight
+        generations.
+      what_actually_drives_growth: >
+        Not source churn — lock churn. The deps closure moves whenever
+        Cargo.lock or flake.lock moves (three times in the two days before this
+        was written), and each move orphans the previous multi-GiB closure
+        forever. Measured at the same moment: five stale deps closures
+        resident, zero current ones. Pinning the current set is what makes the
+        stale ones collectable rather than indistinguishable.
+      deletion_is_safe: >
+        `rm -rf` on the whole store is a supported recovery: the next
+        `nix-toolbox.sh ensure` recreates it and the next build repopulates it,
+        slowly. Pinned by scripts/test-nix-toolbox.sh (delete-and-rebuild), as
+        is the root mechanism itself (pinned-survives-gc) — so a nix upgrade
+        that stopped honouring roots in that location fails loud here instead
+        of silently evaporating the cache.
+      concurrency: >
+        Safe. Measured 2026-08-17 against one chroot store: eight concurrent
+        builders of the same derivation all exited 0 and produced one output
+        path; eight concurrent writers racing a simultaneous `nix store gc`
+        produced zero failures and `nix store verify --all` exited 0. Four
+        agents building at once on one host is the normal case here, not the
+        edge. Note the one real hazard this does NOT remove: a collection
+        running concurrently with a build can evict a freshly written path that
+        nothing has rooted yet, which is another reason `gc` pins first.
 
   development_environment_lifecycle:
     authority: "The Tlatoāni, 2026-08-13 (fleet-restart directive)"
@@ -463,8 +527,9 @@ on_demand_experts:
         a `.last-daily-maintenance` marker under the cache dir so it is idempotent
         and not repeated every cycle. Bare-metal durable hosts only; forges exempt.
       steps:
-        - "Build-cache GC per build_cache_hygiene (cargo clean + nix gc when bloated/stale)."
-        - "nix store gc / nix-collect-garbage on Silverblue+toolbox hosts; podman image prune of superseded versioned images."
+        - "Build-cache GC per build_cache_hygiene (cargo clean + scripts/nix-toolbox.sh gc when bloated/stale)."
+        - "scripts/nix-toolbox.sh gc on Silverblue+toolbox hosts (pins the current deps closures, then collects above the ceiling; a bare nix store gc would delete the whole cache — see build_cache_hygiene.nix_store_policy); podman image prune of superseded versioned images."
+        - "Nix-lane guards, on hosts with nix: scripts/test-nix-toolbox.sh (store contract) and scripts/check-nix-deps-stability.sh (the content-stability property the cache's hit rate depends on). Daily rather than per-commit deliberately — each is a flake evaluation, and putting them in ./build.sh --check would tax every edit to protect a property that only moves when a lock file does."
         - "Reap defunct delegate/opencode handles; delegate-outcome.sh sweep any stale registered delegate."
         - "Verify the dev-environment expert containers are up + fresh (see dev_environment_experts)."
     post_restart_verification: >
