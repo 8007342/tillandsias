@@ -52,9 +52,25 @@ critical_path:
     expected_behavior: "fn select_diagnostics_agent_kind"
 
   - step: "bash distill consumer: delegates to the Rust-backed diagnostics packager"
-    command: "grep -F 'target/debug/tillandsias-policy' scripts/distill-forge-diagnostics.sh && grep -F 'distill-forge-diagnostics --repo-root' scripts/distill-forge-diagnostics.sh"
+    # 2026-08-17: the first grep pinned the literal path
+    # `target/debug/tillandsias-policy`, which order 770-ifeg legitimately
+    # removed when it generalized every exec site to the run-don't-stat probe
+    # (`resolve_target_binary tillandsias-policy debug`). The PROPERTY — this
+    # bash wrapper resolves the Rust policy binary and delegates to its
+    # subcommand rather than reimplementing the packaging — is unchanged and
+    # is what this step now asserts. Pinning the literal path made a
+    # correctness improvement read as a regression.
+    # Carries a NEGATIVE CONTROL, which is what 634-39ik's ratchet requires of
+    # any step that reads source: the same assertion is re-run against a copy
+    # with the delegation stripped out, and the step fails if that copy still
+    # passes. My first rewrite here swapped one literal path for an OR of two
+    # literals and the ratchet refused it — correctly, since that is still
+    # pinning how the source is written. A behavioural run is not available
+    # cheaply (the wrapper cargo-builds tillandsias-policy before delegating,
+    # far past this step's budget), so the control is the honest alternative.
+    command: "t=$(mktemp -d); grep -Eq 'resolve_target_binary tillandsias-policy|target/debug/tillandsias-policy' scripts/distill-forge-diagnostics.sh && grep -Fq 'distill-forge-diagnostics --repo-root' scripts/distill-forge-diagnostics.sh || { rm -rf $t; echo FAIL-real-wrapper-does-not-delegate; exit 1; }; sed -e s/resolve_target_binary/:/ -e s/--repo-root/:/ scripts/distill-forge-diagnostics.sh > $t/stripped.sh; if grep -Eq 'resolve_target_binary tillandsias-policy|target/debug/tillandsias-policy' $t/stripped.sh; then rm -rf $t; echo FAIL-negative-control-did-not-fail; exit 1; fi; rm -rf $t; echo 'ok: delegates to the Rust packager (negative control red on a stripped copy)'"
     timeout_ms: 5000
-    expected_behavior: "distill-forge-diagnostics --repo-root"
+    expected_behavior: "ok: delegates to the Rust packager (negative control red on a stripped copy)"
 
   - step: "bash distill consumer: extracts all four envelope fields"
     command: "grep -F 'rfind(|l| l.starts_with(\"event:diagnostics_envelope \"))?' crates/tillandsias-policy/src/main.rs && grep -F 'event:diagnostics_envelope ' crates/tillandsias-headless/src/main.rs"
