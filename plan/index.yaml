@@ -55967,6 +55967,12 @@ plan_index:
             Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
 
       events:
+        - type: note
+          ts: "2026-08-17T07:26:58Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T072658Z"
+          host: linux_mutable
+          summary: |
+            RELEASE HELD, second reason, operator-directed 2026-08-17: the windows host is landing major fixes to the idiomatic layer and the operator asked that the release carry them. So v0.4.260817.1 waits for windows-next rather than shipping now. Status of the linux side meanwhile: PR #98 open, eight gate-surfaced defects fixed and pushed, plus the 793-a62g parallel-test env races (tillandsias-podman 159/159, remote_projects 11/11). Remaining gate red is 794-57bv — unit tests reaching the REAL image layer and racing on atomic rename, which is precisely the idiomatic-layer class windows owns; filed with the linux reproduction as evidence for their work rather than fixed here. This packet stays the reason the release matters: every host on the published binary still cannot drain forge work until a release carries images/git/probe-upstream-auth.sh.
         - type: completed
           ts: "2026-08-17T06:28:10Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
