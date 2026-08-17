@@ -1,0 +1,129 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T22:04:50Z.
+#
+# Both found by running the destructive e2e's Step 1 (./build.sh --ci-full
+# --install) for the first time in days. Both are the same defect class and it
+# is the night's recurring one: a checker that measures a DIFFERENT POPULATION
+# than the thing it is judging, and reports the difference as a regression.
+# Neither was a real product fault; both blocked the gate.
+packets:
+  - packet_id: guard-activation-audit-cannot-see-through-the-skill-symlinks
+    order: 807-d7qw
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "the guard-activation audit used `grep -r` over .claude/skills, which is a symlink farm — so every guard invoked ONLY from a skill was reported 'shipped but never invoked' and failed the gate"
+    deliverable: "the audit follows the skill symlinks, and a genuinely uninvoked guard is still caught by name"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [guards, fail-loud, skills, ci]
+    estimated_hours: 1
+    context: |
+      OBSERVED, macuahuitl 2026-08-17, as a --ci-full failure:
+        ✗ Orphaned guard(s) found — shipped but never invoked
+        guard-activation: total=50 active=49 orphan=1 verdict=orphans-found
+        orphans: check-daily-maintenance.sh
+
+      check-daily-maintenance.sh (order 801-qasc, authored on the windows host)
+      is referenced TWICE in skills/meta-orchestration/SKILL.md — it is the
+      guard that makes that skill's Start-Of-Day gate falsifiable, wired
+      exactly where it belongs. The accusation was false.
+
+      MECHANISM: scripts/audit-guard-activation.sh:44 used
+      `grep -rl -- "$name" "$s"`, and `.claude/skills` is a directory of
+      SYMLINKS by construction — there is one canonical skills/<name>/ and each
+      runtime (.claude, .opencode, .codex, .gemini, .github) reaches it through
+      a link, which is how the repo keeps one source of truth. `grep -r` does
+      not follow symlinks encountered during traversal; `grep -R` does. Proven
+      directly:
+        grep -rl "check-daily-maintenance.sh" .claude/skills  -> (nothing)
+        grep -Rl "check-daily-maintenance.sh" .claude/skills  -> .claude/skills/meta-orchestration/SKILL.md
+
+      So the surface list named `.claude/skills` as an activation surface and
+      then read it as empty, forever. Any guard whose only invoker is a skill
+      was permanently an orphan.
+
+      WHY IT IS WORSE THAN A MISSING CHECK: a false accusation that BLOCKS a
+      gate demands a fix that cannot be made — the remedy it implies is
+      "wire this guard", and the guard is already wired. The next person either
+      re-wires it somewhere redundant or adds an exception. Both make the tree
+      worse to satisfy a checker that was wrong.
+  - packet_id: batch-triage-litmus-counted-a-parked-p0-the-selector-refuses
+    order: 807-kdg7
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "litmus:cycle-batch-triage-shape compared the batch against a ledger query that ignores dependencies, so a BLOCKED p0 made the selector look like it was hiding urgent work"
+    deliverable: "the ledger side of the urgency comparison subtracts parked packets, so the two sides describe the same population"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [litmus, triage, selector, fail-loud]
+    estimated_hours: 1
+    context: |
+      OBSERVED, macuahuitl 2026-08-17, the only litmus FAIL in a 306/307 run:
+        [STEP 18/22] URGENCY OVERRIDE: the batch's best priority matches the
+        ledger's best ... [FAIL]
+        output=FAIL: batch best is p1 while the ledger offers p0
+
+      The step compared `scripts/select-work-batch.sh linux` against
+      `query --status ready --claimable-by linux --release v0.5`. The query
+      filters by role and release but does NOT evaluate dependencies.
+
+      MEASURED: exactly one p0 satisfied that query — 722-uern
+      (mirror-identity-negative-matrix-litmus). Its depends_on is
+      [mirror-identity-vault-roles-exact, mirror-identity-per-project-dns,
+      mirror-identity-lane-sidecar-and-sshd], and `parked-blocks` reports the
+      last of those as status BLOCKED. So the packet cannot be worked, the
+      selector correctly omitted it, and the gate called that omission a
+      regression.
+
+      This is the failure mode where the CHECK is wrong and the SUBJECT is
+      right — the most expensive kind, because the instinct is to "fix" the
+      selector, which would mean teaching it to offer work nobody can start.
+
+      FIX: subtract `parked-blocks` from the ledger side before taking the
+      minimum, so both sides describe eligible work.
+
+events:
+  - packet_id: guard-activation-audit-cannot-see-through-the-skill-symlinks
+    event:
+      type: completed
+      ts: "2026-08-17T22:04:50Z"
+      agent_id: linux-macuahuitl-opus5-20260817T213700Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. scripts/audit-guard-activation.sh now uses
+        `grep -Rl` so the skill symlink farms are actually searched. BEFORE: total=50
+        active=49 orphan=1, orphans: check-daily-maintenance.sh, and --ci-full failed.
+        AFTER: total=50 active=50 orphan=0 verdict=ok, with check-daily-maintenance.sh
+        resolved to .claude/skills/meta-orchestration/SKILL.md. NEGATIVE CONTROL, because
+        an audit that stops accusing must still be able to accuse: dropped a throwaway
+        scripts/check-zzz-orphan-control.sh with no invoker into the tree and re-ran —
+        total=51 active=50 orphan=1, named correctly; removed it and the verdict returned
+        to ok. So the fix restored sight rather than blinding the auditor.
+      evidence_refs:
+        - "scripts/audit-guard-activation.sh: find_invoker uses grep -Rl (was -rl)"
+        - "grep -rl over .claude/skills -> nothing; grep -Rl -> meta-orchestration/SKILL.md"
+        - "before 49/50 orphan=1; after 50/50 orphan=0; planted orphan still caught 51/50 orphan=1"
+  - packet_id: batch-triage-litmus-counted-a-parked-p0-the-selector-refuses
+    event:
+      type: completed
+      ts: "2026-08-17T22:04:50Z"
+      agent_id: linux-macuahuitl-opus5-20260817T213700Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. The urgency step's ledger side now subtracts
+        `parked-blocks` before taking the minimum priority. Executed directly against the
+        live ledger: rc=0, "ok: urgency reachable batch=p1 ledger=p1", where the original
+        expression produced "FAIL: batch best is p1 while the ledger offers p0". NON-VACUITY,
+        the control that matters for a subtractive filter: the parked set is 6 ids and the
+        filter takes the ledger from 271 rows to 266 — it removes five specific rows, not
+        the population. Had it emptied the set, best_ledger would default to 9 and the step
+        would pass unconditionally, which is the way this kind of fix fails silently.
+      evidence_refs:
+        - "openspec/litmus-tests/litmus-cycle-batch-triage-shape.yaml: ledger side subtracts parked-blocks"
+        - "722-uern depends_on mirror-identity-lane-sidecar-and-sshd, status BLOCKED (parked-blocks)"
+        - "step executed: rc=0, batch=p1 ledger=p1; original expression: FAIL p1 vs p0"
+        - "filter selectivity: 271 ledger rows -> 266 kept, parked set = 6"
