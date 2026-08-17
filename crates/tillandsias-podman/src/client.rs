@@ -85,7 +85,7 @@ fn exit_status_from_code(code: Option<i32>) -> std::process::ExitStatus {
 #[cfg(target_os = "windows")]
 async fn wsl_distro_exists_async(name: &str) -> bool {
     let out = match {
-        let mut __c = tokio::process::Command::new("wsl.exe");
+        let mut __c = crate::wsl_command_async();
         crate::no_window_async(&mut __c);
         __c
     }
@@ -513,7 +513,7 @@ impl PodmanClient {
         #[cfg(target_os = "windows")]
         {
             let output = {
-                let mut __c = tokio::process::Command::new("wsl.exe");
+                let mut __c = crate::wsl_command_async();
                 crate::no_window_async(&mut __c);
                 __c
             }
@@ -896,7 +896,7 @@ impl PodmanClient {
 
             // Unregister the distro.
             let output = {
-                let mut __c = tokio::process::Command::new("wsl.exe");
+                let mut __c = crate::wsl_command_async();
                 crate::no_window_async(&mut __c);
                 __c
             }
@@ -1489,7 +1489,7 @@ impl PodmanClient {
             debug!(distro, %cmd, user, cwd, "Executing command in WSL distro");
 
             let output = {
-                let mut __c = tokio::process::Command::new("wsl.exe");
+                let mut __c = crate::wsl_command_async();
                 crate::no_window_async(&mut __c);
                 __c
             }
@@ -1838,7 +1838,7 @@ async fn run_container_wsl_detached(args: &[String]) -> Result<String, PodmanErr
 
     // Build the wsl.exe command: wsl.exe -d <distro> --user forge --cd /home/forge --exec env K=V ... <entrypoint> [args...]
     let mut cmd = {
-        let mut __c = tokio::process::Command::new("wsl.exe");
+        let mut __c = crate::wsl_command_async();
         crate::no_window_async(&mut __c);
         __c
     };
