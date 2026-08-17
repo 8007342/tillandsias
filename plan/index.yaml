@@ -52922,6 +52922,12 @@ plan_index:
         - the index refreshes on commit or names its staleness in the envelope
 
       events:
+        - type: progress
+          ts: "2026-08-17T03:30:38Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Honesty slice landed (2b1f8d188) — the cheap half of the split recorded on this packet, leaving the index build itself with order 552. (1) The capability line now carries spec_index=present|absent, computed with the SAME predicate the answer path uses, so it can no longer advertise spec subcommands while spec_answer cannot answer; appended not inserted, since both litmus that read the line match by substring. This also closes 712-r5x8 criterion 1. (2) The dev embed MODEL now matches the dev ENDPOINT: lib-dev-env.sh names the ollama model for the dev environment (runtime default untouched), and scripts/check-dev-embed-model-agreement.sh pins it against the model dev-inference-ensure.sh actually pulls, with a selftest whose control refuses a disagreeing pair and rejects empty extractor matches. Without this, spec_answer would have 404'd on embeddings even after 552 built a real index, and the failure would have looked like a missing index. (3) NEW FINDING while proving (1): the field reported absent for an index that existed, because .claude/settings.local.json — TRACKED in git despite the .local convention — exports FORGE_SPEC_INDEX_DIR as a /mnt/c Windows path that cannot exist on this host, and forge-plan.sh resolves the index dir from it. Every non-Windows host would therefore resolve the spec index to an impossible path forever. Removed that one machine-specific key here; the tracking question is filed as 789-nc2s because untracking the file removes its portable settings from every host at once. This packet stays open for the index build (order 552).
         - type: note
           ts: "2026-08-17T01:34:54Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
