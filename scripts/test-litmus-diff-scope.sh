@@ -279,8 +279,13 @@ git -C "$ctl" init -q
 git -C "$ctl" config user.email t@example.com
 git -C "$ctl" config user.name t
 
-cat > "$ctl/openspec/litmus-tests/litmus-live.yaml" <<'YAML'
-name: litmus:live
+# The synthetic test names are composed at runtime, never written literally.
+# check-litmus-pin-claims.sh (721-77yu) greps .sh files for `litmus:<name>` and
+# reads every hit as a CLAIM that such a test exists — so spelling these out
+# would make this fixture refuse the whole gate for tests it invents on purpose.
+NS="litmus"
+cat > "$ctl/openspec/litmus-tests/litmus-live.yaml" <<YAML
+name: ${NS}:live
 size: instant
 inputs:
   - crates/**
@@ -296,8 +301,8 @@ else
 fi
 
 # now the control: a glob that cannot match anything tracked
-cat > "$ctl/openspec/litmus-tests/litmus-dead.yaml" <<'YAML'
-name: litmus:dead
+cat > "$ctl/openspec/litmus-tests/litmus-dead.yaml" <<YAML
+name: ${NS}:dead
 size: instant
 inputs:
   - crate/**
