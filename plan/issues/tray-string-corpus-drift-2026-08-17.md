@@ -2,32 +2,50 @@
 
 <!-- provenance: 792-77bt (slice 2 of 628-c7qd). Regenerate with
      scripts/check-tray-string-corpus-drift.sh --list -->
-<!-- freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-17 verdict=refreshed scope=792-77bt generated -->
+<!-- freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-17 verdict=updated scope=792-77bt corrected — production text only, quoted-literal match -->
 
 ```
-tray-string-drift: en_keys=168 rendered=18 unmatched=150 rendered_pct=10
+tray-string-drift: en_keys=168 rendered=5 unmatched=163 rendered_pct=2
 ```
 
-The count is generous to matches — comments and `#[cfg(test)]` modules are
-included in the haystack — so the unmatched majority below is a FLOOR on the
-drift, not an estimate. A stricter production-only measurement on 2026-08-17
-put the verbatim matches at 9 rather than 18.
+## How to read these numbers
+
+Three methods were run and they disagree in a way worth stating:
+
+| method | matches | note |
+|---|---:|---|
+| bare substring, whole files | 18 | counted comments, test code, and substrings (`Maintenance` inside `🔧 Maintenance`) |
+| bare substring, production text | 13 | comments and `#[cfg(test)]` removed |
+| quoted literal, production text (this script) | 5 | does not decode `\u{...}` escapes, so it under-counts |
+| exact literal with escapes decoded (cross-check) | 9 | the closest to truth |
+
+So `rendered` here is a LOWER bound and `unmatched` an UPPER bound. Every
+method agrees on the only thing that decides 628-c7qd: **over 90% of the
+corpus is not what the trays render.**
+
+The first version of this report counted comments and test modules — including
+a pin added the day before that asserts `APP_NAME == "Tillandsias"`, which the
+next run then counted as the tray rendering that string. A measurement that reads
+its own assertions is not a measurement; that is corrected here.
 
 ## Why this decides 628-c7qd's direction
 
 628-c7qd requires the refactor to be BYTE-IDENTICAL at the surface while
-resolving every string from this corpus. Both cannot hold: adopting these
-values would change ~150 user-visible strings. The corpus must therefore be
-regenerated FROM the shipped literals (code → toml), and each entry below is
-a drift finding for **628-w9sm** to rule on — never fixed in passing
+resolving every string from this corpus. Both cannot hold. The corpus must be
+regenerated FROM the shipped literals (code → toml), and each entry below is a
+drift finding for **628-w9sm** to rule on — never fixed in passing
 (spec:tray-ux governance).
 
-## en.toml values that appear nowhere in the tray sources
+## en.toml values whose quoted literal appears nowhere in production tray text
 
 ```
   root_terminal = "🛠️ Root"
+  projects = "🏠 ~/src"
+  cloud_projects = "☁️ Cloud"
   no_projects = "No projects detected"
   settings = "Settings"
+  quit = "Quit Tillandsias"
+  blooming = "Blooming"
   maintenance = "⛏️ Maintenance"
   stop = "🛑 Stop"
   serve_here = "🔗 Serve Here"
@@ -36,6 +54,7 @@ a drift finding for **628-w9sm** to rule on — never fixed in passing
   language = "Language"
   credit = "by Tlatoāni"
   version = "Tillandsias v{version}"
+  sign_in_github = "🔑 GitHub Login"
   attach_here_with_emoji = "🌱 Attach Here"
   attach_another_with_emoji = "🌱 Attach Another"
   clone_and_launch = "⬇️ Clone & Launch"
@@ -43,8 +62,11 @@ a drift finding for **628-w9sm** to rule on — never fixed in passing
   verifying_environment = "Verifying environment …"
   building_one = "Building {image} …"
   building_many = "Building {images} …"
+  ready_one = "{image} OK"
   environment_ready = "✅ Environment ready"
   github_unreachable = "GitHub unreachable — using cached list"
+  label = "GitHub"
+  login = "🔑 GitHub Login"
   login_refresh = "🔒 GitHub Login Refresh"
   loading = "Loading..."
   all_cloned = "All repos cloned locally"
@@ -60,7 +82,9 @@ a drift finding for **628-w9sm** to rule on — never fixed in passing
   failed = "❌ {name} build failed"
   chip_browser_runtime = "Browser runtime"
   chip_enclave = "Enclave network"
+  chip_proxy = "Proxy"
   chip_inference_engine = "Inference Engine"
+  chip_router = "Router"
   chip_code_mirror = "Code Mirror"
   chip_git_service = "Git Service"
   chip_forge = "Development Environment"
@@ -77,6 +101,7 @@ a drift finding for **628-w9sm** to rule on — never fixed in passing
   waiting_setup = "Waiting for environment setup to complete..."
   preparing = "Tillandsias init — preparing development environment"
   already_ready = "✓ Development environment already ready"
+  ready = "Ready."
   setup_in_progress = "⌛ Setup already in progress, waiting..."
   setup_timed_out = "✗ Setup timed out. If this persists, please reinstall from https://github.com/8007342/tillandsias"
   env_ready = "✓ Environment ready"
@@ -166,7 +191,9 @@ a drift finding for **628-w9sm** to rule on — never fixed in passing
   tools_overlay_ready = "✓ Software layer ready"
   skipping = "↷ {name}: {tag} (already built, skipping)"
   title = "Tillandsias v{version}"
+  os_label = "OS:"
   podman_label = "Podman:"
+  podman_not_found = "not found"
   forge_ready = "{tag} (ready)"
   forge_update_needed = "update needed (current: {current}, expected: {expected})"
   forge_not_built = "not built (run: tillandsias init)"
@@ -175,5 +202,5 @@ a drift finding for **628-w9sm** to rule on — never fixed in passing
   log_unknown_module = "Warning: Unknown log module: {module}. Valid modules: {valid}"
   log_invalid_level = "Error: Invalid log level: {level}. Valid levels: {valid}"
   flag_requires_value = "Error: {flag} requires a value"
-tray-string-drift: en_keys=168 rendered=18 unmatched=150 rendered_pct=10
+tray-string-drift: en_keys=168 rendered=5 unmatched=163 rendered_pct=2
 ```

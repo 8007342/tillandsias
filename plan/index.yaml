@@ -35375,6 +35375,12 @@ plan_index:
         Foundation packet. Can run in parallel with 628-p5tj. Blocks 628-h4nx and 628-w9sm.
       events:
         - type: progress
+          ts: "2026-08-17T07:29:47Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0723z"
+          host: macos
+          summary: |
+            SEQUENCING FINDING that closes out the proposed "convert the already-matching keys first" slice: it is NOT executable as a safe first step, and the reason is where the matches live rather than how many there are. All FIVE production matches at HEAD sit in crates with heavy source-scan test coverage — app.name in macos-tray, menu.attach_here / menu.build.chip_maintenance / menu.unhealthy_environment in headless/tray, menu.status.separator in windows-tray. ZERO are in tillandsias-host-shell, which is the one crate with no source-scan assertion sites and therefore the crate the measurement said to convert FIRST. So the safe crate has nothing to convert and the convertible strings are all in unsafe crates (headless alone carries 82 include_str assertion sites that assert on file TEXT, so even a byte-identical runtime refactor turns them red). One of the five is also the known semantic trap: chip_maintenance byte-matches while the semantically correct key is menu.maintenance. CONSEQUENCE: the string layer cannot become load-bearing by converting existing matches. It becomes load-bearing only after 628-w9sm rules on the drift and the corpus is regenerated from the shipped literals — which is what 792-77bt already routed. Recording this so the next host does not re-derive it and start converting in headless.
+        - type: progress
           ts: "2026-08-17T04:38:23Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0423z"
           host: macos

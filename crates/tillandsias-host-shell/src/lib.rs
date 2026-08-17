@@ -108,8 +108,13 @@ mod locale_strings_tests {
     /// This asserts the DIRECTION, not an exact count, so ordinary edits do
     /// not churn it — but a real convergence (or a further collapse) trips it
     /// and forces the packet family to be re-read rather than assumed.
-    /// Counting is deliberately generous to matches (comments and test
-    /// modules included), so the unmatched majority it reports is a floor.
+    ///
+    /// It reads PRODUCTION text only — `//` comments stripped, each file cut
+    /// at its first `#[cfg(test)]`. That is not fussiness: the first version
+    /// counted comments and test code, so the sibling pin in this very module
+    /// (`APP_NAME == "Tillandsias"`) made the corpus look one key closer to
+    /// the shipped tray. A measurement that reads its own assertions is not a
+    /// measurement.
     #[test]
     fn en_corpus_does_not_describe_the_shipped_tray() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -146,7 +151,9 @@ mod locale_strings_tests {
                 continue;
             }
             total += 1;
-            if haystack.contains(value) {
+            // The QUOTED literal, so `Maintenance` does not count as rendered
+            // because `🔧 Maintenance` contains it.
+            if haystack.contains(&format!("\"{value}\"")) {
                 rendered += 1;
             }
         }
@@ -162,6 +169,9 @@ mod locale_strings_tests {
         );
     }
 
+    /// Production text only: `//` comments dropped and each file truncated at
+    /// its first column-0 `#[cfg(test)]`. Conservative by construction — it
+    /// can only under-count matches, never invent them.
     fn collect_rs(dir: &std::path::Path, out: &mut String) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
@@ -173,7 +183,16 @@ mod locale_strings_tests {
             } else if path.extension().and_then(|e| e.to_str()) == Some("rs")
                 && let Ok(src) = std::fs::read_to_string(&path)
             {
-                out.push_str(&src);
+                for line in src.lines() {
+                    if line.starts_with("#[cfg(test)]") {
+                        break;
+                    }
+                    if line.trim_start().starts_with("//") {
+                        continue;
+                    }
+                    out.push_str(line);
+                    out.push('\n');
+                }
             }
         }
     }
