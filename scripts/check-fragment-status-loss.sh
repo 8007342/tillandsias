@@ -56,42 +56,23 @@ declared="$(awk '
 
 [ -n "$declared" ] || { echo "ok:no-fragment-status-loss:0 checked"; exit 0; }
 
-checked=0
-violations=""
-while IFS=$'\t' read -r pid want; do
-    [ -n "$pid" ] || continue
-    checked=$((checked + 1))
-    got="$("$PLAN" status "$pid" 2>/dev/null | awk '{print $2}')"
-    [ -n "$got" ] || continue
-    if [ "$got" != "$want" ]; then
-        # A packet legitimately declared `ready` in one fragment and later moved
-        # on via the LWW channel is NOT a loss — the fold is ahead of the
-        # declaration, which is correct. Only flag a declaration the fold is
-        # BEHIND: a terminal status that never took effect.
-        # Exactly the resolver's terminal set (is_terminal_status, 650-dq6u) —
-        # a guard laxer OR wider than the resolver is decorative (649-b2e4).
-        case "$want" in
-            completed|verified|done|obsoleted)
-                violations="${violations}${pid}: declared '${want}' in a fragment, folds as '${got}'"$'\n'
-                ;;
-        esac
-    fi
-done <<< "$declared"
-
 # SECOND CLASS: a terminal EVENT with no matching status transition.
 #
-# The first pass above catches "declared terminal under `packets:`, discarded by
+# The `declared` pass catches "declared terminal under `packets:`, discarded by
 # the G-Set". It cannot see the other way a completion goes missing: recording
 # `type: completed` as an EVENT and never writing the `status:` LWW entry.
 # Nothing is discarded there, so nothing looks wrong — the packet simply stays
 # claimable forever.
+#
+# Both classes are compared against the fold in the single join below; this
+# block only collects WHICH packets declare a closure event.
 #
 # Observed on three hosts. The macOS close-out on 2026-08-09 reported 624-q4jj
 # ALL-PASS with a full evidence file, wrote `type: completed`, carried no
 # `status:` block, and the packet was still being offered as work. Windows filed
 # the naming half of the same trap as 642-fedr the same day. Three hosts
 # independently is a write-path defect, not three mistakes.
-event_violations=""
+#
 # Which packet_ids DECLARE a terminal `completed` event in their events block?
 #
 # ORDER 752-pst5. This used to be a line-grep with ad-hoc resets, and a grep
@@ -110,7 +91,7 @@ if plan_binary_has "$PLAN" fragment-terminal-events; then
     done | sort -u)"
 else
     # ORDER 702-68zj: a binary that predates the rule is STALE HOST STATE, not
-    # a ledger defect. The first pass above still runs (it only needs `status`);
+    # a ledger defect. The `declared` pass still runs (it only needs the fold);
     # the event pass is skipped LOUDLY rather than approximated with an awk that
     # could again invent completions — a checker that invents completions is
     # worse than no checker, and a half-correct scanner is exactly the next
@@ -119,27 +100,90 @@ else
     echo "  note: $PLAN predates fragment-terminal-events — closure-event pass SKIPPED (rebuild with 'cargo build --release -p tillandsias-plan')" >&2
 fi
 
-if [ -n "$declared_events" ]; then
-    while IFS= read -r pid; do
+# ── THE FOLD, READ ONCE (order 783-xyk5) ────────────────────────────────────
+#
+# Both passes above ask the same question of the same fold: "what status does
+# packet X carry?" This used to be `"$PLAN" status "$pid"` inside each loop,
+# and every one of those invocations re-read and re-folded the ENTIRE base
+# ledger plus all fragments. Measured 2026-08-17 by the 765-dfry per-step gate
+# telemetry: ~436ms per spawn, 10.5s warm for this one guard — ~60% of a 17.4s
+# `./build.sh --check`, paid 2-5x per cycle on every host, every cycle.
+#
+# `query --json` is the SAME folded reader (582-26mm) the per-packet `status`
+# call goes through, so reading every (packet_id, status) pair in ONE
+# invocation is a spawn-count fix, not a semantics change: 974 packets in
+# ~129ms, independent of how many packets the fragments declare.
+#
+# FAIL-SAFE, NOT FAIL-FAST. If the batch cannot be built — a binary predating
+# `query`, a jq-less host, a fake harness binary that advertises the
+# subcommand without implementing it — the map is rebuilt with exactly the
+# per-packet `status` calls this replaced. Slower is acceptable; checking
+# NOTHING is not, and an empty map would silently pass every packet. That is
+# the same failure this guard exists to catch, so it must never be reachable
+# from a performance change.
+status_map=""
+if plan_binary_has "$PLAN" query && command -v jq >/dev/null 2>&1; then
+    status_map="$("$PLAN" query --json --limit 0 2>/dev/null \
+        | jq -r '.[] | select((.packet_id // "") != "") | [.packet_id, (.status // "")] | @tsv' 2>/dev/null)"
+fi
+if [ -z "$status_map" ]; then
+    echo "  note: batched fold unavailable ($PLAN query --json); falling back to per-packet status lookups" >&2
+    status_map="$( { printf '%s\n' "$declared" | cut -f1
+                     printf '%s\n' "$declared_events"; } | sort -u | while IFS= read -r pid; do
         [ -n "$pid" ] || continue
-        got="$("$PLAN" status "$pid" 2>/dev/null | awk '{print $2}')"
-        [ -n "$got" ] || continue
-        # A completed EVENT legitimately pairs with ANY closure-ladder terminal:
-        # per 650-dq6u the event may set status to completed, or directly to
-        # verified/done when the evidence meets that higher rung's bar.
-        # obsoleted is accepted too (supersession recorded over a completion).
-        case "$got" in
-            completed|verified|done|obsoleted) ;;
-            *)
-                event_violations="${event_violations}${pid}: has a 'completed' EVENT but folds as '${got}'"$'\n'
-                ;;
-        esac
-    done <<< "$declared_events"
+        s="$("$PLAN" status "$pid" 2>/dev/null | awk '{print $2}')"
+        [ -n "$s" ] && printf '%s\t%s\n' "$pid" "$s"
+    done )"
 fi
 
-if [ -n "$event_violations" ]; then
-    violations="${violations}${event_violations}"
-fi
+# One awk pass joins the map against both declaration classes. Rows are tagged
+# M/D/E so the map is loaded before either comparison; `checked` counts D rows
+# only (pass one), exactly as the per-packet loop did, and a packet absent from
+# the map is skipped exactly as an empty `status` result was. Terminal-set
+# membership is the resolver's (is_terminal_status, 650-dq6u) — a guard laxer
+# OR wider than the resolver is decorative (649-b2e4). Pass-one violations are
+# emitted before event violations, preserving the report's original order.
+# POSIX awk arrays only: bash stays 3.2-clean (no associative arrays, 761-g36m).
+join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
+               printf '%s\n' "$declared"        | sed 's/^/D\t/'
+               printf '%s\n' "$declared_events" | sed 's/^/E\t/'; } \
+    | awk -F'\t' -v q="'" '
+        $1 == "M" { if ($2 != "") st[$2] = $3; next }
+        $1 == "D" {
+            pid = $2; want = $3
+            if (pid == "") next
+            checked++
+            if (!(pid in st)) next
+            got = st[pid]
+            if (got == want) next
+            # A packet legitimately declared `ready` in one fragment and later
+            # moved on via the LWW channel is NOT a loss — the fold is ahead of
+            # the declaration, which is correct. Only flag a declaration the
+            # fold is BEHIND: a terminal status that never took effect.
+            if (want == "completed" || want == "verified" || want == "done" || want == "obsoleted")
+                dv = dv sprintf("%s: declared %s%s%s in a fragment, folds as %s%s%s\n", pid, q, want, q, q, got, q)
+            next
+        }
+        $1 == "E" {
+            pid = $2
+            if (pid == "") next
+            if (!(pid in st)) next
+            got = st[pid]
+            # A completed EVENT legitimately pairs with ANY closure-ladder
+            # terminal: per 650-dq6u the event may set status to completed, or
+            # directly to verified/done when the evidence meets that higher
+            # rung. obsoleted is accepted too (supersession over a completion).
+            if (got == "completed" || got == "verified" || got == "done" || got == "obsoleted") next
+            ev = ev sprintf("%s: has a %scompleted%s EVENT but folds as %s%s%s\n", pid, q, q, q, got, q)
+            next
+        }
+        END { printf "%s%s__CHECKED__%d\n", dv, ev, checked }
+    ')"
+
+checked="$(printf '%s\n' "$join_out" | sed -n 's/^__CHECKED__\([0-9][0-9]*\)$/\1/p' | tail -1)"
+[ -n "$checked" ] || checked=0
+violations="$(printf '%s\n' "$join_out" | grep -v '^__CHECKED__' | grep -v '^$')"
+[ -n "$violations" ] && violations="${violations}"$'\n'
 
 if [ -n "$violations" ]; then
     n="$(printf '%s' "$violations" | grep -c .)"
