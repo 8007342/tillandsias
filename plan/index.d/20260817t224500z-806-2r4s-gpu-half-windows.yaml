@@ -1,0 +1,74 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-17T22:45Z.
+#
+# The GPU half of 806-2r4s is implemented and verified live. The NPU half is
+# NOT, and cannot be from inside the guest — 809-7e4m owns that. No status
+# transition is declared here: the packet's deliverable covers both halves, so
+# it stays claimable for the residual rather than being closed on half the work.
+
+events:
+  - packet_id: accel-probe-reports-none-where-its-own-contract-promises-present-unusable
+    event:
+      type: note
+      ts: "2026-08-17T22:45:00Z"
+      agent_id: windows-yolanda-opus5-20260817t2219z
+      host: windows
+      summary: >
+        GPU HALF LANDED, verified on the real device shape. accel_probe.rs's
+        enumerate_gpus had exactly two Linux arms — nvidia via nvidia-smi (which
+        already uses the present-unusable pattern with
+        unusable_reason=cdi-spec-missing) and /dev/dri — and no arm at all for
+        WSL2's shape, so the GPU was silently dropped and the envelope reported
+        accel_gpu=none. Added a third arm behind a pure, fully-tabled predicate
+        wsl2_paravirtual_gpu(dxg_present, dri_present, already_found), emitting a
+        record with usable=false, unusable_reason=wsl2-no-dri-render-node,
+        lanes=[] and vendor="unknown" (/dev/dxg is vendor-agnostic — Intel and
+        AMD both present through it, measured on two Windows hosts, so naming a
+        vendor would be a guess and a wrong vendor in the fleet matrix is worse
+        than an honest unknown).
+        BEFORE, on this host: accel_class=cpu-only accel_gpu=none
+        accel_gpu_name=- accel_npu=none accel_reason=- .
+        AFTER, freshly built binary run in a WSL2 distro with the identical
+        shape (/dev/dxg present, /dev/dri absent): accel_class=cpu-only
+        accel_gpu=present-unusable accel_gpu_name=WSL2_paravirtual_GPU_dev_dxg
+        accel_npu=none accel_npu_name=- accel_reason=wsl2-no-dri-render-node
+        accel_cpu_cores=16 accel_ram_gb=7. Note accel_class stayed cpu-only,
+        which is the property to protect: an unreachable GPU must never inflate
+        the class, or a scheduler would place GPU work on a host that cannot run
+        it.
+        NO SCHEMA CHANGE WAS NEEDED, which corrects this packet's original
+        framing a second time. accel_envelope's own state closure already maps
+        any record lacking a container lane to "present-unusable", under the
+        comment "so 'present but unusable' never renders as 'none'". The
+        machinery was right the whole time; only the detection arm was missing.
+        HONEST LIMIT ON THE TESTS: this is NOT red-before-green, unlike 764-sunk.
+        Two tests were added — a full decision table for the predicate (8 cases,
+        including every shape that must NOT fire, so it cannot manufacture a
+        phantom device on bare metal or double-count where /dev/dri exists) and
+        an envelope test proving a lane-less record renders as present-unusable
+        with its reason. Neither would have failed against the original bug: the
+        envelope was already correct, and the predicate did not exist. They are
+        forward regression pins, and the evidence of FIX is the live before/after
+        above. Catching the original gap in a unit test would require
+        enumerate_gpus to take injectable path-existence rather than calling
+        Path::new(...).exists() inline; worth doing, not done here.
+        RESIDUAL, and why this packet is not closed: accel_npu is still `none`
+        on a host whose NPU Windows reports at Status=OK. That is not the same
+        defect — the guest cannot observe the NPU at all (no /dev/accel*, no
+        amdxdna, 4 virtual PCI devices, no 1022:17f0), so no probe arm can fix
+        it. 809-7e4m owns that half and argues the Windows row must be assembled
+        from two execution contexts.
+  - packet_id: windows-capability-document-cannot-be-produced-by-the-guest-probe-alone
+    event:
+      type: note
+      ts: "2026-08-17T22:46:00Z"
+      agent_id: windows-yolanda-opus5-20260817t2219z
+      host: windows
+      summary: >
+        Corroboration from the build distro, which matters because it shows the
+        constraint is a property of WSL2 rather than of the runtime guest's
+        minimal image: tillandsias-build reports the identical shape (/dev/dxg
+        PRESENT, /dev/dri absent). Both distros on this machine see the
+        paravirtual GPU and neither sees the NPU. A second, fuller distro
+        changing nothing is the negative control for "maybe the runtime guest is
+        just missing a package".
