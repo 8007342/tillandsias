@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: the-fold-itself-skips-unparseable-fragments-with-only-a-warning
+    event:
+      type: note
+      ts: "2026-08-17T09:16:00Z"
+      agent_id: fork-796-4ydb-20260817T0805Z
+      host: linux_mutable
+      summary: >
+        EXIT 3, NOT 1, and this is the part that pays. Exit 1 means the ledger is UNSOUND — something it says is wrong. Exit 3 means it is INCOMPLETE — something it should say is missing, and what is there may be fine. The distinction is not cosmetic: a depends_on whose target is DEFINED in the unreadable fragment reports as a dangling reference, so a reader who trusts a partial violation list repairs the reference instead of the fragment and makes it worse. check now prints that caveat when both conditions hold. The pre-push plan-only lane told the two apart by grepping this binary's stderr for the sentence 'does not parse and was SKIPPED', and said so in a comment ending 'the deeper question of whether check itself should exit non-zero is filed separately; it has callers on three hosts'. That comment is now answered and that grep is now a case statement on rc.

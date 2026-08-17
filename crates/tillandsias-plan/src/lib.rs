@@ -114,6 +114,18 @@ pub struct Ledger {
     /// Freshness is derived over base PLUS this set, so adding a fragment
     /// changes `indexed_at` even before anything reads its content.
     corpus_files: Vec<PathBuf>,
+    /// ORDER 796-4ydb — the fragments the fold COULD NOT READ, and therefore
+    /// the content this ledger is missing.
+    ///
+    /// The fold has always skipped an unparseable fragment so one bad file
+    /// cannot make the whole plan unreadable. What it did not do was carry that
+    /// fact in its RESULT: the skip was announced once, on stderr, by whichever
+    /// caller happened to re-scan the directory, and everything downstream
+    /// answered from a partial ledger with no way to know it. Making this a
+    /// field of the fold's output turns "this answer may be missing filed work"
+    /// into a condition a caller can branch on — `check` refuses on it, the
+    /// answer envelope reports it — instead of prose beside exit 0.
+    skipped_fragments: Vec<PathBuf>,
 }
 
 /// One winning source for a folded packet or field: the fragment FILE (by
@@ -369,6 +381,7 @@ impl Ledger {
             origin_sources: BTreeMap::new(),
             field_sources: BTreeMap::new(),
             corpus_files: Vec::new(),
+            skipped_fragments: Vec::new(),
         })
     }
 
@@ -405,15 +418,34 @@ impl Ledger {
         &self.corpus_files
     }
 
+    /// ORDER 796-4ydb — the fragments this fold could not parse and therefore
+    /// did NOT include. Non-empty means the ledger in hand is incomplete: work
+    /// filed in those files is absent from every answer derived from it.
+    ///
+    /// Empty for a base-only load and for any load where every fragment
+    /// parsed, so the clean case costs a caller nothing.
+    pub fn skipped_fragments(&self) -> &[PathBuf] {
+        &self.skipped_fragments
+    }
+
+    /// Whether the fold read the whole corpus. The inverse of a non-empty
+    /// [`Ledger::skipped_fragments`], named so a caller reads the intent rather
+    /// than an emptiness test.
+    pub fn fold_is_complete(&self) -> bool {
+        self.skipped_fragments.is_empty()
+    }
+
     pub(crate) fn set_fragment_sources(
         &mut self,
         origin_sources: BTreeMap<String, FieldSource>,
         field_sources: BTreeMap<String, FieldSource>,
         corpus_files: Vec<PathBuf>,
+        skipped_fragments: Vec<PathBuf>,
     ) {
         self.origin_sources = origin_sources;
         self.field_sources = field_sources;
         self.corpus_files = corpus_files;
+        self.skipped_fragments = skipped_fragments;
     }
 
     /// Rebuild the lookup indexes from the current `packets`, leaving `spans`

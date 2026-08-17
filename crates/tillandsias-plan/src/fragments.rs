@@ -1221,11 +1221,28 @@ impl Ledger {
             })
             .unwrap_or_default();
         corpus_files.sort();
+        // ORDER 796-4ydb — the fold's own record of what it could not read.
+        // Derived from the SAME directory listing as `corpus_files` (a file
+        // present in the corpus that `load_all` did not yield is one that could
+        // not be read or parsed) rather than by re-scanning with `malformed`:
+        // two scans of a directory other hosts append to can disagree, and the
+        // disagreement would land exactly on the fragment being reported.
+        let parsed: std::collections::BTreeSet<&Path> =
+            fragments.iter().map(|f| f.path.as_path()).collect();
+        let skipped: Vec<PathBuf> = corpus_files
+            .iter()
+            .filter(|p| !parsed.contains(p.as_path()))
+            .cloned()
+            .collect();
         if fragments.is_empty() {
+            // NOT necessarily an empty directory: a corpus whose fragments ALL
+            // fail to parse arrives here too, and that is the worst case, not
+            // the trivial one. It must carry `skipped` like any other.
             ledger.set_fragment_sources(
                 std::collections::BTreeMap::new(),
                 std::collections::BTreeMap::new(),
                 corpus_files,
+                skipped,
             );
             return Ok(ledger);
         }
@@ -1308,7 +1325,7 @@ impl Ledger {
                 );
             }
         }
-        ledger.set_fragment_sources(origin_sources, field_sources, corpus_files);
+        ledger.set_fragment_sources(origin_sources, field_sources, corpus_files, skipped);
         Ok(ledger)
     }
 }
@@ -2129,6 +2146,117 @@ packets:
             f0.indexed_at(),
             f1.indexed_at()
         );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    // ---- ORDER 796-4ydb: the fold carries what it could not read ----------
+
+    #[test]
+    fn a_clean_fold_reports_nothing_skipped() {
+        // THE NON-VACUITY HALF, and the one that keeps this cheap: a corpus
+        // that parses whole must be indistinguishable from before this field
+        // existed. If this ever fails, every caller starts paying attention to
+        // a condition that is not happening.
+        let d = scratch("skipped-clean");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260817t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+        )
+        .expect("write fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("overlay loads");
+        assert!(l.fold_is_complete(), "a parseable corpus was folded whole");
+        assert!(l.skipped_fragments().is_empty());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn an_unparseable_fragment_is_named_by_the_fold_that_skipped_it() {
+        // THE DEFECT. The fold has always skipped a fragment it cannot parse —
+        // correctly, so one bad file cannot make the whole plan unreadable —
+        // but the skip lived only in a stderr sentence printed by whichever
+        // caller re-scanned the directory. The result carried no trace, so
+        // every consumer answered from a partial ledger at full confidence.
+        let d = scratch("skipped-bad");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260817t0100z-aaaa-h1.yaml"),
+            "packets:\n  - packet_id: gamma\n    order: 102\n    status: ready\n",
+        )
+        .expect("write good fragment");
+        let bad = d.join("plan/index.d/20260817t0200z-bbbb-h1.yaml");
+        std::fs::write(
+            &bad,
+            "status:\n  - packet_id: alpha\n    field: status\n    value: completed\n    [unclosed\n",
+        )
+        .expect("write bad fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("a bad fragment must NOT fail the load");
+        assert!(
+            !l.fold_is_complete(),
+            "the fold skipped a fragment and must say so"
+        );
+        assert_eq!(
+            l.skipped_fragments(),
+            &[bad.clone()][..],
+            "exactly the unreadable file, named"
+        );
+        // And the GOOD fragment still folded: degrading is not refusing.
+        assert!(
+            l.resolve("gamma").is_some(),
+            "a readable fragment beside a broken one must still fold"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_corpus_of_only_unparseable_fragments_still_reports_them() {
+        // THE WORST CASE TAKES THE EARLY RETURN. When no fragment parses,
+        // `load_all` yields an empty vec and the fold short-circuits before the
+        // merge — the same branch an EMPTY directory takes. A skipped-set
+        // computed only on the merge path would report nothing here, i.e. would
+        // go silent exactly when the whole overlay is missing.
+        let d = scratch("skipped-all-bad");
+        let index = d.join("plan/index.yaml");
+        let bad = d.join("plan/index.d/20260817t0300z-cccc-h1.yaml");
+        std::fs::write(&bad, "packets: [unclosed\n").expect("write bad fragment");
+
+        let l = Ledger::load_with_fragments(&index).expect("loads");
+        assert_eq!(
+            l.skipped_fragments(),
+            &[bad][..],
+            "an all-malformed corpus takes the empty-fragments early return, and must \
+             still carry the skip"
+        );
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn the_skipped_set_agrees_with_the_standalone_malformed_scan() {
+        // The fold derives its skipped set by DIFFERENCE (corpus minus what
+        // `load_all` yielded) rather than by calling `malformed`, so that one
+        // directory listing backs both and a concurrent write cannot make the
+        // two disagree about the very file being reported. That is only safe
+        // while the two definitions of "unreadable" stay identical — this
+        // pins them together.
+        let d = scratch("skipped-agrees");
+        let index = d.join("plan/index.yaml");
+        std::fs::write(
+            d.join("plan/index.d/20260817t0400z-dddd-h1.yaml"),
+            "packets:\n  - packet_id: delta\n    order: 103\n    status: ready\n",
+        )
+        .expect("write good");
+        std::fs::write(
+            d.join("plan/index.d/20260817t0500z-eeee-h1.yaml"),
+            "packets: [unclosed\n",
+        )
+        .expect("write bad");
+        // A non-.yaml neighbour is not part of the corpus at all, by either route.
+        std::fs::write(d.join("plan/index.d/README.md"), "not a fragment\n").expect("write note");
+
+        let l = Ledger::load_with_fragments(&index).expect("loads");
+        assert_eq!(l.skipped_fragments(), malformed(&index).as_slice());
         let _ = std::fs::remove_dir_all(&d);
     }
 }

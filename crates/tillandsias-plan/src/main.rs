@@ -125,7 +125,17 @@ const USAGE: &str = concat!(
     "                                     predates order 569 and its capabilities are unknowable —\n",
     "                                     that absence is itself the stale-binary signal the forge\n",
     "                                     wrapper branches on.\n",
-    "           check                     integrity + schema validation (exit 1 on violations)\n",
+    "           check [--strict-fragments]\n",
+    "                                     integrity + schema validation (exit 1 on violations).\n",
+    "                                     ORDER 796-4ydb. A fragment the fold could not parse is\n",
+    "                                     always named on stdout as `malformed: <path>` and the\n",
+    "                                     verdict says `incomplete:` instead of `ok:` — the checks\n",
+    "                                     that passed were run over less than the plan. It exits 0\n",
+    "                                     anyway, because build.sh runs this on every host and a\n",
+    "                                     fleet-wide refusal makes one host's typo every host's red\n",
+    "                                     build (699-dycj). --strict-fragments arms that refusal for\n",
+    "                                     a caller that cannot tolerate a partial corpus: exit 3,\n",
+    "                                     distinct from 1 so 'incomplete' and 'unsound' never blur.\n",
     "           closure-evidence-check <fragment.yaml>\n",
     "                                     exit 1 if the fragment sets a closure rung\n",
     "                                     (completed/verified/done) with no evidence event (686-7qcm)\n",
@@ -323,8 +333,19 @@ fn unknown_subcommand(name: &str) -> ! {
 /// Exits 0 in every case, including a downgrade: `unsupported` is a well-formed
 /// answer, and the forge-plan MCP wrapper runs under `set -e` where a non-zero
 /// status kills the server mid-request. The envelope is the signal.
-fn emit_verified_envelope(envelope: answer::Envelope, root: &Path) {
-    match serde_json::to_string_pretty(&self_verified(envelope, root)) {
+///
+/// ORDER 796-4ydb — the envelope is also STAMPED with whatever the fold could
+/// not read. `skipped` is those corpus files: empty for the
+/// methodology and spec corpora, which are loaded before and independently of
+/// the ledger, and `ledger.skipped_fragments()` for the plan corpus. Every call
+/// site states it explicitly so a new one has to decide rather than inherit
+/// silence, which is the exact failure this order exists to fix.
+fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[PathBuf]) {
+    // Stamped AFTER self-verification: `self_verified` may replace the envelope
+    // with a fresh refusal, and the corpus was still partial either way.
+    let verified = self_verified(envelope, root)
+        .with_skipped_sources(skipped.iter().map(|p| citation_path(p, root)).collect());
+    match serde_json::to_string_pretty(&verified) {
         Ok(json) => println!("{json}"),
         Err(e) => {
             eprintln!("error: serialize envelope: {e}");
@@ -428,6 +449,17 @@ fn emit(text: &str) {
 /// Fifteen minutes: generous enough for a slow cycle that read the clock at its
 /// start and writes at its end, tight enough to catch a fabricated hour.
 const TS_SKEW_LIMIT_SECS: i64 = 900;
+
+/// ORDER 796-4ydb — `check --strict-fragments` refused because the fold could
+/// not read part of the corpus.
+///
+/// DISTINCT FROM 1 ON PURPOSE. Exit 1 means the ledger is UNSOUND — something
+/// it says is wrong. This means the ledger is INCOMPLETE — something it should
+/// say is missing, and what is there may be fine. A caller that cannot tell
+/// them apart either escalates a typo to a corruption or, far worse, reads a
+/// partial-corpus refusal as a clean tree. The pre-push plan-only lane told
+/// them apart by grepping stderr prose until this existed.
+const EXIT_FOLD_INCOMPLETE: i32 = 3;
 
 fn now_epoch() -> i64 {
     std::time::SystemTime::now()
@@ -1820,7 +1852,8 @@ fn main() {
         };
         // ORDER 523 (R2): self-verify before emitting. The methodology corpus
         // root IS the checkout, so citations resolve against `root`.
-        emit_verified_envelope(envelope, &root);
+        // No ledger is loaded on this path, so there is nothing skipped to report.
+        emit_verified_envelope(envelope, &root, &[]);
         return;
     }
 
@@ -1965,7 +1998,8 @@ fn main() {
                     }
                 };
                 let envelope = spec::build_envelope(answer.trim(), &chunks, &root);
-                emit_verified_envelope(envelope, &root);
+                // Spec corpus, not the ledger: nothing skipped to report here.
+                emit_verified_envelope(envelope, &root, &[]);
                 return;
             }
             other => {
@@ -2012,7 +2046,35 @@ fn main() {
     // A fragment that cannot be parsed is SKIPPED so one bad file never makes
     // the whole plan unreadable — but skipping it quietly would lose filed work
     // with no signal, which this project refuses on principle.
-    for bad in tillandsias_plan::fragments::malformed(&index) {
+    //
+    // ORDER 796-4ydb — THE WARNING IS NOT THE FIX, AND USED TO BE THE WHOLE OF
+    // IT. This loop printed exactly this sentence and the process exited 0, so
+    // `plan_answer`, `plan_next`, the batch selector, burndown and every
+    // closure check answered from a ledger they had been TOLD was partial, at
+    // full confidence. The sentence stays — it is how the defect was found —
+    // but it is now the human rendering of a typed condition the fold carries
+    // (`Ledger::skipped_fragments`), and the two surfaces that can act on it do:
+    //
+    //   * `check` NAMES the file on stdout and downgrades its verdict from
+    //     `ok:` to `incomplete:`, and refuses — exit 3 — only under
+    //     `--strict-fragments`. The release preflight and the plan-only push
+    //     lane opt in; `build.sh` does not, because it runs on every host.
+    //   * `answer` / `next` DEGRADE BUT REPORT: the envelope carries
+    //     `skipped_sources`, so an MCP client can see the answer is drawn from
+    //     a partial corpus without parsing stderr prose.
+    //
+    // WHY NOT REFUSE EVERYWHERE. Two reasons, and 699-dycj states the second as
+    // a design constraint on anyone who touches this. First, the tooling needed
+    // to FIX a bad fragment is this same binary, and the agents doing the
+    // fixing bootstrap by asking the plan what to do — a reader that hard-fails
+    // would wedge every host on the one file nobody can then look up. Second,
+    // an unconditional refusal turns one host's typo into every other host's
+    // red build, converting a local error into a fleet outage.
+    //
+    // Read from the LEDGER, not by re-scanning: the fold already listed what it
+    // skipped, and a second scan of a directory other hosts append to can
+    // disagree with the first.
+    for bad in ledger.skipped_fragments() {
         eprintln!(
             "warning: ledger fragment {} does not parse and was SKIPPED — its contents are not in the answers below",
             bad.display()
@@ -2204,6 +2266,21 @@ fn main() {
             }
         }
         "check" => {
+            // 796-4ydb. Opt-in, because the refusal it arms is fleet-wide; see
+            // the block below the integrity report for why that is not the
+            // default.
+            let mut strict_fragments = false;
+            for a in &args[1..] {
+                match a.as_str() {
+                    "--strict-fragments" => strict_fragments = true,
+                    other => {
+                        eprintln!(
+                            "error: unknown option {other:?} for `check` (known: --strict-fragments)"
+                        );
+                        std::process::exit(2);
+                    }
+                }
+            }
             // INVARIANT CORE (ids + references) hard-gates: a live dangling
             // reference means the graph is a lie. SCHEMA drift (status enum,
             // required fields) is ADVISORY — the schema is evolving data
@@ -2235,18 +2312,90 @@ fn main() {
                     }
                 );
             }
-            if report.violations.is_empty() {
-                println!(
-                    "ok: {} packets, ids unique, live references sound ({} parked-block edge{})",
-                    ledger.packets.len(),
-                    parked.len(),
-                    if parked.len() == 1 { "" } else { "s" }
+            // ORDER 796-4ydb — AN UNREADABLE FRAGMENT IS REPORTED HERE, AND
+            // REFUSED ONLY WHEN THE CALLER ASKS.
+            //
+            // The first draft of this made a skipped fragment an unconditional
+            // violation, and 699-dycj forbids exactly that, by name: "do not
+            // simply make `check` exit non-zero and call it done — re-read why
+            // 698 scoped itself first." The reason holds. `build.sh` runs this
+            // command on EVERY host, so a fleet-wide refusal turns one host's
+            // typo into every other host's red build, on a file they did not
+            // write and may not be able to fix. That converts a local error
+            // into a fleet outage — the same argument 634-39ik used to scope
+            // its enforcement to the diff.
+            //
+            // So the split is: this command always SAYS SO, in a form a caller
+            // can branch on, and refuses only under `--strict-fragments`, which
+            // the surfaces that genuinely cannot tolerate a partial corpus turn
+            // on for themselves. The author-side diff-scoped gate
+            // (698-7n6q / check-added-fragments-parse.sh) keeps its job of
+            // stopping the fragment at whoever wrote it.
+            let skipped = ledger.skipped_fragments();
+            for bad in skipped {
+                // Same token the `fragments` subcommand uses for the same
+                // condition — one word for one thing across the CLI.
+                emit(&format!("malformed: {}", bad.display()));
+            }
+            if !report.violations.is_empty() && !skipped.is_empty() {
+                // WHY THIS CAVEAT IS NOT DECORATION: a `depends_on` whose
+                // target is DEFINED in the unreadable fragment reports here as
+                // a dangling reference. When the fold is partial the violation
+                // list is partial evidence too, and a reader who fixes the
+                // "dangling" reference instead of the fragment makes it worse.
+                eprintln!(
+                    "note: {} fragment(s) could not be read, so the violations below may be \
+                     ARTIFACTS of the missing content — repair the fragment first, then re-check",
+                    skipped.len()
                 );
-            } else {
+            }
+            if !report.violations.is_empty() {
                 for v in &report.violations {
                     eprintln!("violation: {v}");
                 }
                 std::process::exit(1);
+            }
+            if skipped.is_empty() {
+                // `emit`, not `println!`: this line is routinely piped
+                // (litmus:parked-blocks-visibility-shape does `check | grep -q`),
+                // and `println!` PANICS with exit 101 when the reader closes
+                // early. It survived on output small enough to fit the pipe
+                // buffer; adding lines above it is not the moment to keep
+                // relying on that.
+                emit(&format!(
+                    "ok: {} packets, ids unique, live references sound ({} parked-block edge{})",
+                    ledger.packets.len(),
+                    parked.len(),
+                    if parked.len() == 1 { "" } else { "s" }
+                ));
+            } else {
+                // NOT `ok:`. Announcing a sound ledger when part of the corpus
+                // was never read is the precise lie this order was filed
+                // against — the checks that follow the colon are all true, and
+                // they were run over less than the plan.
+                emit(&format!(
+                    "incomplete: {} packets from a PARTIAL corpus — {} fragment(s) could not be \
+                     read; ids unique and live references sound across what WAS read \
+                     ({} parked-block edge{})",
+                    ledger.packets.len(),
+                    skipped.len(),
+                    parked.len(),
+                    if parked.len() == 1 { "" } else { "s" }
+                ));
+                if strict_fragments {
+                    eprintln!(
+                        "refusing (--strict-fragments): the fold skipped {} unreadable \
+                         fragment(s); this ledger is incomplete",
+                        skipped.len()
+                    );
+                    // DISTINCT EXIT CODE, so a caller can tell "incomplete
+                    // corpus" from "unsound ledger" WITHOUT parsing prose. The
+                    // pre-push plan-only lane used to grep this binary's stderr
+                    // for the sentence "does not parse and was SKIPPED" and
+                    // said so in a comment; that is what a condition with no
+                    // machine-readable form costs its callers.
+                    std::process::exit(EXIT_FOLD_INCOMPLETE);
+                }
             }
         }
         "parked-blocks" => {
@@ -2874,7 +3023,7 @@ fn main() {
             // paths were built relative to. This is the exact disagreement that
             // was observed — an index reached through a probe path yielded
             // confidence=exact with a citation `verify-answer` refused.
-            emit_verified_envelope(envelope, &root);
+            emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
         }
         "next" => {
             // ORDER 606-xu52. The cold-start selector: at most five cited,
@@ -2930,7 +3079,7 @@ fn main() {
                 limit,
                 &citation_path(&index, &root),
             );
-            emit_verified_envelope(envelope, &root);
+            emit_verified_envelope(envelope, &root, ledger.skipped_fragments());
         }
         "append-event" => {
             // append-event <ref> <type> <summary> --ts <ISO> [--agent A] [--host H]

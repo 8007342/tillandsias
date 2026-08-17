@@ -42797,6 +42797,12 @@ plan_index:
         - the rationale for choosing report-vs-gate is recorded where the next reader will find it, not just in a commit message
       events:
         - type: note
+          ts: "2026-08-17T09:16:00Z"
+          agent_id: "fork-796-4ydb-20260817T0805Z"
+          host: linux_mutable
+          summary: |
+            796-4ydb LANDED AND MOVES THIS, but does not close it — read the criteria before claiming. DELIVERED: (1) partially — an already-landed malformed fragment is now named on stdout as 'malformed: <path>' by tillandsias-plan check, which build.sh runs on every host, and the verdict word drops from ok: to incomplete:, so the signal is loud and named in every host's GATE OUTPUT. It is NOT in the cycle handoff or burndown, which is the shape this packet actually suggests ('a named line the cycle handoff must surface, or a burndown entry') — that is the residual. (2) MET, with a test: litmus:fold-incompleteness-typed-shape step 8 builds a fixture repo where a sibling's malformed fragment is already in the base commit, makes an unrelated change, and proves the diff-scoped author gate reports ok:added-fragments-parse:0 checked and plain check exits 0 — while --strict-fragments still refuses (rc=3) for a caller that asks. (3) MET — the report-vs-gate rationale is in crates/tillandsias-plan/src/main.rs at the check arm, in the USAGE text, and in the litmus header, each naming this packet. WHOEVER CLAIMS THIS: the remaining work is surfacing the condition in the cycle handoff or burndown, not in the gate.
+        - type: note
           ts: "2026-08-15T05:00:29Z"
           agent_id: "unknown"
           host: windows
