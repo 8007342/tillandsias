@@ -71,7 +71,47 @@ load_state() {
             echo "blocked:no-snapshot-taken"
             exit 3
         fi
-        echo "blocked:boundary-state-missing:$(cat "$stamp")"
+        local current requested
+        current="$(cat "$stamp")"
+        # SUPERSEDED IS NOT MISSING (order 771-wwzi). Both land here — the
+        # requested directory is gone either way — but the causes are opposite
+        # and the remedies are too, so one verdict for both is a diagnosis the
+        # reader has to guess at.
+        #
+        # 771-wwzi was filed believing a CONCURRENT FORK had deleted the
+        # parent's boundary. Measured 2026-08-17, that cannot happen: stamps
+        # live under `git rev-parse --git-dir`, which in a linked worktree is
+        # .git/worktrees/<name>, so each worktree only ever retires a directory
+        # ITS OWN stamp names. Two worktrees snapshotting concurrently leave
+        # both boundaries intact (pinned in the fixture).
+        #
+        # What actually happened is this branch: the cycle ran `snapshot` a
+        # SECOND time — re-baselining after unexpected dirt — which retired the
+        # first boundary exactly as 725-bu54 intends, while the caller still
+        # held the first path in a pointer file. It then read
+        # `boundary-state-missing:<a path it had never seen>` and concluded its
+        # boundary had been destroyed by another agent. Naming both paths and
+        # the cause ends that misreading.
+        requested="$1"
+        local retired_stamp superseded=0
+        retired_stamp="$(stamp_path boundary-retired 2>/dev/null || true)"
+        if [[ -n "$retired_stamp" && -f "$retired_stamp" ]] \
+            && grep -Fqx "$requested" "$retired_stamp"; then
+            superseded=1
+        fi
+        if [[ "$superseded" -eq 1 ]]; then
+            echo "blocked:boundary-superseded:$current"
+            {
+                echo "  the boundary you asked about was retired by a LATER snapshot in this"
+                echo "  same worktree (the 725-bu54 retire-previous step), not by another agent."
+                echo "    requested: $1"
+                echo "    current:   $current"
+                echo "  Verify against the current boundary, or re-snapshot if this cycle needs a"
+                echo "  fresh baseline. A concurrent worktree cannot reach this stamp."
+            } >&2
+            exit 3
+        fi
+        echo "blocked:boundary-state-missing:$current"
         exit 3
     }
     [[ -f "$state_dir/repo-root" && -f "$state_dir/startup/status.z" ]] || {
@@ -136,7 +176,23 @@ case "$mode" in
                 && -f "$previous_dir/repo-root" && -d "$previous_dir/startup" ]]; then
                 case "$previous_dir/" in
                     "$repo_root/"*) : ;;   # never inside the worktree
-                    *) rm -rf "$previous_dir" ;;
+                    *)
+                        rm -rf "$previous_dir"
+                        # Remember WHAT WE RETIRED (order 771-wwzi), so a later
+                        # verify against that path can say "superseded" as a
+                        # fact rather than infer it from "not the current one".
+                        # A caller naming a path that was never a boundary is a
+                        # different fault and must keep its own verdict.
+                        # Bounded to the last 20: this is a diagnostic tail, not
+                        # an audit log, and an unbounded file in the git dir is
+                        # a slow leak.
+                        _mo_retired="$(stamp_path boundary-retired)"
+                        printf '%s\n' "$previous_dir" >>"$_mo_retired"
+                        if [[ "$(wc -l <"$_mo_retired")" -gt 20 ]]; then
+                            tail -n 20 "$_mo_retired" >"$_mo_retired.trim" \
+                                && mv "$_mo_retired.trim" "$_mo_retired"
+                        fi
+                        ;;
                 esac
             fi
         fi

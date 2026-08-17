@@ -117,9 +117,48 @@ if [ ! -f "$bystander/precious.txt" ]; then
     failures+=("bystander-untouched: snapshot deleted a directory that was not a boundary")
 fi
 
+# 10. CONCURRENCY (order 771-wwzi). The packet was filed believing a fork's
+#     snapshot had retired the PARENT's boundary. It cannot: stamps live under
+#     `git rev-parse --git-dir`, which for a linked worktree is
+#     .git/worktrees/<name>, so a worktree only ever retires what ITS OWN stamp
+#     names. This pins the isolation so the belief cannot re-form — and so a
+#     future change that moves the stamp to the COMMON dir (which would make
+#     the reported bug real) fails here instead of in a 3am cycle.
+git -C "$repo" worktree add -q "$work/linked" -b linked 2>/dev/null \
+    || failures+=("cross-worktree: could not create a linked worktree")
+if [ -d "$work/linked" ]; then
+    state_main="$work/state-main"
+    state_linked="$work/state-linked"
+    (cd "$repo" && "$GUARD" snapshot "$state_main") \
+        || failures+=("cross-worktree: main snapshot refused")
+    (cd "$work/linked" && "$GUARD" snapshot "$state_linked") \
+        || failures+=("cross-worktree: linked snapshot refused")
+    if [ ! -d "$state_main" ]; then
+        failures+=("cross-worktree-isolated: the linked worktree's snapshot retired the main worktree's boundary")
+    fi
+    if [ ! -d "$state_linked" ]; then
+        failures+=("cross-worktree-isolated: the linked worktree's own boundary did not survive")
+    fi
+    # And the main worktree can still verify against its own boundary.
+    run "cross-worktree-main-still-verifies" 0 "ok: startup worktree boundary preserved" -- \
+        verify "$state_main"
+fi
+
+# 11. SUPERSEDED IS NOT MISSING (order 771-wwzi). Re-snapshotting in the SAME
+#     worktree retires the previous boundary by design; a caller still holding
+#     the old path must be told THAT, not handed a path it has never seen.
+#     Scenario 2 above is the negative control: a path that was never a
+#     boundary keeps the boundary-state-missing verdict.
+state_super_old="$work/state-super-old"
+state_super_new="$work/state-super-new"
+(cd "$repo" && "$GUARD" snapshot "$state_super_old") || failures+=("snapshot-super-old: guard refused")
+(cd "$repo" && "$GUARD" snapshot "$state_super_new") || failures+=("snapshot-super-new: guard refused")
+run "boundary-superseded" 3 "blocked:boundary-superseded" -- verify "$state_super_old"
+run "boundary-superseded-names-both" 3 "requested: $state_super_old" -- verify "$state_super_old"
+
 if [ "${#failures[@]}" -gt 0 ]; then
     printf 'FAIL: %s\n' "${failures[@]}" >&2
     echo "boundary-guard: FAIL ${#failures[@]} scenario(s) did not match expected verdicts"
     exit 1
 fi
-echo "PASS: worktree-boundary-guard fixture 9/9 scenarios green (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, extended-cycle-reverifies, stamp-cleared, previous-boundary-retired, bystander-untouched)"
+echo "PASS: worktree-boundary-guard fixture 12/12 scenarios green (no-snapshot-taken, boundary-state-missing, clean-verify, verified-stamp, dirty-exit, extended-cycle-reverifies, stamp-cleared, previous-boundary-retired, bystander-untouched, cross-worktree-isolated, cross-worktree-main-still-verifies, boundary-superseded)"
