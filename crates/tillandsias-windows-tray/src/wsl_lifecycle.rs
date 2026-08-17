@@ -28,6 +28,50 @@ use crate::wsl_probe_policy::{
     classify_nonzero_distro_exec, distro_exec_probe_decision,
 };
 
+/// The runtime guest's base package set — ONE list, so the `rpm -q` guard and
+/// the `dnf install` that follows it cannot drift apart.
+///
+/// They used to be two hand-maintained spellings of the same set on adjacent
+/// lines. A package added to only the guard never installs; a package added to
+/// only the install reinstalls on every provision, because the guard never
+/// reports it satisfied. Neither failure is loud. Generating both from this
+/// array removes the choice rather than policing it.
+const GUEST_BASE_PACKAGES: &[&str] = &[
+    "systemd",
+    "podman",
+    "dbus-broker",
+    "libcap",
+    "shadow-utils",
+    "openssl",
+    "selinux-policy-targeted",
+    "policycoreutils",
+    "selinux-policy-devel",
+    "checkpolicy",
+    // Phase 5 vsock-in-vsock loopback tests.
+    "socat",
+    // Order 807-c3mf: scripts/bench-accel-lane.sh needs curl AND jq. The guest
+    // shipped curl but not jq, so the host that most needs an in-guest
+    // measurement could only take one from outside, through the wslrelay
+    // mirror, while linux measures in-process. Rows taken at different loci are
+    // not the same measurement, which is a comparability hazard in the fleet
+    // capability matrix rather than a cosmetic gap.
+    "jq",
+];
+
+/// Render the idempotent base-package setup script from [`GUEST_BASE_PACKAGES`].
+///
+/// `rpm -q` short-circuits when everything is present, so re-provision stays
+/// cheap; `setcap` is safe to repeat.
+fn base_packages_setup() -> String {
+    let pkgs = GUEST_BASE_PACKAGES.join(" ");
+    format!(
+        "set -e\n\
+         rpm -q {pkgs} >/dev/null 2>&1 || \\\n  dnf install -y {pkgs}\n\
+         for b in /usr/bin/newuidmap /usr/sbin/newuidmap; do [ -e \"$b\" ] && setcap cap_setuid+ep \"$b\" || true; done\n\
+         for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e \"$b\" ] && setcap cap_setgid+ep \"$b\" || true; done\n"
+    )
+}
+
 /// What the last `reconcile_adopted_guest` actually DID to the adopted guest
 /// (order 620-duta). Recorded to disk so `--diagnose` can report it.
 ///
@@ -1352,22 +1396,28 @@ impl WslLifecycle {
         // Phase 3a: include SELinux packages so `inject_bootstrap_logic` can
         // install the policy modules and `getenforce` becomes available.
         // `socat` is added for Phase 5 vsock-in-vsock loopback tests.
-        const SETUP: &str = r#"set -e
-rpm -q systemd podman dbus-broker libcap shadow-utils openssl \
-    selinux-policy-targeted policycoreutils selinux-policy-devel checkpolicy socat \
-    >/dev/null 2>&1 || \
-  dnf install -y systemd podman dbus-broker libcap shadow-utils openssl \
-    selinux-policy-targeted policycoreutils selinux-policy-devel checkpolicy socat
-for b in /usr/bin/newuidmap /usr/sbin/newuidmap; do [ -e "$b" ] && setcap cap_setuid+ep "$b" || true; done
-for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_setgid+ep "$b" || true; done
-"#;
+        //
+        // `jq` (order 807-c3mf): the shared accel benchmark
+        // (scripts/bench-accel-lane.sh) requires curl and jq, and this guest had
+        // curl but not jq — so the ONE host that most needs an in-guest
+        // measurement could only take it from outside, through the wslrelay
+        // loopback mirror, while linux runs it in-process. That difference is a
+        // comparability hazard in the fleet capability matrix, not a cosmetic
+        // one: two rows taken at different loci are not the same measurement.
+        // Precedent for a test/diagnostic dependency in this list is `socat`
+        // directly above, and jq is smaller than selinux-policy-devel already
+        // here. The alternative — dropping jq from bench-accel-lane.sh — was
+        // rejected only because that script is another host's and this image is
+        // ours; if the fleet later prefers a dependency-free bench, remove this.
+        //
+        let setup = base_packages_setup();
         // 25 min, not 5: on N100-class hosts with cold dnf metadata the base
         // set legitimately takes ~10 min (Esmeralda field evidence,
         // 2026-08-08: DNS verified healthy, dnf still mid-transaction when
         // the old 300s ceiling fired — the orphaned dnf then finished in the
         // guest after the tray had already declared failure). rpm -q
         // short-circuits when everything is installed, so retries are cheap.
-        tokio::time::timeout(Duration::from_secs(1500), self.wsl_root_sh(SETUP))
+        tokio::time::timeout(Duration::from_secs(1500), self.wsl_root_sh(&setup))
             .await
             .map_err(|_| {
                 "Package installation timed out after 25 min — the WSL2 network may be \
@@ -2214,6 +2264,41 @@ fn parse_headless_version(stdout: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    /// The drift class this generator exists to remove: every package must
+    /// appear in BOTH the `rpm -q` guard and the `dnf install`, because a
+    /// package in only the guard never installs and one in only the install
+    /// reinstalls on every provision — and neither is loud.
+    fn base_package_setup_lists_every_package_in_both_the_guard_and_the_install() {
+        let setup = base_packages_setup();
+        let (guard, install) = setup
+            .split_once("dnf install -y")
+            .expect("setup must contain the dnf install arm");
+
+        assert!(guard.contains("rpm -q"), "guard arm missing:\n{setup}");
+        for pkg in GUEST_BASE_PACKAGES {
+            assert!(
+                guard.contains(pkg),
+                "{pkg} missing from the rpm -q guard — it would reinstall every provision:\n{setup}"
+            );
+            assert!(
+                install.contains(pkg),
+                "{pkg} missing from the dnf install — it would never install:\n{setup}"
+            );
+        }
+    }
+
+    #[test]
+    /// Order 807-c3mf: the accel bench needs jq in the guest, so that this
+    /// host's capability-matrix row can be taken at locus=in-guest rather than
+    /// host-side-via-mirror.
+    fn guest_base_packages_carry_jq_for_the_shared_accel_bench() {
+        assert!(
+            GUEST_BASE_PACKAGES.contains(&"jq"),
+            "jq must ship in the runtime guest or bench-accel-lane.sh cannot run there"
+        );
+    }
 
     /// The 0-byte `github-login-last.log` is what made the v0.4.260809.2 blank
     /// terminal so hard to read: it proved the login produced no output at all.
