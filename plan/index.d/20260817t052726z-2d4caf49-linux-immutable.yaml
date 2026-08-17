@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: tracked-settings-local-broadcasts-one-hosts-paths
+    event:
+      type: completed
+      ts: "2026-08-17T05:27:26Z"
+      agent_id: linux-yoga-claude-20260816t185912z
+      host: linux-immutable
+      summary: >
+        Both criteria met (b248882cd + the FORGE_SPEC_INDEX_DIR removal in 2b1f8d188). Criterion 1: the env block now carries no host-specific value — the leaked /mnt/c path is gone and every remaining value (loopback endpoints, a model name) is host-independent, so the file did not need untracking after all; the fleet decision I deferred turned out to be unnecessary once the one harmful key was removed. Criterion 2: scripts/check-tracked-config-host-paths.sh refuses a tracked agent config whose ENV block hard-codes a one-machine path, selftest 4/4 with negative controls for both /mnt/c and /Users/, plus the exclusion that keeps prose free to quote those paths (cheatsheets and this repo's own packets cite /mnt/c as evidence; a guard that flagged documentation for describing the defect would be its own defect). TWO CORRECTIONS THE GUARD'S OWN FIRST RUN FORCED, both worth recording: (a) writing the Windows shape as [A-Za-z]:[\/] matches every http:// URL — it now requires a single drive letter at a boundary, because a guard that cries wolf on every endpoint gets turned off within a day; (b) scanning the whole file is too blunt, so only the ENV block refuses while host-specific paths elsewhere are reported as a NOTE. That distinction found a real residue this cycle: three Git-Bash paths (/c/Users/bullo/...) inside the permissions allowlist. They are inert on other hosts — a permission pattern that never matches costs nothing — so they are surfaced rather than deleted, since removing another host's permission entries is not a decision this host should make silently. Left for the windows host or the operator.

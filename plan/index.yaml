@@ -55961,6 +55961,12 @@ plan_index:
             Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
 
       events:
+        - type: note
+          ts: "2026-08-17T05:27:47Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            THIRD SIGHTING, prediction confirmed (yoga 2026-08-17T05:25Z, evidence target/smoke-e2e/11-forge-lane.log). This packet predicted that forge lanes stay blocked on released hosts until a release containing probe-upstream-auth.sh ships. Re-checked before running: still no new release (daily channel resolves v0.4.260815.1, installed binary reports the same), and the versioned git image still contains no probe. The lane duly returned blocked:upstream-auth-unpublished and refused before any committable work — the same verdict as the 20:22Z and 00:24Z lanes, four and five hours apart, across an intervening local image rebuild that the tray overwrote. Nothing on a released host can clear this; the packet's exit criteria stand unchanged. Recording the third data point rather than re-diagnosing: the mechanism is settled and the remaining action is a release, which is the operator's to cut.
         - type: discovered
           ts: "2026-08-17T01:00:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
