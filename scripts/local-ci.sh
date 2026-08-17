@@ -1291,7 +1291,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
                     fi
                 fi
             else
-                log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+                log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
                 archive_check_log "podman-path-availability" "fail"
             fi
         else
@@ -1329,7 +1329,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
                     archive_check_log "litmus-pre-build" "fail" /tmp/litmus-pre-build.log
                 fi
             else
-                log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+                log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
                 archive_check_log "podman-path-availability" "fail"
             fi
         else
@@ -1363,7 +1363,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "post-build" ]]; then
                 fi
             fi
         else
-            log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+            log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
             archive_check_log "podman-path-availability" "fail"
         fi
     else
@@ -1407,7 +1407,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "runtime" ]]; then
                 fi
             else
                 printf 'FAIL\n' >"$RUNTIME_STATUS_FILE"
-                log_fail_tracked "podman-path-availability" "podman is not available on PATH"
+                log_fail_tracked "podman-path-availability" "podman check failed; require_podman printed the cause on stderr (absent and present-but-unresponsive are different faults - order 793-a62g)"
                 archive_check_log "podman-path-availability" "fail"
             fi
         else
