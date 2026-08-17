@@ -411,7 +411,14 @@ case "$subcommand" in
         fi
         printf 'mock-exec-output\n'
         ;;
-    version)
+    version|--version|-v)
+        # BOTH the subcommand and the FLAG forms. `podman --version` is the
+        # probe require_podman uses, and it is not a global flag, so the skip
+        # loop above leaves it as the subcommand. Before 797-p2xa's fail-closed
+        # default it matched no arm and fell through to the bare `exit 0`:
+        # success with NO OUTPUT, so every caller parsing a version string got
+        # an empty one and carried on. Found by the default arm firing during
+        # scripts/build-image.sh, which is the first thing it caught.
         printf 'podman version 5.0.0-mock\n'
         ;;
     ps)
@@ -490,8 +497,44 @@ case "$subcommand" in
         exit 0
         ;;
     network|compose|system)
+        # DELIBERATE no-ops. The product issues these and no test asserts on
+        # them, so answering 0 is correct here — but it has to be SAID, because
+        # the whole point of the default arm below is that "handled
+        # deliberately" and "not handled at all" stop being the same answer.
         exit 0
+        ;;
+    *)
+        # FAIL CLOSED (order 797-p2xa). This file used to end in a bare
+        # `exit 0`, so any invocation the mock did not understand was answered
+        # with success and no output, and every test built on it could pass
+        # while exercising nothing.
+        #
+        # What that looked like downstream, measured on macuahuitl: `atomic
+        # rename failed: No such file or directory` (the temp checkout the mock
+        # never created) and `invalid gh JSON: EOF while parsing a value` (the
+        # array it never printed). Neither message contains the words podman,
+        # mock, or unrecognized — the failure surfaced as far from its cause as
+        # it is possible to get.
+        #
+        # 66a37e92c closed the specific hole (global flags were not skipped, so
+        # `--remote` became the subcommand). It could not close the CLASS: any
+        # future flag, any subcommand the product starts using, any typo in a
+        # litmus step landed in the same silent success. A mock that cannot
+        # report its own confusion is not a test double, it is a source of
+        # false green.
+        printf '[podman-mock] REFUSED: unrecognized subcommand %s\n' "${subcommand:-<empty>}" >&2
+        printf '[podman-mock] full argv: %s\n' "$*" >&2
+        printf '[podman-mock] This mock fails CLOSED. Add an explicit arm for this\n' >&2
+        printf '[podman-mock] subcommand (or to network|compose|system if a no-op is\n' >&2
+        printf '[podman-mock] genuinely correct) rather than restoring a permissive tail.\n' >&2
+        # 97 rather than 1: distinctive enough to grep for, and it cannot be
+        # confused with a real podman exit status.
+        exit 97
         ;;
 esac
 
+# Arms that print and fall through land here. This is SAFE now in a way it was
+# not before: the `*)` arm above refuses anything unrecognized, so reaching this
+# line means a deliberate arm ran to completion. Previously this same line was
+# the fall-open default for every unmatched invocation.
 exit 0
