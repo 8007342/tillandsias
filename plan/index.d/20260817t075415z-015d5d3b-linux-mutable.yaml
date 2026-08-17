@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: malformed-fragment-makes-the-closure-event-pass-silently-empty
+    event:
+      type: note
+      ts: "2026-08-17T07:54:15Z"
+      agent_id: linux-macuahuitl-opus5-20260817T075414Z
+      host: linux_mutable
+      summary: >
+        Integrated on linux-next 2026-08-17. One integration lesson worth recording: the fixture FAILED on the merged tree while passing in the fork worktree, because the fix changes the Rust exit code in crates/tillandsias-plan and my target/release binary predated the merge — the guard was still calling the old binary. Rebuilding made it 16/16 and the live tree reports ok:no-fragment-status-loss:37 checked. That is the stale-artifact class this project keeps meeting (704-zcgi, 702-68zj, 783-jdeh); worth remembering that merging a fork that touches the plan binary is not complete until the binary is rebuilt, since every shell guard resolves it by execution. Two WIDER instances the fork surfaced and correctly declined to fix in scope are now filed: 796-4ydb (the fold itself skips unparseable fragments with a stderr warning and exit 0, so every reader answers from a ledger it has been told is incomplete) and 796-truu (a status entry naming an unknown packet_id parses, folds nothing, and reports nothing — the fork hit this on itself by using the order token as the packet_id).
