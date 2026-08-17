@@ -825,23 +825,115 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
     })
 }
 
+/// How long a NON-INTERACTIVE stdin gets to answer a prompt before we give up.
+///
+/// Generous compared to `STDIN_FORWARD_TIMEOUT`'s 5s, because a pipe feeding a
+/// three-prompt login may be doing real work between lines. Still bounded,
+/// because the alternative is unbounded (see `prompt_line`).
+const PROMPT_LINE_PIPED_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Prompt the user on the host terminal and read a single line. When `hidden`,
 /// terminal echo is disabled via `stty -echo` for the duration (no extra crate
-/// dep) so secrets like the PAT are not shown. Returns the trimmed line.
+/// dep) so secrets like the PAT are not shown. Returns the trimmed line, or an
+/// empty string when stdin could not answer — callers already treat empty as a
+/// hard error.
+///
+/// 663-69kp THIRD PATH. 689-stig bounded the `--exec-guest` stdin read and
+/// 689-y2my dealt with the guest heartbeat resetting the exec idle deadline.
+/// This function was the remaining unbounded read, and it is the one
+/// `--github-login` uses (three call sites). It is worse-placed than the one
+/// 689-stig fixed, in a way that changes the SIGNATURE of the hang:
+///
+///   * `read_line` here had NO `is_terminal()` guard and no timeout at all;
+///   * it is called from inside a `DynamicExpect` response closure, i.e. AFTER
+///     the VM is booted and the control-wire stream is open — so the symptom is
+///     NOT the pre-breadcrumb silence of 689-stig, it is a wedge that already
+///     printed its progress lines and is holding a live VM;
+///   * and per the comment on the `expects` list below, the guest's 30s PTY
+///     heartbeat keeps resetting the exec idle deadline (689-y2my), so nothing
+///     upstream bounds the wait either.
+///
+/// So an unattended `--github-login` WITHOUT `--with-token` boots a VM, reaches
+/// the guest's token prompt, and then blocks here forever on a stdin whose
+/// parent never closes the write end — an agent harness, a launchd job, a
+/// background shell. The 07-29 prompt-ordering deadlock the comment below
+/// describes was a SECOND, independent cause of the same 70-minute wedges; it
+/// was fixed by reordering, which is why this one survived.
+///
+/// The rule mirrors 689-stig's insight — "not a TTY" is not "a pipe that will
+/// EOF" — without breaking interactive use:
+///   * stdin IS a terminal: read unbounded. A human is reading the prompt and
+///     typing a token; timing that out would be the bug.
+///   * stdin is NOT a terminal: bounded, and on expiry refuse LOUDLY telling the
+///     operator how to answer by pipe.
+///
+/// The refusal deliberately does NOT suggest `--with-token`. That is a
+/// tillandsias-headless (GUEST) flag with no macOS host equivalent, and
+/// suggesting it here would repeat 663-acdw, where it cost one session two blind
+/// credential runs. On macOS the host drives the guest login over the control
+/// wire, so PIPING credentials to `--github-login` is the supported unattended
+/// path (main.rs:262-271 is the authority) — which is exactly the path this
+/// bounded read has to keep working, not merely tolerate.
 fn prompt_line(label: &str, hidden: bool) -> String {
-    use std::io::Write;
+    use std::io::{IsTerminal, Write};
+
     print!("{label}: ");
     let _ = std::io::stdout().flush();
+
+    // Echo suppression must be undone on EVERY exit from this function,
+    // including the timeout path. Leaving a terminal with echo off after an
+    // already-confusing hang is a hostile end state, and it outlives the
+    // process.
     if hidden {
         let _ = std::process::Command::new("stty").arg("-echo").status();
     }
-    let mut line = String::new();
-    let _ = std::io::stdin().read_line(&mut line);
-    if hidden {
-        let _ = std::process::Command::new("stty").arg("echo").status();
-        println!(); // newline the suppressed Enter would have produced
+    let restore_echo = || {
+        if hidden {
+            let _ = std::process::Command::new("stty").arg("echo").status();
+            println!(); // newline the suppressed Enter would have produced
+        }
+    };
+
+    if std::io::stdin().is_terminal() {
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        restore_echo();
+        return line.trim().to_string();
     }
-    line.trim().to_string()
+
+    // Non-interactive: the read happens on a detached helper thread so the
+    // timeout is real — a thread parked in `read(2)` cannot be cancelled. This
+    // is a one-shot process, so the thread is left to die with it.
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+    std::thread::spawn(move || {
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+        let _ = tx.send(line);
+    });
+    match rx.recv_timeout(PROMPT_LINE_PIPED_TIMEOUT) {
+        Ok(line) => {
+            restore_echo();
+            line.trim().to_string()
+        }
+        Err(_) => {
+            restore_echo();
+            eprintln!(
+                "[github-login] stdin is not a terminal and sent no line for \"{label}\" \
+                 within {}s — refusing to wait longer.\n\
+                 A VM is already booted and the guest is waiting at its prompt, so an \
+                 unbounded wait here holds a live VM open indefinitely (663-69kp).\n\
+                 On macOS the host drives the guest login over the control wire, so pipe \
+                 the answers in — one full line each, in this order (token, author name, \
+                 author email), with the producer closing its end:\n\
+                 \x20 printf '%s\\n%s\\n%s\\n' \"$TOKEN\" \"$NAME\" \"$EMAIL\" \
+                 | tillandsias-tray --github-login\n\
+                 (`--with-token` is a tillandsias-headless GUEST flag and is NOT accepted \
+                 here — see 663-acdw.)",
+                PROMPT_LINE_PIPED_TIMEOUT.as_secs()
+            );
+            String::new()
+        }
+    }
 }
 
 /// `--transport-conformance`: run the shared GuestTransport conformance
@@ -1739,6 +1831,72 @@ mod tests {
         let tail = &source[start..];
         let end = tail.find("\n///").unwrap_or(tail.len());
         &tail[..end]
+    }
+
+    /// 663-69kp THIRD PATH. `prompt_line` is the only remaining stdin read on a
+    /// one-shot path, and it had no `is_terminal()` guard and no timeout. It is
+    /// reached from inside the `DynamicExpect` closures — after the VM is booted
+    /// and the control wire is open — and per 689-y2my the guest's 30s PTY
+    /// heartbeat keeps resetting the exec idle deadline, so nothing upstream
+    /// bounds it either. An unattended `--github-login` therefore booted a VM and
+    /// then blocked here forever on a stdin whose parent never closes.
+    ///
+    /// HONEST LIMIT OF THIS TEST: it is a SOURCE-SHAPE assertion, not a
+    /// behavioural one. It cannot prove the timeout fires — only that the guard
+    /// and the bound are present and that the interactive path stays unbounded.
+    /// A behavioural test would have to boot a VM, which is far too heavy for a
+    /// unit test and is why the property is pinned this way rather than not at
+    /// all. Treat a green result here as "the shape is right", not as "measured".
+    #[test]
+    fn prompt_line_is_bounded_for_non_interactive_stdin() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let window = source_window(
+            source,
+            "fn prompt_line(label: &str, hidden: bool) -> String {",
+        );
+
+        assert!(
+            window.contains("is_terminal()"),
+            "prompt_line must distinguish an interactive stdin from a pipe — treating \
+             'not a TTY' as 'a pipe that will EOF' is the 689-stig mistake: {window}"
+        );
+        assert!(
+            window.contains("recv_timeout(PROMPT_LINE_PIPED_TIMEOUT)"),
+            "the NON-INTERACTIVE read must be bounded, or an unattended --github-login \
+             wedges forever holding a live VM (663-69kp): {window}"
+        );
+        // The interactive branch must stay UNBOUNDED. A human reading a prompt and
+        // typing a token must never be timed out; a fix that bounded both paths
+        // would satisfy the assertion above and break attended logins.
+        let terminal_idx = window
+            .find("if std::io::stdin().is_terminal() {")
+            .expect("prompt_line must special-case an interactive stdin");
+        let terminal_branch = &window[terminal_idx..];
+        let terminal_end = terminal_branch
+            .find("// Non-interactive")
+            .expect("the interactive branch must precede the bounded one");
+        assert!(
+            !terminal_branch[..terminal_end].contains("recv_timeout"),
+            "the INTERACTIVE branch must not be bounded — a human typing a token is not a \
+             hang: {}",
+            &terminal_branch[..terminal_end]
+        );
+
+        // Echo restoration must be reachable from the timeout path too: leaving a
+        // terminal with echo off outlives the process.
+        assert!(
+            window.matches("restore_echo()").count() >= 3,
+            "restore_echo must run on the interactive, piped-ok AND timeout exits — a \
+             terminal left with echo disabled after a hang is a hostile end state: {window}"
+        );
+
+        // The refusal must not send the operator to a flag this binary rejects.
+        assert!(
+            !window.contains("--github-login --with-token"),
+            "must NOT suggest --with-token: it is a tillandsias-headless GUEST flag with no \
+             macOS host equivalent, and suggesting it repeats 663-acdw (two blind credential \
+             runs). main.rs:262-271 is the authority: pipe to --github-login instead."
+        );
     }
 
     #[test]
