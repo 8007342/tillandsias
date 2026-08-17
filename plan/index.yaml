@@ -55935,6 +55935,12 @@ plan_index:
             A test drives the absent-binary-with-pending-build case and asserts preflight waits rather than refusing terminally; the futile case still refuses immediately.
 
       events:
+        - type: completed
+          ts: "2026-08-17T01:28:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            DIAGNOSIS CORRECTED then FIXED (7a30ff140). I filed this as an async-build race; the race is real but secondary. Primary defect: resolve_plan_binary searched only ./target and PATH, while every forge exports CARGO_TARGET_DIR=$PROJECT_CACHE/cargo/target (lib-common.sh:1512) so the mounted checkout has NO ./target — meaning cycle-preflight could not see the binary its own 'cargo build' had just produced one line earlier, and reported capabilities-refused. resolve_target_binary (770-ifeg) FIFTY LINES DOWN IN THE SAME FILE already honoured CARGO_TARGET_DIR; the newer generic probe had learned the lesson the older plan-specific one still had — fifth instance of the path-assumption class 704-zcgi centralised the file to end. Fixed with the same precedence (CARGO_TARGET_DIR, then ./target, then PATH). New scripts/test-plan-binary-probe.sh 5/5 hermetic, including the negative control that makes case 1 mean something (same tree, var unset, must REFUSE) and the relative-path case matching its sibling. Fixture also caught its own bug: PATH=/nonexistent broke the stub's env-shebang and failed 3 cases against a correct probe. All eight probe callers re-verified. With the path fixed the race largely disappears: preflight now finds what it built, instead of waiting on the launch build to install to ~/.local/bin.
         - type: discovered
           ts: "2026-08-17T01:00:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
