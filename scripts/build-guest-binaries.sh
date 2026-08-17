@@ -184,17 +184,112 @@ if verify_binaries >/dev/null 2>&1; then
     fi
 fi
 
-build_with_nix() {
-    command -v nix >/dev/null 2>&1 || return 1
+# Order 790-mbk9. Turn a nix out-link into a path that actually holds the
+# built bytes, and print it. MEASURED on macuahuitl 2026-08-17, because this is
+# the exact risk the packet was filed with as INFERRED and it turned out to be
+# real: with `--store <dir>`, `nix build --out-link L` writes a symlink to the
+# LOGICAL store path (`/nix/store/<hash>-name`), not to where the bytes live.
+# On a host whose store is elsewhere that link dangles —
+#
+#     .nix-probe-hx -> /nix/store/a2qmpfw70…-tillandsias-headless-x86_64-0.0.0
+#     test -f .nix-probe-hx/bin/tillandsias            -> rc=1   (dangles)
+#     <store>/nix/store/a2qmpfw70…/bin/tillandsias     -> 13849840 bytes
+#
+# — so the pre-existing `install .nix-output/result-hx/bin/tillandsias` line
+# could never have worked on the chroot rung. Routing alone would have turned
+# a silent cargo degradation into a loud failure, which is better but still
+# broken; the physical path is the store root prefixed onto the logical one.
+# Prefer the link when it resolves (the daemon rung, where logical == physical)
+# so the daemon path is untouched.
+resolve_out_link() { # <out-link> <store-root-or-empty> ; prints a binary path
+    local link="$1" store_root="$2" target
+    if [[ -f "$link/bin/tillandsias" ]]; then
+        printf '%s\n' "$link/bin/tillandsias"
+        return 0
+    fi
+    target="$(readlink "$link" 2>/dev/null)" || return 1
+    [[ -n "$target" && -n "$store_root" ]] || return 1
+    if [[ -f "$store_root$target/bin/tillandsias" ]]; then
+        printf '%s\n' "$store_root$target/bin/tillandsias"
+        return 0
+    fi
+    return 1
+}
 
-    echo "[build-guest-binaries] Building guest binaries using Nix..."
+# The gate used to be `command -v nix`, which is a claim that a
+# BINARY EXISTS, not evidence that it can BUILD. On a daemonless host — the
+# operator's standing configuration, not an accident (777-amku: "we agreed to
+# use toolboxes for everything; never require a host daemon when a toolbox can
+# carry the tool") — nix is installed, the gate passed, and then BOTH builds
+# died with `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`.
+# The caller caught the non-zero return and degraded to cargo, so the lane was
+# dead code that looked available: every `--ci-full --install` paid a failed
+# attempt and never reached the chroot rung that works here.
+#
+# Same principle as the plan-binary probe's `capabilities` test (721-nyev): ask
+# scripts/nix-toolbox.sh which rung ACTUALLY works and take its flags, rather
+# than inferring capability from presence. nix-toolbox.sh itself learned this
+# the hard way — its own header records that `nix eval` answers fine with the
+# daemon dead, so it probes `store ping` instead.
+build_with_nix() {
+    local nix_tb="$ROOT/scripts/nix-toolbox.sh"
+    if [[ ! -x "$nix_tb" ]]; then
+        echo "[build-guest-binaries] nix lane SKIPPED: $nix_tb missing or not executable." >&2
+        return 1
+    fi
+
+    local verdict
+    if ! verdict="$("$nix_tb" ensure 2>&1)"; then
+        echo "[build-guest-binaries] nix lane UNAVAILABLE: $verdict" >&2
+        return 1
+    fi
+
+    # `nix-args` serves the daemon and chroot rungs. The toolbox rung runs nix
+    # INSIDE a container, where this script's paths ($ROOT, $TARGET_DIR) are not
+    # the paths nix would write to — staging from here would be wrong in a way
+    # that only shows up as a stale or missing binary later. Refuse it by name
+    # instead of guessing; the cargo fallback is the correct answer on such a
+    # host until someone verifies the container path mapping.
+    local nix_args=()
+    local arg
+    local nix_store_dir=""
+    local want_store=0
+    while IFS= read -r arg; do
+        [[ -n "$arg" ]] || continue
+        nix_args+=("$arg")
+        # Remember the store root: on the chroot rung it is where the built
+        # bytes physically live, which the out-link does NOT point at (see
+        # stage_out_link below).
+        if [[ "$want_store" == 1 ]]; then
+            nix_store_dir="$arg"
+            want_store=0
+        elif [[ "$arg" == "--store" ]]; then
+            want_store=1
+        fi
+    done < <("$nix_tb" nix-args 2>/dev/null)
+    if [[ ${#nix_args[@]} -eq 0 ]]; then
+        echo "[build-guest-binaries] nix lane UNAVAILABLE: $verdict serves no host-side store arguments (the toolbox rung runs nix in a container whose paths are not this checkout's; staging from here is unverified)." >&2
+        return 1
+    fi
+
+    echo "[build-guest-binaries] Building guest binaries using Nix ($verdict)..."
     mkdir -p "$ROOT/.nix-output"
-    nix build -L .#tillandsias-headless-x86_64-musl   --out-link "$ROOT/.nix-output/result-hx" || return 1
-    nix build -L .#tillandsias-headless-aarch64-musl  --out-link "$ROOT/.nix-output/result-ha" || return 1
+    nix "${nix_args[@]}" build -L .#tillandsias-headless-x86_64-musl   --out-link "$ROOT/.nix-output/result-hx" || return 1
+    nix "${nix_args[@]}" build -L .#tillandsias-headless-aarch64-musl  --out-link "$ROOT/.nix-output/result-ha" || return 1
+
+    local hx ha
+    hx="$(resolve_out_link "$ROOT/.nix-output/result-hx" "$nix_store_dir")" || {
+        echo "[build-guest-binaries] ERROR: the x86_64 out-link does not resolve to a binary ($verdict). Store root: ${nix_store_dir:-<host>}" >&2
+        return 1
+    }
+    ha="$(resolve_out_link "$ROOT/.nix-output/result-ha" "$nix_store_dir")" || {
+        echo "[build-guest-binaries] ERROR: the aarch64 out-link does not resolve to a binary ($verdict). Store root: ${nix_store_dir:-<host>}" >&2
+        return 1
+    }
 
     mkdir -p "$TARGET_DIR"
-    install -m 0755 "$ROOT/.nix-output/result-hx/bin/tillandsias" "$X86_64_DEST" || return 1
-    install -m 0755 "$ROOT/.nix-output/result-ha/bin/tillandsias" "$AARCH64_DEST" || return 1
+    install -m 0755 "$hx" "$X86_64_DEST" || return 1
+    install -m 0755 "$ha" "$AARCH64_DEST" || return 1
 
     # Remove symlinks to keep directory clean
     rm -rf "$ROOT/.nix-output/result-hx" "$ROOT/.nix-output/result-ha"
@@ -240,7 +335,11 @@ build_with_cargo() {
 }
 
 if ! build_with_nix; then
-    echo "[build-guest-binaries] Nix build unavailable; trying local Cargo fallback..." >&2
+    # Order 790-mbk9: the fallback is legitimate, but it must never be reached
+    # silently — the reason is printed by build_with_nix immediately above, and
+    # naming the DEGRADATION here (rather than the vague "Nix build
+    # unavailable") is what makes a host-fixable cause visible in a CI log.
+    echo "[build-guest-binaries] DEGRADED to the local Cargo fallback (reason above). The release lane builds guest binaries with Nix; a host that cannot is building them differently." >&2
     if ! build_with_cargo; then
         echo "[build-guest-binaries] ERROR: failed to build guest binaries with Nix or local Cargo." >&2
         exit 1

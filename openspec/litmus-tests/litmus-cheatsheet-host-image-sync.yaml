@@ -7,9 +7,16 @@ severity: high
 size: instant
 
 # ORDER 448 — why this no longer diffs two trees directly.
-# images/default/cheatsheets/ is a DERIVED, .gitignore'd build-context copy that
+# images/default/cheatsheets/ is a DERIVED build-context copy that
 # scripts/build-image.sh regenerates from the canonical cheatsheets/ before every
-# forge build. The old step 1 ran `diff -qr cheatsheets images/default/cheatsheets`,
+# forge build. It carries a .gitignore entry (which suppresses ad-hoc local
+# regeneration noise) but it IS TRACKED, deliberately — the binary embeds it and
+# the end-user image build has no other source. This comment previously said
+# ".gitignore'd" in a way that read as "untracked"; that inherited the false
+# 2026-07-20 correction on packet 448 and is corrected here. See
+# plan/issues/cheatsheet-derived-tree-tracking-decision-2026-08-16.md and
+# methodology/cheatsheets.yaml -> cheatsheets.storage_and_authority.
+# The old step 1 ran `diff -qr cheatsheets images/default/cheatsheets`,
 # which asserts "a forge build ran on this host after the last cheatsheet edit" —
 # structurally RED on a fresh clone, in CI, and on any host that edited a
 # cheatsheet since its last build. It burned three preflights that way.

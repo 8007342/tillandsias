@@ -1,0 +1,119 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written in set-field shape: worktree isolation refuses the compound
+# invocation the CLI needs from here.
+status:
+  - packet_id: proxy-squid-version-bump-past-6-9
+    field: status
+    value: implemented
+    ts: "2026-08-17T03:47:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: proxy-squid-version-bump-past-6-9
+    event:
+      type: implemented
+      ts: "2026-08-17T03:47:00Z"
+      agent_id: "fork-782-9jfg-20260817t0334z"
+      host: linux_mutable
+      summary: >
+        Bump LANDED and verified running; held at implemented because this
+        packet's own deliverable names a 7-day no-recurrence sentinel as the
+        closure evidence, and that window has not STARTED (see hold note).
+        images/proxy now FROM docker.io/library/alpine:3.22 (squid 6.12-r0,
+        was 3.20/squid-6.9-r0 — the build-id behind the crash family).
+        Verified in a throwaway container built from the change: `squid -v` =
+        "Squid Cache: Version 6.12"; /usr/lib/squid/security_file_certgen
+        present at the exact path squid.conf and entrypoint.sh reference and
+        SPAWNED as a live child (`{security_file_c} -s /var/lib/squid/ssl_db
+        -M 16`) so ssl-bump works on 6.12; container reached HEALTHY; a raw
+        proxied request returned TCP_DENIED/000 for a non-allowlisted host,
+        i.e. squid parsed HTTP, evaluated the allowlist ACLs and enforced
+        policy — full request processing, not merely a listening socket.
+        Pins moved with the bump, deliberately and exactly: expect_base in
+        scripts/check-container-bases.sh (proxy only — the other Alpine
+        images stay on 3.20; this is targeted, not a fleet base bump) and
+        litmus:proxy-container-shape STEP 2 + its rollback prose. Proxy
+        litmus 4/4 PASS, reverse-proxy-internal 1/1 PASS, ./build.sh --check
+        rc=0 (72s). entrypoint.sh DISTRO note updated 3.20 -> 3.22.
+  - packet_id: proxy-squid-version-bump-past-6-9
+    event:
+      type: note
+      ts: "2026-08-17T03:47:30Z"
+      agent_id: "fork-782-9jfg-20260817t0334z"
+      host: linux_mutable
+      summary: >
+        UPSTREAM DILIGENCE — NEGATIVE RESULT, and it changes how this bump
+        should be described. The packet's context said "the 6.x line fixed
+        store/SslBump lifecycle defects continuously through 6.10 and 6.12".
+        The ChangeLogs do not support that. Read in full for the three
+        releases between us and the target: 6.10 (10 Jun 2024) is Bug 5378
+        libTrie type mismatch, ESI disabled by default, clang v18 build, unit
+        tests, docs; 6.11 (15 Sep 2024) is Kerberos cross-compile detection,
+        DNS robustness on reconfigure, a TCP-DNS memory leak, ACL parse
+        errors, dead-code removal; 6.12 (12 Oct 2024) is Digest auth header
+        parameter validation, libtool/automake build, build-info via git, a
+        portability fix. NOTHING touches store teardown, MemObject,
+        HttpHeader::clean or SslBump lifecycle. Bug-tracker search surfaced
+        storeDirWriteCleanLogs only in old shutdown/logrotate reports
+        (3.x-era) — consistent with our own reading that
+        storeDirWriteCleanLogs is the DEATH HANDLER, not the fault.
+        So this is a BUMP-PLUS-TOOLCHAIN-REFRESH, not a targeted fix, and is
+        labelled as such in the Containerfile. It is still the right move for
+        263 crashes: three patch releases of general hardening plus a rebuild
+        against Alpine 3.22's musl and openssl3, which is a plausible lever
+        on a memory-corruption bug and is cheap to try. The corollary matters
+        more: if the signature recurs on 6.12 we have probably found an
+        UNREPORTED upstream bug, and we hold two symbolicated dumps
+        (~/claudia/tillandsias-forensics/604-vmcg/) to report it with.
+        Squid 7.x deliberately not taken — Alpine 3.24 ships squid-7.6-r0,
+        but a major version moves the ssl_bump/config surface and would
+        change many variables at once while chasing a memory bug. If 6.12
+        does not stop it, evaluate 7.x as its own packet.
+  - packet_id: proxy-squid-version-bump-past-6-9
+    event:
+      type: note
+      ts: "2026-08-17T03:48:00Z"
+      agent_id: "fork-782-9jfg-20260817t0334z"
+      host: linux_mutable
+      summary: >
+        HOLD NOTE — exactly what remains, and why implemented rather than
+        completed. (1) THE WINDOW HAS NOT STARTED. The image is built and
+        proven, but the LIVE tillandsias-proxy container is still running the
+        OLD 6.9 image; I was directed not to disturb the running stack, which
+        other agents depend on. The 7-day sentinel cannot begin until the
+        enclave stack is recreated onto the new image. (2) SENTINEL BASELINE,
+        captured now so it is not lost: coredumpctl retains 245 squid dumps
+        at this moment (the packet's 263 was the count at 767-es4w time;
+        systemd rotates), and the MOST RECENT squid SIGSEGV is
+        2026-08-16 20:42:35 PDT — hours before this fork ran, i.e. the crash
+        is live and ongoing on 6.9, not historical. Match signature for the
+        window: SIGSEGV in HttpHeader::clean() under destroyStoreEntry() on
+        /usr/sbin/squid. Read the window at deploy+7d. (3) BOUNDARY WITH
+        782-dpby, so the two do not build the same thing twice: dpby owns
+        CONTINUOUS detection (the watcher, the crash counter in --diagnose,
+        the loud ledger-reaching record); this packet owns only the BASELINE
+        above and the single deploy+7d read that closes it. If dpby lands
+        first its counter is the natural instrument for that read.
+  - packet_id: proxy-squid-version-bump-past-6-9
+    event:
+      type: note
+      ts: "2026-08-17T03:48:30Z"
+      agent_id: "fork-782-9jfg-20260817t0334z"
+      host: linux_mutable
+      summary: >
+        TWO OUT-OF-SCOPE OBSERVATIONS, neither acted on. (a) SECURITY, live
+        host state: /tmp/tillandsias-ca/intermediate.key is mode 644, dated
+        2026-08-14 11:55 — three days before this fork, so pre-existing and
+        not created by it. litmus:proxy-ca-key-not-world-readable STEP 5
+        fails on it ("FAIL: live key mode 644"). 755-qcxh fixed the CODE
+        (podman-secret delivery + a 0600 clamp) and is closed, but this
+        stale pre-fix key file was never re-clamped or regenerated, so a
+        world-readable CA private key is sitting on this host right now. The
+        remedy touches the running stack, which I was told not to disturb —
+        flagging for the parent rather than acting. (b) build-proxy-progress.jsonl
+        is TRACKED in git while matching .gitignore's /build-*-progress.jsonl
+        rule, so the ignore is inert and every proxy image build dirties the
+        tree with transient telemetry. That is precisely the already-tracked
+        inert-ignore class 723-ydmk's guard was built for; the guard passes
+        because it only refuses BINARY blobs. I restored the file rather than
+        committing the churn.

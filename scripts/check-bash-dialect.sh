@@ -15,7 +15,7 @@
 #
 # Fixture: scripts/test-check-bash-dialect.sh (two directions: an unguarded
 # bash-4-ism FAILS, a guarded one PASSES).
-# freshness: filed 2026-08-16 macos 761-g36m
+# freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=761-g36m authoring
 set -u
 
 SCAN_DIR="${TILLANDSIAS_DIALECT_SCAN_DIR:-scripts}"
@@ -35,7 +35,12 @@ PAT_BUILTIN='(^|[^A-Za-z0-9_])(mapfile|readarray)([^A-Za-z0-9_]|$)'
 # -A (assoc, 4.0), -g (global, 4.2), -n (nameref, 4.3) — including combined
 # flags like -gA, which slipped past the earlier literal 'declare -A' and
 # crashed trace-coverage.sh on this host (766-tdij follow-on).
-PAT_ASSOC='declare +-[a-zA-Z]*[Agn]'
+# `local -A` and `typeset -A` are the same bash-4 feature as `declare -A`, and
+# `local` is how it actually appears inside functions — which is where it hid:
+# scripts/hooks/pre-commit-openspec.sh used `local -A`, so on bash 3.2 the
+# declaration errored and the lookups degenerated to index 0 (always set), and
+# the zero-trace check silently passed EVERY spec (784-dwkh).
+PAT_ASSOC='(declare|local|typeset|readonly) +-[a-zA-Z]*[Agn]'
 PAT_PRINTF_T='%\([^)]*\)T'
 # GNU-date-only forms (766-tdij). BSD date SUCCEEDS on an unknown %-format,
 # passing it through literally, so exit-code guards never fire — the 765
@@ -44,7 +49,12 @@ PAT_PRINTF_T='%\([^)]*\)T'
 # Line-level exemption: a raw-line comment `# gnu-date: ok (<reason>)` for
 # digit-validated fallbacks (build.sh _now_ms is the exemplar) or sites
 # where garbage output is provably harmless.
-PAT_GNUDATE='(^|[^A-Za-z0-9_])date[^|;&()]*\+[^ "]*%-?[0-9]*N|(^|[^A-Za-z0-9_])date +(-d|--date)[ =]'
+# The -d arm allows INTERVENING flags: the first cut required -d to be date's
+# first flag, so `date -u -d "@$epoch"` slipped through — and did, in
+# scripts/test-ledger-ts-guard.sh, where it returned empty on BSD and made the
+# whole fixture for the ledger timestamp guard fail silently on macOS
+# (found by the cycle-22 freshness audit, 784-dwkh).
+PAT_GNUDATE='(^|[^A-Za-z0-9_])date[^|;&()]*\+[^ "]*%-?[0-9]*N|(^|[^A-Za-z0-9_])date( +-[A-Za-z-]+)* +(-d|--date)[ =]'
 GNUDATE_EXEMPT='# gnu-date: ok'
 
 in_allowlist() {
@@ -75,8 +85,15 @@ unguarded=0
 allowlisted_hits=0
 # build.sh carries the gate's own phase telemetry, so it is scanned too
 # (766-tdij) — unless a fixture redirects the scan dir.
+# Subdirectories too (784-dwkh): scripts/hooks/, scripts/test-support/ and
+# scripts/fixtures/ were invisible to the first cut, and scripts/hooks/ is
+# where a dialect bug hurts most — pre-commit-openspec.sh's `date -d` failure
+# landed on a `|| continue`, so its staleness warning could never fire on
+# macOS and looked exactly like "nothing is stale".
 SCAN_FILES=""
-for _c in "$SCAN_DIR"/*.sh; do SCAN_FILES="$SCAN_FILES $_c"; done
+for _c in "$SCAN_DIR"/*.sh "$SCAN_DIR"/*/*.sh; do
+  [ -f "$_c" ] && SCAN_FILES="$SCAN_FILES $_c"
+done
 if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -f build.sh ]; then
   SCAN_FILES="$SCAN_FILES build.sh"
 fi
@@ -111,9 +128,19 @@ for f in $SCAN_FILES; do
     while IFS= read -r _h; do
       [ -n "$_h" ] || continue
       _ln="${_h%%:*}"
-      # A same-line BSD arm (date -v / -jf / -r) makes the line
-      # self-portable — the GNU form fails on BSD and the chain catches it.
-      if printf '%s' "$_h" | grep -qE 'date +-(v|jf|r)'; then
+      # A BSD arm (date -v / -j / -jf / -r / -f) on the same LOGICAL command
+      # makes the line self-portable — the GNU form fails on BSD and the
+      # `||` chain catches it. Three things the first cut got wrong, all
+      # found against the real corpus (784-dwkh):
+      #   - intervening flags: `date -j -u -f '%s' …`, `date -u -r "$e"`
+      #   - attached values:   `date -v-30d +%s`
+      #   - CONTINUATION LINES: the arm often sits on the next line after a
+      #     trailing backslash, so a strictly same-line search flagged three
+      #     already-portable files and buried the one real defect.
+      # Scanning a small following window is deliberately generous: a lint
+      # that cries wolf gets muted, and the true positive is what matters.
+      if sed -n "${_ln},$((_ln + 2))p" "$f" 2>/dev/null \
+           | grep -qE 'date( +-[A-Za-z-]+)* +-(v|j|jf|r|f)'; then
         continue
       fi
       if sed -n "${_ln}p" "$f" | grep -qF "$GNUDATE_EXEMPT"; then

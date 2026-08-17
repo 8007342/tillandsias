@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: plan-answer-direction-question-unsupported
+    field: status
+    value: completed
+    ts: "2026-08-17T02:38:33Z"
+    host: linux_mutable
+
+events:
+  - packet_id: plan-answer-direction-question-unsupported
+    event:
+      type: completed
+      ts: "2026-08-17T02:38:33Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: night2-cycle4: the capability half was already delivered by 706-f7mq + the 760-3mh8 MCP work; what this packet actually needed was the PIN, and it now exists — groundtruth case plan-current-direction-bootstrap-question (rung1) grades PASS, asserting confidence=retrieved + a plan citation whose span_contains '## Direction' and 'Operator-owned thematic direction', re-read from the corpus at grading time so it survives loop_status.md growing. Deliberately unpinned per 680-zphp: the theme text and the line range, both operator-owned and mutable. Live root cause also cleared: the Aug-12 ~/.local/bin install was still answering 'unsupported' while the checkout binary answered 'retrieved' — refreshed from target/release, both now agree (the durable refresh/skew-stamp remains 760-nwzr). rung1 suite 22/22 with the new case

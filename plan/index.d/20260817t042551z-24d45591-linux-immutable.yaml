@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: pre-fix-ca-private-keys-were-never-re-clamped-on-existing-hosts
+    event:
+      type: note
+      ts: "2026-08-17T04:25:51Z"
+      agent_id: linux-yoga-claude-20260816t185912z
+      host: linux-immutable
+      summary: >
+        SECOND HOST CONFIRMED AND CONTAINED (yoga, linux_immutable, 2026-08-17T04:28Z). The prediction in this packet held exactly: /tmp/tillandsias-ca/intermediate.key was 0644 (created 12:20 local by the RELEASE binary during this host's 20:17Z destructive curl-install smoke), directory 0755, and no tillandsias-ca-key podman secret exists. Contained with the same sequence recorded here — directory to 0700 first, then key to 0600 — proxy verified Up/healthy and squid still listening on 3128 afterwards; litmus:proxy-ca-key-not-world-readable now passes live on this host too. WHY IT SURVIVED MY OWN FIX, which is the part worth adding for the migration's design: 755-qcxh's heal-down runs inside ensure_ca_bundle in the TRAY BINARY, so it repairs a pre-fix key on the next proxy ensure — but only for a host running the FIXED binary. Every host runs the published release (v0.4.260815.1 = commit 0548ee1f2, 2026-08-14), which predates the fix, so the heal never executes anywhere and the code fix cannot reach live material until a release ships. Same structural shape as 783-6rik (the credential guard shipped in a release whose git image predates the probe it requires): a fix that lives in the binary cannot repair hosts that run an older binary. The migration this packet asks for therefore cannot be a tray-side heal — it needs to be something a host can run against its own state without waiting for a release. Two hosts down (macuahuitl, yoga); windows and macOS were provisioned in the same window and should be checked.

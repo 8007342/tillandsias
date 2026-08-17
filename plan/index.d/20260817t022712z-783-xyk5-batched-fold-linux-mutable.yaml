@@ -1,0 +1,73 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Shape written by hand in the `tillandsias-plan set-field` form (order
+# 636-9m79): 783-xyk5 was filed in the parent checkout and is not yet pushed,
+# so `set-field` cannot resolve it from this worktree's fold. The LWW channel
+# below is named `status:` for historical reasons but corrects ANY field
+# (642-fedr); re-declaring the packet under `packets:` would be a G-Set no-op
+# and would silently do nothing — the very defect this packet's guard catches.
+status:
+  - packet_id: fragment-status-guard-folds-the-ledger-once-per-packet
+    field: status
+    value: completed
+    ts: "2026-08-17T02:27:12Z"
+    host: linux_mutable
+
+events:
+  - packet_id: fragment-status-guard-folds-the-ledger-once-per-packet
+    event:
+      type: completed
+      ts: "2026-08-17T02:27:12Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: check-fragment-status-loss.sh now
+        reads the fold ONCE (`query --json --limit 0`, the same 582-26mm folded
+        reader the per-packet `status` call used) and joins both declaration
+        classes in a single POSIX-awk pass tagged M/D/E — replacing the two
+        `while read` loops that spawned one full ledger fold per declared
+        packet. CONTROLLED A/B, same worktree, same binary, same seeded input of
+        24 declared pairs against the real 974-packet ledger: OLD 3.340s -> NEW
+        0.383s (8.7x), byte-identical verdict `ok:no-fragment-status-loss:24
+        checked`; on the two seeded defect classes both implementations emit
+        byte-identical violation reports and rc=1. bash stays 3.2-clean (no
+        associative arrays; check-bash-dialect.sh ok:bash-dialect-clean).
+        MUTATION CONTROL is the closure bar and it is met: NEW hermetic
+        scripts/test-fragment-status-loss.sh, 11 assertions over 9 scenarios,
+        each in a throwaway ledger — discarded terminal declaration REFUSED,
+        closure-event-without-transition REFUSED, matching declaration passes,
+        fold-ahead-of-a-non-terminal passes (649-b2e4 width control), prose
+        quoting the marker is not a declaration (752-pst5), 598-kibt per-file
+        boundary still isolated (the neighbouring packet does not inherit),
+        702-68zj stale-binary skip still loud and not a violation, the
+        fail-safe lane where the batch is unavailable still REFUSES via
+        per-packet fallback and announces itself, and a negative control that
+        the real binary does NOT take that fallback (so the speedup is proven
+        live, not merely available). Fixture proven NON-VACUOUS: sabotaging the
+        comparison turns it red on both mutation scenarios (exit 1). Litmus
+        litmus:fragment-status-loss-attribution-shape extended 7 -> 9 steps
+        (mutation-control invocation + fail-safe-not-fail-open pin), PASS via
+        the canonical runner. ./build.sh --check rc=0 verified unmasked.
+  - packet_id: fragment-status-guard-folds-the-ledger-once-per-packet
+    event:
+      type: note
+      ts: "2026-08-17T02:27:12Z"
+      host: linux_mutable
+      summary: >
+        Design note for the next reader: the batched read is deliberately
+        FAIL-SAFE rather than fail-fast. A binary predating `query`, a jq-less
+        host, or a harness stub that advertises the subcommand without serving
+        it yields an empty map — and an empty map would silently pass every
+        packet, which is exactly the silent-discard failure this gate exists to
+        catch, reintroduced by an optimization. So an unusable batch falls back
+        to the per-packet `status` lookups this change replaced, loudly on
+        stderr, and scenario 8 of the fixture pins that path against a stub that
+        advertises `query` and refuses to serve it. Two observations left for
+        others rather than folded in: (1) the `declared`-empty early exit at the
+        top of the script also skips the closure-event pass entirely, so a
+        fragment carrying ONLY events and no `packets:` block is not examined —
+        pre-existing behaviour, preserved deliberately here, but it looks like a
+        genuine coverage hole worth its own packet; (2) build.sh's `_step`
+        tracker closes the previous phase when the next banner is printed, so a
+        765-dfry step record spans banner-to-banner and can absorb un-bannered
+        work that follows it — this guard measured 5ms directly but ~1.5s as a
+        step record on a 0-pair ledger, so the per-step attribution is coarser
+        than it looks.

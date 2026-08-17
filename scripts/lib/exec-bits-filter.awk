@@ -56,7 +56,17 @@ NR == FNR {
         # non-executable. So ")" is permitted only after "$(".
         bare  = "(^|[;&|(])[[:space:]]*\"?" p "([[:space:]\"]|$)"
         subst = "\\$\\([[:space:]]*\"?" p "([[:space:]\")]|$)"
-        if (content !~ bare && content !~ subst) continue
+        # A litmus step's `command:` is an execution site, but its path is
+        # preceded by ": \"" -- a lead-in none of the shell delimiters above
+        # accept, so every litmus-only caller was invisible and the guard
+        # reported a clean tree it had not examined (order 770-dyqr; live case
+        # 2026-08-16, two scripts at mode 100644 invoked from
+        # litmus-release-artifact-integrity.yaml STEP 5, rc=126 at runtime
+        # while this checker printed ok). Keyed on the literal `command:` and
+        # not on a general ":" lead-in, because ":" appears throughout prose and
+        # the narrowness of this checker is the reason it is trusted.
+        yamlcmd = "command:[[:space:]]*\"?" p "([[:space:]\"]|$)"
+        if (content !~ bare && content !~ subst && content !~ yamlcmd) continue
 
         # Naming an interpreter works at any mode; sourcing is not execution.
         if (content ~ ("(bash|sh|source|\\.)[[:space:]]+\"?" p)) continue

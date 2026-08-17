@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: fragment-status-guard-folds-the-ledger-once-per-packet
+    event:
+      type: note
+      ts: "2026-08-17T02:30:40Z"
+      agent_id: linux-macuahuitl-opus5-20260817T023040Z
+      host: linux_mutable
+      summary: >
+        ATTRIBUTION CORRECTION by the implementing fork, recorded against this packet because this packet's own framing carried the error: the '60% of every --check' figure in the context block came from a step record (10470ms) that spans banner-to-banner and therefore bundled work the guard did not do. The FIX is fully vindicated on a controlled measurement — same worktree, same binary, same 24 seeded declared pairs: 3.340s -> 0.383s (8.7x), byte-identical violation reports on both defect classes, fail-SAFE fallback to per-packet lookups when the batch is unusable (stale binary / no jq / stub), pinned by scenario 8 with scenario 9 as its negative control. This host's gate did fall 17363ms -> 7762ms, but compaction shrank the fragment workload in the same window, so that number is not a clean attribution. The measurement defect itself is filed as 785-ibu9.

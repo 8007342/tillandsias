@@ -176,7 +176,11 @@ if [ -n "${TILLANDSIAS_CODEX_PROMPT:-}" ]; then
     if [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
         codex_result_args+=(--json)
     fi
-    exec /usr/local/bin/codex-oauth-session -- \
+    # 767-nkkq: non-interactive prompted lane is crash-supervised (see the
+    # opencode entrypoint for the full rationale; same class, every harness).
+    export TILLANDSIAS_CRASH_LAST_OUTPUT="/tmp/forge-lifecycle.log"
+    exec /usr/local/bin/harness-supervisor codex \
+        /usr/local/bin/codex-oauth-session -- \
         codex exec "${codex_forge_args[@]}" "${codex_result_args[@]}" "$TILLANDSIAS_CODEX_PROMPT"
 fi
 

@@ -105,3 +105,23 @@ Vault GitHub token push permission for 8007342/tillandsias, then verify
 `authorized/<epoch>`. The in-forge original of this update (commit fb4206bdf)
 died with its container, per the standing 741-3y48 shape; salvaged here from
 the launcher-captured output.
+
+## Update 2026-08-17T05:27Z (forge, linux-next) — verdict refs STILL absent
+
+Credential channel guard: `blocked:upstream-auth-unpublished`. Direct probe
+confirms zero `refs/tillandsias/upstream-auth/*` refs on origin — the verdict
+machinery is absent again, not just stale. The 702-griq remediation (rebuild
+git image at installed VERSION + recreate stack) has not reached this forge's
+container, or the container was rebuilt from a pre-756 image. Cycle refused
+worker drain per the guard; no MO-FULL marker will be emitted.
+
+The git image is at VERSION 0.4.260815.1 (per startup context), same as the
+build that had the probe wired — so either the entrypoint's probe loop is not
+running, or the container was launched without the reconcile tick. This is the
+702-griq class manifesting as persistent infrastructure debt.
+
+**Smallest next action (operator, unchanged):** rebuild the `tillandsias-git`
+container image (`scripts/build-image.sh git lane` or `--ci-full`), recreate
+the stack, verify `git ls-remote <origin> 'refs/tillandsias/upstream-auth/*'`
+publishes `authorized/<epoch>`. Every forge cycle will continue to fail-closed
+at this gate until the probe publishes.

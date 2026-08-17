@@ -26,12 +26,77 @@
 # The stamp lives in the git dir, never in the worktree — it is local machine
 # state, not project content, and must never be committed or merged.
 #
+# WHAT THE STAMP DOES **NOT** COVER, AND WHY THAT NEEDED A FIELD (order 765-dt8h)
+#
+# Until 2026-08-17 the stamp recorded THAT a gate passed against these bytes,
+# never WHICH gate — `_write_gate_stamp` writes identically from `--check`,
+# `--ci` and `--ci-full`, which validate materially different things (`--check`
+# never runs the test suite, the all-features clippy, or the litmus lane). That
+# was harmless only because every gate validated the whole tree. The moment a
+# scoped gate exists (diff-scoped litmus, change-class selectors, memoization —
+# all blocked on this file), a scoped run writing the old format would let
+# pre-push bless a push whose Rust the scoped run never compiled. The audit
+# calls this the silent-green pivot for all scoping work.
+#
+# So the stamp now records its SCOPE, and the pre-push hook refuses when the
+# outgoing diff reaches outside it. Scope is either `full` (everything — what
+# every gate writes today) or a set of CHANGE CLASSES. The class vocabulary is
+# closed and TOTAL: every path maps to exactly one class, and anything the
+# taxonomy does not recognise maps to `other`, which only `full` covers. A
+# scoped stamp can therefore never accidentally vouch for a path nobody
+# classified.
+#
+# STAMP FORMAT
+#
+#   v2 (current) — keyed lines, extensible without another format change:
+#       version 2
+#       digest <64-hex>
+#       scope full            # or: scope plan-ledger,docs
+#       dispatch check        # provenance: which gate wrote it
+#
+#   v1 (legacy)  — a bare digest line. REFUSED, loudly, with the re-run
+#       command: a v1 stamp carries no scope, and inferring one would be
+#       exactly the assumption this packet exists to remove. The cost is one
+#       `./build.sh --check` per host, once.
+#
 # SUBCOMMANDS
-#   compute  print the stamp for the current tree
-#   write    record the current stamp (call after the gate PASSES)
-#   verify   ok:gate-fresh | stale:<reason>   (exit 0 / non-zero)
+#   compute   print the stamp for the current tree
+#   write     record the current stamp (call after the gate PASSES)
+#             [--scope full|<class,...>] [--dispatch <name>]
+#   verify    ok:gate-fresh | stale:<reason>   (exit 0 / non-zero)
+#   scope     print the recorded scope (`full` or a class list) | stale:<reason>
+#   classify  read paths on stdin, print the sorted unique class set
 
 set -uo pipefail
+
+# ── Change-class taxonomy (order 765-dt8h) ────────────────────────────────────
+# TOTAL by construction: the final `*)` arm is what makes an unclassified path
+# fail closed instead of silently belonging to whatever a scoped gate claimed.
+# Keep the arms ordered most-specific-first; `plan/` must precede nothing else
+# that could swallow it.
+gate_stamp_classify_path() {
+    case "$1" in
+        plan/*)                                   echo plan-ledger ;;
+        crates/*|Cargo.toml|Cargo.lock|rust-toolchain*) echo rust ;;
+        images/*)                                 echo images ;;
+        openspec/*)                               echo specs ;;
+        methodology.yaml|methodology/*)           echo methodology ;;
+        scripts/*|build.sh|flake.nix|flake.lock)  echo build-scripts ;;
+        .github/*)                                echo ci ;;
+        cheatsheets/*|docs/*|*.md)                echo docs ;;
+        *)                                        echo other ;;
+    esac
+}
+
+GATE_STAMP_KNOWN_CLASSES="plan-ledger rust images specs methodology build-scripts ci docs other"
+
+gate_stamp_class_is_known() {
+    local c
+    for c in $GATE_STAMP_KNOWN_CLASSES; do
+        [[ "$c" == "$1" ]] && return 0
+    done
+    return 1
+}
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
     echo "stale:not-a-git-repo"
@@ -152,12 +217,65 @@ compute() {
     done | sha256sum | cut -d' ' -f1
 }
 
+# Read one keyed field out of a v2 stamp. Prints nothing for a v1/legacy or
+# malformed file — every caller treats "no value" as fail-closed.
+stamp_field() {
+    local key="$1" k v
+    while read -r k v; do
+        [[ "$k" == "$key" ]] && { printf '%s\n' "$v"; return 0; }
+    done < "$STAMP_FILE"
+    return 1
+}
+
+stamp_is_v2() {
+    [[ -f "$STAMP_FILE" ]] || return 1
+    [[ "$(stamp_field version 2>/dev/null)" == "2" ]]
+}
+
 case "${1:-verify}" in
     compute)
         compute
         ;;
     write)
-        compute > "$STAMP_FILE" || {
+        shift
+        scope_spec="full"
+        dispatch="unknown"
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --scope)    scope_spec="${2:-}"; shift 2 ;;
+                --scope=*)  scope_spec="${1#*=}"; shift ;;
+                --dispatch) dispatch="${2:-}"; shift 2 ;;
+                --dispatch=*) dispatch="${1#*=}"; shift ;;
+                *) echo "gate-stamp: unknown write option '$1'" >&2; exit 2 ;;
+            esac
+        done
+        # Refuse an unknown class AT WRITE TIME too. A stamp is only as
+        # trustworthy as the vocabulary both sides share; letting a typo become
+        # a scope token would make the hook's subset test silently wrong in the
+        # permissive direction.
+        if [[ "$scope_spec" != "full" ]]; then
+            IFS=',' read -r -a _scope_classes <<< "$scope_spec"
+            if [[ ${#_scope_classes[@]} -eq 0 ]]; then
+                echo "stale:empty-scope"
+                exit 1
+            fi
+            for _c in "${_scope_classes[@]}"; do
+                if ! gate_stamp_class_is_known "$_c"; then
+                    echo "stale:unknown-scope-class:$_c"
+                    exit 1
+                fi
+            done
+        fi
+        digest="$(compute)" || {
+            echo "stale:cannot-write-stamp"
+            exit 1
+        }
+        {
+            printf 'version 2\n'
+            printf 'digest %s\n' "$digest"
+            printf 'scope %s\n' "$scope_spec"
+            printf 'dispatch %s\n' "$dispatch"
+        } > "$STAMP_FILE" || {
             echo "stale:cannot-write-stamp"
             exit 1
         }
@@ -168,20 +286,66 @@ case "${1:-verify}" in
             echo "stale:never-run"
             exit 1
         fi
-        recorded="$(cat "$STAMP_FILE" 2>/dev/null)"
-        current="$(compute)"
+        if [[ ! -s "$STAMP_FILE" ]]; then
+            echo "stale:empty-stamp"
+            exit 1
+        fi
+        if ! stamp_is_v2; then
+            # A bare-digest stamp from before 765-dt8h. It almost certainly came
+            # from a full gate — but "almost certainly" is the inference this
+            # packet exists to delete, so migrate loudly instead of assuming.
+            echo "stale:legacy-stamp-format"
+            exit 1
+        fi
+        recorded="$(stamp_field digest 2>/dev/null)"
         if [[ -z "$recorded" ]]; then
             echo "stale:empty-stamp"
             exit 1
         fi
+        current="$(compute)"
         if [[ "$recorded" != "$current" ]]; then
             echo "stale:tree-changed-since-gate"
             exit 1
         fi
         echo "ok:gate-fresh"
         ;;
+    scope)
+        if [[ ! -f "$STAMP_FILE" ]]; then
+            echo "stale:never-run"
+            exit 1
+        fi
+        if ! stamp_is_v2; then
+            echo "stale:legacy-stamp-format"
+            exit 1
+        fi
+        recorded_scope="$(stamp_field scope 2>/dev/null)"
+        if [[ -z "$recorded_scope" ]]; then
+            echo "stale:no-scope-recorded"
+            exit 1
+        fi
+        if [[ "$recorded_scope" != "full" ]]; then
+            IFS=',' read -r -a _scope_classes <<< "$recorded_scope"
+            for _c in "${_scope_classes[@]}"; do
+                if ! gate_stamp_class_is_known "$_c"; then
+                    # An unknown token cannot be reasoned about; the packet's
+                    # rule is that ambiguity is staleness.
+                    echo "stale:unknown-scope-class:$_c"
+                    exit 1
+                fi
+            done
+        fi
+        printf '%s\n' "$recorded_scope"
+        ;;
+    classify)
+        # Paths on stdin (one per line) -> the sorted unique class set, one per
+        # line. One spawn for a whole diff; the hook must not fork per path.
+        while IFS= read -r p; do
+            [[ -n "$p" ]] || continue
+            gate_stamp_classify_path "$p"
+        done | LC_ALL=C sort -u
+        ;;
     *)
-        echo "usage: gate-stamp.sh [compute|write|verify]" >&2
+        echo "usage: gate-stamp.sh [compute|write [--scope S] [--dispatch D]|verify|scope|classify]" >&2
         exit 2
         ;;
 esac

@@ -75,13 +75,63 @@ while IFS= read -r hit; do
             *"litmus:$tok") case "$tok" in *-) wrapped=$((wrapped + 1)); continue ;; esac ;;
         esac
         checked=$((checked + 1))
-        if ! printf '%s\n' "$existing" | grep -qx "$tok"; then
+        # MEMBERSHIP IS A BUILTIN TEST, NOT A PIPELINE (order 792-ksr8, 2026-08-17).
+        #
+        # FOUND THREE TIMES INDEPENDENTLY IN ONE NIGHT — this host and two
+        # separate fork agents, each blocked by it — which is the measure of
+        # how often it fires once several agents build concurrently. This host
+        # inferred "a spawn that fails to fork under load"; the forks MEASURED
+        # the real cause. It is not fork failure — see the SIGPIPE race.
+        #
+        # This was `printf '%s\n' "$existing" | grep -qx "$tok"`, and under
+        # `set -o pipefail` (line 39) that made the guard's verdict a function
+        # of MACHINE LOAD. `grep -q` exits on the FIRST match and closes the
+        # pipe; `printf` — still writing a ~10KB list — then dies of SIGPIPE
+        # (141), and pipefail promotes that to the pipeline's status even
+        # though grep MATCHED. Whether printf finishes before grep exits is a
+        # race, so a token that provably exists was reported absent
+        # intermittently: measured 35/300 with pipefail on, 0/300 with it off,
+        # at loadavg ~17. Live effect: `./build.sh --check` produced
+        # `violation:litmus-pin-unresolvable:N` with N varying 3-26 run to run
+        # on an UNCHANGED tree, naming different real tests each time.
+        #
+        # Same family as 731-pc5r: a pipeline's exit status deciding a guard's
+        # verdict for reasons unrelated to the guard's question. The case test
+        # is a bash builtin — no fork, no pipe, no race — and it also removes
+        # ~2 forks per token from the hot loop.
+        #
+        # Corroborating observation from the parent cycle, same night: with the
+        # name index and the scanned corpus both proven STABLE (357 names, 67
+        # claim lines, 280 files across five samples each), the verdict still
+        # returned 1, 5, 2 and 3 on unchanged trees, and a clean `git archive`
+        # of origin reproduced it — so trunk itself read red. Ten consecutive
+        # runs are green after this change.
+        #
+        # WHY EARLY NAMES FAILED MOST (765-5efu's measurement, the detail that
+        # makes the race legible): the outcome turns on whether printf finished
+        # writing all 358 lines before grep exited, so a match near the TOP of
+        # a sorted list gives printf the least time and fails most often. Five
+        # consecutive runs there gave 6, 13, 3, 3 and 2 violations, all false.
+        # Minimal demonstration: piping the list into
+        # `grep -qx accel-capability-probe-contract-shape` returns 141, while
+        # the same check for an alphabetically late name returns 0.
+        #
+        # A here-string also fixes it (one process instead of two). The builtin
+        # `case` is kept because it spawns NOTHING: no fork to fail, and ~2
+        # fewer processes per token in the hot loop.
+        if ! case $'\n'"$existing"$'\n' in *$'\n'"$tok"$'\n'*) true ;; *) false ;; esac; then
             unresolvable=$((unresolvable + 1))
             echo "REFUSED: $file claims litmus:$tok — no litmus test declares that name." >&2
             echo "         The claim reads as verification and supplies none." >&2
             continue
         fi
-        if [ -n "$bound" ] && ! printf '%s\n' "$bound" | grep -qx "$tok"; then
+        # Same SIGPIPE-under-pipefail race as the membership test above. A
+        # fourth agent's observation corroborates the mechanism from the other
+        # side: it saw the SAME claim flip between "no litmus test declares
+        # that name" and "the test exists but no spec binds it" across runs,
+        # which is exactly what two independently-racing lookups produce —
+        # whichever one loses decides which refusal you get.
+        if [ -n "$bound" ] && ! case $'\n'"$bound"$'\n' in *$'\n'"$tok"$'\n'*) true ;; *) false ;; esac; then
             unbound=$((unbound + 1))
             echo "REFUSED: $file claims litmus:$tok — the test exists but no spec binds it in" >&2
             echo "         $BINDINGS, so it executes in no suite. Add it to a spec's litmus_tests." >&2

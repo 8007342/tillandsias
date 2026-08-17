@@ -122,6 +122,24 @@ if [ "${CYCLE_PREFLIGHT_SKIP_BUILD:-0}" != "1" ]; then
     esac
 fi
 
+# Host-state security migration (order 791-swxt). Runs SILENTLY and never
+# touches this script's verdict line, so the pinned arity is unaffected.
+#
+# It belongs here rather than in the tray because the exposure it repairs
+# cannot be repaired by the tray: 755-qcxh made ensure_ca_bundle create the CA
+# key 0600 and heal a pre-fix key down, but that heal lives in the BINARY, and
+# every host runs the published release, which predates the fix. Two hosts
+# were found with a world-readable CA private key days after the packet
+# closed. A checkout-side step reaches every host on its next cycle without
+# waiting for a release — which is the whole point.
+#
+# Best-effort by construction: a failure here must never block a cycle (the
+# key being 0644 is bad, but refusing to work is worse), and the script is
+# idempotent, so the common path is two stat calls.
+if [ -x "$ROOT/scripts/clamp-ca-material.sh" ]; then
+    bash "$ROOT/scripts/clamp-ca-material.sh" --fix >/dev/null 2>&1 || true
+fi
+
 # Inference is a REPORT, not a gate: the deterministic expert tiers work without
 # it, and a cycle that cannot reach a model is degraded, not broken. Blocking
 # here would strand work on a host with no network — the same reasoning that

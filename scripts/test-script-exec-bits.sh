@@ -41,11 +41,16 @@ trap 'rm -rf "$work"' EXIT
 
 failures=()
 
-# scenario <name> <expected-rc> <expected-stdout-substring> <caller-body> [mode]
+# scenario <name> <expected-rc> <expected-stdout-substring> <caller-body> [mode] [caller-path]
+#
+# caller-path (order 770-dyqr) defaults to scripts/caller.sh. A `.yaml`/`.yml`
+# caller is written VERBATIM — no shebang — because the surfaces that broke were
+# a litmus `command:` line and a CI workflow, not a shell script.
 scenario() {
     local name="$1" want_rc="$2" want="$3" caller_body="$4" mode="${5:-100644}"
+    local caller_path="${6:-scripts/caller.sh}"
     local repo="$work/$name"
-    rm -rf "$repo"; mkdir -p "$repo/scripts"
+    rm -rf "$repo"; mkdir -p "$repo/scripts" "$repo/$(dirname "$caller_path")"
     git -C "$repo" init -q -b main
     git -C "$repo" config user.email f@example.invalid
     git -C "$repo" config user.name fixture
@@ -56,7 +61,10 @@ scenario() {
     mkdir -p "$repo/scripts/lib"
     cp "$ROOT/scripts/lib/exec-bits-filter.awk" "$repo/scripts/lib/"
     printf '#!/usr/bin/env bash\necho target\n' > "$repo/scripts/target.sh"
-    printf '#!/usr/bin/env bash\n%s\n' "$caller_body" > "$repo/scripts/caller.sh"
+    case "$caller_path" in
+        *.yaml|*.yml) printf '%s\n' "$caller_body" > "$repo/$caller_path" ;;
+        *)            printf '#!/usr/bin/env bash\n%s\n' "$caller_body" > "$repo/$caller_path" ;;
+    esac
     git -C "$repo" add -A >/dev/null 2>&1
     # The mode is the whole point of the check, so set it explicitly rather
     # than relying on whatever the filesystem reported.
@@ -101,6 +109,28 @@ scenario "command-substitution-refused" 1 "violation:script-not-executable:1" \
 scenario "after-pipe-refused" 1 "violation:script-not-executable:1" \
     'echo hi | scripts/target.sh'
 
+# 8-10. ORDER 770-dyqr. The caller surfaces that are not shell.
+#
+# THE LIVE BREACH: on 2026-08-16 two scripts reached linux-next at mode 100644
+# from the windows lane and litmus:release-artifact-integrity STEP 5 died with
+# rc=126 Permission denied -- while THIS guard printed `ok:script-exec-bits:26
+# checked` and the gate went green. The litmus corpus was already in the caller
+# set; what was missing is that a step's path is preceded by `: "`, and the
+# invocation patterns only accepted start-of-line or one of `;&|(`. So the
+# breach form was unreachable, and scenario 8 is the regression that proves it
+# is reachable now. Scenario 9 is the control that keeps the rule narrow: the
+# overwhelming majority of litmus steps name an interpreter and must stay
+# silent, or this checker becomes noise inside 400+ litmus files.
+scenario "litmus-command-bare-refused" 1 "violation:script-not-executable:1" \
+    '    command: "scripts/target.sh 2>&1 | tail -1"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+scenario "litmus-command-interpreter-ok" 0 "ok:script-exec-bits:" \
+    '    command: "bash scripts/target.sh 2>&1"' 100644 \
+    "openspec/litmus-tests/litmus-demo.yaml"
+scenario "workflow-bare-refused" 1 "violation:script-not-executable:1" \
+    '          scripts/target.sh --verify' 100644 \
+    ".github/workflows/release.yml"
+
 # 7. The checker must REFUSE when its filter helper is absent, not report a
 # clean tree it never examined. Without this the perf split could regress into
 # a checker that always passes.
@@ -140,6 +170,6 @@ fi
 #   bare-invocation-executable          -> executable-bare-ok
 #   interpreter-prefixed-non-executable -> interpreter-prefixed-ok
 #   sourced-library-non-executable      -> sourced-ok
-echo "PASS: script-exec-bits fixture 7/7 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses)"
-echo "ok:script-exec-bits-fixture:7"
+echo "PASS: script-exec-bits fixture 10/10 scenarios green (bare-invocation-refused, interpreter-prefixed-ok, sourced-ok, executable-bare-ok, command-substitution-refused, after-pipe-refused, missing-helper-refuses, litmus-command-bare-refused, litmus-command-interpreter-ok, workflow-bare-refused)"
+echo "ok:script-exec-bits-fixture:10"
 exit 0

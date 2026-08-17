@@ -50,6 +50,10 @@ COPY lib-common.sh /usr/local/lib/tillandsias/lib-common.sh
 COPY codex-safe-state.sh /usr/local/lib/tillandsias/codex-safe-state.sh
 COPY brew-tools-allowlist.txt /usr/local/lib/tillandsias/brew-tools-allowlist.txt
 COPY brew-shim-exec.sh /usr/local/bin/tillandsias-brew-shim-exec
+# 767-nkkq: minimal PID-1 crash supervision for non-interactive harness runs —
+# a harness SIGSEGV becomes a loud named verdict + evidence file + truthful
+# nonzero container exit instead of a silent status-139 death. Never restarts.
+COPY harness-supervisor.sh /usr/local/bin/harness-supervisor
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 COPY codex-device-auth.sh /usr/local/bin/codex-device-auth
 COPY codex-oauth-vault.sh /usr/local/bin/codex-oauth-vault
@@ -97,6 +101,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-antigravity.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/tillandsias-brew-shim-exec \
+             /usr/local/bin/harness-supervisor \
              /usr/local/bin/vault-cli.sh \
              /usr/local/bin/codex-device-auth \
              /usr/local/bin/codex-oauth-vault \

@@ -1,0 +1,40 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-17, demonstrated live while
+# claiming this cycle's own bundle.
+packets:
+  - packet_id: ledger-node-claim-accepts-a-node-that-does-not-exist
+    order: 790-u8x6
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "scripts/claim-ledger-node.sh answers `claimed:<anything>` for a node id that is not in the ledger — a typo'd lease protects nothing while reading exactly like protection"
+    deliverable: "claim refuses an id that resolves to no packet (a typed refusal naming the unknown id), or resolves order tokens and packet_ids the way tillandsias-plan status does; release stays permissive so stale leases can always be cleaned"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [plan-tooling, concurrency, fail-loud, guards]
+    estimated_hours: 1
+    context: |
+      OBSERVED live 2026-08-17 (this host, cycle 5), not inferred: claiming a
+      three-packet bundle I guessed two node ids from their titles and got
+      `claimed:squid-proxy-version-bump-past-6-9` and
+      `claimed:crane-deps-stability-and-fleet-binary-cache` — both accepted,
+      neither a real packet. The actual ids are
+      `proxy-squid-version-bump-past-6-9` and
+      `crane-deps-stability-and-binary-cache`. So for as long as it took me
+      to notice, this cycle believed it held leases on two packets that were
+      in fact unleased and claimable by any sibling host, while the lease
+      output looked identical to a successful claim.
+
+      This is the "a guard that reads as protective and is not" class the
+      723-ydmk packet named, applied to the coordination layer: the claim is
+      advisory by design (CRDT-friendly, never a mutex — that part is
+      correct and should stay), but an advisory lease on a NONEXISTENT node
+      is not weak coordination, it is zero coordination reported as success.
+      The blast radius is exactly what the lease exists to prevent: two hosts
+      doing the same work, which the 2026-06-20 collision report already
+      cost cycles to.
+
+      Note the fix must not break the legitimate release-a-stale-lease path
+      (an id whose packet was since obsoleted or renamed still needs
+      releasing), which is why the deliverable keeps `release` permissive
+      and constrains only `claim`.

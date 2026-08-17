@@ -137,6 +137,34 @@ jobs:
           nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
           nix build -L .#tillandsias-headless-aarch64-musl  --out-link result-ha
 
+      - name: Assert crane deps derivations are source-stable (order 765-8hc3)
+        # The cache-miss warning below reports that a rebuild was SLOW; it
+        # cannot say WHY. This says why, and is the only signal that
+        # distinguishes "the lockfile legitimately moved" from "an ordinary
+        # source commit now invalidates ~1,000 vendored crates per target".
+        #
+        # Non-blocking by design: it perturbs the tree to measure, so a failure
+        # here means the caching property regressed, not that this release is
+        # unsafe to publish. Loud, and recorded in the step summary.
+        continue-on-error: true
+        run: |
+          set +e
+          VERDICT="$(scripts/check-nix-deps-stability.sh --all 2>/tmp/deps-stability.err)"
+          RC=$?
+          set -e
+          echo "$VERDICT"
+          sed -n '1,20p' /tmp/deps-stability.err || true
+          {
+            echo "### Crane deps-derivation stability"
+            echo ""
+            echo '```'
+            echo "$VERDICT"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$RC" -ne 0 ]; then
+            echo "::warning::Crane deps churn: $VERDICT — an ordinary source commit now invalidates the dependency derivations, so every release and every --ci-full --install cold-compiles ~1,000 crates per target. See order 765-8hc3 and the ORDER 765-8hc3 comment in flake.nix."
+          fi
+
       - name: Verify release builds use binary-self-hash (no dev seed fallback)
         run: |
           # Release builds must NOT contain the debug DEV_ROOT_SEED. With LTO

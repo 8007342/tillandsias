@@ -46,14 +46,20 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Containerfile: Alpine 3.20 base + squid/openssl/bash + non-root proxy UID 1000"
+  - step: "Containerfile: Alpine 3.22 base + squid/openssl/bash + non-root proxy UID 1000"
     # Spec § "Proxy container image versioned and built via pipeline"
     # Scenarios: Alpine-based with squid + SSL support; runs as
     # non-root `proxy` UID 1000. A regression to a different base or
     # root user would silently widen the attack surface.
-    command: "grep -F 'FROM docker.io/library/alpine:3.20' images/proxy/Containerfile && grep -F 'apk add --no-cache squid openssl bash' images/proxy/Containerfile && grep -F 'adduser -D -u 1000' images/proxy/Containerfile"
+    #
+    # Order 782-9jfg moved the pin 3.20 -> 3.22 deliberately: Alpine freezes
+    # squid per release and 3.20 is stuck on squid-6.9-r0, the build behind
+    # 263 SIGSEGVs (767-es4w). The version stays PINNED and exact — the point
+    # of this step is that the base cannot drift unnoticed, not that it can
+    # never be changed on purpose.
+    command: "grep -F 'FROM docker.io/library/alpine:3.22' images/proxy/Containerfile && grep -F 'apk add --no-cache squid openssl bash' images/proxy/Containerfile && grep -F 'adduser -D -u 1000' images/proxy/Containerfile"
     timeout_ms: 3000
-    expected_behavior: "alpine:3.20"
+    expected_behavior: "alpine:3.22"
 
   - step: "squid.conf: dual-port architecture (3128 strict + 3129 permissive) with ssl-bump on both"
     # Spec § "Dual-port architecture" mandates 3128 (strict
@@ -148,7 +154,7 @@ observability:
 rollback:
   on_failure: >
     A `spec:proxy-container` source surface drifted. Restore all 4
-    `@trace spec:proxy-container` markers; Alpine 3.20 base + apk
+    `@trace spec:proxy-container` markers; Alpine 3.22 base + apk
     install of squid/openssl/bash + UID-1000 proxy user;
     `http_port 3128 ssl-bump` + `http_port 3129 ssl-bump`; the exact
     `acl ssl_bump_step1 at_step SslBump1` → `ssl_bump peek

@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: guards-that-spawn-per-item-go-flaky-under-fleet-load
+    event:
+      type: note
+      ts: "2026-08-17T05:00:58Z"
+      agent_id: linux-macuahuitl-opus5-20260817T050058Z
+      host: linux_mutable
+      summary: >
+        FOUR independent discoveries in one night — this host plus three fork agents, each blocked by the same guard, each investigating separately. Convergent evidence, and one useful disagreement: fork 790-mbk9 stress-tested the membership lookup 400x under load 16-18 and got 0/400 failures, concluding the lookup was NOT the cause and the instability lay in the claims scan. That falsification was sound for the hypothesis it tested (subprocess exhaustion, which was MY inference) but missed SIGPIPE, which needs the specific printf-into-early-matching-grep shape rather than raw load. Its own other observation corroborates SIGPIPE from the far side: it saw the SAME claim flip between the two refusal messages across runs, which is precisely what two independently-racing lookups produce — whichever loses decides which refusal you get. All four agents landed the same fix shape (remove the pipe); the merged implementation keeps the spawn-free builtin case. Determinism verified 8/8 and 10/10 post-merge under the same load that produced 1/2/3/5/6/13/27.

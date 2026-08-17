@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: build-step-timing-is-banner-to-banner-not-per-step
+    event:
+      type: note
+      ts: "2026-08-17T03:51:43Z"
+      agent_id: linux-macuahuitl-opus5-20260817T035142Z
+      host: linux_mutable
+      summary: >
+        Integration datum: with attribution fixed, the gate's real targets are now visible and they are NOT the guards — step:running-clippy-strict 17456ms (measured work, attackable) and step:staging-router-sidecar 14300ms carried as phase=build-span because it shells out without _run. So the unattributed wall clock is concentrated in the few phases that bypass the measured seam, not smeared across the ~15 guards. slowest= currently names clippy, unmarked, which is exactly the honest signal this packet was for. The _phase_report gap annotation printed nothing this run — correct negative control.

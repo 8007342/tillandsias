@@ -1914,6 +1914,84 @@ opencode_auth_contract_ok() {
     return 0
 }
 
+# Positive assertion that the TUI RENDERER actually initializes (order
+# 626-p4xd).
+#
+# WHY. Every existing gate answers "does the binary start and honour our
+# flags?" — `--version`, flag greps, `auth list`. None of them loads the
+# renderer, so a build whose TUI cannot initialize passes all of them, gets
+# installed, and is RECORDED AS LAST-GOOD; the rollback path then re-validates
+# with the same blind probe and can restore-and-certify another broken
+# snapshot. The user meets the failure; the gate never does.
+#
+# POSITIVE ASSERTION, not error-matching. Grepping for an upstream error
+# string ("Failed to initialize OpenTUI") rots the moment upstream rewords it.
+# We require the renderer to PROVE itself: within the budget it must emit an
+# alt-screen switch or a truecolor SGR, and must not have exited nonzero.
+#
+# Measured on this class of binary (yoga, 2026-08-17): no pty is needed —
+# with stdin from /dev/null the renderer still initializes and emits its
+# sequences; first CSI at 521-733ms, strict marker at ~2.6s. The ceiling below
+# is deliberately far above that because the artifact the curl channel ships
+# is a bun single-file executable whose FIRST run pays a cold asset
+# extraction, unlike the ELF those timings came from.
+#
+# `--pure` plus the updater guards keep this inside litmus:harness-byte-cheap,
+# which pins that a probe may not self-update.
+opencode_render_contract_ok() {
+    local bin_path="$1" probe_root out waited=0 status=1
+    local budget="${TILLANDSIAS_RENDER_PROBE_BUDGET_S:-20}"
+    probe_root="$(mktemp -d /tmp/tillandsias-opencode-render-probe.XXXXXX)" || return 1
+    out="$probe_root/out"
+    : > "$out"
+    (
+        XDG_DATA_HOME="$probe_root/data" \
+        XDG_STATE_HOME="$probe_root/state" \
+        XDG_CONFIG_HOME="$probe_root/config" \
+        OPENCODE_DB=:memory: \
+        DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1 \
+        timeout "$budget" "$bin_path" --pure </dev/null >"$out" 2>&1
+    ) &
+    local probe_pid=$!
+    # Poll for the marker rather than sleeping the full budget: a healthy
+    # renderer answers in ~3s and the gate runs three times per launch.
+    while [ "$waited" -lt "$((budget * 10))" ]; do
+        if grep -qa -e $'\033\[?1049h' -e '38;2;' "$out" 2>/dev/null; then
+            status=0
+            break
+        fi
+        kill -0 "$probe_pid" 2>/dev/null || break   # exited before rendering
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    kill "$probe_pid" 2>/dev/null
+    wait "$probe_pid" 2>/dev/null
+    rm -rf -- "$probe_root"
+    if [ "$status" -ne 0 ]; then
+        trace_lifecycle "harness" "opencode RENDER CONTRACT BROKEN — no TUI renderer output within ${budget}s (binary starts and honours flags, but its interface never initializes)"
+        return 1
+    fi
+    return 0
+}
+
+# Cache the render verdict against the binary's identity, so the three probes
+# a launch performs (record-last-good, validate-or-rollback, restore) cost one
+# ~3s render instead of three. Keyed on the hash so a reinstall re-probes: the
+# whole point is to gate a NEW artifact.
+opencode_render_contract_cached() {
+    local bin_path="$1" key stamp
+    key="$( { sha256sum "$bin_path" 2>/dev/null || shasum -a 256 "$bin_path" 2>/dev/null; } | cut -d' ' -f1)"
+    [ -n "$key" ] || { opencode_render_contract_ok "$bin_path"; return $?; }
+    stamp="${HARNESS_CURL_ROOT:-$HOME/.cache/tillandsias-harness}/opencode/.render-ok.$key"
+    [ -f "$stamp" ] && return 0
+    if opencode_render_contract_ok "$bin_path"; then
+        mkdir -p "$(dirname "$stamp")" 2>/dev/null
+        : > "$stamp" 2>/dev/null
+        return 0
+    fi
+    return 1
+}
+
 # Positive assertion for the credential actually injected into this lane. The
 # isolated probe compares OpenCode's reported count and provider IDs with the
 # in-memory JSON, checks both probe and real XDG paths for auth.json, and never
@@ -2018,7 +2096,10 @@ harness_probe() {
     local bin_path="${2:-${NPM_CONFIG_PREFIX:-/usr/local}/bin/$1}"
     [ -x "$bin_path" ] && timeout 30 "$bin_path" --version >/dev/null 2>&1 \
         && harness_contract_ok "$1" "$bin_path" \
-        && { [ "$1" != "opencode" ] || opencode_auth_contract_ok "$bin_path"; }
+        && { [ "$1" != "opencode" ] || {
+            opencode_auth_contract_ok "$bin_path" \
+                && opencode_render_contract_cached "$bin_path"
+        }; }
 }
 
 harness_last_good_file() {
@@ -2042,6 +2123,43 @@ harness_record_last_good() {
 # A fresh install that fails the health probe rolls back to the recorded
 # last-good version (order 284).
 # @trace plan/issues/forge-harness-every-launch-latest-2026-07-04.md (order 181)
+# ── Harness update mutex (order 626-p4xd) ───────────────────────────────────
+#
+# ONE lock, two writers. Both `ensure_forge_harnesses` (backgrounded from the
+# entrypoint) and `require_opencode` (foreground, same entrypoint, same
+# launch) write $HARNESS_CURL_ROOT/opencode/bin/opencode. Only the first one
+# ever took this lock, so the mutex was ONE-SIDED: the guarded background
+# updater could be rewriting the binary underneath the unguarded foreground
+# installer. Extracted here so the second writer can take the SAME lock
+# rather than inventing a second discipline.
+harness_update_lock_path() {
+    echo "$HOME/.cache/tillandsias-project/npm-update.lock"
+}
+
+# Returns 0 when this process now HOLDS the lock, 1 when another live holder
+# has it. Reclaims a leak older than an hour: a real updater finishes in
+# minutes, and these locks live on the PERSISTENT volume, where one leak used
+# to disable updates forever.
+harness_update_lock_acquire() {
+    local lock
+    lock="$(harness_update_lock_path)"
+    mkdir -p "$(dirname "$lock")" 2>/dev/null
+    if mkdir "$lock" 2>/dev/null; then
+        return 0
+    fi
+    if [ -d "$lock" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +60 2>/dev/null)" ]; then
+        trace_lifecycle "harness" "reclaiming stale npm-update lock (leaked pre-fix)"
+        rm -rf "$lock"
+        mkdir "$lock" 2>/dev/null || return 1
+        return 0
+    fi
+    return 1
+}
+
+harness_update_lock_release() {
+    rm -rf "$(harness_update_lock_path)" 2>/dev/null || true
+}
+
 ensure_forge_harnesses() {
     # Avoid a concurrent npm join race — only the first process runs npm.
     local npm_lock="$HOME/.cache/tillandsias-project/npm-update.lock"
@@ -2764,9 +2882,27 @@ curl_install_claude() {
 require_opencode() {
     # Curl channel first (order 459); legacy npm as the transition fallback
     # so a half-warm cache from the old channel still launches.
+    #
+    # Order 626-p4xd: take the SAME lock ensure_forge_harnesses takes. Both
+    # run from this entrypoint on one launch — one backgrounded, this one
+    # foreground — and both write $HARNESS_CURL_ROOT/opencode/bin/opencode.
+    # Guarding only the background writer left the mutex one-sided.
+    #
+    # Failing to get the lock is NOT fatal here: the other holder is
+    # installing the same binary, so fall through and use whatever it
+    # produced. Blocking the lane on a harness update would be worse than the
+    # race — this path exists to make the lane launchable.
+    local held=0
+    if harness_update_lock_acquire; then
+        held=1
+    else
+        trace_lifecycle "harness" "opencode install deferring to the in-flight harness updater (shared lock held elsewhere)"
+    fi
     if curl_install_opencode && [ -n "${OC_BIN:-}" ] && [ -x "$OC_BIN" ]; then
+        [ "$held" -eq 1 ] && harness_update_lock_release
         return 0
     fi
+    [ "$held" -eq 1 ] && harness_update_lock_release
     OC_BIN="$(_require_harness opencode opencode-ai opencode)"
     return 0
 }

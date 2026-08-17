@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: fragment-status-guard-skips-events-only-fragments
+    field: status
+    value: completed
+    ts: "2026-08-17T02:44:46Z"
+    host: linux_mutable
+
+events:
+  - packet_id: fragment-status-guard-skips-events-only-fragments
+    event:
+      type: completed
+      ts: "2026-08-17T02:44:46Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: worktree-agent-a0e378d719e528327: the early exit keyed on `declared` is gone; the closure-event pass now runs independently and only genuinely-nothing exits early (new cheap no-fragment-files fast path, plus a both-empty guard AFTER the event pass). `checked` now counts DISTINCT packet_ids examined by EITHER pass — a D-only counter would have reported '0 checked' for an events-only run that really did check something, a smaller version of the same misreport this packet closes; no machine consumer parses the number and the grammar is unchanged. 783-xyk5's batched fold and its loud fail-SAFE fallback, the 598-kibt per-file isolation, and the 702-68zj loud SKIP are all preserved. Fixture scripts/test-fragment-status-loss.sh 9->12 scenarios, 17 assertions, ALL PASS: 'MUTATION events-only fragment still refuses', 'events-only fragment whose transition landed passes', 'the events-only examination is visible in the checked count', 'no declarations and no closure events passes as 0 checked', 'empty fragment directory passes as 0 checked'. NON-VACUITY PROVEN: restoring the early exit turns exactly the two new mutation assertions red while all nine pre-existing scenarios stay green. litmus:fragment-status-loss-attribution-shape 9->11 steps, 11/11 OK via the canonical runner, the new pins BEHAVIOURAL (hermetic sandbox) not source greps so the 634-39ik ratchet is satisfied. check-bash-dialect.sh ok:bash-dialect-clean (3.2-safe, POSIX awk arrays only). Real-ledger verdict here: ok:no-fragment-status-loss:7 checked. ./build.sh --check rc=0 verified unmasked.

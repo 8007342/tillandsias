@@ -2,7 +2,7 @@
 # @trace spec:host-chromium-on-demand, spec:download-telemetry, spec:chromium-safe-variant
 # @cheatsheet runtime/forge-paths-ephemeral-vs-persistent.md
 # @cheatsheet security/owasp-top-10-2021.md
-# freshness: audited 2026-08-16 macos verdict=updated (774-cfw8) — header
+# freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=updated scope=774-cfw8 audit — header
 # integration claims corrected; the script is currently ORPHANED, see below.
 #
 # Tillandsias userspace Chromium installer.

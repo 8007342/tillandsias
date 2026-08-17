@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-stamp-scope-awareness
+    field: status
+    value: completed
+    ts: "2026-08-17T04:53:57Z"
+    host: linux_mutable
+
+events:
+  - packet_id: gate-stamp-scope-awareness
+    event:
+      type: completed
+      ts: "2026-08-17T04:53:57Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: 4ff0c7338: gate-stamp.sh v2 keyed format (version/digest/scope/dispatch) + closed TOTAL change-class taxonomy whose catch-all 'other' is coverable only by 'full'; new scope/classify subcommands; write-time refusal of an unknown class. pre-push enforce_stamp_scope compares stamp scope to the outgoing diff's classes, naming missing classes + the rerun command, fail-closed on unreadable scope / unknown token / missing ref list (634-39ik polarity inverted, per the packet). build.sh writes scope=full + dispatch provenance from all three dispatches, so no gate can overstate coverage. NEW scripts/test-gate-stamp-scope.sh 8/8, every case driving a REAL git push at a REAL bare remote through the REAL hook and asserting whether the remote head moved. Criterion-by-criterion: c1 full-scope behaves as today = case 1 + existing test-gate-stamp.sh 7/7 unchanged; c2 subset-only + fail-closed = cases 2/5/6; c3 668-2xeh lane preserved = case 7 + litmus:plan-only-push-lane-shape PASS; c4 the named negative (scope {plan-ledger} vs a crates/ push) = case 2, REFUSED with 'rust' named and the remote head unmoved; c5 ordering constraint = every dispatch writes full, scoped stamps are unreachable until a selector packet opts in. MUTATION CONTROL non-vacuous, twice: neutering enforce_stamp_scope reds case 2 only; making the legacy branch pass silently reds case 4 only. litmus:release-gates-run-locally extended 18->19 steps, PASS. Real push through the edited hook verified end to end (probe branch pushed then deleted). ./build.sh --check rc=0 unmasked (29s). bash-dialect-clean

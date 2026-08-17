@@ -19,7 +19,14 @@ preconditions:
 
 critical_path:
   - step: "lib-common defines the curl channel and routes require_* through it"
-    command: "grep -q 'curl_install_opencode()' images/default/lib-common.sh && grep -q 'curl_install_claude()' images/default/lib-common.sh && grep -A3 'require_opencode()' images/default/lib-common.sh | grep -q curl_install_opencode && grep -A3 'require_claude()' images/default/lib-common.sh | grep -q curl_install_claude && echo 'ok: curl-channel-wired'"
+    # Scans each require_* FUNCTION BODY (awk between the definition and its
+    # closing brace) rather than the first three lines after the definition.
+    # The `-A3` window encoded how the source happened to be laid out, not the
+    # property being asserted: order 626-p4xd added the shared harness-update
+    # lock to require_opencode, which pushed the curl call to line 4 and
+    # turned this step red without changing the routing at all. Pin the
+    # property, not the line count (634-39ik).
+    command: "grep -q 'curl_install_opencode()' images/default/lib-common.sh && grep -q 'curl_install_claude()' images/default/lib-common.sh && awk '/^require_opencode\\(\\)/,/^}/' images/default/lib-common.sh | grep -q curl_install_opencode && awk '/^require_claude\\(\\)/,/^}/' images/default/lib-common.sh | grep -q curl_install_claude && echo 'ok: curl-channel-wired'"
     timeout_ms: 5000
     expected_behavior: "ok: curl-channel-wired"
 
