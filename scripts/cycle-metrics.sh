@@ -406,8 +406,11 @@ fi
 if [ "$mcp_health" = "ok" ]; then
     _surface_stamp="${TILLANDSIAS_MCP_SURFACE_STAMP:-$(git rev-parse --absolute-git-dir 2>/dev/null || echo "$REPO_ROOT/.git")/tillandsias-mcp-surface}"
     if [ -f "$_surface_stamp" ]; then
-        _sfc_claim="$(sed -n 's/.*\bclaim=\([^ ]*\).*/\1/p' "$_surface_stamp" 2>/dev/null | head -1)"
-        _sfc_epoch="$(sed -n 's/.*\bepoch=\([0-9]*\).*/\1/p' "$_surface_stamp" 2>/dev/null | head -1)"
+        # Space-split + anchored, not `\b` (order 803-bqte): BSD sed has no
+        # `\b`, so on macOS both reads returned empty and the `mcp:` line
+        # silently dropped the surface attestation it is supposed to fold in.
+        _sfc_claim="$(tr ' ' '\n' < "$_surface_stamp" 2>/dev/null | sed -n 's/^claim=\(.*\)$/\1/p' | head -1)"
+        _sfc_epoch="$(tr ' ' '\n' < "$_surface_stamp" 2>/dev/null | sed -n 's/^epoch=\([0-9]*\)$/\1/p' | head -1)"
         _sfc_now="$(date -u +%s 2>/dev/null || echo 0)"
         _sfc_max="${TILLANDSIAS_MCP_SURFACE_MAX_AGE:-14400}"
         _sfc_fresh=1
