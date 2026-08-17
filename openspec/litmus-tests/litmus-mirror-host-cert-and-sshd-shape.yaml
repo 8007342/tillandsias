@@ -3,6 +3,12 @@ name: litmus:mirror-host-cert-and-sshd-shape
 spec: git-mirror-service
 phase: pre-build
 size: quick
+# inputs: see order 765-mza8. Rebuilds the git image via build-image.sh.
+inputs:
+  - images/git/**
+  - scripts/build-image.sh
+  - scripts/common.sh
+  - scripts/test-mirror-host-cert-and-sshd.sh
 severity: critical
 description: >
   Order 749-54pv (design T4+T5 — plan/issues/ssh-ca-forge-mirror-push-design-2026-07-31.md):

@@ -1183,6 +1183,23 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "tracked-config-host-paths" "skipped"
     fi
 
+    # Order 765-mza8. Wired here, literally, for the same reason as the three
+    # above. A dead `inputs:` glob is silent by construction: it cannot make a
+    # test run, only skip, so nothing else in this suite would ever go red for
+    # it. Verified passing before wiring: 51 glob(s) across 11 annotated test(s).
+    if [[ -f "scripts/check-litmus-dead-inputs.sh" ]]; then
+        if bash scripts/check-litmus-dead-inputs.sh 2>&1 | tee /tmp/litmus-dead-inputs.log; then
+            log_pass "Every litmus inputs: glob resolves to a tracked file"
+            archive_check_log "litmus-dead-inputs" "pass" /tmp/litmus-dead-inputs.log
+        else
+            log_fail_tracked "litmus-dead-inputs" "Dead litmus inputs glob (see /tmp/litmus-dead-inputs.log)"
+            archive_check_log "litmus-dead-inputs" "fail" /tmp/litmus-dead-inputs.log
+        fi
+    else
+        log_fail_missing_guard "litmus-dead-inputs" "scripts/check-litmus-dead-inputs.sh"
+        archive_check_log "litmus-dead-inputs" "skipped"
+    fi
+
     # ============================================================================
     # Guard activation audit (order 599-4wzr) — a guard nobody can prove is
     # running is not a guard. Fails loud if any check-*.sh has no invoker.

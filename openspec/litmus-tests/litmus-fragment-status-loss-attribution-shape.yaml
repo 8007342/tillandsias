@@ -5,6 +5,19 @@ phase: pre-build
 description: The status-loss gate's closure-event pass attributes completions to the packet's actual events block, not to prose that quotes the marker, and keeps the 598-kibt file-boundary isolation
 severity: high
 size: instant
+# inputs: see order 765-mza8. plan-binary-probe.sh builds the plan binary, so
+# the crate tree is a transitive input the YAML itself never names.
+inputs:
+  - crates/**
+  - Cargo.toml
+  - Cargo.lock
+  - plan/index.yaml
+  - plan/index.d/**
+  - scripts/check-fragment-status-loss.sh
+  - scripts/test-fragment-status-loss.sh
+  - scripts/plan-binary-probe.sh
+  - scripts/with-wsl2-builder.sh
+  - images/default/lib-common.sh
 
 # ORDER 752-pst5. check-fragment-status-loss.sh's second pass used a line-grep
 # with ad-hoc resets: it cleared its packet_id on a two-space-indent key, but

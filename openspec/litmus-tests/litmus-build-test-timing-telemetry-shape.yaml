@@ -33,6 +33,15 @@ description: >
   that an unwritable log path never fails the step nor the reporter.
 severity: high
 size: instant
+# inputs: see order 765-mza8. Named individually, not scripts/**, so an
+# unrelated script edit does not drag this test back in.
+inputs:
+  - scripts/cycle-metrics.sh
+  - scripts/local-ci.sh
+  - scripts/run-litmus-test.sh
+  - scripts/test-build-step-timing-attribution.sh
+  - scripts/test-slowest-span-marker.sh
+  - scripts/timing-log.sh
 
 preconditions:
   - repository root contains scripts/cycle-metrics.sh

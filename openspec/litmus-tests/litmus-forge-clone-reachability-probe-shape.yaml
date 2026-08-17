@@ -5,6 +5,10 @@ phase: pre-build
 description: The forge clone reachability probe fast-fails ONLY an unresolvable mirror alias (the DOA class), names the real remedy, and defers every seed-delay case to the tolerant clone loop
 severity: high
 size: instant
+# inputs: see order 765-mza8. Every step evals probe_mirror_reachable() out of
+# this one file; nothing else can change the verdict.
+inputs:
+  - images/default/lib-common.sh
 
 # Order 691-ssw9. A forge cloned git://tillandsias-git before that alias was
 # DNS-resolvable and treated it as fatal, DOA-ing the operator's window; the

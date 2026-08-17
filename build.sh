@@ -948,6 +948,33 @@ _run_litmus_phase() {
 # lesser gate just to be allowed to push. Found by the gate refusing its own
 # release push on 2026-08-04.
 _write_gate_stamp() {
+    # Order 765-mza8 makes the `scope full` paragraph below enforceable rather
+    # than aspirational. run-litmus-test.sh drops this sentinel when it actually
+    # skipped tests under --diff-scope; if it is present, this dispatch did NOT
+    # validate the whole tree and must not say it did.
+    #
+    # Refusing to write ANY stamp is the fail-closed choice, and it is the right
+    # one: no stamp means pre-push asks for a full gate, which is exactly what a
+    # partially-verified tree needs. Downgrading to a scoped stamp would be
+    # worse — this function cannot know WHICH classes the scoped litmus run
+    # actually covered, and inventing a class list is how a stamp starts lying.
+    #
+    # FIRST, before the ghost ratchet and before the gate-stamp.sh existence
+    # check. Both can fail or return early, and either would leave the sentinel
+    # on disk to veto every LATER, legitimately-full run. The sentinel is
+    # one-shot: consuming it here is what bounds the veto to the run that
+    # earned it.
+    local _scoped_sentinel
+    _scoped_sentinel="$(git rev-parse --absolute-git-dir 2>/dev/null)/tillandsias-litmus-diff-scoped"
+    if [[ -f "$_scoped_sentinel" ]]; then
+        local _scoped_detail
+        _scoped_detail="$(cat "$_scoped_sentinel" 2>/dev/null || echo 'diff-scope')"
+        rm -f "$_scoped_sentinel" 2>/dev/null || true
+        _warn "NOT writing a gate stamp: this run's litmus lane was diff-scoped (${_scoped_detail})"
+        _warn "  A scoped run cannot vouch for the whole tree. Re-run the gate without --diff-scope before pushing."
+        return 0
+    fi
+
     [[ -f "$SCRIPT_DIR/scripts/gate-stamp.sh" ]] || return 0
 
     # Order 584-2qq2: a stamp is authority for the pre-push hook, so it must

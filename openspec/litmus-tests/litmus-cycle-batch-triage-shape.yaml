@@ -5,6 +5,10 @@ phase: pre-build
 description: One orchestration cycle selects a cohesive, budgeted, minimax-ranked batch with reproducible entropy
 severity: high
 size: instant
+# inputs: see order 765-mza8.
+inputs:
+  - methodology/distributed-work.yaml
+  - scripts/select-work-batch.sh
 
 # Order 626-* (operator directive 2026-08-09). Every step here EXECUTES the
 # selector and asserts a property of its output. None of them grep the script's
