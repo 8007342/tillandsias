@@ -219,6 +219,22 @@ pub struct Envelope {
     confidence: Confidence,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     citation_root: Option<String>,
+    /// ORDER 796-4ydb — corpus files the fold COULD NOT READ, repo-relative.
+    ///
+    /// Non-empty means this answer is drawn from a partial corpus: the named
+    /// fragments did not parse, so anything filed in them is missing from the
+    /// ledger the answer was computed against. It is deliberately NOT folded
+    /// into `confidence`. `confidence: exact` is a claim about the CITATION —
+    /// the cited span exists and says what is quoted — and that claim stays
+    /// true; the failure mode here is OMISSION, which needs its own word.
+    /// Collapsing the two would either overstate the citation's weakness or,
+    /// worse, let a caller conclude from `exact` that nothing was missed.
+    ///
+    /// ADDITIVE AND ABSENT WHEN CLEAN: a corpus that parsed whole serializes
+    /// byte-identically to before this field existed, so no consumer pinning
+    /// the envelope shape sees a change until there is something to report.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    skipped_sources: Vec<String>,
 }
 
 impl Envelope {
@@ -244,6 +260,7 @@ impl Envelope {
             freshness,
             confidence,
             citation_root: None,
+            skipped_sources: Vec::new(),
         }
     }
 
@@ -257,7 +274,26 @@ impl Envelope {
             freshness,
             confidence: Confidence::Unsupported,
             citation_root: None,
+            skipped_sources: Vec::new(),
         }
+    }
+
+    /// ORDER 796-4ydb — stamp the corpus files the fold could not read.
+    ///
+    /// Applied at EMISSION, after any downgrade to [`Envelope::unsupported`],
+    /// because the incompleteness is a property of the corpus rather than of
+    /// the answer: a refusal computed from a partial ledger is still a refusal
+    /// computed from a partial ledger, and rebuilding the envelope must not
+    /// drop that. Empty input is a no-op.
+    pub fn with_skipped_sources(mut self, skipped: Vec<String>) -> Self {
+        self.skipped_sources = skipped;
+        self
+    }
+
+    /// The corpus files that did not parse and are therefore absent from this
+    /// answer. Empty means the fold read the whole corpus.
+    pub fn skipped_sources(&self) -> &[String] {
+        &self.skipped_sources
     }
 
     pub fn with_citation_root(mut self, root: &Path) -> Self {
@@ -1998,5 +2034,61 @@ mod tests {
         ] {
             assert_eq!(iso8601_to_epoch(bad), None, "must refuse {bad:?}");
         }
+    }
+
+    // ---- ORDER 796-4ydb: the envelope reports a partial corpus -----------
+
+    #[test]
+    fn a_whole_corpus_serializes_the_envelope_exactly_as_before() {
+        // The additive half. `skipped_sources` must be ABSENT — not `[]` —
+        // when there is nothing to report, so the field costs nothing to every
+        // consumer pinning this shape until the day it matters.
+        let e = Envelope::unsupported("nothing", fresh());
+        let json = serde_json::to_string(&e).expect("serializes");
+        assert!(
+            !json.contains("skipped_sources"),
+            "clean corpus must not mention it: {json}"
+        );
+    }
+
+    #[test]
+    fn a_partial_corpus_names_what_the_fold_could_not_read() {
+        let e = Envelope::unsupported("nothing", fresh())
+            .with_skipped_sources(vec!["plan/index.d/broken.yaml".to_string()]);
+        assert_eq!(
+            e.skipped_sources(),
+            &["plan/index.d/broken.yaml".to_string()]
+        );
+        let json = serde_json::to_string(&e).expect("serializes");
+        assert!(
+            json.contains("\"skipped_sources\":[\"plan/index.d/broken.yaml\"]"),
+            "a caller must be able to read this without parsing prose: {json}"
+        );
+    }
+
+    #[test]
+    fn incompleteness_is_reported_beside_confidence_not_folded_into_it() {
+        // A DELIBERATE SEPARATION, worth pinning because collapsing it looks
+        // tidier. `confidence: exact` is a claim about the CITATION -- the
+        // cited span exists and says what is quoted -- and a skipped fragment
+        // does not falsify it. The failure mode is OMISSION, which needs its
+        // own word: downgrading to `unsupported` would withhold a correct
+        // answer, and leaving `exact` alone with no other field would let a
+        // caller conclude nothing was missed.
+        let e = Envelope::supported(
+            "alpha is ready",
+            vec![Citation::new(
+                "plan/index.yaml".to_string(),
+                1,
+                2,
+                CitationKind::Plan,
+                BTreeMap::new(),
+            )],
+            Confidence::Exact,
+            fresh(),
+        )
+        .with_skipped_sources(vec!["plan/index.d/broken.yaml".to_string()]);
+        assert_eq!(e.confidence(), Confidence::Exact);
+        assert_eq!(e.skipped_sources().len(), 1);
     }
 }
