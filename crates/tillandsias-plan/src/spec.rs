@@ -55,6 +55,7 @@ fn citation_kind_of(kind: &str) -> CitationKind {
     match kind {
         "methodology" => CitationKind::Methodology,
         "cheatsheet" => CitationKind::Cheatsheet,
+        "code" => CitationKind::Code,
         _ => CitationKind::Spec,
     }
 }
@@ -66,6 +67,20 @@ const CORPUS_ROOTS: &[(&str, &str)] = &[
     ("cheatsheets", "cheatsheet"),
     ("docs/cheatsheets", "cheatsheet"),
     ("methodology", "methodology"),
+    // Order 803-su4n. Code was the one corpus the expert could not see, and it
+    // is the corpus agents actually ask about: of the questions that consumed a
+    // whole session on macuahuitl — how the inference tier is chosen, what a
+    // podman mock returns, why a preflight conflated timeout with exec failure
+    // — every single one was code, so the L1 expert was structurally absent for
+    // exactly the class of question that cost the most hours.
+    //
+    // NOTE for anyone adding the next root: the comment above says a new corpus
+    // is "one row, not a code change". That is true for prose and FALSE for
+    // code. A bare row inherits want_ext=["md"] and chunk_markdown, so `crates`
+    // would have matched zero files and silently indexed nothing — the failure
+    // would have looked like an empty result, not an error.
+    ("crates", "code"),
+    ("scripts", "code"),
 ];
 
 /// Walk the whole-spec corpus under `root` and return every chunk. Missing
@@ -79,10 +94,10 @@ pub fn chunk_corpus(root: &Path) -> Vec<Chunk> {
         if !dir.is_dir() {
             continue;
         }
-        let want_ext: &[&str] = if *kind == "methodology" {
-            &["yaml", "yml"]
-        } else {
-            &["md"]
+        let want_ext: &[&str] = match *kind {
+            "methodology" => &["yaml", "yml"],
+            "code" => &["rs", "sh"],
+            _ => &["md"],
         };
         let mut files = walk_files(&dir, want_ext);
         files.sort(); // deterministic ordering => stable chunk ids for a given tree
@@ -91,10 +106,10 @@ pub fn chunk_corpus(root: &Path) -> Vec<Chunk> {
                 continue;
             };
             let rel = to_repo_relative(root, &file);
-            let file_chunks = if *kind == "methodology" {
-                chunk_yaml(&rel, kind, &text)
-            } else {
-                chunk_markdown(&rel, kind, &text)
+            let file_chunks = match *kind {
+                "methodology" => chunk_yaml(&rel, kind, &text),
+                "code" => chunk_code(&rel, kind, &text),
+                _ => chunk_markdown(&rel, kind, &text),
             };
             for mut c in file_chunks {
                 c.id = next_id;
@@ -257,6 +272,131 @@ fn distinctive_key(raw: &str) -> String {
         cleaned
     };
     cleaned.chars().take(80).collect()
+}
+
+/// A span longer than this is split, so one 800-line function does not become
+/// one un-embeddable chunk. The embedder truncates long inputs, so an oversized
+/// chunk silently loses its tail — and the tail is where the interesting branch
+/// usually is.
+const MAX_CODE_SPAN_LINES: usize = 120;
+
+/// Is this line the start of a named, citable code construct?
+///
+/// Deliberately LINE-BASED rather than a parse. A real parser would be more
+/// precise and would also mean this crate can never index a language it cannot
+/// parse; the corpus is a retrieval aid, not a compiler, and a boundary that is
+/// occasionally one line off still lands the reader inside the right function.
+/// The invariant that actually matters is the one `verify` depends on: the key
+/// must be a literal substring of the span it names.
+fn code_boundary(line: &str, is_rust: bool) -> bool {
+    let t = line.trim_start();
+    if is_rust {
+        // `pub`, `pub(crate)`, `async`, `unsafe`, `const`, `default` may precede.
+        let mut rest = t;
+        for prefix in [
+            "pub(crate) ",
+            "pub(super) ",
+            "pub ",
+            "default ",
+            "const ",
+            "async ",
+            "unsafe ",
+            "extern ",
+        ] {
+            while let Some(stripped) = rest.strip_prefix(prefix) {
+                rest = stripped;
+            }
+        }
+        rest.starts_with("fn ")
+            || rest.starts_with("impl ")
+            || rest.starts_with("impl<")
+            || rest.starts_with("struct ")
+            || rest.starts_with("enum ")
+            || rest.starts_with("trait ")
+            || rest.starts_with("mod ")
+            || rest.starts_with("macro_rules!")
+    } else {
+        // Shell: `name() {`, `name ()`, or `function name`.
+        if t.starts_with("function ") {
+            return true;
+        }
+        let name: String = t
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty() {
+            return false;
+        }
+        let after = t[name.len()..].trim_start();
+        after.starts_with("()")
+    }
+}
+
+/// Section chunker for CODE (order 803-su4n): each chunk spans one named
+/// construct — a Rust `fn`/`impl`/`struct`/`enum`/`trait`/`mod`, or a shell
+/// function — from its signature to the line before the next one.
+///
+/// WHY BOUNDARIES AND NOT FIXED WINDOWS. A fixed window lands citations
+/// mid-function, and a citation a reader cannot act on is the failure this
+/// packet's own scorecard recorded (Q3: right file, wrong span, and nothing in
+/// the answer signalled it). The signature line is both the boundary and the
+/// key, so every citation names the thing it points at.
+///
+/// The FILE PREAMBLE is chunked too, and that is not an afterthought: in this
+/// repo the header comment above the first function routinely carries the
+/// rationale — the order number, the incident, the reason a check exists — that
+/// nothing else in the tree records.
+pub fn chunk_code(rel_path: &str, kind: &str, text: &str) -> Vec<Chunk> {
+    let is_rust = rel_path.ends_with(".rs");
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.is_empty() {
+        return Vec::new();
+    }
+
+    let mut starts: Vec<usize> = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        if code_boundary(l, is_rust) {
+            starts.push(i);
+        }
+    }
+
+    let mut chunks = Vec::new();
+    let first = starts.first().copied().unwrap_or(lines.len());
+    if first > 0 && lines[..first].iter().any(|l| !l.trim().is_empty()) {
+        push_code_span(&mut chunks, rel_path, kind, 1, first, &lines);
+    }
+    for (idx, &s) in starts.iter().enumerate() {
+        let end = starts.get(idx + 1).copied().unwrap_or(lines.len());
+        push_code_span(&mut chunks, rel_path, kind, s + 1, end, &lines);
+    }
+    chunks
+}
+
+/// Push one code span, splitting it if it exceeds [`MAX_CODE_SPAN_LINES`].
+///
+/// Each piece takes its OWN key — the first non-blank line of that piece —
+/// rather than inheriting the signature. Inheriting would be friendlier to read
+/// and would break `verify`: the signature is not a substring of the second
+/// half, so every continuation citation would fail to resolve.
+fn push_code_span(
+    out: &mut Vec<Chunk>,
+    rel_path: &str,
+    kind: &str,
+    line_start: usize,
+    line_end: usize,
+    lines: &[&str],
+) {
+    let mut start = line_start;
+    while start <= line_end {
+        let end = std::cmp::min(start + MAX_CODE_SPAN_LINES - 1, line_end);
+        let key = lines[start - 1..end]
+            .iter()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| distinctive_key(l.trim()))
+            .unwrap_or_else(|| "section".to_string());
+        push_chunk(out, rel_path, kind, start, end, &key, lines);
+        start = end + 1;
+    }
 }
 
 fn push_chunk(
@@ -473,6 +613,104 @@ pub fn answer_cheatsheet_query(root: &Path, chunks: &[Chunk], query: &str) -> En
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The invariant `answer::verify` rests on, asserted for CODE: every chunk's
+    /// key must appear verbatim in the span it names. This is the test that
+    /// makes the long-span split safe — a continuation piece inherits no
+    /// signature, so if it ever took the parent's key this would fail.
+    #[test]
+    fn code_chunk_keys_are_in_their_span() {
+        let rust = "//! header rationale\n\nuse std::fs;\n\npub fn alpha(x: u32) -> u32 {\n    x + 1\n}\n\nimpl Beta {\n    fn inner(&self) {}\n}\n";
+        let sh = "#!/usr/bin/env bash\n# why this exists\nset -eu\n\nmain() {\n  echo hi\n}\n\nhelper () {\n  echo there\n}\n";
+        for (path, text) in [("crates/x/src/a.rs", rust), ("scripts/b.sh", sh)] {
+            let chunks = chunk_code(path, "code", text);
+            assert!(!chunks.is_empty(), "{path} produced no chunks");
+            let lines: Vec<&str> = text.lines().collect();
+            for c in &chunks {
+                let span = lines[c.line_start - 1..c.line_end].join("\n");
+                assert!(
+                    span.contains(&c.key),
+                    "{path}: key {:?} not in span {:?}",
+                    c.key,
+                    span
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn code_chunks_on_named_constructs_and_keeps_the_file_preamble() {
+        let rust = "//! header rationale worth citing\n\npub fn alpha() {}\n\nimpl Beta {\n    fn inner(&self) {}\n}\n";
+        let chunks = chunk_code("crates/x/src/a.rs", "code", rust);
+        // The preamble carries the WHY and is routinely the only place it is
+        // written down, so it must be retrievable.
+        assert!(
+            chunks.iter().any(|c| c.text.contains("header rationale")),
+            "file preamble was dropped: {:?}",
+            chunks.iter().map(|c| &c.key).collect::<Vec<_>>()
+        );
+        assert!(chunks.iter().any(|c| c.key.contains("fn alpha")));
+        assert!(chunks.iter().any(|c| c.key.contains("impl Beta")));
+
+        let sh = "#!/usr/bin/env bash\n# rationale\n\nmain() {\n  echo hi\n}\n\nfunction helper {\n  echo there\n}\n";
+        let sc = chunk_code("scripts/b.sh", "code", sh);
+        assert!(sc.iter().any(|c| c.key.contains("main()")));
+        assert!(sc.iter().any(|c| c.key.contains("function helper")));
+    }
+
+    /// NEGATIVE CONTROL for the boundary detector: prose and ordinary
+    /// statements must NOT open a chunk, or the corpus fragments into noise and
+    /// every citation lands on a random line.
+    #[test]
+    fn code_boundaries_do_not_fire_on_ordinary_lines() {
+        for line in [
+            "    let fn_name = 1;",
+            "// fn commented_out() {}",
+            "    x.impl_detail();",
+            "echo 'main() is a string'",
+            "    return 0",
+        ] {
+            assert!(
+                !code_boundary(line, true) || line.trim_start().starts_with("fn "),
+                "rust boundary fired on {line:?}"
+            );
+        }
+        assert!(!code_boundary("echo hello", false), "shell fired on echo");
+        assert!(
+            !code_boundary("  # comment", false),
+            "shell fired on comment"
+        );
+    }
+
+    /// An oversized construct is split rather than truncated by the embedder,
+    /// and the split pieces stay contiguous and in order.
+    #[test]
+    fn oversized_code_span_is_split_contiguously() {
+        let mut src = String::from("pub fn huge() {\n");
+        for i in 0..(MAX_CODE_SPAN_LINES * 2) {
+            src.push_str(&format!("    let v{i} = {i};\n"));
+        }
+        src.push_str("}\n");
+        let chunks = chunk_code("crates/x/src/h.rs", "code", &src);
+        assert!(
+            chunks.len() >= 2,
+            "expected a split, got {} chunk(s)",
+            chunks.len()
+        );
+        for w in chunks.windows(2) {
+            assert_eq!(
+                w[1].line_start,
+                w[0].line_end + 1,
+                "split left a gap or overlap"
+            );
+        }
+        for c in &chunks {
+            assert!(
+                c.line_end - c.line_start < MAX_CODE_SPAN_LINES,
+                "piece longer than the cap"
+            );
+        }
+    }
 
     #[test]
     fn markdown_chunk_keys_are_in_their_span() {

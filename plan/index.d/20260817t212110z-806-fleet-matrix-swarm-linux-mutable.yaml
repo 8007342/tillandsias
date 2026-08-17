@@ -1,0 +1,169 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T21:21:10Z.
+#
+# Operator roadmap disclosure, 2026-08-17. Records the incoming fleet shape, the
+# long-horizon swarm, and where SPIFFE/SPIRE lands — plus one packet whose
+# operator DECISION is being answered in the field rather than at the desk.
+packets:
+  - packet_id: inference-swarm-transparent-resource-pool-across-the-fleet
+    order: 806-6k6k
+    status: ready
+    desired_release: v0.7
+    priority: p2
+    kind: enhancement
+    title: "long horizon: every host's inference container becomes a transparently addressable resource, so 'all tillandsias I am logged into' is one pool — which makes the swarm and the identity plane the same problem, not two"
+    deliverable: "a design (not yet an implementation) for advertising, discovering and authorizing inference endpoints across hosts, with the near-term constraint stated: nothing in the local lane may bake in an assumption that the endpoint is loopback-only or host-local"
+    pickup_role: any
+    release_target: stable-milestone-v1
+    capability_tags: [inference, fleet, swarm, identity, long-horizon]
+    estimated_hours: 8
+    context: |
+      OPERATOR, 2026-08-17: "on the long horizon is to add all of these
+      inference containers to a swarm so 'all available tillandsias logged into
+      by me' would be available transparently as resources ... keep in mind the
+      long horizon of extensibility and make resources transparently available
+      everywhere."
+
+      THE NEAR-TERM CONSTRAINT, which is the only part that binds today. The
+      dev endpoint currently publishes to loopback by construction:
+      scripts/dev-inference-ensure.sh runs
+      `--publish "${ENDPOINT_HOST}:${ENDPOINT_PORT}:11434"` with a comment
+      saying "this endpoint is for the agent on this machine, bound to loopback
+      only". That is CORRECT for today and must not be widened casually — an
+      inference endpoint reachable off-host without authorization is a
+      capability handed to anything on the network. So the constraint is not
+      "make it remote now", it is "do not write code that can only ever be
+      loopback". Concretely: keep the endpoint's address a resolved value, not
+      a literal, and keep the tier/placement decision separable from the
+      transport.
+
+      WHY THE SWARM AND THE IDENTITY PLANE ARE ONE PROBLEM. The moment host A
+      serves inference to host B, three questions arrive together: who is
+      asking, what are they allowed to run, and how does B know A is really A.
+      Those are exactly the questions 692-zjzg (SPIFFE/SPIRE) exists to answer.
+      A swarm built on ambient trust — a shared token, an allowlisted subnet,
+      "it is on my tailnet so it is fine" — would have to be dismantled to
+      adopt SPIFFE later. So the ORDER matters: the swarm should not ship
+      before the identity plane it needs, and the identity work should be
+      sequenced knowing the swarm is its first real consumer rather than an
+      abstract aspiration.
+
+      NOT PROPOSED HERE: any transport, any discovery mechanism, any scheduler.
+      Those are the design work. This packet exists so the constraint is
+      written down before ten hosts of local-only assumptions accumulate.
+events:
+  - packet_id: spiffe-spire-identity-plane-aspiration
+    event:
+      type: note
+      ts: "2026-08-17T21:21:10Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      summary: |
+        OPERATOR SET A TARGET WINDOW, 2026-08-17: "let's plan for a later
+        release (v0.7? v0.8?) raising the bar to full SPIFFE/SPIRE
+        architecture, since it likely will be a game of whack-a-mole and
+        probably harder than it sounds."
+
+        THE WHACK-A-MOLE PREDICTION IS CORRECT AND THE MOLES ARE ENUMERABLE.
+        This is not greenfield: the project already runs an identity plane, it
+        is just several mechanisms rather than one. Vault issues and rotates;
+        the enclave CA signs TLS; there is an SSH-CA lane with per-project
+        signer roles (722-hthz) and opaque per-project hostnames (722-ft6g);
+        the mirror publishes upstream write-authorization verdicts as refs
+        (756-2jnj); forges carry an agent identity (scripts/agent-identity.sh).
+        SPIFFE would CONVERGE those onto one SVID-shaped answer rather than
+        introduce identity where there was none.
+
+        So the moles are every place that currently authorizes by something
+        other than a verified identity — a shared alias, an allowlisted
+        subnet, a token in an env var, a socket whose mere presence is taken as
+        proof (797-r6tc was exactly that shape, one level down). Each of those
+        is a conversion, and each conversion can regress a working lane. That
+        is why it is a release-scale bar raise and not a packet.
+
+        WHY THE TARGET WINDOW IS RIGHT RATHER THAN CONSERVATIVE: 806-6k6k
+        (inference swarm) is filed for the same horizon and is SPIFFE's first
+        real consumer. Doing the swarm on ambient trust first would mean
+        dismantling it later; doing SPIFFE with no consumer risks an identity
+        plane nobody exercises. They should be sequenced against each other,
+        which is an argument for planning them in the same release window even
+        if they land in different ones.
+
+        SUGGESTED FIRST RUNG WHEN THE WINDOW OPENS, cheap and diagnostic:
+        inventory every authorization decision in the tree and label each as
+        identity-based or ambient. The count of ambient ones is the size of the
+        job, and today nobody knows it. That inventory is also useful
+        immediately, independent of SPIFFE.
+  - packet_id: npu-inference-service-requires-windows-side-host-install
+    event:
+      type: note
+      ts: "2026-08-17T21:21:10Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      summary: |
+        THIS DECISION IS BEING ANSWERED IN THE FIELD, which the packet should
+        know before someone spends a cycle preparing a decision brief.
+
+        Operator, 2026-08-17: the small 4-core Windows host (Esme) installed a
+        Lemonade Server via winget, and it was subsequently seen running on
+        yolanda too. So the "whether to install a Windows-side NPU inference
+        service (Lemonade Server and/or FastFlowLM)" question has a de facto
+        answer of yes on at least two Windows hosts.
+
+        WHAT THAT CHANGES. The remaining question is no longer whether, it is
+        what the product does about a host-installed inference service it does
+        not manage: does the accel probe detect it, does the policy router get
+        to route to it, is its lifecycle ours or the operator's, and what
+        happens on a host where it is absent. A host-side service that the
+        capability document cannot see is invisible to every routing decision
+        the fleet makes — the same shape as this host running CPU-only for
+        weeks because a CDI file was missing (408).
+
+        NOT CLAIMED: I have not seen either host's capability output, and I do
+        not know whether Lemonade is serving the NPU or the iGPU there. Yolanda
+        and Esme own that measurement. Flagging it so the operator-decision
+        framing does not outlive its usefulness.
+  - packet_id: hardware-fingerprint-makes-the-twin-hosts-a-substrate-control
+    event:
+      type: note
+      ts: "2026-08-17T21:21:10Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      summary: |
+        THE INCOMING FLEET, from the operator 2026-08-17, and what it does to
+        this packet's design.
+
+        Known or announced: macuahuitl (Core Ultra 7 265KF, 20 cores, RTX A5000
+        24 GiB, Intel NPU, 62 GiB) — the ceiling. yolanda (windows) and yoga
+        (silverblue) — the TWIN PAIR, near-identical hardware, differing only
+        in OS and container substrate. Esme and Pirria — low-end 4-core, one
+        windows one silverblue, i.e. a SECOND twin pair at the floor. A
+        12-year-old 8 GiB silverblue laptop. A 3-year-old silverblue laptop
+        with an RTX 3070. A macOS host with an M5. Possibly a small Mac for the
+        low tier.
+
+        TWO TWIN PAIRS, NOT ONE, and that is better than it sounds: a
+        high-spec pair and a low-spec pair, each isolating the substrate
+        variable at a different point on the curve. If WSL2 costs the NPU lane
+        on the fat pair but not the thin one (or vice versa) that is a
+        finding no single host could produce.
+
+        THE MATRIX IS A CRDT — operator's framing, and it has a hard design
+        consequence this packet must absorb. A CRDT needs a MERGE that is
+        associative, commutative and idempotent, so N hosts publishing without
+        coordination converge to the same matrix regardless of arrival order.
+        Two rules follow:
+          * A host may only ever write its OWN row. Never infer or overwrite
+            another host's capability from your own (I did exactly that
+            inference error today, calling yoga the LOW tier from its OS
+            alone).
+          * Disagreement must be REPRESENTABLE, not resolved by last-writer.
+            If two same-fingerprint hosts report different accel_npu verdicts,
+            that divergence IS the substrate finding — a merge that picks a
+            winner destroys the experiment. Same discipline as the ledger's
+            G-Set: add, never clobber.
+        Monotonic reduction of uncertainty means rows get MORE determined over
+        time (unknown -> measured), never flip-flop between hosts.
+
+        SO THE FINGERPRINT THIS PACKET ASKS FOR IS THE CRDT'S KEY. Without it
+        rows cannot be grouped and the twin pairs are just more hosts.
