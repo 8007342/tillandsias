@@ -49,7 +49,6 @@ building_one = "Wird erstellt: {image} …"
 building_many = "Wird erstellt: {images} …"
 ready_one = "{image} OK"
 environment_ready = "✅ Umgebung bereit"
-ready = "{image} bereit"
 github_unreachable = "GitHub nicht erreichbar — verwende Cache"
 separator = " · "
 

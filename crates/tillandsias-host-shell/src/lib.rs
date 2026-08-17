@@ -15,6 +15,34 @@
 #![allow(dead_code)]
 
 pub mod lifecycle;
+
+/// Shared tray strings, generated from `locales/en.toml` at build time
+/// (792-cf5x, first slice of 628-c7qd).
+///
+/// Nothing resolves through this module yet — converting call sites is a
+/// later slice, and deliberately so: every user-visible byte in the trays
+/// must move under the byte-identical rule, and the corpus does not yet
+/// agree with what ships (only 9 of 168 keys render verbatim today, which
+/// is what 792-77bt exists to fix). The generator ships first so the
+/// mechanism is proven and gated before any string moves.
+///
+/// Runtime locale SELECTION is not here either, and that is a recorded
+/// deferral rather than an oversight: shipping all 17 locales embeds
+/// ~177 KB into a 3.8 MB binary (+4.8%), which is a product decision, and
+/// `locales/` reaches no artifact today. The `en` consts cost ~11 KB and
+/// carry the build-time gate on their own.
+pub mod locale_strings {
+    include!(concat!(env!("OUT_DIR"), "/locale_strings_generated.rs"));
+}
+
+/// A corpus that silently collapsed — truncated file, a parse that yielded
+/// nothing — must not build. This is a CONST assertion on purpose: it fails
+/// at compile time, so an empty string layer is unrepresentable rather than
+/// merely detectable by a test someone has to run (792-cf5x).
+const _: () = assert!(
+    locale_strings::EN_KEY_COUNT > 100,
+    "locales/en.toml collapsed: the generated string layer has almost no keys"
+);
 pub mod menu_action;
 pub mod menu_state;
 pub mod provisioning;
@@ -48,6 +76,56 @@ pub mod vsock_client;
 /// @trace spec:vm-provisioning-lifecycle, spec:tray-app
 pub fn version() -> &'static str {
     env!("WORKSPACE_VERSION")
+}
+
+#[cfg(test)]
+mod locale_strings_tests {
+    use super::locale_strings;
+
+    /// 792-cf5x: the generated layer carries the values `en.toml` actually
+    /// holds. (Non-emptiness is enforced one level up by a const assertion,
+    /// which fails the BUILD rather than a test run.)
+    #[test]
+    fn generated_layer_carries_the_en_corpus() {
+        assert_eq!(locale_strings::APP_NAME, "Tillandsias");
+        // A key whose value contains an emoji and a placeholder, to prove the
+        // escaper round-trips both.
+        assert_eq!(locale_strings::MENU_SIGN_IN_GITHUB, "🔑 GitHub Login");
+        assert_eq!(locale_strings::MENU_STATUS_READY_ONE, "{image} OK");
+    }
+
+    /// 792-cf5x: a SPARSE locale must not fail the build — only an EXTRA key
+    /// may. 14 of the 17 locales are ~25 keys behind `en` and fall back to
+    /// it; a gate that demanded full coverage would fail on day one and be
+    /// switched off within the hour.
+    ///
+    /// This test asserts the policy from the other side: the build you are
+    /// running right now succeeded, and the corpus it read is provably
+    /// sparse. If someone tightens the generator to require coverage, the
+    /// build breaks before this test can even run — which is the loudest
+    /// possible signal, and why this reads as a comment-with-teeth rather
+    /// than a runtime assertion.
+    #[test]
+    fn sparse_locales_are_normal_and_do_not_break_the_build() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../locales");
+        let count_keys = |name: &str| -> usize {
+            let src = std::fs::read_to_string(dir.join(name)).unwrap_or_default();
+            src.lines()
+                .filter(|l| {
+                    let t = l.trim_start();
+                    !t.starts_with('#') && !t.starts_with('[') && t.contains(" = ")
+                })
+                .count()
+        };
+        let en = count_keys("en.toml");
+        let fr = count_keys("fr.toml");
+        assert!(en > 0 && fr > 0, "both corpora must parse");
+        assert!(
+            fr < en,
+            "fr.toml is expected to be sparse relative to en.toml (fr={fr}, en={en}); \
+             if it caught up, this test is stale rather than wrong"
+        );
+    }
 }
 
 #[cfg(test)]
