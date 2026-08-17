@@ -55973,6 +55973,12 @@ plan_index:
             Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
 
       events:
+        - type: completed
+          ts: "2026-08-17T06:28:10Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            All three criteria met. (1) The guard now PROBES the running mirror image and names the cause instead of prescribing one remedy: probe-absent says rebuilding does not help and you need a build/release carrying probe-upstream-auth.sh, and adds the distinction the 05:24Z lane demonstrated — the relay still ACCEPTS pushes, so this blocks worker drain, not fail-loud bookkeeping; probe-present says the probe exists but is not publishing, so restart and read its logs then suspect the Vault token; uninspectable says so rather than guessing. All on stderr, so the single-line stdout grammar pinned by litmus:credential-channel-check-shape is unchanged (b9ef795e0, meta-orchestration instant suite green). This matters because agents were reading the old remedy straight out of the message and regenerating it verbatim as their own next action. (2) scripts/check-guard-asset-skew.sh reports the mismatch DIRECTLY as a version skew (ee069bc99): it compares the checkout's images/ against the same tree materialized from the installed binary, for a short list of assets a guard actually depends on — deliberately not a general diff, since images/ runs ahead of the last release constantly. Advisory, exit 0 always, wired into cycle-preflight on stderr with the verdict line and 8-field arity unchanged. Selftest 3/3 including the control that the REVERSE case (asset in the runtime but not the checkout) is NOT a skew but a retired rule. Live on this host it correctly reports skew:guard-asset-missing:upstream-auth-probe. (3) The fleet note is recorded across this packet's events, including the correction that the exposure is 'cannot drain work' rather than 'lanes are dead'. What remains is not implementable by any host: cutting a release that contains the probe, which is the operator's.
         - type: note
           ts: "2026-08-17T05:33:17Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
