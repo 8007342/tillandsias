@@ -95,7 +95,44 @@ forge_upstream_auth_verdict() {
     fi
   done <<< "$auth_lines"
   if [ -z "$best_state" ]; then
-    echo "[check-credential-channel] The git mirror is reachable but publishes NO upstream write-authorization verdict (refs/tillandsias/upstream-auth/*). Either the mirror image predates probe-upstream-auth (restart/rebuild the tillandsias-git container) or its probe is failing — authorization is UNPROVEN, so worker drain must not start (order 756-2jnj)." >&2
+    # Order 783-6rik: DISTINGUISH the two causes, because the obvious
+    # remediation is futile for one of them and every host that follows it
+    # wastes a cycle discovering that.
+    #
+    # If the running mirror image simply has no probe, "rebuild the container"
+    # only works when the rebuild can SEE a probe — i.e. when the running
+    # binary's embedded assets carry one. A host on a release older than the
+    # probe rebuilds from those embedded assets and gets another probe-less
+    # image, overwriting any image built by hand from the checkout (measured
+    # on yoga 2026-08-17: a checkout build was replaced by the tray's within
+    # 30 seconds). Telling that host to rebuild is telling it to repeat what
+    # just failed.
+    #
+    # So probe the image directly and say which case this host is in.
+    _ccc_probe_present="unknown"
+    if command -v podman >/dev/null 2>&1; then
+      _ccc_img="$(podman ps --filter 'name=tillandsias-git' --format '{{.Image}}' 2>/dev/null | head -1)"
+      if [ -n "$_ccc_img" ]; then
+        if podman run --rm --entrypoint ls "$_ccc_img" /usr/local/share/git-service/ 2>/dev/null |
+            grep -q '^probe-upstream-auth'; then
+          _ccc_probe_present="yes"
+        else
+          _ccc_probe_present="no"
+        fi
+      fi
+    fi
+    echo "[check-credential-channel] The git mirror is reachable but publishes NO upstream write-authorization verdict (refs/tillandsias/upstream-auth/*). Authorization is UNPROVEN, so worker drain must not start (order 756-2jnj)." >&2
+    case "$_ccc_probe_present" in
+      no)
+        echo "[check-credential-channel] CAUSE: the running mirror image carries NO probe-upstream-auth, so it CANNOT publish a verdict. If this host runs a published release older than the probe, rebuilding the container does NOT help — the tray rebuilds the image from the assets embedded in the installed binary and overwrites any hand-built image (order 783-6rik). Remedy: install a build/release that contains images/git/probe-upstream-auth.sh. Note the mirror relay still ACCEPTS pushes, so this blocks worker drain, not fail-loud bookkeeping." >&2
+        ;;
+      yes)
+        echo "[check-credential-channel] CAUSE: the running mirror image HAS probe-upstream-auth, so the probe is present but not publishing — it is failing or has not run. Remedy: restart the tillandsias-git container and inspect its logs; if it still publishes nothing, repair the mirror's Vault GitHub token." >&2
+        ;;
+      *)
+        echo "[check-credential-channel] CAUSE: could not inspect the mirror image (no podman, or no running tillandsias-git). Check whether the image carries images/git/probe-upstream-auth.sh before rebuilding anything (order 783-6rik)." >&2
+        ;;
+    esac
     echo "blocked:upstream-auth-unpublished"
     return 1
   fi
