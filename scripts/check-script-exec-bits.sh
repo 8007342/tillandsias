@@ -40,7 +40,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
 # Files that EXECUTE things. Prose is deliberately excluded — see above.
-caller_files="$(git ls-files 'scripts/*.sh' 'build.sh' 'skills/*/SKILL.md' 'openspec/litmus-tests/*.yaml' 2>/dev/null)"
+# `.github/workflows/*.yml` joined the set with order 770-dyqr: CI runs scripts
+# by path too, and a bare invocation there fails in a lane no local gate walks.
+# (`.claude/skills/*` needs no entry — those paths are symlinks, mode 120000,
+# pointing at the `skills/*/SKILL.md` already covered here.)
+caller_files="$(git ls-files 'scripts/*.sh' 'build.sh' 'skills/*/SKILL.md' 'openspec/litmus-tests/*.yaml' '.github/workflows/*.yml' 2>/dev/null)"
 if [ -z "$caller_files" ]; then
     echo "ok:script-exec-bits:0 checked"
     echo "  note: no caller files found (not a git checkout?)" >&2
@@ -99,7 +103,7 @@ if [ "${#candidates[@]}" -gt 0 ]; then
     # each candidate — so this only has to be a superset.
     alt="$(printf '%s|' "${candidates[@]}")"; alt="${alt%|}"
     printf '%s\n' "$caller_files" \
-        | xargs -r grep -nHE "((^|[;&|(])[[:space:]]*\"?(${alt}))|(\\\$\\([[:space:]]*\"?(${alt}))" \
+        | xargs -r grep -nHE "((^|[;&|(])[[:space:]]*\"?(${alt}))|(\\\$\\([[:space:]]*\"?(${alt}))|(command:[[:space:]]*\"?(${alt}))" \
             > "$_eb_tmp/hits" 2>/dev/null
 
     while IFS=$'\t' read -r path hit; do
