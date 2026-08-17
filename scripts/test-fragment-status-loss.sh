@@ -295,6 +295,80 @@ else
     echo "ok: real binary uses the batched fold"
 fi
 
+# ── 10. 785-sqe6 MUTATION: an events-ONLY fragment is still examined ────────
+# THE REGRESSION THIS PACKET CLOSES. An early exit used to fire when no
+# fragment declared a (packet_id, status) pair, which made the closure-event
+# pass unreachable on exactly the shape `append-event` produces: an `events:`
+# append with no `packets:` block. The gate printed `0 checked` and exit 0
+# while pass two had never run.
+S="$TDIR/eventsonly"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+events:
+  - packet_id: alpha-packet
+    event:
+      type: completed
+      ts: "2026-08-17T03:10:00Z"
+      host: fixture
+      summary: "closed via append-event; no packets block, no status entry"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "MUTATION events-only fragment still refuses" 1 \
+    "alpha-packet: has a 'completed' EVENT but folds as 'ready'" "$rc" "$out"
+
+# ── 11. 785-sqe6 NEGATIVE CONTROL: events-only against a fold that took it ──
+# The same fragment shape must PASS when the transition really happened —
+# otherwise scenario 10 would be satisfied by a gate that refuses every
+# events-only fragment on sight.
+S="$TDIR/eventsonly-ok"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+status:
+  - packet_id: alpha-packet
+    field: status
+    value: completed
+    ts: "2026-08-17T03:11:00Z"
+    host: fixture
+
+events:
+  - packet_id: alpha-packet
+    event:
+      type: completed
+      ts: "2026-08-17T03:11:00Z"
+      host: fixture
+      summary: closed WITH the status LWW entry beside it
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "events-only fragment whose transition landed passes" 0 \
+    "ok:no-fragment-status-loss:" "$rc" "$out"
+if printf '%s' "$out" | grep -qE '^ok:no-fragment-status-loss:0 checked$'; then
+    echo "FAIL: events-only pass reported 0 checked — the event pass did not run" >&2
+    fail=1
+else
+    echo "ok: the events-only examination is visible in the checked count"
+fi
+
+# ── 12. 785-sqe6 CONTROL: genuinely nothing to examine stays fast and quiet ──
+# The early exit was not wrong to exist, only wrong to depend on `declared`.
+# A fragment set with neither declarations nor closure events must still be a
+# silent `0 checked`, and so must an empty fragment directory.
+S="$TDIR/nothing"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+events:
+  - packet_id: alpha-packet
+    event:
+      type: progress
+      ts: "2026-08-17T03:12:00Z"
+      host: fixture
+      summary: progress is not a closure
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "no declarations and no closure events passes as 0 checked" 0 \
+    "ok:no-fragment-status-loss:0 checked" "$rc" "$out"
+
+S="$TDIR/emptydir"; sandbox "$S"
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "empty fragment directory passes as 0 checked" 0 \
+    "ok:no-fragment-status-loss:0 checked" "$rc" "$out"
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fragment-status-loss scenarios passed"
     exit 0

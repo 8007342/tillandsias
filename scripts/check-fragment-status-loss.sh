@@ -38,6 +38,16 @@ cd "$ROOT" || exit 2
 FRAG_DIR="plan/index.d"
 [ -d "$FRAG_DIR" ] || { echo "ok:no-fragment-status-loss:0 checked"; exit 0; }
 
+# FAST PATH: no fragment files at all means neither pass below has anything to
+# examine, and this guard runs on every `./build.sh --check`. Kept as a literal
+# file test rather than deferring to the passes so the freshly-compacted
+# checkout — the common case — costs no subprocess at all.
+frag_present=0
+for _f in "$FRAG_DIR"/*.yaml; do
+    [ -f "$_f" ] && { frag_present=1; break; }
+done
+[ "$frag_present" -eq 1 ] || { echo "ok:no-fragment-status-loss:0 checked"; exit 0; }
+
 # One probe, shared with every script that needs the binary (704-zcgi), and it
 # resolves by EXECUTION (721-nyev): an executable BIT is a claim; RUNNING the
 # binary is evidence. On a shared Windows/WSL checkout a WSL build leaves a
@@ -54,7 +64,9 @@ declared="$(awk '
     /^    status:/    { if (pid != "" && st == "") { st = $2; print pid "\t" st; pid = "" } }
 ' "$FRAG_DIR"/*.yaml 2>/dev/null | sort -u)"
 
-[ -n "$declared" ] || { echo "ok:no-fragment-status-loss:0 checked"; exit 0; }
+# NOTE (order 785-sqe6): there is deliberately NO early exit here. See the
+# independence guard below the event pass for why an empty `declared` must not
+# short-circuit this script.
 
 # SECOND CLASS: a terminal EVENT with no matching status transition.
 #
@@ -100,6 +112,24 @@ else
     echo "  note: $PLAN predates fragment-terminal-events — closure-event pass SKIPPED (rebuild with 'cargo build --release -p tillandsias-plan')" >&2
 fi
 
+# ── THE TWO PASSES ARE INDEPENDENT (order 785-sqe6) ─────────────────────────
+#
+# An early exit used to sit above the event pass: "no (packet_id, status) pair
+# declared under `packets:`, therefore nothing to check, exit 0". It made the
+# closure-event pass UNREACHABLE on exactly the fragment shape most likely to
+# carry the defect that pass was written for — a pure `events:` append, which
+# is what `append-event` produces and what a set-field/append-event cycle emits
+# by default. The verdict printed `ok:no-fragment-status-loss:0 checked` while
+# the second pass had never run: this guard's own failure class (an unexamined
+# ledger reported as clean), reintroduced by a short-circuit.
+#
+# Only genuinely-nothing-to-examine exits early now. A fragment set carrying
+# events and no declarations reaches the join below, which is the whole point.
+if [ -z "$declared" ] && [ -z "$declared_events" ]; then
+    echo "ok:no-fragment-status-loss:0 checked"
+    exit 0
+fi
+
 # ── THE FOLD, READ ONCE (order 783-xyk5) ────────────────────────────────────
 #
 # Both passes above ask the same question of the same fold: "what status does
@@ -137,9 +167,19 @@ if [ -z "$status_map" ]; then
 fi
 
 # One awk pass joins the map against both declaration classes. Rows are tagged
-# M/D/E so the map is loaded before either comparison; `checked` counts D rows
-# only (pass one), exactly as the per-packet loop did, and a packet absent from
-# the map is skipped exactly as an empty `status` result was. Terminal-set
+# M/D/E so the map is loaded before either comparison, and a packet absent from
+# the map is skipped exactly as an empty `status` result was.
+#
+# `checked` counts DISTINCT packet_ids examined by EITHER pass (order
+# 785-sqe6); it counted pass-one rows only while pass two could not run without
+# pass one. Now that an events-only fragment set is examined, a D-only counter
+# would report `0 checked` for a run that really did check something — a
+# smaller version of the same misreport this packet closes. Distinct-by-pid
+# rather than row-summed so a packet carrying both a declaration and a closure
+# event counts once: the number answers "how many packets did I examine",
+# which is how every loop-status entry has read it. An examination ATTEMPT
+# counts whether or not the packet resolves in the fold, exactly as the
+# per-packet loop counted before its `status` lookup. Terminal-set
 # membership is the resolver's (is_terminal_status, 650-dq6u) — a guard laxer
 # OR wider than the resolver is decorative (649-b2e4). Pass-one violations are
 # emitted before event violations, preserving the report's original order.
@@ -152,7 +192,7 @@ join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
         $1 == "D" {
             pid = $2; want = $3
             if (pid == "") next
-            checked++
+            if (!(pid in seen)) { seen[pid] = 1; checked++ }
             if (!(pid in st)) next
             got = st[pid]
             if (got == want) next
@@ -167,6 +207,7 @@ join_out="$( { printf '%s\n' "$status_map"      | sed 's/^/M\t/'
         $1 == "E" {
             pid = $2
             if (pid == "") next
+            if (!(pid in seen)) { seen[pid] = 1; checked++ }
             if (!(pid in st)) next
             got = st[pid]
             # A completed EVENT legitimately pairs with ANY closure-ladder
