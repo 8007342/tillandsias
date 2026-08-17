@@ -1155,6 +1155,22 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
     # right: a name assembled at runtime is invisible to `grep` for a human
     # reader too, and "who calls this guard?" must stay answerable by search.
     log_section "Recently Landed Guards"
+    # 792-77bt (windows lane). A REPORT, not a pass/fail gate: it prints the
+    # tray string-corpus drift ratio and exits 0 whatever the ratio is, so it
+    # is wired to surface the number, not to fail on it. Wired here because
+    # the activation audit correctly flagged it as an orphan the moment it
+    # landed — an unwired guard is inert, and inert is the 599-4wzr class.
+    # The packet is windows-owned; if they give it a fail threshold, this
+    # block should move to the tracked-failure shape the others use.
+    if [[ -f "scripts/check-tray-string-corpus-drift.sh" ]]; then
+        bash scripts/check-tray-string-corpus-drift.sh 2>&1 | tee /tmp/tray-string-corpus-drift.log || true
+        log_pass "Tray string-corpus drift reported (792-77bt, informational)"
+        archive_check_log "tray-string-corpus-drift" "pass" /tmp/tray-string-corpus-drift.log
+    else
+        log_fail_missing_guard "tray-string-corpus-drift" "scripts/check-tray-string-corpus-drift.sh"
+        archive_check_log "tray-string-corpus-drift" "skipped"
+    fi
+
     if [[ -f "scripts/check-cheatsheet-frontmatter.sh" ]]; then
         if bash scripts/check-cheatsheet-frontmatter.sh 2>&1 | tee /tmp/cheatsheet-frontmatter.log; then
             log_pass "Cheatsheet frontmatter valid"

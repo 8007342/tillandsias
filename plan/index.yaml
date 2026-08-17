@@ -53016,6 +53016,13 @@ plan_index:
         - 'The post-VERSION-bump sidecar rebuild appears as a named slowest-step candidate in the timing: rolling line'
         - No gate exit code changes under fault injection (timing sink unwritable)
 
+      events:
+        - type: note
+          ts: "2026-08-17T08:32:33Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T083232Z"
+          host: linux_mutable
+          summary: |
+            Measurement-discipline lesson from the 765-mza8 fork, recorded against the telemetry packet because it is about how to READ these records. That fork ranked annotation targets by MAX duration across telemetry history and was misled: mirror-sshd-posture-shape ranked second at 79.7s, but that sample was a cold run rebuilding the git image and its steady-state cost is 1.9s, so annotating it bought almost nothing. Rank by a percentile, not a maximum — a max is a measurement of the worst environment the test ever met, not of the test. Related and already recorded on 785-ibu9: the same trap in the other direction, where a step record spanned banner-to-banner and looked like one step-s cost.
     - packet_id: gate-stamp-scope-awareness
       order: 765-dt8h
       status: ready
@@ -53064,6 +53071,13 @@ plan_index:
         - 'Measured: in-loop --ci-full pre-build litmus drops from ~254s to a diff-proportional cost on a plan-only tree, with the skip ledger naming every scoped-out test'
         - e2e/runtime tests remain unannotated (their input is the built product)
 
+      events:
+        - type: note
+          ts: "2026-08-17T08:32:32Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T083232Z"
+          host: linux_mutable
+          summary: |
+            Integrated on linux-next 2026-08-17, with the two tests scoping HID re-checked: cycle-batch-triage-shape and guest-container-metrics-wire-shape both pass 100% now, so they were transient (the plus-or-minus-3 FAIL variance this fork itself flagged), not standing trunk reds. That does not soften the finding — scoping hid genuinely-red tests on its first measured use, which is exactly the cost this mechanism trades for speed, and it is why the gate-stamp veto and the 24h full-run ratchet are load-bearing rather than belt-and-braces. Verified here: diff-scope fixtures green, dead-inputs guard ok at 51 globs across 11 annotated tests, and the veto lives at build.sh:973 as the FIRST statement of the stamp function (the fork caught its own ordering bug there — placed after the ghost-trace ratchet, an early return would have stranded the one-shot sentinel and wedged the gate for every later full run). Also wired check-tray-string-corpus-drift.sh, which arrived orphaned via the same merge (792-77bt, windows-owned): it is a REPORT that exits 0 whatever the ratio, so it is wired to surface the number rather than fail on it; activation audit back to 47/47, orphan 0.
     - packet_id: build-check-stamp-memoization
       order: 765-tkq2
       status: ready
