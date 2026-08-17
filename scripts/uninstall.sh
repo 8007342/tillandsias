@@ -3,8 +3,17 @@
 # @trace spec:app-lifecycle
 set -euo pipefail
 
-if [[ "$(uname -s)" == "Darwin" ]]; then
-    INSTALL_DIR="/usr/local/bin"
+# Seams, for the fixture only (804-bpke). Both default to the shipped values, so
+# a real uninstall is unchanged. They exist because this script removes paths
+# OUTSIDE $HOME (/usr/local/bin) and branches on uname, so a test that could not
+# redirect those two things would have to either skip the macOS arm or delete a
+# real installed binary to run.
+_uname_s="${TILLANDSIAS_UNINSTALL_FAKE_UNAME:-$(uname -s)}"
+
+IS_MACOS=false
+if [[ "$_uname_s" == "Darwin" ]]; then
+    IS_MACOS=true
+    INSTALL_DIR="${TILLANDSIAS_UNINSTALL_INSTALL_DIR:-/usr/local/bin}"
     LIB_DIR="$HOME/Library/Application Support/tillandsias/lib"
     DATA_DIR="$HOME/Library/Application Support/tillandsias"
     CONFIG_DIR="$HOME/Library/Application Support/tillandsias"
@@ -44,9 +53,16 @@ echo ""
 [ -f "$INSTALL_DIR/tillandsias" ] && echo "    - $INSTALL_DIR/tillandsias (app binary)"
 [ -f "$INSTALL_DIR/tillandsias-uninstall" ] && echo "    - $INSTALL_DIR/tillandsias-uninstall (uninstaller)"
 [ -d "$LIB_DIR" ] && echo "    - $LIB_DIR/ (libraries)"
-[ -d "$DATA_DIR" ] && echo "    - $DATA_DIR/ (app data)"
-[ -d "$CONFIG_DIR" ] && echo "    - $CONFIG_DIR/ (settings)"
-[ -d "$LOG_DIR" ] && echo "    - $LOG_DIR/ (logs)"
+# 804-bpke: on macOS DATA_DIR is the VM home and is preserved without --wipe,
+# so it must not be listed as "will be removed" on that path — the preamble is
+# the only warning the user gets, and there is no confirmation prompt.
+if [[ "$IS_MACOS" == true && "$WIPE" != true ]]; then
+    [ -d "$LOG_DIR" ] && echo "    - $LOG_DIR/ (logs)"
+else
+    [ -d "$DATA_DIR" ] && echo "    - $DATA_DIR/ (app data, including the VM image)"
+    [ -d "$CONFIG_DIR" ] && echo "    - $CONFIG_DIR/ (settings)"
+    [ -d "$LOG_DIR" ] && echo "    - $LOG_DIR/ (logs)"
+fi
 if [[ "$IS_ROOT" == true ]]; then
     [ -f "$SYSTEMD_USER_UNIT_DIR/tillandsias.service" ] && echo "    - $SYSTEMD_USER_UNIT_DIR/tillandsias.service (systemd user service)"
     [ -f "$SYSUSERS_DIR/tillandsias.conf" ] && echo "    - $SYSUSERS_DIR/tillandsias.conf (service account sysusers entry)"
@@ -70,10 +86,39 @@ rm -f "$INSTALL_DIR/tillandsias" "$INSTALL_DIR/tillandsias-uninstall"
 rm -rf "$LIB_DIR"
 
 # ── Remove bundled data (flake, scripts, images) ──────────────
-rm -rf "$DATA_DIR"
+# Order 804-bpke. On LINUX the six directories above are six distinct XDG
+# paths, and DATA_DIR really is bundled data (flake, scripts, images) — cheap
+# to reinstall, correct to remove unconditionally. On macOS THREE OF THEM
+# COLLAPSE ONTO ONE PATH: LIB_DIR is a subdirectory of DATA_DIR, CONFIG_DIR is
+# byte-identical to it, and the same directory is where the VM lives —
+# vz.rs's image_root, holding rootfs.img. So this one line, written for the
+# Linux meaning, deleted the entire VM.
+#
+# Measured on a macOS dev host 2026-08-17: DATA_DIR 11.83 GiB actual
+# (rootfs.img 11.33 GiB actual / 250 GiB apparent, sparse), against a
+# CACHE_DIR of 8 KB. The script then printed "Cache preserved. Use --wipe to
+# remove everything." — so the default path destroyed ~11.8 GiB and reported
+# preservation, while opting in to "remove everything" added 8 KB. Re-creating
+# it costs a ~2.47 GB mandatory re-download (ollama engine payload + model +
+# Fedora base) before the guest can serve a token again.
+#
+# The default therefore preserves the VM on macOS and --wipe removes it, which
+# is what the closing message has always promised. Linux behaviour is
+# unchanged: there DATA_DIR holds no VM.
+if [[ "$IS_MACOS" == true && "$WIPE" != true ]]; then
+    echo "  Preserving the VM image in $DATA_DIR (use --wipe to remove it)."
+else
+    rm -rf "$DATA_DIR"
+fi
 
 # ── Remove settings ───────────────────────────────────────────
-rm -rf "$CONFIG_DIR"
+# On macOS CONFIG_DIR == DATA_DIR, so removing it unconditionally would undo
+# the preservation above. Same guard, same reason.
+if [[ "$IS_MACOS" == true && "$WIPE" != true ]]; then
+    :
+else
+    rm -rf "$CONFIG_DIR"
+fi
 
 # ── Remove logs ───────────────────────────────────────────────
 rm -rf "$LOG_DIR"
@@ -134,12 +179,30 @@ echo "  Uninstall complete. The following were removed:"
 echo ""
 echo "    - App binary"
 echo "    - Libraries"
-echo "    - App data"
-echo "    - Settings"
-echo "    - Logs"
-echo "    - Desktop launcher"
+# 804-bpke: report what this run actually did, per platform and per mode.
+if [[ "$IS_MACOS" == true && "$WIPE" != true ]]; then
+    echo "    - Logs"
+    echo "    - Desktop launcher"
+else
+    echo "    - App data"
+    echo "    - Settings"
+    echo "    - Logs"
+    echo "    - Desktop launcher"
+fi
 [[ "$WIPE" == true ]] && echo "    - Cache and container images"
+if [[ "$IS_MACOS" == true && "$WIPE" == true ]]; then
+    echo "    - VM image ($DATA_DIR)"
+fi
 echo ""
 echo "  Your project files were NOT touched."
-[[ "$WIPE" != true ]] && echo "  Cache preserved. Use --wipe to remove everything."
+# 804-bpke: name what was actually preserved. The old unconditional line said
+# "Cache preserved" on a macOS run that had just deleted the VM — the one
+# expensive thing on the disk — while the cache it named was 8 KB.
+if [[ "$WIPE" != true ]]; then
+    if [[ "$IS_MACOS" == true ]]; then
+        echo "  VM image, settings and cache preserved. Use --wipe to remove everything."
+    else
+        echo "  Cache preserved. Use --wipe to remove everything."
+    fi
+fi
 echo ""
