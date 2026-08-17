@@ -3300,6 +3300,26 @@ fn read_and_handover_root_token(_debug: bool) -> Result<String, String> {
     Err("vault feature not compiled".into())
 }
 
+pub(crate) fn container_exit_state(name: &str) -> Option<(String, i64)> {
+    let out = podman_cmd_sync()
+        .args([
+            "inspect",
+            "--format",
+            "{{.State.Status}} {{.State.ExitCode}}",
+            name,
+        ])
+        .output_bounded(tillandsias_podman::OperationKind::Inspect.default_budget())
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&out.stdout);
+    let mut parts = raw.split_whitespace();
+    let status = parts.next()?.to_string();
+    let code = parts.next()?.parse::<i64>().ok()?;
+    Some((status, code))
+}
+
 pub(crate) fn container_running(name: &str) -> bool {
     let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])
