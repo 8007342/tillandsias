@@ -1,0 +1,164 @@
+packets:
+  - packet_id: tray-string-layer-generated-const-gate
+    order: 792-cf5x
+    release_target: stable-milestone-v1
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: enhancement
+    title: 'Slice 1 of 628-c7qd: stand up the generated-const string layer in host-shell with a genuinely build-failing missing-key gate — zero call sites converted'
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - host-shell
+      - i18n
+      - build
+    context: |
+      First executable slice of 628-c7qd, sized from measurement (see that
+      packet's 2026-08-17 measurement event for the numbers and the
+      refutations that reshaped it).
+
+      Why this slice first: it proves the mechanism before a single
+      user-visible byte moves, and it is the only part of 628-c7qd with no
+      UX blast radius at all.
+
+      MEASURED CONSTRAINTS that decide the design:
+        - locales/*.toml ships in ZERO artifacts today (macOS .app carries 7
+          files, 0 *.toml; the windows staging carries the exe + 3 .ps1; the
+          Linux embedded asset table has 411 entries, 0 from locales/). So
+          runtime file loading is not viable anywhere without a packaging
+          change on all three release scripts. Compile-time embedding is the
+          right call, not merely the convenient one — and on macOS the bundle
+          is codesigned --deep --strict, so any added Resources file must
+          precede signing.
+        - tillandsias-host-shell ALREADY has a build.rs (reads ../../VERSION)
+          and toml 0.8.2 is ALREADY in its build graph via tillandsias-core:
+          `toml = { workspace = true }` costs 0 new crates and 0 lockfile
+          churn. Cargo.lock carries BOTH 0.8.2 and 1.1.2 — a bare `toml = "1"`
+          would pull the wrong one, so it must go through the workspace pin.
+        - The repo already contains the counterexample for doing this as a
+          test: scripts/test-locale-coverage.sh passes, covers only the .sh
+          corpus for 4 locales, and is wired into NO gate (zero hits in
+          build.sh, local-ci.sh, .github/workflows). A test nobody runs is
+          not a gate.
+    exit_criteria:
+      - host-shell's existing build.rs emits a generated consts module from locales/en.toml into OUT_DIR, with cargo:rerun-if-changed on that file
+      - deleting a key from locales/en.toml makes `cargo check -p tillandsias-host-shell` FAIL (name resolution or build-script refusal), and restoring it makes it green — demonstrated, not asserted
+      - a key missing from a NON-en locale does NOT fail the build (14 of 17 locales are ~25 keys behind en today and would fail permanently on day one); fallback-to-en is the majority path and is tested
+      - zero call sites converted in this slice, so no user-visible byte can move
+    verifiable_closure: |
+      The delete-a-key/restore demonstration is recorded with both verdicts,
+      and `cargo check -p tillandsias-host-shell` is green at HEAD.
+    notes: |
+      Do NOT add fluent/rust-i18n/unic-langid — the workspace has no i18n
+      crate and host-shell is deliberately lean for the mingw cross-build.
+
+  - packet_id: tray-string-corpus-direction-is-inverted
+    order: 792-77bt
+    release_target: stable-milestone-v1
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: decision+audit
+    title: 'Slice 2 of 628-c7qd: en.toml describes a UI that does not ship — the corpus must be regenerated FROM the shipped literals, not consumed as a source'
+    pickup_role: any
+    depends_on: []
+    capability_tags:
+      - tray-ux
+      - i18n
+      - governance
+    context: |
+      MEASURED, and it inverts 628-c7qd: only 9 of 168 en.toml keys (5.4%)
+      carry a value the trays render verbatim. Restricted to menu* sections
+      it is 8 of 55. Concrete divergences: en.toml maintenance = "⛏️
+      Maintenance" while menu_state.rs renders "🔧 Maintenance"; en.toml
+      quit = "Quit Tillandsias" while the trays render "❌ Quit
+      Tillandsias"; en.toml no_projects = "No projects detected" while the
+      tray renders "(no projects yet)". en.toml also carries whole surfaces
+      no tray has (Blooming, Seedlings, Serve Here, Settings) and lacks
+      surfaces every tray ships (🌱 Agents, 👾 Claude, 💻 OpenCode,
+      🏗️ Codex, 🪐 Antigravity, 🔭 Observatorium).
+
+      628-c7qd requires the refactor to be BYTE-IDENTICAL at the surface.
+      Wiring en.toml as written would therefore change ~159 user-visible
+      strings — a mass UX change requiring operator sign-off under
+      spec:tray-ux, and precisely what that criterion forbids. The two
+      requirements are mutually exclusive as written; the corpus must flow
+      code -> toml.
+
+      Also measured, and it removes an entire assumed workstream: the .toml
+      and .sh corpora are 100% DISJOINT — 0 shared values across three
+      independent intersections (exact, normalised, key-name). They address
+      different tiers (host tray vs guest forge shell). "Reconcile the two
+      corpora / write a generator between them" is not a merge; there is
+      nothing to reconcile, and a generator cannot be written until the
+      forge string set is authored into .toml as a new namespace.
+    exit_criteria:
+      - 628-c7qd's exit criteria are corrected — direction inverted to code->toml, and the corpus-reconciliation criterion either dropped or restated as "author the guest namespace first"
+      - a committed, machine-checked drift report lists the en.toml keys with no rendered counterpart and the shipped literals with no key, with the counts pinned by a test so they cannot drift silently
+      - the drift entries are routed to 628-w9sm rather than fixed in passing (spec:tray-ux governance)
+    verifiable_closure: |
+      The drift report exists with its count test green, and 628-c7qd no
+      longer asks for a byte-identical refactor against a corpus that
+      differs in 159 of 168 values.
+    notes: |
+      Naive validation fails in BOTH directions here, so the checker needs
+      key semantics rather than value equality: "Maintenance" byte-matches
+      menu.build.chip_maintenance while the semantically correct key is
+      menu.maintenance, and the one emoji-bearing key that fully matches
+      does so only inside #[allow(dead_code)] the tray never executes.
+
+  - packet_id: forge-localization-assets-are-staged-nowhere-and-partly-dead
+    order: 792-7bt5
+    release_target: fail-loud-diagnosis-milestone
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: 'Forge localization ships broken three ways: 440 lines of translated help unreachable, 15 of 17 bundles unstaged on the nix path, 34 dead keys'
+    pickup_role: linux
+    depends_on: []
+    capability_tags:
+      - forge
+      - i18n
+      - packaging
+    context: |
+      Incidental findings from the 628-c7qd measurement sweep, none of them
+      part of that packet's scope but all real:
+
+      1. DEAD LOCALIZED HELP. images/default/help.sh dispatches to
+         /usr/local/share/tillandsias/help-${_LOCALE}.sh, but the
+         Containerfile COPYs only help.sh. The four translations live in
+         scripts/help-{de,es,fr,ja}.sh (110 lines each), outside the image
+         build context, staged by nothing. 440 lines of translated help can
+         never be reached.
+      2. NIX PATH STAGES 2 OF 17. images/default/Containerfile ships all 17
+         .sh bundles, but flake.nix stages only en.sh and es.sh — so on the
+         nix/VM path (the macOS path) 15 languages silently fall back to
+         English. Not a breakage; simply absent localization, and nothing
+         says so.
+      3. DEAD KEYS AND A DRIFTED DUPLICATE. 34 of 84 L_* keys are defined
+         and referenced nowhere (the entrypoint banner/install strings —
+         and no entrypoint*.sh references L_ at all, though en.sh's header
+         claims it is sourced by entrypoint.sh). scripts/help.sh and
+         images/default/help.sh are two English copies that have drifted by
+         8 lines, and only the images/default copy carries the re-entry
+         guard that fixes an infinite self-source (exit 139).
+      4. Two inline `${L_X:-default}` fallbacks are dead because en.sh is
+         always sourced first and its text is staler than the inline default.
+    exit_criteria:
+      - each of the four is fixed or explicitly declined with a reason (staged, deleted, or documented as intentional)
+      - whichever localization assets are claimed to ship are proven present in the built artifact, not inferred from the Containerfile
+    verifiable_closure: |
+      A built forge image lists the localized help files it dispatches to,
+      or help.sh no longer dispatches to files that cannot exist.
+
+events:
+  - packet_id: tray-string-layer-generated-const-gate
+    event:
+      type: filed
+      ts: "2026-08-17T04:37:16Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0423z"
+      host: macos
+      summary: |
+        Filed from the 628-c7qd measurement sweep (3-agent fan-out).
