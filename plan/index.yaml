@@ -11118,6 +11118,12 @@ plan_index:
         - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
       events:
         - type: progress
+          ts: "2026-08-17T14:24:13Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t1123z"
+          host: macos
+          summary: |
+            CRITERION 3 — STATIC HALF LANDED as an enforced guard. scripts/check-guest-unit-hardening.sh reads the SHIPPED unit text out of the provisioning sources (the VZ heredoc in vz.rs and the WSL string literal in wsl.rs — not a hand-written unit in a test, because order 308 WAS a shipped-vs-tested divergence) and refuses the 308 directive family plus the sandboxing directives that break podman for the same reason. Wired into build.sh --check. Verdict grammar ok:guest-unit-unconfined | blocked:guest-unit-hardened:N | blocked:guest-unit-not-found. FIXTURE 3/3, and the third scenario is the one that matters most: a guard whose MARKERS DRIFT must fail CLOSED, because a checker that can no longer find what it guards still prints ok — the 700-nz4n shape. Renaming the unit in a copied tree now yields blocked:guest-unit-not-found rather than a green light. Second scenario re-injects order 308 exact directives and must fail; first is the live tree passing. TWO SELF-CORRECTIONS worth recording because both were silent-pass shapes: (a) the fixture first ran the ORIGINAL checker from a cd, and since the checker resolves its own repo root from BASH_SOURCE it kept re-measuring the live tree — two scenarios "passed" while testing nothing, fixed by invoking the checker copied INTO the tree under test; (b) my own @trace named spec:vm-idiomatic-lifecycle, which does not exist — the ghost-trace gate caught it and it is now spec:vm-provisioning-lifecycle. SCOPE AND EXPIRY ARE IN THE FILE: this guards the unit that FORKS PODMAN. When the split lands the listener unit SHOULD be confined hard, and the guard must then be re-aimed at the orchestrator unit rather than deleted — it is a regression guard, not an argument that confinement is wrong. What remains for criterion 3 is the dynamic half: exercising a real headless-driven podman ensure under that unit, which needs a booted guest.
+        - type: progress
           ts: "2026-08-17T09:26:28Z"
           agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0823z"
           host: macos
