@@ -52,10 +52,12 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: shared lock taken by"
 
-  - step: "regression: the existing harness rollback + byte-cheap fixtures still pass"
-    command: "scripts/test-harness-rollback.sh >/dev/null 2>&1 && scripts/test-harness-byte-cheap.sh >/dev/null 2>&1 && echo 'ok: sibling harness fixtures green'"
-    timeout_ms: 300000
-    expected_behavior: "ok: sibling harness fixtures green"
+  # NO sibling-regression step here on purpose. litmus:harness-rollback-shape
+  # and litmus:harness-byte-cheap already run those fixtures in this same
+  # suite, so re-running them made this the slowest instant-tier step in the
+  # corpus (20.3s, surfaced by the cycle timing telemetry the run itself
+  # emitted). A gate that duplicates a sibling gate buys no coverage and is
+  # paid on every pre-build.
 
 observability:
   traces:
