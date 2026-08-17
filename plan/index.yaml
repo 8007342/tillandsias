@@ -12996,7 +12996,7 @@ plan_index:
       order: 333
       desired_release: v0.5
       title: "Guest/container metrics over the control wire (per-container + per-mount I/O) — no VM-boundary hacks"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/guest-container-metrics-over-control-wire-2026-07-13.md
       depends_on: []
@@ -13050,6 +13050,16 @@ plan_index:
           host: forge
           summary: |
             Group under socket-audit-master (order 625-jd5f)
+        - type: completed
+          ts: "2026-08-16T21:22:19Z"
+          host: linux-immutable
+          summary: |
+            status 'completed' with evidence_refs: 05073eed6 + litmus:guest-container-metrics-wire-shape 7/7 PASS + cargo test -p tillandsias-headless --features listen-vsock green
+        - type: note
+          ts: "2026-08-16T21:22:19Z"
+          host: linux-immutable
+          summary: |
+            333 guest side closed by linux-yoga-claude-20260816t185912z; cross-host criterion 4 owned by child 778-n9z2
     - packet_id: forge-hot-path-placement-metrics
       order: 329
       desired_release: v0.5
@@ -13121,6 +13131,12 @@ plan_index:
         - "one named recommendation with a migration-ladder sketch"
         - "mirror observability requirements enumerated as litmus-pinnable statements"
       events:
+        - type: progress
+          ts: "2026-08-16T23:30:34Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Wrote the missing artifact cheatsheets/concurrent-git/git-mirror-managed-alternatives.md (2eea6ca6c), distilling the RATIFIED build-vs-adopt half rather than re-running it: full candidate/verdict table with reasons, the rule it encodes (server-held credentials implies asynchronous; synchronous implies client credentials forwarded; we need both, so the wheel does not exist), and our --atomic advantage over GitLab's published sample. Added what the decision doc lacked: a two-directional migration ladder, and the observability half as SIX litmus-pinnable claims (queue depth; last relay per ref; per-ref divergence; ack-latency distribution, since the tail is what agents feel as a hang; rejects counted BY REASON; credential-refresh failures distinguished from network, with 756-2jnj as the live example) plus control-wire transport per order 323 and a no-fabricated-healthy-value anti-requirement. Gates: index regenerated via script (not hand-edited), tier checks OK, image copy staged. Exit criteria 1 and 3 MET; criterion 2's recommendation is KEEP but its RATIFICATION is The Tlatoani's, so per multi_cycle + the no-named-verification-gate row in plan/long-running.md this packet stays ready and is NOT closed here.
         - type: filed
           ts: "2026-07-13T23:10:00Z"
           agent_id: "macos-Tlatoanis-MacBook-Air-fable5-20260713T2243Z"
@@ -22793,6 +22809,12 @@ plan_index:
         - "editing host cheatsheets cannot leave the committed image copy stale without a loud failure at commit/CI time, OR the image copy is generated and not committed"
         - "litmus:cheatsheet-host-image-sync stays green without manual intervention"
       events:
+        - type: note
+          ts: "2026-08-16T23:56:57Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            LEDGER CORRECTION (operator-directed audit, 2026-08-16, evidence 5ad4168ed + plan/issues/cheatsheet-derived-tree-tracking-decision-2026-08-16.md): this packet's 2026-07-20T06:30Z 'CORRECTION: images/default/cheatsheets/ is GITIGNORED (build-generated), not committed' is FALSE and was false when written — 231 files were tracked at that instant, and git log -G shows the ignore rule was added 2026-07-04 AFTER 230 of them were already tracked (gitignore is inert against tracked paths; only 2 files were ever a true force-add). The original 06:20Z statement ('the ROOT is that it is a COMMITTED copy') was correct. That false correction is why no untrack was attempted for 21 days and it propagated verbatim into scripts/stage-image-cheatsheets.sh's docstring and litmus-cheatsheet-host-image-sync.yaml's description, both since corrected. DECISION NOW RECORDED: the tree STAYS tracked — build.rs embeds images/ into the binary, ./build.sh never stages cheatsheets, and the end-user lane builds from the embedded snapshot where no authored tree exists, so untracking breaks tillandsias --init for curl-installed users and reds every_containerfile_copy_source_exists_in_embedded_assets on a fresh clone. The real defect was INCOMPLETENESS (5 authored cheatsheets missing from the tracked copy while INDEX.md advertised all 5) — fixed, and now gated by an index-level equality check in stage-image-cheatsheets.sh with methodology canon at cheatsheets.storage_and_authority.
         - type: progress
           ts: "2026-07-29T05:30:00Z"
           agent_id: "linux-mutable-metaorch-20260729"
@@ -28131,6 +28153,13 @@ plan_index:
         - "the Envelope freshness block reports the new HEAD sha after a commit"
         - "a content-hash mismatch flags a stale index (fails closed)"
 
+      events:
+        - type: note
+          ts: "2026-08-17T01:35:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            CROSS-REFERENCE (yoga 2026-08-17): scoping of 760-hzi4 established that the spec RAG index is built on NO host — this packet's body is unimplemented, and the embedding producer does not exist in any language (read_vectors only reads vectors.jsonl; the producer exists only as prose inside forge-plan.sh's refusal message). 760-hzi4 was filed believing the index existed in-forge and was merely missing on dev hosts; it is therefore a duplicate of THIS packet's scope, not a parity gap. Whoever picks either one should merge or re-point them rather than implement both. Also relevant: 551 spec-expert-groundtruth cannot grade a corpus that has no vectors, so it is effectively blocked behind this.
     - packet_id: expert-groundtruth-harness-red-on-linux-next
       order: 553
       desired_release: v0.5
@@ -30830,7 +30859,7 @@ plan_index:
     - packet_id: windows-runtime-guest-reprovision-and-lane-verification
       release_target: stable-milestone-v1
       order: 599-3b9h
-      status: ready
+      status: completed
       desired_release: v0.5
       role: platform-validation
       pickup_role: windows
@@ -30885,6 +30914,47 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: progress
+          ts: "2026-08-16T20:55:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Criterion 3 (deferred W5 half, post-82160687 token grep): PASS.
+            Evidence, taken live ~2026-08-16T20:55-21:05Z inside the first real
+            tray-launched forge lane on this host (container
+            tillandsias-java-forge, image localhost/tillandsias-forge:v0.4.260815.1,
+            guest v0.4.260815.1):
+            `env | cut -d= -f1 | grep -xE 'GH_TOKEN|GITHUB_TOKEN|HOMEBREW_GITHUB_API_TOKEN'`
+            returned nothing in BOTH the exec session and PID 1's /proc/1/environ.
+            This is the first Windows measurement of the token-removal contract:
+            clean.
+        - type: progress
+          ts: "2026-08-16T20:56:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Criterion 2 (deferred W4 half, accel envelope first line): read TAKEN.
+            Evidence, same lane as the criterion-3 read (tillandsias-java-forge,
+            localhost/tillandsias-forge:v0.4.260815.1, guest v0.4.260815.1):
+            TILLANDSIAS_ACCEL_ENVELOPE is ABSENT — not in
+            `podman inspect .Config.Env`, not in /proc/1/environ, and no
+            "Accelerators" line in `podman logs`. Not a GPU claim — a missing
+            claim, so the criterion's "first line = cpu-only" expectation could
+            not be evaluated against an envelope that was never set. The read
+            itself is discharged; the absent envelope is a launch-path defect,
+            filed as windows-tray-lane-launch-omits-accel-envelope (776-drwr),
+            cross-referencing 769-w3ma (its accel_class=<value|unknown> grammar
+            now has a confirmed real absent-envelope case on Windows).
+        - type: completed
+          ts: "2026-08-16T20:55:29Z"
+          host: windows
+          summary: |
+            status 'completed' with evidence_refs: first tray-launched forge lane on windows/Yolanda 2026-08-16T20:55-21:05Z (container tillandsias-java-forge, image localhost/tillandsias-forge v0.4.260815.1, guest v0.4.260815.1); criterion 1 long satisfied (guest >= 0.4.260802.1); criterion 3 PASS - token grep empty in both the exec session and /proc/1/environ (first post-82160687 measurement on Windows); criterion 2 read taken - TILLANDSIAS_ACCEL_ENVELOPE absent, defect filed as 776-drwr; evidence events in plan/index.d/20260816t205500z-599-3b9h-reads-windows.yaml
+        - type: note
+          ts: "2026-08-16T20:55:29Z"
+          host: windows
+          summary: |
+            all three exit criteria discharged in the operator-attended session 2026-08-16 (The Tlatoani, windows/Yolanda); the absent accel envelope is tracked separately as windows-tray-lane-launch-omits-accel-envelope 776-drwr
     - packet_id: plan-append-event-blind-to-fragment-packets
       order: 600-c266
       status: completed
@@ -31219,7 +31289,7 @@ plan_index:
         such an account attended). Do not re-run M1-M4/M6; their evidence
         stands at the recorded commits.
       order: 598-kibt
-      status: ready
+      status: completed
       desired_release: v0.5
       role: platform-validation
       pickup_role: macos
@@ -31319,6 +31389,16 @@ plan_index:
           host: forge
           summary: |
             Group under stable-milestone-v1 (order 625-jd5f)
+        - type: completed
+          ts: "2026-08-16T20:24:47Z"
+          host: macos
+          summary: |
+            status 'completed' with evidence_refs: unit pins in action_host.rs (confirmed-empty/logout-reset/first-flip) + operator in-session ruling 2026-08-16; M1-M4/M6 events of 2026-08-09/10
+        - type: note
+          ts: "2026-08-16T20:24:47Z"
+          host: macos
+          summary: |
+            M5 runtime half closed at the achievable bar per operator ruling (no zero-repo account exists); all other criteria green on recorded evidence
     - packet_id: codex-mcp-config-registration
       order: 600-xrqk
       status: completed
@@ -33317,7 +33397,7 @@ plan_index:
     - packet_id: host-browser-mcp-live-tool-family-wiring-gap
       release_target: forge-local-experts-milestone
       order: 616-nm7q
-      status: ready
+      status: blocked
       desired_release: v0.5
       priority: p1
       title: Wire the eight browser MCP tools onto the configured live host bridge
@@ -33391,6 +33471,11 @@ plan_index:
           host: forge
           summary: |
             Group under forge-local-experts-milestone (order 625-jd5f)
+        - type: note
+          ts: "2026-08-16T21:23:35Z"
+          host: linux-immutable
+          summary: |
+            616-nm7q superseded by its four children (779-5ryn, 779-3trn, 779-dqsv, 779-hae5) filed by linux-yoga-claude-20260816t185912z; parent parked pending their completion
     - packet_id: container-image-squash-noop-cache-regression
       order: 617-mxqn
       status: completed
@@ -34607,6 +34692,17 @@ plan_index:
           host: forge
           summary: |
             Group under fail-loud-diagnosis-milestone (order 625-jd5f)
+        - type: note
+          ts: "2026-08-16T21:40:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Windows evidence (2026-08-16 ~20:45-21:00Z, first lane launch on a
+            freshly version-bumped guest v0.4.260815.1): all four enclave
+            images (router/inference/forge-base/forge) rebuilt from scratch,
+            each digest_missing, several SILENT minutes per image, before the
+            lane could proceed — observed live by the operator during the
+            java-lane repro of 777-i7hf.
     - packet_id: opencode-harness-gate-blind-to-tui-runtime
       release_target: fail-loud-diagnosis-milestone
       order: 626-p4xd
@@ -34661,6 +34757,18 @@ plan_index:
       notes: |
         Sibling of order 284 (broken upstream publish) and order 291 (fatal require on empty cache). Both were fixed for the failure modes then visible; this is a third mode neither covers, because both reasoned about the binary being ABSENT or CRASHING, never about it being present, startable, and unable to render.
       events:
+        - type: progress
+          ts: "2026-08-17T02:30:26Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Partial slice landed (0cabca46b): criteria 1, 2, 4 and 5 met; criterion 3 (cold-cache repro) left open because it needs a destructive e2e slot. opencode_render_contract_ok asserts POSITIVELY (alt-screen or truecolor SGR within budget, no nonzero exit) rather than matching upstream's error wording, which would rot; wired into harness_probe so ALL THREE consumers inherit it (record-last-good, validate-or-rollback, restore-last-good) instead of one call site — that is what stops a broken binary being certified as last-good; memoized on the binary sha256 so a launch's three probes cost one render while a reinstall still re-probes. 20s ceiling sized for the bun single-file executable the curl channel ships (cold asset extraction on first run), not for the ELF the timings were measured on. Update guards keep it inside litmus:harness-byte-cheap. The one-sided lock is closed: harness_update_lock_acquire/_release extracted and require_opencode now takes the SAME lock ensure_forge_harnesses takes; failing to acquire is non-fatal there since the other holder installs the same binary. Fixture scripts/test-opencode-render-probe.sh 6/6 hermetic, including the control (a rendering stub must PASS, else case 1 proves nothing), a wording-independent early-exit case, a fast-crash-detection case, and memo invalidation on binary swap. litmus:opencode-render-probe-shape added and bound; default-image instant suite 12/12. Repaired a pin my own change broke: litmus:harness-curl-install-shape asserted the curl call within a three-line window after require_opencode; the lock pushed it to line four and turned the step red without changing routing — widened to the function body per 634-39ik.
+        - type: note
+          ts: "2026-08-17T01:34:33Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            SCOPING (read-only, yoga 2026-08-17). Premise HOLDS — all five cited claims re-verified true, but every lib-common.sh line cite has DRIFTED ~230 lines (file now 4044 lines): harness_probe is 2014-2022 (not 1803), curl_install_opencode 2402-2450 (not 2164), opencode_record_curl_last_good 2364-2376 (not 2175). Rollback blindness confirmed structurally — opencode_restore_curl_last_good re-validates with the same blind harness_probe, so the safety net can select AND certify a TUI-broken snapshot. ONE FRAMING SUPERSEDED: the packet says the curl channel has no equivalent guard to the npm-update lock. The lock EXISTS and ensure_forge_harnesses takes it before curl_install_opencode; require_opencode calls curl_install_opencode directly in the foreground holding NO lock. So it is a ONE-SIDED mutex, not a missing one, and the fix is lock reuse rather than a new discipline. PROBE DESIGN MEASURED LIVE on opencode 1.18.10: no pty/script wrapper needed (script and strace are both absent on this host anyway) — with stdin from /dev/null the binary still initializes OpenTUI and emits truecolor SGR plus alt-screen; time-to-first-CSI 521/626/733ms over 3 runs, strict renderer marker at ~2.6s. So a positive-assertion probe (must emit a renderer marker within N seconds, must not have exited nonzero) costs ~3s and does not depend on upstream error wording, which would rot. TWO CAVEATS for the implementer: measurement was against the brew/npm ELF, not the bun single-file executable the curl channel installs and which actually failed, so gate on the marker with a generous ceiling (20s) rather than a fixed sleep; and litmus harness-byte-cheap pins that probes cannot self-update, so the probe must carry the --pure / DISABLE_AUTOUPDATER guards claude_probe already uses. Recommended shape: partial-slice — wire the render contract into harness_probe (one edit covers all three consumers), memoize on a binary-hash stamp so three probes per launch cost ~3s once, add the lock reuse, add a fixture litmus; split criterion 3's cold-cache repro (needs a destructive e2e slot) into its own packet.
         - type: filed
           ts: "2026-08-09T06:25:00Z"
           agent_id: windows-claude-fable-20260809t062500z
@@ -35266,6 +35374,12 @@ plan_index:
       notes: |
         Foundation packet. Can run in parallel with 628-p5tj. Blocks 628-h4nx and 628-w9sm.
       events:
+        - type: progress
+          ts: "2026-08-17T04:38:23Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0423z"
+          host: macos
+          summary: |
+            MEASURED (3-agent fan-out, macOS, HEAD ee6008779) — and the measurement REFUTES this packet in two load-bearing places, so it is not executable as written. Sliced into 792-cf5x (build-time gate, zero call sites), 792-77bt (the direction inversion + drift report), 792-7bt5 (incidental forge-localization breakage). REFUTATION 1, the corpora: they are 100 percent DISJOINT — 0 shared values across three independent intersections (exact, normalised, key-name), because .toml is host-tier (tray menu, CLI) and .sh is guest-tier (forge welcome, shell errors). So exit criterion 2 (make the two corpora ONE source, generator between them) is not a merge and cannot be started: there is nothing to reconcile until the forge string set is authored into .toml as a new namespace. REFUTATION 2, the corpus itself: en.toml is STALE and describes a UI that does not ship — only 9 of 168 keys (5.4%) render verbatim; menu sections 8 of 55. It says Maintenance with a pickaxe where the tray renders a wrench, Quit Tillandsias where the tray renders it with a leading X, No projects detected where the tray renders (no projects yet); it carries whole surfaces no tray has (Blooming, Seedlings, Serve Here, Settings) and lacks surfaces every tray ships (Agents, Claude, OpenCode, Codex, Antigravity, Observatorium). Wiring it as written changes ~159 user-visible strings — a mass UX change needing operator sign-off under spec:tray-ux, which exit criterion 3 (BYTE-IDENTICAL) forbids. Criteria 2 and 3 are mutually exclusive as written; the corpus must flow code->toml. ALSO MEASURED: locales/*.toml ships in ZERO artifacts (macOS .app = 7 files, 0 toml; windows staging = exe + 3 ps1; Linux embedded table = 411 assets, 0 from locales/), so runtime loading needs a packaging change on all three release scripts and compile-time embedding is the right call — host-shell already has a build.rs and toml 0.8.2 is already in its graph (0 new crates), though Cargo.lock carries both 0.8.2 and 1.1.2 so the dep must use the workspace pin. The REAL blast radius is not line count but source-scan tests: 82 include_str! assertion sites in headless, 28 windows-tray, 26 macos-tray, all asserting on file TEXT — a perfectly byte-identical runtime refactor still turns them red, which is why host-shell (0 such sites) must be sequenced first. Estimate corrections: windows balloon sites are 10, not 19; macOS notification sites are 2, not 31 (there are only two notify_* functions, both shelling to osascript) — notifications are nearly a non-problem and menu labels are the whole surface. Also note the repo already contains the counterexample for gating this with a test: scripts/test-locale-coverage.sh passes, covers 4 locales of the .sh corpus only, and is wired into no gate at all.
         - type: filed
           ts: "2026-08-09T08:51:57Z"
           agent_id: windows-claude-fable-metaorch-20260809t063000z
@@ -37638,6 +37752,36 @@ plan_index:
           host: forge
           summary: |
             Group under fail-loud-diagnosis-milestone (order 625-jd5f)
+        - type: progress
+          ts: "2026-08-16T20:30:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            First WINDOWS reproduction — evidence from the operator's live GitHub
+            login run (The Tlatoāni, 2026-08-16 ~20:30Z / 13:30 local,
+            windows/Yolanda): the token paste failed TWICE before the flow fell
+            back to device login, which completed the sign-in. Second platform,
+            same shape as the 2026-08-10 Linux field report: the pasted token did
+            not authenticate; the device flow did. Adjacent NEW finding from the
+            same run filed separately (the login terminal stayed blocked awaiting
+            ENTER after browser device-auth already completed):
+            plan/issues/enhancement/github-login-device-flow-dangling-enter-prompt-2026-08-16.md.
+        - type: decision
+          ts: "2026-08-16T21:35:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            OPERATOR DIRECTIVE (The Tlatoāni, 2026-08-16, attended session on
+            windows/Yolanda): REMOVE the token-paste prompts entirely; device
+            login becomes the ONLY GitHub auth flow — "that one works much
+            better". Grounded in today's live run (token paste failed twice,
+            device flow succeeded end to end — the first Windows reproduction,
+            recorded as a progress event earlier this session). The fix
+            direction for this packet is thereby RULED: device-flow-only, not
+            prompt-repair. Implementation successor filed:
+            github-login-device-flow-only (777-kyjp). This packet's untraced
+            question (which component launched the device flow after the token
+            attempt failed) remains open inside the successor's scope.
     - packet_id: provision-failed-retry-is-a-dead-affordance
       order: 648-jv69
       status: completed
@@ -45090,7 +45234,7 @@ plan_index:
       release_target: windows-authenticode-signing
       kind: decision
       title: Provision the Trusted Signing identity and reach it from CI without a token
-      deliverable: an Azure Trusted Signing account + certificate profile, and the federated credentials the release workflow uses
+      deliverable: a SignPath Foundation signing chain (published code-signing policy page and attribution, approved application, per-release manual approvals), with Azure Artifact Signing as the recorded fallback
       pickup_role: operator
       capability_tags:
         - windows
@@ -45119,6 +45263,32 @@ plan_index:
           summary: |
             CONCRETE REQUIREMENTS, read from the Artifact Signing integration doc (learn.microsoft.com/azure/artifact-signing/how-to-signing-integrations) while the operator installed the client tools on this host.  The client tools are NOT the blocker and installing them proves nothing about readiness: `winget install -e --id Microsoft.Azure.ArtifactSigningClientTools` delivers only the local toolchain — SignTool, .NET 8 runtime, VC++ redist, and Azure.CodeSigning.Dlib.dll. Signing still refuses until the Azure side exists.  WHAT THIS RUNG MUST ACTUALLY PRODUCE:   * an Artifact Signing account, IDENTITY VALIDATION (the long pole; everything else is minutes), and a certificate profile;   * the Artifact Signing Certificate Profile Signer role assigned to the signing identity — without it the tools are installed and signing 403s;   * the account's REGION, recorded. metadata.json's Endpoint is region-specific (e.g. https://wus2.codesigning.azure.net) and the doc names a region/profile mismatch as the common cause of 403 Forbidden plus an internal SignerSign() failure. That is a configuration fact to write down, not to rediscover from an error message.  TOOLCHAIN PIN worth recording with it: SignTool must come from Windows SDK >= 10.0.2261.755, and the doc states the 20348 SDK is NOT supported with the dlib. A host that happens to have an older SDK on PATH fails in a way that looks like a signing problem.  CI: authentication is DefaultAzureCredential, so federated OIDC drops in as intended, and ExcludeCredentials can narrow the chain so a misconfigured runner fails fast instead of walking every credential type.
 
+        - type: note
+          ts: "2026-08-16T20:57:47Z"
+          host: windows
+          summary: |
+            operator decision 2026-08-16 (The Tlatoani, attended session) reshaping the packet from the Azure Trusted Signing deliverable to the SignPath Foundation chain; decision event and prerequisite chain in plan/index.d/20260816t210500z-776-signing-chain-windows.yaml
+        - type: decision
+          ts: "2026-08-16T21:05:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            OPERATOR DECISION (The Tlatoāni, 2026-08-16, attended session on
+            windows/Yolanda): SignPath Foundation is the signing path for the
+            GitHub-release channel. This packet is RESHAPED, not closed: the
+            deliverable changes from "an Azure Trusted Signing account" to the
+            SignPath Foundation chain (code-signing policy page + attribution,
+            application with days-to-weeks lead, per-release manual approval;
+            publisher name will read "SignPath Foundation"), with Azure Artifact
+            Signing (Trusted Signing renamed, GA Jan 2026; Basic $9.99/mo; paid
+            subscription required; individual validation US/CA only) as the
+            recorded fallback. Prerequisite chain filed this session:
+            repo-osi-license-decision (776-it8u, the repo has NO LICENSE file and
+            SignPath requires an OSI-approved license) -> signpath-foundation-
+            application (776-t8hs); plus store-msix-free-signing-research
+            (776-g6r3, research-recommended, NOT yet operator-approved). Full
+            research with provenance:
+            plan/issues/windows-signing-research-2026-08-16.md.
     - packet_id: windows-tray-authenticode-in-packaging
       order: 722-qvqb
       status: ready
@@ -47390,6 +47560,21 @@ plan_index:
           host: windows
           summary: |
             Adjacent honesty landed via 777-i7hf (2026-08-16, windows): the forge no-cloneable-refs FATAL in images/default/lib-common.sh now names all three causes (still seeding / genuinely empty / upstream fetch cannot AUTHENTICATE) and points at the mirror log's 'Seed fetch failed: UPSTREAM AUTH REFUSED' marker, which the mirror entrypoint now emits for 401/403-class seed failures. The live java repro's misleading 'or upstream is empty' reading cannot recur in that form. The wire-level discriminator work this packet tracks (CloudRefreshReply ok/err) remains open and untouched.
+        - type: progress
+          ts: "2026-08-16T21:40:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            LIVE EVIDENCE (2026-08-16, windows/Yolanda, java-lane repro of
+            777-i7hf): the OpenCode lane's FATAL — "EMPTY checkout (no HEAD)
+            after 12 attempts. The mirror is reachable but advertised no
+            cloneable refs — it has not finished seeding from upstream (or
+            upstream is empty)." — fired while upstream github.com/8007342/java
+            was VERIFIED NON-EMPTY via gh api (size=316, default_branch=main,
+            pushed_at=2026-06-12). The conflation this packet names ("not
+            seeded" vs "upstream empty") had a real operator staring at it
+            during root-cause; the unseeded-mirror root cause is filed as
+            777-i7hf.
     - packet_id: forge-validate-push-absent-reported-as-failed
       order: 732-z8ef
       release_target: architecture-audit-epic
@@ -51409,6 +51594,12 @@ plan_index:
         - Squid starts healthy and vault-cli require_cacert stays green on a fresh guest (the 2026-07-22 field repro path).
         - The entrypoint's unreachable branch is either made reachable (secret delivery) or removed in the same change — no fallback nobody takes remains.
       events:
+        - type: note
+          ts: "2026-08-17T03:51:06Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T035106Z"
+          host: linux_mutable
+          summary: |
+            REOPENED-ADJACENT, live host state 2026-08-17: this packet closed the CODE path (material generated after it is 0600 — verified: vault.key Aug 16 is correct), but /tmp/tillandsias-ca/intermediate.key generated Aug 14 was still 0644 on macuahuitl three days later, and litmus:proxy-ca-key-not-world-readable STEP 5 was failing against live host state while the packet read closed. The running tillandsias-proxy still bind-mounts that key and no tillandsias-ca-key secret exists here, so the live container predates the secrets path. Contained by hand (dir 0700, key+cert 0600, proxy healthy, litmus now PASS); the fleet-wide migration is filed as 791-swxt.
         - type: completed
           ts: "2026-08-16T19:20:48Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
@@ -52439,7 +52630,7 @@ plan_index:
     - packet_id: macos-forge-seed-checkout-staleness-poisons-validation
       order: 763-munc
       release_target: fail-loud-diagnosis-milestone
-      status: ready
+      status: obsoleted
       desired_release: v0.5
       priority: p1
       kind: bug
@@ -52517,6 +52708,16 @@ plan_index:
             true-but-late non-ff rejection are one defect: nothing gates seed
             freshness at launch.
 
+        - type: completed
+          ts: "2026-08-16T20:24:09Z"
+          host: macos
+          summary: |
+            status 'obsoleted' with evidence_refs: operator in-session directive 2026-08-16 + successor packet 776-jcf3
+        - type: note
+          ts: "2026-08-16T20:24:09Z"
+          host: macos
+          summary: |
+            operator ruling: ~/src is being retired entirely; successor 776-jcf3 carries the real removal gate
     - packet_id: wsl2-builder-wrapper-rewrites-sourcer-shell-options
       order: 764-sunk
       status: ready
@@ -52549,7 +52750,7 @@ plan_index:
 
     - packet_id: litmus-runner-cannot-filter-by-litmus-id
       order: 764-8m5j
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p3
       kind: enhancement
@@ -52574,6 +52775,12 @@ plan_index:
         loud (good) but names no next action, so the cost is a discovery round
         trip per agent per cycle; targeted closure evidence wants a targeted run.
 
+      events:
+        - type: completed
+          ts: "2026-08-16T23:37:48Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: night2-cycle2: run-litmus-test.sh resolves a single-litmus filter (litmus:<name>, litmus-<name>, or bare <name>) to its owning spec and runs EXACTLY that test — spec ids keep strict precedence via a bindings check, unresolvable filters keep the 642 fail-loud refusal. Verified all four modes live: the original incident's bare-name replay now executes 1/1 PASS with 'Single-litmus filter' logged (was a refusal + full-suite round trip); litmus:-prefixed 1/1; spec-id path unchanged 6/6; garbage still refuses rc=1
     - packet_id: plan-answer-direction-question-unsupported
       order: 764-p9w7
       status: ready
@@ -52726,6 +52933,19 @@ plan_index:
         - on a dev host with the ensure green, spec_answer returns a retrieved envelope instead of the index-not-built refusal
         - the index refreshes on commit or names its staleness in the envelope
 
+      events:
+        - type: progress
+          ts: "2026-08-17T03:30:38Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Honesty slice landed (2b1f8d188) — the cheap half of the split recorded on this packet, leaving the index build itself with order 552. (1) The capability line now carries spec_index=present|absent, computed with the SAME predicate the answer path uses, so it can no longer advertise spec subcommands while spec_answer cannot answer; appended not inserted, since both litmus that read the line match by substring. This also closes 712-r5x8 criterion 1. (2) The dev embed MODEL now matches the dev ENDPOINT: lib-dev-env.sh names the ollama model for the dev environment (runtime default untouched), and scripts/check-dev-embed-model-agreement.sh pins it against the model dev-inference-ensure.sh actually pulls, with a selftest whose control refuses a disagreeing pair and rejects empty extractor matches. Without this, spec_answer would have 404'd on embeddings even after 552 built a real index, and the failure would have looked like a missing index. (3) NEW FINDING while proving (1): the field reported absent for an index that existed, because .claude/settings.local.json — TRACKED in git despite the .local convention — exports FORGE_SPEC_INDEX_DIR as a /mnt/c Windows path that cannot exist on this host, and forge-plan.sh resolves the index dir from it. Every non-Windows host would therefore resolve the spec index to an impossible path forever. Removed that one machine-specific key here; the tracking question is filed as 789-nc2s because untracking the file removes its portable settings from every host at once. This packet stays open for the index build (order 552).
+        - type: note
+          ts: "2026-08-17T01:34:54Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            SCOPING (read-only, yoga 2026-08-17) — THIS PACKET'S PREMISE IS FALSE, and the correction matters more than the packet. The title says the spec RAG index is built in-forge but never on a dev host. It is built on NO host, ever. Evidence: a repo-wide grep for spec-index outside crates/ returns exactly two hits, both in forge-plan.sh (the path variable at 700 and the TEXT of the refusal message at 727) — no script, entrypoint, Containerfile, hook or MCP startup ever invokes it. ensure_forge_experts (lib-common.sh 1249-1411) builds and installs the tillandsias-plan BINARY and nothing else; it never touches spec-index. The embedding half has NO implementation at all in any language — read_vectors only READS vectors.jsonl, and the producer exists solely as English prose inside the refusal string. The pipeline has run exactly once, as a manual bounded 370-chunk sample on 2026-07-31, which itself labels full-corpus embed as the launch-time job of order 552. ORDER 552 (spec-index-commit-freshness) IS STILL READY — so this packet is 552's unimplemented body, and claiming it as written would silently duplicate 552 and leave both open. Corroboration that in-forge is equally empty: the 2026-08-01 in-forge validation event and 712-r5x8 (filed 2026-08-13 by an in-forge delegate hitting the same refusal). SECOND CORRECTION, for the operator's expert-soundness question: the degradation is ANNOUNCED, not silent. forge-plan.sh 726-729 refuses with a typed unsupported envelope naming the exact directory, the exact two missing files, the exact build command and the owning order, with zero citations and never a guess; the tool description pre-announces the fail-soft. semantic_expert.rs is a SEPARATE lane that does not consume this index, so plan_answer / methodology_ask / cheatsheet answers do not degrade from it. The expert system is SOUND on this axis — this is a MISSING-CAPABILITY packet, not a silent-degradation one. estimated_hours 3 is wrong by roughly an order of magnitude (10113 chunks to embed on a 137M CPU model) because it was written believing the index already existed. TWO NEW LIVE DEFECTS, both cheap and both worth taking before the index work: (i) the embed model default disagrees between files — forge-plan.sh 706 says nomic-embed-text-v1-GGUF (a lemonade/LM-Studio name) while dev-inference-ensure.sh 74 says nomic-embed-text (the ollama name), and this host's endpoint serves nomic-embed-text, so the lane would 404 even AFTER an index exists; (ii) lib-expert-capability.sh contains zero occurrences of spec-index/spec_answer/spec-retrieve, so the capability line truthfully advertises the subcommands while spec_answer still refuses for lack of data — the same behavioural-vs-subcommand drift class as 760-nwzr, and closing it also closes 712-r5x8 criterion 1. RECOMMENDED SPLIT: take the honesty slice (shared embed-model constant + index-presence field in the capability line) as an S packet now; re-point this packet at order 552 or merge them, re-estimated L; note that closing it also unblocks 551 spec-expert-groundtruth, which cannot grade a corpus with no vectors.
     - packet_id: stale-user-level-expert-install-refresh
       order: 760-nwzr
       status: ready
@@ -52754,6 +52974,13 @@ plan_index:
       exit_criteria:
         - a dev host with a weeks-old user-level install either gets it refreshed by the normal build flow or sees its skew named by expert_capability
 
+      events:
+        - type: note
+          ts: "2026-08-17T02:38:33Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T023833Z"
+          host: linux_mutable
+          summary: |
+            Live confirmation + interim clearance 2026-08-17: ~/.local/bin/tillandsias-plan (Aug 12) was STILL serving confidence=unsupported for the CLAUDE.md bootstrap Direction question while the checkout binary served retrieved — the exact shadow this packet describes, four days stale. Refreshed by hand from target/release as host maintenance; both agree now. That is a one-host manual clearance, NOT this packet's fix: the durable answer is refresh-or-skew-stamp so no host silently serves a stale expert again.
     - packet_id: gate-per-step-telemetry
       order: 765-dfry
       status: ready
@@ -53026,7 +53253,7 @@ plan_index:
             status 'completed' with evidence_refs: cycles 1-5 of the 2026-08-16 overnight loop, one win at a time with ./build.sh --check green between each: (1) subsumed cargo check removed — clippy --all-targets carries the type-check; (2) check-only dispatches skip registry+dev-proxy preamble on all host kinds — build-preamble telemetry fell 4205ms -> 12ms, pin test still ok; (5) bump-version Cargo.toml rewrites content-conditional (sandbox-verified both directions); (6) local-ci default clippy aligned to --all-targets; (7) build-preamble timing record landed and immediately exposed the ~37 percent hidden tax; (3) sidecar restage now byte-compares — VERSION touch live-verified: rebuild ran, bytes identical, mtime-refresh-only, second call fast-paths up-to-date, recompile cascade gone; (4) macos-tray no longer tracks .git/index — committed-state provenance unchanged, BUILD_TIME residue explicitly delegated to 765-evbt per the appendix scope. Gate totals over the night: 13-16s (cycle 0) -> 4-10s (cycles 3-5). No win dropped.
     - packet_id: build-image-regenerates-metrics-dashboard-from-empty-telemetry
       order: 766-7zqf
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -53070,6 +53297,11 @@ plan_index:
           host: linux_mutable
           summary: |
             Scope correction from the 611-kqpf fork (2026-08-16): ./build.sh --check in a fresh worktree ALSO regenerates plan/metrics-dashboard.md from empty telemetry — the fix must cover the shared regeneration path, not just build-image.sh. Second observation for whoever takes the runner next: the real-podman preflight regex can false-ENV-FAIL a litmus whose steps merely contain 'command -v podman'; backend: fake is the documented escape, but the trigger match deserves tightening.
+        - type: completed
+          ts: "2026-08-16T22:37:00Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: cycle1-20260816T22xx: guard landed at the source ALL callers share (scripts/generate-dashboard.sh) — regeneration now refuses, loudly on stderr and with exit 0, to replace a dashboard recording more forge build points than local telemetry carries; sandbox verification both directions (git-only telemetry vs 9-point committed dashboard -> REFUSED + file byte-identical; 10-point telemetry -> regenerates); root cause named in-code: committed cross-host artifact regenerated from per-host ephemeral cache. The ssh-lane fixture's interim backup guard remains as defense-in-depth
     - packet_id: gate-scripts-gnu-date-isms-break-bsd-hosts
       order: 766-tdij
       release_target: fail-loud-diagnosis-milestone
@@ -53279,9 +53511,16 @@ plan_index:
         uid 1000. Cadence is near-daily with multi-crash bursts, which reads as
         traffic-triggered, not random.
 
+      events:
+        - type: progress
+          ts: "2026-08-16T23:41:07Z"
+          agent_id: "fork-767es4w-20260816T234107Z"
+          host: linux_mutable
+          summary: |
+            FORENSICS COMPLETE (research fork, 2026-08-16T23:5xZ). VERSION FACTS: the chronic crasher IS the enclave proxy — live container runs squid 6.9-r0 (Alpine 3.20, frozen there; upstream 6.x reached 6.12+ in 2024); the dev-cache lane's docker.io/library/squid:6.1 is a separate concern and NOT the crasher (dump cgroups are libpod scopes running 'squid -N' on musl = the Alpine images/proxy entrypoint). SYMBOLICATION: build-id 0348aa59... of the crashed binary is BYTE-IDENTICAL to the current v0.4.260816.1 image's squid; two dumps a day apart carry the exact same stack — SIGSEGV in HttpHeader::clean <- HttpReply::clean <- ~HttpReply <- ~MemObject <- StoreEntry::destroyMemObject <- destroyStoreEntry, then death() -> xassert in storeDirWriteCleanLogs -> abort. Deterministic store-teardown corruption under ssl-bump traffic. UPSTREAM: no exact public match in first-pass search; 6.x fixed store/SslBump lifecycle defects through 6.10/6.12 — exhaustive bugs.squid-cache.org search delegated to the bump packet. DISPOSITION: two children filed — 782-9jfg (version bump past 6.9 with a 7-day no-recurrence sentinel) and 782-dpby (loud-restart watcher with crash counter; interaction with 767-nkkq's never-silent-restart rule documented as agent-vs-infrastructure). This packet stays ready as the criteria holder until both land.
     - packet_id: forge-pid1-crash-supervision
       order: 767-nkkq
-      status: ready
+      status: implemented
       desired_release: v0.5
       priority: p1
       kind: enhancement
@@ -53316,6 +53555,12 @@ plan_index:
         closed for findings. Constraint: do NOT silently restart the agent —
         a crashed drain cycle must not re-run its prompt unattended.
 
+      events:
+        - type: progress
+          ts: "2026-08-16T23:42:55Z"
+          host: linux_mutable
+          summary: |
+            status 'implemented' (not terminal) with evidence_refs: worktree fork (base d0ba3160a): images/default/harness-supervisor.sh — PID-1 stays with the supervisor, harness runs as child; fatal signal -> ONE machine-grepable verdict fail:harness-crashed:harness=<n>:signal=<s>:rc=<rc> on BOTH streams + evidence file (signal/rc/harness/ts/cmd/last-output-pointer) + truthful nonzero exit; ZERO restarts by hard policy; ordered shutdowns (forwarded TERM/INT) explicitly NOT misread as crashes (podman-stop false-positive caught by fixture scenario 4 during development and designed out); clean/ordinary exits byte-silent passthrough. Wired: opencode prompted + diagnostics lanes and codex prompted lane (interactive TTY lanes deliberately direct-exec — human-watched, TUI keeps PID-1 signal semantics, pinned by litmus STEP 5). Fixture 6/6 scenarios incl. exactly-once and external-SIGKILL loudness; litmus:harness-crash-supervision-shape 6/6 STEPS OK via the canonical runner, registered under default-image. HOLD at implemented: (1) live in-forge crash repro — the 767-qrbv consecutive-lane harness is the natural vehicle; (2) the supervisor is IMAGE content and reaches running forges only after a forge-image rebuild (the 743-y5wh bake-timing class)
     - packet_id: smoke-harness-consecutive-lane-dimension
       order: 767-qrbv
       status: ready
@@ -53345,7 +53590,7 @@ plan_index:
 
     - packet_id: freshness-inventory-blind-to-html-comment-stamps
       order: 768-9eut
-      status: ready
+      status: completed
       desired_release: v0.5
       priority: p2
       kind: bug
@@ -53374,6 +53619,12 @@ plan_index:
         indented-# form as a workaround; migrate it back if the regex learns
         the comment leader.
 
+      events:
+        - type: completed
+          ts: "2026-08-16T22:37:00Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: cycle1-20260816T22xx: STAMP_RE leader set extended with the <!--[#] markdown-comment form; freshness-inventory --self-test PASS (5 fixtures + unstamped lane intact, malformed-date lane untouched); the three previously-invisible audited files (forge-environment-discoverability spec, opencode-web-launch + git-workflows cheatsheets) now count STAMPED (unstamped-report count 0, coverage 25/1301) and stop being re-offered to freshness-next
     - packet_id: dev-inference-container-suppresses-e2e-eligibility
       order: 769-g2wr
       status: completed
@@ -53688,6 +53939,13 @@ plan_index:
         chain). Multi-agent single-host operation is now the NORMAL pattern
         (five fork integrations tonight); the guard predates it.
 
+      events:
+        - type: note
+          ts: "2026-08-17T02:51:27Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T025127Z"
+          host: linux_mutable
+          summary: |
+            PREMISE FALSIFIED — and it was MINE. I filed this packet from inference after a real symptom (my Finalization verify answered blocked:boundary-state-missing mid-cycle while forks were running) and named concurrency as the cause without testing it. The fork demonstrated with a real linked worktree that a fork CANNOT retire the parent's boundary: stamps live under git rev-parse --git-dir, which for a linked worktree is .git/worktrees/<name>, so the two are isolated by construction. The actual cause was same-worktree: a second snapshot (re-baselining after dirt — which I did that cycle) retires the first BY DESIGN per 725-bu54, while the caller still held the stale pointer; verify then reported boundary-state-missing naming a path it had never seen, which reads as sabotage. Defect was DIAGNOSTIC, and is now fixed as such: snapshot records what it retired, verify answers blocked:boundary-superseded:<current> naming both paths and the cause, with a never-was-a-boundary negative control. The cross-worktree scenarios were kept as regression pins that would go red if anyone moved the stamp to the common dir — i.e. if my inferred bug were ever made real.
     - packet_id: meta-orchestration-ghost-spec-author-or-repoint
       order: 771-icf2
       status: ready
@@ -53947,6 +54205,12 @@ plan_index:
             A pin (unit test or litmus step reachable from the macOS lane) fails if a chmod wider than 0600 on intermediate.key returns to the crate.
 
       events:
+        - type: completed
+          ts: "2026-08-17T01:55:18Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
+          host: macos
+          summary: |
+            All three criteria discharged on osx-next. (1) Both preambles clamp to 0600, and each now carries an UNCONDITIONAL heal-down OUTSIDE the test -s guard — the load-bearing half: an existing 0644 key skips the openssl block entirely, and ensure_proxy_running early-returns at main.rs:2975-2980 when the proxy is already up, BEFORE the ensure_ca_bundle heal at :2991, so without it a widened key survived the VM's lifetime. (2) Verified STATICALLY, and recorded as static rather than claimed live: images/proxy/entrypoint.sh:42-52 reads ONLY /run/secrets/tillandsias-ca-key and exits 1 without it; the key travels as PROXY_CA_KEY_SECRET_OPTS uid=1000,gid=1000,mode=0400 (main.rs:2899/2930), so no proxy reader ever consulted the guest file's mode; the in-guest headless that writes and re-reads it runs as root (vz.rs unit has no User=). The stated justification in-tree ('so Squid (uid 1000) can read it') was FALSE since 755-qcxh and is rewritten with the real reason. No guest boot was performed, so no live claim is made. (3) Pin guest_ca_preflight_never_widens_the_private_key added to diagnose.rs's existing source-scanning mod tests; reachable from the macOS lane, unlike litmus-proxy-ca-key-not-world-readable.yaml whose stat -c %a is GNU-only and errors on BSD. HAND-FALSIFIED: reverting one chmod to 644 makes it fail with 'no code path may chmod the CA private key to 644'; restored, 86/86 green, clippy clean. First attempt at that negative control was itself a false pass — a BSD sed expression silently matched nothing, so the 'reverted' build was never reverted; caught by re-reading the file rather than trusting the runner.
         - type: filed
           ts: "2026-08-16T19:25:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
@@ -54039,6 +54303,12 @@ plan_index:
             Verdict recorded on 273: either the agent TUI paints (273 is MOOT — was the disk; obsolete it with the capture as evidence) or the login flow still appears with a built forge image (273's dispatch bug is REAL; unblock it and attach the fresh capture as the new founding evidence).
 
       events:
+        - type: progress
+          ts: "2026-08-17T01:55:52Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
+          host: macos
+          summary: |
+            SCOPING (macOS, cycle 22 triage — no work claimed): NOT cycle-sized as written, and half of it is already answered by evidence on disk. Criterion 1 needs three things this host cannot do unattended today: (a) the installed bundle (Aug 14) and staged guest binary (Aug 16 11:25) both PREDATE order 270 (b99a5726 12:44, bf29595d 13:10), so a rebuild+install is a precondition; (b) the first-use forge-base build at VERSION 0.4.260815.1 measured >>300s on this host (macos-opencode-firstuse-silent-build-idle-timeout-2026-07-13.md) on a substrate cold-provisioned Aug 14; (c) scripts/macos-tray-ax-smoke.sh ax_click iterates TOP-LEVEL menu items only and cannot descend into a project submenu to reach the agent leaf. ALSO: do NOT substitute a CLI --opencode one-shot for the capture — diagnose.rs sends ExecOneShot without --cloud and without the PTY bridge, so it exercises neither the argv 273 blames (host-shell pty/mod.rs:242-245, unchanged at HEAD) nor the tee the criterion names; treating them as equivalent would manufacture a false MOOT. WHAT IS ALREADY ANSWERED: the 250G fix 058c63c6 is an ancestor of 374cb0b8, so every macOS session from 2026-07-12 ran on the healthy substrate — and on it the tray-menu OpenCode leaf launched and ran a full in-forge cycle on retry (macos-opencode-first-attach-blank-lane-2026-07-12.md), the 07-16 in-forge MO smoke PASSED, and by 07-25 the open macOS defects presuppose a painting TUI. Proposed verdict for the linux-owned 273: MOOT-pending-tee. Not flipped from here — 273 is pickup_role linux.
         - type: filed
           ts: "2026-08-16T19:46:00Z"
           agent_id: linux-yoga-claude-20260816t185912z
@@ -54135,3 +54405,1653 @@ plan_index:
           summary: |
             Filed from the cycle-17 freshness audit; disposition=updated
             (header corrected, orphan status stated in the artifact itself).
+    - packet_id: plan-append-event-writer-identity-defaults
+      order: 772-4se9
+      status: completed
+      desired_release: v0.5
+      release_target: fail-loud-diagnosis-milestone
+      priority: p2
+      kind: bug
+      pickup_role: any
+      capability_tags:
+        - rust
+        - ledger
+      title: |
+        tillandsias-plan append-event stops fabricating agent_id=unknown host=linux: host defaults from the compiled platform, agent_id derives from TILLANDSIAS_AGENT_ID or refuses loudly.
+      context: |
+        Shaped from plan/issues/plan-append-event-defaults-fabricate-host-linux-2026-08-16.md.
+        `append-event` without --agent/--host hardcodes agent="unknown",
+        host="linux" (crates/tillandsias-plan/src/main.rs append-event arm) —
+        a wrong FACT on two of four host kinds, written into an immutable
+        fragment by every non-linux host that omits the flags. The binary
+        knows its platform at compile time; `unknown` is the hand-composed
+        improvisation 756-hn3a removed from claim recipes. Other writer arms
+        already share resolve_writer_host, whose own fallback is the literal
+        "unknown" plus a warning — also replaceable by the compiled platform,
+        which is a known fact, not an absence.
+      exit_criteria:
+        - |
+            append-event with no --host stamps the compiled platform (cfg target_os -> linux|macos|windows), TILLANDSIAS_HOST_KIND still winning when set (forge); resolve_writer_host's shared fallback follows the same rule so set-field/expire-claims stop writing host=unknown.
+
+        - |
+            append-event with no --agent derives agent_id from TILLANDSIAS_AGENT_ID; when that is absent (or the value is the literal "unknown") it REFUSES with a loud verdict naming scripts/agent-identity.sh — the literal string "unknown" can no longer be written as an agent_id.
+
+        - |
+            Unit tests pin both resolvers: a non-linux build can never default host=linux, and absent/literal-unknown agent identity is an error, not a written event.
+
+      verifiable_closure: |
+        cargo test -p tillandsias-plan passes including
+        writer_host_default_is_the_compiled_platform_never_a_fabricated_linux
+        and writer_agent_refuses_absence_and_the_literal_unknown;
+        scripts/test-ledger-ts-guard.sh stays 9/9 green.
+      events:
+        - type: filed
+          ts: "2026-08-16T12:46:00Z"
+          agent_id: windows-yolanda-fable5-20260816t124617z
+          host: windows
+          summary: |
+            Minted 772-4se9 and shaped from the cycle-2 issue; claimed for
+            implementation in the same windows cycle (small fixed-cost
+            reliability slice, experts/ledger-reliability directive).
+        - type: completed
+          ts: "2026-08-16T12:52:26Z"
+          host: windows
+          summary: |
+            status 'completed' with evidence_refs: WSL cargo test 17/17 incl. writer_host_default_is_the_compiled_platform_never_a_fabricated_linux + writer_agent_refuses_absence_and_the_literal_unknown; test-ledger-ts-guard.sh 9/9; no-agent refusal rc=2 loud verdict; unresolved-ref verdict still precedes identity refusal (litmus:append-event-rejects-unknown-flags-shape compatible)
+
+    - packet_id: retire-host-src-checkout-behind-proven-transparent-push
+      order: 776-jcf3
+      release_target: stable-milestone-v1
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: coordination+verification
+      title: 'Retire ~/src/<project> fleet-wide: cloud<->ephemeral-mirror<->ephemeral-forge only — gated on PER-HOST proof that the mirror pushes transparently (all forge changes die with the container otherwise)'
+      pickup_role: any
+      depends_on: []
+      capability_tags:
+        - forge
+        - git-mirror
+        - coordination
+        - all-platforms
+      context: |
+        OPERATOR DIRECTIVE (2026-08-16, in-session on macOS): the fleet is
+        moving to a truly idempotent/ephemeral path — cloud <-> ephemeral
+        git-mirror <-> ephemeral forge — and the host ~/src/<project> checkout
+        is to be REMOVED and never touched again. The hard constraint the
+        operator names: every forge change is LOST on container shutdown, so
+        the mirror's transparent push must be PROVEN on each host before the
+        historical recovery path (~/src, "from where we've been digging lost
+        work") is deleted.
+        
+        PROOF STATE at filing:
+          - macOS: **PROVEN** — 349's closing run (2026-08-16, evidence
+            plan/issues/macos-forge-349-closing-run-2026-08-16.md): a real
+            in-forge push relayed through the mirror to the actual GitHub
+            repo, verified upstream host-side, then cleaned. Fetch + TLS
+            parity green. Mirror pre-receive denies ref deletion (by design;
+            cleanup is host-side).
+          - linux: **BLOCKED-403** — their own e2e halted at gate 1 on a live
+            upstream 403 (770-dyqr / 771-wwzi, 759 family: seed-time
+            authorization validation). Push NOT proven.
+          - windows: **UNPROVEN** — no recorded real-push evidence; their
+            736-28m7/738-3pft attestation thread is adjacent but is about
+            test attestations, not mirror push.
+        
+        Also inherited from 763-munc (obsoleted by the same ruling): auto-ff
+        of ~/src is ruled OUT (never write it); the launch-time seed-staleness
+        verdict stays as transitional observability until removal.
+      exit_criteria:
+        - a real, reversible in-forge push through the mirror reaches upstream and is verified from outside the enclave on EACH of linux and windows (macOS evidence stands)
+        - the loss-on-shutdown window is stated and bounded in the runbook (what happens to committed-but-unpushed work when a lane dies — the mirror holds it? for how long? the answer is written down, not assumed)
+        - the launcher path drops the ~/src dependency (seed branch, gitconfig origin resolution, forge project mount) in favor of the mirror-only path, behind a flag or cutover plan the operator approves
+        - ~/src/<project> removal is an operator-executed final step, never automated
+      verifiable_closure: |
+        A forge launched on a host with NO ~/src/<project> present completes a
+        full cycle (clone from mirror, commit, push, verified upstream) on all
+        three platforms.
+      notes: |
+        Unit-level testing only where real accounts would be needed (operator:
+        only one GitHub account exists, and it has repos — no zero-repo or
+        scratch accounts will ever be available). Scratch BRANCHES on the real
+        repo, verified-then-deleted host-side, are the sanctioned real-push
+        proof shape (the 349 pattern).
+      events:
+        - type: filed
+          ts: "2026-08-16T20:25:00Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260816t2023z
+          host: macos
+          summary: |
+            Filed from the operator's in-session directive; successor to
+            763-munc. macOS's half of the proof is already banked (349).
+        - type: progress
+          ts: "2026-08-16T21:26:56Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260816t2123z
+          host: macos
+          summary: |
+            CRITERION 2 DISCHARGED: the loss-on-shutdown window is now WRITTEN DOWN with code provenance — cheatsheets/runtime/forge-loss-on-shutdown-window.md. The load-bearing fact, verified in images/git/pre-receive-hook.sh: relay is SYNCHRONOUS and upstream-first — a client push-success means upstream durably holds the atomic ref set; relay failure fails the push loudly (no queue, no grace window). Loss surface reduces to uncommitted/unpushed lane work (the accepted ephemerality trade) and local-only projects (mirror volume = only copy; on macOS that volume is in-guest and dies with --reset-guest — flagged as the accept-or-fence decision in the doc). Deletes and force-pushes through the mirror are denied by receive config before the relay. Also noted from linux's 587ebbef: their 403 is narrowed to the TOKEN itself with the verdict machinery proven end-to-end — criterion 1's linux half is close.
+        - type: progress
+          ts: "2026-08-16T22:24:31Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260816t2223z
+          host: macos
+          summary: |
+            PROOF MATRIX UPDATE from windows (b93cd060, 2026-08-16T22:0xZ): windows push chain VERIFIED out-of-band — claude/mirror-fix-verify-260816=7972411 landed on github.com from a windows in-forge push with zero manual git config (594-pm5h evidence; their full-meta completion gate still pending by their own rate-limit discipline, but criterion 1's SUBSTANCE — a real relayed push verified upstream — is banked). 777-i7hf also fixed the mirror FETCH credential path with two verified-ack pushes. Matrix now: macOS PROVEN (349), windows PROVEN (594-pm5h), linux = token-only (756-2jnj machinery proven). The ~/src retirement gate is one linux credential fix from fully green on criterion 1.
+
+    - packet_id: windows-tray-lane-launch-omits-accel-envelope
+      release_target: stable-milestone-v1
+      order: 776-drwr
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: windows
+      priority: p2
+      tags:
+        - windows
+        - tray
+        - forge
+        - accel
+        - provenance
+        - v0.5
+      title: |
+        The Windows tray lane-launch path never sets TILLANDSIAS_ACCEL_ENVELOPE — the first real tray-launched lane ran with no accel claim at all, and lib-common.sh's agent-facing "Accelerators" line is absent from lane logs.
+      context: |
+        Measured live 2026-08-16 ~20:55-21:05Z on windows/Yolanda, inside the
+        first real tray-launched forge lane on this host (container
+        tillandsias-java-forge, image localhost/tillandsias-forge:v0.4.260815.1,
+        guest v0.4.260815.1): TILLANDSIAS_ACCEL_ENVELOPE is ABSENT — not in
+        `podman inspect .Config.Env`, not in /proc/1/environ, and no
+        "Accelerators" line in `podman logs`. Not a GPU claim — a missing claim.
+        The claim side is headless main.rs `.env(TILLANDSIAS_ACCEL_ENVELOPE, ...)`,
+        which evidently does not reach this launch path.
+        Cross-references: 769-w3ma (its `accel_class=<value|unknown>` grammar now
+        has a confirmed real absent-envelope case on Windows) and 599-3b9h
+        (whose criterion-2 read produced this measurement; evidence events in
+        plan/index.d/20260816t205500z-599-3b9h-reads-windows.yaml).
+      exit_criteria:
+        - |
+            A tray-launched Windows forge lane carries TILLANDSIAS_ACCEL_ENVELOPE in its container environment (visible in `podman inspect .Config.Env` and /proc/1/environ), with the first line naming the host's accel class (cpu-only on this hardware).
+
+        - |
+            lib-common.sh's agent-facing "Accelerators" line renders in the lane log for tray-launched lanes.
+
+        - |
+            The launch-path divergence is named in the fix: where the headless `.env(TILLANDSIAS_ACCEL_ENVELOPE, ...)` claim attaches, and why the Windows tray lane-launch path bypassed it.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:00:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed from the 599-3b9h criterion-2 read during the operator-attended
+            session 2026-08-16 (The Tlatoāni, windows/Yolanda): the first real
+            tray-launched lane on this host had no accel envelope anywhere —
+            container env, PID 1 environ, or lane log.
+
+    - packet_id: repo-osi-license-decision
+      release_target: windows-authenticode-signing
+      order: 776-it8u
+      status: completed
+      desired_release: v0.5
+      kind: decision
+      pickup_role: operator
+      priority: p1
+      capability_tags:
+        - licensing
+        - signing
+        - governance
+      title: |
+        Choose and commit an OSI-approved LICENSE for the repo — the SignPath Foundation prerequisite.
+      context: |
+        The repo has NO LICENSE file. SignPath Foundation — the decided signing
+        path for the GitHub-release channel (operator decision 2026-08-16,
+        recorded on 722-w7a2) — requires an OSI-approved license, no proprietary
+        components, and no commercial dual-licensing (signpath.org/terms). The
+        license choice binds the legal terms of the whole project, so it is the
+        operator's: pickup_role operator. Research:
+        plan/issues/windows-signing-research-2026-08-16.md.
+      exit_criteria:
+        - |
+            An OSI-approved LICENSE file is committed at the repo root, and the choice (who/when/which license) is recorded as a decision event on this packet.
+
+        - |
+            The SignPath constraints are confirmed against the chosen license and the tree: OSI-approved, no proprietary components, no commercial dual-licensing.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:05:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed as the first rung of the SignPath prerequisite chain decided
+            by the operator 2026-08-16 (decision event on 722-w7a2).
+        - type: completed
+          ts: "2026-08-16T21:09:34Z"
+          host: windows
+          summary: |
+            status 'completed' with evidence_refs: commit 17d16629f adds LICENSE at the repo root - canonical FSF GPL-3.0 text verbatim, sha256 3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986; GPL-3.0 is OSI-approved and meets the SignPath constraints (no proprietary components, no commercial dual-licensing); operator decision event in plan/index.d/20260816t213000z-776-it8u-license-decided-windows.yaml
+        - type: note
+          ts: "2026-08-16T21:09:34Z"
+          host: windows
+          summary: |
+            decided GPL-3.0 by the operator in the same attended session that filed the packet; filed as already-decided per coordinator addition A
+        - type: decision
+          ts: "2026-08-16T21:30:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            OPERATOR DECISION (The Tlatoāni, 2026-08-16, attended session on
+            windows/Yolanda): the repo license is GPL-3.0. The canonical FSF
+            text (https://www.gnu.org/licenses/gpl-3.0.txt, verbatim, sha256
+            3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986)
+            is committed as LICENSE at the repo root (commit 17d16629f).
+            SignPath constraints confirmed for the choice: GPL-3.0 is
+            OSI-approved; no proprietary components and no commercial
+            dual-licensing are in play. This satisfies the license side of
+            signpath-foundation-application's (776-t8hs) dependency.
+
+    - packet_id: signpath-foundation-application
+      release_target: windows-authenticode-signing
+      order: 776-t8hs
+      status: ready
+      desired_release: v0.5
+      kind: implementation
+      pickup_role: operator
+      priority: p1
+      depends_on:
+        - repo-osi-license-decision
+      capability_tags:
+        - windows
+        - signing
+        - ci
+      title: |
+        Publish a code-signing policy page + attribution and apply to SignPath Foundation for the GitHub-release channel.
+      context: |
+        The decided path per the 2026-08-16 operator decision on 722-w7a2
+        (SignPath Foundation over Azure Artifact Signing, which stays the
+        recorded fallback). Expect a days-to-weeks lead time and PER-RELEASE
+        manual approval thereafter; the publisher name on signed binaries will
+        read "SignPath Foundation". Requires the OSI license decision first
+        (depends_on repo-osi-license-decision, 776-it8u). Research and
+        constraints: plan/issues/windows-signing-research-2026-08-16.md.
+      exit_criteria:
+        - |
+            A code-signing policy page and the SignPath attribution are published where SignPath requires them.
+
+        - |
+            The application is submitted; its status (approved/pending/rejected, with dates) is recorded as events on this packet.
+
+        - |
+            On approval, wiring the release workflow to SignPath (including the per-release manual-approval step) is scoped as its own follow-up packet, not smuggled into this one.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:05:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed as the second rung of the SignPath prerequisite chain decided
+            by the operator 2026-08-16 (decision event on 722-w7a2).
+
+    - packet_id: store-msix-free-signing-research
+      release_target: windows-authenticode-signing
+      order: 776-g6r3
+      status: ready
+      desired_release: v0.5
+      kind: research+enhancement
+      pickup_role: windows
+      priority: p2
+      capability_tags:
+        - windows
+        - signing
+        - packaging
+        - ci
+      title: |
+        Research/prototype the Microsoft Store MSIX channel — Store re-signing costs $0 and clears SmartScreen/SAC.
+      context: |
+        RESEARCH-RECOMMENDED, NOT YET OPERATOR-APPROVED — recorded explicitly
+        per the 2026-08-16 session. Microsoft re-signs MSIX packages submitted
+        through the Store ($0; no SmartScreen/SAC warnings; both Partner Center
+        registration fees waived as of 2025-09-10 and 2026-05-07), and the
+        operator already holds a Store listing. Scope: MSIX-package the tray
+        (runFullTrust + startup task), drive the Store submission API from CI.
+        Complementary to — not a replacement for — the SignPath GitHub-release
+        channel. Research: plan/issues/windows-signing-research-2026-08-16.md.
+      exit_criteria:
+        - |
+            A working MSIX packaging of the Windows tray (runFullTrust + a startup task) is demonstrated, or the concrete blocker is named.
+
+        - |
+            The Store submission API path from CI is mapped end to end (auth, artifact upload, submission, publish), with costs and lead times recorded.
+
+        - |
+            An operator decision event on this packet records whether the Store channel is adopted alongside the GitHub-release channel — until then this stays research, not direction.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:05:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed from the 2026-08-16 signing research; flagged explicitly as
+            recommended by research and NOT yet operator-approved.
+
+    - packet_id: hash-image-sources-git-normalized
+      release_target: stable-milestone-v1
+      order: 776-cm74
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: any
+      priority: p2
+      tags:
+        - build
+        - forge
+        - windows
+        - portability
+        - v0.5
+      title: |
+        scripts/hash-image-sources.sh hashes GIT-NORMALIZED content (index object ids), not working-tree bytes.
+      context: |
+        OPERATOR DECISION (The Tlatoāni, 2026-08-16, attended session on
+        windows/Yolanda): the hasher hashes git-normalized content, not
+        working-tree bytes — ruling the open hasher question in
+        plan/issues/hash-image-sources-fixture-windows-portability-2026-08-16.md
+        (decision appended there, same date). This makes the forge-image source
+        hash invariant under core.autocrlf and checkout location, which is what
+        the fixture's cross-location comparison actually needs to be truthful on
+        Windows (today the CRLF working-tree bytes hash differently between two
+        clones of the SAME commit).
+      exit_criteria:
+        - |
+            scripts/hash-image-sources.sh derives its hash from git-normalized content (e.g. git ls-files -s object ids over the image source set), so two clones of the same commit hash identically regardless of core.autocrlf or checkout location.
+
+        - |
+            scripts/test-hash-image-sources.sh passes on Windows (a core.autocrlf=true host config) and on Linux; the exec-bit scenario is gated on core.fileMode=true with a loud skip verdict where false, per the issue's second question.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:10:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed from the operator's 2026-08-16 ruling on the fixture-
+            portability issue; cites
+            plan/issues/hash-image-sources-fixture-windows-portability-2026-08-16.md.
+
+    - packet_id: ensure-toolbox-default-pattern-adoption
+      order: 777-amku
+      status: completed
+      desired_release: v0.5
+      priority: p1
+      kind: enhancement
+      title: 'OPERATOR DIRECTIVE 2026-08-16: every script is idempotent and toolbox-friendly via a shebang-level ensure_toolbox.sh include — adopt the pattern repo-wide and canonize it in methodology'
+      deliverable: scripts/ensure_toolbox.sh (landed 2026-08-16, delegates to with-tillandsias-builder.sh direct mode) sourced by every script that needs tools the host may lack; a methodology/ entry stating the pattern; a litmus pinning the include's contract (create+init once, noop after, no caller option rewrite, silent noop off-toolbox hosts); host-daemon/package operator asks re-shaped as toolbox-friendliness packets
+      pickup_role: any
+      release_target: convergence-velocity-milestone
+      capability_tags:
+        - toolbox
+        - methodology
+        - portability
+        - idempotence
+      estimated_hours: 4
+      context: |
+        The operator rejected "enable host nix-daemon" as a remedy for 606-um5s:
+        toolboxes are the agreed substrate for everything; host-level daemons and
+        packages are snowflake state. scripts/ensure_toolbox.sh now exists with
+        the exact directed contract (if the toolbox doesn't exist, create and
+        init; otherwise noop) implemented by delegation to
+        with-tillandsias-builder.sh's marker-gated ensure — one implementation,
+        two entry shapes (ensure-only include vs re-exec wrapper). Adoption
+        sweep: audit scripts/ for host-tool dependencies (nix, ruby, jq
+        variants, perl, cross toolchains), add the include where needed, and
+        ensure the toolbox INIT installs the swept tool set (nix single-user in
+        the toolbox unblocks 606-um5s verification with zero host changes).
+        Guard against the 599-4wzr shipped-but-never-activated class: the litmus
+        and the methodology entry are part of DONE, not follow-ups.
+      events:
+        - type: completed
+          ts: "2026-08-16T22:42:38Z"
+          host: linux_mutable
+          summary: |
+            status 'completed' with evidence_refs: worktree fork 2026-08-16T23:0xZ: (1) METHODOLOGY canonized — multi-host-development.yaml toolbox_first_scripts (rule + include contract + tool-dispatch pattern, cites the operator directive and 777-amku; file parses); (2) LITMUS litmus:ensure-toolbox-include-shape registered under dev-build and executed 6/6 STEPS OK on this host (exists/parses, strict-option preservation, lax no-errexit-leak [731-pc5r class], direct exec, single-delegated-implementation grep, canon-entry routable); (3) SWEEP — already-compliant: build.sh + local-ci.sh (with-tillandsias-builder re-exec), nix lanes (scripts/nix-toolbox.sh daemon/chroot/toolbox preference, fixture 5/5 at rung=chroot here), with-wsl2-builder (windows sibling); newly included: archive-plan-packets.sh (the ONE hard-ruby script with no fallback — ensure_toolbox include + _ruby host-preferred/toolbox-fallback dispatch on all three call sites, --check mode re-run green: idempotent); audited-not-needing-it: check-pickup-role-grammar.sh (grep/sed/awk by design), check-plan-schema-divergence.sh (yq-first + loud no-reader refusal), run-litmus-test.sh (comment-only ruby mention), select-work-batch.sh, cycle-preflight.sh (fail-loud blocked:preflight:plan:cargo-absent, proven daily on Silverblue yoga); (4) Silverblue create+init lane: no NEW behavior introduced — the include delegates to with-tillandsias-builder.sh whose create+init runs daily on yoga; pass-through lane verified here. 606-um5s enablement recorded as an event (nix-toolbox.sh already covers it).
+
+    - packet_id: wsl2-gate-plan-probe-survives-interop-loss
+      release_target: stable-milestone-v1
+      order: 778-zydb
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: windows
+      priority: p2
+      tags:
+        - windows
+        - wsl2
+        - gate
+        - fail-loud
+        - v0.5
+      title: |
+        The pre-push gate inside tillandsias-build survives WSL interop loss: resolve_plan_binary learns CARGO_TARGET_DIR candidates so the probe never depends solely on Windows-exe interop.
+      context: |
+        Measured live 2026-08-16 ~21:00-21:30Z (windows/Yolanda): four
+        consecutive `./build.sh --check` runs went red at
+        check-fragment-status-loss with "tillandsias-plan not built" while the
+        same check passed standalone in Git Bash. Root cause: the gate re-execs
+        inside the tillandsias-build WSL2 distro, where WSL interop had died
+        (Windows-exe exec = 126; /proc/sys/fs/binfmt_misc/WSLInterop gone —
+        likeliest killer: concurrent runtime-distro churn from the operator's
+        stress test; the WSL2 utility VM's binfmt table is shared across
+        distros). With interop dead the probe has NO live candidate: the
+        in-tree .exe cannot exec, no in-tree Linux binary exists (the wrapper
+        deliberately uses a distro-native CARGO_TARGET_DIR), and
+        /root/.local/bin is login-shell-only PATH. The only trunk-protection
+        gate stays red for as long as interop is down. Full forensics:
+        plan/issues/enhancement/wsl2-gate-plan-probe-interop-single-point-of-failure-2026-08-16.md.
+      exit_criteria:
+        - |
+            resolve_plan_binary (scripts/plan-binary-probe.sh) includes $CARGO_TARGET_DIR/release and $CARGO_TARGET_DIR/debug tillandsias-plan candidates (execution-probed, same as every other candidate), mirroring resolve_target_binary's CARGO_TARGET_DIR handling (770-ifeg).
+
+        - |
+            scripts/with-wsl2-builder.sh ensures a distro-native tillandsias-plan exists before re-exec (idempotent cargo build) or exports TILLANDSIAS_PLAN_BIN to one, so a gate run inside the distro never depends on Windows-exe interop.
+
+        - |
+            A fixture pins the interop-dead shape: with an exec-format-failing .exe candidate and a valid CARGO_TARGET_DIR candidate, the probe resolves the latter; with NO live candidate the failure verdict names the dead candidates rather than only "not built".
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:34:15Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed during the attended session after the pre-push gate went red
+            four times in a row on this host; recovered by building
+            tillandsias-plan distro-natively and forwarding
+            TILLANDSIAS_PLAN_BIN through WSLENV (recovery recipe in the
+            issue).
+
+    - packet_id: github-login-device-flow-only
+      release_target: fail-loud-diagnosis-milestone
+      order: 777-kyjp
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: linux
+      priority: p2
+      deliverable: crates/tillandsias-headless/src/main.rs
+      depends_on: []
+      capability_tags:
+        - auth
+        - github
+        - login
+        - ux
+      title: |
+        Remove the GitHub token-paste prompts entirely — device login is the ONLY GitHub auth flow.
+      context: |
+        OPERATOR DIRECTIVE (The Tlatoāni, 2026-08-16, attended session on
+        windows/Yolanda; recorded as a decision event on 648-e5pf): remove the
+        token-paste prompts entirely; device login becomes the only GitHub auth
+        flow — "that one works much better". Live-session grounding: the token
+        paste failed twice, the device flow succeeded end to end (first Windows
+        reproduction of 648-e5pf, progress event
+        plan/index.d/20260816t211500z-648-e5pf-windows.yaml). 648-e5pf
+        established the mechanism: GH_LOGIN_TOKEN_SCRIPT (main.rs:7100) pipes to
+        `gh auth login --with-token` and contains no device flow, while GitHub
+        is registered AuthModel::OAuthDevice (main.rs:523) — a declared auth
+        model and an actual input method that disagree. This packet resolves the
+        disagreement in favor of the declared model. Related findings from the
+        same run:
+        plan/issues/enhancement/github-login-device-flow-dangling-enter-prompt-2026-08-16.md
+        and
+        plan/issues/enhancement/github-login-device-url-not-clickable-2026-08-16.md.
+      exit_criteria:
+        - |
+            The GitHub login flow presents NO token-entry prompt anywhere; the device flow (one-time code + github.com/login/device URL) is the only path and completes the sign-in.
+
+        - |
+            GH_LOGIN_TOKEN_SCRIPT and its prompt surface are removed (not merely hidden), and the AuthModel::OAuthDevice registration matches the actual flow.
+
+        - |
+            648-e5pf is closed against this packet when the device-only flow lands, with its untraced question (which component launched the device flow after the token attempt failed) answered or explicitly carried forward.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:35:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed as the implementation successor of the operator's
+            device-flow-only directive (decision event on 648-e5pf, same
+            fragment).
+
+    - packet_id: windows-git-mirror-daemon-has-no-upstream-credential-and-never-seeds
+      release_target: stable-milestone-v1
+      order: 777-i7hf
+      status: completed
+      desired_release: v0.5
+      kind: fix
+      pickup_role: windows
+      priority: p1
+      tags:
+        - windows
+        - git-mirror
+        - forge
+        - credentials
+        - fail-loud
+        - v0.5
+      title: |
+        The Windows lane git mirror never seeds — the daemon container has no upstream credential channel and a workstation fetch refspec — so every lane launch on this host fails or hangs on an empty mirror.
+      context: |
+        MAJOR DEFECT, root-caused live by the operator (The Tlatoāni,
+        ~2026-08-16T20:55-21:05Z, windows/Yolanda). Repro: OpenCode lane for
+        project `java` (upstream github.com/8007342/java — VERIFIED NON-EMPTY
+        via gh api: size=316, default_branch=main, pushed_at=2026-06-12). Lane
+        sequence: "cloud: cloning 8007342/java ... clone complete" -> four
+        images built fresh (router/inference/forge-base/forge, all
+        digest_missing, several minutes) -> 12 in-lane
+        `git clone git://git-hhpf3na9q9rs1i74sbhg/java` attempts, each
+        "warning: You appear to have cloned an empty repository" -> "[forge]
+        FATAL: ... EMPTY checkout (no HEAD) after 12 attempts. The mirror is
+        reachable but advertised no cloneable refs — it has not finished
+        seeding from upstream (or upstream is empty)." Multiple relaunches
+        identical — NOT a first-time race. A codex lane launched afterwards
+        HUNG retrying the mirror clone every ~2.5s indefinitely (guest journal
+        21:00Z onward; each attempt logged by the daemon as "fatal: the remote
+        end hung up unexpectedly") — filed separately as 777-k88g.
+        
+        Forensics on the long-lived mirror container tillandsias-git-java
+        (image localhost/tillandsias-git:v0.4.260815.1, Up since ~20:45Z,
+        healthcheck "healthy" throughout):
+        - /srv/git/java bare repo exists; HEAD -> refs/heads/main; refs/heads/
+          EMPTY; no packed-refs; refs/remotes/ ABSENT;
+          `find objects -type f | wc -l` = 0; FETCH_HEAD 0 bytes, mtime
+          touched 21:00Z (something retries fetches).
+        - git-daemon args are correct (--base-path=/srv/git --export-all
+          --enable=receive-pack --listen=0.0.0.0 --port=9418).
+        - Repo config: remote origin = https://github.com/8007342/java.git
+          with fetch refspec `+refs/heads/*:refs/remotes/origin/*` — a
+          WORKSTATION refspec; even a successful fetch would land refs where
+          git:// clients cannot clone them. A mirror wants
+          `+refs/heads/*:refs/heads/*` or mirror=true. tagOpt --no-tags.
+        - Live test fetch inside the container: "fatal: could not read
+          Username for 'https://github.com': No such device or address" ->
+          the daemon container has NO upstream credential channel, despite
+          the operator's GitHub device-login completing ~30 min before the
+          container was created (vault write path was healthy).
+        - Context: short-lived tillandsias-git blip containers (~400ms
+          create->remove each, with per-op podman secret create/secret
+          remove) were observed at 13:28-13:29 local — if those blips are the
+          intended seeding mechanism (fetch with secret, push into the daemon
+          via receive-pack), they either never targeted java or fail fast.
+        
+        Cross-references: 594-pisu
+        (git-mirror-container-created-without-relay-credential — completed on
+        linux; this is its regression or its unported Windows path), 594-csgb
+        (mirror-first-seed vs launch-readiness race), 756-2jnj (healthcheck
+        says healthy while upstream auth is absent — health = daemon-up, not
+        refs-present), 731-eupn (the FATAL text conflates "not seeded" with
+        "upstream empty"; live evidence note recorded on it this session),
+        and cycle 4's windows litmus mirror-seam red.
+      exit_criteria:
+        - |
+            For a project with a non-empty upstream, the mirror seeds within a bounded time of container creation: refs/heads/ populated via a mirror-style refspec (`+refs/heads/*:refs/heads/*` or mirror=true), objects non-zero, and an in-lane `git clone git://...` yields a NON-EMPTY checkout.
+
+        - |
+            The seeding path has a working upstream credential channel on Windows (the vault-held GitHub credential reaches whatever performs the upstream fetch), or the design is changed so the daemon container never needs one — either way the actual mechanism (blip containers or in-daemon fetch) is named and verified live on this host.
+
+        - |
+            Mirror health/readiness reflects refs-present, not merely daemon-up (756-2jnj family), so a lane launch cannot be handed an unseeded mirror silently.
+
+        - |
+            The live repro passes end to end: an OpenCode lane for 8007342/java on this host reaches a non-empty checkout.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:40:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed from the operator's live root-cause session 2026-08-16:
+            empty bare repo (0 objects, empty refs/heads, 0-byte FETCH_HEAD),
+            workstation fetch refspec, and no upstream credential channel in
+            the daemon container, while the healthcheck reported healthy
+            throughout and upstream was verified non-empty.
+        - type: completed
+          ts: "2026-08-16T21:56:09Z"
+          agent_id: windows-yolanda-fable5-20260816T2130Z-mirror-fix
+          host: windows
+          summary: |
+            ROOT CAUSE (sharper than filed): the daemon container HAD its Vault AppRole credential channel (Vault Agent authenticated on every start — journal 21:40:03.7Z) and the 'workstation' configured refspec is the deliberate order-301 TRACKING refspec (cloneable heads are written by the EXPLICIT command-line refspecs of the seed/reconcile fetches). The real defect: NO fetch path wired the Vault credential helper — entrypoint seed fetch (old :445), startup retry/FF fetches (old :472/:493), reconcile-exported-heads.sh:37 — only the push relay (relay-refs.sh) and probe-upstream-auth did. github.com/8007342/java is PRIVATE (verified: anonymous ls-remote with credential.helper disabled is refused; the filed 'non-empty via gh api' check was authenticated), so every anonymous fetch got 401 and died 'could not read Username' (journal 20:45:19Z + every 120s reconcile tick); zero refs forever while the port-only healthcheck said healthy. The ~400ms blip containers are the containerized gh list/clone calls (remote_projects.rs), NOT a seeder — the daemon container itself is the seeder, by design. FIX (platform-shared, images/): entrypoint.sh exports GIT_TERMINAL_PROMPT=0 plus the relay's reset+helper GIT_CONFIG credential.helper environment pair once at entrypoint scope so every fetch child inherits it; seed failure now classifies UPSTREAM AUTH REFUSED loudly instead of reading like 'upstream empty' (731-eupn); lib-common.sh no-cloneable-refs FATAL names all three causes; pinned by new litmus:git-mirror-fetch-credential-shape (6/6 green, bound in litmus-bindings.yaml) which also pins the order-301 tracking refspec so nobody 'fixes' it into a clobbering mirror refspec. LIVE VERIFICATION (this host, guest v0.4.260815.1 hot-swapped headless carrying the fix, git image sha256-ce2f2cd5, SAME previously-empty volume): container start 21:40:03Z -> Vault Agent token sink 21:40:03.7Z -> seed fetch 21:40:05 -> refs/heads/main=283a73a1 + 68 objects + HEAD->main + upstream-auth:authorized:1786916406; enclave git:// ls-remote advertises HEAD+main at the upstream SHA; OpenCode java lane cloned NON-EMPTY ('Cloning into /home/forge/src/java') and printed JAVA-LANE-SMOKE: OK, lane rc=0 (cold incl. full image rebuilds 21:33->21:41Z; warm relaunch 53s). EC1/EC2/EC4 met; EC3's container-healthcheck residue (health=daemon-up) spun off to 778-hb3x — the launcher gate is already refs-based (594-csgb) and the in-forge FATAL is now honest.
+        - type: completed
+          ts: "2026-08-16T21:59:31Z"
+          host: windows
+          summary: |
+            status 'completed' with evidence_refs: commit efda53d6a; litmus:git-mirror-fetch-credential-shape 6/6 OK in the registered git-mirror-service suite (windows 2026-08-16, fail set unchanged vs baseline a1ab8d81f); live as-wired check: java mirror seeded refs/heads/main=283a73a1 + OpenCode lane JAVA-LANE-SMOKE: OK rc=0 + two verified-ack pushes landed upstream (7972411126b3, out-of-band ls-remote)
+        - type: note
+          ts: "2026-08-16T21:59:31Z"
+          host: windows
+          summary: |
+            all exit criteria addressed live 2026-08-16; EC3 healthcheck residue spun off to 778-hb3x (see completed event of same date)
+
+    - packet_id: codex-lane-mirror-wait-unbounded
+      release_target: fail-loud-diagnosis-milestone
+      order: 777-k88g
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: any
+      priority: p2
+      tags:
+        - forge
+        - lanes
+        - fail-loud
+        - v0.5
+      title: |
+        The codex lane retries the mirror clone forever — no attempt cap, no timeout, no fail-loud.
+      context: |
+        Observed live 2026-08-16 from ~21:00Z (windows/Yolanda) during the
+        mirror-never-seeds defect (777-i7hf): a codex lane hung retrying the
+        mirror clone every ~2.5s indefinitely (guest journal; each attempt
+        logged by the daemon as "fatal: the remote end hung up unexpectedly").
+        Contrast the OpenCode lane in the same launch against the same mirror:
+        it fails LOUD after 12 attempts with a FATAL naming the mirror state.
+        Only the lane's wait policy differs; the codex lane's unbounded wait
+        converts a diagnosable mirror defect into a silent hang.
+      exit_criteria:
+        - |
+            The codex lane bounds its mirror-clone wait (attempt cap and/or timeout) and fails LOUD with a verdict naming the mirror state, consistent with the OpenCode lane's grammar (and with 731-eupn's not-seeded vs upstream-empty disambiguation when that lands).
+
+        - |
+            A test or litmus pins the bounded-wait behavior so an unbounded retry loop cannot return silently.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:40:00Z"
+          agent_id: windows-fable5-attended-20260816
+          host: windows
+          summary: |
+            Filed from the same live session as 777-i7hf: the codex lane hung
+            indefinitely where the OpenCode lane failed loud after 12
+            attempts.
+        - type: progress
+          ts: "2026-08-16T23:00:00Z"
+          agent_id: windows-fable5-mo-cycle6-20260816T2220Z
+          host: windows
+          summary: |
+            Source-reading narrows the residual (not claimed this cycle): the
+            packet premise "no attempt cap" does not match CURRENT source. The
+            codex lane shares clone_project_from_mirror
+            (images/default/lib-common.sh), whose network clone loop is capped
+            at max_retries=12 with a loud FATAL and the 777-i7hf-aware
+            empty-vs-auth disambiguation; the codex CLI path also passes
+            through ensure_enclave_for_project, whose launcher-side
+            wait_for_git_mirror_ready gate is bounded
+            (GIT_MIRROR_COLD_SEED_MAX_WAIT_SECS) and refuses the launch.
+            The observed indefinite ~2.5s retry therefore most likely came
+            from (a) a forge image predating these bounds (same
+            stale-bundled-assets family as 683-g7p6), or (b) a restart/retry
+            loop OUTSIDE the entrypoint. Smallest next action for the
+            claimant: pull the guest journal for the offending codex
+            container's image tag from the 2026-08-16 ~21:00Z window before
+            writing any code.
+
+    - packet_id: mcp-tool-socket-is-a-ghost-spec-trace
+      release_target: stable-milestone-v1
+      order: 780-32zr
+      status: completed
+      desired_release: v0.5
+      kind: fix
+      pickup_role: linux
+      priority: p2
+      tags:
+        - openspec
+        - traceability
+        - mcp
+        - v0.5
+      title: |
+        16 `@trace spec:mcp-tool-socket` annotations point at a spec that does not exist — the per-lane MCP socket has no spec of its own.
+      context: |
+        Every commit touching `crates/tillandsias-headless/src/tray/mod.rs`
+        prints 16 pre-commit notices of the form
+        `✗ OpenSpec: ghost trace 'spec:mcp-tool-socket' … — no spec exists`.
+        `openspec/specs/` contains browser-mcp-server, cheatsheet-mcp-server,
+        host-browser-mcp and mcp-on-demand — but no `mcp-tool-socket`.
+        
+        This is not cosmetic. The per-lane NDJSON socket introduced by order
+        505 (listener-derived attribution, 0600 sockets, per-lane mount
+        isolation) is a real, security-relevant surface whose invariants are
+        currently traced to nothing. Order 779-5ryn (2026-08-16) folded a
+        description of the transport into `host-browser-mcp/spec.md` because
+        that was the spec that had drifted — but the socket itself is used by
+        more than the browser family (the publish/service trio rides it too),
+        so `mcp-tool-socket` deserves either its own spec or a deliberate
+        redirect of all 16 traces to an existing one.
+        
+        A trace that resolves to nothing is worse than an untraced line: it
+        reads as coverage and the gate that would catch drift never runs.
+      exit_criteria:
+        - |
+            Either `openspec/specs/mcp-tool-socket/spec.md` exists and states the per-lane socket contract (path shape, 0600, listener-derived attribution, deny-then-close on an unattributable peer, NDJSON one-object-per-line framing), or every `@trace spec:mcp-tool-socket` annotation is retargeted to the spec that actually owns each invariant.
+
+        - |
+            The pre-commit OpenSpec ghost-trace notice count for tray/mod.rs is zero, and a litmus or the existing trace-coverage gate fails if a ghost trace is reintroduced.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T21:40:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Surfaced while composing the browser tool family (779-3trn): the
+            dispatcher's whole surface traces a spec id that has never
+            existed.
+        - type: completed
+          ts: "2026-08-16T23:26:45Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Took the first branch: the traces were correct and the spec was missing, so openspec/specs/mcp-tool-socket/spec.md now exists and owns the socket contract (per-lane path + 0600/0700 + mount isolation, listener-derived attribution incl. forged-environ and unattributable cases, NDJSON framing with the 4 MiB ceiling bounded at the read, resync-not-close, one-request-in-flight and why no concurrent limit belongs while sequential). host-browser-mcp's transport section reduced to a pointer plus what is genuinely its own (socat bridge, order-505 supersession record) — restating the contract twice is how specs drift, the exact defect 779-5ryn repaired. Bound to litmus:host-browser-mcp-lane-socket-shape (precedent: one litmus serving four specs). Verified: pre-commit prints ZERO spec:mcp-tool-socket ghost notices (was 17); trace-coverage ghost specs 10 -> 9, remaining nine belong to other specs (enclave-service-catalog x6, fat-spec-corpus-index, forge-git-ergonomics, +1) and are untouched.
+        - type: completed
+          ts: "2026-08-16T23:26:46Z"
+          host: linux-immutable
+          summary: |
+            status 'completed' with evidence_refs: c08550f2b + zero ghost notices on commit + litmus mcp-tool-socket and host-browser-mcp both PASS
+        - type: note
+          ts: "2026-08-16T23:26:46Z"
+          host: linux-immutable
+          summary: |
+            780-32zr closed by linux-yoga-claude-20260816t185912z
+
+    - packet_id: macos-diagnose-consumes-guest-metrics-snapshot
+      release_target: socket-audit-master
+      order: 778-n9z2
+      status: ready
+      desired_release: v0.5
+      kind: enhancement
+      pickup_role: macos
+      priority: p2
+      depends_on:
+        - guest-container-metrics-over-control-wire
+      tags:
+        - macos
+        - tray
+        - observability
+        - control-wire
+        - v0.5
+      title: |
+        macOS --diagnose --json gains a metrics block read over the control wire (333's exit criterion 4, split at the write-scope boundary).
+      context: |
+        Order 333's guest side LANDED on linux-next 2026-08-16: the guest
+        headless samples per-container cgroup v2 counters and per-mount I/O and
+        answers `MetricsSnapshotRequest` with `MetricsSnapshotReply` over vsock
+        (additive wire variants, no WIRE_VERSION bump; routing pinned vsock-only
+        in control_dispatch; litmus:guest-container-metrics-wire-shape 7/7).
+        The guest advertises the capability string `MetricsSnapshotRequest` in
+        its HelloAck server_caps, so the tray can feature-detect rather than
+        version-sniff.
+        
+        333's fourth exit criterion — "`--diagnose --json` gains a metrics block
+        on macOS (read over the wire)" — lives in
+        `crates/tillandsias-macos-tray/`, outside the linux write scope, so it
+        is split here rather than edited cross-host. Wire types to consume:
+        `MetricsSnapshotWire { sampled_at_unix, containers, mounts }` with
+        `ContainerMetricWire` / `MountIoMetricWire` (all counters `Option<u64>`;
+        a failed sample carries `error` and leaves counters `None`).
+      exit_criteria:
+        - |
+            `--diagnose --json` on macOS includes a metrics block populated from a MetricsSnapshotRequest over the control wire when the guest advertises the MetricsSnapshotRequest capability, and omits it (or marks it unsupported) when the guest does not — feature detection via HelloAck server_caps, never a version comparison.
+
+        - |
+            The NO-FABRICATION contract survives the tray hop: a container or mount sample carrying `error` renders as an error in the diagnose JSON with its counters absent — never as a zero (spec:observability-metrics).
+
+        - |
+            Evidence from a booted guest: the diagnose JSON shows at least one real per-container sample and the named hot-path mounts, captured on an attended macOS smoke.
+
+      events:
+        - type: progress
+          ts: "2026-08-17T02:31:31Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0223z"
+          host: macos
+          summary: |
+            CRITERIA 1 AND 2 DISCHARGED (criterion 3 remains, attended by its own wording). Criterion 1: --diagnose --json now carries metrics + metrics_status, and a new OPT-IN verb --diagnose --with-metrics boots the VM, handshakes, and reads a MetricsSnapshotReply. Feature detection is by CAPABILITY — a new additive vm-layer helper fetch_metrics_snapshot reads HelloAck server_caps and returns Ok(None) when MetricsSnapshotRequest is absent (an older guest, not a fault) — with NO change to the shared Client::handshake signature, which is shared_logic with linux and windows callers. Criterion 2: the wire types travel through untouched, so an uncollected counter serialises as JSON null with the sample error preserved. Pinned by two tests, and the no-fabrication pin was HAND-FALSIFIED by adding skip_serializing_if to ContainerMetricWire.cpu_usec — the exact tempting cleanup — which made it fail with "counters must be PRESENT-and-null, never omitted"; reverted, control-wire byte-identical. THE DEFAULT PATH DELIBERATELY DOES NOT BOOT: install-macos.sh runs --diagnose --json synchronously during install, so plain --diagnose reports metrics_status unsupported:no-live-wire-handle and starts nothing (verified live: the release build prints exactly that and no VM appears). Exit-code contract untouched. Spec scenario added to macos-native-tray (the existing wire-omission scenario is not violated — this path DECLARES that the probe was not performed rather than faking one); cheatsheet documents both keys and the grammar. Verified: 88/88 tray bins, 59/59 control-wire, clippy clean, litmus macos-tray-diagnose-cli-surface PASS, build.sh --check green.
+        - type: progress
+          ts: "2026-08-17T01:55:52Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
+          host: macos
+          summary: |
+            SCOPING (macOS, cycle 22 triage — no work claimed): premise CONFIRMED — the guest serves MetricsSnapshotRequest (vsock_server.rs:1309-1359, advertised in HelloAck server_caps :926, landed 2008ff59) and the macOS tray consumes nothing (zero 'metrics' hits anywhere under crates/tillandsias-macos-tray/src/). Two structural facts the packet does not state, both of which shape the fix: (1) a standalone --diagnose holds NO VM handle — VZ vsock is per-VM-handle and there is no host-side tray control socket, so a live read requires either an opt-in flag that boots its own VM (the list_cloud_projects_main template) or the tray persisting a snapshot the way crashloop.state is; and --diagnose has no require_no_live_tray gate while install-macos.sh runs it synchronously during install, so a default-path boot would start a VM mid-install. (2) the host Client::handshake() DISCARDS server_caps (host-shell vsock_client.rs:157-195), so feature detection needs a NEW helper, never a signature change to that shared-logic crate. Criterion 3 is additionally blocked here: the staged guest binary has 0 hits for MetricsSnapshotRequest (3 for VmStatusRequest) — it predates the handler by ~3h — and 'at least one real per-container sample' needs podman ps non-empty, i.e. a full enclave bring-up, not just a boot. Cycle-sized slice = criteria 1+2 only (additive Option<MetricsBlock> + metrics_status grammar defaulting to unsupported:no-live-wire-handle, opt-in boot flag behind require_no_live_tray, counters stay Option<u64> — never unwrap_or(0), which spec:observability-metrics forbids).
+        - type: filed
+          ts: "2026-08-16T22:05:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Split out of 333 at the ownership boundary once the guest side
+            landed; parent closes with criteria 1-3 met and this child owning
+            criterion 4.
+
+    - packet_id: mo-smoke-cap-unreachable-on-windows-forge-plan-expert-rebuilds-every-lane
+      release_target: stable-milestone-v1
+      order: 781-6gys
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: any
+      priority: p2
+      tags:
+        - meta-orchestration
+        - e2e
+        - forge
+        - windows
+        - performance
+        - v0.5
+      title: |
+        MO Smoke Mode cannot finish inside its 600s hard cap on the Windows forge: the in-forge plan expert rebuilds from scratch EVERY lane (nothing persists it in the forge cache volume), so the smoke runbook's plan_check alone outlives the budget.
+      context: |
+        Two consecutive live runs of the sanctioned harness
+        (scripts/litmus-opencode-e2e-launch.sh, litmus:opencode-prompt-e2e-shape
+        STEP 3 shape) on windows/Yolanda 2026-08-16, both in SMOKE mode with the
+        rate limiter honored (recorded:full-meta first; harness printed
+        "limited:full-meta:14400s — running smoke mode"):
+        
+        - Run 1 (~21:47Z, cold): lane healthy end to end — tillandsias mirror
+          seeded, 4316-file clone, agent executed the Smoke runbook
+          (ok:experts-healthy, dirty-tree classification, in-forge litmus
+          suites) — FORGE_EXIT=124 (hard cap 600s, mode=smoke). Cold bring-up
+          consumed ~2.5 min of the budget.
+        - Run 2 (~21:58Z, warm stack, fresh forge): bring-up ~1 min, agent at
+          the runbook within the first minute — STILL FORGE_EXIT=124. The
+          budget went to `forge-plan plan_check`: the agent's own log says
+          "Plan expert is still building (transient). Retrying both checks
+          with proper timeouts." ~7 minutes into the lane, and a 120s shell
+          tool timeout fired inside a single check.
+        
+        Root shape: the in-forge plan expert (tillandsias-plan backing the
+        forge-plan MCP) builds inside the forge container's EPHEMERAL
+        filesystem. The persistent forge cache volume
+        (tillandsias-forge-cache-<project>) carries only src/ — no cargo
+        target for the expert — so every lane pays the full build, and on
+        this host that build alone exceeds what the 600s smoke cap leaves
+        after bring-up. Linux hosts fit the cap; the same runbook here
+        structurally cannot. Same platform-tax family as the litmus step
+        budgets (windows-red-meta-orchestration-litmus-2026-08-16.md), but
+        this one is inside the forge (Linux userland), so it is build-cost,
+        not MSYS spawn-tax.
+        
+        NOT a mirror/credential problem: both lanes cloned non-empty
+        checkouts through the freshly fixed mirror (777-i7hf) and the same
+        session's push lane landed two verified-ack pushes upstream.
+      exit_criteria:
+        - |
+            The in-forge plan expert build is persisted across lanes (cache volume or prebuilt into the forge image) OR the smoke runbook's plan_check degrades gracefully (bounded skip with a named reason) when the expert is not yet built.
+
+        - |
+            A smoke-mode harness run on a warm windows stack finishes inside the cap with `MO-SMOKE: PASS`, recorded with FORGE_EXIT=0 evidence on this packet.
+
+        - |
+            If the cap itself is resized for slow-inference/first-build hosts, the resize is justified against the operator's token-budget directive (2026-07-11), not silently inflated.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T22:10:00Z"
+          agent_id: windows-yolanda-fable5-20260816T2130Z-mirror-fix
+          host: windows
+          summary: |
+            Filed from two live capped runs during the 777-i7hf verification
+            session. Both lanes were healthy (mirror seed, clone, agent
+            working the runbook); the cap loss is the expert rebuild, named
+            in the agent's own in-forge log. Full logs:
+            /tmp/opencode-e2e-forge.log in the guest (per-run, overwritten)
+            and the harness stdout captured by the session.
+        - type: progress
+          ts: "2026-08-16T23:00:00Z"
+          agent_id: windows-fable5-mo-cycle6-20260816T2220Z
+          host: windows
+          summary: |
+            Exit criterion 1 IMPLEMENTED (order 781-6gys): ensure_forge_experts
+            (images/default/lib-common.sh) now publishes the probed
+            tillandsias-plan artifact + its source-hash key into the persistent
+            per-project cache volume at cargo/prebuilt-plan/ — INSIDE the cargo
+            subtree deliberately, so the ephemerality proofs
+            (litmus:forge-experts-teardown-ephemeral) keep pruning it as the
+            sanctioned §7.3 build-artifact carve-out — and restores it on warm
+            lanes in O(cp) with ZERO cargo involvement (no target-dir lock, no
+            fresh-clone mtime rebuild). The exec probe, not the stamp, gates
+            both restore and publish, so image/toolchain drift falls through to
+            a fresh build. Structural pins added:
+            litmus:forge-plan-expert-build-shape (artifact-cache-warm-path
+            step) and litmus:forge-experts-ephemerality-shape (allowlist +
+            order-621-2re2 paying assertion). Both scoped suites pass except
+            two PRE-EXISTING windows reds now tracked as 782-ih74.
+            GROUNDING CORRECTION to the packet context: the cache volume DOES
+            persist cargo/target (4.3G observed read-only in the guest) — but
+            it was created 14:48 local 2026-08-16, DURING run 1, so both capped
+            runs paid a cold build; and even warm, nothing persisted the
+            BINARY, so every lane still re-entered cargo.
+            REMAINING (criterion 2): lib-common.sh is baked into the forge
+            image at build time, so the fix reaches lanes at the next image
+            rebuild; a warm-stack smoke harness run recording `MO-SMOKE: PASS`
+            with FORGE_EXIT=0 evidence is still needed and was NOT run this
+            cycle (operator lanes possibly live; do-not-disturb).
+
+    - packet_id: mirror-seed-failure-invisible-to-health-and-launch-surfaces
+      release_target: fail-loud-diagnosis-milestone
+      order: 778-hb3x
+      status: ready
+      desired_release: v0.5
+      kind: enhancement
+      pickup_role: any
+      priority: p2
+      tags:
+        - git-mirror
+        - fail-loud
+        - observability
+        - healthcheck
+        - v0.5
+      title: |
+        A mirror that can NEVER seed still reports healthy everywhere cheap to look: healthcheck is port-only, the auth probe publishes `error` (not the credential truth) on an unseeded mirror, and the launcher's seeded-gate waits its full budget without ever surfacing the seed-fetch error.
+      context: |
+        Spun out of 777-i7hf (windows java-lane live repro 2026-08-16). During
+        the ~80 minutes the mirror was fetch-broken, every cheap surface said
+        fine: the container HEALTHCHECK (nc 127.0.0.1 9418, images/git/
+        Containerfile) reported "healthy" throughout because the daemon WAS up;
+        probe-upstream-auth on the empty mirror exited via `finish error`
+        ("mirror has no local heads to probe with") — a verdict that conflates
+        "cannot seed" with a transport failure and never names the credential
+        state; and the launcher's 594-csgb seeded-gate simply burned its
+        cold-seed budget in silence — the actual per-tick failure line
+        ("could not read Username ...") existed only in the container journal.
+        
+        The 777-i7hf fix (credentialed fetch paths + the loud UPSTREAM AUTH
+        REFUSED seed classification + the three-cause forge FATAL text) makes
+        the root cause diagnosable at the mirror log and the in-forge FATAL.
+        This packet is the remaining surface work, kept OFF that fix's critical
+        path deliberately:
+        - healthcheck (or a sibling readiness surface) should distinguish
+          "daemon up, mirror seeded/local-only" from "daemon up, origin
+          configured, zero refs, seed failing" (756-2jnj family: health =
+          daemon-up, not refs-present);
+        - probe-upstream-auth on an unseeded mirror with an https origin
+          should still probe (synthetic ref or ls-remote form) or at least
+          publish the credential-channel truth instead of `error`;
+        - the launcher seeded-gate (wait_for_git_mirror_ready) should
+          surface the mirror's last seed-fetch failure line while it waits,
+          so a never-going-to-seed wait is visibly different from a slow
+          first seed.
+      exit_criteria:
+        - |
+            A mirror with a configured origin and zero refs whose seed fetch is failing is distinguishable from a healthy/seeding mirror WITHOUT reading the container journal (healthcheck state, published ref, or launcher gate output — at least one cheap surface).
+
+        - |
+            probe-upstream-auth publishes an honest verdict (not `error`) for the unseeded-mirror-with-https-origin case, or its `error` verdict carries the no-heads reason in the published namespace.
+
+        - |
+            The launcher's seeded-gate output includes the mirror's seed-failure reason when one exists, and a litmus pins that surface.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T22:15:00Z"
+          agent_id: windows-yolanda-fable5-20260816T2130Z-mirror-fix
+          host: windows
+          summary: |
+            Filed from the 777-i7hf fix session as the found-but-not-fixed
+            observability residue (mission rule: honesty fixes must not expand
+            the fix's critical path). Live evidence for every named surface is
+            in the 777-i7hf completion event of the same date.
+
+    - packet_id: host-browser-mcp-spec-rebaseline-to-per-lane-ndjson
+      release_target: forge-local-experts-milestone
+      order: 779-5ryn
+      status: completed
+      desired_release: v0.5
+      kind: fix
+      pickup_role: linux
+      priority: p1
+      tags:
+        - mcp
+        - spec
+        - litmus
+        - forge
+        - v0.5
+      title: |
+        Re-baseline the host-browser-mcp spec + frame litmus onto the per-lane NDJSON socket order 505 actually shipped.
+      context: |
+        openspec/specs/host-browser-mcp/spec.md:68-110 still mandates that MCP
+        rides `ControlMessage::McpFrame` on `/run/host/tillandsias/control.sock`
+        and that "no additional Unix-domain socket nodes are created". Order 505
+        (dd8fd63fa) DELETED that path: tray/mod.rs:1218-1233 now answers
+        McpFrame on control.sock with `ErrorCode::Unsupported` naming the
+        per-lane requirement, and the live route is a per-lane NDJSON
+        `mcp.sock` bind-mounted at /run/host/tillandsias-mcp. Consequently the
+        4 MiB `MAX_MCP_FRAME_BYTES` cap (control-wire lib.rs:88) and all of
+        litmus-host-browser-mcp-frame-shape.yaml guard a contract the product
+        no longer uses, while the live NDJSON path has NO payload cap at all.
+        A spec that describes a deleted transport is worse than no spec: it
+        makes every later "parity" claim unfalsifiable.
+        Also false: images/default/config-overlay/mcp/host-browser.sh:3-7 claims
+        it "wraps each as a ControlMessage::McpFrame" — it is a raw socat pipe.
+      exit_criteria:
+        - |
+            spec.md's transport requirement and its scenarios describe the per-lane NDJSON socket with listener-derived attribution (order 505), with the McpFrame path recorded as superseded rather than deleted silently.
+
+        - |
+            litmus:host-browser-mcp-frame-shape is retired or retargeted so no green litmus guards the dead McpFrame contract; the host-browser-mcp litmus set still fails loud if the live path regresses.
+
+        - |
+            The host-browser.sh docstring states what it actually does (raw socat to the per-lane socket).
+
+      events:
+        - type: filed
+          ts: "2026-08-16T22:15:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: Split child 4 of 616-nm7q; sequenced FIRST.
+        - type: completed
+          ts: "2026-08-16T21:28:48Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Spec transport requirement re-baselined onto the per-lane NDJSON socket with listener-derived attribution; McpFrame recorded as superseded-and-still-refused (live negative, verified in tray/mod.rs); missing NDJSON payload cap named as a tracked gap owned by 779-dqsv instead of silently blessed. litmus:host-browser-mcp-frame-shape retired and retargeted as litmus:host-browser-mcp-lane-socket-shape (6/6 PASS; docstring assertion verified with a live negative control that FAILS when the false McpFrame comment is restored). host-browser.sh docstring corrected.
+        - type: completed
+          ts: "2026-08-16T21:28:49Z"
+          host: linux-immutable
+          summary: |
+            status 'completed' with evidence_refs: d4ad24d45 + litmus:host-browser-mcp-lane-socket-shape 6/6 PASS with negative control
+        - type: note
+          ts: "2026-08-16T21:28:49Z"
+          host: linux-immutable
+          summary: |
+            779-5ryn closed by linux-yoga-claude-20260816t185912z; unblocks 779-3trn and 779-hae5
+
+    - packet_id: host-browser-mcp-compose-tool-families-in-dispatcher
+      release_target: forge-local-experts-milestone
+      order: 779-3trn
+      status: completed
+      desired_release: v0.5
+      kind: enhancement
+      pickup_role: linux
+      priority: p1
+      depends_on:
+        - host-browser-mcp-spec-rebaseline-to-per-lane-ndjson
+      tags:
+        - mcp
+        - forge
+        - browser
+        - host-services
+        - v0.5
+      title: |
+        Compose the eight browser.* tools into the live per-lane MCP dispatcher (the wiring gap itself).
+      context: |
+        `crates/tillandsias-browser-mcp` has no [[bin]] and NO crate depends on
+        it (grep over Cargo.toml files finds only the workspace member list) —
+        it is dead code in the product. The live dispatcher
+        (tray/mod.rs::handle_mcp_jsonrpc, ~line 735) advertises exactly three
+        tools: publish_local, service_status, service_stop, pinned by the unit
+        test at ~4552. So the forge's `host-browser` MCP server reaches a
+        dispatcher that has never heard of the browser family.
+        Attribution is the constraint that shapes the fix: the project label
+        MUST come from the connection's LaneIdentity, never from the request
+        and never from BrowserMcpServer::new()'s TILLANDSIAS_PROJECT env read
+        (server.rs:56-57).
+      exit_criteria:
+        - |
+            tillandsias-headless depends on tillandsias-browser-mcp; serve_mcp_connection builds ONE BrowserMcpServer (with_project_label from LaneIdentity) plus one runtime per connection, hoisted out of the per-call path.
+
+        - |
+            tools/list returns the publish trio PLUS the eight browser.* tools; tools/call routes browser.* through the composed server and leaves the trio and the -32601 unknown-tool fallback untouched. The existing three-tool pin test is updated, not deleted.
+
+        - |
+            A test drives a real UnixStream::pair() through serve_mcp_connection with a pinned LaneIdentity (initialize + tools/list + a disallowed-URL browser.open) and asserts eleven tools and a typed error — through the transport, hermetic via with_project_label_and_mode(fake_launch=true).
+
+      events:
+        - type: filed
+          ts: "2026-08-16T22:15:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: Split child 1 of 616-nm7q; the vertical slice that closes the wiring gap.
+        - type: completed
+          ts: "2026-08-16T21:34:22Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Browser family composed into the live per-lane dispatcher. headless now depends on browser-mcp (was dead code: no bin, no dependents); one BrowserMcpServer + one runtime per connection, hoisted out of the per-call path, label pinned from LaneIdentity so the TILLANDSIAS_PROJECT env read never runs; tools/list = trio + the eight browser.* descriptors fetched from the composed server itself; tools/call routes browser.* there leaving the trio and the -32601 fallback intact. Both three-tool pins updated (the second was inside the NDJSON handshake round-trip). New transport-level test drives a real UnixStream::pair through serve_mcp_connection with a pinned LaneIdentity: 11 tools over the wire, disallowed-URL browser.open refused. Contract detail pinned: the browser family denies via MCP result+isError, the trio via JSON-RPC -32000. 448 tests green under --features tray.
+        - type: completed
+          ts: "2026-08-16T21:34:22Z"
+          host: linux-immutable
+          summary: |
+            status 'completed' with evidence_refs: 907659956 + cargo test -p tillandsias-headless --features tray 448 passed 0 failed + transport-level UnixStream test
+        - type: note
+          ts: "2026-08-16T21:34:22Z"
+          host: linux-immutable
+          summary: |
+            779-3trn closed by linux-yoga-claude-20260816t185912z
+
+    - packet_id: host-browser-mcp-ndjson-transport-policy
+      release_target: forge-local-experts-milestone
+      order: 779-dqsv
+      status: completed
+      desired_release: v0.5
+      kind: fix
+      pickup_role: linux
+      priority: p2
+      depends_on:
+        - host-browser-mcp-compose-tool-families-in-dispatcher
+      tags:
+        - mcp
+        - transport
+        - concurrency
+        - limits
+        - v0.5
+      title: |
+        NDJSON transport policy: a payload cap on the live path, and enough concurrency for the 16-call limit to be observable.
+      context: |
+        Two findings from the 616-nm7q scoping, both structural:
+        (a) The live NDJSON path has NO payload cap — a base64 full-page
+        screenshot travels as one unbounded line — while the retired McpFrame
+        path's 4 MiB cap is the only limit in the tree.
+        (b) 616-nm7q's "17th concurrent call is rejected" criterion is
+        UNREACHABLE on today's transport: serve_mcp_connection is a strictly
+        sequential `for line in BufReader::lines()` loop, so sixteen in-flight
+        tools/calls cannot exist on one connection. The semaphore that
+        implements the cap (browser-mcp server.rs:83) is per-connection, which
+        only matches "per session" once the loop is concurrent.
+        This child owns the socket shared with publish_local, so it is
+        deliberately separated for its own review.
+      exit_criteria:
+        - |
+            The live NDJSON path enforces a documented per-line cap, returning a typed JSON-RPC error instead of writing or accepting an unbounded line; the number's provenance (the retired MAX_MCP_FRAME_BYTES) is recorded.
+
+        - |
+            The lane loop handles requests concurrently enough that the 16-call semaphore is observable end-to-end, with a test that drives 17 concurrent tools/calls through the real transport and sees exactly one rejection — or, if concurrency is rejected as a design, the semaphore is removed and the limit re-expressed in terms the transport can actually enforce.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T22:15:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: Split child 2 of 616-nm7q; carries the unreachable-criterion finding.
+        - type: completed
+          ts: "2026-08-16T22:31:49Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Both halves closed. CAP: the live NDJSON path now enforces MAX_MCP_FRAME_BYTES (4 MiB) as a per-line cap in both directions, re-exported not re-invented; inbound bounded at the READ so a hostile peer cannot allocate first, refused with RequestTooLarge and the stream RESYNCS (pinned); outbound replaced via pure cap_response_line with ResponseTooLarge keeping the request id. CONCURRENCY: took the second branch of the exit criterion with evidence — the semaphore used try_acquire_owned against a strictly sequential loop, so at most one permit was ever held and ConcurrentCallLimit could never fire; its only consumer was itself; removed rather than left unbindable (755-qcxh rule), with the transport's real guarantee (one in-flight call, replies in request order) pinned by test and the spec directing any future pipelining transport to put its limit where it can bind. litmus 11/11 with the new guard verified falsifiable.
+        - type: completed
+          ts: "2026-08-16T22:31:49Z"
+          host: linux-immutable
+          summary: |
+            status 'completed' with evidence_refs: 4d884b540 + litmus:host-browser-mcp-lane-socket-shape 11/11 with negative controls + 451 headless and 103 browser-mcp tests green
+        - type: note
+          ts: "2026-08-16T22:31:49Z"
+          host: linux-immutable
+          summary: |
+            779-dqsv closed by linux-yoga-claude-20260816t185912z
+
+    - packet_id: host-browser-mcp-nix-packaging-parity
+      release_target: forge-local-experts-milestone
+      order: 779-hae5
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: linux
+      depends_on:
+        - host-browser-mcp-spec-rebaseline-to-per-lane-ndjson
+      priority: p2
+      capability_tags:
+        - nix
+        - packaging
+      tags:
+        - mcp
+        - nix
+        - packaging
+        - forge
+        - v0.5
+      title: |
+        Nix forge image ships the MCP config overlay and socat (Fedora/Nix packaging parity).
+      context: |
+        flake.nix:180 binds forgeOpencode to images/default/opencode.json — a
+        two-key schema/autoupdate stub — and flake.nix:307 copies only that to
+        the forge's opencode config. Nothing installs config-overlay/opencode/
+        config.json, config-overlay/mcp/, or config-overlay/claude/mcp.json,
+        all of which the Fedora Containerfile:136-142,171 does install (and
+        chmod +x). A Nix-built forge therefore has no host-browser MCP route.
+        NOT IN THE ORIGINAL FINDING: `socat` is absent from the Nix image
+        entirely (it comes from Containerfile.base:33 via dnf), so packaging
+        the overlay alone still dies with `socat: command not found`.
+        NOTE for pickup: `nix` is NOT installed on the yoga (linux_immutable)
+        host — this child needs a Nix-capable host.
+      exit_criteria:
+        - |
+            The Nix forge image installs the config-overlay opencode/mcp/claude files with the mcp scripts executable, mirroring the Fedora Containerfile, and includes socat in the image environment.
+
+        - |
+            Presence is asserted in the built x86_64 AND aarch64 .#forge-image outputs (the multiarch half of the original criterion).
+
+      events:
+        - type: filed
+          ts: "2026-08-16T22:15:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: Split child 3 of 616-nm7q; needs a Nix-capable host (absent on yoga).
+
+    - packet_id: log-query-language-has-zero-consumers
+      order: 781-hseq
+      release_target: local-telemetry-for-bottleneck-finding-milestone
+      status: ready
+      desired_release: v0.5
+      priority: p3
+      kind: audit+decision
+      title: tillandsias-logging::query (Loki-style query language, spec-traced, 16 tests) has ZERO consumers outside its crate — wire it to a surface or tombstone it
+      pickup_role: any
+      depends_on: []
+      capability_tags:
+        - logging
+        - telemetry
+        - freshness
+      context: |
+        Standing freshness audit (order 372 duty), 2026-08-16 cycle 20, macOS:
+        the inventory's flagged-next component. The module is internally
+        healthy — parser + executor, 16 green unit tests, traced to
+        spec:structured-query-language — but no CLI subcommand, MCP tool,
+        headless endpoint, or sibling crate calls it (zero matches for
+        tillandsias_logging::query outside the crate). Second orphan found by
+        this audit in two runs (774-cfw8 was the first): built-and-tested
+        components that never got wired to a surface read as healthy in every
+        per-crate view and are invisible as debt.
+        
+        Natural owner: the 682 local-telemetry-for-bottleneck-finding family —
+        a log query surface is exactly its shape IF wanted; else tombstone
+        module + spec together.
+      exit_criteria:
+        - the telemetry/logging owner either wires query.rs to a real surface (CLI, MCP tool, or expert backend) with one end-to-end test proving the WIRING, or tombstones module + spec in one change
+        - no spec-traced module remains that zero surfaces call
+      verifiable_closure: |
+        grep -rl 'tillandsias_logging::query' crates/ finds a consumer outside
+        the crate, or the module and its spec are gone in the same commit.
+      events:
+        - type: filed
+          ts: "2026-08-16T22:27:00Z"
+          agent_id: macos-tlatoanis-macbook-air-fable5-20260816t2223z
+          host: macos
+          summary: |
+            Filed from the cycle-20 freshness audit; disposition=updated (stamp
+            + orphan status recorded in the artifact).
+
+    - packet_id: windows-red-forge-env-discoverability-litmus
+      release_target: fail-loud-diagnosis-milestone
+      order: 782-ih74
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: windows
+      priority: p3
+      tags:
+        - litmus
+        - windows
+        - platform-tax
+        - v0.5
+      title: |
+        Two forge-environment-discoverability litmus tests are red-by-default on windows at HEAD, unrecorded until now.
+      context: |
+        litmus:expert-refresh-cargo-target-shape (STEP 2, fake-cargo fixture,
+        `FAIL: content= log_success=0` with git CRLF warnings on the fixture
+        files) and litmus:project-answer-synthesis-refusal-typed (STEP 3,
+        dead-endpoint refusal, EMPTY output) both fail identically on a
+        PRISTINE worktree at 9a677a116 on windows, so they are pre-existing
+        host reds, not regressions. Discovered while running the scoped suite
+        for the 781-6gys change. A spec suite red-by-default trains agents to
+        read failures as noise. Full diagnosis notes:
+        plan/issues/research/windows-red-forge-env-discoverability-litmus-2026-08-16.md
+      exit_criteria:
+        - |
+            Both tests either pass on windows or carry an explicit, machine-readable host-eligibility skip with a named reason — never a silent red.
+
+        - |
+            The root cause (CRLF fixture corruption vs real engine gap) is named in the closing event with reproduction evidence.
+
+      events:
+        - type: filed
+          ts: "2026-08-16T23:00:00Z"
+          agent_id: windows-fable5-mo-cycle6-20260816T2220Z
+          host: windows
+          summary: |
+            Filed from the 781-6gys litmus run; pristine-HEAD attribution done
+            the same session (worktree at 9a677a116 shows identical failures).
+
+    - packet_id: proxy-squid-version-bump-past-6-9
+      order: 782-9jfg
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: fix
+      title: Bump the enclave proxy's squid past 6.9 — the chronic segfault has ONE deterministic signature (HttpHeader::clean under destroyStoreEntry) on Alpine 3.20's frozen squid-6.9-r0, and the 6.x line is at 6.12+ upstream
+      deliverable: 'images/proxy on a base whose squid is >= 6.10 (Alpine 3.21/3.22 or a pinned newer apk), passing the proxy litmus suite, with a recurrence sentinel: coredumpctl gains NO new squid dump matching the pinned signature for 7 days after deploy (recorded as the closure evidence)'
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - proxy
+        - squid
+        - enclave
+        - images
+      estimated_hours: 3
+      context: |
+        767-es4w symbolication (2026-08-16, this fork): two dumps four weeks
+        apart (PIDs 2126717 @2026-08-11, 3987925 @2026-08-12) carry the exact
+        same stack on the same build-id 0348aa59... (squid-6.9-r0, byte-identical
+        to the CURRENT v0.4.260816.1 image): SIGSEGV in HttpHeader::clean() <-
+        HttpReply::clean() <- ~HttpReply() <- ~MemObject() <-
+        StoreEntry::destroyMemObject() <- destroyStoreEntry(), after which
+        squid's own death() handler hits an xassert inside
+        storeDirWriteCleanLogs() and aborts. Deterministic store-teardown
+        corruption under enclave (ssl-bump) traffic; cadence near-daily with
+        bursts. No exact public upstream match found in first-pass search
+        (bugs.squid-cache.org not exhaustively searched — do that before
+        pinning a specific fix commit), but the 6.x line fixed store/SslBump
+        lifecycle defects continuously through 6.10 (2024-06) and 6.12
+        (2024-10); Alpine 3.20's package is frozen at 6.9-r0. Base-image policy:
+        keep the pinned-tag rules (container-base gate) — a bump means a NEW
+        pinned base, never :latest. Coordinate with images/proxy DISTRO notes
+        (busybox/adduser/CA-path comments) if the base moves.
+
+      events:
+        - type: note
+          ts: "2026-08-17T04:37:24Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T043724Z"
+          host: linux_mutable
+          summary: |
+            SEQUENCING TRAP, measured on macuahuitl 2026-08-17 — do NOT recreate the enclave stack to start the sentinel until a CURRENT binary is installed. Facts: the squid-6.12 image is built and on this host (localhost/tillandsias-proxy:v0.4.260815.1, 6.12 verified); the RUNNING proxy is v0.4.260816.1 serving squid 6.9; the INSTALLED tillandsias binary was built Aug 16 03:12 local, while the CA-secret fix (67a66a658, 755-qcxh) landed Aug 16 12:21 — nine hours LATER. So the installed launcher still creates the pre-fix shape: intermediate.key bind-mounted rather than delivered as the tillandsias-ca-key podman secret. Recreating the stack with it would re-create the world-readable-key shape and UNDO tonight's clamp, trading a security fix for a sentinel start. Correct order: build+install a current binary, THEN recreate, THEN start the 7-day window. Blocker on that order: --install bumps VERSION and the 702-eusw ruling on whether smoke installs may commit their build-counter bumps is still pending with the operator.
+    - packet_id: proxy-crash-watcher-loud-restart
+      order: 782-dpby
+      status: ready
+      desired_release: v0.5
+      priority: p1
+      kind: enhancement
+      title: 'The enclave proxy must never sit Exited(139) silently: supervised restart WITH a loud, ledger-reaching crash record and a crash counter in diagnostics'
+      deliverable: 'a watcher for application-lifetime enclave services (proxy first): on abnormal exit, restart bounded (cap + backoff) AND surface the event loudly (diagnostics surface + a finding that reaches plan/, not just stdout); crash counter visible in --diagnose; litmus with a kill-injection fixture proving both halves (restarted AND recorded)'
+      pickup_role: linux
+      release_target: fail-loud-diagnosis-milestone
+      capability_tags:
+        - proxy
+        - enclave
+        - fail-loud
+        - supervision
+      estimated_hours: 4
+      context: |
+        The unwatched half of 767-es4w: 263 SIGSEGVs since 2026-06-30 and a
+        two-day Exited(139) outage with zero alarms — every enclave consumer
+        degraded silently (the 604-vmcg lane's [ENV-FAIL] podman stalls may be
+        downstream of exactly this). INTERACTION NOTE, deliberate: 767-nkkq
+        (agent PID-1 supervision) rules NEVER-auto-restart for the AGENT lane —
+        that rule is about not silently resuming a crashed agent's WORK. An
+        infrastructure service is the opposite case: restart is correct, the
+        sin is silence. Both packets share the loud-record half; whoever
+        implements second should reuse the first's record surface. Restart cap
+        matters: squid 6.9's crash is deterministic under traffic (782-9jfg),
+        so an uncapped restart loop would flap — pair this with the version
+        bump, and make the counter make flapping VISIBLE.
+
+    - packet_id: cheatsheet-template-cannot-satisfy-its-own-canon
+      release_target: forge-local-experts-milestone
+      order: 782-avtk
+      status: completed
+      desired_release: v0.5
+      kind: fix
+      pickup_role: any
+      priority: p2
+      tags:
+        - cheatsheets
+        - provenance
+        - experts
+        - v0.5
+      title: |
+        cheatsheets/TEMPLATE.md teaches a prose provenance section and NO YAML frontmatter, while methodology requires frontmatter on every cheatsheet.
+      context: |
+        `methodology/cheatsheets.yaml` (cheatsheet_frontmatter_required) states
+        every cheatsheet MUST carry YAML frontmatter "so the validator can
+        classify tier, authority, status, provenance, and lifecycle metadata
+        without relying on ad hoc filename heuristics". `cheatsheets/TEMPLATE.md`
+        — the file authors copy — contains NO frontmatter at all; it teaches a
+        prose `## Provenance` section with bullet URLs and a `**Last updated:**`
+        line. An author who follows the template produces a cheatsheet the canon
+        rejects and the gates cannot classify.
+        
+        Live consequence, already in the tree:
+        `cheatsheets/runtime/forge-loss-on-shutdown-window.md` uses HTML-comment
+        `<!-- provenance: ... -->` / `<!-- freshness: ... -->` headers instead of
+        frontmatter, so it is INVISIBLE to every frontmatter-parsing gate — its
+        tier, sources and last_verified are unenforced. Coverage today is 219/222
+        authored files with frontmatter; the three without are INDEX.md
+        (generated), TEMPLATE.md, and that file.
+        
+        This matters for the expert system specifically: the experts treat
+        cheatsheets as ground truth (methodology.yaml
+        cheatsheets_are_ground_truth_and_enforced_by_local_experts), and an entry
+        whose provenance no gate can read is an unverifiable citation.
+      exit_criteria:
+        - |
+            TEMPLATE.md carries a complete, copyable YAML frontmatter block covering every field the validator classifies (tags, languages, since, last_verified, sources, authority, status, tier, summary_generated_by, bundled_into_image, committed_for_project), so following the template satisfies the canon by construction.
+
+        - |
+            forge-loss-on-shutdown-window.md is converted to frontmatter (or its HTML-comment form is explicitly recognized by the validator), and a gate fails when an authored cheatsheet other than INDEX.md/TEMPLATE.md lacks frontmatter — with a negative control proving the gate sees a frontmatter-less file.
+
+      events:
+        - type: filed
+          ts: "2026-08-17T00:10:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Found during the derived-tree tracking audit; independent of that
+            decision but same coupling concern (attribution the experts rely on).
+        - type: completed
+          ts: "2026-08-17T00:30:54Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            TEMPLATE.md now opens with a complete annotated frontmatter block (each field labelled with what reads it and why); the prose Provenance section is removed because it duplicated sources: and duplicated provenance is how the two drift. runtime/forge-loss-on-shutdown-window.md — the live instance whose HTML-comment provenance was invisible to every frontmatter gate — gains frontmatter following the established project-derived convention (repo paths in sources:, per architecture/transport-overhead.md), keeping its comment block for the line-level citations a path list cannot carry. New scripts/check-cheatsheet-frontmatter.sh enforces it on the AUTHORED tree only (the derived copy inherits by construction and is guarded for equality by stage-image-cheatsheets.sh): 221 files pass, INDEX.md exempt as generated, TEMPLATE.md deliberately NOT exempt. Its --selftest carries the control that matters — a horizontal rule further down the file must NOT count as frontmatter, so the check keys on line 1 exactly (3/3 cases). NOTE for the operator: an unresolved canon tension remains — cheatsheets.provenance.rule says project-local inference is NOT provenance and must be labelled derived, yet the established convention puts repo paths directly in sources: with authority: high. I followed the convention rather than invent a third form mid-cycle; deciding which is canonical is worth an operator ruling.
+        - type: completed
+          ts: "2026-08-17T00:30:54Z"
+          host: linux-immutable
+          summary: |
+            status 'completed' with evidence_refs: 07445b393 + check-cheatsheet-frontmatter.sh selftest 3/3 and live 221 checked + cheatsheet-tiers OK
+        - type: note
+          ts: "2026-08-17T00:30:54Z"
+          host: linux-immutable
+          summary: |
+            782-avtk closed by linux-yoga-claude-20260816t185912z
+
+    - packet_id: gitignore-comments-orphaned-by-silent-sort
+      release_target: stable-milestone-v1
+      order: 782-zy95
+      status: ready
+      desired_release: v0.5
+      kind: fix
+      pickup_role: any
+      priority: p3
+      tags:
+        - hygiene
+        - traceability
+        - v0.5
+      title: |
+        A one-line .gitignore change silently sorted the whole file, orphaning ~30 rationale comments from the rules they documented.
+      context: |
+        Commit `c38e91f83` (2026-07-03), whose message says only ".gitignore: add
+        mock-release/ (local e2e test artifacts)", rewrote the entire file:
+        +62/-76, alphabetically sorted. Every explanatory comment was hoisted
+        into a sorted block at the top and separated from its rule. The
+        rationales still exist as text — e.g. "# Staged by scripts/build-image.sh
+        — cheatsheets-license-tiered (bundled-tier bake + meta side-channel)" at
+        line 24, and four `# @trace spec:` lines at 2-5 — but none of them sits
+        above the rule it justifies, so ~30 ignore patterns now read as
+        arbitrary.
+        
+        This is the mechanism behind the operator's concern that ignore rules
+        "flip-flop": they did not flip, their JUSTIFICATIONS were detached. In a
+        project whose discipline is that every moving part carries a
+        justification, an unattributable ignore rule is the same defect class as
+        a ghost @trace — it reads as documented and documents nothing.
+      exit_criteria:
+        - |
+            Each surviving comment in .gitignore is reunited with the rule(s) it explains, or deleted if its rule no longer exists; the @trace lines sit above the patterns they trace.
+
+        - |
+            A rule with no discoverable rationale is either given one (from git history) or removed, and the reasoning is recorded in the commit rather than inferred later.
+
+      events:
+        - type: filed
+          ts: "2026-08-17T00:10:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Surfaced while tracing why the cheatsheet ignore rule had no
+            attached rationale; the rule itself turned out to postdate the sort
+            by one day, but ~30 other rules did lose theirs.
+
+    - packet_id: released-binary-cannot-publish-upstream-auth-verdict
+      release_target: stable-milestone-v1
+      order: 783-6rik
+      status: ready
+      desired_release: v0.5
+      kind: bug
+      pickup_role: linux
+      priority: p1
+      tags:
+        - forge
+        - git-mirror
+        - release
+        - credential
+        - fail-loud
+        - v0.5
+      title: |
+        Every forge lane on the PUBLISHED release is structurally blocked: the credential guard requires a verdict ref that only a post-release probe can publish, and the tray re-materializes its own probe-less image.
+      context: |
+        Measured on yoga 2026-08-17 with two forge lanes, before and after a
+        local image rebuild.
+        
+        THE STRUCTURE:
+        1. `scripts/check-credential-channel.sh` (checkout-side, current) refuses
+           a forge cycle unless the mirror publishes
+           `refs/tillandsias/upstream-auth/<state>/<epoch>` (order 756-2jnj).
+        2. That ref is published by `images/git/probe-upstream-auth.sh`, which
+           lives in the git IMAGE.
+        3. The running tray builds its images from EMBEDDED assets, materialized
+           from the installed binary — release v0.4.260815.1, whose tag points at
+           commit 0548ee1f2 (2026-08-14).
+        4. `images/git/probe-upstream-auth.sh` landed 2026-08-15 — AFTER that
+           commit. Verified: `podman run --rm --entrypoint ls
+           localhost/tillandsias-git:v0.4.260815.1 /usr/local/share/git-service/`
+           lists no probe.
+        
+        So the guard shipped in a release whose git image cannot satisfy it. Every
+        forge lane on the published artifact fail-closes at
+        `blocked:upstream-auth-unpublished` — observed twice, four hours apart.
+        
+        THE REMEDIATION TEXT IS WRONG FOR THIS CASE, and that is the sharp edge.
+        The guard says "restart/rebuild the tillandsias-git container". I did
+        exactly that from the current checkout (`scripts/build-image.sh git`,
+        12s) and the rebuilt image DID carry the probe. Thirty seconds later the
+        tray's own on-demand ensure rebuilt the image from its embedded assets
+        and re-pointed the `v0.4.260815.1` tag at a probe-less layer:
+          - checkout build  -> image ddd7223f609b, tag ...6b0fd28 (has probe)
+          - tray rebuild    -> image 53e7cd7ec992, tag sha256-0f1d7a3f (no probe)
+          - `v0.4.260815.1` now resolves to 53e7cd7ec992; running container uses it.
+        This is NOT a 702-griq regression: the digest-aware ensure behaved
+        correctly, hashing ITS OWN embedded sources. The point is that a host
+        running the released binary CANNOT repair this locally — the release's
+        embedded assets always win.
+      exit_criteria:
+        - |
+            The credential guard's remediation distinguishes the two cases: on a host running a RELEASE whose image predates the probe, rebuilding the container is futile and the message says so (pointing at a release containing the probe, or a locally-built binary), instead of prescribing an action that cannot work.
+
+        - |
+            A litmus or check detects the mismatch directly — the installed binary's embedded git image lacking probe-upstream-auth while the checkout's guard requires its verdict — so the condition is reported as a version-skew rather than rediscovered by each host as an auth failure.
+
+        - |
+            Fleet note recorded: forge lanes are blocked on released hosts until a release containing the probe ships; hosts needing forge lanes sooner run a locally-built binary.
+
+      events:
+        - type: note
+          ts: "2026-08-17T05:33:17Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            CORRECTION to the third-sighting note I appended minutes earlier. I read the lane's log while it was still running (40 lines) and recorded that it 'refused before any committable work'. That was true at that instant and WRONG as a description of the run. The lane went on to complete: it filed the blocker, committed the opsx sync dirt, pushed three commits, and emitted MO-FULL: COMPLETE f4d8f4972 — which is on origin/linux-next and is now this branch's history. Reading a background job mid-flight and reporting it as final is the mistake; the log was 697 lines, not 40. WHAT THE CORRECTED PICTURE MEANS FOR THIS PACKET, which is more interesting than the error: the guard blocks WORKER DRAIN, not the cycle. An in-forge agent can still do the fail-loud bookkeeping — file the blocker, push it, attest — because the mirror relay ACCEPTS pushes. The in-forge agent said so in its own words: pushes succeed even though the verdict ref is unpublished. So the exposure is narrower than 'forge lanes are dead on released hosts': they cannot DRAIN WORK, but they are not silent and they do not lose findings. That distinction matters for how urgent a release is. Second observation: the in-forge agent's smallest-next-action was 'rebuild the tillandsias-git container image' — the same remediation this packet already proved futile on a released host, because the tray rebuilds the image from its embedded assets and overwrites the rebuild within seconds. The advice keeps being regenerated because the GUARD'S OWN MESSAGE says it, which is exactly why this packet's first exit criterion is to fix that message rather than to explain the workaround again.
+        - type: note
+          ts: "2026-08-17T05:27:47Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            THIRD SIGHTING, prediction confirmed (yoga 2026-08-17T05:25Z, evidence target/smoke-e2e/11-forge-lane.log). This packet predicted that forge lanes stay blocked on released hosts until a release containing probe-upstream-auth.sh ships. Re-checked before running: still no new release (daily channel resolves v0.4.260815.1, installed binary reports the same), and the versioned git image still contains no probe. The lane duly returned blocked:upstream-auth-unpublished and refused before any committable work — the same verdict as the 20:22Z and 00:24Z lanes, four and five hours apart, across an intervening local image rebuild that the tray overwrote. Nothing on a released host can clear this; the packet's exit criteria stand unchanged. Recording the third data point rather than re-diagnosing: the mechanism is settled and the remaining action is a release, which is the operator's to cut.
+        - type: discovered
+          ts: "2026-08-17T01:00:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Two forge lanes on the published release; local image rebuild proved
+            the remedy futile because the tray overwrote it within 30s.
+
+    - packet_id: forge-preflight-races-the-async-launch-build
+      release_target: forge-local-experts-milestone
+      order: 783-jdeh
+      status: ready
+      desired_release: v0.5
+      kind: bug
+      pickup_role: linux
+      priority: p2
+      tags:
+        - forge
+        - experts
+        - preflight
+        - race
+        - v0.5
+      title: |
+        In-forge cycle-preflight returns a terminal blocked:preflight:plan:capabilities-refused when the async launch build has not yet produced target/release/tillandsias-plan.
+      context: |
+        Observed on yoga 2026-08-17, second forge lane
+        (target/smoke-e2e/06b-forge-lane-after-rebuild.log:32,188). The in-forge
+        agent ran `scripts/cycle-preflight.sh`, which returned
+        `blocked:preflight:plan:capabilities-refused`. Its own diagnosis:
+        
+          $ ./target/release/tillandsias-plan --version
+          bash: ./target/release/tillandsias-plan: No such file or directory
+          $ ls -la ./target/release/
+          ls: cannot access './target/release/': No such file or directory
+        
+        There was no binary and no target/ directory at all — the forge's async
+        launch build had not delivered it yet. The agent then correctly refused
+        to start the cycle, because the skill says a `blocked:preflight:*`
+        verdict means the instrument is unverified.
+        
+        But the expert-capability contract already distinguishes this exact case:
+        `skew=pending-build` means WAIT AND RETRY ("the async launch build will
+        deliver it in this session"), as opposed to `relaunch-required` where
+        retrying is futile. Preflight collapses both into one terminal refusal,
+        so a lane that merely started early is indistinguishable from a lane
+        whose instrument can never appear — and the cheap, correct action
+        (wait a few seconds and re-probe) is never taken.
+        
+        Cost is a whole forge cycle per occurrence: this lane did zero work.
+      exit_criteria:
+        - |
+            cycle-preflight distinguishes "binary absent but a launch build is in flight" from "binary cannot be produced", waiting-and-retrying the former within a bounded window and only then refusing, with the two verdicts named differently.
+
+        - |
+            A test drives the absent-binary-with-pending-build case and asserts preflight waits rather than refusing terminally; the futile case still refuses immediately.
+
+      events:
+        - type: note
+          ts: "2026-08-17T02:16:45Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T021645Z"
+          host: linux_mutable
+          summary: |
+            CONVERGENT INDEPENDENT DISCOVERY, merged 2026-08-17 on linux-next: windows-next fixed the SAME CARGO_TARGET_DIR blindness in the same file the same day, from a different cause (with-wsl2-builder.sh points CARGO_TARGET_DIR at a distro-native path so target/ never lands on 9p; their preflight refused a binary that ran fine and declared 35 capabilities). Merge resolution kept THIS packet's unified-loop implementation (single candidate loop via ${ctd:+...}, plus relative-path normalization the windows variant lacked) and folded the windows rationale into the comment so both causes are recorded. Fixture 5/5 including the relative-CARGO_TARGET_DIR case. Two hosts converging on one line is the strongest possible argument that the fix belonged in the shared probe rather than at either call site.
+        - type: completed
+          ts: "2026-08-17T01:28:51Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            DIAGNOSIS CORRECTED then FIXED (7a30ff140). I filed this as an async-build race; the race is real but secondary. Primary defect: resolve_plan_binary searched only ./target and PATH, while every forge exports CARGO_TARGET_DIR=$PROJECT_CACHE/cargo/target (lib-common.sh:1512) so the mounted checkout has NO ./target — meaning cycle-preflight could not see the binary its own 'cargo build' had just produced one line earlier, and reported capabilities-refused. resolve_target_binary (770-ifeg) FIFTY LINES DOWN IN THE SAME FILE already honoured CARGO_TARGET_DIR; the newer generic probe had learned the lesson the older plan-specific one still had — fifth instance of the path-assumption class 704-zcgi centralised the file to end. Fixed with the same precedence (CARGO_TARGET_DIR, then ./target, then PATH). New scripts/test-plan-binary-probe.sh 5/5 hermetic, including the negative control that makes case 1 mean something (same tree, var unset, must REFUSE) and the relative-path case matching its sibling. Fixture also caught its own bug: PATH=/nonexistent broke the stub's env-shebang and failed 3 cases against a correct probe. All eight probe callers re-verified. With the path fixed the race largely disappears: preflight now finds what it built, instead of waiting on the launch build to install to ~/.local/bin.
+        - type: discovered
+          ts: "2026-08-17T01:00:00Z"
+          agent_id: linux-yoga-claude-20260816t185912z
+          host: linux-immutable
+          summary: |
+            Second forge lane of cycle 6 lost its entire cycle to this race;
+            the first lane (same host, 40 minutes earlier) got past preflight.

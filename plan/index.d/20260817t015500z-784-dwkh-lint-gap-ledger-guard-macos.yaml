@@ -1,0 +1,68 @@
+packets:
+  - packet_id: gnu-date-lint-missed-intervening-flags-and-broke-the-ledger-guard-fixture
+    order: 784-dwkh
+    release_target: fail-loud-diagnosis-milestone
+    status: completed
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: 'The GNU-date lint only saw `date -d` as the FIRST flag, so `date -u -d` shipped — and the ledger timestamp guard''s own fixture had been failing on macOS for exactly that reason'
+    pickup_role: macos
+    depends_on: []
+    capability_tags:
+      - shell
+      - cross-platform
+      - macos
+      - fail-loud
+      - freshness
+    context: |
+      Found by the standing freshness audit (cycle 22) on its flagged target
+      scripts/test-ledger-ts-guard.sh — the fixture for the ledger
+      timestamp-skew guard (719-kgr5). Running it on macOS: 6 of 9 scenarios
+      FAILED, every failure reading `--ts '' is not a ledger timestamp`.
+
+      Root cause: `iso_offset() { date -u -d "@$epoch" ... }`. GNU-only, and
+      BSD returns empty, so every scenario fed an EMPTY timestamp and the
+      fixture reported six failures that said nothing about the guard it
+      exists to prove. A fixture for a fail-loud mechanism, failing quietly
+      for the wrong reason.
+
+      AND THE LINT THAT SHOULD HAVE CAUGHT IT DID NOT (this host's own
+      766-tdij work): PAT_GNUDATE required `-d` to be date's FIRST flag, so
+      `date -u -d` slipped through from the day the lint landed.
+
+      Widening detection then exposed a symmetric bug in the EXEMPTION
+      recognizer: it accepted only a same-line `date -(v|jf|r)`, while the
+      real corpus writes `|| date -j -u -f '%s' …`, `|| date -u -r "$e"`,
+      `|| date -v-30d +%s`, and most often puts the BSD arm on the
+      CONTINUATION LINE. Un-widened, the lint flagged three already-portable
+      files (forge-liveness-probe, freshness-inventory, reclaim-stranded-
+      claims, manage-cache) and buried the single real defect in the noise —
+      the failure mode that gets a lint muted instead of obeyed.
+    exit_criteria:
+      - the lint catches `date -d` with intervening flags, and its fixture pins that direction
+      - the exemption recognizer accepts real BSD arms (intervening flags, attached values like -v-30d, continuation lines) so already-portable files are not flagged
+      - scripts/test-ledger-ts-guard.sh passes on a BSD-date host
+    verifiable_closure: |
+      check-bash-dialect prints ok:bash-dialect-clean with the widened
+      patterns live, its fixture is green including the new
+      date-u-d-refused scenario, and test-ledger-ts-guard.sh passes on
+      macOS.
+    notes: |
+      Both halves of a lint matter equally: what it detects AND what it
+      forgives. A too-narrow detector ships bugs; a too-narrow exemption
+      ships false alarms, and false alarms are how a real hit gets ignored.
+
+events:
+  - packet_id: gnu-date-lint-missed-intervening-flags-and-broke-the-ledger-guard-fixture
+    event:
+      type: completed
+      ts: "2026-08-17T01:55:00Z"
+      agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0139z"
+      host: macos
+      summary: |
+        All three criteria discharged in the filing commit. Live verdicts on
+        macOS: check-bash-dialect ok:bash-dialect-clean (was
+        blocked:bash4-unguarded:4 mid-fix, narrowed to the ONE true
+        positive), fixture 12/12 (was 11), and
+        test-ledger-ts-guard 9/9 — green on this host for the first time.

@@ -207,6 +207,7 @@ specs:
 - spec_id: default-image
   status: active
   litmus_tests:
+  - litmus:opencode-render-probe-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
@@ -223,6 +224,7 @@ specs:
   - litmus:forge-agent-result-format
   - litmus:forge-policy-binary-discoverability
   - litmus:npm-harness-install-idempotent-shape
+  - litmus:harness-crash-supervision-shape
   coverage_ratio: 80
   last_verified: '2026-07-24'
 - spec_id: dev-build
@@ -237,6 +239,7 @@ specs:
   - litmus:cross-target-cfg-gate-check
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape
+  - litmus:sidecar-staleness-stamp-shape
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: direct-podman-calls
@@ -1028,6 +1031,12 @@ specs:
   - litmus:chromium-variants-launch-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
+- spec_id: mcp-tool-socket
+  status: active
+  litmus_tests:
+  - litmus:host-browser-mcp-lane-socket-shape
+  coverage_ratio: 100
+  last_verified: '2026-08-16'
 - spec_id: mcp-on-demand
   status: active
   litmus_tests:

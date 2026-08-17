@@ -36,6 +36,19 @@ A single binary, two diagnostic modes. Both are non-GUI and exit with codes suit
 |----------------------------|---------------------------------------------------------------------------------------------|-------------------------|
 | `--diagnose`               | Bundled human-readable health report (version, bundle, image-root artifacts, release tag, manifest pin, wire-status disclaimer). | `0` provisioned / `2` degraded / `1` hard fail |
 | `--diagnose --json`        | Same report as a structured JSON object on stdout.                                          | (same as `--diagnose`)  |
+| `--diagnose --with-metrics` | Boots the VM, reads the guest metrics snapshot over the control wire, prints it as `metrics`, stops the VM. Refuses while a tray owns the VM (order 277). Plain `--diagnose` never boots anything. | (same as `--diagnose` — a metrics failure never changes the exit code) |
+
+Two keys carry the metrics read (778-n9z2):
+
+- `metrics` — the guest snapshot, or `null`. Counters are **present-and-null**
+  when they could not be collected; a `null` is never rendered as `0` and
+  never omitted, so "could not measure" cannot be misread as "measured zero"
+  (`spec:observability-metrics`).
+- `metrics_status` — why: `ok` · `unsupported:no-live-wire-handle` (plain
+  `--diagnose`: a separate process holds no VM handle) ·
+  `unsupported:guest-lacks-capability` (guest did not advertise
+  `MetricsSnapshotRequest` in its HelloAck — detection is by capability,
+  never by wire-version comparison) · `error:<slug>`.
 
 GUI mode (no flags) launches the AppKit tray itself.
 

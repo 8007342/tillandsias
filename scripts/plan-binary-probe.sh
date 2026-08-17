@@ -42,32 +42,41 @@ resolve_plan_binary() {
         printf '%s\n' "${TILLANDSIAS_PLAN_BIN}"
         return 0
     fi
-    # CARGO_TARGET_DIR FIRST, when set. scripts/with-wsl2-builder.sh points it at
-    # a distro-native path on Windows precisely so target/ never lands on 9p
-    # ("9p-backed target/ makes cargo crawl"), which means the binary cycle-
-    # preflight just built is not under ./target at all. Probing only ./target
-    # made preflight build the instrument successfully and then refuse it:
-    # `blocked:preflight:plan:capabilities-refused` on a host whose binary ran
-    # fine and declared 35 capabilities — the cycle could never start.
+    # CARGO_TARGET_DIR FIRST (order 783-jdeh). Every forge exports it
+    # (images/default/lib-common.sh: CARGO_TARGET_DIR="$PROJECT_CACHE/cargo/target")
+    # so that ./target/ does not exist in the mounted checkout at all. A probe
+    # that looks only under ./target therefore cannot see the binary
+    # cycle-preflight.sh JUST BUILT one line earlier, and reports
+    # `blocked:preflight:plan:capabilities-refused` — blaming the instrument
+    # for a path assumption and costing the forge its whole cycle. Measured on
+    # yoga 2026-08-17: the forge lane died here with no ./target/ directory
+    # while the build had succeeded.
     #
-    # This is the same family as the four earlier instances, with the cause
-    # inverted: those re-implemented the probe and looked in the right place the
-    # wrong way; this one uses the shared probe correctly and the shared probe
-    # looks in the wrong place. Hence the fix belongs here, not at the call site.
-    if [ -n "${CARGO_TARGET_DIR:-}" ]; then
-        for candidate in \
-            "$CARGO_TARGET_DIR/release/tillandsias-plan.exe" \
-            "$CARGO_TARGET_DIR/debug/tillandsias-plan.exe" \
-            "$CARGO_TARGET_DIR/release/tillandsias-plan" \
-            "$CARGO_TARGET_DIR/debug/tillandsias-plan"; do
-            [ -f "$candidate" ] || continue
-            if "$candidate" capabilities >/dev/null 2>&1; then
-                printf '%s\n' "$candidate"
-                return 0
-            fi
-        done
+    # WINDOWS FOUND THE SAME DEFECT INDEPENDENTLY, same day, different cause —
+    # recorded here because two unrelated causes converging on one line is the
+    # argument for fixing it HERE rather than at either call site:
+    # scripts/with-wsl2-builder.sh points CARGO_TARGET_DIR at a distro-native
+    # path precisely so target/ never lands on 9p ("9p-backed target/ makes
+    # cargo crawl"), so on that host too the just-built binary is not under
+    # ./target and preflight refused a binary that ran fine and declared 35
+    # capabilities. Their framing of the family is worth keeping: the four
+    # earlier instances re-implemented the probe and looked in the right place
+    # the wrong way; this one uses the shared probe correctly and the shared
+    # probe looks in the wrong place.
+    #
+    # resolve_target_binary (order 770-ifeg), fifty lines below in THIS file,
+    # already honours CARGO_TARGET_DIR. The newer generic probe learned the
+    # lesson the older specific one still had — the fifth instance of the
+    # path-assumption class 704-zcgi centralised this file to end.
+    local ctd="${CARGO_TARGET_DIR:-}"
+    if [ -n "$ctd" ] && [ "${ctd#/}" = "$ctd" ]; then
+        ctd="./$ctd"
     fi
     for candidate in \
+        ${ctd:+"$ctd/release/tillandsias-plan.exe"} \
+        ${ctd:+"$ctd/debug/tillandsias-plan.exe"} \
+        ${ctd:+"$ctd/release/tillandsias-plan"} \
+        ${ctd:+"$ctd/debug/tillandsias-plan"} \
         ./target/release/tillandsias-plan.exe \
         ./target/debug/tillandsias-plan.exe \
         ./target/release/tillandsias-plan \

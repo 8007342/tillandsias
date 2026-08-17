@@ -1,0 +1,47 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-17, from two of this host's own
+# packets having their causes falsified by their implementing forks in one night.
+packets:
+  - packet_id: packet-context-must-separate-observed-symptom-from-inferred-cause
+    order: 788-mj37
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: enhancement
+    title: "A packet's context states inferred causes in the same voice as measured facts, so implementers inherit an unmarked hypothesis as a premise — two were falsified in one night"
+    deliverable: "a methodology convention (and a shaping-time habit in the skills that file packets) marking each context claim as OBSERVED or INFERRED, so an implementer knows which parts to test before building on them"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [methodology, plan-quality, convergence, fail-loud]
+    estimated_hours: 2
+    context: |
+      2026-08-17, this host, one night, two packets it filed itself:
+
+        783-xyk5 — context asserted "one guard is ~60% of every --check".
+          OBSERVED: a 10470ms step record. INFERRED: that the named guard
+          spent it. The implementing fork found build.sh's _step closes a
+          phase at the NEXT banner, so the record bundled other work. Fix was
+          still right (8.7x measured on controlled input); the attribution
+          was not. Measurement defect filed as 785-ibu9.
+
+        771-wwzi — context asserted "a fork's snapshot retired the parent's
+          boundary". OBSERVED: verify answered boundary-state-missing
+          mid-cycle while forks ran. INFERRED: concurrency. The fork proved
+          with a real linked worktree that stamps live under the per-worktree
+          git-dir and cannot collide; the true cause was a same-worktree
+          re-snapshot superseding the first while the caller held a stale
+          pointer. The defect was diagnostic and got fixed as such.
+
+      In BOTH cases the packet was worth doing and the fork caught the error —
+      the adversarial-verification loop worked. The cost is that an
+      implementer spends part of its budget disproving the filer, and a less
+      careful one would have built on the premise instead. Both contexts read
+      as fact because prose has no marker for "this is the part I did not
+      test".
+
+      Cheap fix, in the shaping habit rather than new tooling: write context
+      claims tagged, e.g. `OBSERVED:` for what was measured or seen and
+      `INFERRED:` for the causal story, and let the deliverable name which
+      inference the implementer should test FIRST. This is the same discipline
+      the closure ladder already enforces at the other end (evidence for a
+      status) applied to the intake end. Related and complementary:
+      785-ibu9 (the measurement that misled the first case).

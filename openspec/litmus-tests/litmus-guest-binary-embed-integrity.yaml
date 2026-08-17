@@ -19,6 +19,17 @@ critical_path:
     success_pattern: "verify:(ok|skip-stale-staging)"
     timeout_ms: 10000
 
+  - step: "the nix lane tests CAPABILITY and routes through the toolbox, and its out-link staging survives a non-host store (order 790-mbk9)"
+    # Behavioural, not a source grep (634-39ik): the fixture runs the REAL
+    # script in sandboxes whose stub nix refuses un-routed calls the way a dead
+    # daemon socket does, and asserts which flags reached nix, that a chroot
+    # store's DANGLING out-link is still staged from the store root, that a
+    # genuinely absent artifact fails loud, and that the cargo fallback is
+    # reached only with a named reason.
+    command: "bash scripts/test-guest-binaries-nix-lane.sh 2>&1 | tail -1"
+    success_pattern: "ok:guest-binaries-nix-lane-fixture:[0-9]+"
+    timeout_ms: 60000
+
 observability:
   traces:
     - "@trace spec:ci-release"

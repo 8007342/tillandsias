@@ -3,7 +3,7 @@
 # an UNGUARDED bash-4-ism fails the gate; the SAME construct behind a
 # BASH_VERSINFO refusal passes; a clean tree passes. Hermetic — scans a
 # temp dir via TILLANDSIAS_DIALECT_SCAN_DIR, never the live tree.
-# freshness: filed 2026-08-16 macos 761-g36m
+# freshness: auditor=macos-tlatoanis-macbook-air-fable5 date=2026-08-16 verdict=refreshed scope=761-g36m authoring
 set -u
 
 CHECKER="$(cd "$(dirname "$0")" && pwd)/check-bash-dialect.sh"
@@ -66,9 +66,15 @@ printf '#!/usr/bin/env bash\nt="$(date +%%s%%3N)" # gnu-date: ok (digit-validate
 rm "$TMP/gnudate.sh"
 expect "exempted-gnu-date-passes" "ok:bash-dialect-clean" 0
 
+# date -d with INTERVENING flags is caught (the gap that let
+# test-ledger-ts-guard.sh's `date -u -d "@epoch"` ship broken on BSD).
+printf '#!/usr/bin/env bash\nt=$(date -u -d "@123" +%%s)\necho "$t"\n' > "$TMP/dated-u.sh"
+rm "$TMP/gnudate-ok.sh"
+expect "date-u-d-refused" "blocked:bash4-unguarded:1" 1
+rm "$TMP/dated-u.sh"
+
 # date -d (GNU relative-date form) is caught too.
 printf '#!/usr/bin/env bash\ndate -d yesterday +%%Y\n' > "$TMP/dated.sh"
-rm "$TMP/gnudate-ok.sh"
 expect "date-d-refused" "blocked:bash4-unguarded:1" 1
 rm "$TMP/dated.sh"
 
@@ -80,9 +86,18 @@ rm "$TMP/assoc.sh"
 expect "declare-a-passes" "ok:bash-dialect-clean" 0
 rm "$TMP/indexed.sh"
 
+# `local -A` inside a function is the same bash-4 feature and the form that
+# actually hid in scripts/hooks/ (784-dwkh); plain `local -r` must still pass.
+printf '#!/usr/bin/env bash\nf() { local -A m=(); m[x]=1; }\nf\n' > "$TMP/localassoc.sh"
+expect "local-A-refused" "blocked:bash4-unguarded:1" 1
+printf '#!/usr/bin/env bash\nf() { local -r x=1; echo "$x"; }\nf\n' > "$TMP/localr.sh"
+rm "$TMP/localassoc.sh"
+expect "local-r-passes" "ok:bash-dialect-clean" 0
+rm "$TMP/localr.sh"
+
 if [ "$fails" -gt 0 ]; then
   echo "FAIL: check-bash-dialect fixture: $fails scenario(s) diverged" >&2
   exit 1
 fi
-echo "PASS: check-bash-dialect fixture 11/11 scenarios green"
+echo "PASS: check-bash-dialect fixture 14/14 scenarios green"
 exit 0

@@ -171,3 +171,63 @@ cheatsheet_binding:
         reason: >
           Every cheatsheet entry tracks hits/misses/verification_deltas.
           Unused or failing entries are deleted to keep the cache compact.
+
+  # ---------------------------------------------------------------------------
+  # Where cheatsheets LIVE, and which copy is authoritative.
+  #
+  # Added 2026-08-16 by operator directive after the archaeology recorded in
+  # plan/issues/cheatsheet-derived-tree-tracking-decision-2026-08-16.md. Canon
+  # had been SILENT on storage: it required provenance and frontmatter but never
+  # said which tree owns them, so a false "it is gitignored, therefore not
+  # committed" claim survived 21 days in the ledger, propagated into two tool
+  # docstrings, and left the shipped image advertising five cheatsheets whose
+  # files were absent. Silence is what let that happen; this block ends it.
+  storage_and_authority:
+    authority: "The Tlatoāni, 2026-08-16 (justify-every-moving-part directive)"
+
+    authoring_surface: >
+      cheatsheets/ is the SOLE authoring surface. Every provenance gate reads
+      only this tree, so frontmatter here (tier, sources, authority, status,
+      last_verified, bundled_into_image, committed_for_project) is the ONLY
+      attribution the project recognizes.
+
+    derived_tree_is_a_tracked_build_input: >
+      images/default/cheatsheets/ is a DERIVED copy that is nonetheless TRACKED,
+      deliberately. It is a build input, not a convenience copy: the headless
+      build.rs embeds images/ recursively into the binary, ./build.sh never
+      stages cheatsheets, and the end-user lane builds the forge image from the
+      EMBEDDED snapshot where neither the authored tree nor the staging script
+      exists. Untracking it ships an image whose `COPY cheatsheets/` has nothing
+      to copy. The sibling images/default/skills/ is safely untracked ONLY
+      because build.rs explicitly excludes it from asset collection; absent such
+      an exclusion, a derived tree the binary embeds MUST stay tracked.
+
+    never_hand_edit_the_derived_tree: >
+      An edit to images/default/cheatsheets/ is at best reverted by the next
+      stage and at worst ships attribution its own source does not carry.
+      Recorded incident: commit 79b3e82da (2026-07-21) edited only the derived
+      copy, so the tracked tree claimed last_verified 2026-07-21 while its
+      authored source still said 2026-05-20 — attribution flowing BACKWARDS for
+      three days until a build silently reverted it.
+
+    the_two_trees_must_match_at_every_commit: >
+      The tracked derived tree MUST equal the authored tree, checked against the
+      git INDEX (path + blob hash), not merely the working tree. A check that
+      regenerates before comparing repairs the working tree and leaves the index
+      stale, which is exactly how five authored cheatsheets went missing from
+      the shipped copy while every gate stayed green. Enforced by
+      scripts/stage-image-cheatsheets.sh (verdict `derived-tree-index-stale`).
+
+    gitignore_semantics: >
+      The .gitignore entry for the derived tree suppresses ad-hoc local
+      regeneration noise. It does NOT mean untracked — gitignore is inert
+      against already-tracked paths, and 230 of these files were tracked before
+      the rule existed. Never infer trackedness from .gitignore; ask git
+      (`git ls-files`).
+
+    changing_this_arrangement: >
+      Untracking the derived tree, or excluding it from embedded assets, is a
+      release-affecting change: it must be justified against build.rs asset
+      collection AND the end-user image-build lane, and land with the
+      Containerfile COPY-source test still green on a FRESH CLONE. Do not
+      reverse it on the strength of a tidiness argument alone.

@@ -69,6 +69,40 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: helper is exit-transparent"
 
+  - step: "--emit-timing-batch (765-dfry) writes N grammar-valid records in ONE spawn, drops malformed and day-bound lines"
+    # Three input lines: valid guard record; day-bound violation (86400000ms);
+    # malformed (no numeric duration -> coerced 0, still valid grammar).
+    command: "F=$(mktemp); printf 'step:checking-x\\tbuild\\t42\\t0\\thost1\\nstep:huge\\tbuild\\t86400000\\t0\\thost1\\nlitmus:t-y\\tpre-build\\tnotanumber\\t1\\thost1\\n' | TILLANDSIAS_TIMING_LOG=$F scripts/cycle-metrics.sh --emit-timing-batch; n=$(wc -l < $F | tr -d ' '); ok1=$(head -1 $F | jq -e '.step==\"step:checking-x\" and .duration_ms==42 and .exit==0' >/dev/null 2>&1 && echo y); ok2=$(tail -1 $F | jq -e '.step==\"litmus:t-y\" and .duration_ms==0 and .exit==1' >/dev/null 2>&1 && echo y); rm -f $F; if [ \"$n\" = 2 ] && [ \"$ok1\" = y ] && [ \"$ok2\" = y ]; then echo 'ok: batch grammar and bounds'; else echo \"observed n=$n ok1=$ok1 ok2=$ok2\"; echo 'fail: batch grammar and bounds'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: batch grammar and bounds"
+
+  - step: "a batch emit to an unwritable path still exits 0 (fault injection: timing sink unwritable, gate exit untouched)"
+    command: "printf 'step:x\\tbuild\\t1\\t0\\th\\n' | TILLANDSIAS_TIMING_LOG=/proc/1/nope.jsonl scripts/cycle-metrics.sh --emit-timing-batch; rc=$?; if [ $rc -eq 0 ]; then echo 'ok: batch survives unwritable log'; else echo \"observed rc=$rc\"; echo 'fail: batch emit must never fail its caller'; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: batch survives unwritable log"
+
+  - step: "the 765-dfry emitters are WIRED: build.sh flushes phases, local-ci archives duration_ms per check, the litmus runner batches per-test records"
+    command: "grep -q '_phase_emit_timing' build.sh && grep -q 'duration_ms:\\$duration_ms' scripts/local-ci.sh && grep -q '_PER_TEST_LOG' scripts/run-litmus-test.sh && grep -q 'emit-timing-batch' scripts/run-litmus-test.sh && echo 'ok: per-step emitters wired'"
+    timeout_ms: 5000
+    expected_behavior: "ok: per-step emitters wired"
+
+  - step: "785-ibu9: a step record measures the step's OWN work, not the banner-to-banner span that can bundle other work"
+    # Behavioural, not a source grep: the fixture sources build.sh's real
+    # tracker, runs a fast named step followed by slow UNNAMED work, and
+    # asserts the fast step's record stays fast. Reverting the fix makes it
+    # report the adjacent second instead — the defect that got a packet filed
+    # on an inflated reading.
+    command: "bash scripts/test-build-step-timing-attribution.sh 2>&1 | tail -1"
+    timeout_ms: 60000
+    expected_behavior: "ok:build-step-timing-attribution-fixture:9"
+
+  - step: "785-ibu9: a phase with no measurable work is labelled build-span and slowest= marks it ~span"
+    # The honesty half: when there is no attributable number, the wall-clock
+    # fallback must announce itself rather than pose as a step cost.
+    command: "bash scripts/test-slowest-span-marker.sh 2>&1 | tail -1"
+    timeout_ms: 30000
+    expected_behavior: "ok:slowest-span-marker-fixture:3"
+
 observability:
   traces:
     - "@trace spec:methodology-accountability"

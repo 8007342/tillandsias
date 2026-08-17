@@ -1,0 +1,54 @@
+# Filed by linux_mutable (macuahuitl), 2026-08-17: a PUSH-BLOCKING trunk gate
+# was returning different verdicts run-to-run on an unchanged tree. Fixed in
+# the same change; filed for the class, not the instance.
+packets:
+  - packet_id: guards-that-spawn-per-item-go-flaky-under-fleet-load
+    order: 792-ksr8
+    status: implemented
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "check-litmus-pin-claims.sh returned 1, 5, 2 and 3 violations on an UNCHANGED tree because it spawned a grep per token and read any non-zero exit as 'name does not exist' — fixed here; the class needs a sweep"
+    deliverable: "the instance is fixed (spawn-free case membership); the packet's residual is the SWEEP — audit the other guards for per-item spawns whose failure is indistinguishable from a negative result, and for `if ! cmd` idioms that conflate 'said no' with 'could not run'"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [guards, fail-loud, concurrency, velocity, flakiness]
+    estimated_hours: 3
+    context: |
+      OBSERVED (measured, this host, 2026-08-17 ~21:40 PDT, three fork agents
+      building concurrently, load average 8.5 on 20 cores):
+        * `./build.sh --check` went red on `violation:litmus-pin-unresolvable`
+          and REFUSED THE PUSH. The same gate had been green ~20 minutes
+          earlier.
+        * A clean `git archive` of origin/linux-next reproduced it, so it was
+          not local dirt — trunk itself appeared red.
+        * Successive runs of the guard on UNCHANGED trees returned 5, then 2,
+          then 1, then 5, then 2, then 3 violations, and the REFUSED list
+          named different scripts each time.
+        * Both of the guard's inputs were proven STABLE across five samples
+          each: 357 declared litmus names, 67 claim lines, 280 files. So the
+          variance was inside the guard, not in what it read.
+
+      INFERRED (the mechanism, consistent with all of the above and with the
+      fix's result): the guard did `if ! printf '%s\n' "$existing" | grep -qx
+      "$tok"` — two spawns per claim token, ~46 tokens — and `if !` treats
+      EVERY non-zero status as "not found". grep exits 1 for no-match but >1
+      for an error, so a spawn that fails to fork under load is
+      indistinguishable from a genuine miss.
+
+      FIXED IN THIS CHANGE: replaced with the house newline-delimited `case`
+      membership idiom (freshness-inventory.sh, check-no-tracked-binaries.sh)
+      — spawn-free, bash-3.2 clean, cannot fail for reasons of load. VERIFIED:
+      ten consecutive runs under the same load, all
+      `ok:litmus-pin-claims:46 checked`.
+
+      WHY THE PACKET STAYS OPEN AT implemented: this is the 702-pwhc /
+      723-b9cn / 731-pc5r family — a pipeline's exit status deciding a
+      guard's verdict for reasons unrelated to the guard's question — and it
+      has now recurred at least four times. The fleet went multi-agent this
+      week (four concurrent builds on one host is routine now), which turns
+      every per-item spawn in every guard into a load-dependent coin flip.
+      The residual is the sweep, plus a decision on whether `if ! cmd` over
+      a spawn should be bannable by a gate the way python and base64 are.
+      A flaky trunk gate is worse than a slow one: it teaches every host to
+      retry until green, which is indistinguishable from disabling it.

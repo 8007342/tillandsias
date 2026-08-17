@@ -204,15 +204,26 @@ if [ "${TILLANDSIAS_AGENT_RESULT_FORMAT:-}" = "json" ]; then
     oc_format_args=(--format json)
 fi
 
+# 767-nkkq: NON-INTERACTIVE runs go through the PID-1 crash supervisor — a
+# Bun/JSC SIGSEGV (the 604-vmcg class) becomes a loud
+# `fail:harness-crashed:...` verdict + evidence file + truthful nonzero exit
+# instead of a silent status-139 container death that loses in-flight work.
+# The supervisor NEVER restarts the agent (a crashed drain cycle must not
+# re-run its prompt unattended). The INTERACTIVE lane below stays a direct
+# exec on purpose: a human is watching that tty (a crash there is seen), and
+# keeping the TUI as PID 1 preserves its signal/job-control semantics.
+export TILLANDSIAS_CRASH_LAST_OUTPUT="/tmp/forge-lifecycle.log"
 if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
-    trace_lifecycle "exec" "launching prompted opencode run"
-    exec "$OC_BIN" run "${oc_auto_args[@]}" "${oc_format_args[@]}" "$TILLANDSIAS_OPENCODE_PROMPT"
+    trace_lifecycle "exec" "launching prompted opencode run (supervised, 767-nkkq)"
+    exec /usr/local/bin/harness-supervisor opencode \
+        "$OC_BIN" run "${oc_auto_args[@]}" "${oc_format_args[@]}" "$TILLANDSIAS_OPENCODE_PROMPT"
 elif [ "$IS_DIAGNOSTICS" = "true" ]; then
-    trace_lifecycle "exec" "launching unattended opencode run"
+    trace_lifecycle "exec" "launching unattended opencode run (supervised, 767-nkkq)"
     # Execute the unattended loop run command.
     # We ignore the other passed arguments (--print, --output-format, json) as they are intended for the orchestrator,
     # and instead run opencode unattended using the synthetic prompt or command.
-    exec "$OC_BIN" run "${oc_auto_args[@]}" "${oc_format_args[@]}" "run /startup"
+    exec /usr/local/bin/harness-supervisor opencode \
+        "$OC_BIN" run "${oc_auto_args[@]}" "${oc_format_args[@]}" "run /startup"
 else
     trace_lifecycle "exec" "launching opencode ($OC_BIN)"
     exec "$OC_BIN" "$@"

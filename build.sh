@@ -128,6 +128,18 @@ _error() { echo -e "${RED}[build]${NC} $*" >&2; }
 _PHASE_NAME=""
 _PHASE_T0=""
 _PHASE_LOG=""
+# Order 785-ibu9. `_PHASE_T0` measures BANNER TO BANNER, which is the phase's
+# wall clock but NOT necessarily the named step's own cost: any work between a
+# step's command and the next banner lands on the previous step's record. That
+# inflated a real reading (783-xyk5 was filed on a step number that bundled
+# work the guard did not do), so the emitted telemetry now carries the step's
+# OWN measured work — the time spent inside `_run`, accumulated here — and
+# falls back to the span only for phases that run no `_run` at all. The
+# fallback is labelled in the record's `phase` field rather than silently
+# mixed in, because an unattributable number that looks attributable is the
+# defect this packet closes.
+_PHASE_WORK_MS=0
+_PHASE_RAN_WORK=0
 # date '+%s%3N' is GNU-only. BSD/macOS date SUCCEEDS while passing %3N
 # through literally ("<secs>3N"), so an exit-code guard never fires and the
 # phase arithmetic explodes ("value too great for base" — first hit: macOS
@@ -151,10 +163,16 @@ _now_ms() {
 
 _phase_close() {
     [[ -n "$_PHASE_NAME" ]] || return 0
-    local now elapsed
+    local now elapsed work
     now="$(_now_ms)"
     elapsed=$(( now - _PHASE_T0 ))
-    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${_PHASE_NAME}
+    [[ "$elapsed" -ge 0 ]] || elapsed=0
+    work="$_PHASE_WORK_MS"
+    [[ "$work" -ge 0 ]] || work=0
+    # span<TAB>work<TAB>name — `work` is -1 when the phase measured no `_run`,
+    # so a consumer can tell "measured zero work" from "nothing to measure".
+    [[ "$_PHASE_RAN_WORK" == 1 ]] || work=-1
+    _PHASE_LOG="${_PHASE_LOG}${elapsed}	${work}	${_PHASE_NAME}
 "
     _PHASE_NAME=""
 }
@@ -163,6 +181,8 @@ _step()  {
     _phase_close
     _PHASE_NAME="$*"
     _PHASE_T0="$(_now_ms)"
+    _PHASE_WORK_MS=0
+    _PHASE_RAN_WORK=0
     [[ "${FLAG_GRAPHS:-false}" == true ]] || echo -e "${CYAN}[build]${NC} $*"
 }
 
@@ -173,15 +193,58 @@ _phase_report() {
     local total slow_ms
     slow_ms="${TILLANDSIAS_GATE_SLOW_MS:-5000}"
     total="$(printf '%s' "$_PHASE_LOG" | awk -F'\t' '{s+=$1} END {printf "%d", s}')"
+    # 785-ibu9: the report is a WALL-CLOCK view, so it keeps ranking on span —
+    # but when a phase's span materially exceeds the work measured inside it,
+    # the difference is time the named step did not spend, and printing it is
+    # how the unattributed gap stops hiding inside a step's number.
     if [[ "${TILLANDSIAS_GATE_PROFILE:-0}" == "1" ]]; then
         printf '%s' "$_PHASE_LOG" | sort -rn | awk -F'\t' \
-            '{printf "  %6.1fs  %s\n", $1/1000, $2}' >&2
+            '{ gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
+               printf "  %6.1fs  %s%s\n", $1/1000, $3, gap }' >&2
     else
         printf '%s' "$_PHASE_LOG" | sort -rn \
             | awk -F'\t' -v lim="$slow_ms" \
-            '$1 > lim {printf "  %6.1fs  %s\n", $1/1000, $2}' >&2
+            '$1 > lim { gap = ($2 >= 0 && $1 - $2 > 250) ? sprintf("   (+%.1fs unattributed)", ($1-$2)/1000) : ""
+                        printf "  %6.1fs  %s%s\n", $1/1000, $3, gap }' >&2
     fi
     _info "Gate phases totalled $(( total / 1000 ))s (set TILLANDSIAS_GATE_PROFILE=1 for every phase)"
+}
+
+# 765-dfry: flush every closed phase into the 682-emvg timing side-channel, in
+# ONE spawn (per-record emission costs ~15ms x ~45 phases per gate — the
+# audit's empty-suite-floor lesson applied to the telemetry itself). Step name
+# is a stable slug of the phase description, prefixed `step:` so consumers can
+# select the family; per-phase exit is 0 by definition (phase records carry
+# WHERE the time went; the gate's verdict lives on the build-check record).
+# Best-effort like every 682-emvg emission: never alters output or exit codes,
+# and never double-emits (the log is consumed on flush).
+_phase_emit_timing() {
+    _phase_close
+    [[ -n "$_PHASE_LOG" ]] || return 0
+    {
+        printf '%s' "$_PHASE_LOG" | awk -F'\t' \
+            -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" '
+            NF == 3 {
+                name = tolower($3)
+                gsub(/[^a-z0-9]+/, "-", name)
+                gsub(/^-+|-+$/, "", name)
+                if (length(name) > 64) name = substr(name, 1, 64)
+                if (name == "") next
+                # 785-ibu9: prefer the step OWN WORK (measured inside _run) over
+                # the banner-to-banner span. `phase` carries the provenance so a
+                # reader never has to guess which one a number is: `build` means
+                # attributable to the named step, `build-span` means the phase
+                # ran no measurable command and the number is wall clock between
+                # banners. Same `step:` family either way, so the finest-grain
+                # slowest= preference keeps seeing every phase.
+                if ($2 >= 0) { dur = $2; prov = "build" } else { dur = $1; prov = "build-span" }
+                printf "step:%s\t%s\t%s\t0\t%s\n", name, prov, dur, host
+            }' | bash "$SCRIPT_DIR/scripts/cycle-metrics.sh" --emit-timing-batch
+    } 2>/dev/null || true
+    # Consume on flush: combined dispatches (--ci-full --install) flush once
+    # per stage, so a later flush emits only the phases closed since this one.
+    _PHASE_LOG=""
+    return 0
 }
 
 # ---------------------------------------------------------------------------
@@ -831,9 +894,25 @@ fi
 # Host build execution
 # ---------------------------------------------------------------------------
 
+# Order 785-ibu9: `_run` is the seam where a step's REAL work happens, so it is
+# where the step's own cost can be measured without annotating ~40 call sites
+# (765-dfry's zero-per-site-edit property is the reason its telemetry exists at
+# all, and a fix that required per-step edits would rot). Accumulates rather
+# than assigns: a phase may run several commands, and their sum is the phase's
+# work. `|| _rc=$?` keeps the command "tested" so errexit does not abort before
+# the accounting, and the original status is then returned unchanged — the
+# 682-emvg contract (never alter exit codes or output) is preserved by
+# construction, and a broken clock can only mis-add, never fail the step.
 _run() {
     _require_host_build_tools
-    (cd "$SCRIPT_DIR" && "$@")
+    local _run_t0 _run_rc=0 _run_dt
+    _run_t0="$(_now_ms)"
+    (cd "$SCRIPT_DIR" && "$@") || _run_rc=$?
+    _run_dt=$(( $(_now_ms) - _run_t0 ))
+    [[ "$_run_dt" -ge 0 ]] || _run_dt=0
+    _PHASE_WORK_MS=$(( _PHASE_WORK_MS + _run_dt ))
+    _PHASE_RAN_WORK=1
+    return "$_run_rc"
 }
 
 _run_litmus_phase() {
@@ -894,8 +973,23 @@ _write_gate_stamp() {
         return 1
     fi
 
+    # Order 765-dt8h: the stamp records WHICH gate wrote it and WHAT it
+    # validated. Every dispatch here validates the whole tree, so all of them
+    # write `scope full` — the field exists so that a future scoped run (the
+    # diff-scoped litmus / change-class selector packets, all of which depend
+    # on this one) physically cannot write a stamp that overstates its
+    # coverage. `dispatch` is provenance only: --check and --ci-full both
+    # cover everything, but they do not cover it equally, and a reader of a
+    # refused push deserves to know which one ran.
+    local _stamp_dispatch="check"
+    if [[ "$FLAG_CI_FULL" == true ]]; then
+        _stamp_dispatch="ci-full"
+    elif [[ "$FLAG_CI" == true ]]; then
+        _stamp_dispatch="ci"
+    fi
+
     _step "Writing the gate stamp..."
-    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write >/dev/null 2>&1; then
+    if bash "$SCRIPT_DIR/scripts/gate-stamp.sh" write --scope full --dispatch "$_stamp_dispatch" >/dev/null 2>&1; then
         _info "Gate stamp recorded (pre-push will accept this tree)"
     else
         _warn "Could not record gate stamp — pre-push may ask you to re-run the gate"
@@ -1094,6 +1188,11 @@ if [[ "$FLAG_INSTALL" == true ]]; then
             _warn "Evidence bundle generation failed (non-fatal)"
         fi
     fi
+
+    # 765-dfry: flush install-stage phase records (portable-launcher build,
+    # image ensure, status smoke, evidence bundle) so a --ci-full --install
+    # run's wall clock is attributable from the timing records alone.
+    _phase_emit_timing
 
     # If --install is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CHECK$FLAG_CLEAN$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then
@@ -1385,6 +1484,9 @@ if [[ "$FLAG_CHECK" == true ]]; then
     # record for the whole gate. (packet 682-emvg)
     trap - EXIT
     _phase_report
+    # 765-dfry: flush per-phase records AFTER the printed report (report reads
+    # the same log; the flush consumes it).
+    _phase_emit_timing
     timing_emit build-check check "$_CHECK_T0" 0
 
     # If --check is the only remaining flag, exit

@@ -278,8 +278,37 @@ _tec_build_in_flight() {
     return 0
 }
 
+# Is the spec RAG index actually built? (order 760-hzi4 / 712-r5x8.)
+#
+# WHY THIS FIELD EXISTS. Every other field on this line reports SUBCOMMANDS —
+# what the binary can be asked. `spec-retrieve` and `spec-envelope` are
+# compiled in, so the line has always advertised them truthfully while
+# `spec_answer` refused every question for want of DATA. A caller reading the
+# capability line therefore concluded the spec expert was usable when it could
+# not answer anything. That is the same behavioural-vs-subcommand drift as
+# 760-nwzr: a capability is what the system can DO, not what it can be asked.
+#
+# Uses the same predicate the answer path uses (forge-plan.sh: both
+# chunks.jsonl and vectors.jsonl non-empty), so the line cannot claim an index
+# the answer path would reject. Honours FORGE_SPEC_INDEX_DIR for the same
+# reason forge-plan.sh does — the dev host keeps its index outside the
+# runtime's /dev/shm state dir.
+_tillandsias_expert_spec_index_state() {
+    _tec_index_dir="${FORGE_SPEC_INDEX_DIR:-${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}/spec-index}"
+    if [ -s "$_tec_index_dir/chunks.jsonl" ] && [ -s "$_tec_index_dir/vectors.jsonl" ]; then
+        printf 'present\n'
+    else
+        printf 'absent\n'
+    fi
+}
+
 _tillandsias_expert_capability_emit() {
-    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST}"
+    TILLANDSIAS_EXPERT_CAP_SPEC_INDEX="$(_tillandsias_expert_spec_index_state)"
+    # spec_index is APPENDED, never inserted: the existing five fields are
+    # matched by substring in litmus:capability-manifest-guard and
+    # litmus:expert-capability-skew-honesty, so growing the line at the end is
+    # additive for every current reader.
+    TILLANDSIAS_EXPERT_CAPABILITY_LINE="expert_capability: now=${TILLANDSIAS_EXPERT_CAP_NOW} after_relaunch=${TILLANDSIAS_EXPERT_CAP_AFTER} skew=${TILLANDSIAS_EXPERT_CAP_SKEW} blocked_capabilities=${TILLANDSIAS_EXPERT_CAP_BLOCKED} lost_on_relaunch=${TILLANDSIAS_EXPERT_CAP_LOST} spec_index=${TILLANDSIAS_EXPERT_CAP_SPEC_INDEX}"
 }
 
 # tillandsias_expert_capability_advice — the one-sentence action for the verdict.

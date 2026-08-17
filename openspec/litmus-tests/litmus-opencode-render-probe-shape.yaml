@@ -1,0 +1,79 @@
+# @trace spec:default-image, spec:fail-loud-diagnosis
+name: litmus:opencode-render-probe-shape
+spec: default-image
+phase: pre-build
+description: >-
+  Pin the order-626-p4xd render contract. Every harness gate used to answer
+  only "does the binary start and honour our flags?" — --version, flag greps,
+  auth list — and none of them loaded the TUI renderer. A build whose
+  interface could not initialize therefore passed every gate, was installed,
+  and was RECORDED AS LAST-GOOD; the rollback path re-validated with the same
+  blind probe, so it could restore and certify another broken snapshot. The
+  user met the failure and the gate never did.
+
+  The probe asserts POSITIVELY (the renderer must prove itself by emitting an
+  alt-screen switch or a truecolor SGR) rather than matching an upstream error
+  string, which would rot the moment upstream rewords it.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/lib-common.sh
+  - workspace contains scripts/test-opencode-render-probe.sh
+
+critical_path:
+  - step: "BEHAVIOUR: the render contract refuses a non-rendering binary and accepts a rendering one"
+    # The fixture carries its own controls: a stub that answers --version and
+    # flag greps but never renders must FAIL, and a stub that emits the marker
+    # must PASS. Without the second, the first would pass even if the probe
+    # rejected everything.
+    command: "scripts/test-opencode-render-probe.sh"
+    timeout_ms: 120000
+    success_pattern: "PASS: opencode render-probe fixture"
+    failure_pattern: "FAIL:"
+
+  - step: "Req: the gate is wired where all three consumers reach it"
+    # record-last-good, validate-or-rollback and restore-last-good all call
+    # harness_probe. Wiring the contract there — rather than at one call site
+    # — is what stops a broken binary being certified as last-good.
+    command: "awk '/^harness_probe\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'opencode_render_contract_cached' && echo 'ok: render contract inside harness_probe'"
+    timeout_ms: 10000
+    expected_behavior: "ok: render contract inside harness_probe"
+
+  - step: "Req: the probe cannot self-update (litmus:harness-byte-cheap contract)"
+    command: "awk '/^opencode_render_contract_ok\\(\\)/,/^}/' images/default/lib-common.sh | grep -q 'DISABLE_AUTOUPDATER=1 DISABLE_UPDATES=1' && echo 'ok: update guards present'"
+    timeout_ms: 10000
+    expected_behavior: "ok: update guards present"
+
+  - step: "Req: the harness update lock has TWO takers, not one"
+    # The mutex was one-sided: ensure_forge_harnesses took it while
+    # require_opencode wrote the same binary in the foreground without it.
+    command: "n=$(grep -c 'harness_update_lock_acquire' images/default/lib-common.sh); [ \"$n\" -ge 2 ] && echo \"ok: shared lock taken by $n callers\" || { echo \"FAIL: harness update lock has $n taker(s)\"; exit 1; }"
+    timeout_ms: 10000
+    expected_behavior: "ok: shared lock taken by"
+
+  # NO sibling-regression step here on purpose. litmus:harness-rollback-shape
+  # and litmus:harness-byte-cheap already run those fixtures in this same
+  # suite, so re-running them made this the slowest instant-tier step in the
+  # corpus (20.3s, surfaced by the cycle timing telemetry the run itself
+  # emitted). A gate that duplicates a sibling gate buys no coverage and is
+  # paid on every pre-build.
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+  expected_log: "opencode RENDER CONTRACT BROKEN — no TUI renderer output within the budget"
+  log_fields:
+    spec: "default-image"
+    test: "opencode-render-probe-shape"
+    artifact: "images/default/lib-common.sh"
+
+rollback:
+  on_failure: >
+    The render gate drifted. harness_probe must call
+    opencode_render_contract_cached so all three consumers
+    (opencode_record_curl_last_good, opencode_validate_or_rollback,
+    opencode_restore_curl_last_good) inherit it; the probe must keep its
+    update guards; and the harness update lock must be taken by BOTH
+    ensure_forge_harnesses and require_opencode.
+  command: "grep -n 'opencode_render_contract\\|harness_update_lock_acquire' images/default/lib-common.sh | head -12"

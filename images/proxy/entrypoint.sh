@@ -2,8 +2,11 @@
 set -e
 # @trace spec:proxy-container
 # Entrypoint for the Tillandsias MITM caching proxy container.
-# DISTRO: Alpine 3.20 — bash installed explicitly via apk add bash.
+# DISTRO: Alpine 3.22 — bash installed explicitly via apk add bash.
 #         Uses POSIX-compatible constructs only (no [[ ]], no arrays).
+#         Moved 3.20 -> 3.22 with the squid 6.9 -> 6.12 bump (order 782-9jfg);
+#         /usr/lib/squid/security_file_certgen is unchanged on 6.12 and was
+#         verified spawning in-container before the bump landed.
 
 # Stage the CA material FIRST (755-qcxh): every squid invocation below —
 # including the cache-init `squid -z` — parses squid.conf, and the config

@@ -1,0 +1,87 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Hand-written in `set-field` shape: worktree isolation refuses the compound
+# invocation the CLI needs, and no plan binary is built in this worktree.
+status:
+  - packet_id: sidecar-staleness-evaluation-stamp
+    field: status
+    value: completed
+    ts: "2026-08-17T04:56:52Z"
+    host: linux_mutable
+
+events:
+  - packet_id: sidecar-staleness-evaluation-stamp
+    event:
+      type: completed
+      ts: "2026-08-17T04:56:52Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: build-sidecar.sh staleness is now
+        CONTENT-addressed via a gitignored evaluation stamp
+        (images/router/.sidecar.stamp) recording BOTH the digest of the input set
+        and the digest of the artifact those inputs produced. Measured in one
+        worktree, same binary, same inputs — the packet's case
+        (touch a sidecar source, content identical) 12.274s -> 0.071s (172x);
+        full-input-set mtime churn as a git merge produces 8.665s -> 0.070s
+        (124x); end-to-end the green ./build.sh --check records
+        step:staging-router-sidecar-build-artifact-not-committed at 75ms, out of
+        the gate's top six entirely (it was cited at 14300ms when this packet was
+        raised). Honest cost: the unchanged-tree fast path goes 0.003s -> 0.072s
+        because a digest is computed where a single find -newer -quit used to
+        run; that +69ms buys the 8-12s churn saving on every host, every cycle.
+        DEVIATION FROM THE LITERAL DELIVERABLE, deliberate: the packet proposed
+        keeping find -newer and moving its reference file to a stamp. That still
+        keys on TIMESTAMPS, so a git merge/checkout rewriting byte-identical
+        files would still rebuild — the exact waste being removed. The digest is
+        the stronger form of the same guarantee: exit criterion 2's "false
+        negatives are impossible by construction" holds because ANY content,
+        mode, path, or set change moves the manifest digest, and the digest was
+        WIDENED (effective target triple, musl-target availability, rustc
+        version) with inputs the mtime probe was blind to — widening can only
+        cause more rebuilds, never fewer. Manifest shape (path:type:mode:content,
+        sort-then-hash) mirrors scripts/hash-image-sources.sh, the repo's
+        existing source-digest idiom; _sha256 falls back to shasum for macOS,
+        which runs this script via build-osx.sh; the stamp is written atomically
+        (temp + mv) so a concurrent build.sh cannot read a torn one.
+        CORRECTNESS, not just speed: the mtime probe could not see WHICH bytes
+        were staged, the hazard build-sidecar.sh's own 723-b9cn comment names
+        ("a wrong binary left in place would be served to every later build as
+        up-to-date"). The stamp hashes the staged artifact, so a tampered,
+        corrupted, or wrong-target binary is rebuilt rather than trusted —
+        verified live: appending bytes to the staged sidecar produced a restage
+        (0.234s) and a valid ELF, where the old probe reported up-to-date.
+        Exit criteria: (1) VERSION bump then second invocation skips — fixture
+        scenarios 5+2 and the 75ms record; (2) input file set unchanged, oracle
+        strengthened, see deviation above; (3) 723-b9cn ELF assert and
+        wrong-artifact removal untouched and now reinforced; (4) fat LTO
+        untouched in release.yml and nix — the optional thin-LTO dev profile is
+        DECLINED with the argument recorded in the script header (this binary is
+        include_bytes!'d into tillandsias-headless, so a dev-only profile means
+        local builds embed different bytes than the cosign-signed release ships,
+        against 710-w9kc's version-matched intent; and with the stamp the rebuild
+        it would speed up is now the rare path); (5) negative test — a real
+        source edit rebuilds, measured 9.088s live and pinned as fixture
+        scenario 4.
+        Proof: scripts/test-sidecar-staleness-stamp.sh, 11 hermetic scenarios
+        driving the REAL script against a stub cargo that counts build
+        invocations, ok:sidecar-staleness-stamp-fixture:11 in 1.0s. NON-VACUITY
+        ENFORCED — reverting is_stale to the pre-765-5efu mtime probe turns
+        exactly the scenarios this fix owns red ("mtime churn on identical
+        content skips the build", "a tampered staged artifact is rebuilt, not
+        trusted", plus the three stamp-state scenarios) while cold-build,
+        unchanged-inputs, real-source-change, VERSION-bump and added-file stay
+        green, so the suite is not "everything fails". Pinned by new
+        litmus:sidecar-staleness-stamp-shape (4 behavioural steps, bound under
+        dev-build), PASS via the canonical runner. bash-dialect-clean;
+        ./build.sh --check rc=0 verified unmasked.
+  - packet_id: sidecar-staleness-evaluation-stamp
+    event:
+      type: note
+      ts: "2026-08-17T04:56:52Z"
+      host: linux_mutable
+      summary: >
+        Scope note for the next reader: the 14300ms figure this packet was
+        raised on came from a COLD agent worktree, where the cost is a genuine
+        first build that no stamp can avoid. On a warm checkout the pre-fix
+        script was already 0.003s when nothing changed — the real recurring
+        waste was mtime churn (8-12s), which is what the stamp removes. Both
+        numbers were true; they measure different states.

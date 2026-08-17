@@ -1,0 +1,21 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: gate-per-step-telemetry
+    field: status
+    value: completed
+    ts: "2026-08-16T23:55:09Z"
+    host: linux_mutable
+
+events:
+  - packet_id: gate-per-step-telemetry
+    event:
+      type: completed
+      ts: "2026-08-16T23:55:09Z"
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence_refs: worktree fork 2026-08-16T23:xx: per-step gate telemetry landed at three single-site seams, one grammar. (C1) build.sh's existing _step/_phase_close tracker now FLUSHES every closed phase as step:<slug> records via new cycle-metrics --emit-timing-batch — ONE spawn per gate stage (per-record spawns would tax the 8s gate ~0.7s; empty-suite-floor lesson applied to telemetry itself); live --check emitted 23 step: records + build-preamble + build-check in one isolated log; install-stage flush added at the --install block end. (C2) local-ci archive_check_log gains duration_ms per check (anchor-per-archive over the sequential suite) AND mirrors non-skipped checks to timing records as check:<id> — clippy-all-features/rust-tests/quick-litmus/install all attributable from records. (C3) run-litmus-test emits litmus:<name> per-test records (batched at suite end) + a compact Slowest-tests block (>=0.5s top 10): live sample litmus:podman-idiomatic-launch-routing 16755ms cold / 633ms warm. (C4) sidecar staging is a named record (step:staging-router-sidecar-build-artifact-not-committed, 13006ms live) and the timing: slowest= now prefers the finest grain over aggregates (live: slowest=step:checking-for-fragment-status-transitions-the-fold-discards:41067 — an attackable step, not the gate total; litmus_ms_avg scoped EXACTLY to litmus-suite so per-test records cannot pollute the series). (C5) fault injection live: full ./build.sh --check with TILLANDSIAS_TIMING_LOG=/proc/1/nope-unwritable.jsonl exited 0. litmus:build-test-timing-telemetry-shape extended 5->8 steps — 8/8 PASS; final ./build.sh --check rc=0. Honest note: a full --ci-full end-to-end attribution run was not executed in this fork (multi-minute lane); the seams are litmus-pinned and exercise on every future ci run.

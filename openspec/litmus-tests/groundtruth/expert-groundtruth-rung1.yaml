@@ -528,3 +528,36 @@ cases:
         - "The three primitives you actually need"
         - "G-Set"
         - "LWW-Register"
+
+  - id: plan-current-direction-bootstrap-question
+    engine: plan.answer
+    query: "what is the current Direction?"
+    why: >
+      ORDER 764-p9w7. CLAUDE.md's bootstrap block lists this VERBATIM as a good
+      first question, and on 2026-08-15 it answered `confidence=unsupported` —
+      the recommended cold-start question and the expert disagreed about what
+      an agent may ask, so the Direction had to be reconstructed by hand from
+      plan.yaml's frontier_note. The root cause was a stale ~/.local/bin
+      install shadowing the checkout binary (760-nwzr); the capability itself
+      landed with the 706-f7mq semantic fallback. This case is the PIN: the
+      bootstrap contract and the expert must not drift apart again, and a
+      stale artifact serving `unsupported` must show up as a graded RED rather
+      than as an agent quietly doing the work by hand.
+      Deliberately NOT pinned (680-zphp): the direction's THEME text and the
+      cited line range, both operator-owned and mutable. What is pinned is
+      that the question resolves to the operator's own Direction section with
+      a citation whose span really contains it — span_contains re-reads the
+      span at grading time, so the case survives the section moving as
+      plan/loop_status.md grows.
+    expect:
+      confidence: retrieved
+      citation_kind: plan
+      min_citations: 1
+      citations_include:
+        - path: plan/loop_status.md
+          kind: plan
+          span_contains:
+            - "## Direction"
+            - "Operator-owned thematic direction"
+      answer_contains:
+        - "## Direction"

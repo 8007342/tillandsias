@@ -153,6 +153,12 @@ TIMEOUT_SECONDS=600
 VERBOSE=0
 LIST_ONLY=0
 FILTER_SPEC=""
+# 764-8m5j: when the filter names a single LITMUS TEST (litmus:<name>,
+# litmus-<name>, or the bare <name>) rather than a spec, the runner resolves
+# the owning spec and runs ONLY that test instead of refusing — targeted
+# closure evidence without paying the whole spec suite. Spec ids take strict
+# precedence: resolution only fires when the filter matches no spec binding.
+FILTER_TEST_NAME=""
 FILTER_PHASE="all"
 SIZE_FILTER="all"
 COMPACT=0
@@ -163,6 +169,11 @@ SPEC_SHORTHAND=""
 
 # Test result tracking
 TESTS_PASSED=0
+# 765-dfry: per-test duration accumulator, tab-separated `dur_ms<TAB>name<TAB>rc`
+# lines. Consumed twice at suite end: a ranked slowest-tests block in compact
+# output, and ONE --emit-timing-batch spawn (per-test spawns would tax an
+# instant suite seconds to measure milliseconds — the empty-suite-floor lesson).
+_PER_TEST_LOG=""
 TESTS_FAILED=0
 TESTS_SKIPPED=0
 TESTS_RUN=0
@@ -1052,6 +1063,15 @@ run_tests_for_spec() {
         fi
 
         local test_phase
+        # 764-8m5j: exact-name filter, before phase/host/size so the skip
+        # reason is unambiguous when a single test was requested.
+        if [[ -n "$FILTER_TEST_NAME" && "$test_name" != "$FILTER_TEST_NAME" ]]; then
+            log_test_result "$spec_id" "$test_name" "SKIP" "Name filter: running only $FILTER_TEST_NAME"
+            spec_skipped=1
+            test_count=$((test_count+1))
+            continue
+        fi
+
         test_phase="$(get_test_phase "$test_file")"
         if [[ "$FILTER_PHASE" != "all" && "$test_phase" != "$FILTER_PHASE" ]]; then
             log_test_result "$spec_id" "$test_name" "SKIP" "Phase mismatch: $test_phase"
@@ -1085,15 +1105,29 @@ run_tests_for_spec() {
         # @trace spec:spec-traceability
         printf '%bℹ%b Executing %s...\n' "${BLUE}" "${NC}" "$test_name" >&2
 
+        # 765-dfry: time every executed test so the quick lane is rankable
+        # test-by-test. Capture is two clock reads; emission is batched at
+        # suite end. Best-effort: a stubbed clock yields t0=0 and the record
+        # is dropped downstream, never poisoned.
+        local _pt_t0 _pt_dur _pt_rc
+        _pt_t0="$(timing_now_ms 2>/dev/null || echo 0)"
         if run_litmus_test_file "$test_file" "$spec_id"; then
+            _pt_rc=0
             log_test_result "$spec_id" "$test_name" "PASS" ""
         else
+            _pt_rc=1
             log_test_result "$spec_id" "$test_name" "FAIL" "Check implementation"
             spec_failed=1
-            if should_fail_fast_for_spec "$spec_id"; then
-                printf '@trace spec:%s\n' "$spec_id" >&2
-                return 20
-            fi
+        fi
+        if [[ "$_pt_t0" =~ ^[0-9]+$ && "$_pt_t0" -gt 0 ]]; then
+            _pt_dur=$(( $(timing_now_ms 2>/dev/null || echo 0) - _pt_t0 ))
+            [[ "$_pt_dur" -ge 0 && "$_pt_dur" -lt 86400000 ]] || _pt_dur=0
+            _PER_TEST_LOG="${_PER_TEST_LOG}${_pt_dur}	${test_name}	${_pt_rc}
+"
+        fi
+        if [[ "$_pt_rc" -ne 0 ]] && should_fail_fast_for_spec "$spec_id"; then
+            printf '@trace spec:%s\n' "$spec_id" >&2
+            return 20
         fi
 
         test_count=$((test_count+1))
@@ -1146,6 +1180,24 @@ print_summary() {
     printf '%bCoverage%b: %d%% %s\n' "${BOLD}" "${NC}" "$covered_specs" "$coverage_text" >&2
     printf '%bPass Rate%b: %d%% (%d/%d executed)\n' "${BOLD}" "${NC}" "$coverage_ratio" "$TESTS_PASSED" "$total_executed" >&2
     echo "" >&2
+
+    # 765-dfry: per-test durations — ONE batch emission for the whole suite,
+    # plus a ranked slowest-tests block so the compact view names what
+    # dominates the lane (quiet threshold 500ms, top 10 — the full ranking
+    # lives in the timing records; 734-sjb3 noise discipline).
+    if [[ -n "$_PER_TEST_LOG" ]]; then
+        {
+            printf '%s' "$_PER_TEST_LOG" | awk -F'\t' \
+                -v phase="${FILTER_PHASE:-unknown}" \
+                -v host="${TILLANDSIAS_HOST_ID:-$(hostname 2>/dev/null || echo unknown)}" \
+                'NF >= 3 { name = $2; sub(/^litmus:/, "", name); printf "litmus:%s\t%s\t%s\t%s\t%s\n", name, phase, $1, $3, host }' \
+                | bash "$PROJECT_ROOT/scripts/cycle-metrics.sh" --emit-timing-batch
+        } 2>/dev/null || true
+        _slow_tests="$(printf '%s' "$_PER_TEST_LOG" | sort -rn | awk -F'\t' '$1 >= 500 {printf "  %7.1fs  %s\n", $1/1000, $2}' | head -10)"
+        if [[ -n "$_slow_tests" ]]; then
+            printf '%bSlowest tests%b (>=0.5s, top 10; full ranking in the timing records):\n%s\n\n' "${BOLD}" "${NC}" "$_slow_tests" >&2
+        fi
+    fi
 
     # Overall status
     if [[ $TESTS_FAILED -eq 0 ]]; then
@@ -1390,6 +1442,28 @@ main() {
     [[ "$COMPACT" == "1" ]] && log_info "Output mode: compact"
     [[ "$STRICT_MODE" == "1" ]] && log_info "Strict mode: enabled"
     echo "" >&2
+
+    # 764-8m5j: single-litmus filter resolution. Fires only when the filter is
+    # NOT a known spec binding (spec ids keep strict precedence), and resolves
+    # litmus:<name> / litmus-<name> / bare <name> to the owning spec + an
+    # exact-name test filter. An unresolvable filter falls through to the
+    # existing zero-match refusal — the 642 fail-loud boundary is unchanged.
+    if [[ -n "$FILTER_SPEC" ]] \
+        && ! grep -q "^- spec_id: ${FILTER_SPEC}\$" "${PROJECT_ROOT}/openspec/litmus-bindings.yaml" 2>/dev/null; then
+        local _cand _name_file _owner
+        _cand="$FILTER_SPEC"
+        [[ "$_cand" == litmus-* ]] && _cand="litmus:${_cand#litmus-}"
+        [[ "$_cand" == litmus:* ]] || _cand="litmus:${_cand}"
+        _name_file="$(grep -rlF "name: ${_cand}" "${LITMUS_TESTS_DIR}" 2>/dev/null | head -n 1)"
+        if [[ -n "$_name_file" ]]; then
+            _owner="$(grep -m1 -E '^spec:' "$_name_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//; s/"//g')"
+            if [[ -n "$_owner" ]]; then
+                FILTER_TEST_NAME="$_cand"
+                FILTER_SPEC="$_owner"
+                log_info "Single-litmus filter: ${FILTER_TEST_NAME} (owning spec: ${FILTER_SPEC})"
+            fi
+        fi
+    fi
 
     # Determine which specs to test
     local specs_to_test

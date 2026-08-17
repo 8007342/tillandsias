@@ -99,6 +99,27 @@ if [[ -f scripts/release-preflight.sh ]]; then
     fi
 fi
 
+# ── 1b. Derived cheatsheet tree equals the authored tree ──────────────────────
+# The tracked images/default/cheatsheets/ is embedded into the binary and is the
+# ONLY cheatsheet source the end-user image build has, so a tracked copy that
+# has fallen behind ships an INDEX advertising files the image does not contain
+# — an expert citing what it cannot open. It is checked HERE, at push, because
+# the divergence is most often introduced by an integration rather than an edit:
+# a merge/rebase that brings a sibling's cheatsheet change desyncs the two trees
+# with nobody having touched the derived copy (observed 2026-08-16, minutes
+# after the check itself landed). ./build.sh --check does not run the
+# cheatsheet-host-image-sync litmus, so without this the gate that guards every
+# push could not see it.
+# @trace spec:cheatsheet-tooling — methodology/cheatsheets.yaml storage_and_authority
+if [[ -f scripts/stage-image-cheatsheets.sh ]]; then
+    if ! cheat_out="$(bash scripts/stage-image-cheatsheets.sh --verify 2>&1)"; then
+        refuse "derived cheatsheet tree is out of sync with cheatsheets/" \
+               "$cheat_out" \
+               "" \
+               "Fix: scripts/stage-image-cheatsheets.sh --stage && git add -f images/default/cheatsheets"
+    fi
+fi
+
 # ── Plan-only fast lane (order 668-2xeh) ───────────────────────────────────────
 # Attempted only when the stamp is missing/stale. Emits one line per validated
 # file — "plan-only lane: validated <path>" — so the push record names exactly
@@ -415,11 +436,114 @@ attempt_plan_only_lane() {
     return 0
 }
 
+# ── Stamp SCOPE enforcement (order 765-dt8h) ──────────────────────────────────
+# A fresh stamp proves the gate ran against these bytes. It does NOT, on its
+# own, prove the gate VALIDATED what is being pushed — `--check` and `--ci-full`
+# validate materially different things, and once a scoped gate exists a stamp
+# could cover a strict subset of the tree. So when the stamp declares a scope
+# narrower than `full`, the outgoing diff's change classes must be a subset of
+# it. Anything unclassifiable, unparseable, or unscopeable is STALE (fail
+# closed) — the inverse of 634-39ik's fail-open polarity, which is correct only
+# for a guard that ADDS enforcement. This one REMOVES coverage, so it refuses.
+#
+# `full` short-circuits before any diff work, so the overwhelmingly common path
+# costs one extra subshell and nothing else.
+enforce_stamp_scope() {
+    local scope
+    scope="$(bash scripts/gate-stamp.sh scope 2>/dev/null)"
+    case "$scope" in
+        full)
+            return 0
+            ;;
+        stale:*|"")
+            refuse "the gate stamp does not declare a usable scope (${scope:-<no verdict>})" \
+                   "A stamp whose scope cannot be read cannot be trusted to cover this push." \
+                   "Re-run the full gate:" \
+                   "  ./build.sh --check"
+            ;;
+    esac
+
+    # Scoped stamp: the outgoing diff must not reach outside it.
+    if [[ -z "$REFS" ]]; then
+        refuse "the gate stamp is scoped to '$scope' but there is no ref list to scope the outgoing diff against" \
+               "A scoped stamp can only be honoured when the push can be classified." \
+               "Re-run the full gate:" \
+               "  ./build.sh --check"
+    fi
+
+    local -a paths=()
+    local local_ref local_sha remote_ref remote_sha path
+    while read -r local_ref local_sha remote_ref remote_sha; do
+        [[ -n "$local_ref" ]] || continue
+        if [[ "$local_sha" =~ ^0+$ ]]; then continue; fi
+        if [[ "$remote_sha" =~ ^0+$ ]] || ! git cat-file -e "$remote_sha" 2>/dev/null; then
+            refuse "the gate stamp is scoped to '$scope' but $remote_ref has no usable local base to diff against" \
+                   "A scoped stamp can only be honoured when the push can be classified." \
+                   "Re-run the full gate:" \
+                   "  ./build.sh --check"
+        fi
+        while IFS= read -r path; do
+            [[ -n "$path" ]] && paths+=("$path")
+        done < <(git diff --name-only --no-renames "$remote_sha" "$local_sha" -- 2>/dev/null)
+    done <<< "$REFS"
+
+    if [[ ${#paths[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    local -a diff_classes=()
+    local cls covered
+    while IFS= read -r cls; do
+        [[ -n "$cls" ]] && diff_classes+=("$cls")
+    done < <(printf '%s\n' "${paths[@]}" | bash scripts/gate-stamp.sh classify 2>/dev/null)
+
+    if [[ ${#diff_classes[@]} -eq 0 ]]; then
+        refuse "the outgoing diff could not be classified against the scoped stamp ('$scope')" \
+               "Re-run the full gate:" \
+               "  ./build.sh --check"
+    fi
+
+    local -a missing=()
+    for cls in "${diff_classes[@]}"; do
+        covered=0
+        case ",$scope," in
+            *",$cls,"*) covered=1 ;;
+        esac
+        [[ $covered -eq 1 ]] || missing+=("$cls")
+    done
+
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        local missing_csv
+        missing_csv="$(printf '%s,' "${missing[@]}")"; missing_csv="${missing_csv%,}"
+        refuse "the gate stamp is scoped to '$scope' but this push also changes: $missing_csv" \
+               "The gate that stamped this tree never validated those change classes." \
+               "Re-run the full gate:" \
+               "  ./build.sh --check"
+    fi
+
+    echo "${GRN}✓ local gate: scoped stamp '$scope' covers every outgoing change class${RST}" >&2
+    return 0
+}
+
 # ── 2. The local gate must have run against this exact tree ────────────────────
 if [[ -f scripts/gate-stamp.sh ]]; then
     stamp="$(bash scripts/gate-stamp.sh verify 2>/dev/null)"
     case "$stamp" in
         ok:gate-fresh)
+            enforce_stamp_scope
+            ;;
+        stale:legacy-stamp-format)
+            # Order 765-dt8h migration. The stamp predates scope recording, so
+            # what it validated is unknowable from the file. The plan-only lane
+            # still applies (it never consults the stamp's scope), and anything
+            # else re-runs the gate once.
+            if attempt_plan_only_lane; then
+                exit 0
+            fi
+            refuse "the gate stamp predates scope recording (order 765-dt8h)" \
+                   "Stamps now record WHICH change classes the gate validated, and this one" \
+                   "cannot say. Re-run the gate once to write a scoped stamp:" \
+                   "  ./build.sh --check"
             ;;
         stale:never-run|stale:tree-changed-since-gate)
             # Before refusing, offer the plan-only fast lane: a fragments-only

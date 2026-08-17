@@ -55,6 +55,30 @@
         # identical source produce identical hashes and therefore derive
         # matching PSKs — "same binary talks to same binary".
 
+        # ORDER 765-8hc3 — READ BEFORE "FIXING" THE DEPS CACHING HERE.
+        #
+        # It looks like passing the whole tree as `src` makes every
+        # `buildDepsOnly` below churn on any file change, cold-compiling ~1,000
+        # vendored crates per target on every commit. The 2026-08-15 velocity
+        # audit (finding F7) inferred exactly that. MEASURED 2026-08-17, it is
+        # FALSE: `buildDepsOnly` runs its `src` through crane's `mkDummySrc`,
+        # which keeps the dependency-defining inputs and stubs the rest, so the
+        # deps derivations are already stable. Observed on this flake:
+        #
+        #   source-only edit    -> top-level drv CHANGED, deps drv UNCHANGED
+        #   Cargo.toml metadata -> deps drv UNCHANGED (crane normalizes it)
+        #   Cargo.lock edit     -> deps drv CHANGED   (dependency graph moved)
+        #
+        # So do NOT add a hand-rolled `depsOnlySrc` filter here. It would buy
+        # nothing, and an over-narrow filter silently drops a manifest — the
+        # failure mode is a deps set that no longer matches the real graph.
+        #
+        # What DOES break the property: giving buildDepsOnly an explicit
+        # `dummySrc`, an `extraDummyScript`, or a `preBuild` that reads real
+        # sources. `scripts/check-nix-deps-stability.sh` perturbs the tree and
+        # asserts the invariant directly (and refuses to pass if it cannot
+        # observe the perturbation at all); it fails loud on precisely those
+        # regressions.
         commonCraneArgs = {
           src = craneSrc;
           strictDeps = true;
