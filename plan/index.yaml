@@ -28153,6 +28153,13 @@ plan_index:
         - "the Envelope freshness block reports the new HEAD sha after a commit"
         - "a content-hash mismatch flags a stale index (fails closed)"
 
+      events:
+        - type: note
+          ts: "2026-08-17T01:35:07Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            CROSS-REFERENCE (yoga 2026-08-17): scoping of 760-hzi4 established that the spec RAG index is built on NO host — this packet's body is unimplemented, and the embedding producer does not exist in any language (read_vectors only reads vectors.jsonl; the producer exists only as prose inside forge-plan.sh's refusal message). 760-hzi4 was filed believing the index existed in-forge and was merely missing on dev hosts; it is therefore a duplicate of THIS packet's scope, not a parity gap. Whoever picks either one should merge or re-point them rather than implement both. Also relevant: 551 spec-expert-groundtruth cannot grade a corpus that has no vectors, so it is effectively blocked behind this.
     - packet_id: expert-groundtruth-harness-red-on-linux-next
       order: 553
       desired_release: v0.5
@@ -34750,6 +34757,12 @@ plan_index:
       notes: |
         Sibling of order 284 (broken upstream publish) and order 291 (fatal require on empty cache). Both were fixed for the failure modes then visible; this is a third mode neither covers, because both reasoned about the binary being ABSENT or CRASHING, never about it being present, startable, and unable to render.
       events:
+        - type: note
+          ts: "2026-08-17T01:34:33Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            SCOPING (read-only, yoga 2026-08-17). Premise HOLDS — all five cited claims re-verified true, but every lib-common.sh line cite has DRIFTED ~230 lines (file now 4044 lines): harness_probe is 2014-2022 (not 1803), curl_install_opencode 2402-2450 (not 2164), opencode_record_curl_last_good 2364-2376 (not 2175). Rollback blindness confirmed structurally — opencode_restore_curl_last_good re-validates with the same blind harness_probe, so the safety net can select AND certify a TUI-broken snapshot. ONE FRAMING SUPERSEDED: the packet says the curl channel has no equivalent guard to the npm-update lock. The lock EXISTS and ensure_forge_harnesses takes it before curl_install_opencode; require_opencode calls curl_install_opencode directly in the foreground holding NO lock. So it is a ONE-SIDED mutex, not a missing one, and the fix is lock reuse rather than a new discipline. PROBE DESIGN MEASURED LIVE on opencode 1.18.10: no pty/script wrapper needed (script and strace are both absent on this host anyway) — with stdin from /dev/null the binary still initializes OpenTUI and emits truecolor SGR plus alt-screen; time-to-first-CSI 521/626/733ms over 3 runs, strict renderer marker at ~2.6s. So a positive-assertion probe (must emit a renderer marker within N seconds, must not have exited nonzero) costs ~3s and does not depend on upstream error wording, which would rot. TWO CAVEATS for the implementer: measurement was against the brew/npm ELF, not the bun single-file executable the curl channel installs and which actually failed, so gate on the marker with a generous ceiling (20s) rather than a fixed sleep; and litmus harness-byte-cheap pins that probes cannot self-update, so the probe must carry the --pure / DISABLE_AUTOUPDATER guards claude_probe already uses. Recommended shape: partial-slice — wire the render contract into harness_probe (one edit covers all three consumers), memoize on a binary-hash stamp so three probes per launch cost ~3s once, add the lock reuse, add a fixture litmus; split criterion 3's cold-cache repro (needs a destructive e2e slot) into its own packet.
         - type: filed
           ts: "2026-08-09T06:25:00Z"
           agent_id: windows-claude-fable-20260809t062500z
@@ -52902,6 +52915,13 @@ plan_index:
         - on a dev host with the ensure green, spec_answer returns a retrieved envelope instead of the index-not-built refusal
         - the index refreshes on commit or names its staleness in the envelope
 
+      events:
+        - type: note
+          ts: "2026-08-17T01:34:54Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            SCOPING (read-only, yoga 2026-08-17) — THIS PACKET'S PREMISE IS FALSE, and the correction matters more than the packet. The title says the spec RAG index is built in-forge but never on a dev host. It is built on NO host, ever. Evidence: a repo-wide grep for spec-index outside crates/ returns exactly two hits, both in forge-plan.sh (the path variable at 700 and the TEXT of the refusal message at 727) — no script, entrypoint, Containerfile, hook or MCP startup ever invokes it. ensure_forge_experts (lib-common.sh 1249-1411) builds and installs the tillandsias-plan BINARY and nothing else; it never touches spec-index. The embedding half has NO implementation at all in any language — read_vectors only READS vectors.jsonl, and the producer exists solely as English prose inside the refusal string. The pipeline has run exactly once, as a manual bounded 370-chunk sample on 2026-07-31, which itself labels full-corpus embed as the launch-time job of order 552. ORDER 552 (spec-index-commit-freshness) IS STILL READY — so this packet is 552's unimplemented body, and claiming it as written would silently duplicate 552 and leave both open. Corroboration that in-forge is equally empty: the 2026-08-01 in-forge validation event and 712-r5x8 (filed 2026-08-13 by an in-forge delegate hitting the same refusal). SECOND CORRECTION, for the operator's expert-soundness question: the degradation is ANNOUNCED, not silent. forge-plan.sh 726-729 refuses with a typed unsupported envelope naming the exact directory, the exact two missing files, the exact build command and the owning order, with zero citations and never a guess; the tool description pre-announces the fail-soft. semantic_expert.rs is a SEPARATE lane that does not consume this index, so plan_answer / methodology_ask / cheatsheet answers do not degrade from it. The expert system is SOUND on this axis — this is a MISSING-CAPABILITY packet, not a silent-degradation one. estimated_hours 3 is wrong by roughly an order of magnitude (10113 chunks to embed on a 137M CPU model) because it was written believing the index already existed. TWO NEW LIVE DEFECTS, both cheap and both worth taking before the index work: (i) the embed model default disagrees between files — forge-plan.sh 706 says nomic-embed-text-v1-GGUF (a lemonade/LM-Studio name) while dev-inference-ensure.sh 74 says nomic-embed-text (the ollama name), and this host's endpoint serves nomic-embed-text, so the lane would 404 even AFTER an index exists; (ii) lib-expert-capability.sh contains zero occurrences of spec-index/spec_answer/spec-retrieve, so the capability line truthfully advertises the subcommands while spec_answer still refuses for lack of data — the same behavioural-vs-subcommand drift class as 760-nwzr, and closing it also closes 712-r5x8 criterion 1. RECOMMENDED SPLIT: take the honesty slice (shared embed-model constant + index-presence field in the capability line) as an S packet now; re-point this packet at order 552 or merge them, re-estimated L; note that closing it also unblocks 551 spec-expert-groundtruth, which cannot grade a corpus with no vectors.
     - packet_id: stale-user-level-expert-install-refresh
       order: 760-nwzr
       status: ready
