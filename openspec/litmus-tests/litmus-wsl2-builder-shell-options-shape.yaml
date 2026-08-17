@@ -1,0 +1,73 @@
+# @trace spec:dev-build
+#
+# Regression pin for order 764-sunk, the WSL2 sibling of 731-pc5r.
+#
+# `source` runs in the CALLER's shell. scripts/with-wsl2-builder.sh declared
+# `set -euo pipefail` unconditionally at line 43, so every sourcer inherited
+# errexit, nounset and pipefail permanently — including the ones that
+# deliberately run without them. scripts/local-ci.sh is exactly that caller: its
+# run-every-check, report-at-end design omits -e on purpose, and a silently
+# re-armed errexit kills the suite at its own advisory step on the HAPPY path.
+# That is how 731-pc5r presented on the Silverblue wrapper; this file pins the
+# Windows one so the pair cannot drift apart again.
+#
+# The claim is one-directional and that is the point: the wrapper may ADD
+# options for its own body, and must hand a sourcer back exactly the option
+# state it entered with. Case 2 exists so a fix cannot "pass" by blanket-
+# clearing options the caller genuinely had, and case 3 so it cannot pass by
+# blanket-applying.
+#
+# The fixture was shown RED against the pre-764 wrapper before it was accepted
+# (2 of 4 cases failing: `flags=ehuB pipefail=1` where the caller had none of
+# them) via TILLANDSIAS_WSL2_WRAPPER_UNDER_TEST. A pin that has never failed
+# against the bug it names is not evidence.
+name: litmus:wsl2-builder-shell-options-shape
+spec: dev-build
+phase: pre-build
+description: >
+  Pin that sourcing scripts/with-wsl2-builder.sh never mutates the sourcer's
+  shell options: a caller without -e/-u/pipefail keeps all three off, a caller
+  with all three keeps them, a mixed caller is preserved exactly, and no
+  _W2_CALLER_* bookkeeping variable leaks into the caller's shell.
+severity: high
+size: instant
+
+inputs:
+  - scripts/with-wsl2-builder.sh
+  - scripts/test-wsl2-builder-shell-options.sh
+
+preconditions:
+  - workspace contains scripts/with-wsl2-builder.sh
+  - workspace contains scripts/test-wsl2-builder-shell-options.sh
+  - bash is available (the fixture reads $- and [[ -o pipefail ]] in-shell)
+
+critical_path:
+  - step: "four-case fixture: no-options caller keeps none, full-options caller keeps all, mixed caller preserved exactly, no bookkeeping leak"
+    command: "bash scripts/test-wsl2-builder-shell-options.sh"
+    timeout_ms: 60000
+    success_pattern: "ok:wsl2-builder-shell-options:4 cases"
+    failure_pattern: "fail:wsl2-builder-shell-options:"
+
+observability:
+  traces:
+    - "@trace spec:dev-build"
+  expected_log: "ok:wsl2-builder-shell-options:4 cases"
+  log_fields:
+    spec: "dev-build"
+    test: "wsl2-builder-shell-options-shape"
+    artifact: "scripts/with-wsl2-builder.sh"
+
+rollback:
+  on_failure: >
+    Case 1 red means with-wsl2-builder.sh went back to applying `set -euo
+    pipefail` in the sourcer's shell — restore the guarded capture block above
+    line 43 and the explicit _w2_restore_caller_opts call at BOTH sourced return
+    sites (the uname guard and the TILLANDSIAS_SKIP_WSL2 guard); every other exit
+    from the file is `exec`, where caller options are moot. Case 2 or 3 red means
+    a fix over-reached and is now stripping options the caller genuinely had —
+    the restore must REMOVE only what the caller lacked. Do NOT convert the
+    explicit calls into a RETURN trap: `trap - RETURN` inside the running handler
+    does not reliably clear across sourced-file boundaries (observed 2026-08-16
+    on the sibling, where it re-fired at the next sourced file's return with the
+    handler already unset).
+  command: "grep -n 'set -euo pipefail\\|_w2_restore_caller_opts' scripts/with-wsl2-builder.sh"

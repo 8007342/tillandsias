@@ -34,27 +34,47 @@ preconditions:
 caveats:
   - time_intensive: "cold run is download-bound (minutes on slow links); warm run ~15s"
 
+# ORDER 518. THIS LITMUS USED TO WIPE THE OPERATOR'S REAL MODEL CACHE.
+# Its first step rm -rf'd blobs/, manifests/ and .tools/ under
+# ${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models -- the directory
+# build_inference_run_args mounts into the real inference container
+# (main.rs:4014). It is selected by the post-build phase at --size e2e (size
+# `long` matches the `e2e` filter), so `./build.sh --ci-full --install` -- a
+# CLAUDE.md Common Command and Step 1 of the build-install e2e skill -- emptied
+# it on every run. The filing host recorded 9.2 GB lost. With the GPU tier live
+# (order 408) a real synthesis model turns that into tens of GB re-downloaded
+# over the proxy, on every host that runs the skill.
+#
+# The test never needed the REAL cache. It launches its own container and
+# mounts $CACHE_DIR itself, so any cold directory satisfies it. It now uses a
+# scratch path, overridable via TILLANDSIAS_LITMUS_MODEL_CACHE.
+#
+# The old path also diverged from the product: the litmus honoured
+# XDG_CACHE_HOME while main.rs hardcodes `.cache`, so on a host with that
+# variable set the litmus wiped a directory the container never used -- and the
+# "cold" path it believed it was testing was not cold. Using a scratch dir
+# removes the divergence rather than papering over it.
 critical_path:
   - step: "wipe the cache to force the cold path"
-    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; mkdir -p \"$CACHE_DIR\"; rm -rf \"$CACHE_DIR/.tools\" \"$CACHE_DIR/manifests\" \"$CACHE_DIR/blobs\" && echo 'ok: cache cold'"
+    command: "CACHE_DIR=\"${TILLANDSIAS_LITMUS_MODEL_CACHE:-${TMPDIR:-/tmp}/tillandsias-litmus-deferred-pulls/models}\"; mkdir -p \"$CACHE_DIR\"; rm -rf \"$CACHE_DIR/.tools\" \"$CACHE_DIR/manifests\" \"$CACHE_DIR/blobs\" && echo 'ok: cache cold'"
     timeout_ms: 10000
     success_pattern: "ok: cache cold"
     failure_pattern: "Permission denied"
 
   - step: "cold run: product-shape launch installs ollama + reaches default-model ready"
-    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; \"$RP\" rm -f test-inference-cold >/dev/null 2>&1; \"$RP\" run -d --name test-inference-cold --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE_DIR:/home/ollama/.ollama/models:rw\" tillandsias-inference:latest >/dev/null || { echo 'FAIL: cold launch did not start'; exit 1; }; ok=''; for i in $(seq 1 120); do log=$(\"$RP\" logs test-inference-cold 2>&1); printf '%s' \"$log\" | grep -qE 'default model .* ready' && { ok=1; break; }; printf '%s' \"$log\" | grep -q 'FATAL: no ollama binary' && break; sleep 5; done; log=$(\"$RP\" logs test-inference-cold 2>&1); \"$RP\" rm -f test-inference-cold >/dev/null 2>&1; [ -n \"$ok\" ] && printf '%s' \"$log\" | grep -q 'Installing ollama binary (first run)' && echo 'ok: cold run installed and ready' || { printf '%s\\n' \"$log\" | tail -8; echo 'FAIL: cold run did not reach ready'; exit 1; }"
+    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; CACHE_DIR=\"${TILLANDSIAS_LITMUS_MODEL_CACHE:-${TMPDIR:-/tmp}/tillandsias-litmus-deferred-pulls/models}\"; \"$RP\" rm -f test-inference-cold >/dev/null 2>&1; \"$RP\" run -d --name test-inference-cold --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE_DIR:/home/ollama/.ollama/models:rw\" tillandsias-inference:latest >/dev/null || { echo 'FAIL: cold launch did not start'; exit 1; }; ok=''; for i in $(seq 1 120); do log=$(\"$RP\" logs test-inference-cold 2>&1); printf '%s' \"$log\" | grep -qE 'default model .* ready' && { ok=1; break; }; printf '%s' \"$log\" | grep -q 'FATAL: no ollama binary' && break; sleep 5; done; log=$(\"$RP\" logs test-inference-cold 2>&1); \"$RP\" rm -f test-inference-cold >/dev/null 2>&1; [ -n \"$ok\" ] && printf '%s' \"$log\" | grep -q 'Installing ollama binary (first run)' && echo 'ok: cold run installed and ready' || { printf '%s\\n' \"$log\" | tail -8; echo 'FAIL: cold run did not reach ready'; exit 1; }"
     timeout_ms: 640000
     success_pattern: "ok: cold run installed and ready"
     failure_pattern: "FAIL: cold"
 
   - step: "cache holds the binary and the default model manifest after the cold run"
-    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; test -x \"$CACHE_DIR/.tools/ollama/ollama\" && test -d \"$CACHE_DIR/manifests\" && echo 'ok: cache populated' || { ls -la \"$CACHE_DIR\" \"$CACHE_DIR/.tools/ollama\" 2>&1 | head -8; echo 'FAIL: cache missing artifacts'; exit 1; }"
+    command: "CACHE_DIR=\"${TILLANDSIAS_LITMUS_MODEL_CACHE:-${TMPDIR:-/tmp}/tillandsias-litmus-deferred-pulls/models}\"; test -x \"$CACHE_DIR/.tools/ollama/ollama\" && test -d \"$CACHE_DIR/manifests\" && echo 'ok: cache populated' || { ls -la \"$CACHE_DIR\" \"$CACHE_DIR/.tools/ollama\" 2>&1 | head -8; echo 'FAIL: cache missing artifacts'; exit 1; }"
     timeout_ms: 10000
     success_pattern: "ok: cache populated"
     failure_pattern: "FAIL: cache"
 
   - step: "warm run: serves from cache — no re-install, no pull"
-    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; \"$RP\" rm -f test-inference-warm >/dev/null 2>&1; \"$RP\" run -d --name test-inference-warm --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE_DIR:/home/ollama/.ollama/models:rw\" tillandsias-inference:latest >/dev/null || { echo 'FAIL: warm launch did not start'; exit 1; }; ok=''; for i in $(seq 1 24); do log=$(\"$RP\" logs test-inference-warm 2>&1); printf '%s' \"$log\" | grep -qE 'ready \\(cached\\)' && { ok=1; break; }; sleep 5; done; log=$(\"$RP\" logs test-inference-warm 2>&1); \"$RP\" rm -f test-inference-warm >/dev/null 2>&1; [ -n \"$ok\" ] || { printf '%s\\n' \"$log\" | tail -8; echo 'FAIL: warm run did not report cached'; exit 1; }; printf '%s' \"$log\" | grep -q 'Installing ollama binary (first run)' && { echo 'FAIL: warm run re-installed the binary'; exit 1; }; echo 'ok: warm run cached'"
+    command: "RP=\"${TILLANDSIAS_REAL_PODMAN:-/usr/bin/podman}\"; CACHE_DIR=\"${TILLANDSIAS_LITMUS_MODEL_CACHE:-${TMPDIR:-/tmp}/tillandsias-litmus-deferred-pulls/models}\"; \"$RP\" rm -f test-inference-warm >/dev/null 2>&1; \"$RP\" run -d --name test-inference-warm --userns=keep-id --security-opt=label=disable --security-opt=no-new-privileges -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 -v \"$CACHE_DIR:/home/ollama/.ollama/models:rw\" tillandsias-inference:latest >/dev/null || { echo 'FAIL: warm launch did not start'; exit 1; }; ok=''; for i in $(seq 1 24); do log=$(\"$RP\" logs test-inference-warm 2>&1); printf '%s' \"$log\" | grep -qE 'ready \\(cached\\)' && { ok=1; break; }; sleep 5; done; log=$(\"$RP\" logs test-inference-warm 2>&1); \"$RP\" rm -f test-inference-warm >/dev/null 2>&1; [ -n \"$ok\" ] || { printf '%s\\n' \"$log\" | tail -8; echo 'FAIL: warm run did not report cached'; exit 1; }; printf '%s' \"$log\" | grep -q 'Installing ollama binary (first run)' && { echo 'FAIL: warm run re-installed the binary'; exit 1; }; echo 'ok: warm run cached'"
     timeout_ms: 140000
     success_pattern: "ok: warm run cached"
     failure_pattern: "FAIL: warm"
@@ -64,6 +84,11 @@ critical_path:
     timeout_ms: 15000
     success_pattern: "ok: cleanup"
     failure_pattern: ""
+
+  - step: "release the scratch cache so a 1.7 GiB cold download does not accumulate in TMPDIR"
+    command: "CACHE_DIR=\"${TILLANDSIAS_LITMUS_MODEL_CACHE:-${TMPDIR:-/tmp}/tillandsias-litmus-deferred-pulls/models}\"; case \"$CACHE_DIR\" in */tillandsias-litmus-deferred-pulls/models) rm -rf \"$CACHE_DIR\"; echo 'ok: scratch cache released' ;; *) echo 'ok: scratch cache kept:not-a-scratch-path' ;; esac"
+    timeout_ms: 20000
+    success_pattern: "ok: scratch cache"
 
 observability:
   traces:

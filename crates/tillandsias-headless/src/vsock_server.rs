@@ -924,6 +924,11 @@ async fn serve_ready_stream(
                 // Order 333: advertise guest metrics so a tray can feature-
                 // detect instead of probing a version table.
                 "MetricsSnapshotRequest".into(),
+                // Order 795-zshi: advertise that this guest accepts a
+                // verbatim argv vector, so a host can stop flattening argv
+                // into a shell string — and can tell whether THIS guest
+                // supports it rather than guessing from a version.
+                tillandsias_control_wire::CAP_EXEC_ARGV_VECTOR.into(),
                 CAP_PTY_ATTACH_V1.into(),
                 CAP_PTY_HEARTBEAT_V1.into(),
             ],

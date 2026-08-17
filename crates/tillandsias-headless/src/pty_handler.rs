@@ -188,35 +188,7 @@ impl PtySessionStore {
             return Err(PtyOpenError::EmptyArgv);
         }
 
-        let is_allowed = match argv[0].as_str() {
-            "/bin/bash" => argv.len() >= 2 && (argv[1] == "-l" || argv[1] == "-lc"),
-            "tillandsias" => argv.len() == 3 && argv[1] == "--agent",
-            "tillandsias-headless" => argv.len() >= 2 && argv[1] == "--github-login",
-            "podman" if argv.len() >= 4 && argv[1] == "exec" && argv[2] == "-it" => {
-                let target = &argv[3];
-                if target.starts_with("tillandsias-") && target.ends_with("-forge") {
-                    let project = &target["tillandsias-".len()..target.len() - "-forge".len()];
-                    let project_valid = !project.is_empty()
-                        && project
-                            .chars()
-                            .all(|c| c.is_ascii_alphanumeric() || c == '-');
-
-                    let subcmd = argv.get(4).map(|s| s.as_str());
-                    let subcmd_valid = match subcmd {
-                        Some("/bin/bash") => {
-                            argv.len() >= 6 && (argv[5] == "-l" || argv[5] == "-lc")
-                        }
-                        Some("tillandsias") => argv.len() == 7 && argv[5] == "--agent",
-                        Some(_) | None => false,
-                    };
-                    project_valid && subcmd_valid
-                } else {
-                    false
-                }
-            }
-            "podman" => false,
-            _ => false,
-        };
+        let is_allowed = crate::exec_allowlist::exec_argv_is_allowed(&argv);
 
         if !is_allowed {
             return Err(PtyOpenError::Spawn(std::io::Error::new(

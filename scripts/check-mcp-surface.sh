@@ -136,7 +136,16 @@ handshake_state() {
 
 stamp_field() {
     [ -f "$STAMP" ] || return 1
-    sed -n "s/.*\\b$1=\\([^ ]*\\).*/\\1/p" "$STAMP" 2>/dev/null | grep -m1 . || return 1
+    # Field values carry no spaces, so splitting on space and anchoring the
+    # field name reads the record exactly — and portably. `\b` is a GNU sed
+    # extension that BSD sed silently never matches (order 803-bqte), which
+    # made every macOS `attest` write a correct stamp that `check` then read
+    # as `unattested:no-surface-claim`. The one fact only the agent can report
+    # was therefore discarded on exactly the hosts whose read path is most
+    # often degraded.
+    tr ' ' '\n' < "$STAMP" 2>/dev/null \
+        | sed -n "s/^$1=\\(.*\\)\$/\\1/p" \
+        | grep -m1 . || return 1
 }
 
 case "${1:-check}" in
