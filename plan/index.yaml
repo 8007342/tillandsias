@@ -55973,6 +55973,12 @@ plan_index:
             A test drives the absent-binary-with-pending-build case and asserts preflight waits rather than refusing terminally; the futile case still refuses immediately.
 
       events:
+        - type: note
+          ts: "2026-08-17T02:16:45Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T021645Z"
+          host: linux_mutable
+          summary: |
+            CONVERGENT INDEPENDENT DISCOVERY, merged 2026-08-17 on linux-next: windows-next fixed the SAME CARGO_TARGET_DIR blindness in the same file the same day, from a different cause (with-wsl2-builder.sh points CARGO_TARGET_DIR at a distro-native path so target/ never lands on 9p; their preflight refused a binary that ran fine and declared 35 capabilities). Merge resolution kept THIS packet's unified-loop implementation (single candidate loop via ${ctd:+...}, plus relative-path normalization the windows variant lacked) and folded the windows rationale into the comment so both causes are recorded. Fixture 5/5 including the relative-CARGO_TARGET_DIR case. Two hosts converging on one line is the strongest possible argument that the fix belonged in the shared probe rather than at either call site.
         - type: completed
           ts: "2026-08-17T01:28:51Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
