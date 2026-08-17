@@ -617,17 +617,67 @@ multi_host_development:
       initialize it; otherwise noop. Never require a host daemon or host
       package install (the nix-daemon lesson, 2026-08-16) when a toolbox can
       carry the tool.
+    why: >
+      A host-tool dependency is a SNOWFLAKE: it makes a script's behaviour a
+      function of which machine ran it, so the same script is green on the
+      host that was hand-prepared and red everywhere else — and the red is
+      indistinguishable from a real regression. Worse, the standard remedy
+      ("enable the nix-daemon", "dnf install ruby on the host") converts a
+      one-line script defect into a permanent, undocumented, un-reviewable
+      change to a machine, which no later agent can discover, reproduce, or
+      undo. A toolbox carries the tool INSIDE the repo's control: it is
+      created from a recipe, it is disposable, and a host that lacks it is
+      one command away from having it. The directive's word "idempotent" is
+      what makes that affordable — an ensure that costs a probe on the
+      99 runs after the first is cheap enough to sit at the top of every
+      script, and a pattern that is only cheap sometimes is a pattern
+      nobody adopts.
+    what_it_is_not: >
+      It is NOT "run everything inside a toolbox". The include ENSURES the
+      toolbox and returns; it does not re-exec the caller and does not
+      change how the caller finds its tools, so a host that already carries
+      the tool natively behaves exactly as before — zero behaviour change is
+      the point, not a fallback. It is NOT a ban on host tools: the
+      dispatch pattern PREFERS the host binary and reaches for the toolbox
+      only when the host has none. It is NOT a requirement that every
+      script carry the include — a script whose entire tool set is the
+      POSIX baseline (bash/grep/sed/awk/find/git) has nothing to ensure,
+      and adding the include there buys a subprocess and no property. And
+      it is NOT licence to make a missing tool silent: a script that needs
+      a tool the host lacks AND the toolbox cannot carry must still fail
+      loudly (fail_loud_diagnosis), never degrade quietly.
+    boundary: >
+      The include's job ENDS at "the toolbox exists and is initialized". Two
+      things sit deliberately outside it. (1) RE-EXEC: putting the caller's
+      own process inside the toolbox stays in
+      scripts/with-tillandsias-builder.sh and is reserved for build entry
+      points (build.sh, local-ci.sh) — a check script that re-execs itself
+      pays a container round-trip per invocation and loses the host's
+      environment. (2) FAILURE POLICY: where no `toolbox` binary exists the
+      include is a silent noop by design, but where a toolbox ensure is
+      ATTEMPTED and fails, the include returns non-zero and says so — the
+      silence covers "this host is not a toolbox host", never "the ensure
+      broke".
     include_contract: >
       scripts/ensure_toolbox.sh — (1) after it returns 0,
       `toolbox run --container tillandsias-builder …` works on
       toolbox-capable hosts; (2) on hosts without `toolbox` it is a silent,
-      instant noop; (3) create+init happens at most once (marker-gated in the
-      delegate); (4) it never re-execs the caller and never rewrites the
-      caller's shell options; (5) it DELEGATES to
-      scripts/with-tillandsias-builder.sh direct mode (`… true`) so the
-      ensure logic has exactly one implementation with two entry shapes —
-      the ensure-only include, and the re-exec wrapper for build entry
-      points. Pinned by litmus:ensure-toolbox-include-shape.
+      instant noop — zero bytes on stdout and stderr, exit 0; (3) create+init
+      happens at most once: the delegate gates creation on a `toolbox list`
+      probe and initialization on a TOOL-PRESENCE probe inside the container
+      (`command -v gcc && … && rustup target list`), so a second run issues
+      no `toolbox create` and no `dnf install`. The gate is the PROBE, not
+      $HOME/.cache/tillandsias/builder-toolbox-initialized — that file is
+      written and never read, and describing it as the gate is wrong in the
+      dangerous direction: the probe correctly re-initializes a
+      half-built toolbox that a marker would have certified as done.
+      (4) It never re-execs the caller and never rewrites the caller's shell
+      options; (5) it DELEGATES to scripts/with-tillandsias-builder.sh direct
+      mode (`… true`) so the ensure logic has exactly one implementation with
+      two entry shapes — the ensure-only include, and the re-exec wrapper for
+      build entry points. Pinned by litmus:ensure-toolbox-include-shape,
+      which asserts these as BEHAVIOURS against a hermetic fake `toolbox`
+      and carries a paired mutant for each (order 634-39ik).
     tool_dispatch_pattern: >
       Host tool preferred when present, toolbox as the fallback — zero
       behavior change on hosts that carry the tool natively:

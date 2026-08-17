@@ -54,7 +54,17 @@ critical_path:
     expected_behavior: "ok: expired-reclaimed"
 
   - step: "every verdict line is well-formed against the grammar"
-    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; { bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh status a/b; bash scripts/claim-ledger-node.sh release a/b; bash scripts/claim-ledger-node.sh status a/b; } > out.txt 2>/dev/null; tot=$(grep -c . out.txt); good=$(grep -cE '^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$' out.txt); rm -f out.txt; [ \"$tot\" = 5 ] && [ \"$good\" = 5 ] && echo \"ok: grammar ($good/$tot)\" || { echo \"FAIL: $good/$tot well-formed\"; exit 1; }"
+    # Order 797-295s: the capture file MUST live under mktemp, never at a
+    # relative path. This step used to redirect into `out.txt` with the harness
+    # cwd at the repo root and `rm -f` it only on the success path, so a timeout
+    # (measured on windows 2026-08-17, 5000ms budget) stranded an untracked file
+    # in the working tree. That is a cross-host hazard: the meta-orchestration
+    # startup boundary treats a status-visible untracked path as sibling work
+    # that must stay byte-identical, so the stranded file can hand the NEXT
+    # cycle a dirty-start refusal or fail its Finalization verify. Under mktemp
+    # even a hard kill strands nothing in the checkout, which is why the fix is
+    # the redirect target and not the budget or a better cleanup.
+    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; o=$(mktemp); trap 'rm -f \"$o\"' EXIT; { bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh status a/b; bash scripts/claim-ledger-node.sh release a/b; bash scripts/claim-ledger-node.sh status a/b; } > \"$o\" 2>/dev/null; tot=$(grep -c . \"$o\"); good=$(grep -cE '^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$' \"$o\"); [ \"$tot\" = 5 ] && [ \"$good\" = 5 ] && echo \"ok: grammar ($good/$tot)\" || { echo \"FAIL: $good/$tot well-formed\"; exit 1; }"
     timeout_ms: 5000
     expected_behavior: "ok: grammar"
 
