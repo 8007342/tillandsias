@@ -204,6 +204,23 @@ else
     if [[ ! -x "$PODMAN" ]] || [[ "$PODMAN" -ot "$_podman_bin" ]]; then
         _podman_wrapper_needs_rebuild=true
     fi
+    # Order 797-w8kf. Newer-than-podman is not freshness: the wrapper can be
+    # perfectly recent and exec a path that no longer exists. The litmus
+    # harness builds its fake podman under `mktemp -d` and this file is written
+    # to ONE fixed shared path, so the tempdir is removed while the wrapper
+    # that execs it survives. Every later consumer then gets exit 127 —
+    # "podman EXISTS at ... but did not answer '--version'" — on a host whose
+    # real podman answers `info` in 0.06s. Measured on macuahuitl 2026-08-17:
+    # one evening's leftover wrapper failed the next morning's whole gate, and
+    # deleting it by hand fixed the gate until the next litmus run recreated
+    # it. So ask about the target, not only about the mtime.
+    if [[ "$_podman_wrapper_needs_rebuild" != true ]] && [[ -r "$PODMAN" ]]; then
+        _podman_wrapper_target="$(sed -n 's/^.*exec "\([^"]*\)".*$/\1/p' "$PODMAN" | tail -1)"
+        if [[ -n "$_podman_wrapper_target" ]] && [[ ! -x "$_podman_wrapper_target" ]]; then
+            _podman_wrapper_needs_rebuild=true
+        fi
+        unset _podman_wrapper_target
+    fi
     if [[ -n "$_podman_remote_url" ]]; then
         export TILLANDSIAS_PODMAN_REMOTE_URL="$_podman_remote_url"
         _podman_remote_runtime_dir="${TILLANDSIAS_PODMAN_RUNTIME_DIR:-}"
