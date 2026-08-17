@@ -144,6 +144,29 @@ else
     echo "FAIL: verdict parity (runner rc=$runner_rc verdict=$runner_verdict direct=$direct_verdict spy=$(wc -c <"$spy_log"))"; tail -5 "$suite_tmp/runner-style.log"; fail=1
 fi
 
+# ── 797-p2xa: the mock must fail CLOSED on anything it does not understand ──
+# The negative control this packet asked for by name. The mock used to end in a
+# bare `exit 0`, so an unrecognized invocation was answered with success and no
+# output and every test built on it could pass while exercising nothing.
+mock_out="$(scripts/test-support/podman-mock.sh definitely-not-a-subcommand --weird 2>&1)"; mock_rc=$?
+if [ "$mock_rc" -eq 0 ]; then
+    echo "FAIL: podman-mock accepted an absurd subcommand with exit 0 (fails OPEN)"; fail=1
+elif ! printf '%s' "$mock_out" | grep -q 'definitely-not-a-subcommand'; then
+    # A refusal that does not NAME the thing it refused sends the reader back
+    # to the same search that made this class expensive.
+    echo "FAIL: podman-mock refused (rc=$mock_rc) without naming the subcommand: $mock_out"; fail=1
+else
+    echo "ok:fake-podman-fixture:unrecognized-subcommand-refused-loudly"
+fi
+
+# CONTROL FOR THE CONTROL: a subcommand the mock DOES handle must still work,
+# or the check above would pass on a mock that refuses everything.
+if scripts/test-support/podman-mock.sh version >/dev/null 2>&1; then
+    echo "ok:fake-podman-fixture:known-subcommand-still-handled"
+else
+    echo "FAIL: podman-mock refused a subcommand it implements (version)"; fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fake-podman-hermetic scenarios passed"
     exit 0
