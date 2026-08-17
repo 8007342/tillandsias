@@ -2,8 +2,18 @@
 
 - classification: optimization
 - filed: 2026-08-17 (windows/ESMERALDINHA, cycle 4)
-- status: **applied on this host and verified**; fleet adoption is an operator
-  decision (718-nkm2 is `kind: decision`, `pickup_role: windows`)
+- status: **RECOMMENDATION WITHDRAWN 2026-08-17 on operator decision — REVERTED
+  on this host.** The measurement below is correct; the fix it recommends is
+  not. `networkingMode=mirrored` collapses the Windows/WSL2 network boundary,
+  which the sibling windows host assessed as a **lower security boundary** than
+  the current configuration. More fundamentally it treated a **self-inflicted
+  symptom**: the ambiguity existed only because a redundant ollama had been
+  installed on Windows during bring-up, and
+  `scripts/dev-inference-ensure.sh` had already settled 718-nkm2 in favour of an
+  in-build-distro endpoint on the servers' own loopback. Removing the extra
+  install removes the ambiguity with **no boundary change at all**.
+  See `mirrored-networking-reverted-redundant-ollama-removed-2026-08-17.md`.
+  **The cgroup-v2 correction further down this file is unaffected and stands.**
 - related: **718-nkm2** (wsl2-inference-substrate-decision — this closes its
   option C branch with evidence), **718-ja7g** (endpoint contract),
   `plan/issues/research/loopback-endpoint-is-ambiguous-across-wsl2-2026-08-17.md`
