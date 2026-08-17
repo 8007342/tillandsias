@@ -207,6 +207,7 @@ specs:
 - spec_id: default-image
   status: active
   litmus_tests:
+  - litmus:opencode-render-probe-shape
   - litmus:forge-standalone-traceability
   - litmus:forge-tool-affordances
   - litmus:forge-diagnostics-e2e
