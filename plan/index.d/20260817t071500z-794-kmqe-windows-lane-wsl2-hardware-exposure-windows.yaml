@@ -1,0 +1,206 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows-esmeraldinha-opus5-20260817 (MO full cycle 8), 2026-08-17.
+#
+# Operator directive 2026-08-17 (The Tlatoani): "Your windows sibling is doing a
+# similar performance research, for wsl2, although that host has gpu and npu,
+# but your metrics and exposing of hardware into the guest should be similar and
+# overlap significantly, make sure to share findings via the ./plan and keep
+# each other posted on findings."
+#
+# This fragment is the handoff. It carries ESMERALDINHA's measured WSL2
+# guest-exposure findings into the ledger where Yolanda can consume them, names
+# the convergences ALREADY observed independently by both hosts, and states what
+# this host cannot answer and wants back.
+packets:
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    order: 794-kmqe
+    status: ready
+    kind: research
+    pickup_role: windows
+    priority: p2
+    desired_release: v0.5
+    multi_cycle: true
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - windows
+      - wsl2
+      - performance
+      - inference
+      - gpu
+      - npu
+    tags:
+      - windows
+      - wsl2
+      - performance
+      - cross-host
+      - v0.5
+    title: |
+      The two Windows hosts pool one WSL2 guest-hardware-exposure result: ESMERALDINHA supplies the lower-bound + iGPU half and a common instrument, Yolanda supplies the GPU/NPU half, and neither re-derives the other's traps.
+    context: |
+      Two Windows hosts are independently measuring WSL2 performance and guest
+      hardware exposure. The hardware differs (ESMERALDINHA: Intel N100, 4
+      E-cores, 16GB single-channel DDR4-2667 ~21.3 GB/s, Intel UHD 24EU iGPU, no
+      NPU. Yolanda: GPU + NPU), but the SUBSTRATE question is identical: what
+      does WSL2 actually expose into the guest, and what does that cost.
+
+      THREE CONVERGENCES ALREADY HAPPENED WITHOUT COORDINATION — which is the
+      argument for this packet:
+
+      1. MISSING GUEST TOOLS, found twice on 2026-08-16/17.
+         Yolanda: `pgrep` is absent from the runtime guest (procps-ng ships in
+         the forge image, not the guest rootfs), so a waiter loop keyed on
+         `pgrep -f ... || break` exits on its FIRST iteration with a
+         command-not-found masquerading as "process finished"
+         (plan/issues/optimization/wsl-runtime-guest-detached-work-systemd-run-2026-08-16.md).
+         ESMERALDINHA: `ps`, `ss`, `netstat`, `ip` AND `pgrep` are all absent
+         from that same distro; an early pass read their empty output as "no
+         process is listening" and concluded a live service was dead
+         (plan/issues/research/loopback-endpoint-is-ambiguous-across-wsl2-2026-08-17.md).
+         SAME TRAP, two hosts, two different wrong conclusions. Shared rule:
+         **on a minimal image, absent output means an absent TOOL — probe the
+         service, not the process table.**
+
+      2. YOLANDA'S FINDING EXPLAINS AN ESMERALDINHA ANOMALY.
+         Yolanda: `nohup ... &` does not survive the `wsl.exe` session, because
+         systemd-WSL tears down the per-connection session scope when `wsl.exe`
+         exits; nohup shields SIGHUP, not the cgroup kill. Use
+         `systemd-run --unit=<name>`.
+         ESMERALDINHA started an in-distro ollama with `nohup ... &` in cycle 3
+         and later found it gone, and attributed that to something else. Their
+         filing is the explanation. **This host owes them that confirmation and
+         records it here.**
+
+      3. THE CARGO_TARGET_DIR PROBE (order 783-jdeh) was found the same day by
+         yoga (forge lib-common.sh exports CARGO_TARGET_DIR, so ./target does
+         not exist in a mounted checkout) and by ESMERALDINHA
+         (with-wsl2-builder.sh points it distro-native so target/ never lands on
+         9p). Two unrelated causes, one line. Already merged; noted because it
+         is the third instance of the same coordination gap.
+    findings_handed_over: |
+      ESMERALDINHA's measured WSL2 guest-exposure facts, for Yolanda to compare
+      against GPU/NPU hardware:
+
+      * `/dev/dri` is **ABSENT** in the WSL2 guest. WSL2 exposes the GPU as
+        `/dev/dxg` with `/usr/lib/wsl/lib/{libd3d12.so,libd3d12core.so,
+        libdxcore.so}`, NOT as a DRI device, and no Mesa `dzn`
+        (Vulkan-on-D3D12) driver is installed. Consequence on this host: the
+        Intel iGPU is unreachable from BOTH sanctioned runtimes (development =
+        build distro, end-user = podman enclave). **The open question for
+        Yolanda: does a discrete GPU and/or an NPU expose any differently, or
+        is `/dev/dxg`-only universal for WSL2?** If universal, no WSL2-hosted
+        inference on any Windows host can use an accelerator without
+        passthrough work, which is a fleet-level constraint neither host can
+        establish alone.
+      * The two WSL2 distros **share a network namespace** — a service in
+        `tillandsias` sits on `tillandsias-build`'s loopback.
+      * Windows -> WSL2 loopback does **not** forward under default NAT: a
+        `0.0.0.0:11435` bind inside WSL2 is unreachable from Windows.
+      * **cgroup v2 IS already enabled** in BOTH distros without any
+        `.wslconfig`: `/sys/fs/cgroup` is `cgroup2fs` with controllers
+        `cpuset cpu io memory hugetlb pids rdma`. An onboarding survey claimed
+        the opposite and that podman `--memory`/`--cpus` would silently no-op;
+        that claim is FALSE and was corrected. Relevant to order 437.
+      * `autoMemoryReclaim` belongs under `[experimental]`, NOT `[wsl2]`. In
+        `[wsl2]` WSL 2.7.11.0 prints `Unknown key 'wsl2.autoMemoryReclaim'` on
+        the NEXT distro launch and silently ignores it.
+      * `networkingMode=mirrored` DOES remove the cross-boundary endpoint
+        ambiguity, and is **withdrawn on operator decision** (lower security
+        boundary; enclave stays isolated). Recorded so Yolanda does not spend a
+        cycle rediscovering that it works before learning it is refused.
+      * Floor timings for expectation-setting: `./build.sh --check` 320-564s;
+        cold `tillandsias-plan` build 21 min; cold workspace build 11m35s at
+        `-j4`; `gate-stamp verify` 11.9s against a documented "milliseconds";
+        `cheatsheet_tier_check` 30245ms against a ~900ms budget (order
+        734-sjb3).
+
+      A COMMON INSTRUMENT now exists, which is the part that makes the two
+      hosts' numbers comparable instead of anecdotal:
+
+      * `scripts/bench-inference-floor.sh` — engine/lane throughput. DERIVES the
+        engine label from `/api/ps` offload rather than trusting a flag, and
+        reports `claimed=` separately so a mislabelled run is visible.
+        `BENCH_MODELS` sweeps arbitrary model sets.
+      * `scripts/bench-semantic-budget.sh` — whether a model meets
+        `semantic_expert.rs`'s 1500ms socket budget. Reports `eval_tok` beside
+        the verdict and emits `PASS-DEGENERATE`, because a pass earned by not
+        answering is a bug (gemma3:270m "met" the budget with ONE token).
+
+      ESMERALDINHA's baseline, for direct comparison (qwen2.5:0.5b, identical
+      GGUF blob, cache defeated, offload verified):
+        ollama/CPU     prefill 90.57-92.03  gen 26.44-30.20 tok/s
+        llama.cpp/CPU  prefill 84.90-85.95  gen 28.63-30.02
+        ollama/Vulkan  prefill ~296         gen ~20
+        llama.cpp/Vulkan prefill 267.3-284.4 gen 19.03-19.12
+      Engine parity holds on both lanes (<=10%); the LANE moves prefill ~3.3x.
+      **Trap for Yolanda: `-ngl 0` is NOT an off switch.** It controls weight
+      offload, not op scheduling; with the backend merely REGISTERED, ggml's
+      graph scheduler still places ops on it (measured 165-241 tok/s prefill at
+      `-ngl 0` vs a true CPU baseline of 84.9-86.0). Any litmus asserting
+      "CPU-only" via `-ngl 0` records numbers ~2x too fast, in the flattering
+      direction. The falsifiable test is backend PRESENCE, not layer count.
+    exit_criteria:
+      - |
+          Yolanda reports whether a discrete GPU and/or NPU exposes into the
+          WSL2 guest any differently than this host's iGPU does — specifically
+          whether `/dev/dri` exists there, or whether `/dev/dxg` + D3D12 is
+          universal for WSL2. This is the single fact neither host can settle
+          alone and it gates whether ANY WSL2-hosted inference can use an
+          accelerator fleet-wide.
+      - |
+          Both hosts have run `scripts/bench-inference-floor.sh` on the same
+          model, so the fleet holds two comparable points on the same instrument
+          — a lower-bound iGPU host and a GPU/NPU host — rather than two
+          incomparable anecdotes.
+      - |
+          The shared-trap rules are recorded once where both hosts read them
+          rather than re-derived: absent output on a minimal image means an
+          absent TOOL; detached guest work needs `systemd-run --unit`, not
+          `nohup`; `-ngl 0` is not an off switch.
+      - |
+          Each host has read the other's WSL2 filings at least once and said so,
+          so a third convergence is not discovered by accident.
+    verification_required:
+      agents:
+        - id: host-windows-esmeraldinha
+          note: lower-bound reference; iGPU, no NPU
+          criteria: [WL-BASELINE, WL-TRAPS]
+        - id: host-windows-yolanda
+          note: GPU + NPU
+          criteria: [WL-EXPOSURE, WL-BASELINE, WL-TRAPS]
+      completion_gate: >
+        BOTH Windows hosts emit verified-by events. Yolanda's WL-EXPOSURE is the
+        load-bearing one: until a GPU/NPU host reports what WSL2 exposes to it,
+        the fleet cannot tell whether "no accelerator inside WSL2" is a property
+        of this host's iGPU or of WSL2 itself. A finding of "/dev/dxg only,
+        universally" is a complete and valuable answer, not a failure.
+    criteria_definitions: |
+      WL-EXPOSURE — On a GPU/NPU Windows host: does `/dev/dri` exist in the WSL2
+        guest? What is in `/usr/lib/wsl/lib`? Is any Vulkan ICD or NPU device
+        visible in-guest? Report the commands and their raw output.
+      WL-BASELINE — Run `scripts/bench-inference-floor.sh` on a model both hosts
+        have, and paste the emitted lines verbatim. The harness derives the
+        engine label itself; do not hand-label a run.
+      WL-TRAPS — Confirm the three shared traps reproduce (or do not) on your
+        host, so each is known to be substrate-wide rather than host-specific.
+    events:
+      - type: filed
+        ts: "2026-08-17T07:15:00Z"
+        agent_id: windows-esmeraldinha-opus5-20260817
+        host: windows
+        summary: |
+          Filed on operator directive to share windows-lane WSL2 findings
+          between the two Windows hosts. Hands over this host's measured
+          guest-exposure facts (no /dev/dri; /dev/dxg + D3D12 only; distros
+          share a network namespace; no Windows->WSL2 loopback forwarding under
+          NAT; cgroup v2 already present with the memory controller, correcting
+          a false survey claim; autoMemoryReclaim belongs under [experimental];
+          mirrored works but is operator-refused), the two committed benchmark
+          harnesses as a COMMON INSTRUMENT, and this host's full engine x lane
+          baseline. Names three convergences that already happened without
+          coordination — the missing-guest-tools trap found independently by
+          both hosts with two different wrong conclusions, Yolanda's
+          nohup/systemd-run finding which EXPLAINS an ESMERALDINHA anomaly it
+          had misattributed, and the 783-jdeh probe found the same day by yoga
+          and this host from unrelated causes. Asks Yolanda for the one fact
+          this host cannot produce: whether a discrete GPU/NPU exposes into the
+          WSL2 guest any differently than an iGPU does.
