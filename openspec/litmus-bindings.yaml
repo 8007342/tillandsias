@@ -21,6 +21,7 @@ specs:
   - litmus:environment-isolation
   - litmus:app-lifecycle-state-machine-shape
   - litmus:app-lifecycle-tray-state-api-shape
+  - litmus:uninstall-preserves-vm-image
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: appimage-build-pipeline

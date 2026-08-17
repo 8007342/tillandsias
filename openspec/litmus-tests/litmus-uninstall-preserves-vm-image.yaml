@@ -1,0 +1,70 @@
+# @trace spec:app-lifecycle
+# @trace order:804-bpke
+#
+# Pins the shipped uninstaller's data-loss guard (order 804-bpke). On macOS
+# three of uninstall.sh's six directories collapse onto ONE path: LIB_DIR is a
+# subdirectory of DATA_DIR, CONFIG_DIR is byte-identical to it, and that same
+# directory is vz.rs's image_root, holding rootfs.img. `rm -rf "$DATA_DIR"` —
+# written for the LINUX meaning of DATA_DIR, "bundled data: flake, scripts,
+# images" — therefore deleted the entire VM. It sat OUTSIDE the --wipe guard,
+# required no root, and had no confirmation prompt; the script then printed
+# "Cache preserved. Use --wipe to remove everything."
+#
+# Measured on a macOS dev host 2026-08-17: DATA_DIR 11.83 GiB actual
+# (rootfs.img 11.33 GiB actual / 250 GiB apparent, sparse) against a CACHE_DIR
+# of 8 KB — the reassuring path destroyed ~11.8 GiB and the opt-in "remove
+# everything" added 8 KB. Recovery costs a ~2.47 GB mandatory re-download
+# (ollama engine payload + model + Fedora base) before the guest serves a token.
+#
+# uninstall.sh is a SHIPPED release artifact (.github/workflows/release.yml
+# installs it into release-artifacts/ and asserts it is present), so the defect
+# was operator-reachable in a published release. Steps assert BEHAVIOUR by
+# running the real script against a sandboxed $HOME, never by grepping how it
+# is written.
+name: litmus:uninstall-preserves-vm-image
+spec: app-lifecycle
+phase: pre-build
+description: >
+  Pin scripts/uninstall.sh: without --wipe on macOS the VM image survives and
+  the closing message names what was actually preserved; with --wipe it is
+  removed, so the escape hatch remains honest; the preamble never lists the VM
+  directory as "will be removed" on a run that preserves it (it is the user's
+  only notice — there is no confirmation prompt); and LINUX behaviour is
+  UNCHANGED, since there DATA_DIR genuinely is cheap-to-reinstall bundled data.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/uninstall.sh
+  - workspace contains scripts/test-uninstall-preserves-vm.sh
+  - shell utilities (bash, grep, mktemp) are available in PATH
+
+critical_path:
+  - step: "script and fixture parse and are executable"
+    command: "bash -n scripts/uninstall.sh && bash -n scripts/test-uninstall-preserves-vm.sh && test -x scripts/uninstall.sh && test -x scripts/test-uninstall-preserves-vm.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all six hermetic scenarios pass (macOS preserve + message + preamble, --wipe removes, Linux negative control)"
+    command: "scripts/test-uninstall-preserves-vm.sh >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/test-uninstall-preserves-vm.sh; exit 1; }"
+    timeout_ms: 30000
+    expected_behavior: "ok: scenarios-pass"
+
+  - step: "THE BREACH SHAPE: a macOS uninstall without --wipe leaves rootfs.img on disk"
+    command: "d=$(mktemp -d); mkdir -p \"$d/Library/Application Support/tillandsias/lib\" \"$d/fixture-bin\"; echo rootfs > \"$d/Library/Application Support/tillandsias/rootfs.img\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=\"$d/fixture-bin\" bash scripts/uninstall.sh >/dev/null 2>&1; if [ -f \"$d/Library/Application Support/tillandsias/rootfs.img\" ]; then echo 'ok: vm-preserved'; else echo 'FAIL: the uninstaller deleted the VM image without --wipe'; fi; rm -rf \"$d\""
+    timeout_ms: 15000
+    expected_behavior: "ok: vm-preserved"
+
+  - step: "ESCAPE HATCH STAYS HONEST: --wipe on macOS does remove the VM image (a guard that preserved it unconditionally would pass the step above and must be caught here)"
+    command: "d=$(mktemp -d); mkdir -p \"$d/Library/Application Support/tillandsias/lib\" \"$d/fixture-bin\"; echo rootfs > \"$d/Library/Application Support/tillandsias/rootfs.img\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_FAKE_UNAME=Darwin TILLANDSIAS_UNINSTALL_INSTALL_DIR=\"$d/fixture-bin\" bash scripts/uninstall.sh --wipe >/dev/null 2>&1; if [ -e \"$d/Library/Application Support/tillandsias/rootfs.img\" ]; then echo 'FAIL: --wipe left the VM image behind'; else echo 'ok: wipe-removes-vm'; fi; rm -rf \"$d\""
+    timeout_ms: 15000
+    expected_behavior: "ok: wipe-removes-vm"
+
+  - step: "NEGATIVE CONTROL: Linux still removes DATA_DIR unconditionally — a fix that preserved it on BOTH platforms would satisfy every step above while silently breaking the Linux uninstall"
+    command: "d=$(mktemp -d); mkdir -p \"$d/.local/share/tillandsias\" \"$d/.local/bin\"; echo bundled > \"$d/.local/share/tillandsias/flake.nix\"; HOME=\"$d\" TILLANDSIAS_UNINSTALL_FAKE_UNAME=Linux bash scripts/uninstall.sh >/dev/null 2>&1; if [ -e \"$d/.local/share/tillandsias/flake.nix\" ]; then echo 'FAIL: linux uninstall stopped removing bundled data'; else echo 'ok: linux-unchanged'; fi; rm -rf \"$d\""
+    timeout_ms: 15000
+    expected_behavior: "ok: linux-unchanged"
+
+evidence:
+  artifact: "scripts/uninstall.sh + scripts/test-uninstall-preserves-vm.sh"
+  measured_on: "macOS Mac17,3, 2026-08-17 — DATA_DIR 11.83 GiB vs CACHE_DIR 8 KB"
