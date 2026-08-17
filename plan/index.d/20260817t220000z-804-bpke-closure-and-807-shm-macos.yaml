@@ -1,0 +1,183 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-17T22:00:00Z.
+#
+# Closes the p0 data-loss bug this host filed one cycle earlier, and files the
+# reason the macOS row of the brand-new fleet matrix cannot be produced.
+status:
+  - packet_id: macos-uninstall-destroys-the-vm-outside-its-own-wipe-guard
+    field: status
+    value: completed
+    ts: "2026-08-17T22:00:00Z"
+    host: macos
+
+events:
+  - packet_id: macos-uninstall-destroys-the-vm-outside-its-own-wipe-guard
+    event:
+      type: completed
+      ts: "2026-08-17T22:00:00Z"
+      agent_id: macos-opus5-metal-20260817T210000Z
+      host: macos
+      summary: >
+        FIXED AND PINNED. ROOT CAUSE, which the original filing had not yet
+        isolated: on LINUX uninstall.sh's six directories are six distinct XDG
+        paths and DATA_DIR really is bundled data (flake, scripts, images) —
+        cheap to reinstall, correct to remove unconditionally. On macOS THREE
+        COLLAPSE ONTO ONE PATH: LIB_DIR is a subdirectory of DATA_DIR,
+        CONFIG_DIR is byte-identical to it, and that same directory is vz.rs's
+        image_root holding rootfs.img. So one line, written for the Linux
+        meaning, deleted the whole VM — and `rm -rf "$CONFIG_DIR"` two lines
+        later was the SAME command a second time. FIX: the macOS non---wipe
+        path now preserves DATA_DIR (and therefore the VM and settings);
+        --wipe removes it. Linux is untouched. Every user-facing string was
+        wrong in the same direction and all three were corrected: the preamble
+        no longer lists the VM dir as "will be removed" on a run that preserves
+        it (it is the ONLY notice — there is no confirmation prompt), the
+        completion report names what the run actually did, and the closing line
+        now reads "VM image, settings and cache preserved" on macOS instead of
+        the old "Cache preserved" that had just deleted 11.83 GiB while naming
+        an 8 KB directory. PINNED, not merely fixed: scripts/
+        test-uninstall-preserves-vm.sh runs the REAL script against a sandboxed
+        $HOME (6/6) and litmus:uninstall-preserves-vm-image is bound under
+        spec:app-lifecycle (5 steps, PASS, 0 FAIL). Two seams were added for
+        the fixture and default to the shipped values, because this script
+        removes paths OUTSIDE $HOME (/usr/local/bin) and branches on uname — a
+        test that could not redirect both would have to skip the macOS arm or
+        delete a real installed binary to run. THE FIXTURE IS FALSIFIABLE, spot
+        checked rather than assumed: reverting the guard turns it red on
+        exactly macos-default-preserves-the-vm-image and green again on
+        restore. It also carries a NEGATIVE CONTROL — Linux must still remove
+        DATA_DIR — because a "fix" that preserved it on BOTH platforms would
+        pass every other assertion while silently breaking the Linux uninstall.
+      evidence_refs:
+        - "scripts/uninstall.sh — macOS non---wipe preserves DATA_DIR; all three messages corrected"
+        - "scripts/test-uninstall-preserves-vm.sh — 6/6, real script against a sandboxed HOME"
+        - "openspec/litmus-tests/litmus-uninstall-preserves-vm-image.yaml — 5 steps, PASS 0 FAIL"
+        - "openspec/litmus-bindings.yaml — bound under spec:app-lifecycle"
+        - "falsifiability: guard reverted -> red on macos-default-preserves-the-vm-image; restored -> green"
+
+  - packet_id: spec-answer-refusal-recites-the-algorithm-and-hides-a-stale-override
+    event:
+      type: note
+      ts: "2026-08-17T22:00:00Z"
+      agent_id: macos-opus5-metal-20260817T210000Z
+      host: macos
+      summary: >
+        CONFIRMING ON A THIRD PLATFORM, so the scope in the record is not read
+        as Linux-only. Running scripts/spec-index-ensure.sh on this macOS host
+        with a default environment refused with
+        blocked:spec-index:destination-unwritable:/mnt/c/Users/bullo/claudia/
+        tillandsias/target/spec-index — a WSL2 Windows path, in a macOS
+        session. FORGE_SPEC_INDEX_DIR is exported into this session exactly as
+        the existing record describes: removed from .claude/settings.local.json
+        in 2b1f8d188, but an exported variable does not un-export when the file
+        that seeded it changes, so it needs a SESSION RESTART to clear. NOT
+        FILING A NEW PACKET — this is a live instance of what is already
+        recorded, and the guard behaved perfectly: it refused loudly, named
+        FORGE_SPEC_INDEX_DIR as the likely cause, and did so BEFORE the
+        expensive embedding step (the 12m19s lesson that produced the guard).
+        The consequence worth carrying: spec_answer is degraded in THIS session
+        too, and any macOS cycle reading a spec through it is on the fallback
+        path until the session restarts.
+
+  - packet_id: fragment-status-loss-guard-cannot-see-unrecognized-shapes
+    event:
+      type: note
+      ts: "2026-08-17T22:05:00Z"
+      agent_id: macos-opus5-metal-20260817T210000Z
+      host: macos
+      summary: >
+        ADJACENT GAP IN THE SAME GUARD FAMILY, found by making the mistake and
+        then checking whether anything would have caught it. An event whose
+        packet_id matches NO packet is silently accepted — the evidence is
+        folded into nothing and never surfaces. Found it honestly: this cycle's
+        own fragment attached a note to an invented packet_id
+        (spec-index-dir-env-leak-refusal instead of the real 799-j4xd
+        spec-answer-refusal-recites-the-algorithm-and-hides-a-stale-override),
+        and `tillandsias-plan check` reported success. CONFIRMED with a
+        controlled probe rather than left as anecdote: dropped a fragment
+        carrying a single `completed` event on packet_id
+        this-packet-id-does-not-exist-anywhere-807, ran check, and got exit 0,
+        "ok: 1073 packets, ids unique, live references sound", and ZERO
+        mentions of the phantom id anywhere in the output; removing the probe
+        produced byte-identical output. WHY IT MATTERS BEYOND A TYPO: a
+        `completed` event is how a host records that work is DONE. Attached to
+        a phantom id it is indistinguishable, to every reader and to burndown,
+        from work that was never done — while the filing host's transcript says
+        it closed something. That is the same invisibility class as a stranded
+        in_progress (641-e2qa), reached from the other direction. The cheap
+        constraint: check should reject, or at minimum name, an event whose
+        packet_id resolves to nothing. NOT filing a separate packet — this is
+        the same "the guard cannot see this shape" defect 797-qm4t already
+        owns, and it is ready, so whoever picks it up should see both shapes
+        together.
+
+packets:
+  - packet_id: fleet-bench-corpus-path-is-linux-only-so-macos-has-no-matrix-row
+    order: 807-bjjv
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: fix
+    title: "the shared accel benchmark defaults its corpus to /dev/shm, which does not exist on macOS — so the one host class the matrix most needs cannot produce a row"
+    deliverable: "a portable default state/corpus dir (tmpfs where it exists, ${TMPDIR:-/tmp} otherwise) in spec-index-ensure.sh and bench-accel-lane.sh, so a macOS host can build the corpus and run the shared workload with no per-host env fiddling"
+    depends_on: [npu-lane-has-no-engine-so-the-tier-can-never-be-chosen]
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [portability, macos, inference, benchmarking, fleet]
+    estimated_hours: 2
+    context: |
+      MEASURED on macOS 2026-08-17, the same day scripts/bench-accel-lane.sh
+      landed (order 802-2536).
+
+        $ ls -d /dev/shm
+        ls: /dev/shm: No such file or directory
+
+        $ scripts/bench-accel-lane.sh --lane cpu
+        bench-accel-lane: no chunk corpus at
+        /dev/shm/tillandsias-experts/spec-index/chunks.jsonl
+        (build it with scripts/spec-index-ensure.sh)          [exit 2]
+
+      Two hardcoded Linux-only defaults, neither with a fallback:
+        scripts/bench-accel-lane.sh:53
+          CHUNKS="${TILLANDSIAS_BENCH_CHUNKS:-/dev/shm/tillandsias-experts/spec-index/chunks.jsonl}"
+        scripts/spec-index-ensure.sh:47
+          FORGE_EXPERTS_STATE_DIR="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
+
+      /dev/shm is a Linux tmpfs convention. macOS has no such path and never
+      has. So the corpus cannot be BUILT and the benchmark cannot be RUN on a
+      Mac with a default environment.
+
+      WHY THIS IS p1 RATHER THAN A PAPER CUT. bench-accel-lane.sh exists
+      precisely to make the fleet matrix comparable — its own header says so:
+      "a per-host benchmark with per-host methodology is three anecdotes. The
+      numbers only mean anything as a matrix, so the workload, the warm-up, the
+      sample and the reported statistic have to be identical on every host.
+      That is a script, not a paragraph in a packet." A shared harness that
+      silently excludes a platform produces a matrix with a hole in it, and the
+      hole is in the row the fleet has the least data about — the operator's
+      standing brief for this lane is that there is NO HIGH/MID/LOW matrix to
+      route against, and macOS is the unmeasured corner. The unified-memory
+      Apple-silicon class is also the one where 793-qr4t's prefill/decode
+      crossover argument is least transferable from x86 measurements, so
+      substituting a Linux number for it is not conservative, it is wrong.
+
+      BOTH VALUES ARE ENV-OVERRIDABLE, so this is a DEFAULT problem, not a hard
+      block — a macOS host can export its way past it. That is the reason it
+      will not self-correct: it fails as a missing corpus, which reads as "you
+      forgot to build the index", not as "this platform is unsupported". The
+      first macOS host to try will conclude it did something wrong.
+
+      THE PORTABLE IDIOM IS ALREADY IN BOTH FILES, ONE LINE AWAY — each uses
+      mktemp -d "${TMPDIR:-/tmp}/..." for its scratch directory
+      (bench-accel-lane.sh:82, spec-index-ensure.sh:106). The state/corpus dir
+      simply did not get the same treatment.
+
+      KEEP THE TMPFS INTENT: /dev/shm was chosen so the index lives in RAM. A
+      fix should prefer a real tmpfs where one exists and fall back to
+      ${TMPDIR:-/tmp} otherwise, rather than moving every host to disk. On
+      macOS $TMPDIR is per-user and already the right home.
+
+      RELATED, NOT DUPLICATED: the separate FORGE_SPEC_INDEX_DIR session-env
+      leak (a stale /mnt/c WSL2 path exported into this macOS session) is
+      already recorded and is NOT this packet — that guard fired correctly. See
+      the note event filed alongside this packet.

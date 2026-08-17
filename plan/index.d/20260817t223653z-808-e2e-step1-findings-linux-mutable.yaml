@@ -1,0 +1,119 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T22:36:53Z.
+# discovered_by: /build-install-and-smoke-test-e2e (linux)
+#
+# The destructive e2e was attempted after three cycles of deferral. It STOPPED
+# at Step 1 by the runbook's own rule ("if the build, CI, or install fails,
+# stop — do not destroy the runtime substrate"). No podman reset was run.
+# Recording what Step 1 proved, what it found, and why the destruction gate was
+# not reached.
+events:
+  - packet_id: inference-deferred-model-pulls-litmus-destructive-and-red
+    event:
+      type: note
+      ts: "2026-08-17T22:36:53Z"
+      agent_id: linux-macuahuitl-opus5-20260817T213700Z
+      host: linux_mutable
+      summary: |
+        THE 518 FIX PROVEN BY THE COMMAND IN ITS OWN TITLE. Closed earlier this
+        cycle on a scoped run; Step 1 of the e2e is `./build.sh --ci-full
+        --install`, the exact invocation that used to empty the cache, and it
+        ran twice to completion tonight.
+
+          model cache before Step 1 : 9 blobs, 1.5 GB
+          model cache after  Step 1 : 9 blobs, 1.5 GB   (twice)
+
+        The post-build phase selected and ran litmus:inference-deferred-model-
+        pulls both times — visible in the log at "[STEP 4/6] warm run: serves
+        from cache" — so the litmus executed against its scratch directory and
+        the operator's models were untouched. Before today that run would have
+        deleted them.
+  - packet_id: upstream-auth-refs-blocked-by-absent-mirror-not-stale-image
+    event:
+      type: note
+      ts: "2026-08-17T22:36:53Z"
+      agent_id: linux-macuahuitl-opus5-20260817T213700Z
+      host: linux_mutable
+      summary: |
+        MEASUREMENT THAT CORRECTS MY OWN FILING, and sharpens it.
+
+        I filed this packet saying the mirror-service CONTAINER DOES NOT EXIST,
+        inferred from `podman ps -a` showing no tillandsias-git. Tonight's e2e
+        Step 1 launched a real forge lane, which produced the mechanism:
+
+          MO-FULL: FAIL push-failed-upstream-auth-stale
+          "Repair the mirror's Vault GitHub token or repo push permission.
+           Verify images/git/entrypoint.sh probe loop refreshes the upstream
+           auth verdict within 900s."
+          FORGE_EXIT=127 (full run exited 0 without valid MO-FULL attestation)
+
+        and then, on teardown:
+
+          "no active lane containers; cleaning project + shared stack ...
+           (lane-scoped: tillandsias-inference; keeping application-lifetime:
+           tillandsias-vault, tillandsias-proxy, tillandsias-router)"
+
+        So the mirror is LANE-SCOPED: it is created for a forge lane and torn
+        down with it, while vault/proxy/router persist. My "does not exist"
+        was true at the moment I looked and wrong as a description — the
+        container exists only while a lane is up, which is exactly when the
+        verdict would need to be fresh.
+
+        THE REAL DEFECT IS THEREFORE NARROWER AND WORSE: during the lane the
+        mirror WAS up, and its upstream-auth verdict was STALE rather than
+        absent. The forge did its work and could not push it. That is the
+        forge-write blocker the operator's directive names, reproduced with a
+        typed verdict instead of a hypothesis.
+
+        WHAT THIS DOES NOT SETTLE, stated because the failure text offers two
+        causes and I verified neither: whether the Vault GitHub token is bad,
+        or whether the probe loop in images/git/entrypoint.sh simply does not
+        refresh within 900s on a lane that short. Those need a lane held open
+        long enough to watch the ref, which Step 1's litmus does not do. The
+        host-side credential channel is healthy and not implicated —
+        check-credential-channel.sh answers ok:gh-keyring.
+packets:
+  - packet_id: e2e-step1-blocks-the-destruction-gate-on-a-forge-lane-failure
+    order: 808-zrzz
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "the destructive e2e can never reach its destruction gate while the forge lane is red, because the forge lane runs INSIDE Step 1's post-build phase — one lane failure blocks the whole idempotence test"
+    deliverable: "a decision, recorded: either the forge-lane litmus moves out of the build gate's post-build phase into the e2e's own §4, or the e2e documents that Step 1 subsumes §4 and its failure mode; today the runbook implies they are separate steps and they are not"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [e2e, forge, gates, meta-orchestration]
+    estimated_hours: 3
+    context: |
+      OBSERVED, macuahuitl 2026-08-17, attempting the deferred destructive e2e.
+
+      The runbook presents four steps: (1) build+install, (2) destroy the
+      substrate, (3) re-provision, (4) run the forge lane. Its own rule is
+      "if the build, CI, install, path lookup, or version probe fails, STOP.
+      Do not destroy the runtime substrate."
+
+      But Step 1 is `./build.sh --ci-full --install`, whose post-build phase
+      runs litmus:opencode-prompt-e2e-shape — which LAUNCHES A FORGE with the
+      meta-orchestration prompt (step 5/9, 1560s budget). So the forge lane
+      that the runbook calls §4 already executes inside §1. When it fails, §1
+      fails, and the runbook's stop rule forbids reaching §2 and §3.
+
+      Consequence measured twice tonight: the idempotence test — destroy the
+      substrate and re-provision from nothing, which is the whole point of the
+      skill and the thing deferred for three cycles — is unreachable whenever
+      the forge cannot push. Those are unrelated properties. A stale mirror
+      credential should not make it impossible to test that `tillandsias --init`
+      rebuilds a wiped stack.
+
+      TALLY FROM THE RUN, so the split is visible: pre-build litmus 307 PASS /
+      0 FAIL; post-build 10 PASS / 1 FAIL, the single failure being the forge
+      lane. Everything the build gate is nominally for was green.
+
+      NOT PROPOSED: simply skipping the forge litmus in the e2e. It is a real
+      gate and the operator's cycles depend on it. The point is that two
+      independent properties are wired in series, and the cheaper one
+      (substrate idempotence) is gated behind the more fragile one (a live
+      forge with working upstream credentials). Whoever takes this should
+      decide deliberately which order serves the fleet, and write it down —
+      the current arrangement was not chosen, it accumulated.
