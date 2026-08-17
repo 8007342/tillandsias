@@ -1,0 +1,101 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows-esmeraldinha-opus5-20260817 (MO full cycle 11).
+#
+# A CORRECTNESS defect found while measuring order 552's re-embed budget. Filed
+# as a packet rather than only an issue because it silently loses data and has a
+# clean executable closure.
+packets:
+  - packet_id: spec-index-chunks-must-fit-the-embedding-context
+    order: 797-qv4z
+    status: ready
+    kind: fix
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: forge-local-experts-milestone
+    capability_tags:
+      - experts
+      - inference
+      - rag
+      - correctness
+    tags:
+      - experts
+      - rag
+      - fail-loud
+      - v0.5
+    title: |
+      spec-index must not emit chunks larger than the embedding model can read: today 11 chunks silently lose 168,137 characters, including 89% of methodology/distributed-work.yaml.
+    context: |
+      `nomic-embed-text` silently truncates input at ~9,750-10,000 characters
+      (~2048 tokens). It returns HTTP 200 with a well-formed 768-dimension
+      vector and no warning. `tillandsias-plan spec-index` emits chunks far
+      larger than that, so their embeddings represent only the first ~10k
+      characters of the chunk.
+
+      Measured on the real corpus (9,909 chunks): 11 chunks (0.11%) exceed the
+      limit and **168,137 characters — 4.6% of the corpus — are never
+      embedded**. The loss concentrates in the most-queried documents:
+      methodology/distributed-work.yaml loses 80,975 of its 90,975 chars;
+      multi-host-development.yaml loses 33,230; litmus-framework.yaml 14,644.
+
+      distributed-work.yaml is the canonical source for worker_agent_protocol,
+      mcp_first_read_path, cycle_batch_triage, order_id_allocation and
+      long_running_packets. A spec_answer query about the worker protocol is
+      searching roughly the first 11% of that file.
+
+      WHY THIS IS THE WORST SHAPE OF FAILURE: nothing reports it. spec-index
+      counts the chunk; /api/embed returns 200 with a valid vector;
+      spec-retrieve cosine-matches against it; spec_answer returns a CITED
+      envelope naming the file. Every layer reports success. The system does not
+      know it is degraded, so it cannot refuse — unlike the
+      confidence=unsupported honesty the project builds elsewhere.
+
+      Detection method (truncation is invisible in the response, so it was
+      established by VECTOR IDENTITY): embedding the full 91,224-char chunk and
+      embedding its 12,000-char prefix produce byte-identical vectors; bisection
+      puts the boundary at 9,750 < B <= 10,000.
+      Evidence: plan/issues/research/spec-index-silently-truncates-large-chunks-2026-08-17.md
+    exit_criteria:
+      - |
+          spec-index emits no chunk larger than the configured embedding
+          context, verified by an executable check that fails non-zero on
+          violation rather than by inspection.
+      - |
+          The bound is CONFIGURATION derived from the embedding model, not a
+          hardcoded constant: 9,750-10,000 chars is nomic-embed-text's 2048-token
+          window expressed in this corpus's character-to-token ratio, and a
+          different TILLANDSIAS_EMBED_MODEL moves it. A conservative default is
+          preferred to a tight one.
+      - |
+          The retrieval-unit consequence is decided explicitly, not by accident:
+          splitting a 90k-char YAML block into ~10 chunks makes spec-retrieve
+          return a SECTION rather than a whole file, which changes what
+          `--k 6` means and therefore interacts with order 548's synthesis
+          step. Record the decision either way.
+      - |
+          A regression guard exists so this cannot silently return: the check
+          runs where the ledger gates run, and its verdict is a pinned grammar
+          line rather than prose.
+    verifiable_closure: |
+      scripts/check-spec-index-chunk-bounds.sh
+        ok:chunk-bounds:<n>-chunks-max-<chars>      (exit 0)
+        violation:oversized-chunks:<count>          (exit non-zero)
+      Runs spec-index, reads back max(.text|length), fails when any chunk exceeds
+      the configured embedding context. Cheap: the chunker takes 5.3s on the full
+      corpus. Falsifiable in the direction that matters — it fails loudly on
+      exactly the condition that is currently silent.
+    events:
+      - type: filed
+        ts: "2026-08-17T09:25:00Z"
+        agent_id: windows-esmeraldinha-opus5-20260817
+        host: windows
+        summary: |
+          Found while re-measuring order 552's re-embed budget on the sanctioned
+          dev-inference endpoint. Not a performance defect — a silent data-loss
+          defect in the RAG index, caught before 552 ships. Performance cost of
+          fixing it is negligible: splitting the 11 offenders adds ~17 chunks to
+          a 9,909-chunk corpus, about 12s of one-time full-rebuild cost out of
+          ~115 min, and nothing measurable on the delta path (re-embed is free
+          on 96% of commits). The only real cost is the retrieval-unit change,
+          which is why that is an explicit exit criterion rather than an
+          implementation detail.

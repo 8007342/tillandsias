@@ -1,0 +1,314 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17, from a worktree fork.
+#
+# 777-amku was ALREADY `completed` when this fork started (event
+# 2026-08-16T22:42:38Z). This fragment does not discover an un-done packet; it
+# re-affirms the same terminal status after closing three gaps the earlier
+# closure left, and it files the remainder it deliberately did not attempt.
+# The status value is unchanged, so the fold sees an idempotent re-assertion.
+status:
+  - packet_id: ensure-toolbox-default-pattern-adoption
+    field: status
+    value: completed
+    ts: "2026-08-17T11:17:01Z"
+    host: linux_mutable
+
+events:
+  - packet_id: ensure-toolbox-default-pattern-adoption
+    event:
+      type: completed
+      ts: "2026-08-17T11:17:01Z"
+      agent_id: linux-macuahuitl-opus5-fork777-20260817t1117z
+      host: linux_mutable
+      summary: >
+        RE-AFFIRMED completed after closing three gaps in the 2026-08-16 closure.
+        GAP 1, RETRIEVABILITY — the canon entry existed at
+        multi_host_development.toolbox_first_scripts and answered a PATH query at
+        confidence=exact, but nothing could reach it in PROSE: `methodology_ask
+        "must scripts route host tools through a toolbox?"` returned
+        confidence=unsupported, so the rule was documentation an agent could only
+        find by already knowing where it was. Added the route
+        (&["toolbox"] -> toolbox_first_scripts.rule) to
+        methodology.rs::CANONICAL_QUESTIONS; the same question now answers exact,
+        citing multi_host_development.toolbox_first_scripts.rule. `toolbox`
+        collides with no other route token, so the deterministic
+        exactly-one-match rule still holds — and the new unit test asserts BOTH
+        halves, including that "may I file an issue about a toolbox?" is still
+        REFUSED as ambiguous. Also added the entry's missing `why`,
+        `what_it_is_not` and `boundary`, which the shape reference
+        (work_shaping_protocol.observed_vs_inferred, 788-mj37) carries and this
+        entry did not.
+        GAP 2, VACUOUS LITMUS — litmus:ensure-toolbox-include-shape asserted
+        SHAPE only: parses, does not rewrite caller options, plus two greps
+        confirming the source text mentions the delegate and the methodology key.
+        None of it touched the properties the directive names, and its
+        "direct execution is an ensure-or-noop that exits 0" step was a TAUTOLOGY
+        on this host — macuahuitl is Fedora Workstation with `toolbox` present
+        but no rpm-ostree, so with-tillandsias-builder.sh returns at its
+        Silverblue guard and an ensure_toolbox.sh that did nothing at all passed
+        every step. New fixture scripts/test-ensure-toolbox-properties.sh drives
+        the REAL include against a hermetic fake `toolbox` + fake `rpm-ostree`
+        with HOME redirected, and asserts five properties each paired with a
+        MUTANT that must fail: P1 creates-and-inits when missing, P2 idempotent
+        (second run issues zero `toolbox create` and zero `dnf`), P3 silent noop
+        off-toolbox (rc=0, both streams zero bytes), P4 a FAILED ensure is loud
+        (nonzero + stderr), P5 delegates rather than duplicating. 10/10.
+        GAP 3, WRONG CANON — both the methodology entry and the include's own
+        header called the idempotence gate "marker-gated". It is not:
+        with-tillandsias-builder.sh gates creation on a `toolbox list` probe and
+        init on a tool-presence probe inside the container, and
+        $HOME/.cache/tillandsias/builder-toolbox-initialized is WRITTEN AND NEVER
+        READ (grep MARKER_FILE finds one assignment and one touch). The error was
+        in the dangerous direction — a marker would certify a half-built toolbox
+        that the probe correctly repairs. Corrected in both places.
+        SWEEP — 2 converted, 3 filed, ~55 left with reasons; see the note event.
+      evidence_refs:
+        - "scripts/test-ensure-toolbox-properties.sh: 10 ok, 0 failed, 0 n/a — PASS 10/10 (5 properties x positive+mutant)"
+        - "NON-VACUITY on the real artifact: inserting one `echo` into scripts/ensure_toolbox.sh turned P3 red (9 ok, 1 failed, rc=1); restored -> 10/10 rc=0"
+        - "NON-VACUITY of the mutation controls themselves: breaking the line a sed targets makes `cmp` fire — 'mutation never-ensures changed nothing', rc=1, naming the drifted expression"
+        - "litmus:ensure-toolbox-include-shape 7/7 STEPS OK (dev-build, pre-build, instant)"
+        - "tillandsias-plan methodology-ask --root . 'must scripts route host tools through a toolbox?' -> confidence=exact, yaml_path=multi_host_development.toolbox_first_scripts.rule"
+        - "tillandsias-plan methodology-ask --root . 'may I file an issue about a toolbox?' -> confidence=unsupported (ambiguity still refused)"
+        - "cargo test -p tillandsias-plan methodology -> 13 passed 0 failed (was 12; the_toolbox_first_rule_is_reachable_in_prose_and_still_refuses_ambiguity is new)"
+        - "MUTATION CONTROL on the route: comment out the CANONICAL_QUESTIONS entry -> the new test FAILS with 'must route to exactly one path', rc=101; restore -> 13 passed rc=0"
+        - "./build.sh --check rc=0 (expression-pinning enforcement passed, added-fragments-parse 1 checked, closure-evidence 1 checked, script-exec-bits 27 checked)"
+        - "scripts/check-bash-dialect.sh -> ok:bash-dialect-clean"
+        - "scripts/check-plan-schema-divergence.sh toolbox tier: yq+ruby hidden from PATH, fake toolbox -> ok:status-vocab-in-sync via `toolbox run --container tillandsias-builder ruby`; control (container unusable) -> blocked:index-load-failed ... no YAML reader on PATH (tried yq, ruby, toolbox ruby), rc=1; baseline host PATH -> zero toolbox calls"
+
+  - packet_id: nix-supported-release-and-crane-migration
+    event:
+      type: note
+      ts: "2026-08-17T11:17:01Z"
+      agent_id: linux-macuahuitl-opus5-fork777-20260817t1117z
+      host: linux_mutable
+      summary: |
+        606-um5s IS SATISFIABLE WITHOUT A HOST DAEMON — measured, not inferred,
+        on macuahuitl 2026-08-17 with nix-daemon.socket INACTIVE (`systemctl
+        is-active nix-daemon.socket` -> inactive, rc=3) and no passwordless sudo:
+
+          scripts/nix-toolbox.sh ensure     -> ok:nix-toolbox:chroot   rc=0
+          scripts/nix-toolbox.sh nix-args   -> --extra-experimental-features
+                                               "nix-command flakes" --store
+                                               $HOME/.local/share/tillandsias/nix-store
+          nix <those args> store ping       -> Store URL: local, Trusted: 1, rc=0
+
+        That retires the 2026-08-16 host-capability blocker note on this packet
+        ("no local nix build can run ... until the operator runs sudo systemctl
+        enable --now nix-daemon.socket"). It does not, by itself, prove the
+        flake BUILDS — only that a daemonless nix lane executes. Whoever claims
+        606-um5s should budget the first `nix build` as the real test.
+
+        CORRECTION TO THE 2026-08-16 GUIDANCE ON THIS PACKET, which said "Use
+        scripts/nix-toolbox.sh run -- nix build ... for this packet's
+        verification lane". That advice does not work and was not tested:
+
+          $ scripts/nix-toolbox.sh run -- nix store ping
+          Store URL: daemon
+          error: cannot connect to socket at
+                 '/nix/var/nix/daemon-socket/socket': Connection refused
+          rc=1
+
+        `run` does not inject the rung's flags — `daemon|chroot) exec "$@"` —
+        so on the chroot rung it addresses the dead daemon, which is exactly the
+        failure the rung exists to avoid. Use `nix-args` instead, as
+        check-nix-deps-stability.sh, nix-deps-drv-paths.sh and
+        build-guest-binaries.sh already do. Filed as 799-nx4r.
+
+        CONVERTED THIS CYCLE, and it is this packet's own lane:
+        scripts/release-preflight-local.sh --nix-probe was the last nix consumer
+        still demanding a host `nix` and, implicitly, a live daemon (bare `nix
+        build`, no --store). It now takes `ensure` + `nix-args` from
+        scripts/nix-toolbox.sh, prints the rung it landed on, and refuses loudly
+        on the toolbox rung rather than running a nix that is not there.
+
+  - packet_id: ensure-toolbox-default-pattern-adoption
+    event:
+      type: note
+      ts: "2026-08-17T11:17:01Z"
+      agent_id: linux-macuahuitl-opus5-fork777-20260817t1117z
+      host: linux_mutable
+      summary: |
+        ADOPTION SWEEP — full inventory of scripts/ (294 files) plus the 14
+        top-level *.sh. Counts: 2 converted, 3 filed, ~55 candidate scripts
+        deliberately left. OBSERVED unless marked otherwise.
+
+        CONVERTED (2):
+          1. scripts/release-preflight-local.sh --nix-probe -> nix-toolbox.sh
+             ensure/nix-args. Rationale: three sibling consumers already do
+             exactly this; it is the one clean host-daemon dependency the
+             operator named. Verified: ensure -> ok:nix-toolbox:chroot on a
+             daemonless host.
+          2. scripts/check-plan-schema-divergence.sh — added a THIRD reader tier
+             (`toolbox run --container tillandsias-builder ruby`) after the
+             existing yq and host-ruby tiers. Strictly additive: reached only
+             where the script previously hard-refused, and `ruby` is in the
+             tillandsias-builder init set so the tier can actually work. It does
+             NOT include ensure_toolbox.sh — the file is #!/bin/sh (no
+             BASH_SOURCE) and a CHECK has no business creating a toolbox; it
+             uses one that exists or refuses. Verified with a PATH that hides yq
+             and ruby and a recording fake toolbox, plus a control where the
+             container is unusable (loud refusal) and a baseline on the real
+             PATH (zero toolbox calls — no behaviour change where the host has
+             the tool).
+
+        LEFT, WITH REASONS — the largest group is blocked on one fact:
+
+          * ~24 bare-`jq` scripts, ~22 bare-`cargo`, 4 bare-`openssl`, 2 `rg`.
+            THE TOOLBOX CANNOT CARRY THESE TODAY. with-tillandsias-builder.sh's
+            init installs gcc pkg-config file cmake make openssl-devel
+            systemd-devel ruby perl-FindBin procps-ng findutils diffutils, plus
+            rustup — no jq, no yq, no ripgrep, no openssl CLI. Writing
+            `toolbox run --container tillandsias-builder jq` today produces a
+            command-not-found inside the container, i.e. it converts a clear
+            host error into a confusing container one. The init set must grow
+            FIRST. Filed as 799-tb7q. (cargo is a partial exception — it IS in
+            the toolbox — but the bare-cargo callers mostly want a built
+            tillandsias-plan/tillandsias-policy, which is build.sh's job, and
+            build.sh already re-execs through the wrapper.)
+          * scripts/check-nix-deps-stability.sh and scripts/select-work-batch.sh
+            judge nix capability by `command -v nix` on the HOST, so a
+            toolbox-capable host is declared nix-incapable and has nix-tagged
+            work subtracted from its pool. Correct fix is to ask nix-toolbox.sh,
+            but doing so inside a --check gate can trigger an image pull, which
+            is a cost change to the pre-push path, not a refactor. Filed as
+            799-tb7q's second criterion.
+          * scripts/build-guest-binaries.sh REFUSES the nix toolbox rung on
+            purpose (container store paths are not the checkout's). Left as
+            correct.
+          * podman / toolbox themselves, wsl.exe, powershell.exe, osascript,
+            codesign, sips, iconutil, create-dmg, zig: host-OS-bound or the
+            substrate itself. Routing them through a toolbox is meaningless.
+          * The many `command -v <tool> || skip` scripts that DEGRADE rather
+            than fail: converting a skip into a toolbox attempt changes gate
+            semantics and cost. Not a mechanical sweep; belongs with 799-tb7q.
+
+        INFERRED, not measured, and flagged as such: that adding jq/yq/ripgrep
+        to the toolbox init is cheap. It is one more dnf line, but it also
+        lengthens first-run init on a pristine Silverblue host, and nobody has
+        timed that. Whoever takes 799-tb7q should measure the delta before and
+        after rather than inheriting this sentence as a fact.
+
+        ALSO LEFT DELIBERATELY: no repo-wide mechanical insertion of the include.
+        The methodology entry now says in `what_it_is_not` that a script whose
+        entire tool set is the POSIX baseline has nothing to ensure, and adding
+        the include there buys a subprocess and no property. A sweep that put
+        the line at the top of all 294 scripts would satisfy the letter of the
+        directive and make every check slower for nothing.
+
+packets:
+  - packet_id: builder-toolbox-init-set-too-small-for-the-dispatch-pattern
+    order: 799-tb7q
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: enhancement
+    title: "the toolbox-first dispatch pattern is unusable for jq/yq/ripgrep/openssl because the tillandsias-builder init set does not carry them — grow the init set, then sweep the ~50 scripts that currently assume the host has the tool"
+    deliverable: "with-tillandsias-builder.sh's init installs the tools the sweep actually needs (at minimum jq, yq, ripgrep, openssl CLI), with the first-run init cost measured before and after; then the bare-jq / bare-rg / bare-openssl callers take the documented host-preferred-toolbox-fallback dispatch; and the two nix CAPABILITY probes stop judging by host binary alone"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [toolbox, portability, scripts, idempotence]
+    estimated_hours: 6
+    context: |
+      OBSERVED (777-amku sweep, macuahuitl 2026-08-17). The methodology entry
+      multi_host_development.toolbox_first_scripts.tool_dispatch_pattern says:
+
+        command -v <tool> >/dev/null && <tool> … ||
+        toolbox run --container tillandsias-builder <tool> …
+
+      That pattern is only valid for tools the toolbox HAS. Read the init block
+      in scripts/with-tillandsias-builder.sh: it installs gcc pkg-config file
+      cmake make openssl-devel systemd-devel ruby perl-FindBin procps-ng
+      findutils diffutils, then rustup and the two musl targets. openssl-devel
+      is the headers, not the CLI. There is no jq, no yq, no ripgrep.
+
+      So the ~50 scripts the sweep identified CANNOT be converted yet:
+
+        * bare `jq`, no guard, ~24 scripts — check-forge-service-health.sh,
+          cycle-metrics.sh, generate-dashboard.sh, generate-evidence-bundle.sh,
+          manage-cache.sh, query-traces.sh, select-work-batch.sh, local-ci.sh,
+          update-convergence-dashboard.sh and the test-* family.
+        * hard-fail-with-a-host-install-instruction on jq —
+          scripts/tray-diagnose.sh:96 and scripts/diagnose-macos-provision.sh:82
+          both say `brew install jq` and exit 1. These are exactly the shape the
+          directive calls mis-shaped.
+        * `rg` — check-cheatsheet-refs.sh:45 exits 2 with "ripgrep (rg) is
+          required but not on PATH"; test-forge-config-trust-cross-platform-
+          parity.sh:19 calls it bare.
+        * bare `openssl` CLI — build.sh:508, diagnose-proxy.sh:35,
+          run-forge-project.sh:78, orchestrate-enclave.sh:72.
+
+      Writing the dispatch line for any of them TODAY makes things worse: the
+      fallback arm runs and the container reports command-not-found, which is a
+      more confusing failure than the host one it replaced. The init set is the
+      prerequisite, which is why this is a packet and not a sweep.
+
+      SECOND CRITERION, same root. scripts/check-nix-deps-stability.sh:77
+      (`command -v nix … || skip:nix-deps-stability:no-nix`) and
+      scripts/select-work-batch.sh:348 (TOOL_CAP_TAGS="nix", host `command -v`)
+      both decide "is this host nix-capable" by asking whether the HOST has the
+      binary. scripts/nix-toolbox.sh answers that question properly (daemon ->
+      chroot -> toolbox). A toolbox-capable host is currently declared
+      nix-incapable and has nix-tagged work removed from its pool. The reason
+      this was not converted in 777-amku: asking nix-toolbox.sh inside a
+      pre-push --check can trigger a `podman pull` of fedora-toolbox, which is a
+      change to the gate's COST, not a refactor, and needs a decision about
+      whether a check may create infrastructure.
+
+      INFERRED, test it first: that growing the init set is cheap. It is one dnf
+      line, but it also lengthens first-run init on a pristine Silverblue host
+      and nobody has timed it. Measure the create+init wall time before and
+      after; if it is material, split the init into a base set and an on-demand
+      set rather than paying it on every fresh host.
+
+  - packet_id: nix-toolbox-run-subcommand-is-broken-on-two-of-its-three-rungs
+    order: 799-nx4r
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "scripts/nix-toolbox.sh `run` addresses the dead daemon on the chroot rung and cannot execute at all on the toolbox rung (`exec` of a shell function) — the subcommand advertised as the toolbox-nix entry point works only where it is least needed"
+    deliverable: "`nix-toolbox.sh run -- <cmd>` works on every rung `ensure` can return: chroot injects --store, toolbox actually enters the container; plus a fixture case per rung so a rung that cannot execute is a red, not a discovery"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [nix, toolbox, fail-loud]
+    estimated_hours: 3
+    context: |
+      OBSERVED, macuahuitl 2026-08-17, on a host at rung=chroot (host nix,
+      nix-daemon.socket inactive):
+
+        $ scripts/nix-toolbox.sh ensure
+        ok:nix-toolbox:chroot
+        $ scripts/nix-toolbox.sh run -- nix store ping
+        Store URL: daemon
+        error: cannot connect to socket at
+               '/nix/var/nix/daemon-socket/socket': Connection refused
+        rc=1
+
+      The dispatch is `daemon|chroot) exec "$@" ;;` — `run` execs the command
+      verbatim and never injects the rung's flags, so on the chroot rung it
+      addresses exactly the daemon the rung exists to avoid. `nix-args` returns
+      the right flags; `run` ignores them.
+
+      The toolbox arm is worse: `toolbox) exec _toolbox run -c "$TOOLBOX_NAME"
+      "$@" ;;` where `_toolbox` is a shell FUNCTION defined next to `_podman`.
+      `exec` replaces the process with a program and cannot see functions:
+
+        $ bash -c '_f(){ echo hi; }; exec _f'
+        bash: line 1: exec: _f: not found      (rc=127)
+
+      So the toolbox rung of `run` has never executed. Consistent with the
+      evidence: all three real consumers use `nix-args`, and
+      scripts/test-nix-toolbox.sh only covers daemon and chroot.
+
+      WHY IT MATTERS BEYOND TIDINESS: 606-um5s carries a 2026-08-16 note telling
+      the next agent to "use scripts/nix-toolbox.sh run -- nix build ... for
+      this packet's verification lane". Following that instruction produces the
+      connection-refused above and looks exactly like "this host still needs the
+      nix-daemon" — the conclusion the operator has already rejected twice. A
+      broken affordance that reproduces a withdrawn blocker is expensive.
+
+      NEGATIVE CONTROL THE FIX SHOULD CARRY: a fixture case that forces the
+      toolbox rung and asserts the command actually ran INSIDE the container
+      (something only reachable there), not merely that the wrapper exited 0.
+      The current failure mode is exit 127 from `exec`, which a `|| true`
+      anywhere upstream would hide.

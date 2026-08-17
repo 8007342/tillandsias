@@ -1,0 +1,242 @@
+packets:
+  # ------------------------------------------------------------------ 1
+  - packet_id: vsock-listener-is-spawned-last-behind-blocking-startup-tasks
+    order: 798-q4m9
+    status: ready
+    kind: bug
+    pickup_role: any
+    priority: p2
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    depends_on: []
+    deliverable: |
+      The vsock listener task is spawned BEFORE the startup background tasks,
+      and no genuinely blocking startup work runs on a tokio worker thread.
+    capability_tags:
+      - rust
+      - vsock
+      - tokio
+      - all-platforms
+      - architecture
+    tags:
+      - readiness
+      - v0.5
+      - audit-2026-08-17
+    title: |
+      The bind is first in program order but its TASK is spawned last, behind five background tasks — two of which run blocking code on tokio worker threads, so a 1-vCPU guest can still delay the listener.
+    context: |
+      This is the surviving, REWRITTEN half of 795-jeym, whose stated mechanism
+      (daemon does provisioning work before binding) was refuted by measurement
+      on 2026-08-17 — see
+      plan/issues/guest-vsock-bind-ordering-refuted-2026-08-17.md.
+
+      The bind IS first in program order: it is the only `.await` between the
+      start of the vsock task and `run_vsock_listener`. But the vsock task is
+      the LAST thing `run_headless_async` spawns (main.rs:13750), behind five
+      tasks queued at main.rs:13697-13713. Two of those are sync functions
+      wrapped in `tokio::spawn(async move { f() })` rather than
+      `spawn_blocking`, so they occupy WORKER threads:
+
+        - run_disk_usage_check (main.rs:13713) — shells out to
+          `bash manage-cache.sh` via a blocking `Command::output()`, and on a
+          first boot materializes every embedded runtime asset to disk through
+          resolve_runtime_asset_root -> ensure_runtime_assets.
+        - run_trace_budget_enforcement (main.rs:13709) — reads the whole
+          tillandsias.log and serde_json-parses every line in a loop with no
+          yield points.
+
+      On a multi-vCPU host this is invisible: four cold boots measured the bind
+      at 61-255 ms. On a 1-vCPU guest the single worker drains the injection
+      queue in order and both sit ahead of the bind. Not observed firing; found
+      by reading the scheduler, and filed rather than assumed away.
+
+      SECOND, SEPARATE MEASUREMENT ITEM in the same area: the daemon unit
+      declares Requires=/After=tillandsias-headless-fetch.service with
+      TimeoutStartSec=300s. On the download variant of fetch-headless.sh that
+      is up to ~135s of retry overhead plus transfer BEFORE the binding process
+      is launched. Any readiness clock started at `systemctl enable --now`
+      rather than at daemon-start attributes that to bind latency.
+    exit_criteria:
+      - |
+          `maybe_spawn_vsock_listener` is called before the five background
+          spawns in `run_headless_async`, so the vsock task is the FIRST thing
+          on the runtime's injection queue.
+      - |
+          `run_disk_usage_check` and `run_trace_budget_enforcement` no longer
+          occupy tokio worker threads (moved to `spawn_blocking`, or made
+          genuinely async with yield points). Named individually in the commit.
+      - |
+          MEASURED, not assumed: bind latency on a guest constrained to ONE
+          vCPU, before and after, on a cold boot. A pass on a multi-vCPU host
+          is not evidence for this packet — that is the exact "verified where
+          it was written" shape 757-4hdt filed against itself.
+      - |
+          The readiness clock's origin is stated explicitly: daemon-start, not
+          `systemctl enable --now`. If the fetch gate can contribute, say so
+          with a number.
+    verifiable_closure: |
+      A test asserting `maybe_spawn_vsock_listener` precedes the background
+      spawns in source order, plus a recorded before/after bind-latency
+      measurement from a 1-vCPU cold boot.
+    notes: |
+      Do NOT "fix" this by deleting the background tasks. They are wanted; they
+      are merely mis-scheduled. The change is ordering plus `spawn_blocking`.
+    events:
+      - type: filed
+        ts: "2026-08-17T09:55:00Z"
+        agent_id: windows-yolanda-opus5-20260817T0930Z
+        host: windows
+        summary: |
+          Split out of 795-jeym after its stated mechanism was refuted by
+          measurement. Carries the LIVE intent (the listener should be
+          reachable as early as possible) under the mechanism that is actually
+          real (task spawn order + blocking work on worker threads), per
+          philosophy.obsolete_mechanism_live_intent -> mechanism_dead_intent_live.
+
+  # ------------------------------------------------------------------ 2
+  - packet_id: readiness-deadline-900s-is-3500x-the-measured-bind
+    order: 798-vxj5
+    status: blocked
+    kind: enhancement
+    pickup_role: windows
+    priority: p2
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    depends_on:
+      - readiness-probe-depends-on-a-module-load-that-races-it
+    deliverable: |
+      A readiness deadline proportional to the measured bind, and the retirement
+      of `--no-block` once nothing needs to outlive a long window.
+    capability_tags:
+      - windows
+      - wsl
+      - systemd
+    tags:
+      - readiness
+      - v0.5
+      - audit-2026-08-17
+    title: |
+      The 900s readiness deadline is ~3500x the measured worst-case bind (255ms), but it cannot be shortened until the vsock_loopback race it actually covers is closed.
+    context: |
+      Measured over four cold boots on 2026-08-17: the listener answers at
+      61ms, 78ms, 90ms and 255ms after daemon start. The 900s deadline was set
+      by 757-4hdt on the belief that a cold boot needed minutes to bind; that
+      belief is refuted (see
+      plan/issues/guest-vsock-bind-ordering-refuted-2026-08-17.md).
+
+      It is nonetheless NOT free to shorten, which is why this is a separate,
+      BLOCKED packet rather than a line in the refutation. The window is doing
+      real work: it covers `vsock_loopback` being loaded late relative to the
+      probe. Shorten it before that dependency is deterministic and a slow PASS
+      becomes a fast INDETERMINATE — a worse signal, arrived at faster.
+
+      `--no-block` on the assertion's start retires with the deadline, not
+      before: it exists so provisioning does not wait on a long window.
+    exit_criteria:
+      - |
+          Deadline reduced to a value justified by the measured bind plus the
+          (now-deterministic) module load, with the number's derivation stated.
+      - |
+          `--no-block` either removed with a stated reason, or kept with a
+          stated reason. Not left unexamined.
+      - |
+          Cold-boot verification at the new deadline, three runs, identical
+          verdicts. One PASS is not evidence when the recorded failure mode is
+          intermittent.
+    verifiable_closure: |
+      The existing `litmus`/unit assertions on the generated ready unit, plus
+      three cold-boot runs recorded with identical verdicts at the new value.
+    events:
+      - type: filed
+        ts: "2026-08-17T09:55:00Z"
+        agent_id: windows-yolanda-opus5-20260817T0930Z
+        host: windows
+        summary: |
+          Split out of 795-jeym. Deliberately filed `blocked` on 798-emje
+          rather than `ready`: this is the one of the six exceptions that is
+          genuinely reducible, and sequencing it first would trade a slow pass
+          for a fast INDETERMINATE.
+
+  # ------------------------------------------------------------------ 3
+  - packet_id: readiness-probe-depends-on-a-module-load-that-races-it
+    order: 798-emje
+    status: ready
+    kind: bug
+    pickup_role: windows
+    priority: p1
+    desired_release: v0.5
+    release_target: architecture-audit-epic
+    depends_on: []
+    deliverable: |
+      The readiness probe's `vsock_loopback` dependency is satisfied
+      deterministically before the probe runs, so its verdict stops depending
+      on module-load timing.
+    capability_tags:
+      - windows
+      - wsl
+      - systemd
+      - release-blocker
+    tags:
+      - readiness
+      - nondeterminism
+      - v0.5
+      - audit-2026-08-17
+    title: |
+      THIS is the cold-boot nondeterminism: the readiness probe connects to CID 1, which needs vsock_loopback, and the module load races the probe — the one variable that differed between 757-4hdt's FAIL and PASS on identical artifact+host.
+    context: |
+      757-4hdt recorded one FAIL and one PASS of the SAME published tag
+      v0.4.260815.1 on the SAME host and concluded the cold-boot readiness path
+      is nondeterministic. Its own two runs name the variable that differed:
+
+        FAIL run: `[tillandsias] preflight vsock_loopback missing`
+        PASS run: `[tillandsias] preflight vsock_loopback loaded`
+
+      The probe connects to CID 1 (VMADDR_CID_LOCAL), which REQUIRES that
+      module. The bind does not — measured at 61-255 ms across four cold boots
+      and never once late (see
+      plan/issues/guest-vsock-bind-ordering-refuted-2026-08-17.md). So the
+      nondeterminism lives in the module load, not in the daemon, and 795-jeym
+      was filed against the wrong half.
+
+      Today the module arrives by three independent, unordered routes:
+      /etc/modules-load.d/tillandsias-vsock.conf via systemd-modules-load, the
+      provisioning path's own modprobe, and the probe's best-effort modprobe.
+      None of them is ORDERED with respect to the probe, which is what makes
+      the outcome timing-dependent.
+    exit_criteria:
+      - |
+          The probe cannot run before the module is loaded — e.g. the ready
+          unit gains `After=systemd-modules-load.service` and/or an
+          `ExecStartPre=/usr/sbin/modprobe vsock_loopback`. The best-effort
+          modprobe inside the script STAYS as a backstop; it is load-bearing
+          and removing it recreates 757-4hdt's false alarm.
+      - |
+          NEGATIVE CONTROL preserved: with the module genuinely unavailable the
+          probe still reports INDETERMINATE (exit 2), and with the module
+          present but nothing bound it still reports NOT-BOUND (exit 1). All
+          three states re-falsified by execution, as 757-4hdt did.
+      - |
+          Three cold boots on a guest where the module starts UNLOADED produce
+          three identical verdicts.
+    verifiable_closure: |
+      `litmus:guest-vsock-loopback-ordered-before-readiness-probe` — asserts the
+      generated ready unit orders after the module load, plus the three-state
+      execution matrix (bound 0 / NOT-BOUND 1 / INDETERMINATE 2) re-run on a
+      guest booted with the module unloaded.
+    notes: |
+      Do NOT close this by deleting the INDETERMINATE verdict. The third state
+      is real — "this probe cannot observe the property from here" is not the
+      same fact as "nothing is listening", and collapsing it in either
+      direction reproduces a defect that has already shipped once each way
+      (735-ewzp: always passes; 757-4hdt state A: false alarm on a healthy
+      system).
+    events:
+      - type: filed
+        ts: "2026-08-17T09:55:00Z"
+        agent_id: windows-yolanda-opus5-20260817T0930Z
+        host: windows
+        summary: |
+          Split out of 795-jeym as the packet that carries the ACTUAL cold-boot
+          nondeterminism. Priority p1 and release-blocker tag inherited from
+          795-jeym, because this — not the bind ordering — is what the held
+          release cut is waiting on.

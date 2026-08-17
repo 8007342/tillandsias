@@ -37,6 +37,21 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: force-allows"
 
+  # Order 781-6gys criterion 2. The smoke path is what every rate-limited lane
+  # runs, yet it could not be exercised on demand: mode came only from the
+  # limiter, so testing smoke meant recording a full-meta run that never
+  # happened. These two steps pin the fix AND its safety asymmetry — the
+  # override may only make a run cheaper, and it must not consume the budget.
+  - step: "TILLANDSIAS_E2E_FORCE_MODE=smoke de-escalates without consuming the full-meta budget"
+    command: "export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); m1=$(scripts/litmus-opencode-e2e-launch.sh --print-mode | tail -1); m2=$(TILLANDSIAS_E2E_FORCE_MODE=smoke scripts/litmus-opencode-e2e-launch.sh --print-mode | tail -1); after=$(scripts/forge-e2e-rate-limit.sh check full-meta); rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; [ \"$m1\" = mode=full ] && [ \"$m2\" = mode=smoke ] && [ \"$after\" = allow:full-meta ] && echo 'ok: force-mode-deescalates' || { echo \"FAIL: m1=$m1 m2=$m2 after=$after\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: force-mode-deescalates"
+
+  - step: "TILLANDSIAS_E2E_FORCE_MODE refuses escalation loud (exit 2), never silently ignores"
+    command: "export TILLANDSIAS_E2E_RATE_DIR=$(mktemp -d); out=$(TILLANDSIAS_E2E_FORCE_MODE=full scripts/litmus-opencode-e2e-launch.sh --print-mode 2>&1); rc=$?; out2=$(TILLANDSIAS_E2E_FORCE_MODE=bogus scripts/litmus-opencode-e2e-launch.sh --print-mode 2>&1); rc2=$?; rm -rf \"$TILLANDSIAS_E2E_RATE_DIR\"; echo \"$out\" | grep -q 'FAIL: TILLANDSIAS_E2E_FORCE_MODE' && [ \"$rc\" = 2 ] && [ \"$rc2\" = 2 ] && echo 'ok: force-mode-refuses-escalation' || { echo \"FAIL: rc=$rc rc2=$rc2 out=$out out2=$out2\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: force-mode-refuses-escalation"
+
   - step: "bad usage fails loud with exit 2"
     command: "out=$(scripts/forge-e2e-rate-limit.sh check 'BAD CLASS' 2>&1); rc=$?; echo \"$out\" | grep -q '^FAIL: usage' && [ \"$rc\" = 2 ] && echo 'ok: usage-grammar' || { echo \"FAIL: rc=$rc out=$out\"; exit 1; }"
     timeout_ms: 5000

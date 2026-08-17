@@ -1778,14 +1778,47 @@ main() {
         # owning spec so the user can run the intended suite. The failure and
         # its non-zero exit are unchanged: an unmatched explicit filter must
         # still fail (642 semantics).
+        # Order 764-8m5j. A test id typed WITHOUT its litmus: prefix is the same
+        # mistake and matched zero tests just as silently — the hint simply did
+        # not cover it, because the prefix test above is what gated it. Observed
+        # 2026-08-17: `run-litmus-test.sh fake-podman-direct-invocation-safety`
+        # answered "no litmus tests matched filter" with no hint, and the spec
+        # (litmus-framework) had to be found by grepping the corpus by hand.
+        #
+        # The packet's other option — ACCEPTING a test id as a filter and running
+        # it — is deliberately not taken: order 300/642 requires an explicit
+        # filter that matches zero tests to fail loud, and litmus:litmus-name-
+        # filter-hint-shape pins that. Making the refusal more useful is additive;
+        # making it succeed would delete a safety contract.
+        local -a name_candidates=()
         if [[ "$FILTER_SPEC" == litmus:* || "$FILTER_SPEC" == litmus-* ]]; then
-            local name_file owner_spec
-            name_file="$(grep -rlF "name: ${FILTER_SPEC}" "${LITMUS_TESTS_DIR}" 2>/dev/null | head -n 1)"
-            if [[ -n "$name_file" ]]; then
-                owner_spec="$(grep -m1 -F 'spec: ' "$name_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
-                if [[ -n "$owner_spec" ]]; then
-                    log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
+            name_candidates+=("$FILTER_SPEC")
+        else
+            name_candidates+=("litmus:${FILTER_SPEC}")
+        fi
+
+        local candidate name_file owner_spec resolved_file resolved_name
+        resolved_file=""
+        for candidate in "${name_candidates[@]}"; do
+            while IFS= read -r name_file; do
+                [[ -n "$name_file" ]] || continue
+                # grep -F "name: x" also matches "name: x-longer", so confirm the
+                # file's declared name is EXACTLY the candidate before hinting.
+                # A hint naming the wrong spec is worse than none.
+                resolved_name="$(grep -m1 -E '^name:[[:space:]]*' "$name_file" 2>/dev/null \
+                    | sed -E 's/^name:[[:space:]]*//; s/[[:space:]]*$//')"
+                if [[ "$resolved_name" == "$candidate" ]]; then
+                    resolved_file="$name_file"
+                    break
                 fi
+            done < <(grep -rlF "name: ${candidate}" "${LITMUS_TESTS_DIR}" 2>/dev/null)
+            [[ -n "$resolved_file" ]] && break
+        done
+
+        if [[ -n "$resolved_file" ]]; then
+            owner_spec="$(grep -m1 -F 'spec: ' "$resolved_file" 2>/dev/null | sed -E 's/^spec:[[:space:]]*//')"
+            if [[ -n "$owner_spec" ]]; then
+                log_warn "hint: '${FILTER_SPEC}' is a test name; run its spec: scripts/run-litmus-test.sh ${owner_spec}"
             fi
         fi
         exit 1

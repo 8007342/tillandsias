@@ -11118,6 +11118,12 @@ plan_index:
         - "a verifiable check exercises headless-driven podman under the shipped unit constraints (litmus or e2e assertion)"
       events:
         - type: progress
+          ts: "2026-08-17T09:26:28Z"
+          agent_id: "macos-tlatoanis-macbook-air-fable5-20260817t0823z"
+          host: macos
+          summary: |
+            CRITERION 1 DRAFTED — design record at plan/issues/headless-least-privilege-split-design-2026-08-17.md, DRAFT pending The Tlatoani signature (it moves a trust boundary, so per ambitious_milestone_reduction it is a proposed decision rather than work to start). THE FINDING THAT CONSTRAINS EVERY DESIGN, from order 308s own commit: a cap-stripped uid-0 podman SELECTS ROOTLESS MODE and wedges every ensure. Podman inspects its own capability state and switches behaviour, so you cannot confine the process that forks podman at all — the split is not one option among several, it is the only shape that can work. MEASURED CONSTRAINTS: podman is reached by FORKING THE CLI, not the API (47 Command::new/podman_cmd_sync sites in headless main.rs alone, plus the podman crate); the network-facing half is ALSO a podman-forking half (pty_handler builds Command::new(argv[0]) per PtyOpen with an allowlist admitting podman exec), so the two roles are entangled in one code path rather than merely one process; the listener needs NO privilege of its own (vsock port 42420 is above 1024, so not even CAP_NET_BIND_SERVICE — the one capability 308s unit kept, and nothing needed it). RECOMMENDED Option A, confined listener plus unconfined orchestrator over a 0600 unix socket: the wire parser — the only network-facing attack surface — becomes fully confined, and the argv allowlist becomes a TRUST BOUNDARY rather than an internal check, since today the checker and the forker are the same process. Cost stated honestly: a new IPC protocol, PTY fd-passing over SCM_RIGHTS (the fiddliest part), two units, and a new orchestrator-down-listener-up failure mode needing a loud defined behaviour. REJECTED Option B, podman API socket delegation, for two independent reasons: ~50 call sites would become REST calls, and more importantly the podman socket is NOT a reduced authority — anything that can talk to it can create privileged containers with host mounts, so client rights there is approximately root and the confinement would look real in the unit file while buying very little. PROPOSED CLOSURE for criterion 3: a litmus that exercises a headless-driven podman ensure under the SHIPPED unit text (read from vz.rs, not hand-written in the test — 308 was precisely a shipped-vs-tested divergence), with a negative control that restores the 308 directives and must FAIL.
+        - type: progress
           ts: "2026-08-16T19:51:09Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
           host: linux-immutable
@@ -55646,6 +55652,68 @@ plan_index:
             If the cap itself is resized for slow-inference/first-build hosts, the resize is justified against the operator's token-budget directive (2026-07-11), not silently inflated.
 
       events:
+        - type: progress
+          ts: "2026-08-17T09:06:00Z"
+          agent_id: "windows-yolanda-fable5-mo-cycle10-20260817T0821Z"
+          host: windows
+          summary: |
+            CRITERION 2 CLOSED with live evidence. Two consecutive sanctioned-harness runs
+            (scripts/litmus-opencode-e2e-launch.sh, SMOKE mode) on the warm windows stack,
+            both green, against the UNCHANGED 600s cap:
+
+            - Lane 1: START 2026-08-17T08:55:53Z END 08:57:13Z = 80s wall.
+              MO-SMOKE: PASS / FORGE_EXIT=0 / HARNESS_RC=0.
+              WARM RESTORE: the cache dir cargo/prebuilt-plan was still stamped
+              2026-08-16T23:50Z throughout the lane while the installed expert appeared at
+              08:56 — a restore publishes nothing, so unchanged-cache + fresh-install is
+              the restore signature.
+            - Lane 2: START 2026-08-17T08:58:26Z END 09:03:56Z = 330s wall.
+              MO-SMOKE: PASS / FORGE_EXIT=0 / HARNESS_RC=0.
+              Cache-key MISS (the enclave mirror had caught up to a9037ac28, which touches
+              crates/tillandsias-plan): rebuilt `Finished release profile [optimized]
+              target(s) in 28.68s` and republished ccc55a83... -> 59cdba15...
+            - Literal warm-path line, from a supplementary --debug lane at 09:04Z once
+              lane 2 had published the current key:
+              [lifecycle] experts | ready (cache-volume): restored
+              /home/forge/.local/bin/tillandsias-plan from
+              /home/forge/.cache/tillandsias-project/cargo/prebuilt-plan/tillandsias-plan
+              (src=59cdba15e62e) - no cargo
+
+            Compare the filing baseline: two FORGE_EXIT=124 runs pinned at the 600s cap.
+            80s and 330s. Criterion 3 respected — the cap was NOT resized.
+
+            NO IMAGE REBUILD WAS NEEDED, and the packet's own remaining-work note was
+            wrong about why. The forge image's lib-common.sh does not come from a repo
+            checkout: it comes from the runtime assets EMBEDDED IN the guest
+            tillandsias-headless binary, extracted to
+            /root/.local/share/tillandsias/runtime/0.4.260815.1/. The hot-swapped guest
+            binary already carried criterion 1, so the image built 2026-08-16T23:47:18Z
+            (localhost/tillandsias-forge:v0.4.260815.1) already bakes it — verified
+            byte-identical: baked lib-common.sh sha256 head 56c52c6cdd602f7d ==
+            extracted-asset sha256 head 56c52c6cdd602f7d, prebuilt-plan hits=2. The stale
+            /root/src/tillandsias copy (prebuilt-plan hits=0) is the launch-side project
+            path and is NOT an image input, which is why it misleads.
+
+            ENABLER, and a real defect fixed in this slice: the smoke path could not be
+            reached on demand. Mode came solely from the rate limiter, so deliberately
+            exercising smoke — the path THIS criterion demands evidence for, and the path
+            every rate-limited lane takes — required recording a full-meta run that never
+            happened, i.e. falsifying the budget ledger the 2026-07-11 directive exists to
+            protect. scripts/litmus-opencode-e2e-launch.sh now honours
+            TILLANDSIAS_E2E_FORCE_MODE=smoke as DE-ESCALATION ONLY (any other value is
+            refused with exit 2, so it can never evade the budget) plus a --print-mode
+            resolver. Pinned by two new behavioural steps in
+            litmus:forge-e2e-rate-limit-shape (de-escalates without consuming the budget;
+            refuses escalation loud) — suite 10/10 PASS.
+
+            RESIDUALS FILED, not absorbed: 797-5sqs (the warm key is invalidated by any
+            plan-crate/Cargo.lock commit, so a miss is the steady state after any such
+            commit; lane 2 survived its miss only because the cargo target volume was warm
+            — a miss with a COLD target should be expected to return to the cap, and that
+            is the cliff still to measure) and 797-thbw (the ready (cache-volume) line is
+            TILLANDSIAS_DEBUG-gated, so the one diagnostic the forge startup context names
+            is empty in every automated lane; this closure's literal line needed a
+            --debug lane to exist at all).
         - type: filed
           ts: "2026-08-16T22:10:00Z"
           agent_id: windows-yolanda-fable5-20260816T2130Z-mirror-fix

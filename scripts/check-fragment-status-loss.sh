@@ -284,8 +284,40 @@ if [ -n "$violations" ]; then
     n="$(printf '%s' "$violations" | grep -c .)"
     echo "violation:fragment-status-loss:${n}"
     printf '%s' "$violations" | sed 's/^/  /'
-    echo "  CAUSE: \`packets:\` is a G-Set — re-declaring a packet does NOT change its status."
-    echo "  REMEDY: write a NEW fragment with a \`status:\` entry (packet_id/field/value/ts/host)."
+    # Order 696-6byc, exit criteria 2 and 4. This used to print ONE cause and
+    # ONE remedy, both describing the declared-under-`packets:` class, whichever
+    # class had actually fired. An author whose terminal EVENT disagreed with a
+    # non-terminal status was told to "write a NEW fragment with a status:
+    # entry" — which would push the packet to completed instead of resolving the
+    # contradiction, and forces retracting an immutable fragment. A remedy for
+    # the wrong class is worse than no remedy: it is confidently actionable and
+    # wrong. Both classes can fire in one run, so these are independent tests,
+    # not an if/else.
+    #
+    # Matched with `case` on the accumulated text rather than `printf | grep -q`.
+    # Measured, because the obvious claim here is overstated: with a SHORT
+    # `$violations` the grep form is fine — printf finishes writing before
+    # grep -q exits, so no SIGPIPE, and the condition is correctly true (checked
+    # under `set -uo pipefail`, which line 33 sets). The hazard appears only once
+    # the producer outruns the pipe buffer: `yes ... | grep -qF` under the same
+    # options returns 141, i.e. FAILURE exactly when the pattern MATCHED
+    # (795-imz3). So this is not "the grep version is broken today" — it is a
+    # size-dependent failure that would arrive silently on the first run with a
+    # few hundred violations, in the code path whose whole job is to explain a
+    # failure. `case` is a builtin, needs no subshell or pipe, and cannot have
+    # the bug at any size.
+    case "$violations" in
+        *"in a fragment, folds as"*)
+            echo "  CAUSE (declared): \`packets:\` is a G-Set — re-declaring a packet does NOT change its status."
+            echo "  REMEDY (declared): write a NEW fragment with a \`status:\` entry (packet_id/field/value/ts/host)."
+            ;;
+    esac
+    case "$violations" in
+        *"EVENT but folds as"*)
+            echo "  CAUSE (event): a terminal event was recorded without the matching \`status:\` transition. Nothing was discarded, so nothing looks wrong — the packet just stays claimable forever."
+            echo "  REMEDY (event): decide which channel is telling the truth. If the closure IS real, add the \`status:\` entry. If it is NOT, the event type must match the rung — \`set-field --evidence\` derives it from the status since 696-6byc, so re-run it rather than hand-writing a terminal event."
+            ;;
+    esac
     echo "          See plan/index.d/README.md."
     exit 1
 fi

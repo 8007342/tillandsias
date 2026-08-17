@@ -15,8 +15,15 @@
 #     works on toolbox-capable hosts (Silverblue / rpm-ostree).
 #   * On hosts without `toolbox` (mutable Fedora, macOS, Windows/WSL) it is a
 #     silent, instant noop — the script keeps using host tools as before.
-#   * IDEMPOTENT: create+init happens at most once (marker-gated); every later
-#     call is a cheap existence check.
+#   * IDEMPOTENT: create+init happens at most once; every later call is a
+#     cheap existence check. The gate is a PROBE, not a marker file — the
+#     delegate re-asks `toolbox list` and re-asks the container whether gcc /
+#     pkg-config / ruby / rustup are actually present, so a half-built toolbox
+#     is repaired rather than certified. ($HOME/.cache/tillandsias/
+#     builder-toolbox-initialized is written by the delegate and never read;
+#     do not reintroduce it as the gate.)
+#   * A FAILED ensure is LOUD: nonzero plus a diagnosis on stderr. The silence
+#     above covers "this host is not a toolbox host", never "the ensure broke".
 #   * It deliberately does NOT re-exec the caller into the toolbox and does
 #     NOT rewrite the caller's shell options. The stronger re-exec behavior
 #     stays in with-tillandsias-builder.sh for build entry points.
