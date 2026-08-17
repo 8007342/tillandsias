@@ -75,13 +75,29 @@ while IFS= read -r hit; do
             *"litmus:$tok") case "$tok" in *-) wrapped=$((wrapped + 1)); continue ;; esac ;;
         esac
         checked=$((checked + 1))
-        if ! printf '%s\n' "$existing" | grep -qx "$tok"; then
+        # HERE-STRING, NOT A PIPE (found 2026-08-17 while landing 765-5efu).
+        # `printf '%s\n' "$existing" | grep -qx "$tok"` raced: `grep -q` exits
+        # the instant it matches, `printf` then takes SIGPIPE, and `set -o
+        # pipefail` (line 39) turns that into pipeline status 141 — so a token
+        # that MATCHED was reported as "no litmus test declares that name".
+        # The race is won or lost on whether printf finished writing 358 lines
+        # before grep exited, so alphabetically EARLY names failed most often
+        # and load decided the rest: five consecutive runs on an unchanged tree
+        # gave 6, 13, 3, 3 and 2 violations, all of them false. Demonstrated
+        # minimally: `printf | grep -qx accel-capability-probe-contract-shape`
+        # -> 141 while the same check for a late name -> 0.
+        # A here-string has no second process to signal, so the status is
+        # grep's own verdict. Same family as 731-pc5r / 702-pwhc: a pipeline's
+        # exit status deciding a guard's verdict for reasons unrelated to the
+        # guard's question.
+        if ! grep -qx "$tok" <<<"$existing"; then
             unresolvable=$((unresolvable + 1))
             echo "REFUSED: $file claims litmus:$tok — no litmus test declares that name." >&2
             echo "         The claim reads as verification and supplies none." >&2
             continue
         fi
-        if [ -n "$bound" ] && ! printf '%s\n' "$bound" | grep -qx "$tok"; then
+        # Same SIGPIPE-under-pipefail race as the existence check above.
+        if [ -n "$bound" ] && ! grep -qx "$tok" <<<"$bound"; then
             unbound=$((unbound + 1))
             echo "REFUSED: $file claims litmus:$tok — the test exists but no spec binds it in" >&2
             echo "         $BINDINGS, so it executes in no suite. Add it to a spec's litmus_tests." >&2

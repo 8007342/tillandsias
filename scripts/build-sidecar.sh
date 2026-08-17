@@ -27,6 +27,19 @@
 #
 # The staged binary lives under `images/router/tillandsias-router-sidecar`
 # (gitignored).
+#
+# THIN-LTO DEV PROFILE: CONSIDERED AND DECLINED (order 765-5efu, 2026-08-17).
+# The packet offered an optional `[profile.release-sidecar]` (lto=thin,
+# codegen-units=16) for the local dev lane. Measured first, then declined on
+# two grounds. (1) It buys little now: with the evaluation stamp below, an
+# unchanged tree costs 0.07s instead of 8-12s, so the rebuild it would speed
+# up is the RARE path — a genuine source change — and paying for that in
+# divergence is a bad trade. (2) It buys a real risk: this binary is
+# include_bytes!'d into tillandsias-headless, so a thin-LTO dev profile means
+# every local build embeds DIFFERENT bytes than the fat-LTO artifact release
+# ships and cosign signs, which is precisely the version-matched-artifact
+# property order 710-w9kc exists to protect. Do not add it without first
+# answering how a dev-tested sidecar and a released one stay the same binary.
 
 set -euo pipefail
 
@@ -39,26 +52,105 @@ SIDECAR_DEST="$ROOT/images/router/tillandsias-router-sidecar"
 # The nested build still benefits from cargo's incremental compilation
 # under target-musl/.
 SIDECAR_TARGET_DIR="$ROOT/target-musl"
+# Evaluation stamp (order 765-5efu), gitignored beside the staged binary.
+SIDECAR_STAMP="$ROOT/images/router/.sidecar.stamp"
 
-# Staleness check: if the staged binary already exists and is newer than
-# every Cargo.toml + every source file in the three relevant crates,
-# there is nothing to do — exit fast. This makes the script cheap to
-# re-run from build.sh / scripts/build-image.sh / shell hooks.
-is_stale() {
-    [[ ! -f "$SIDECAR_DEST" ]] && return 0
-    local newest
-    # VERSION is included so a build-number bump forces a fresh, version-matched
-    # recompile (order 710-w9kc: idempotent + ephemeral local builds; the sidecar
-    # is a version-matched release artifact, never a committed blob).
-    newest="$(find \
+# Portable SHA-256 over stdin. `sha256sum` is coreutils (Linux/forge/WSL);
+# stock macOS ships `shasum` instead, and build-osx.sh runs this script.
+_sha256() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | cut -d' ' -f1
+    else
+        shasum -a 256 | awk '{print $1}'
+    fi
+}
+
+# CONTENT digest of everything that determines the staged binary's bytes
+# (order 765-5efu). The input FILE set is deliberately unchanged from the
+# mtime probe this replaces — 3 crates + Cargo.toml + Cargo.lock + VERSION,
+# VERSION still present per 710-w9kc so a bump forces a version-matched
+# re-evaluation. Two non-file inputs are added because they change the output
+# from identical sources and the old probe was blind to both: the effective
+# target triple and the toolchain. Widening the digest can only cause MORE
+# rebuilds, never fewer, so it cannot introduce a stale artifact.
+#
+# Manifest shape (path, type, mode, content) then sort-then-hash mirrors
+# scripts/hash-image-sources.sh, the repo's existing source-digest idiom, so a
+# rename, a mode flip, or an added/removed file all move the digest.
+sidecar_input_digest() {
+    local manifest=() f rel mode content musl_installed
+    musl_installed=no
+    if command -v rustup >/dev/null 2>&1 &&
+        rustup target list --installed 2>/dev/null | grep -qx "$TARGET"; then
+        musl_installed=yes
+    fi
+    manifest+=("target:${TARGET}")
+    manifest+=("musl-target-installed:${musl_installed}")
+    manifest+=("rustc:$(rustc -V 2>/dev/null || echo unknown)")
+    while IFS= read -r f; do
+        [[ -n "$f" ]] || continue
+        rel="${f#"$ROOT"/}"
+        if ! mode="$(stat -c '%a' "$f" 2>/dev/null)"; then
+            mode="$(stat -f '%Lp' "$f" 2>/dev/null || echo 0)"
+        fi
+        content="$(_sha256 <"$f")"
+        manifest+=("${rel}:file:${mode}:${content}")
+    done < <(find \
         "$ROOT/crates/tillandsias-router-sidecar" \
         "$ROOT/crates/tillandsias-otp" \
         "$ROOT/crates/tillandsias-control-wire" \
         "$ROOT/Cargo.toml" \
         "$ROOT/Cargo.lock" \
         "$ROOT/VERSION" \
-        -type f -newer "$SIDECAR_DEST" -print -quit 2>/dev/null)"
-    [[ -n "$newest" ]]
+        -type f -print 2>/dev/null)
+    printf '%s\n' "${manifest[@]}" | LC_ALL=C sort | _sha256
+}
+
+# Staleness, content-addressed (order 765-5efu; replaces a `find -newer`
+# probe). The mtime probe rebuilt whenever an input's TIMESTAMP moved, which a
+# `git merge`/`checkout` does to byte-identical files — measured on this
+# checkout: touching one sidecar source cost a 12.3s rebuild that produced a
+# byte-identical binary. It was also foolable in the dangerous direction: the
+# 723-b9cn note below worried that "a wrong binary left in place would be
+# served to every later build as up-to-date", because mtime says nothing about
+# WHICH bytes are staged.
+#
+# The stamp records both halves of the decision — the digest of the inputs and
+# the digest of the artifact those inputs produced — so the build is skipped
+# only when the inputs are unchanged AND the exact bytes previously built from
+# them are still staged. Every other state rebuilds:
+#   no staged binary / no stamp / unreadable stamp  -> build (fresh checkout, CI, release)
+#   any input content, mode, path, or set change    -> build
+#   toolchain or effective target change            -> build
+#   staged bytes differ from what the stamp recorded-> build (tamper/corruption/wrong artifact)
+# TILLANDSIAS_SIDECAR_FORCE_REBUILD=1 bypasses the stamp entirely.
+is_stale() {
+    [[ -f "$SIDECAR_DEST" ]] || return 0
+    [[ "${TILLANDSIAS_SIDECAR_FORCE_REBUILD:-0}" == 1 ]] && return 0
+    [[ -f "$SIDECAR_STAMP" ]] || return 0
+    local want_inputs want_output
+    want_inputs="$(sed -n 's/^inputs=//p' "$SIDECAR_STAMP" 2>/dev/null | head -1)"
+    want_output="$(sed -n 's/^output=//p' "$SIDECAR_STAMP" 2>/dev/null | head -1)"
+    [[ -n "$want_inputs" && -n "$want_output" ]] || return 0
+    [[ "$(_sha256 <"$SIDECAR_DEST")" == "$want_output" ]] || return 0
+    [[ "$(sidecar_input_digest)" == "$want_inputs" ]] || return 0
+    return 1
+}
+
+# Record the evaluation that produced the currently staged bytes. Written
+# ATOMICALLY (temp + mv) so a concurrent build.sh cannot read a half-written
+# stamp — an unreadable stamp is handled above by rebuilding, but a TORN one
+# that happened to parse would be worse than none.
+write_sidecar_stamp() {
+    local tmp
+    tmp="$(mktemp "${SIDECAR_STAMP}.XXXXXX")" || return 0
+    {
+        printf '# tillandsias router-sidecar evaluation stamp (order 765-5efu).\n'
+        printf '# Gitignored build artifact. Delete it to force a rebuild.\n'
+        printf 'inputs=%s\n' "$(sidecar_input_digest)"
+        printf 'output=%s\n' "$(_sha256 <"$SIDECAR_DEST")"
+    } >"$tmp" 2>/dev/null || { rm -f "$tmp"; return 0; }
+    mv -f "$tmp" "$SIDECAR_STAMP" 2>/dev/null || rm -f "$tmp"
 }
 
 if ! is_stale; then
@@ -140,9 +232,12 @@ strip "$SRC" 2>/dev/null || true
 # OTP gating is silently dead.
 #
 # scripts/build-guest-binaries.sh already verifies its own output this way; the
-# sidecar did not. Removing the bad artifact matters as much as refusing: the
-# is_stale() check above keys on mtime, so a wrong binary left in place would be
-# served to every later build as "up-to-date".
+# sidecar did not. Removing the bad artifact matters as much as refusing: a bad
+# binary left in place would be served to every later build as "up-to-date".
+# (Since 765-5efu the staleness check hashes the STAGED BYTES against the
+# stamp, so an unrecorded artifact is rebuilt rather than trusted — but this
+# assert still runs against every fresh build, and removing the bad output is
+# still what stops it reaching the stamp in the first place.)
 if ! file "$SRC" | grep -q 'ELF'; then
     echo "[build-sidecar] ERROR: built sidecar is not a Linux ELF: $(file -b "$SRC")" >&2
     echo "[build-sidecar]   Its consumers are a Linux container image and the guest" >&2
@@ -172,3 +267,9 @@ else
     SIZE="$(du -h "$SIDECAR_DEST" | cut -f1)"
     echo "[build-sidecar] staged: ${SIDECAR_DEST} (${SIZE})"
 fi
+
+# Record the evaluation LAST, and only on a path that reached a verified,
+# staged artifact — the ELF assert and the staging above both precede it, so a
+# refused build (exit 3/4) leaves the previous stamp untouched and the next
+# invocation re-evaluates from scratch rather than trusting a failed run.
+write_sidecar_stamp
