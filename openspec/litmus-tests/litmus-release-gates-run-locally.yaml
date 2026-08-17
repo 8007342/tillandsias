@@ -129,6 +129,23 @@ critical_path:
     timeout_ms: 120000
     expected_behavior: "PASS: gate-stamp (7/7)"
 
+  # Order 765-dt8h. A fresh stamp proves the gate ran against these bytes; it
+  # does NOT prove the gate validated what is being pushed. Every scoping
+  # packet (diff-scoped litmus, change-class selection, --check memoization)
+  # is gated on this, because a scoped run writing an unscoped stamp would let
+  # pre-push bless a push whose Rust the scoped run never compiled — the
+  # highest silent-green risk in the velocity design (audit F5).
+  #
+  # The load-bearing case is the packet's own named negative: a stamp scoped
+  # to {plan-ledger} against a push touching crates/ must be REFUSED. Every
+  # case drives a real `git push` at a real bare remote through the real hook
+  # and asserts whether the remote head moved, so a refusal that pushed anyway
+  # cannot read as a pass.
+  - step: "a scoped stamp is honoured only for the change classes it covers"
+    command: "bash scripts/test-gate-stamp-scope.sh"
+    timeout_ms: 180000
+    expected_behavior: "PASS: gate-stamp-scope (8/8)"
+
   # Tillandsias tracks each harness skill entry as a symlink to a directory.
   # `sha256sum <symlink>` follows it, refuses the directory, and made the first
   # stamp implementation fail on every real checkout even though its regular-
