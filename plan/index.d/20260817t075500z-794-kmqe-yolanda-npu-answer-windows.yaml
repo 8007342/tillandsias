@@ -1,0 +1,246 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: windows-opus5-npu-20260817 on windows/Yolanda, 2026-08-17 UTC.
+#
+# Yolanda's SECOND answer to 794-kmqe. The first
+# (20260817t072600z-794-kmqe-yolanda-answer-windows.yaml) settled the GPU half:
+# /dev/dxg-only is universal, and dzn makes the iGPU usable. It is not repeated
+# here. This fragment adds only what is new: the strong-form NPU verdict, the
+# cross-boundary firewall result, the Lemonade/FastFlowLM measurements, the
+# -ngl 0 trap applied to this host's CPU baseline, and a trap found in the
+# SHARED INSTRUMENT that both hosts are about to pool numbers through.
+#
+# Full provenance:
+# plan/issues/research/npu-unreachable-from-wsl2-lemonade-fastflowlm-2026-08-17.md
+events:
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: note
+      ts: "2026-08-17T07:55:00Z"
+      agent_id: windows-opus5-npu-20260817
+      host: windows
+      summary: >
+        NPU REACHABILITY FROM WSL2 — DEFINITIVE: NOT REACHABLE, and the reason
+        is UPSTREAM OF WSL, which makes it a permanent fleet constraint rather
+        than a provisioning gap. The earlier "no /dev/accel" answer was the weak
+        form. Strong form, three layers. (1) KERNEL: the WSL2 kernel
+        6.18.33.2 has `# CONFIG_DRM_ACCEL is not set` and NO CONFIG_AMDXDNA
+        symbol at all in /proc/config.gz; amdxdna lives under drivers/accel and
+        depends on DRM_ACCEL, so /dev/accel/accel0 is not merely absent, it is
+        unbuildable on this kernel. (2) GUEST DXCORE: libdxcore.so in
+        /usr/lib/wsl/lib does export DXCoreCreateAdapterFactory, so this is
+        answerable directly — a DXCore enumerator compiled INSIDE the guest
+        against microsoft/DirectX-Headers and linked to the WSL library returns
+        exactly ONE adapter for D3D11_GRAPHICS, D3D12_GRAPHICS,
+        D3D12_CORE_COMPUTE and D3D12_GENERIC_ML alike: "AMD Radeon(TM) 860M
+        Graphics" vendor=0x1002 device=0x1114, attribute HW_GPU. No adapter
+        carries HW_NPU or HW_COMPUTE_ACCELERATOR. The guest LUID is REMAPPED
+        (0x34835E06 vs host 0x00010153) — a paravirtualised handle, not
+        passthrough. (3) THE DECISIVE LAYER: the same enumerator built with MSVC
+        against the Windows 11 SDK 10.0.26100.0 and run NATIVELY ON WINDOWS also
+        does not see the NPU — two adapters, the 860M and Microsoft Basic Render
+        Driver, both HW_GPU, even though DXCORE_HARDWARE_TYPE_ATTRIBUTE_NPU is a
+        defined attribute in that SDK and the device is healthy
+        (PCI\VEN_1022&DEV_17F0, class ComputeAccelerator, Status OK). There is
+        also no "NPU Engine" perf-counter set. The XDNA2 NPU is a
+        ComputeAccelerator-class device served by AMD's XRT stack, OUTSIDE the
+        DXGI/DXCore world entirely. GPU-PV forwards DXCore adapters; there is no
+        DXCore adapter to forward. COROLLARY that matters beyond WSL: ONNX
+        Runtime's DirectML EP cannot reach this NPU on WINDOWS either. For
+        ESMERALDINHA's generalisation: /dev/dxg-only is universal, and an NPU
+        does not merely "expose the same" — it does not exist in that namespace
+        at all, so a host having an NPU changes nothing about guest exposure.
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: note
+      ts: "2026-08-17T07:55:30Z"
+      agent_id: windows-opus5-npu-20260817
+      host: windows
+      summary: >
+        WSL2 GUEST -> WINDOWS IS NOW OPEN AND MEASURED, and the earlier
+        DIAGNOSIS of why it was closed was WRONG. The guest reaches a
+        Windows-hosted OpenAI-compatible NPU endpoint at the default gateway
+        http://192.168.48.1:8000 — /api/v1/models returns 200 in 5.6 ms and a
+        real NPU completion crosses the boundary. Control: port 13305, no rule,
+        still times out, so this is a scoped opening and not a collapsed
+        boundary. THE ADDRESS IS THE DEFAULT GATEWAY, and read it from
+        /proc/net/route: `ip` is ABSENT in tillandsias-build — a third instance
+        of the shared missing-tools trap, this time biting a network probe.
+        THREE CONDITIONS, ALL REQUIRED, each individually insufficient:
+        (1) New-NetFirewallHyperVRule -VMCreatorId
+        '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -Direction Inbound -Action
+        Allow -Protocol TCP -LocalPorts <port>; proven NECESSARY by control —
+        port 18080 with only condition (2), bound 0.0.0.0 and reachable from
+        Windows itself, TIMED OUT from the guest. (2) an ordinary host
+        Windows-Defender-Firewall inbound allow for the same port, because the
+        host firewall applies to the vEthernet (WSL) interface independently.
+        (3) NO application-specific inbound BLOCK rule for the listener binary —
+        this was the real blocker and it hides well: Windows had auto-created
+        "TCP/UDP Query User{...}" BLOCK rules for lemonade.exe and
+        lemonadeserver.exe, and in Windows Firewall BLOCK BEATS ALLOW, so (1)
+        and (2) were both satisfied and traffic still died silently.
+        CORRECTION TO THE EARLIER YOLANDA FILING (718-nkm2 note, 07:27:30Z): it
+        attributed the WSL->Windows block to DefaultInboundAction=Block on the
+        WSL VM setting. That is wrong — for a VM, INBOUND means into the VM, and
+        guest->host is OUTBOUND. The earlier probe used Python listeners, and a
+        python.exe inbound BLOCK rule of exactly this auto-created kind exists on
+        this host too. The measured asymmetry was real; the cause named for it
+        was not. GENERALISABLE DIAGNOSTIC, cheap and decisive:
+        Set-NetFirewallProfile -All -LogBlocked True, then read
+        %systemroot%\system32\LogFiles\Firewall\pfirewall.log — a DROP line with
+        RECEIVE and the listener PID is the host layer; silence there points at
+        the Hyper-V layer. ESMERALDINHA can use this recipe verbatim.
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: note
+      ts: "2026-08-17T07:56:00Z"
+      agent_id: windows-opus5-npu-20260817
+      host: windows
+      summary: >
+        WHAT FASTFLOWLM IS, AND THE NPU NUMBERS. FastFlowLM ("flm",
+        github.com/ROCm/FastFlowLM) is a NATIVE LLM runtime for XDNA2 NPUs, not
+        a distro. It supports BOTH Windows and Linux (Linux landed 2026-03-11),
+        but its Linux build requires BARE METAL: its own install guide demands
+        "Kernel 7.0+ with amdxdna, or amdxdna-dkms", AMD's XRT stack, NPU
+        firmware >= 1.1.0.0, and validates against /dev/accel/accel0 — every one
+        of which the preceding note shows WSL2 cannot provide. So the "just run
+        it in a WSL distro" hypothesis fails on the KERNEL, not on packaging.
+        Lemonade's own installer confirms the shape: `lemonade backends install
+        flm:npu` fetched fastflowlm_0.9.46_WINDOWS_amd64.zip. EXECUTION PROVIDER
+        VERIFIED, NOT TRUSTED: the flm process has xrt_core.dll and
+        xrt_coreutil.dll loaded plus per-architecture kernels (qwen3_npu.dll,
+        llama_npu.dll, gemma_npu.dll, q4_npu_eXpress.dll) — the XRT/XDNA path,
+        NOT DirectML and NOT ONNX Runtime; triangulated by host CPU sitting at
+        12.8-21.7% of 16 threads during sustained 92 tok/s generation, which no
+        CPU fallback could do. MEDIANS OF 3, unique nonce per prompt so the
+        prefix cache serves nothing: qwen3-0.6b-FLM prefill 1938.1 t/s (2721-tok
+        prompt), decode 91.9 t/s; llama3.2-1b-FLM prefill 2084.2, decode 63.1.
+        Against this host's other two lanes at comparable scale (CPU 455.9 /
+        76.5; iGPU-dzn 737.8 / 63.8) the NPU wins BOTH axes — 4.3x CPU prefill,
+        2.6x iGPU prefill — and is the only lane that beats CPU decode below the
+        ~1.5B crossover. Caveat stated: different model family and quantisation
+        (FLM q4nx), so order-of-magnitude, not a controlled A/B. SUSTAINED
+        BEHAVIOUR, which is what continuous expert RAG needs: 15 consecutive
+        256-token generations held 92.08-94.28 t/s with NO decay, TTFT flat at
+        0.50-0.53 s, ACPI thermal zone 43.1 C — the NPU does not throttle, which
+        is exactly the property the CPU and iGPU lanes lack. THE CATCH: NPU
+        EMBEDDINGS EXIST AND ARE NOT USABLE. embed-gemma-300m-FLM (recipe flm,
+        label embeddings) returns correct 768-dim vectors — so FastFlowLM IS the
+        only NPU embeddings route, confirming that the ONNX/OGA NPU path does
+        not carry them — but costs 18019.5 ms/chunk against nomic-embed-text on
+        CPU at 295.5 ms/chunk for the same 2000-char chunk. A size sweep shows
+        the cost is NOT input-bound (40 chars 11.9 s, 200 chars 2.3 s, 1000
+        chars 22.4 s, 2000 chars 12.3 s), which is the tell that this is a defect
+        rather than a speed limit. Projected full-corpus re-embed: ~8 HOURS on
+        the NPU vs ~8 MINUTES on the CPU. Functional, not adoptable at 0.9.46.
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: note
+      ts: "2026-08-17T07:56:30Z"
+      agent_id: windows-opus5-npu-20260817
+      host: windows
+      summary: >
+        THE SHARED INSTRUMENT HAS THE SAME TRAP IT WAS BUILT TO CATCH.
+        scripts/bench-inference-floor.sh is the harness 794-kmqe proposes so the
+        two hosts' numbers are comparable rather than anecdotal. Its DECODE,
+        EMBED and derived-engine behaviour are sound, and deriving engine= from
+        /api/ps instead of a flag is exactly right. But its PREFILL number is
+        PROMPT-CACHE CONTAMINATED, in the same flattering direction as the -ngl 0
+        trap: measured on Yolanda `prefill_tok_s=6965.08` for qwen2.5:0.5b on the
+        CPU lane against a TRUE 455.9 t/s for the same model on the same lane —
+        a 15x inflation. The cause is structural, not environmental:
+        bench_model() sends a warm-up with the IDENTICAL fixed $PROMPT and then
+        measures a second request with that same prompt, so ollama serves the
+        prefill from cache and prompt_eval_duration collapses (82 prompt tokens
+        in ~11.8 ms). Yolanda's 2026-08-16 filing already warned ESMERALDINHA
+        about this trap in hand-run form ("a first pass that reused one prompt
+        measured 76,000 prefill tok/s"); nobody noticed the COMMITTED harness has
+        it too. UNTIL FIXED: prefill_tok_s from this harness MUST NOT be pooled
+        across hosts, and any decision resting on it should be re-derived. Fix is
+        small — give each rep a unique prompt prefix; a nonce at the HEAD of the
+        prompt is enough, since the cache keys on a shared prefix. Flagged rather
+        than patched here because the checkout is shared and the fix belongs with
+        whoever owns the harness.
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: verified-by
+      ts: "2026-08-17T07:57:00Z"
+      agent_id: windows-opus5-npu-20260817
+      host: windows
+      criteria: [WL-EXPOSURE]
+      verdict: pass
+      evidence: >
+        /dev/dri ABSENT, /dev/accel ABSENT, /dev/kfd ABSENT; /dev/dxg PRESENT
+        (crw-rw-rw- 10, 258). /usr/lib/wsl/lib holds exactly libd3d12.so,
+        libd3d12core.so, libdxcore.so — byte-identical set to ESMERALDINHA's
+        Intel N100, so /dev/dxg + D3D12 is UNIVERSAL for WSL2 across vendors. No
+        Vulkan ICD is present by default; installing mesa-vulkan-drivers from the
+        distro's own repos yields dzn and makes the iGPU work (already filed
+        07:26:30Z). NPU device visibility in-guest: NONE, established at three
+        layers — kernel CONFIG_DRM_ACCEL unset with no AMDXDNA symbol; in-guest
+        DXCore enumerating one HW_GPU adapter and zero HW_NPU across all five
+        attribute filters; and the NPU absent from DXCore on the WINDOWS host
+        itself. Commands and raw output in
+        plan/issues/research/npu-unreachable-from-wsl2-lemonade-fastflowlm-2026-08-17.md
+        sections 2 and 3.
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: verified-by
+      ts: "2026-08-17T07:57:30Z"
+      agent_id: windows-opus5-npu-20260817
+      host: windows
+      criteria: [WL-BASELINE]
+      verdict: pass-with-notes
+      evidence: >
+        scripts/bench-inference-floor.sh run on Yolanda against the guest ollama
+        0.32.9, emitted verbatim:
+        "host: name=Yolanda cores=16 endpoint=http://127.0.0.1:11434
+        claimed_engine=cpu-true-backend-absent num_predict=200";
+        "gen: model=qwen2.5:0.5b tier=T0 engine=cpu
+        claimed=cpu-true-backend-absent offload_pct=0 load_ms=137
+        prefill_tok_s=6965.08 gen_tok_s=74.67 prompt_tok=82 eval_tok=200
+        total_ms=2830";
+        "embed: model=nomic-embed-text engine=cpu claimed=cpu-true-backend-absent
+        n=10 total_ms=2955 per_chunk_ms=295.5 chunks_per_s=3.38";
+        "project: full_rebuild_chunks=1592 full_rebuild_s=470.4
+        delta_10_chunks_s=2.96 delta_40_chunks_s=11.82".
+        The harness DERIVED engine=cpu with offload_pct=0 and it is correct — the
+        Vulkan backend cannot load at all here. PASS-WITH-NOTES because
+        prefill_tok_s=6965.08 is a cache artefact, not a measurement, and must
+        not be pooled: the honest cache-defeated prefill for this model on this
+        lane is 455.9 t/s. gen_tok_s and the embed/project lines are sound.
+  - packet_id: windows-lane-wsl2-hardware-exposure-shared-measurement
+    event:
+      type: verified-by
+      ts: "2026-08-17T07:58:00Z"
+      agent_id: windows-opus5-npu-20260817
+      host: windows
+      criteria: [WL-TRAPS]
+      verdict: pass
+      evidence: >
+        All three shared traps confirmed SUBSTRATE-WIDE, not host-specific.
+        (1) MISSING GUEST TOOLS reproduces on Yolanda's build distro: `ip` is
+        ABSENT in tillandsias-build, and a gateway probe written with `ip route`
+        silently produced an empty gateway and a meaningless "no host in URL"
+        failure; /proc/net/route gave the answer. Third independent instance.
+        (2) systemd-run vs nohup: not re-tested this cycle; already filed by this
+        host and stands.
+        (3) THE -ngl 0 TRAP: ACKNOWLEDGED AND APPLIED, as ESMERALDINHA is owed.
+        Yolanda's 2026-08-16 CPU arm had the same SHAPE of risk — it ran with
+        OLLAMA_VULKAN=0 while the Vulkan packages were INSTALLED, i.e. a flag,
+        not an absence. The falsifiable presence test was applied at the loader
+        level: `ldd .../lib/ollama/vulkan/libggml-vulkan.so` reports
+        "libvulkan.so.1 => not found", so the backend binary exists but cannot
+        load, cannot register, and cannot be scheduled onto. Re-measured in that
+        state, with a unique nonce per prompt: qwen2.5:0.5b prefill 455.9 t/s
+        (450.7/455.9/464.5), decode 76.5 t/s (78.6/75.9/76.5), against the
+        recorded 397.5 / 78.68. VERDICT: THE BASELINE WAS NOT CONTAMINATED.
+        Contamination inflates; the honest number is 15% HIGHER on prefill and
+        within 3% on decode, and a number cannot have been flattered upward past
+        a true value above it. Consequence, in the unflattering direction for
+        this host's earlier claim: the iGPU prefill advantage was OVERSTATED —
+        737.8/455.9 = 1.62x, not the 1.86x filed on 2026-08-16. Direction of the
+        routing conclusion unchanged, magnitude reduced. Probable reason the trap
+        did not bite: unlike llama.cpp's -ngl 0, ollama's OLLAMA_VULKAN gates a
+        SEPARATELY dlopen'd backend library (lib/ollama/vulkan/libggml-vulkan.so)
+        rather than a layer count — offered as the explanation for a measured
+        result, not as a claim tested on its own.
