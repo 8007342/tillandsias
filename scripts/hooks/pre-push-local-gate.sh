@@ -99,6 +99,27 @@ if [[ -f scripts/release-preflight.sh ]]; then
     fi
 fi
 
+# ── 1b. Derived cheatsheet tree equals the authored tree ──────────────────────
+# The tracked images/default/cheatsheets/ is embedded into the binary and is the
+# ONLY cheatsheet source the end-user image build has, so a tracked copy that
+# has fallen behind ships an INDEX advertising files the image does not contain
+# — an expert citing what it cannot open. It is checked HERE, at push, because
+# the divergence is most often introduced by an integration rather than an edit:
+# a merge/rebase that brings a sibling's cheatsheet change desyncs the two trees
+# with nobody having touched the derived copy (observed 2026-08-16, minutes
+# after the check itself landed). ./build.sh --check does not run the
+# cheatsheet-host-image-sync litmus, so without this the gate that guards every
+# push could not see it.
+# @trace spec:cheatsheet-tooling — methodology/cheatsheets.yaml storage_and_authority
+if [[ -f scripts/stage-image-cheatsheets.sh ]]; then
+    if ! cheat_out="$(bash scripts/stage-image-cheatsheets.sh --verify 2>&1)"; then
+        refuse "derived cheatsheet tree is out of sync with cheatsheets/" \
+               "$cheat_out" \
+               "" \
+               "Fix: scripts/stage-image-cheatsheets.sh --stage && git add -f images/default/cheatsheets"
+    fi
+fi
+
 # ── Plan-only fast lane (order 668-2xeh) ───────────────────────────────────────
 # Attempted only when the stamp is missing/stale. Emits one line per validated
 # file — "plan-only lane: validated <path>" — so the push record names exactly
