@@ -1,0 +1,68 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by: linux-immutable (yoga) meta-orchestration cycle 9, 2026-08-17.
+packets:
+  - packet_id: tracked-settings-local-broadcasts-one-hosts-paths
+    release_target: forge-local-experts-milestone
+    order: 789-nc2s
+    status: ready
+    desired_release: v0.5
+    kind: bug
+    pickup_role: any
+    priority: p2
+    tags:
+      - experts
+      - config
+      - multi-host
+      - v0.5
+    title: |
+      .claude/settings.local.json is TRACKED and exports one machine's absolute paths to the whole fleet — a Windows path reached this Fedora host and silently disabled the spec expert.
+    context: |
+      Found on yoga 2026-08-17 while adding a spec-index field to the
+      expert-capability line: the field kept reporting `absent` for an index
+      that demonstrably existed. Cause was not the code —
+      `FORGE_SPEC_INDEX_DIR` was already exported in the environment as
+      `/mnt/c/Users/bullo/claudia/tillandsias/target/spec-index`, a WSL path.
+      `/mnt/c` does not exist on this host.
+
+      Source: `.claude/settings.local.json`, which despite the `.local`
+      convention (per-machine, normally gitignored) is TRACKED in git
+      (`git ls-files --error-unmatch` succeeds). Every host that opens this
+      checkout therefore inherits one machine's absolute paths.
+
+      CONSEQUENCE, and it is the operator's expert-soundness concern
+      directly: `forge-plan.sh:700` computes
+      `SPEC_INDEX_DIR="${FORGE_SPEC_INDEX_DIR:-$FORGE_EXPERTS_STATE_DIR/spec-index}"`.
+      With the leaked value, every non-Windows host resolves the spec index to
+      a path that cannot exist, so `spec_answer` would refuse EVEN AFTER order
+      552 builds a real index. The refusal names the (wrong) directory, so it
+      is honest — but it is unfixable by building an index, and nothing points
+      at the config as the cause.
+
+      Second-order observation worth keeping: the same file also sets
+      `TILLANDSIAS_EMBED_MODEL=nomic-embed-text`, which happens to MASK the
+      code-level default disagreement between
+      `forge-plan.sh:706` (`nomic-embed-text-v1-GGUF`) and
+      `dev-inference-ensure.sh:74` (`nomic-embed-text`) on any host reading
+      this file. A masked defect is still a defect: a host without this file
+      gets the mismatch.
+
+      Fixed in this cycle only for the one key that is provably
+      machine-specific (`FORGE_SPEC_INDEX_DIR` removed, restoring the
+      `$FORGE_EXPERTS_STATE_DIR/spec-index` default, which resolves sanely on
+      Linux, in the forge, and under WSL2 where /dev/shm exists). The tracking
+      question itself is left to this packet, because untracking the file
+      removes the useful portable settings in it (loopback endpoints) from
+      every host at once and that is a fleet decision, not a yoga decision.
+    exit_criteria:
+      - |
+          No tracked file exports an absolute path that exists on only one machine. Either .claude/settings.local.json is untracked (and the portable settings it carries move to a tracked, path-free location), or every value in it is host-independent.
+      - |
+          A check fails when a tracked config exports a path under /mnt/, /Users/, or C:/ — the three shapes that name one host — with a negative control proving it fires.
+    events:
+      - type: discovered
+        ts: "2026-08-17T03:35:00Z"
+        agent_id: "linux-yoga-claude-20260816t185912z"
+        host: linux-immutable
+        summary: |
+          Surfaced by a new capability field reporting `absent` for an index
+          that existed; the env var pointing at /mnt/c was the real cause.

@@ -4,8 +4,7 @@
     "TILLANDSIAS_INFERENCE_MODEL": "qwen2.5:0.5b",
     "TILLANDSIAS_EMBED_ENDPOINT": "http://127.0.0.1:11434/v1",
     "TILLANDSIAS_EMBED_MODEL": "nomic-embed-text",
-    "TILLANDSIAS_SPEC_EXPERT_ENDPOINT": "http://127.0.0.1:11434/v1",
-    "FORGE_SPEC_INDEX_DIR": "/mnt/c/Users/bullo/claudia/tillandsias/target/spec-index"
+    "TILLANDSIAS_SPEC_EXPERT_ENDPOINT": "http://127.0.0.1:11434/v1"
   },
   "permissions": {
     "allow": [

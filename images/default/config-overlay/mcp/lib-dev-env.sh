@@ -75,6 +75,18 @@ tillandsias_dev_env_hook() {
         # ollama's OpenAI-compatible surface, for spec_answer's /embeddings.
         export TILLANDSIAS_EMBED_ENDPOINT="${TILLANDSIAS_INFERENCE_ENDPOINT%/}/v1"
     fi
+    # The MODEL must match the endpoint, and on dev that endpoint is the
+    # ollama this hook just ensured (order 760-hzi4). forge-plan.sh defaults
+    # to `nomic-embed-text-v1-GGUF`, a lemonade/LM-Studio name, because it was
+    # written for the ENCLAVE inference container — ask ollama for it and the
+    # embed call 404s, so spec_answer would refuse even with a real index
+    # built. Same split this file already draws for the endpoint: the dev
+    # environment names its own model, the runtime default is untouched.
+    # Keep in step with scripts/dev-inference-ensure.sh's EMBED_MODEL — the
+    # two are pinned together by litmus:dev-inference-embed-model-agreement.
+    if [ -z "${TILLANDSIAS_EMBED_MODEL:-}" ]; then
+        export TILLANDSIAS_EMBED_MODEL="nomic-embed-text"
+    fi
 
     # Operator kill switch (620-ca7g): honored here too, loudly.
     _deh_state_dir="${XDG_RUNTIME_DIR:-/tmp}"
