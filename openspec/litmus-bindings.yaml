@@ -237,6 +237,7 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
+  - litmus:wsl2-builder-shell-options-shape
   - litmus:cross-target-cfg-gate-check
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape

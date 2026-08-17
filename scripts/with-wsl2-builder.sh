@@ -40,6 +40,37 @@
 #                                      9p-backed target/ makes cargo crawl)
 # =============================================================================
 
+# `source` runs in the CALLER's shell, so these options would otherwise rewrite
+# the sourcer's error handling permanently — the 731-pc5r shape, of which this
+# file is the WSL2 sibling (order 764-sunk). local-ci.sh deliberately omits -e
+# (run-every-check, report-at-end design), and an unconditional `set -e` here
+# silently re-arms errexit there, killing the suite at its own advisory step on
+# the happy path. The helper body still runs under its own strict options; the
+# restore hands a sourcer back exactly the option state it entered with.
+#
+# Capture must NOT use a $(...) subshell: command substitution clears errexit
+# (shopt inherit_errexit is off), so `$(set +o)` records -e as absent even when
+# the caller had it. Read $- and [[ -o pipefail ]] in the current shell, and
+# restore by REMOVING only what the caller lacked — the helper only ever adds.
+if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+    _W2_CALLER_FLAGS="$-"
+    _W2_CALLER_PIPEFAIL=0
+    [[ -o pipefail ]] && _W2_CALLER_PIPEFAIL=1
+    # Idempotent; invoked EXPLICITLY at every sourced return site below. NOT a
+    # RETURN trap: `trap - RETURN` issued inside the running handler does not
+    # reliably clear across sourced-file boundaries — observed 2026-08-16 in the
+    # sibling, where the trap re-fired at the NEXT sourced file's return with the
+    # handler already unset, an instant command-not-found under the caller's
+    # errexit. The re-exec paths below are `exec`, where caller options are moot.
+    _w2_restore_caller_opts() {
+        [[ -n "${_W2_CALLER_FLAGS:-}" ]] || return 0
+        [[ "$_W2_CALLER_FLAGS" == *e* ]] || set +e
+        [[ "$_W2_CALLER_FLAGS" == *u* ]] || set +u
+        [[ "$_W2_CALLER_PIPEFAIL" == 1 ]] || set +o pipefail
+        unset _W2_CALLER_FLAGS _W2_CALLER_PIPEFAIL
+        return 0
+    }
+fi
 set -euo pipefail
 
 WSL2_SELF="${BASH_SOURCE[0]}"
@@ -53,6 +84,7 @@ case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) ;;
     *)
         [[ "$_W2_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+        ! declare -F _w2_restore_caller_opts >/dev/null || _w2_restore_caller_opts
         return 0 2>/dev/null || exit 0
         ;;
 esac
@@ -60,6 +92,7 @@ esac
 # ── Guard: explicit skip ──────────────────────────────────────────────────
 if [[ "${TILLANDSIAS_SKIP_WSL2:-}" == "1" ]]; then
     [[ "$_W2_DIRECT" == 1 && $# -gt 0 ]] && exec "$@"
+    ! declare -F _w2_restore_caller_opts >/dev/null || _w2_restore_caller_opts
     return 0 2>/dev/null || exit 0
 fi
 

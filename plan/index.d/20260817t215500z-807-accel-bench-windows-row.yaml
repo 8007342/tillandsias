@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-17.
+#
+# The Windows/AMD row of the 802-2536-v1 accel matrix, run with linux's shared
+# harness (scripts/bench-accel-lane.sh) so the workload, warm-up, sample and
+# reported statistic are identical rather than three anecdotes.
+
+packets:
+  - packet_id: runtime-guest-lacks-jq-so-the-shared-accel-bench-cannot-run-in-it
+    order: 807-c3mf
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "the shared accel bench cannot run inside the Windows runtime guest — jq is absent there, so the one host that most needs an in-guest measurement has to take it from outside"
+    deliverable: "either the runtime guest image carries jq (as the build distro has since 703-sjuk), or bench-accel-lane.sh drops its jq dependency, so the Windows lane is measured where the workload actually runs"
+    pickup_role: windows
+    release_target: forge-local-experts-milestone
+    capability_tags: [windows, wsl2, inference, testing, shell]
+    context: |
+      scripts/bench-accel-lane.sh requires curl and jq (line 75-77). The
+      tillandsias runtime guest has curl at /usr/sbin/curl and NO jq, so the
+      bench refuses there with `bench-accel-lane: jq is required` (exit 2).
+
+      This is the SIXTH absent guest tool found on this host, after pgrep, ps,
+      ss, script and ip — the class 794-kmqe's shared rule names. The build
+      distro was given jq/yq deliberately by 703-sjuk precisely because the
+      litmus corpus needed them; the runtime guest never was, and it is where
+      inference actually runs.
+
+      CONSEQUENCE FOR THE MATRIX, stated so the row can be read honestly: the
+      measurement below was taken from the WINDOWS side against the guest's
+      endpoint mirrored onto the Windows loopback (wslrelay), not from inside the
+      guest as linux runs it. The extra hop is believed negligible and the embed
+      arm is evidence for that — 60/61/64 ms per chunk here against linux's
+      60/61/62 on an identical 40-chunk, p50=298 sample — but "believed
+      negligible" is not "measured equal", and the right fix is to make the
+      in-guest run possible.
+
+      NOTE ON A NEAR-MISS, recorded because it nearly became a false defect
+      against linux's new script: the first attempt reported `bench_exit=0`
+      with EMPTY stdout, which reads as a tool that fails silently. It is not.
+      bench-accel-lane.sh exits 2 correctly. The 0 came from invoking it as
+      `wsl.exe -d <distro> -- bash -c '<script>; echo $?'` — in that ARGV form
+      `$?` evaluated inside the guest reads 0 for a command that exited 2.
+      Measured three ways: `bash -c 'sh -c "exit 2"; echo $?'` -> 0 (wrong);
+      `bash -c 'exit 2'` with the status read on the WINDOWS side -> 2 (right);
+      the script's own status written to a file from inside the guest -> 0
+      (wrong). The stdin form (`bash -s <<'EOF'`) is unaffected. This is the same
+      class as order 326 ("wsl arg-joined multi-line scripts get re-parsed by the
+      guest login shell and arrive shredded"), which is why
+      with-wsl2-builder.sh already delivers its init script over stdin. Any
+      Windows-lane script that captures an exit code through `wsl.exe ... bash -c`
+      is reporting a number it did not measure.
+    verifiable_closure: "scripts/bench-accel-lane.sh runs to completion inside the tillandsias runtime guest and emits its JSON object"
+
+events:
+  - packet_id: npu-lane-has-no-engine-so-the-tier-can-never-be-chosen
+    event:
+      type: note
+      ts: "2026-08-17T21:55:00Z"
+      agent_id: windows-yolanda-opus5-20260817t2059z
+      host: windows
+      summary: >
+        802-2536-v1 MATRIX ROW — windows/yolanda, lane cpu. Result recorded at
+        plan/issues/accel-bench-yolanda-cpu-2026-08-17.json, same suite and same
+        harness as plan/issues/accel-bench-yoga-cpu-2026-08-17.json, sample
+        chunks=40 p50_chars=298 reps=3 from a real spec-index corpus (9910
+        chunks), lane_observed=cpu-or-unloaded. Hardware: AMD Ryzen AI 7 350
+        (Zen5, 8C/16T, avx512f + avx512_vnni + avx512_bf16 + avx_vnni), guest
+        allocated 7.3 GB of the machine's 15.2 GB.
+        embed  nomic-embed-text  ms_per_chunk_median_per_rep [60, 61, 64]  failed [0,0,0]
+        decode qwen2.5:0.5b      tps_per_rep [80.4, 87.2, 94.1]
+        prefill qwen2.5:0.5b     tps_per_rep [480.5, 3767.8, 4151.8]
+        THREE THINGS THE ROW SAYS. (1) The prefill-shaped arm is
+        indistinguishable across the two hosts — 60/61/64 here against linux's
+        61/60/62 — on the same corpus and sample. Whatever separates these
+        machines, it is not embedding throughput. (2) The decode-shaped arm is
+        ~20-25% slower here (80-94 tps against 98-121), which is the arm the
+        fleet expected a wide-vector CPU to win; it does not win it against the
+        linux box. (3) prefill rep1 = 480 tps against 3768 and 4152 in reps 2-3
+        is an 8x cold-start outlier, exactly the "rep1 is routinely the cold
+        tail" the harness header warns about and the reason it reports every rep
+        rather than a mean. A single-rep prefill measurement on this host would
+        have been wrong by nearly an order of magnitude.
+        METHODOLOGY CAVEAT, not a footnote: this row was taken from the Windows
+        side against the guest endpoint mirrored onto the Windows loopback,
+        because jq is absent in the runtime guest (807-c3mf). Linux runs it
+        in-process. The embed agreement above is the evidence that the hop is
+        small, and it is the only evidence there is.
+        NOT MEASURED: no gpu or npu arm. Both are unreachable from the guest on
+        this host — /dev/dri, /dev/kfd and /dev/accel* are all absent, only
+        /dev/dxg is present — so there is no lane to point the harness at. See
+        806-2r4s for why the capability envelope reports that as `none` rather
+        than present-unusable.
