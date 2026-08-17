@@ -1,0 +1,27 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17.
+#
+# Correction to the fragment written six minutes earlier
+# (20260817t111701z-777-amku-linux-mutable.yaml). That one is immutable, so the
+# repair is an additional event rather than an edit.
+events:
+  - packet_id: ensure-toolbox-default-pattern-adoption
+    event:
+      type: note
+      ts: "2026-08-17T11:23:52Z"
+      agent_id: linux-macuahuitl-opus5-fork777-20260817t1117z
+      host: linux_mutable
+      summary: |
+        COUNT CORRECTION. The 11:17:01Z fragment reports the sweep as
+        "2 converted, 3 filed, ~55 left". The filed count is wrong: TWO packets
+        were filed, 799-tb7q and 799-nx4r. The "3" counted deferred
+        WORKSTREAMS, not packets — 799-tb7q carries two of them (grow the
+        builder toolbox init set; stop judging nix capability by host binary in
+        check-nix-deps-stability.sh and select-work-batch.sh) and 799-nx4r
+        carries the third.
+
+        Correct line: 2 converted, 2 packets filed covering 3 deferred
+        workstreams, ~55 candidate scripts left.
+
+        Recorded rather than silently left, because a reader burning down the
+        sweep would look for a third packet id and not find one.
