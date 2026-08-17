@@ -127,7 +127,12 @@ case "${1:-check}" in
                 exit 1
                 ;;
         esac
-        if ! printf '%s' "$transcript" | grep -qE '^test .* \.\.\. (ok|FAILED|ignored)'; then
+        # HERE-STRING, NOT A PIPE (order 792-ksr8). `$transcript` is a whole
+        # cargo test transcript; `grep -q` exits on first match and SIGPIPEs
+        # the still-writing `printf`, which `set -uo pipefail` (line 63) then
+        # promotes to the pipeline's status even on a MATCH. A false "no tests
+        # ran" here would stamp a verification that never happened.
+        if ! grep -qE '^test .* \.\.\. (ok|FAILED|ignored)' <<<"$transcript"; then
             echo "refused:stamp-needs-evidence:the transcript contains no test results"
             exit 1
         fi

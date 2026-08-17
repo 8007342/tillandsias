@@ -164,8 +164,9 @@ specs:
   - litmus:script-exec-bit-shape
   - litmus:sidecar-is-a-build-graph-input
   - litmus:selector-urgency-not-inert-shape
+  - litmus:sigpipe-verdict-pipeline-shape
   coverage_ratio: 75
-  last_verified: '2026-08-12'
+  last_verified: '2026-08-17'
 - spec_id: codex-tray-launcher
   status: active
   litmus_tests:
