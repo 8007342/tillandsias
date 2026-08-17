@@ -53068,6 +53068,12 @@ plan_index:
         - the index refreshes on commit or names its staleness in the envelope
 
       events:
+        - type: note
+          ts: "2026-08-17T11:32:15Z"
+          agent_id: "linux-yoga-claude-20260817t113215z"
+          host: linux-immutable
+          summary: |
+            CORRECTION TO LAST CYCLE'S CRITERION 2 CLAIM. I recorded criterion 2 as met because the spec-index refresh is wired into scripts/hooks/post-commit-expert-refresh.sh. The wiring is correct and the hook's own latency budget is met (6ms), but on THIS host the body never executes: the installed .git/hooks/post-commit dispatcher gates it behind TILLANDSIAS_HOST_EXPERTS (order 685-yidq, scripts/install-hooks.sh:200) so that CI and plain checkouts never rebuild an index, and that variable is set nowhere on yoga -- not in the environment, not in .claude/, not in any shell profile. Verified empirically rather than by reading: after seven commits this session the hook log contains ZERO spec-index lines. So the correct statement is that criterion 2 is IMPLEMENTED but INERT on this host pending a per-host opt-in, not that it is met. I checked wiring and did not check execution, which is the 599-4wzr class from the inside -- one cycle after deleting a guard partly for being ineffective. SMALLEST NEXT ACTION, and it is deliberately not a shared-file change: export TILLANDSIAS_HOST_EXPERTS=1 on hosts that should carry a live index (a shell profile or the untracked machine-local agent config). Putting it in the tracked .claude/settings.json would enable rebuilds on every host including CI, which is precisely what the gate exists to prevent. Note also that the index does need a rebuild right now -- the corpus moved with tonight's merges, so the ensure is no longer a fingerprint hit and costs the full ~12min. UNRELATED SELF-CORRECTION recorded so nobody repeats it: 'pgrep -f spec-index-ensure' matches the waiting shell's OWN command line, so an 'until ! pgrep -f ...' wait loop never terminates. Use a completion marker in the output file instead.
         - type: progress
           ts: "2026-08-17T09:05:53Z"
           agent_id: "linux-yoga-claude-20260817t090553z"
