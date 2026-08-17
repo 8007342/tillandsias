@@ -34757,6 +34757,12 @@ plan_index:
       notes: |
         Sibling of order 284 (broken upstream publish) and order 291 (fatal require on empty cache). Both were fixed for the failure modes then visible; this is a third mode neither covers, because both reasoned about the binary being ABSENT or CRASHING, never about it being present, startable, and unable to render.
       events:
+        - type: progress
+          ts: "2026-08-17T02:30:26Z"
+          agent_id: "linux-yoga-claude-20260816t185912z"
+          host: linux-immutable
+          summary: |
+            Partial slice landed (0cabca46b): criteria 1, 2, 4 and 5 met; criterion 3 (cold-cache repro) left open because it needs a destructive e2e slot. opencode_render_contract_ok asserts POSITIVELY (alt-screen or truecolor SGR within budget, no nonzero exit) rather than matching upstream's error wording, which would rot; wired into harness_probe so ALL THREE consumers inherit it (record-last-good, validate-or-rollback, restore-last-good) instead of one call site — that is what stops a broken binary being certified as last-good; memoized on the binary sha256 so a launch's three probes cost one render while a reinstall still re-probes. 20s ceiling sized for the bun single-file executable the curl channel ships (cold asset extraction on first run), not for the ELF the timings were measured on. Update guards keep it inside litmus:harness-byte-cheap. The one-sided lock is closed: harness_update_lock_acquire/_release extracted and require_opencode now takes the SAME lock ensure_forge_harnesses takes; failing to acquire is non-fatal there since the other holder installs the same binary. Fixture scripts/test-opencode-render-probe.sh 6/6 hermetic, including the control (a rendering stub must PASS, else case 1 proves nothing), a wording-independent early-exit case, a fast-crash-detection case, and memo invalidation on binary swap. litmus:opencode-render-probe-shape added and bound; default-image instant suite 12/12. Repaired a pin my own change broke: litmus:harness-curl-install-shape asserted the curl call within a three-line window after require_opencode; the lock pushed it to line four and turned the step red without changing routing — widened to the function body per 634-39ik.
         - type: note
           ts: "2026-08-17T01:34:33Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
