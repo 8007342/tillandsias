@@ -269,7 +269,43 @@ pub struct DiagnoseReport {
     /// the Windows probe it is an observation rather than an inference from
     /// timing.
     pub vm_owner_live: bool,
+
+    /// Guest metrics snapshot (778-n9z2), read over the control wire.
+    ///
+    /// The wire types travel through UNCHANGED — every counter stays
+    /// `Option<u64>` and every sample keeps its `error`, with no
+    /// `skip_serializing_if` anywhere on the path, so a counter that could
+    /// not be collected serialises as JSON `null` and never as a healthy
+    /// zero (spec:observability-metrics; the tray hop is exactly where that
+    /// contract would be lost).
+    ///
+    /// `None` on the ordinary standalone `--diagnose`: a separate process
+    /// holds no VM handle (VZ vsock is per-VM-handle, macOS has no
+    /// AF_VSOCK), so there is nothing to read. `metrics_status` always says
+    /// which of those it is.
+    pub metrics: Option<tillandsias_control_wire::MetricsSnapshotWire>,
+
+    /// Why `metrics` is or is not populated. Grammar, pinned by test:
+    ///   `ok`
+    ///   `unsupported:no-live-wire-handle`     — standalone --diagnose
+    ///   `unsupported:guest-lacks-capability`  — HelloAck server_caps lacks it
+    ///   `error:<slug>`                        — the read was attempted and failed
+    ///
+    /// A status is mandatory precisely because absence is ambiguous: "no
+    /// metrics" must never be readable as "no containers".
+    pub metrics_status: String,
 }
+
+/// Status constant for the default standalone path — no VM handle, so the
+/// wire cannot be read at all. Named so the value cannot drift between the
+/// collector and its test.
+pub(crate) const METRICS_STATUS_NO_HANDLE: &str = "unsupported:no-live-wire-handle";
+
+/// Status constant for a guest whose HelloAck did not advertise
+/// `MetricsSnapshotRequest`. Feature detection is by CAPABILITY, never by
+/// wire-version comparison — a version number says what the peer is, a
+/// capability says what it can do (778-n9z2 exit criterion 1).
+pub(crate) const METRICS_STATUS_NO_CAPABILITY: &str = "unsupported:guest-lacks-capability";
 
 /// Entry point invoked from `main` when `--diagnose` is on argv.
 /// Returns the exit code to bubble up via `std::process::exit`.
@@ -320,6 +356,13 @@ fn collect_report() -> DiagnoseReport {
         guest_binary_staged_sha256: provenance.staged_sha256,
         guest_binary_staged_matches_bundle: provenance.staged_matches_bundle,
         vm_owner_live: live_tray_owns_vm(),
+        // collect_report() runs in a process with no VM handle by
+        // construction. It must NOT boot one: install-macos.sh runs
+        // `--diagnose --json` synchronously during install, so a wire read
+        // on this path would start a VM mid-install and could race a live
+        // tray's handle. The opt-in verb below is the only reader.
+        metrics: None,
+        metrics_status: METRICS_STATUS_NO_HANDLE.to_string(),
     }
 }
 
@@ -1226,6 +1269,102 @@ pub fn github_login_main() -> i32 {
 /// parity (order 128 parity-matrix row `list-cloud-projects`).
 ///
 /// Requires a prior `--github-login` run to have stored the GitHub token in Vault.
+/// `--diagnose --with-metrics`: the ONLY path that reads guest metrics over
+/// the control wire (778-n9z2 exit criterion 1).
+///
+/// Separate from `main(format)` deliberately. A standalone `--diagnose` must
+/// stay a static, VM-free report: `scripts/install-macos.sh` runs
+/// `--diagnose --json` synchronously during install, so booting a VM on the
+/// default path would start a guest mid-install and could collide with a live
+/// tray's VM handle. `main.rs` gates this verb with `require_no_live_tray`
+/// for the same reason every other VM-booting one-shot is gated (order 277).
+///
+/// The exit code stays the ordinary `exit_code_from(&report)` contract
+/// {0,3,2,1}: a metrics failure is reported IN the report, never by changing
+/// the code an operator's script branches on.
+///
+/// @trace spec:observability-metrics, spec:macos-native-tray
+pub fn metrics_snapshot_main(format: DiagnoseFormat) -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
+
+    let mut report = collect_report();
+
+    if let Err(err) = stage_embedded_guest_binary() {
+        report.metrics_status = "error:stage-guest-binary".to_string();
+        eprintln!("[diagnose] stage guest binary: {err}");
+        return finish_metrics_report(report, format);
+    }
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        report.metrics_status = "error:not-provisioned".to_string();
+        eprintln!("[diagnose] not provisioned; run --provision or launch the tray once first");
+        return finish_metrics_report(report, format);
+    }
+
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            report.metrics_status = "error:tokio-runtime".to_string();
+            eprintln!("[diagnose] tokio runtime: {e}");
+            return finish_metrics_report(report, format);
+        }
+    };
+
+    let outcome: Result<Option<tillandsias_control_wire::MetricsSnapshotWire>, String> = rt
+        .block_on(async {
+            use std::time::Duration;
+            use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+            eprintln!("[diagnose] starting VM for the metrics read…");
+            vz.start().await.map_err(|e| format!("start: {e}"))?;
+            let result = async {
+                vz.wait_phase_ready(Duration::from_secs(300), |t| {
+                    probe_phase_secure_or_plain(&vz, t)
+                })
+                .await
+                .map_err(|e| format!("wait_phase_ready: {e}"))?;
+                let stream =
+                    open_control_wire_stream(&vz, CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+                        .await
+                        .map_err(|e| format!("vsock connect: {e}"))?;
+                tillandsias_vm_layer::vsock_exec::fetch_metrics_snapshot(stream).await
+            }
+            .await;
+            // Stop the VM whatever happened: this verb owns the VM it booted.
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            result
+        });
+
+    match outcome {
+        Ok(Some(snapshot)) => {
+            report.metrics = Some(snapshot);
+            report.metrics_status = "ok".to_string();
+        }
+        Ok(None) => {
+            // Handshake fine, capability absent — an older guest, not a fault.
+            report.metrics_status = METRICS_STATUS_NO_CAPABILITY.to_string();
+        }
+        Err(e) => {
+            eprintln!("[diagnose] metrics read failed: {e}");
+            report.metrics_status = "error:wire-read".to_string();
+        }
+    }
+    finish_metrics_report(report, format)
+}
+
+/// Print a metrics-bearing report and return the ordinary diagnose exit code.
+fn finish_metrics_report(report: DiagnoseReport, format: DiagnoseFormat) -> i32 {
+    match format {
+        DiagnoseFormat::Human => print_human(&report),
+        DiagnoseFormat::Json => print_json(&report),
+    }
+    exit_code_from(&report)
+}
+
 /// Applies the same CA cert / exited-proxy workaround as `github_login_main`
 /// (TODO linux-next: remove once headless uses 0o640 + rm-on-reuse).
 ///
@@ -1550,6 +1689,7 @@ fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
 mod tests {
     use super::parse_aarch64_qcow2_sha;
     use super::translate_project_path_for_guest;
+    use super::{METRICS_STATUS_NO_CAPABILITY, METRICS_STATUS_NO_HANDLE};
 
     /// `parse_aarch64_qcow2_sha` reads the actual manifest.toml format
     /// the Fedora pivot emits (`"aarch64.qcow2" = "<sha>"` inside
@@ -1716,6 +1856,110 @@ mod tests {
         );
     }
 
+    /// 778-n9z2 criterion 2 — the NO-FABRICATION contract must survive the
+    /// tray hop. A sample that failed to collect carries `error` and absent
+    /// counters; it must serialise as JSON `null`s, never as healthy zeros
+    /// and never by vanishing from the document (spec:observability-metrics).
+    ///
+    /// This is the assertion that would catch the two tempting "cleanups" —
+    /// a `.unwrap_or(0)` on the counters, or a
+    /// `skip_serializing_if = "Option::is_none"` on the wire structs — either
+    /// of which silently converts "could not measure" into "measured zero".
+    #[test]
+    fn metrics_error_sample_renders_null_counters_never_zero() {
+        use tillandsias_control_wire::{
+            ContainerMetricWire, MetricsSnapshotWire, MountIoMetricWire,
+        };
+
+        let mut report = baseline_diagnose_report();
+        report.metrics = Some(MetricsSnapshotWire {
+            sampled_at_unix: 1_786_900_000,
+            containers: vec![ContainerMetricWire {
+                name: "tillandsias-proxy".to_string(),
+                cpu_usec: None,
+                memory_current_bytes: None,
+                blkio_read_bytes: None,
+                blkio_write_bytes: None,
+                blkio_read_ops: None,
+                blkio_write_ops: None,
+                error: Some("cgroup read failed: ENOENT".to_string()),
+            }],
+            mounts: vec![MountIoMetricWire {
+                path: "/home/forge/src".to_string(),
+                device: None,
+                read_bytes: None,
+                write_bytes: None,
+                read_ops: None,
+                write_ops: None,
+                error: Some("unavailable: virtiofs".to_string()),
+            }],
+        });
+        report.metrics_status = "ok".to_string();
+
+        let json = serde_json::to_value(&report).expect("report must serialise");
+        let container = &json["metrics"]["containers"][0];
+        assert!(
+            container["cpu_usec"].is_null(),
+            "an uncollected counter must be null, not a fabricated zero: {container}"
+        );
+        assert!(
+            container["memory_current_bytes"].is_null(),
+            "an uncollected counter must be null: {container}"
+        );
+        assert_eq!(
+            container["error"], "cgroup read failed: ENOENT",
+            "the sample's error must survive the tray hop"
+        );
+        let mount = &json["metrics"]["mounts"][0];
+        assert!(
+            mount["read_bytes"].is_null() && mount["device"].is_null(),
+            "an unavailable mount reports nulls, not zeros: {mount}"
+        );
+        assert_eq!(mount["error"], "unavailable: virtiofs");
+        // Absent-vs-null matters: a consumer must be able to tell "no such
+        // key" (schema drift) from "known key, unmeasured".
+        assert!(
+            container.get("cpu_usec").is_some() && mount.get("read_bytes").is_some(),
+            "counters must be PRESENT-and-null, never omitted"
+        );
+    }
+
+    /// 778-n9z2 criterion 1 — the report always says WHY metrics are absent,
+    /// and the default standalone path never claims a wire it does not hold.
+    #[test]
+    fn metrics_status_states_why_metrics_are_absent() {
+        let report = baseline_diagnose_report();
+        assert_eq!(report.metrics_status, METRICS_STATUS_NO_HANDLE);
+        assert!(report.metrics.is_none());
+
+        let json = serde_json::to_value(&report).expect("report must serialise");
+        assert!(
+            json["metrics"].is_null(),
+            "no snapshot must serialise as null, not as an empty object that reads like 'no containers'"
+        );
+        assert_eq!(json["metrics_status"], METRICS_STATUS_NO_HANDLE);
+
+        for status in [
+            "ok",
+            METRICS_STATUS_NO_HANDLE,
+            METRICS_STATUS_NO_CAPABILITY,
+            "error:wire-read",
+        ] {
+            assert!(
+                status == "ok"
+                    || status.starts_with("unsupported:")
+                    || status.starts_with("error:"),
+                "metrics_status grammar is ok|unsupported:<why>|error:<slug>, got {status}"
+            );
+        }
+        // Feature detection is by capability, never by wire version — the
+        // constant that carries that decision must name the capability.
+        assert_eq!(
+            tillandsias_vm_layer::vsock_exec::CAP_METRICS_SNAPSHOT,
+            "MetricsSnapshotRequest"
+        );
+    }
+
     /// 772-shi9: neither guest exec preamble may widen the CA PRIVATE key.
     ///
     /// Both preambles once ran `chmod 644` on it, justified by "so Squid
@@ -1801,6 +2045,8 @@ mod tests {
             guest_binary_staged_matches_bundle: Some(true),
             // A provisioned host at rest: nothing is mid-materialization.
             vm_owner_live: false,
+            metrics: None,
+            metrics_status: METRICS_STATUS_NO_HANDLE.to_string(),
         }
     }
 

@@ -115,6 +115,9 @@ fn main() {
              OpenCode forge on <path> inside the guest; streams forge output\n                  \
              to this terminal. With --prompt runs non-interactively (one shot).\n    \
              --diagnose    Print a static health report, then exit\n    \
+             --with-metrics  With --diagnose: boot the VM, read the guest\n                  \
+             metrics snapshot over the control wire, print it in the report,\n                  \
+             then stop the VM. Plain --diagnose never boots anything\n    \
              --json        With --diagnose, emit JSON instead of human text\n    \
              --attach-pty <slave-tty> --session-sock <path>  (internal) in-terminal\n                  \
              attach client the tray spawns inside Terminal.app for live PTY\n                  \
@@ -148,6 +151,19 @@ fn main() {
                 std::process::exit(2);
             }
         }
+    }
+    // 778-n9z2: the metrics read is an OPT-IN verb, not a widening of
+    // --diagnose. install-macos.sh runs `--diagnose --json` synchronously
+    // during install; a default-path VM boot there would start a guest
+    // mid-install. Gated like every other VM-booting one-shot (order 277).
+    if args.iter().any(|a| a == "--with-metrics") {
+        require_no_live_tray("--diagnose --with-metrics");
+        let format = if args.iter().any(|a| a == "--json") {
+            diagnose::DiagnoseFormat::Json
+        } else {
+            diagnose::DiagnoseFormat::Human
+        };
+        std::process::exit(diagnose::metrics_snapshot_main(format));
     }
     if args.iter().any(|a| a == "--provision") {
         std::process::exit(diagnose::provision_main());
