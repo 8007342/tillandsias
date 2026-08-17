@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: fragment-status-guard-folds-the-ledger-once-per-packet
+    event:
+      type: note
+      ts: "2026-08-17T03:51:43Z"
+      agent_id: linux-macuahuitl-opus5-20260817T035142Z
+      host: linux_mutable
+      summary: >
+        CORRECTION REFINED — the 785-ibu9 fix measured it properly and my ORIGINAL reading was sound on this host: the fragment-status step records 10363ms of MEASURED WORK against a 10.4s span, so the two agree and the '~60% of the gate' attribution was not inflated here. The 5ms-vs-1.5s discrepancy that prompted the correction came from the 783-xyk5 fork's OWN worktree, where the guard early-exited on an empty fragment set — a different tree, not a measurement artifact on mine. Net: the optimization was right, the original attribution was right, and the intermediate correction over-generalized from one worktree. Recording all three steps rather than quietly settling on the flattering one.

@@ -51588,6 +51588,12 @@ plan_index:
         - Squid starts healthy and vault-cli require_cacert stays green on a fresh guest (the 2026-07-22 field repro path).
         - The entrypoint's unreachable branch is either made reachable (secret delivery) or removed in the same change — no fallback nobody takes remains.
       events:
+        - type: note
+          ts: "2026-08-17T03:51:06Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T035106Z"
+          host: linux_mutable
+          summary: |
+            REOPENED-ADJACENT, live host state 2026-08-17: this packet closed the CODE path (material generated after it is 0600 — verified: vault.key Aug 16 is correct), but /tmp/tillandsias-ca/intermediate.key generated Aug 14 was still 0644 on macuahuitl three days later, and litmus:proxy-ca-key-not-world-readable STEP 5 was failing against live host state while the packet read closed. The running tillandsias-proxy still bind-mounts that key and no tillandsias-ca-key secret exists here, so the live container predates the secrets path. Contained by hand (dir 0700, key+cert 0600, proxy healthy, litmus now PASS); the fleet-wide migration is filed as 791-swxt.
         - type: completed
           ts: "2026-08-16T19:20:48Z"
           agent_id: "linux-yoga-claude-20260816t185912z"
