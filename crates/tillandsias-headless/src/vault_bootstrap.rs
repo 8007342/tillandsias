@@ -103,8 +103,25 @@ pub fn set_in_vm_credentials(
     // handed a perfectly good share by the host, use it in memory, still fail
     // the predicate, and have its intact Vault wiped on the next launch — the
     // host had the evidence and the guest threw it away.
-    if let Ok(cache_dir) = crate::init_cache_dir() {
-        write_vm_credential_fallbacks(&cache_dir, root_token.as_deref(), share_for_disk.as_deref());
+    // 701-se6x criterion 2: surface a failed write instead of discarding it.
+    // The `Err` arm of init_cache_dir was silent too — same consequence, since
+    // no cache dir means no share file either.
+    match crate::init_cache_dir() {
+        Ok(cache_dir) => {
+            if let Err(e) = write_vm_credential_fallbacks(
+                &cache_dir,
+                root_token.as_deref(),
+                share_for_disk.as_deref(),
+            ) {
+                report_fallback_write_failure("host delivery into the guest", &e.to_string());
+            }
+        }
+        Err(e) => {
+            report_fallback_write_failure(
+                "host delivery into the guest",
+                &format!("cache dir unavailable: {e}"),
+            );
+        }
     }
 }
 
@@ -1143,20 +1160,64 @@ fn vault_data_volume_exists() -> bool {
 ///
 /// Best-effort by design — a failure here must not abort a successful init;
 /// the worst case is the pre-694 behavior.
+/// 701-se6x criterion 2. Both writes used to be `let _ = fs::write(...)`.
+///
+/// That is a credential-destroying silence, not a cosmetic one. The share file
+/// is the ONLY evidence inside the guest that `operator init` ever completed —
+/// `has_shamir_share_in_keyring` consults an OS keychain the guest does not
+/// have, then this file — and its answer is what the partial-init WIPE turns
+/// on. So a single failed 30-byte write (ENOSPC, a non-writable cache dir, a
+/// write lost to an unclean VM stop) leaves the predicate false with a healthy
+/// Vault on disk, and the next launch wipes it, taking the stored GitHub token
+/// with it. That is exactly the 694-mhz8 failure, re-armed by an error nobody
+/// looked at. 694 removed the PERMANENT failure; it did not make the remaining
+/// single point of evidence robust or loud.
+///
+/// Returns Err naming every artifact that failed, so callers can surface it.
+/// BOTH writes are always ATTEMPTED — a token failure must never skip the
+/// share, because the share is the half that arms the wipe.
 fn write_vm_credential_fallbacks(
     cache_dir: &std::path::Path,
     token: Option<&str>,
     share_b64: Option<&str>,
-) {
-    if let Some(token) = token {
-        let _ = fs::write(cache_dir.join("fallback_vault-root-token-v1"), token);
+) -> std::io::Result<()> {
+    let mut failures: Vec<String> = Vec::new();
+
+    if let Some(token) = token
+        && let Err(e) = fs::write(cache_dir.join("fallback_vault-root-token-v1"), token)
+    {
+        failures.push(format!("fallback_vault-root-token-v1: {e}"));
     }
-    if let Some(share_b64) = share_b64 {
-        let _ = fs::write(
+
+    // Deliberately NOT an early return above: see the doc comment.
+    if let Some(share_b64) = share_b64
+        && let Err(e) = fs::write(
             cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")),
             share_b64,
-        );
+        )
+    {
+        failures.push(format!("fallback_{VAULT_SHAMIR_SHARE_V1}: {e}"));
     }
+
+    if failures.is_empty() {
+        return Ok(());
+    }
+    Err(std::io::Error::other(failures.join("; ")))
+}
+
+/// The one place that turns a failed fallback write into something a human or a
+/// log scraper can act on. Kept as a helper so the two call sites cannot drift
+/// into reporting it differently — which is how the original asymmetry between
+/// them arose in the first place (694-mhz8 fixed one site, 701-se6x the other).
+#[cfg(feature = "vault")]
+fn report_fallback_write_failure(context: &str, detail: &str) {
+    eprintln!("[tillandsias-vault] CREDENTIAL FALLBACK WRITE FAILED ({context}): {detail}");
+    eprintln!(
+        "[tillandsias-vault]   the Shamir share may not be on disk. \
+         has_shamir_share_in_keyring() will then read false, and the NEXT launch \
+         can classify this initialized Vault as a crashed partial init and WIPE it \
+         (694-mhz8 / 701-se6x). Free space / fix permissions on the cache dir before relaunching."
+    );
 }
 
 /// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
@@ -3169,8 +3230,24 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
             // genuine partial-init case: if init crashes before reaching this line,
             // the file is absent, the predicate is false, and the wipe still fires —
             // which is exactly what it is for.
-            if let Ok(cache_dir) = crate::init_cache_dir() {
-                write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64));
+            // 701-se6x criterion 2: this site had the same discarded error. It
+            // is the MORE dangerous of the two, because it runs immediately
+            // after `operator init` — the moment the share exists and nothing
+            // else on the host has a copy.
+            match crate::init_cache_dir() {
+                Ok(cache_dir) => {
+                    if let Err(e) =
+                        write_vm_credential_fallbacks(&cache_dir, Some(&token), Some(&share_b64))
+                    {
+                        report_fallback_write_failure("in-VM fresh init", &e.to_string());
+                    }
+                }
+                Err(e) => {
+                    report_fallback_write_failure(
+                        "in-VM fresh init",
+                        &format!("cache dir unavailable: {e}"),
+                    );
+                }
             }
 
             // Update in-memory credentials so the current process has the new token.
@@ -3975,6 +4052,104 @@ mod tests {
     /// unknown key can never unseal, and preserving it strands the guest
     /// permanently. A delivery carrying only a token must therefore leave the
     /// share file absent.
+    /// 701-se6x criterion 2. A FAILED share write must be SURFACED, not
+    /// discarded. This is the assertion that makes the difference observable:
+    /// before the fix the helper returned `()`, so there was no value a test
+    /// could look at and no way for a caller to know the wipe had been re-armed.
+    ///
+    /// The failure is induced portably by making the destination an existing
+    /// DIRECTORY — `fs::write` cannot clobber one on any platform — rather than
+    /// by chmod games, which root ignores and which behave differently across
+    /// the fleet's three host kinds.
+    #[test]
+    fn a_failed_share_fallback_write_is_reported_not_discarded() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701se6x-loud-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        // Occupy the share path with a directory so the write must fail.
+        std::fs::create_dir_all(dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}")))
+            .expect("occupy the share path");
+
+        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        assert!(
+            res.is_err(),
+            "a share-fallback write that FAILED must be reported. Discarding it leaves \
+             has_shamir_share_in_keyring() false with a healthy Vault on disk, and the next \
+             launch wipes it (694-mhz8 re-armed)."
+        );
+        let msg = res.unwrap_err().to_string();
+        assert!(
+            msg.contains(VAULT_SHAMIR_SHARE_V1),
+            "the report must NAME the artifact that failed so an operator knows the wipe is \
+             armed; got: {msg}"
+        );
+
+        // The token half must still have been ATTEMPTED and succeeded — a
+        // failure on one artifact must not skip the other.
+        assert!(
+            dir.join("fallback_vault-root-token-v1").is_file(),
+            "the token write must still happen when the share write fails"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// NEGATIVE CONTROL for the test above. Without this, a helper that simply
+    /// returned `Err` unconditionally would satisfy every assertion there while
+    /// making the loud path fire on every healthy boot — an alarm that is always
+    /// on is one nobody reads, and it would push operators to ignore the one
+    /// message that means their Vault is about to be wiped.
+    #[test]
+    fn a_successful_fallback_write_reports_success() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701se6x-quiet-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+
+        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        assert!(
+            res.is_ok(),
+            "the healthy path must stay silent — an always-firing alarm trains operators to \
+             ignore the wipe warning; got: {res:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 701-se6x criterion 2, the ORDERING property. The share is the half that
+    /// arms the wipe, so a token write that fails must not prevent it from being
+    /// attempted. An early return after the token — the obvious way to write
+    /// this with `?` — would pass both tests above and silently reintroduce the
+    /// bug for the exact host whose disk is already misbehaving.
+    #[test]
+    fn a_failed_token_write_still_attempts_the_share() {
+        let dir = std::env::temp_dir().join(format!(
+            "tillandsias-701se6x-order-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        // Occupy the TOKEN path so its write fails first.
+        std::fs::create_dir_all(dir.join("fallback_vault-root-token-v1"))
+            .expect("occupy the token path");
+
+        let res = write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+
+        assert!(res.is_err(), "the token failure must still be reported");
+        assert!(
+            dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"))
+                .is_file(),
+            "the SHARE must be written even though the token write failed — it is the half \
+             that decides whether the next launch wipes an initialized Vault"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn delivery_without_a_share_leaves_the_wipe_predicate_able_to_fire() {
         let dir = std::env::temp_dir().join(format!(
@@ -3984,7 +4159,11 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
 
-        write_vm_credential_fallbacks(&dir, Some("s.delivered-token"), None);
+        // 701-se6x: assert the write succeeded rather than discarding the
+        // Result. Silencing it with `let _ =` here would reintroduce, in the
+        // tests, precisely the habit this packet removed from the product.
+        write_vm_credential_fallbacks(&dir, Some("s.delivered-token"), None)
+            .expect("fallback write must succeed on a writable temp dir");
 
         assert!(
             dir.join("fallback_vault-root-token-v1").is_file(),
@@ -4016,7 +4195,8 @@ mod tests {
         ));
         std::fs::create_dir_all(&dir).expect("temp dir");
 
-        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="));
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), Some("c2hhcmU="))
+            .expect("fallback write must succeed on a writable temp dir");
 
         let share = dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
         let token = dir.join("fallback_vault-root-token-v1");
@@ -4056,7 +4236,8 @@ mod tests {
 
         // Init got far enough to mint a root token, then crashed before the
         // Shamir handover — exactly the case the wipe exists to recover.
-        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), None);
+        write_vm_credential_fallbacks(&dir, Some("s.roottoken"), None)
+            .expect("fallback write must succeed on a writable temp dir");
 
         assert!(
             dir.join("fallback_vault-root-token-v1").is_file(),
