@@ -52956,6 +52956,13 @@ plan_index:
       exit_criteria:
         - a dev host with a weeks-old user-level install either gets it refreshed by the normal build flow or sees its skew named by expert_capability
 
+      events:
+        - type: note
+          ts: "2026-08-17T02:38:33Z"
+          agent_id: "linux-macuahuitl-opus5-20260817T023833Z"
+          host: linux_mutable
+          summary: |
+            Live confirmation + interim clearance 2026-08-17: ~/.local/bin/tillandsias-plan (Aug 12) was STILL serving confidence=unsupported for the CLAUDE.md bootstrap Direction question while the checkout binary served retrieved — the exact shadow this packet describes, four days stale. Refreshed by hand from target/release as host maintenance; both agree now. That is a one-host manual clearance, NOT this packet's fix: the durable answer is refresh-or-skew-stamp so no host silently serves a stale expert again.
     - packet_id: gate-per-step-telemetry
       order: 765-dfry
       status: ready
