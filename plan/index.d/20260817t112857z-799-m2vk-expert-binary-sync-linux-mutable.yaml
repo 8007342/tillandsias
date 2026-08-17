@@ -1,0 +1,95 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T11:28:57Z.
+#
+# Found by acting on a fork's closing environmental note rather than filing it:
+# the 777-amku fork reported that the running expert server still answered
+# `unsupported` for the rule it had just landed, because the routing table is
+# compiled into the binary and the server held an older one.
+packets:
+  - packet_id: cycle-preflight-rebuilds-one-binary-and-the-experts-exec-another
+    order: 799-m2vk
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "cycle-preflight rebuilds ./target/release/tillandsias-plan while the MCP experts exec ~/.local/bin/tillandsias-plan — so 'rebuild the instrument before using it' was not true for the DEFAULT read path"
+    deliverable: "the preflight keeps the expert-path binary in step with the one it just built and proved, and says which of current/refreshed/absent/refresh-failed happened"
+    pickup_role: linux
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [mcp, experts, preflight, fail-loud, velocity]
+    estimated_hours: 2
+    context: |
+      OBSERVED, macuahuitl 2026-08-17T11:2xZ. Measurements only.
+
+        ~/.local/bin/tillandsias-plan   Aug 16 19:37   1650072 bytes
+        ./target/release/...            Aug 17 04:26   1675080 bytes
+
+      Asked the same prose question of each:
+
+        installed  -> "unsupported: no canonical methodology question matches ..."
+        fresh      -> routed to toolbox_first_scripts.rule, confidence=exact
+
+      The MCP server resolves PLAN_BIN_CANONICAL="$HOME/.local/bin/
+      tillandsias-plan" (images/default/config-overlay/mcp/forge-plan.sh) and
+      shells out to it per request. So the stale copy was answering every
+      methodology_ask on this host for roughly nine hours, including during
+      the cycles that were reading methodology to decide what to do.
+
+      WHY IT MATTERS MORE THAN A STALE BINARY USUALLY WOULD: CLAUDE.md makes
+      MCP the DEFAULT read path ("Ask, don't read"), and scripts/cycle-preflight.sh
+      exists specifically so a cycle never "inherits a component from the
+      previous one and hopes it is current". The preflight was rebuilding the
+      copy nothing queries. Its verdict said `rebuilt` and was true about the
+      wrong artifact.
+
+      AND THE FAILURE IS SILENT IN THE WORST DIRECTION: a stale expert does not
+      error. It answers `unsupported`, which reads as "the methodology does not
+      cover this" — an answer an agent will act on by writing the rule again,
+      or by deciding no rule exists.
+
+      PRIOR ART, and the reason this is a gap rather than an oversight: the
+      Windows lane already implements exactly this principle for its copy.
+      cycle-preflight's own header says the MCP servers "live in the WSL distro
+      and exec ~/.local/bin/tillandsias-plan there (770-ehym), so a cycle that
+      rebuilds only the PE can still start with stale-or-missing experts", and
+      770-f6u4 added scripts/wsl-plan-expert-ensure.sh for it. The same
+      reasoning was never applied to the local copy on Linux.
+    notes: |
+      Deliberately conservative. It refreshes only a path that ALREADY exists,
+      so a host that does not install the expert is untouched and no new file
+      appears anywhere; it installs the binary that just passed
+      resolve_plan_binary rather than a hardcoded ./target path (704-zcgi, the
+      bug that has been reintroduced four times); and it never blocks — a
+      failed refresh is reported, because a stale expert is bad and refusing to
+      start the cycle is worse.
+
+events:
+  - packet_id: cycle-preflight-rebuilds-one-binary-and-the-experts-exec-another
+    event:
+      type: completed
+      ts: "2026-08-17T11:28:57Z"
+      agent_id: linux-macuahuitl-opus5-20260817T105735Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence, filed and fixed in one pass. The preflight now
+        syncs the expert-path copy after the freshly built binary has PASSED its own
+        capability probe, and folds the outcome into the plan segment colon-free
+        (+expert-current / +expert-refreshed / +expert-absent / +expert-refresh-failed)
+        so the pinned line arity is unchanged — the same fold the Windows lane uses for
+        its WSL report. THREE STATES EXERCISED ON THE REAL SCRIPT, not a fixture — (A)
+        in sync -> ok:cycle-preflight:rebuilt+expert-current:...; (B) expert replaced
+        with a stub that exits 9, confirmed answering rc=9 first ->
+        rebuilt+expert-refreshed, and the same question then returned the correctly
+        routed answer; (C) expert path removed -> rebuilt+expert-absent and the path was
+        NOT created, which is the control that the step cannot invent an install on a
+        host that never wanted one. END-TO-END through the live MCP server after the
+        manual repair: methodology_ask "must scripts route host tools through a toolbox?"
+        answers confidence=exact at source_commit 0303cc850. No server restart was
+        needed — it shells out per request — so refreshing the file was sufficient, and
+        that is worth knowing because "restart the MCP server" was the obvious remedy
+        and would have been unavailable to a stdio server the harness owns.
+      evidence_refs:
+        - "scripts/cycle-preflight.sh: expert-path sync after resolve_plan_binary, folded into the plan verdict"
+        - "state A -> +expert-current; state B (stub exiting 9) -> +expert-refreshed and the answer repaired; state C (absent) -> +expert-absent, path not created"
+        - "live MCP methodology_ask -> confidence=exact, source_commit 0303cc850"
+        - "no litmus or script pins the ok:cycle-preflight verdict text (grepped) — the added segment is colon-free and arity-preserving"

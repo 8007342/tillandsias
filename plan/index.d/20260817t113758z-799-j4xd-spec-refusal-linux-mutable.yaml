@@ -1,0 +1,81 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T11:37:58Z.
+#
+# Found by taking the operator's standing ask literally — "harnesses on bare
+# metal should take advantage of the expert system as well" — and actually
+# calling spec_answer on this dev host instead of assuming it worked.
+packets:
+  - packet_id: spec-answer-refusal-recites-the-algorithm-and-hides-a-stale-override
+    order: 799-j4xd
+    status: completed
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "spec_answer's index refusal told the reader to build the index at a path that cannot exist on this host, without mentioning the environment variable that chose it — and recited the build as prose instead of naming the producer"
+    deliverable: "the refusal names scripts/spec-index-ensure.sh, and when FORGE_SPEC_INDEX_DIR points somewhere unreachable it says the location came from the environment rather than presenting it as a missing index"
+    pickup_role: any
+    release_target: forge-local-experts-milestone
+    capability_tags: [experts, mcp, fail-loud, rag]
+    estimated_hours: 1
+    context: |
+      OBSERVED, macuahuitl (LINUX) 2026-08-17T11:3xZ, calling the live tool:
+
+        spec_answer("how does the forge stay isolated ...")
+        -> unsupported: the spec RAG index is not built at
+           /mnt/c/Users/bullo/claudia/tillandsias/target/spec-index ...
+           Build it: tillandsias-plan spec-index --root <repo> --out
+           /mnt/c/Users/bullo/...
+
+      A Windows path, on a Linux host, with instructions to create it there.
+      The advice is not merely unhelpful, it is impossible, and it points the
+      reader at the index when the fault is the location.
+
+      SOURCE, once looked for: FORGE_SPEC_INDEX_DIR was exported into this
+      session. The tracked .claude/settings.local.json used to carry that
+      /mnt/c value; 2b1f8d188 removed it hours earlier and 789-nc2s added
+      scripts/check-tracked-config-host-paths.sh so it cannot come back. Both
+      of those are correct and neither helps here, because a fix in a file does
+      not reach a process that already read it — this session and its MCP
+      server have held the stale value since they started. 552 recorded the
+      same thing happening to it; that is twice.
+
+      SECOND DEFECT, and it is the more embarrassing one: the refusal RECITED
+      the build as prose — chunk, then embed each chunk via /embeddings into
+      vectors.jsonl. Order 552's own closure says the embedding step "existed
+      on no host in any language -- only as English prose inside forge-plan.sh's
+      refusal string". THIS string. A producer now exists
+      (scripts/spec-index-ensure.sh) and the message still described the
+      algorithm instead of naming it.
+    notes: |
+      The NOTE is deliberately conditional on the override being UNREACHABLE
+      (its parent directory absent), not merely set. A host that legitimately
+      points FORGE_SPEC_INDEX_DIR somewhere real must not be told its
+      configuration is stale — a diagnostic that fires on correct setups is the
+      class this milestone exists to remove, not add to.
+
+events:
+  - packet_id: spec-answer-refusal-recites-the-algorithm-and-hides-a-stale-override
+    event:
+      type: completed
+      ts: "2026-08-17T11:37:58Z"
+      agent_id: linux-macuahuitl-opus5-20260817T113400Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. The refusal now names
+        scripts/spec-index-ensure.sh as the producer, and appends a NOTE naming
+        FORGE_SPEC_INDEX_DIR when that variable is set AND the parent of the path it
+        chose does not exist on this host. VERIFIED END TO END over real MCP JSON-RPC
+        (initialize + tools/call) against images/default/config-overlay/mcp/forge-plan.sh,
+        not by reading the source — with FORGE_SPEC_INDEX_DIR=/mnt/c/Users/nobody/x/...
+        the answer carries "that location came from FORGE_SPEC_INDEX_DIR in this
+        process's environment and its parent does not exist on this host, so the override
+        is stale rather than the index missing". NEGATIVE CONTROL, run the same way with
+        the variable UNSET: confidence still unsupported (the index genuinely is not
+        built yet on this host), the path resolves to the default
+        /dev/shm/tillandsias-experts/spec-index, and the NOTE is ABSENT — so the note
+        cannot become permanent decoration on every refusal, which would make it as
+        uninformative as the message it replaces.
+      evidence_refs:
+        - "images/default/config-overlay/mcp/forge-plan.sh: producer named; conditional stale-override NOTE"
+        - "MCP JSON-RPC with an unreachable FORGE_SPEC_INDEX_DIR -> NOTE present"
+        - "MCP JSON-RPC with the variable unset -> default path, NOTE absent"
