@@ -139,6 +139,9 @@ unparseable_fragments=""
 _anyev_capable=no
 if plan_binary_has "$PLAN" fragment-event-packets; then _anyev_capable=yes; fi
 _anyev_seen=""
+_misdef_capable=no
+if plan_binary_has "$PLAN" fragment-misplaced-definitions; then _misdef_capable=yes; fi
+_misdef_seen=""
 if plan_binary_has "$PLAN" fragment-terminal-events; then
     _events_seen=""
     for f in "$FRAG_DIR"/*.yaml; do
@@ -151,6 +154,23 @@ if plan_binary_has "$PLAN" fragment-terminal-events; then
             _any_out="$("$PLAN" fragment-event-packets "$f" 2>/dev/null)"
             [ -n "$_any_out" ] && _anyev_seen="${_anyev_seen}${_any_out}
 "
+            # ORDER 812-d45t. A packet DEFINITION written under `events:`
+            # instead of `packets:` is accepted by every gate and dropped
+            # entirely by the fold — no packet_id is claimed, so the
+            # unknown-packet pass above cannot see it either.
+            if [ "$_misdef_capable" = yes ]; then
+                _mis_out="$("$PLAN" fragment-misplaced-definitions "$f" 2>/dev/null)"
+                # Prefix each id with its file HERE rather than joining with a
+                # separator and splitting later. The first version used "\t",
+                # which inside double quotes is a literal backslash-t, so the
+                # reader's tab-IFS split never fired, every line was skipped,
+                # and the advisory this block exists to print was silently
+                # suppressed — the same shape as the defect being reported.
+                if [ -n "$_mis_out" ]; then
+                    _misdef_seen="${_misdef_seen}$(printf '%s\n' "$_mis_out" | sed "s|^|${f}: |")
+"
+                fi
+            fi
         fi
         case "$_ev_rc" in
             0) [ -n "$_ev_out" ] && _events_seen="${_events_seen}${_ev_out}
@@ -360,6 +380,16 @@ violations="$(printf '%s\n' "$join_out" | grep -v '^__CHECKED__' | grep -v '^__A
 # every host's red build. Naming it is the fix; the silence was the defect.
 if [ -n "$advisories" ]; then
     printf '%s\n' "$advisories" | sed 's/^/  advisory: /' >&2
+fi
+# ORDER 812-d45t, reported on the same terms as the unknown-packet advisory
+# above and for the same reason: historical fragments are append-only, so a
+# past mistake must not redden every host's build (699-dycj). The silence was
+# the defect.
+if [ -n "${_misdef_seen:-}" ]; then
+    printf '%s' "$_misdef_seen" | while IFS= read -r _ml; do
+        [ -n "$_ml" ] || continue
+        echo "  advisory: ${_ml} is a packet DEFINITION under \`events:\` — the fold DROPS it; move it under the top-level \`packets:\` key" >&2
+    done
 fi
 [ -n "$violations" ] && violations="${violations}"$'\n'
 

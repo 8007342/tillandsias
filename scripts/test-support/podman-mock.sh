@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# freshness: auditor=linux-macuahuitl-claude-20260818t030000z date=2026-08-18 verdict=updated scope=797-p2xa nested half: the top-level *) arm (97cb255a9) could not see three more fall-throughs one level down — image <unknown>, secret <unknown>, and image inspect without --format each left their arm with no output and landed on the trailing exit 0; all four sites now share mock_refuse() and exit 97, argv is captured before the global-flag skip so the diagnostic quotes what the caller actually ran; bounded by a FULL pre-build litmus at every size (before 309 PASS/6 FAIL/315 executed, after 311 PASS/5 FAIL/316 executed, and the refusal fired ZERO times in either run, so nothing depended on the permissive tail) plus a new fixture (scripts/test-podman-mock-refusal.sh, 12 scenarios) wired as litmus:podman-mock-refuses-unknown-invocations; a secret-arm argument-position defect found while auditing is filed as 813-frih, not fixed here
 # freshness: auditor=linux-yoga-claude-20260816t185912z date=2026-08-16 verdict=updated scope=666-qbjd: run/create arm records --hostname/--network-alias (tracked-file lines 3+), inspect arm replays a real json array for TRACKED containers (State.Status, Config.Hostname, aliases) so inspect_container round-trips; untracked names keep the byte-identical Secrets fallback; full fixture set (1, 2a-2c, 3b) re-run green
 # freshness: auditor=linux-macuahuitl-fable5-20260810t1910z date=2026-08-10 verdict=refreshed scope=closed the 2026-08-03 Windows audit's open ask: behavioral confirmation litmus:podman-build-command-shape EXECUTED on Linux substrate (podman-orchestration instant tier 4/4 PASS, 0 FAIL); all 6 consumers still live (run-litmus-test.sh, test-concurrent-forge-shared-stack.sh, remote_projects.rs, 3 litmus yamls); no stale arm found
 # freshness: auditor=linux-mutable-root-codex-20260806t001750z date=2026-08-05 verdict=refreshed scope=top inventory finding audited on mutable Linux: all live callers re-enumerated; bash syntax passed; stateful run/create/inspect/ps/stop/rm behavior exercised end-to-end by scripts/test-concurrent-forge-shared-stack.sh (fixtures 1, 2a, 2b, 2c PASS); no stale arm found; inventory threshold/0%-rounding defect filed as order 606-vaua
@@ -23,6 +24,11 @@ set -euo pipefail
 # EOF while parsing a value at line 1 column 0` (the array it never printed).
 # Reproduces in one line: TILLANDSIAS_PODMAN_REMOTE_URL=unix:///x cargo test
 # -p tillandsias-headless --bin tillandsias --features tray remote_projects.
+#
+# Captured BEFORE the skip loop so a refusal can quote the invocation the
+# caller actually made. The landed `*)` arm printed the post-shift `$*`, which
+# drops exactly the global flags the incident was about.
+PODMAN_MOCK_ARGV=("$@")
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --remote|--syslog|--noout)
@@ -98,6 +104,47 @@ record_container() {
     printf '%s\nmock-id-%s-%s\n' "$2" "$$" "$RANDOM$RANDOM" >"$(container_path "$1")"
 }
 
+# ── refusal (order 797-p2xa) ────────────────────────────────────────────────
+# ONE refusal, FOUR call sites. The top-level `*)` arm landed in 97cb255a9 and
+# closed the outer hole. This function exists because the SAME fail-open tail
+# stayed reachable from three more places that arm cannot see, each of them the
+# identical defect one level down — an inner `case` that matches nothing,
+# leaves its arm with no output, and lands on the file's trailing `exit 0`:
+#
+#   * `image <anything but exists|inspect|prune>`  (e.g. `podman image ls`)
+#   * `secret <anything but create|rm|inspect|ls>`
+#   * `image inspect <img>` with no --format
+#
+# All three answered SUCCESS with EMPTY output, which is the whole class this
+# packet exists to close, not a smaller cousin of it.
+#
+# GRAMMAR — line 1 is the stable, typed, assertable part:
+#   [podman-mock] REFUSED: unrecognized <kind>: <subject>
+# <kind> is one of: subcommand | image subcommand | secret subcommand |
+# image inspect form. (The landed arm wrote the same line without the colon;
+# unifying it is what lets a caller assert on <kind> instead of on prose.)
+#
+# EXIT 97, matching the landed arm rather than inventing a second code:
+# distinctive, greppable, and not confusable with a real podman status.
+mock_refuse() {
+    # mock_refuse <kind> <subject>
+    printf '[podman-mock] REFUSED: unrecognized %s: %s\n' "$1" "${2:-<empty>}" >&2
+    printf '[podman-mock] full argv: podman' >&2
+    # bash 3.2 + `set -u`: an empty array is an unbound variable under "$@"
+    # expansion, and `podman` with no arguments at all is one of the shapes
+    # that must refuse rather than crash. The +alternate form is the 3.2-safe
+    # way to expand a possibly-empty array.
+    for _mr_arg in ${PODMAN_MOCK_ARGV[@]+"${PODMAN_MOCK_ARGV[@]}"}; do
+        printf ' %s' "$_mr_arg" >&2
+    done
+    printf '\n' >&2
+    printf '[podman-mock] This mock fails CLOSED. Add an explicit arm for this\n' >&2
+    printf '[podman-mock] invocation (or to the deliberate no-op arm if doing\n' >&2
+    printf '[podman-mock] nothing is genuinely correct) rather than restoring a\n' >&2
+    printf '[podman-mock] permissive tail.\n' >&2
+    exit 97
+}
+
 case "$subcommand" in
     build)
         if stateful_images_enabled; then
@@ -132,12 +179,22 @@ case "$subcommand" in
                         exit 0
                     fi
                 done
-                if [[ "${3:-}" == "--format" ]]; then
-                    printf '0\n'
-                fi
+                # No --format anywhere in argv. This used to leave the arm
+                # with NO output and land on the trailing `exit 0`: a caller
+                # asking for an image's inspect payload got an empty string
+                # and a success. The mock has no bare-form payload to replay,
+                # so it says so instead of pretending.
+                #
+                # (The `if [[ "${3:-}" == "--format" ]]` that used to sit here
+                # was dead: the loop above already matches --format in any
+                # position, including position 3.)
+                mock_refuse "image inspect form" "no --format in argv"
                 ;;
             prune)
                 exit 0
+                ;;
+            *)
+                mock_refuse "image subcommand" "${2:-}"
                 ;;
         esac
         ;;
@@ -382,6 +439,9 @@ case "$subcommand" in
                 done
                 exit 0
                 ;;
+            *)
+                mock_refuse "secret subcommand" "${2:-}"
+                ;;
         esac
         ;;
     exec)
@@ -522,19 +582,20 @@ case "$subcommand" in
         # litmus step landed in the same silent success. A mock that cannot
         # report its own confusion is not a test double, it is a source of
         # false green.
-        printf '[podman-mock] REFUSED: unrecognized subcommand %s\n' "${subcommand:-<empty>}" >&2
-        printf '[podman-mock] full argv: %s\n' "$*" >&2
-        printf '[podman-mock] This mock fails CLOSED. Add an explicit arm for this\n' >&2
-        printf '[podman-mock] subcommand (or to network|compose|system if a no-op is\n' >&2
-        printf '[podman-mock] genuinely correct) rather than restoring a permissive tail.\n' >&2
+        #
         # 97 rather than 1: distinctive enough to grep for, and it cannot be
-        # confused with a real podman exit status.
-        exit 97
+        # confused with a real podman exit status. The body moved into
+        # mock_refuse() above so the three NESTED fall-throughs this arm could
+        # not see refuse in the same words and with the same status.
+        mock_refuse "subcommand" "$subcommand"
         ;;
 esac
 
 # Arms that print and fall through land here. This is SAFE now in a way it was
 # not before: the `*)` arm above refuses anything unrecognized, so reaching this
 # line means a deliberate arm ran to completion. Previously this same line was
-# the fall-open default for every unmatched invocation.
+# the fall-open default for every unmatched invocation — and, until the nested
+# refusals above landed, for `image <unknown>`, `secret <unknown>` and bare
+# `image inspect` as well, which reached it by leaving their arm rather than by
+# missing the outer case.
 exit 0

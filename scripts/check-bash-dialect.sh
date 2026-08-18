@@ -91,11 +91,34 @@ allowlisted_hits=0
 # landed on a `|| continue`, so its staleness warning could never fire on
 # macOS and looked exactly like "nothing is stale".
 SCAN_FILES=""
-for _c in "$SCAN_DIR"/*.sh "$SCAN_DIR"/*/*.sh; do
-  [ -f "$_c" ] && SCAN_FILES="$SCAN_FILES $_c"
-done
+# A SINGLE FILE is a legitimate scan target: a litmus pinning one script wants
+# that script judged, not the whole tree beside it. Until 798-tk7b it was not
+# handled — a file fell through both globs below, matched nothing, and the
+# script printed `ok:bash-dialect-clean`. Measured 2026-08-18 against a copy
+# carrying BOTH `${v^^}` and `declare -A`: reported clean, rc=0.
+if [ -f "$SCAN_DIR" ]; then
+  SCAN_FILES="$SCAN_DIR"
+else
+  for _c in "$SCAN_DIR"/*.sh "$SCAN_DIR"/*/*.sh; do
+    [ -f "$_c" ] && SCAN_FILES="$SCAN_FILES $_c"
+  done
+fi
 if [ -z "${TILLANDSIAS_DIALECT_SCAN_DIR:-}" ] && [ -f build.sh ]; then
   SCAN_FILES="$SCAN_FILES build.sh"
+fi
+
+# A SCAN THAT CONSIDERED NOTHING IS NOT A CLEAN SCAN. With the file case fixed
+# above, the remaining way to reach zero files is a SCAN_DIR that does not
+# exist — a typo, or a directory renamed out from under a caller — and that
+# used to yield a confident green from a gate wired into ./build.sh --check.
+# Same family as everything else this gate guards against: the answer was not
+# missing, it was wrong.
+if [ -z "$SCAN_FILES" ]; then
+  echo "blocked:bash-dialect:scan-empty"
+  echo "[check-bash-dialect] TILLANDSIAS_DIALECT_SCAN_DIR='${SCAN_DIR}' matched no .sh file." >&2
+  echo "  CAUSE: the path is neither a readable file nor a directory containing *.sh or */*.sh. Nothing was judged." >&2
+  echo "  REMEDY: point it at an existing directory or a single .sh file. Do not read this as a passing dialect check — no file was read at all." >&2
+  exit 1
 fi
 
 for f in $SCAN_FILES; do

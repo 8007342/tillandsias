@@ -415,6 +415,42 @@ fn main() {
         let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
         let line = format_diagnostics_envelope_line(&timestamp, version, host_platform, agent_kind);
         eprintln!("{line}");
+
+        // ORDER 798-tk7b. The whole enclave service set, in one place, with the
+        // last exit code and how long it has been dead. Before this, a dead
+        // service was visible only to someone who ran `podman ps -a` by hand
+        // and read past a status line that says "(healthy)" about a container
+        // that exited hours ago.
+        //
+        // Best-effort by construction: --diagnostics is a REPORT, and a host
+        // where podman cannot be reached should still get its envelope. A
+        // failure here says nothing about the enclave, so it must not be
+        // dressed up as though it did.
+        if let Ok(rt) = tokio::runtime::Runtime::new() {
+            let client = tillandsias_podman::PodmanClient::new();
+            match rt.block_on(client.list_containers("tillandsias")) {
+                Ok(entries) if !entries.is_empty() => {
+                    let now = chrono::Utc::now().timestamp();
+                    for e in entries {
+                        eprintln!(
+                            "{}",
+                            format_enclave_service_line(
+                                &e.name,
+                                &e.state,
+                                e.exit_code,
+                                e.exited_at,
+                                now,
+                                e.restarts,
+                            )
+                        );
+                    }
+                }
+                Ok(_) => eprintln!("note:enclave-services-none:prefix=tillandsias"),
+                Err(err) => {
+                    eprintln!("note:enclave-services-unreadable:reason={err}")
+                }
+            }
+        }
     }
 
     if let Some(port) = port_override {
@@ -920,6 +956,76 @@ fn main() {
     {
         eprintln!("Error: {}", e);
         std::process::exit(1);
+    }
+}
+/// One enclave service's health, in the vocabulary the in-container
+/// supervisors already speak (order 798-tk7b).
+///
+/// WHY THIS SHAPE. `images/proxy/squid-supervisor.sh` and
+/// `images/default/harness-supervisor.sh` both emit
+/// `<severity>:<event>:key=value:...` — for example
+/// `fail:proxy-crashed:service=squid:signal=11:rc=139:action=restart`. Those
+/// are the first and second instances of enclave supervision; this is the
+/// third, and the packet that asked for it was explicit that they should
+/// converge on one vocabulary before there is a fourth. So this reuses the
+/// grammar rather than introducing a host-side dialect.
+///
+/// WHY IT EXISTS AT ALL. On macuahuitl the vault container sat `Exited (137)`
+/// for five hours and the nix container `Exited (143)` for two days, and
+/// several cycles ran in that window — using podman heavily — without anyone
+/// noticing. `podman ps -a` renders the vault line as
+/// `Exited (137) 5 hours ago (healthy)`, because the recorded healthcheck
+/// state outlives the container: the human-readable status does not merely
+/// omit the fault, it asserts the opposite. Reporting the structured facts
+/// (state, exit code, signal, age) states the death plainly instead.
+fn format_enclave_service_line(
+    name: &str,
+    state: &str,
+    exit_code: i32,
+    exited_at: i64,
+    now: i64,
+    restarts: u32,
+) -> String {
+    if state == "running" {
+        return format!("ok:enclave-service-up:service={name}:restarts={restarts}");
+    }
+    let age = if exited_at > 0 && now >= exited_at {
+        format_age_secs(now - exited_at)
+    } else {
+        "unknown".to_string()
+    };
+    // A clean stop is not a fault. Conflating it with a crash would make the
+    // report noisy enough to ignore, which is how the original blind spot
+    // survived five hours of cycles.
+    if exit_code == 0 {
+        return format!(
+            "note:enclave-service-stopped:service={name}:state={state}:rc=0:age={age}:restarts={restarts}"
+        );
+    }
+    let signal = match exit_code {
+        // 128+N is the shell/OCI convention for death by signal N.
+        c if c > 128 && c < 192 => match c - 128 {
+            9 => "SIGKILL".to_string(),
+            15 => "SIGTERM".to_string(),
+            11 => "SIGSEGV".to_string(),
+            n => format!("SIG{n}"),
+        },
+        _ => "none".to_string(),
+    };
+    format!(
+        "fail:enclave-service-dead:service={name}:state={state}:rc={exit_code}:signal={signal}:age={age}:restarts={restarts}"
+    )
+}
+
+/// Coarse age for a report a human reads at a glance. Deliberately not exact:
+/// the decision it supports is "has this been dead long enough that nobody
+/// noticed", and seconds-precision would only widen the line.
+fn format_age_secs(secs: i64) -> String {
+    match secs {
+        s if s < 60 => format!("{s}s"),
+        s if s < 3600 => format!("{}m", s / 60),
+        s if s < 86400 => format!("{}h", s / 3600),
+        s => format!("{}d", s / 86400),
     }
 }
 
@@ -3375,6 +3481,7 @@ mod seed_staleness_tests {
     /// 763-munc pin: the verdict names BOTH shas, states unknowns as
     /// `unknown` (never guessed), and classifies fresh/stale/unknown from
     /// the behind count alone.
+
     #[test]
     fn verdict_line_shapes() {
         let fresh = format_seed_staleness("main", "aaa111", Some("aaa111"), Some(0), Some(2));
@@ -23027,5 +23134,89 @@ esac
             body.contains("destructive_reset_allowed()"),
             "run_reset_guest must honor the destructive-reset gate"
         );
+    }
+}
+
+#[cfg(test)]
+mod enclave_service_health_tests {
+    /// Order 798-tk7b. The line a reader sees for a service that died, and the
+    /// case that motivated the packet: `podman ps -a` renders this same
+    /// container as "Exited (137) 5 hours ago (healthy)".
+    #[test]
+    fn a_dead_service_reports_its_signal_and_age_not_its_stale_health() {
+        let now = 1_700_000_000i64;
+        let line = crate::format_enclave_service_line(
+            "tillandsias-vault",
+            "exited",
+            137,
+            now - 5 * 3600,
+            now,
+            0,
+        );
+        assert!(line.starts_with("fail:enclave-service-dead:"), "{line}");
+        assert!(line.contains("service=tillandsias-vault"), "{line}");
+        assert!(line.contains("rc=137"), "{line}");
+        assert!(line.contains("signal=SIGKILL"), "{line}");
+        assert!(line.contains("age=5h"), "{line}");
+        // The word the human status line would have offered must not appear.
+        assert!(!line.contains("healthy"), "{line}");
+    }
+
+    #[test]
+    fn sigterm_and_sigsegv_are_named_not_left_as_numbers() {
+        let now = 1_700_000_000i64;
+        let term = crate::format_enclave_service_line(
+            "tillandsias-nix",
+            "exited",
+            143,
+            now - 2 * 86400,
+            now,
+            0,
+        );
+        assert!(term.contains("signal=SIGTERM"), "{term}");
+        assert!(term.contains("age=2d"), "{term}");
+        let segv = crate::format_enclave_service_line(
+            "tillandsias-proxy",
+            "exited",
+            139,
+            now - 30,
+            now,
+            4,
+        );
+        assert!(segv.contains("signal=SIGSEGV"), "{segv}");
+        assert!(segv.contains("restarts=4"), "{segv}");
+    }
+
+    /// NEGATIVE CONTROL: a running service and a cleanly-stopped one must NOT
+    /// read as failures. Without this the reporter could pass the tests above
+    /// by calling everything dead, and a report that cries wolf on every
+    /// shutdown trains its reader to ignore it — which is how the original
+    /// blind spot survived five hours of cycles.
+    #[test]
+    fn running_and_cleanly_stopped_services_are_not_failures() {
+        let now = 1_700_000_000i64;
+        let up = crate::format_enclave_service_line("tillandsias-proxy", "running", 0, 0, now, 2);
+        assert!(up.starts_with("ok:enclave-service-up:"), "{up}");
+        assert!(!up.contains("fail:"), "{up}");
+        let stopped =
+            crate::format_enclave_service_line("tillandsias-web", "exited", 0, now - 120, now, 0);
+        assert!(
+            stopped.starts_with("note:enclave-service-stopped:"),
+            "{stopped}"
+        );
+        assert!(!stopped.contains("fail:"), "{stopped}");
+    }
+
+    #[test]
+    fn an_unknown_exit_time_says_unknown_rather_than_inventing_an_age() {
+        let line = crate::format_enclave_service_line(
+            "tillandsias-vault",
+            "exited",
+            137,
+            0,
+            1_700_000_000,
+            0,
+        );
+        assert!(line.contains("age=unknown"), "{line}");
     }
 }

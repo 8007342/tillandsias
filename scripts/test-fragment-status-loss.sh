@@ -534,6 +534,48 @@ case "$out" in
     *) echo "ok: no advisory for a note on a packet the fold knows" ;;
 esac
 
+# ── 812-d45t: a packet DEFINITION under `events:` is REPORTED ───────────────
+# Every gate accepts it and the fold drops it entirely. No packet_id is claimed
+# as an event, so the unknown-packet channel above cannot see it either — this
+# needs its own question. Advisory, not violation, for the 699-dycj reason:
+# past fragments are append-only.
+S="$TDIR/misplaced-definition"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+events:
+  - packet_id: dropped-on-the-floor
+    order: 999
+    status: ready
+    kind: bug
+    title: "a packet definition written under the wrong key"
+    deliverable: "should be reported, not silently discarded"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+assert "misplaced packet definition is named" 0 \
+    "dropped-on-the-floor is a packet DEFINITION under" "$rc" "$out"
+case "$out" in
+    violation:*) echo "FAIL: a misplaced definition must not fail the gate (699-dycj); out=$out" >&2; fail=1 ;;
+    *) echo "ok: misplaced definition reports without failing the gate" ;;
+esac
+
+# NEGATIVE CONTROL: the SAME definition under the correct key must be silent,
+# or the advisory fires on every well-formed fragment in the tree.
+S="$TDIR/correct-definition"; sandbox "$S"
+cat >"$S/plan/index.d/a.yaml" <<'F'
+packets:
+  - packet_id: properly-filed
+    order: 999
+    status: ready
+    kind: bug
+    title: "a packet definition under the correct key"
+    deliverable: "must draw no advisory"
+F
+out="$(cd "$S" && bash scripts/check-fragment-status-loss.sh 2>&1)"; rc=$?
+case "$out" in
+    *"is a packet DEFINITION under"*)
+        echo "FAIL: advisory fired on a CORRECTLY filed packet; out=$out" >&2; fail=1 ;;
+    *) echo "ok: no advisory for a definition under packets:" ;;
+esac
+
 if [ "$fail" -eq 0 ]; then
     echo "ok: all fragment-status-loss scenarios passed"
     exit 0
