@@ -1,0 +1,155 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T09:25:00Z.
+#
+# The payoff of the destructive e2e: three cold-start defects in the enclave
+# orchestration, none of which can be seen on a host that already has a stack.
+packets:
+  - packet_id: enclave-orchestration-drifted-from-the-launch-path-the-product-tests
+    order: 825-uxzu
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "scripts/orchestrate-enclave.sh could not bring up a single container on a cold-provisioned host — static IPs the product forbids, a git mirror with no writable volume, and an inference image tag guessed from a VERSION that 702-eusw guarantees is wrong"
+    deliverable: "the enclave stack comes up from a destroyed substrate, and the script stops contradicting invariants the product asserts in unit tests"
+    pickup_role: any
+    release_target: v0.5
+    capability_tags: [enclave-runtime, e2e, fail-loud]
+    estimated_hours: 4
+    context: |
+      OBSERVED 2026-08-18, immediately after the destructive e2e (824-23tb)
+      left this host with a genuinely empty podman store. Every one of these is
+      invisible on a host whose stack already exists, which is the entire
+      argument for running the destructive test.
+
+      FAULT 1 — STATIC IPs THE PRODUCT FORBIDS.
+        Error: IPAM error: requested ip address 10.0.42.2 is already allocated
+        to container ID 29eb69e8...
+
+      I first assumed an orphaned lease. It was not: 29eb69e8 IS
+      tillandsias-vault, running and legitimately holding .2, because
+      `tillandsias --init` had just created it and podman IPAM handed out the
+      first free address. orchestrate-enclave.sh then demanded .2 for the PROXY
+      via `--ip`.
+
+      The product's position is not ambiguous. main.rs:18834 asserts, for
+      proxy/git/inference/router together:
+        assert!(!has_arg(args, "--ip"),
+                "stack launch must let podman IPAM allocate addresses");
+      and :17402-17403 assert the proxy carries neither `--ip` NOR the literal
+      `10.0.42.2`. The script pinned .2/.3/.4 anyway. All three containers
+      already carry `--hostname` and two carry `--network-alias`, so nothing
+      needed the addresses. Removed; the proxy came up healthy on the next run.
+
+      FAULT 2 — A READ-ONLY GIT MIRROR WITH NOWHERE TO WRITE.
+      With the proxy fixed, the git daemon died instantly. Its own words, which
+      nobody had ever seen:
+        [git-service] initializing bare repo at /srv/git/tillandsias
+        fatal: cannot mkdir /srv/git/tillandsias: Read-only file system
+
+      The container runs `--read-only` and the script mounts only the CA cert.
+      The product mounts a named volume there — main.rs:3695
+      `format!("{mirror_volume}:/srv/git")` — with a comment at :18859 saying
+      "/srv/git must be writable (named volume) so the bare repo persists" and
+      a unit test at :18881 asserting `tillandsias-mirror-alpha:/srv/git` is in
+      the args. The script also passed `--base-path=/var/lib/git` while the
+      image serves `$GIT_SERVICE_ROOT` = /srv/git. Both corrected; the mirror
+      came up healthy.
+
+      FAULT 3 — AN IMAGE TAG GUESSED FROM THE WRONG SOURCE.
+        Error: short-name "tillandsias-inference:v0.4.260817.1" did not resolve
+
+      The proxy and git blocks RESOLVE their image from what exists
+      (`podman images ... | grep ... | head -1`). Inference alone CONSTRUCTED
+      `tillandsias-inference:v${VERSION}` from the checkout's VERSION file. The
+      installed binary had built the images as v0.4.260818.1, because
+      `--install` bumps VERSION — and 702-eusw REQUIRES that bump be reverted
+      before pushing. So the project's own push-isolation discipline guarantees
+      the checkout VERSION and the built image tag disagree, and the only
+      container that derives its tag from VERSION is the only one that breaks.
+      Made to resolve like its siblings.
+
+      RESULT: `orchestrate-enclave.sh . tillandsias` now runs to
+      "Orchestration complete", exit 0, having brought up proxy, git mirror and
+      inference in turn. Before these three fixes it could not start the FIRST
+      container on a cold host.
+
+      THE PATTERN, which is the part worth carrying: all three are the shell
+      orchestration having drifted from the product's own container launch
+      path, and in two of the three the product asserts the correct behaviour
+      in a unit test that the script violates. The tests are the spec; nothing
+      checks the script against them.
+
+      A FOURTH, NOT FIXED, filed as the reporting half: when the git container
+      died, the script printed "Image may be incomplete. Rebuild:
+      scripts/build-image.sh git". The image was fine — 1.15 GB, built 36
+      minutes earlier. The container had exited 128 and `--detach --rm` had
+      already deleted it along with its logs, so the readiness probe reported
+      "no such container" and the script guessed. That is the 797-5kqe shape
+      again: a remedy asserting a cause it never measured, pointing at the one
+      link that was healthy. I removed `--rm` from the git block so the next
+      failure can be autopsied, but the misleading message and the other `--rm`
+      service containers remain — see the note below.
+events:
+  - packet_id: enclave-orchestration-drifted-from-the-launch-path-the-product-tests
+    event:
+      type: completed
+      ts: "2026-08-18T09:25:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T083600Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. Three cold-start faults found and fixed in
+        scripts/orchestrate-enclave.sh, each verified by re-running the orchestration and
+        watching the next container come up: static --ip pins removed (proxy healthy),
+        the tillandsias-mirror-<project>:/srv/git volume added and --base-path corrected
+        from /var/lib/git to /srv/git (git mirror healthy), and the inference image resolved
+        from `podman images` like its two siblings instead of constructed from the
+        checkout's VERSION (inference spawned; orchestration reached "Orchestration
+        complete", exit 0). Net diff 4 insertions, 6 deletions. All three contradicted the
+        product: two are asserted against by unit tests (main.rs:18834 "stack launch must
+        let podman IPAM allocate addresses", :18881 the mirror volume) and the third is
+        guaranteed to break by 702-eusw's own VERSION-revert rule.
+      evidence_refs:
+        - "IPAM: 10.0.42.2 held by tillandsias-vault (29eb69e8), demanded by the proxy via --ip; product asserts !--ip and !10.0.42.2"
+        - "git: 'fatal: cannot mkdir /srv/git/tillandsias: Read-only file system', exit 128; product mounts {mirror_volume}:/srv/git (main.rs:3695, test :18881)"
+        - "inference: short-name v0.4.260817.1 unresolved while images are v0.4.260818.1; proxy/git resolve, inference constructed"
+        - "after: orchestrate-enclave.sh . tillandsias -> 'Orchestration complete' exit=0 with proxy+git+inference started"
+  - packet_id: enclave-orchestration-drifted-from-the-launch-path-the-product-tests
+    event:
+      type: note
+      ts: "2026-08-18T09:25:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T083600Z
+      host: linux_mutable
+      summary: |
+        THINGS I GOT WRONG WHILE DOING THIS, all caught by measuring instead of
+        continuing.
+
+        1. I read the IPAM error as an ORPHANED lease and was ready to file
+           "stale netavark entry survives a reset". Checking which container
+           held it showed 29eb69e8 is vault, alive and entitled to the address.
+           The fault was a collision, not a leak, and the remedy is the
+           opposite of what I would have written.
+
+        2. My first edit inserted the volume line but left a BLANK LINE after
+           `--env "GIT_TRACE=1" \`, which terminates a backslash continuation.
+           podman then ran with no image and `--volume` executed as a shell
+           command: "line 171: --volume: command not found". The script's own
+           error output caught it immediately; a quieter failure mode would
+           have had me debugging the mirror.
+
+        3. I resolved CERTS_DIR by `find`ing intermediate.crt and taking its
+           dirname; the find matched nothing, dirname returned ".", and podman
+           refused with rc=125. The script defines CERTS_DIR=/tmp/tillandsias-ca
+           outright. Reading the script beat inferring from the filesystem.
+
+        STILL OPEN, deliberately not swept into this packet:
+        * The "Image may be incomplete" remedy is still printed on any git
+          readiness failure, and is still a cause nobody measured.
+        * Two other service containers still run `--detach --rm`, so their
+          startup failures remain unforensicable. I removed it only from the
+          git block, where I needed the logs, because changing the lifecycle of
+          containers I had not observed failing is a different change with a
+          different blast radius.
+        * Whether the FORGE step after inference works on a cold host is
+          untested — the script tears the stack down immediately after
+          spawning inference, by design, and I did not hold it up to look.
