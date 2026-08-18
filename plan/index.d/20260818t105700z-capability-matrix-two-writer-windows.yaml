@@ -1,0 +1,133 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T10:57Z.
+#
+# FOUR p1 PACKETS CLOSED IN ONE CYCLE, and the reason is that they were one
+# problem wearing four numbers. The status transitions were made with
+# `tillandsias-plan set-field ... --evidence` and verified with `plan status`;
+# no status is declared under `packets:` here.
+#
+# The finding worth more than any of the four is in the 808-7yrd event below:
+# the matrix design this host proposed had a flaw that only appeared when this
+# host tried to USE it, and it would have caused silent data loss.
+
+events:
+  - packet_id: capability-matrix-is-a-crdt-of-per-host-rows-not-a-pile-of-json-files
+    event:
+      type: note
+      ts: "2026-08-18T10:57:00Z"
+      agent_id: windows-yolanda-opus5-20260818t1019z
+      host: windows
+      summary: >
+        A DESIGN FLAW IN 808-7yrd, FOUND BY IMPLEMENTING 809-7e4m ON TOP OF IT
+        — and worth recording carefully, because the fold looked correct and
+        its tests passed.
+        808-7yrd's stated premise is "single writer per key by construction, so
+        LWW never arbitrates a real conflict". On Windows that premise is FALSE
+        as originally keyed. A Windows machine is observed from two execution
+        contexts: the guest sees the cpu and the paravirtual gpu; only Windows
+        sees the NPU, the true GPU name and the real RAM. Both describe machine
+        `yolanda`, so both carry the same host_id. Two writers, one key.
+        MEASURED, NOT ARGUED. Contributing a Windows-side row against the
+        host_id-keyed fold ERASED the guest row:
+          before  host:yolanda  schedulable cpu/container, cpu/host-native;
+                                present-unusable gpu (wsl2-no-dri-render-node)
+          after   host:yolanda  schedulable none;
+                                present-unusable npu (wsl2-npu-not-exposed)
+        The cpu and gpu did not become unschedulable — they stopped being
+        reported. Data loss dressed as an update, and invisible: the surviving
+        row still looked like a well-formed answer. This is the same failure
+        class the matrix exists to prevent (a confidently wrong row a consumer
+        cannot detect), reproduced by the matrix itself.
+        THE FIX KEEPS THE PREMISE AND CORRECTS THE KEY: (host_id, locus). Each
+        key then genuinely has one writer — the guest owns (yolanda, in-guest),
+        Windows owns (yolanda, windows-host) — and LWW returns to deciding only
+        which of ONE writer's successive probes is current. Assembling a
+        machine's full row from its several loci becomes the consumer's job,
+        done with everything present, instead of a merge that happens to run in
+        the right order.
+        THE GENERAL LESSON, for whichever host designs the next channel: "one
+        writer per key" is a claim about the WORLD, not about the code, and it
+        was wrong here for a reason no amount of reading the fold would reveal.
+        It surfaced within an hour of the channel landing, only because the very
+        next packet attempted to use it. A design validated by its own tests and
+        never by a second consumer is not yet validated.
+        This also settles 809-7e4m's open question in the direction it argued:
+        locus is an OBSERVATION property, not a measurement property. It lives
+        on the capability ROW rather than in the document, because the row is
+        the contribution and one probe binary can be run from either side.
+        NOTHING IS DROPPED IN SILENCE: a row that cannot be keyed (no host_id,
+        no locus) is returned in a skipped list and printed, because a silently
+        discarded row is indistinguishable from a host that never contributed —
+        and "the matrix looks empty" is exactly the symptom a misfiled row
+        produces.
+      evidence_refs:
+        - "3cf257de3 fix(plan): capability matrix keys on (host_id, locus)"
+        - "3cf257de3 cargo test -p tillandsias-plan: 194 + 17 passed 0 failed, incl. two_contexts_observing_one_machine_do_not_overwrite_each_other"
+
+  - packet_id: windows-capability-document-cannot-be-produced-by-the-guest-probe-alone
+    event:
+      type: completed
+      ts: "2026-08-18T10:57:00Z"
+      agent_id: windows-yolanda-opus5-20260818t1019z
+      host: windows
+      summary: >
+        CLOSED. scripts/windows-host-capability-probe.sh contributes what only
+        Windows can see, and the matrix now assembles this machine from two
+        loci. Measured on yolanda 2026-08-18:
+          npu  NPU Compute Accelerator Device  Status=OK  driver 32.0.20102.3930
+               PCI\VEN_1022&DEV_17F0  usable=false  wsl2-npu-not-exposed  lanes=[]
+          gpu  AMD Radeon(TM) 860M Graphics   Status=OK  driver 32.0.31035.1003
+               PCI\VEN_1002&DEV_1114  usable=false  wsl2-no-dri-render-node  lanes=[]
+          ram  15.16 GB against the guest's 7.34 GB
+        THE RAM DIFFERENCE IS NOT AN ERROR IN EITHER ROW, which is worth stating
+        because it looks like one. 7.34 GB is what the guest can actually offer
+        a lane, and every engine this project ships runs in the guest — so for
+        scheduling OUR work the guest's figure is the correct one. 15.16 GB is
+        the machine's capacity, relevant only if a Windows-native lane ever
+        ships. The locus key is what lets both be true at once.
+        A FOOTGUN WORTH THE COMMENT IT COST. Filtering NPUs by a /NPU/ name
+        regex silently matches every USB "I-npu-t Device" — four HID devices
+        matched here before the filter became `Class -eq 'ComputeAccelerator'`.
+        A phantom NPU in the fleet matrix is worse than no NPU, because a
+        scheduler would believe it. Recorded in the script.
+        NO CPU RECORD FROM THE WINDOWS SIDE, deliberately: the guest already
+        reports it, and two contexts disagreeing about one device is a
+        reconciliation problem nobody needs. Each context contributes only what
+        it alone can see.
+        DELIBERATELY NOT DONE: `system_ram_gb` on the Windows row is carried in
+        the ledger YAML but is NOT a field on the Rust `HostInfo`, so a Rust
+        consumer deserialising the document drops it. That is a known, recorded
+        gap rather than an oversight. Adding it would create a SECOND home for a
+        value `DeviceRecord.system_ram_gb` already owns, which is the drift class
+        807-c3mf removed rather than documented. The right moment to type it is
+        when a scheduler needs machine-capacity RAM as distinct from
+        context-available RAM; naming those two quantities apart is the design
+        question, and it should not be answered by accident in the last hour of
+        a cycle.
+      evidence_refs:
+        - "7a43555a2 feat(accel): the Windows host contributes what only it can see"
+        - "7a43555a2 tillandsias-plan capability-matrix: host:yolanda at locus in-guest AND windows-host, NPU DeviceRecord present"
+
+  - packet_id: accel-probe-reports-none-where-its-own-contract-promises-present-unusable
+    event:
+      type: completed
+      ts: "2026-08-18T10:57:00Z"
+      agent_id: windows-yolanda-opus5-20260818t1019z
+      host: windows
+      summary: >
+        CLOSED, both halves and both arms of the closure condition.
+        The GPU half landed earlier in the guest probe (/dev/dxg present, no DRI
+        render node, no better GPU already found). The NPU half could NOT be
+        done there and that is structural, not a missing driver: WSL2 passes
+        through no PCI, so nothing in the guest will ever see 1022:17f0. It is
+        now contributed from the Windows side.
+        BOTH ARMS OF verifiable_closure VERIFIED, including the one that is easy
+        to skip: a PnP ComputeAccelerator or display adapter present yields
+        present-unusable with a non-empty reason (measured on this machine), AND
+        an accelerator-free input yields `devices: []` (verified by feeding the
+        probe's own transform an empty device set). The second arm is what stops
+        the fix from manufacturing phantom hardware on machines that have none —
+        the failure mode that would have made this cure worse than the disease.
+      evidence_refs:
+        - "7a43555a2 present arm: npu + gpu emitted present-unusable with named reasons on yolanda"
+        - "7a43555a2 absent arm: empty npus/gpus input yields devices_len=0"

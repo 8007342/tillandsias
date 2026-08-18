@@ -1,0 +1,100 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T10:35Z.
+#
+# 808-43mw LANDED after twelve cycles of holding for coordination that never
+# came. The hold was a stricter reading than the methodology actually asks for,
+# and this fragment says so plainly so the next host does not repeat it.
+#
+# No status is declared under `packets:` here — the transition was made with
+# `tillandsias-plan set-field 808-43mw status completed --evidence ...`
+# (fragment 20260818t103527z-29760574-windows.yaml) and verified with
+# `plan status 808-43mw`.
+
+events:
+  - packet_id: capability-document-cannot-say-which-host-it-describes
+    event:
+      type: completed
+      ts: "2026-08-18T10:35:39Z"
+      agent_id: windows-yolanda-opus5-20260818t1019z
+      host: windows
+      summary: >
+        LANDED. HostInfo carries host_id + host_id_source + host_kind;
+        MeasurementRecord carries workload_suite + locus; SCHEMA_VERSION 1 -> 2.
+        The packet's verifiable_closure is now an executable test rather than a
+        claim: a document round-trips its host_id, a measurement carries suite
+        and locus, and two documents at differing loci differ in a
+        machine-readable field.
+        ON THE TWELVE-CYCLE HOLD, because the lesson is worth more than the
+        field. This host held 808-43mw for twelve consecutive cycles reading
+        "coordinate before landing — it is a shared crate" as "wait for a
+        reply". No reply came; no other host filed a fragment mentioning
+        808-43mw, 808-7yrd, CapabilityDocument or the capability matrix in that
+        entire span. Reading the actual rule
+        (methodology/distributed-work.yaml, ownership matrix) resolves it:
+        tillandsias-headless sits in shared_protocol_and_orchestration whose
+        contribution_policy is "Any host may propose changes via PR or via
+        plan/issues. Linux host owns the green-build invariant on linux-next" —
+        which is NOT the "Other hosts MUST NOT edit ... without coordinating in
+        plan/" wording the windows_native_tray and macos_native_tray scopes
+        carry. The strict phrasing exists in the same table, so its ABSENCE
+        from the shared scope is deliberate. Proposing in plan/ (this host filed
+        808-43mw) plus a green gate IS the sanctioned path. Waiting was not
+        caution, it was a misread that cost twelve cycles on a p1 blocker.
+        WHY kernel_release COULD NOT HAVE BEEN THE KEY — measured, not assumed.
+        This host's guest reports 6.18.33.2-microsoft-standard-WSL2, and so does
+        any other guest on that kernel. Keying on it merges distinct machines
+        into one row and makes LWW arbitrate between hosts that are not in
+        conflict, converting "single writer per key by construction" into a
+        design that silently drops half the fleet.
+        NOT A NEW NAMING SCHEME, which is the part worth reusing. host_id is
+        the identifier the fleet ALREADY has: tillandsias_node_name (short
+        hostname, lowercased), the same string that names
+        plan/mo-full-attestations.d/<host>.md. Verified live in-guest: the probe
+        emits host_id=yolanda, matching yolanda.md. A second name for a machine
+        that already has one would put the matrix and the attestation ledger in
+        disagreement about who a host is.
+        MEASURED AND MILDLY SURPRISING: WSL2 inherits the Windows machine name,
+        so the guest's `uname -n` is Yolanda and the derived chain agrees with
+        the Windows side for free. That is a DEFAULT, not a guarantee —
+        /etc/wsl.conf's network.hostname can override it, at which point a
+        guest-produced row files itself under a second key for one machine.
+        host_id_source (input | node-name | unknown) is how a consumer tells a
+        NAMED host from an inferred one; recording only the value would
+        reproduce the silent-collision defect one level up. host_id is never
+        empty — an unnameable host reports `unknown` rather than folding every
+        unidentifiable machine into one blank key.
+        THE OPTIONALITY OF workload_suite AND locus IS A COMPATIBILITY
+        DECISION, not laxity. scripts/bench-accel-lane.sh already KNOWS the
+        suite — it stamps workload_suite: "802-2536-v1" on its own stdout — and
+        drops it when piping to --record-measurement because the struct had
+        nowhere to put it. The label existed upstream and downstream and was
+        discarded in the middle. But that script is another host's, so
+        REQUIRING the fields would silently stop recording for the first host
+        that runs this binary against the unchanged script (its
+        `|| echo note:...record-failed` arm keeps the bench exiting 0). A test
+        pins the CURRENT payload as still-parseable. The schema permits
+        absence; the MATRIX requires presence — PROBE-9 states that split, and
+        that a consumer must refuse to rank records at differing loci rather
+        than ranking them silently.
+        A KNOWN GAP IS PINNED RATHER THAN PAPERED OVER. host_kind reads `linux`
+        on this Windows machine because the probe runs in the guest. That is
+        809-7e4m's two-execution-context finding arriving in the schema; the
+        field's value is making the split VISIBLE instead of leaving a Windows
+        row indistinguishable from a Linux one. Deliberately not resolved by
+        having the guest infer `windows-wsl2`: the context that can see neither
+        the NPU nor the machine's real RAM (7.3 GB VM slice against 15.2 GB
+        installed) should not be the one naming what the machine is. A test
+        asserts the gap so a later reader sees it as known.
+        SCOPE HELD: DeviceRecord.locus is NOT included. 809-7e4m argues for it
+        in this same bump and that argument still stands, but it is that
+        packet's open design question and touches 13 construction sites;
+        808-43mw's deliverable is complete without it. Deferred deliberately,
+        not overlooked.
+        UNBLOCKED BY THIS: 808-7yrd (the matrix now has a fold key), 809-7e4m /
+        806-2r4s NPU half (a row can now say which host and which context it
+        came from), 810-jeg7 (locus has a home).
+      evidence_refs:
+        - "e75a15cce ./build.sh --check rc=0 (target/smoke-e2e/gate-808-43mw.log)"
+        - "e75a15cce cargo test -p tillandsias-headless --bin tillandsias accel_probe: 23 passed 0 failed (tillandsias-build WSL2 distro)"
+        - "e75a15cce live in-guest probe: host_id=yolanda host_id_source=node-name host_kind=linux kernel=6.18.33.2-microsoft-standard-WSL2"
+        - "openspec/specs/accel-capability-probe/spec.md PROBE-9 (host identity; locus comparison refusal)"
