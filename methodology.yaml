@@ -530,6 +530,7 @@ on_demand_experts:
         - "Build-cache GC per build_cache_hygiene (cargo clean + scripts/nix-toolbox.sh gc when bloated/stale)."
         - "scripts/nix-toolbox.sh gc on Silverblue+toolbox hosts (pins the current deps closures, then collects above the ceiling; a bare nix store gc would delete the whole cache — see build_cache_hygiene.nix_store_policy); podman image prune of superseded versioned images."
         - "Nix-lane guards, on hosts with nix: scripts/test-nix-toolbox.sh (store contract) and scripts/check-nix-deps-stability.sh (the content-stability property the cache's hit rate depends on). Daily rather than per-commit deliberately — each is a flake evaluation, and putting them in ./build.sh --check would tax every edit to protect a property that only moves when a lock file does."
+        - "Enclave nix binary cache (order 801-kqme), on Linux hosts with nix and a running enclave: scripts/nix-cache-service.sh ensure, then scripts/test-nix-cache-service.sh. The fixture asserts BOTH trust mechanisms — the stack-CA leaf for transport and the ed25519 trusted-public-keys signature for content — because they are different properties and a cache that keeps only one is not safe to share. It skips cleanly when the service is absent, but a service that is RUNNING and untrusted is a violation, never a skip."
         - "Reap defunct delegate/opencode handles; delegate-outcome.sh sweep any stale registered delegate."
         - "Verify the dev-environment expert containers are up + fresh (see dev_environment_experts)."
     post_restart_verification: >

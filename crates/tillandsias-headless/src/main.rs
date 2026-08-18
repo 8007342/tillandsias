@@ -1263,8 +1263,16 @@ const ENCLAVE_ONLY_NET: &str = "tillandsias-enclave";
 // git:// (the git wire protocol), which never consults http_proxy — measured
 // with a black-hole proxy control on 2026-08-10 — and enclave_no_proxy()
 // already appends the whole enclave subnet for IP-addressed traffic.
+// Order 801-kqme: `nix-cache` IS listed, and the contrast with the mirror above
+// is the reason. The binary cache's transport is HTTPS, which DOES consult
+// https_proxy, so without the name here every substituter request is sent to
+// squid as a CONNECT and comes back `curl: (56) Recv failure: Connection reset
+// by peer` — measured from an enclave container on 2026-08-17. The subnet entry
+// appended by enclave_no_proxy() does not rescue it: curl matches no_proxy
+// against the HOSTNAME as written, not against the address it resolves to, so a
+// CIDR entry never covers `https://nix-cache:5000`.
 const ENCLAVE_NO_PROXY_BASE: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy";
+    "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,nix-cache";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
 
 fn enclave_subnet() -> String {

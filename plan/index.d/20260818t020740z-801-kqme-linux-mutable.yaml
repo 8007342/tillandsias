@@ -1,0 +1,249 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T02:07:40Z, closing 801-kqme:
+# a nix binary-cache SERVICE on the enclave, backed by the 795-h8er store.
+#
+# Also files three follow-ups this work uncovered but does not own.
+status:
+  - packet_id: nix-binary-cache-service-on-the-enclave-for-warm-forges
+    field: status
+    value: completed
+    ts: "2026-08-18T02:07:40Z"
+    host: linux_mutable
+
+events:
+  - packet_id: nix-binary-cache-service-on-the-enclave-for-warm-forges
+    event:
+      type: completed
+      ts: "2026-08-18T02:07:40Z"
+      agent_id: fork-801kqme-20260818T0207Z
+      host: linux_mutable
+      summary: |
+        SERVING MECHANISM: harmonia 3.2.0, chosen on measurement rather than
+        reputation, as the packet asked.
+
+          harmonia 3.2.0    67 MiB closure,   7 store paths
+          nix-serve 0.2    231 MiB closure, 177 store paths  (Perl + deps)
+
+        The decisive property is not size though: harmonia-cache serves the
+        store from a FULLY READ-ONLY mount. It needs no write access to the WAL
+        SQLite db, so the host keeps building into the same store while the
+        service serves it, with no shared mutable state and no corruption
+        surface. That is what makes "one store, many concurrent readers" safe
+        and is exactly the objection to the bind-mount design.
+
+        Two traps worth carrying forward. First, the `harmonia` dispatcher
+        binary shells out to a `nix` CLI (adding a 159 MiB / 63-path runtime
+        dependency, which would have erased the size advantage); `harmonia-cache`
+        is the real server and needs no nix at all — so the service execs it
+        directly. Second, harmonia derives `workers = 0` in this container and
+        dies with "workers must be greater than 0"; the config sets it
+        explicitly.
+
+        BOTH TRUST MECHANISMS ARE IMPLEMENTED, and the distinction is kept:
+          TRANSPORT — a TLS leaf minted from the stack CA (/tmp/tillandsias-ca),
+            SANs DNS:nix-cache,DNS:localhost,IP:127.0.0.1, the same shape as
+            vault_bootstrap.rs's vault leaf. A client without the stack CA
+            cannot complete the handshake (measured: curl rc=60).
+          CONTENT — an ed25519 binary-cache keypair generated on the host.
+            Clients verify with require-sigs + trusted-public-keys. The secret
+            key lives at ~/.local/share/tillandsias/nix-cache/cache-priv.key,
+            mode 0600, outside the repo and outside every image.
+        The shortcut of marking the cache `trusted-substituters` so signatures
+        are skipped was NOT taken: it means "accept whatever this host sends"
+        and discards the integrity property that makes a shared cache safe.
+
+        THE HOST STORE IS UNCHANGED. 795-h8er's store keeps serving host-side
+        builds directly. Nothing is bind-mounted into any forge.
+
+        MEASURED, from inside the enclave, empty destination store, closure =
+        nix-2.34.8 (63 paths / 159 MiB), signature-verified over TLS:
+          WARM  (https://nix-cache:5000)   586 / 553 / 566 ms   63 paths, 170 MiB
+          COLD  (upstream through squid)   IMPOSSIBLE — connection reset
+        Host-side, where a cold fetch is possible at all: 5.9 s from
+        cache.nixos.org vs 0.19 s from this cache, both 63 paths / 169 MiB.
+
+        THE COLD RESULT IS THE MORE IMPORTANT NUMBER. cache.nixos.org appears
+        NOWHERE in the 207-line squid allowlist, so an enclave container cannot
+        reach any upstream substituter. This service is therefore not an
+        optimisation over a slower path — inside the enclave it is the ONLY
+        substituter that can exist. A forge with nix and without it must build
+        from source.
+
+        SCOPE, HONESTLY. What landed is a design plus a working, tested,
+        single-host service reachable at https://nix-cache:5000 on the enclave.
+        What did NOT land, and why, is filed as three packets below: the forge
+        image contains no nix at all, so nothing in a forge can consume this
+        yet; and the service is started by a script rather than by the tray's
+        ensure_*/container_deps lifecycle graph.
+      evidence_refs:
+        - "scripts/nix-cache-service.sh: new; keygen|pubkey|ensure|status|stop|substituter-args; verdict grammar ok:/skip:/blocked:"
+        - "scripts/test-nix-cache-service.sh: new 8-scenario fixture; ok:nix-cache-fixture:8/8"
+        - "openspec/specs/nix-cache-service/spec.md: new; 5 requirements incl. the both-trust-mechanisms requirement"
+        - "crates/tillandsias-headless/src/main.rs ENCLAVE_NO_PROXY_BASE: +nix-cache (HTTPS consults https_proxy; without it squid resets every request, measured rc=56)"
+        - "methodology.yaml start_of_day_maintenance + skills/meta-orchestration/SKILL.md: fixture wired to the daily activation surface"
+        - "./build.sh --check rc=0 (ghost-trace ratchet initially caught spec:nix-cache-service as a ghost; spec then written)"
+        - "measured: harmonia 67 MiB/7 paths vs nix-serve 231 MiB/177 paths"
+        - "measured warm-from-enclave: 586/553/566 ms, 63 paths, 170 MiB, rc=0 x3"
+        - "measured: cache.nixos.org unreachable from the enclave (curl rc=56); grep -c nixos images/proxy/allowlist.txt = 0"
+
+  - packet_id: nix-binary-cache-service-on-the-enclave-for-warm-forges
+    event:
+      type: note
+      ts: "2026-08-18T02:07:40Z"
+      agent_id: fork-801kqme-20260818T0207Z
+      host: linux_mutable
+      summary: |
+        NEGATIVE CONTROLS — and the first draft of this fixture was VACUOUS.
+        Recording that in full, because the mechanism generalises to any test
+        of any binary cache.
+
+        M1, content trust: remove `sign_key_paths` so the server stops signing.
+        FIRST DRAFT STILL REPORTED 8/8. The mutation was genuinely live — the
+        generated config had no sign_key_paths and the served narinfo had lost
+        our Sig line — and the fixture passed anyway.
+
+        Cause: nix keeps a CLIENT-SIDE narinfo cache
+        (~/.cache/nix/binary-cache-v7.sqlite) keyed by substituter URL, and
+        `narinfo-cache-positive-ttl` defaults to 30 DAYS. nix replayed a
+        narinfo captured while the server was still signing. Discriminated on
+        the same URL:
+          shared cache, default ttl : rc=0, 7 paths   <- masked
+          fresh XDG_CACHE_HOME      : rc=1, 0 paths   <- correctly refused
+          narinfo-cache-positive-ttl 0 : rc=1, 0 paths <- correctly refused
+        An intermediate theory — that a second harmonia on a different port
+        proved the cache innocent — was FALSIFIED: that port had never been
+        cached, so it never exercised a stale hit. Fixed with both a private
+        XDG_CACHE_HOME and explicit ttl 0.
+
+        M2, transport trust: re-mint the leaf from a rogue CA, keeping HTTPS up.
+        FIRST DRAFT REPORTED skip:service-down — because the skip gate asked
+        `nix-cache-service.sh status`, whose own probe uses the stack CA. So
+        the fixture went QUIET at exactly the moment transport trust broke.
+        Fixed: the skip gate now asks podman whether the container is RUNNING,
+        a fact independent of every property under test.
+
+        AFTER BOTH FIXES:
+          baseline            ok:nix-cache-fixture:8/8              rc=0
+          M1 signing removed  violation:...:7/8:failed=6            rc=1
+          M1 restored         ok:nix-cache-fixture:8/8              rc=0
+          M2 rogue CA leaf    violation:...:4/8:failed=3,5,6,7      rc=1
+          M2 restored         ok:nix-cache-fixture:8/8              rc=0
+        Both restores byte-identical by sha256 (service and fixture).
+
+        OBSERVED vs INFERRED. Observed: every number above; the forge image
+        has no nix and no /nix (checked in the image, not inferred from the
+        Containerfile); cache.nixos.org is absent from the squid allowlist.
+        Inferred and NOT yet tested: that a forge which DID have nix would need
+        no change beyond substituters + trusted-public-keys + the no_proxy
+        entry. That is the first thing to test when 801-x1nx lands.
+
+  - packet_id: forge-image-has-no-nix-despite-the-spec-requiring-it
+    order: 801-x1nx
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: fix
+    title: "the runtime forge image contains no nix at all, so openspec/specs/default-image/spec.md's `MUST include Nix` is unmet and nothing in a forge can consume the 801-kqme binary cache"
+    deliverable: "either nix present in the runtime forge image with substituters+trusted-public-keys pointing at nix-cache, or the spec and the welcome banner corrected to stop claiming it"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [nix, forge, images, spec-drift, cache]
+    estimated_hours: 5
+    context: |
+      MEASURED 2026-08-18 inside localhost/tillandsias-forge:v0.4.260816.1:
+        command -v nix   -> rc=1
+        ls -d /nix       -> No such file or directory
+        ls /usr/bin/nix* -> No such file or directory
+
+      Yet openspec/specs/default-image/spec.md:12 says the image MUST include
+      Nix and :22-24 has a scenario "Image contains Nix ... with flakes
+      enabled". The forge banner advertises it too
+      (images/default/forge-welcome.sh:60 GUEST_OS="Nix (Minimal)", :171).
+
+      WHY THE DRIFT EXISTS: there are two image paths. The runtime one is
+      build-forge.sh -> scripts/build-image.sh -> images/default/Containerfile,
+      whose microdnf list has no nix. The nix-built layered image
+      (flake.nix packages.forge-image) DOES include nix at flake.nix:261 and
+      writes ~/.config/nix/nix.conf at :374 — and nothing builds it.
+
+      WHY IT BLOCKS VALUE RATHER THAN JUST BEING UNTIDY: 801-kqme landed a
+      working binary cache on the enclave, and the forge cannot use it, because
+      it has no nix. The service was still worth landing — it is the only
+      substituter reachable from inside the enclave at all — but its consumer
+      does not exist yet.
+
+      DECIDE WHICH WAY TO RESOLVE IT. Adding nix to the runtime image is not
+      free (image size, build time, a second package manager inside the forge)
+      and "the spec claims a capability nobody uses" is a legitimate outcome
+      too. Do not add nix just because a spec sentence says so; find out
+      whether forge agents actually want it, then make spec and image agree.
+
+  - packet_id: nix-cache-service-into-the-tray-container-lifecycle
+    order: 801-vm4p
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: enhancement
+    title: "the enclave nix cache is started by a script, not by the tray's ensure_*/container_deps graph, so it is not supervised, not scope-managed, and not torn down with the stack"
+    deliverable: "build_nix_cache_run_args + ensure_nix_cache_running in main.rs, a Service::NixCache node in container_deps.rs, and a SHARED_STACK_SCOPES row, so the cache has the same lifecycle as vault/proxy/router"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [nix, enclave, containers, lifecycle, cache]
+    estimated_hours: 4
+    context: |
+      801-kqme delivered the service as scripts/nix-cache-service.sh: it runs a
+      real container on tillandsias-enclave with alias `nix-cache`, TLS from the
+      stack CA and ed25519 content signing, and it is proven reachable by DNS
+      from an enclave container holding no host mount. What it is NOT is part of
+      the tray's container graph.
+
+      CONSEQUENCES TODAY, all of them "works but unsupervised":
+        * no LivenessProbe entry, so a death is not self-healed
+        * no SHARED_STACK_SCOPES row, so teardown/refcount logic does not know
+          the container exists (it is neither Core nor LaneScoped)
+        * no runtime_phase::container_mutations_allowed() drain gate
+        * started by the daily maintenance lane rather than at stack bring-up
+
+      THE MAP IS ALREADY WRITTEN — copy the router, which is the closest shape
+      (durable, Core-scoped, read-only, publishes a loopback port):
+        build_router_run_args   main.rs:4244
+        ensure_router_running   main.rs:4412
+        SHARED_STACK_SCOPES     main.rs:5232
+        container_deps.rs       Service enum :27-44, name() :48-58, DEPS :67-99,
+                                RealSatisfier::satisfy :302-327, ALL test :458-466
+      The one main.rs change 801-kqme DID make is already in: `nix-cache` is in
+      ENCLAVE_NO_PROXY_BASE, without which squid resets every request.
+
+      SEQUENCING: this is p3 deliberately. Supervising a service whose only
+      consumer does not exist yet (801-x1nx — the forge has no nix) buys
+      little. Do 801-x1nx first, or do them together.
+
+  - packet_id: harmonia-baked-into-an-image-versus-taken-from-the-served-store
+    order: 801-7tqe
+    status: ready
+    desired_release: v0.6
+    priority: p3
+    kind: enhancement
+    title: "the nix cache runs harmonia out of the store it is serving, so the served binary tracks the host store rather than an image tag"
+    deliverable: "a decision, and if 'bake': images/nix-cache/Containerfile carrying harmonia's closure so the service is self-contained like proxy/vault/git"
+    pickup_role: linux
+    release_target: convergence-velocity-milestone
+    capability_tags: [nix, images, cache, reproducibility]
+    estimated_hours: 3
+    context: |
+      801-kqme mounts the persistent store read-only into the cache container
+      anyway, so it takes harmonia FROM that store and pins it with a GC root
+      (nix/var/nix/gcroots/tillandsias/nix-cache-harmonia, targeting the LOGICAL
+      /nix/store path per the 790-mbk9 trap). The image is a stock
+      fedora-minimal with no baked content.
+
+      WHAT IS GOOD ABOUT IT: zero duplication, a 0-byte image delta, and it
+      reuses 795-h8er's pin mechanism as the delivery mechanism.
+
+      WHAT IS UNCOMFORTABLE: every other enclave service is self-contained, and
+      this one's served binary version is a property of the host store rather
+      than of an image tag. If the pin is ever lost, gc takes the server.
+
+      NOT URGENT, and deliberately v0.6: baking costs a nix-at-image-build-time
+      dependency on every host that builds images, which today only Linux hosts
+      with nix satisfy. Measure whether that matters before paying it.
