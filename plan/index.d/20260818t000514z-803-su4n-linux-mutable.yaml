@@ -1,0 +1,182 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T00:05:14Z.
+#
+# 803-su4n closure narrative. The status transition itself is in
+# 20260818t000447z-1695f378-linux.yaml, written by `set-field` — never
+# hand-authored (README rule, 636-9m79).
+#
+# The corpus landed in two waves. Wave 1 (0a1c2ae24, yoga/linux-immutable)
+# added `crates` and `scripts` and filed a `progress` event, which the fold
+# ignores for status — so the packet read `ready` while most of it was done.
+# This is wave 2 and the closure.
+packets:
+  - packet_id: rag-corpus-config-languages-still-have-no-boundary-rule
+    order: 810-k8jy
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: enhancement
+    title: "the code corpus indexes .rs, .sh and Containerfile; HCL, SELinux policy and the forge's own agent-instruction markdown are still absent because none of them has a boundary rule"
+    deliverable: "either a boundary rule per remaining file class, or a recorded decision that the class is not worth retrieving — the point is that the gap stops being invisible"
+    pickup_role: any
+    release_target: forge-local-experts-milestone
+    capability_tags: [experts, rag, citations]
+    estimated_hours: 3
+    context: |
+      SCOPED OUT OF 803-su4n DELIBERATELY, and not for cost. Cost stopped being
+      the constraint the moment the GPU lane came up: a full cold rebuild of
+      19,260 chunks is 122 seconds on macuahuitl (below). The constraint is that
+      803-su4n's whole thesis is that a citation landing mid-construct is WORSE
+      than no answer, because six citations and confidence=retrieved read as
+      authority. Shipping a class with no boundary rule means shipping fixed
+      120-line windows over it, which is the failure the packet exists to
+      prevent. Absence is honest; a bad boundary is not.
+
+      WHAT IS STILL OUT, measured on this tree:
+        * images/**/*.hcl — 14 files, Vault server config + per-provider
+          policies. Blocks are `path "x/y" { … }`; a rule is maybe ten lines.
+        * images/selinux/*.te, *.cil, *.fc, *.if — 6 files, 348 lines total
+          with the hcl. SELinux TE has `allow` rules and macro blocks.
+        * images/**/*.toml, *.json, *.conf, *.js — scattered singles.
+        * images/default/config-overlay/opencode/instructions/*.md — 8 files.
+          These are NOT the duplicated cheatsheet copy (that is pruned); they
+          are the forge's own agent instructions and nothing else in the corpus
+          carries them. They are markdown, so chunk_markdown already handles
+          them — this one is a corpus-root question, not a chunker question,
+          and is the cheapest of the four.
+
+      NOT A BLOCKER FOR ANYTHING. Filed so the boundary of what the expert can
+      see is written down rather than rediscovered by an agent who asks a Vault
+      policy question and reads a confident answer about something else.
+
+events:
+  - packet_id: expert-rag-corpus-excludes-the-code-it-is-most-often-asked-about
+    event:
+      type: completed
+      ts: "2026-08-18T00:05:14Z"
+      agent_id: linux-macuahuitl-opus5-fork-20260818T000514Z
+      host: linux_mutable
+      summary: >
+        WAVE 2 AND CLOSURE (070021f2f). Wave 1 (0a1c2ae24) added `crates` and
+        `scripts` and verified Q2 from the HOST side — the Rust launcher's
+        effective_inference_tier(). It left the CONTAINER side unreachable, and
+        the container side is the half the packet actually cited: Q2 says the
+        mechanism is invisible because "entrypoint.sh:165 reads
+        TILLANDSIAS_INFERENCE_TIER", and that file is
+        images/inference/entrypoint.sh, under neither indexed root. MEASURED
+        before this change: 0 chunks for that path.
+        BEFORE/AFTER on a real code question, through the REAL consumer path
+        (spec_answer over MCP JSON-RPC against images/default/config-overlay/
+        mcp/forge-plan.sh, not a hand-rolled harness). Question: "what does the
+        inference container entrypoint do with the accelerator tuning line at
+        boot, and what happens if the tuning helper is missing?" BEFORE, against
+        the 9,910-chunk index that was live on this host: six citations, all
+        spec and cheatsheet, zero mechanism — the packet's Q2 PARTIAL verdict
+        reproduced exactly. AFTER, 19,260 chunks: confidence=retrieved with
+        images/inference/entrypoint.sh:147-172 as the TOP hit, keyed
+        "Accelerator engine tuning (order 406)". I read the span rather than
+        trusting it: line 165 is inside it and is the literal
+        TUNING_LINE="tuning: tier=${TILLANDSIAS_INFERENCE_TIER:-cpu} …" the
+        packet named. The citation lands on the section banner, so the reader
+        arrives at the top of a coherent block, not mid-body.
+        TWO THINGS `images` NEEDED THAT `crates`/`scripts` DID NOT. (1) A
+        Containerfile has NO EXTENSION, so the extension-only walker matched
+        none of the seven in the tree; walk_files now also matches exact
+        basenames, and only the `code` kind supplies any. (2) A Containerfile
+        has neither `fn` nor `##`, so both existing chunkers degrade to fixed
+        120-line windows on it — chunk_containerfile boundaries on column-0
+        instructions, holding `\`-continuations inside the instruction they
+        continue so a HEALTHCHECK is never cited as two unrelated halves, and
+        coalescing to a 12-line minimum because images/default/Containerfile is
+        217 lines of mostly single-line COPY and ~40 one-line chunks per image
+        would each be too small to embed while still competing for a top-k slot.
+        SHELL NEEDED SECTIONS, NOT JUST FUNCTIONS — the packet asked for
+        "function / SECTION for shell" and wave 1 did only functions. Not
+        cosmetic: images/inference/entrypoint.sh is 600 lines with exactly ONE
+        function, so it chunked into five fixed 120-line windows. That is the
+        packet's own Q3 failure (right file, wrong span) reappearing inside the
+        very file the packet cited. Column-0 banner comments now open a chunk;
+        787 of them across images + scripts. A banner must carry a TITLE, since
+        a citation keyed on a row of dashes tells the reader nothing about where
+        they were sent, and a banner sitting directly on a function is dropped
+        rather than allowed to steal the signature line. Shell only: Rust
+        already has dense fn/impl boundaries (2.4% of Rust chunks at the cap
+        against 9.1% for shell) and a banner above a doc comment would split
+        that doc comment off the item it documents.
+        NUMBERS. Corpus 18,307 -> 19,260 chunks (code 8,397 -> 9,350; images
+        contributes 648). Shell fixed-window degradation 9.1% -> 5.3%.
+        entrypoint.sh 5 windows -> 12 titled sections. Chunking itself is 64ms.
+        EMBED COST, RE-MEASURED ON THE GPU LANE AND IT CHANGES THE PICTURE. Full
+        cold rebuild of 19,260 chunks: 122 seconds wall, ~11,000 chunks/min,
+        peak GPU 74%, nomic-embed-text fully resident in VRAM (ollama /api/ps
+        size_vram == size, so "GPU lane" is observed, not assumed). Warm
+        per-kind: code 11,659 chunks/min, spec 15,654 — code is slower per chunk
+        because code chunks are materially larger (mean 1,001 chars vs 288 for
+        spec), which is why yoga's per-chunk figure did not transfer. Against
+        ~12 min for 9,910 spec chunks on the old CPU lane and ~35 min for 18,269
+        on yoga, this host is roughly 20x faster and the corpus-size question is
+        simply no longer a cost question. The live index at
+        /dev/shm/tillandsias-experts/spec-index is republished and code-bearing.
+        SECONDARY FINDING FIXED, since it is the seed of the error it describes:
+        inference-container/spec.md said models live "in a persistent volume …
+        on the host". It is a bind mount — verified in code, not inferred:
+        scripts/orchestrate-enclave.sh:220 is
+        -v "$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw" —
+        and the distinction is the entire answer to whether `podman system
+        reset` destroys the cache. Both occurrences reworded.
+        MUTATION CONTROLS, seven, each red then green with the source restored
+        byte-identical. THREE OF THE FIRST-DRAFT TESTS SURVIVED THEIR MUTATION
+        and are the most useful thing here, because all three were the same
+        shape — a test that looks like it guards the rule and does not.
+        (a) The Containerfile name arm was asserted through walk_files directly,
+        which bypasses the dispatch the mutation broke; now asserted through
+        chunk_corpus. (b) The prune test filtered by the same constant it was
+        testing, so emptying CORPUS_PRUNE_PREFIXES made it pass vacuously; now
+        it asserts the rule via is_pruned(). (c) The Containerfile continuation
+        guard is reabsorbed by coalescing at chunk level, so a chunk-level
+        assertion passed with the guard deleted; the boundary computation is now
+        a named function and the rule is asserted there. Each of the three is
+        written down in the source next to the thing it protects, because the
+        next person will otherwise re-introduce exactly the same shape.
+        DO NOT TRUST THESE LINE NUMBERS MORE THAN THEY DESERVE — 801-g9nn
+        (per-citation commit + caller-relative staleness) is still `ready`, and
+        this corpus landed first. A code citation carries no version, so a
+        chunk built before an edit points at a line number that has since moved.
+        In a spec that is annoying; in a function someone is about to edit it is
+        a wrong edit. The mitigation available today is that the post-commit
+        hook re-indexes, and at 122 seconds a rebuild is now cheap enough to run
+        eagerly — but until 801-g9nn lands, a caller cannot TELL whether the
+        citation it is reading predates its own checkout.
+        INDEX PUBLISH IS CORRECT ON DISK AND STILL REFUSED BY THE RUNNING MCP
+        SERVER ON THIS HOST, for a known reason and not this change: the session
+        exports the stale FORGE_SPEC_INDEX_DIR=/mnt/c/... of 789-nc2s, and the
+        long-lived server process also predates 799-j4xd — asked directly, it
+        produced the pre-799 refusal text. Re-running the CURRENT
+        forge-plan.sh with the stale variable set does emit 799-j4xd's "that
+        location came from FORGE_SPEC_INDEX_DIR" note, so the fix is in the
+        checkout and only the running process is stale. Clears on session
+        restart; nothing new to file.
+        SCOPED OUT, filed as 810-k8jy: HCL, SELinux policy, and the forge's own
+        agent-instruction markdown, none of which has a boundary rule. Not a
+        cost decision — the GPU lane removed cost as a constraint — but the
+        packet's thesis is that a mid-construct citation is worse than no
+        answer, so shipping a class with no boundary rule would ship the exact
+        failure it exists to prevent.
+      evidence_refs:
+        - "070021f2fd678d6c29e75de29d47b2ef022cdbd6 — images root, Containerfile chunker, shell section boundaries, spec wording"
+        - "crates/tillandsias-plan/src/spec.rs: CORPUS_ROOTS gains (\"images\", \"code\"); CORPUS_CODE_FILENAMES; CORPUS_PRUNE_PREFIXES/is_pruned; containerfile_boundaries; chunk_containerfile; shell_section_banner"
+        - "BEFORE: jq over chunks.jsonl, images/inference/entrypoint.sh -> 0 chunks. AFTER: 12 chunks, :147-172 keyed 'Accelerator engine tuning (order 406)'"
+        - "images/inference/entrypoint.sh:165 read directly — TUNING_LINE=\"tuning: tier=${TILLANDSIAS_INFERENCE_TIER:-cpu} ...\" is inside the cited span"
+        - "spec_answer over MCP JSON-RPC, stale override cleared: confidence=retrieved, top citation images/inference/entrypoint.sh:147-172"
+        - "same question against the pre-change 9,910-chunk index: 6 citations, all spec/cheatsheet, zero code"
+        - "corpus 18,307 -> 19,260 chunks; code 8,397 -> 9,350; images 648; chunking 64ms"
+        - "shell fixed-window degradation 9.1% -> 5.3% (143/1564 -> 109/2051 at the 120-line cap); rust unchanged at 2.4%"
+        - "full cold rebuild: scripts/spec-index-ensure.sh -> ok:spec-index:built:19257, 105s scratch / 122s live publish, ~11,000 chunks/min, peak GPU 74%"
+        - "GPU lane observed not assumed: ollama /api/ps reports nomic-embed-text size_vram == size (323150151)"
+        - "warm per-kind throughput: code 11,659 chunks/min (mean 1,001 chars), spec 15,654 chunks/min (mean 288 chars)"
+        - "diff -rq cheatsheets images/default/cheatsheets -> empty, rc=0: the pruned copy is byte-identical"
+        - "scripts/orchestrate-enclave.sh:220 -v \"$HOME/.cache/tillandsias/models:/home/ollama/.ollama/models:rw\" — bind mount, not a named volume"
+        - "7 mutation controls: images root / Containerfile name arm / shell banners / naked-banner drop / RUN-continuation guard / cheatsheet prune / foreign key on a split piece — all red then green, source restored byte-identical"
+        - "3 first-draft tests survived their mutation and were rewritten; each rewrite is documented in the source"
+        - "./build.sh --check rc=0; cargo test -p tillandsias-plan --lib 157/157 (19 in spec::)"
+        - "801-g9nn still `ready`: code citations carry no version, so line numbers can be stale and a caller cannot yet tell"
