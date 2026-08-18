@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T11:55:00Z.
+#
+# Closes 820-c8q8 and files a latent budget bug found while testing it.
+packets:
+  - packet_id: sub-second-litmus-budgets-become-no-timeout-at-all
+    order: 827-uh6t
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: bug
+    title: "a litmus step declaring timeout_ms below 1000 gets NO timeout at all — integer division floors it to 0, and GNU timeout treats 0 as 'disabled'"
+    deliverable: "a sub-second budget either works or is refused; it must not silently become unbounded"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [litmus, ci-gates, fail-loud]
+    estimated_hours: 1
+    context: |
+      OBSERVED 2026-08-18 while trying to force a real timeout to verify
+      820-c8q8. I set a step to `timeout_ms: 1` expecting an instant kill; the
+      step ran to completion instead.
+
+      scripts/run-litmus-test.sh computes
+        local timeout_sec=$(( step_timeout_ms / 1000 ))
+      so any budget under 1000ms floors to 0, and GNU coreutils documents
+      "a duration of 0 disables the associated timeout". A step declaring
+      `timeout_ms: 500` therefore runs UNBOUNDED — the opposite of what its
+      author asked for, and the failure mode is a wedged gate rather than a
+      fast red.
+
+      NOT LIVE TODAY: I checked the corpus and no litmus step declares a
+      sub-second budget, so nothing is currently unbounded. This is filed as
+      the latent case, at p3, because the next person who writes a genuinely
+      fast assertion will reach for `timeout_ms: 250` and get silence.
+
+      The honest fix is probably to keep sub-second precision (`timeout` accepts
+      fractional seconds like `0.25s`) rather than to refuse the value.
+status:
+  - packet_id: litmus-timeout-cannot-distinguish-a-regression-from-a-busy-host
+    field: status
+    value: completed
+    ts: "2026-08-18T11:55:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: litmus-timeout-cannot-distinguish-a-regression-from-a-busy-host
+    event:
+      type: completed
+      ts: "2026-08-18T11:55:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T113700Z
+      host: linux_mutable
+      summary: >
+        status 'completed'. A timed-out step now reports the host's runqueue against its
+        core count at kill time and classifies the cause. THE PACKET'S OWN PROPOSAL WAS
+        PARTLY WRONG AND SAYING SO IS THE POINT: it suggested reporting "the step's own
+        elapsed time and its budget" first, and asked whether duration alone already
+        separates the two classes. It cannot, by construction — a killed step always
+        elapses its budget, so 41s/30s and 0s-starved both print as ~30s/30s. The
+        discriminating signal is the one the packet listed second: load. Implemented as
+        three outcomes — SATURATED (runqueue > cores; "re-run before treating this as a
+        regression"), NOT saturated ("this step is genuinely too slow for its Ns budget"),
+        and UNCLASSIFIED when neither loadavg nor a cpu count is readable, which is named
+        rather than guessed. The verdict is unchanged in every case: the step still FAILS,
+        because a step that cannot finish inside its budget on this host has not passed.
+        Reading is portable — /proc/loadavg then sysctl vm.loadavg, nproc then hw.ncpu — and
+        the comparison is scaled-integer because bash 3.2 has no floats and bc is not
+        guaranteed.
+      evidence_refs:
+        - "scripts/run-litmus-test.sh: exit_code 124 branch gains a load classification"
+        - "all three branches exercised against the script's OWN extracted case block: load 40.5/20 -> SATURATED, 0.40/20 -> NOT saturated, unknown -> UNCLASSIFIED"
+        - "bash-dialect-clean; runtime-diagnostics spec still PASS after the edit"
+        - "found while testing: sub-second timeout_ms floors to 0 = no timeout, filed as 827-uh6t"
+  - packet_id: litmus-timeout-cannot-distinguish-a-regression-from-a-busy-host
+    event:
+      type: note
+      ts: "2026-08-18T11:55:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T113700Z
+      host: linux_mutable
+      summary: |
+        WHAT I DID NOT MANAGE TO DO: observe these lines on a LIVE timeout.
+
+        I tried twice. First with `timeout_ms: 1`, which taught me 827-uh6t —
+        it floors to zero and disables the timeout entirely. Then with
+        `timeout_ms: 1000` against a step that had taken 1.4s earlier in the
+        night; on an idle box it finished inside the second and passed. Both
+        litmus edits were reverted and confirmed byte-identical with cmp.
+
+        So the classification is verified by extracting the script's own case
+        block and driving it with all three input shapes — the same technique
+        the 798-c4mq sibling used, and better than a reimplementation — but it
+        has not been seen firing at the end of a genuine 124 exit. The next
+        real timeout on any host is the test, and if the wording is wrong there
+        it will be obvious.
+
+        There is a small irony worth recording: the packet exists because a
+        step timed out for a reason nobody could see, and the change could not
+        be exercised because I could no longer reproduce a timeout on demand.
+        The condition that motivated it — a saturated host — is exactly the
+        condition I had removed by finishing the builds.
