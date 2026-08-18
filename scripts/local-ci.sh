@@ -1197,6 +1197,25 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
         archive_check_log "dev-embed-model-agreement" "skipped"
     fi
 
+    # Order 801-a2by. Sibling of the check above and for the same reason: the
+    # spec-index PRODUCER and its two READERS resolve the durable root
+    # independently, in two runtimes that cannot share a file. A disagreement is
+    # silent by construction — the index gets built where nobody looks and the
+    # system reports a missing index rather than a misconfigured one, which is
+    # the shape that hid the whole embedding step for weeks (552).
+    if [[ -f "scripts/check-spec-index-resolution-agreement.sh" ]]; then
+        if bash scripts/check-spec-index-resolution-agreement.sh 2>&1 | tee /tmp/spec-index-resolution-agreement.log; then
+            log_pass "Spec-index resolution agrees across producer and readers"
+            archive_check_log "spec-index-resolution-agreement" "pass" /tmp/spec-index-resolution-agreement.log
+        else
+            log_fail_tracked "spec-index-resolution-agreement" "Spec-index resolution drift (see /tmp/spec-index-resolution-agreement.log)"
+            archive_check_log "spec-index-resolution-agreement" "fail" /tmp/spec-index-resolution-agreement.log
+        fi
+    else
+        log_fail_missing_guard "spec-index-resolution-agreement" "scripts/check-spec-index-resolution-agreement.sh"
+        archive_check_log "spec-index-resolution-agreement" "skipped"
+    fi
+
     # Order 765-mza8. Wired here, literally, for the same reason as the two
     # above. A dead `inputs:` glob is silent by construction: it cannot make a
     # test run, only skip, so nothing else in this suite would ever go red for

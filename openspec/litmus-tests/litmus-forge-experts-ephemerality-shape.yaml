@@ -21,6 +21,45 @@
 # disjoint. The behavioural half — seed, destroy, scan the survivors — is
 # litmus:forge-experts-teardown-ephemeral (size e2e).
 #
+# ── SANCTIONED CARVE-OUT 2: THE SPEC INDEX (order 801-a2by) ──────────────────
+#
+# READ THIS BEFORE CONCLUDING THE INVARIANT WEAKENED. It did not; the invariant
+# was refined, and the refinement is pinned below rather than merely asserted.
+#
+# The ephemerality invariant exists because expert knowledge built from ONE
+# WORKING TREE must not be served to a later, different forge. The spec RAG
+# index is not that kind of knowledge: it is a pure function of the CORPUS at a
+# commit, and its identity IS a content fingerprint over corpus+model. Serving a
+# stale one is structurally impossible in the corpus dimension, because a
+# different corpus produces a different fingerprint and therefore a MISS, not a
+# wrong hit. Keeping it in tmpfs bought no safety at all — it only made every
+# forge relaunch re-pay a measured ~12-minute embedding pass (9910 chunks) for a
+# corpus that had not changed, N times over for N concurrent forges.
+#
+# So the index moved to the durable tier: a podman named volume
+# `tillandsias-spec-index-<project>`, sibling to `tillandsias-mirror-<project>`,
+# mounted READ-ONLY at /opt/tillandsias/spec-index. The forge keeps every
+# ephemerality guarantee it had. What moved is exactly the thing that carries no
+# working-tree knowledge.
+#
+# THE CARVE-OUT'S BOUNDARY, pinned by the steps at the end of this file:
+#   * the mount is READ-ONLY — the ephemeral tier physically cannot write to the
+#     durable tier, and that is a mount mode rather than a convention;
+#   * it is a NAMED VOLUME, never a host path — the host bind-mount is order
+#     437's opt-in guard and must not become the default fast path;
+#   * it is a SEPARATE volume from the read-write tool cache, so the teardown
+#     proof's scan of that volume keeps its meaning;
+#   * the expert LIVENESS surfaces (state, started_at, plan-source-hash,
+#     project-index) are UNCHANGED and still pinned to tmpfs by the steps above.
+#     lib-common.sh was deliberately not touched by 801-a2by.
+#
+# RESIDUAL GAP, STATED PLAINLY BECAUSE A GUARD MUST NOT IMPLY MORE THAN IT
+# PROVES: a fingerprint proves an entry describes corpus X. It does NOT prove
+# corpus X is what the ASKING agent has checked out. Citations still carry no
+# commit, so a caller at a different commit can open `path:45-49` in its own
+# tree and read different bytes. Order 801-g9nn is that fix. Until it lands,
+# the sharing is real and the caller-relative staleness signal is not.
+#
 # THE ONE SANCTIONED CARVE-OUT
 #   `cargo build` writes into $CARGO_TARGET_DIR, which DOES live on the
 #   persistent cache volume. Per the research's §7.3 a compiled binary in a
@@ -41,9 +80,13 @@ phase: pre-build
 description: >
   Pin forge-expert ephemerality by construction: the experts state dir is tmpfs,
   the experts bin dir is inside the auto-removed container overlay, every write
-  in the experts region targets an ephemeral surface, and NO expert surface is
-  under any volume the launcher mounts persistently into the forge (extracted
-  from both sides and compared, so drift on either side turns this RED).
+  in the experts region targets an ephemeral surface, and NO expert LIVENESS
+  surface is under any volume the launcher mounts persistently into the forge
+  (extracted from both sides and compared, so drift on either side turns this
+  RED). The two sanctioned carve-outs — the cargo build cache and the durable
+  content-addressed spec index (801-a2by) — are pinned at their boundaries
+  rather than merely excluded: read-only, named-volume-only, separate from the
+  read-write tool cache, and unable to pull the liveness surfaces with them.
 severity: high
 size: instant
 
@@ -138,6 +181,56 @@ critical_path:
     command: "grep -q 'install -m 0755 \"$built\" \"$bin_dst\"' images/default/lib-common.sh && grep -q 'BUILD ARTIFACT, not expert knowledge' images/default/lib-common.sh && ! grep -q 'tillandsias-project' images/default/config-overlay/mcp/forge-plan.sh && echo 'ok: cache-is-build-only'"
     timeout_ms: 5000
     expected_behavior: "ok: cache-is-build-only"
+
+  # ── Carve-out 2 boundary pins (order 801-a2by) ─────────────────────────────
+  # The spec index is DELIBERATELY on a persistent mount now. Without these
+  # steps this file would stay green purely because it never looked at that
+  # surface — a carve-out nobody pinned is a hole, not an exemption.
+  - step: "CARVE-OUT 2: the durable spec-index mount is READ-ONLY, so the ephemeral tier cannot write to the durable tier"
+    # A `:rw` here would let any forge corrupt the index every other forge and
+    # every bare-metal harness reads. Read-only is the whole concurrency
+    # discipline, so it is asserted from the launcher source in BOTH directions:
+    # the ReadOnly mode must be present AND ReadWrite must be absent, because a
+    # second `.volume(` call added later would satisfy a presence-only check.
+    command: "blk=$(awk '/^fn build_forge_agent_run_args_with_vault\\(/,/^}/' crates/tillandsias-headless/src/main.rs | grep -A3 'forge_spec_index_volume('); test -n \"$blk\" || { echo 'REGRESSION: the forge no longer mounts the durable spec-index volume (801-a2by)'; exit 1; }; printf '%s' \"$blk\" | grep -q 'MountMode::ReadOnly' || { echo \"REGRESSION: spec-index mount is not ReadOnly: $blk\"; exit 1; }; printf '%s' \"$blk\" | grep -q 'MountMode::ReadWrite' && { echo \"REGRESSION: spec-index mount is ReadWrite — the ephemeral tier can corrupt the durable tier: $blk\"; exit 1; }; echo 'ok: spec-index-mount-read-only'"
+    timeout_ms: 10000
+    expected_behavior: "ok: spec-index-mount-read-only"
+
+  - step: "CARVE-OUT 2: the index is a NAMED VOLUME on its own, never a host path and never the read-write tool cache"
+    # Three ways this could quietly become something else, all rejected here:
+    # a host path source (order 437's opt-in bind mount becoming the default),
+    # reusing the tool-cache volume (which IS read-write and IS scanned by the
+    # teardown proof), or dropping the per-project suffix.
+    command: "src=$(grep -A1 'fn forge_spec_index_volume' crates/tillandsias-headless/src/main.rs | sed -n 's/.*format!(\"\\([^\"]*\\)\").*/\\1/p'); test -n \"$src\" || { echo 'REGRESSION: forge_spec_index_volume is gone'; exit 1; }; case \"$src\" in /*) echo \"REGRESSION: the index source is a HOST PATH ($src), not a named volume — that is order 437's opt-in bind mount becoming the default\"; exit 1 ;; esac; case \"$src\" in *'{project_name}'*) : ;; *) echo \"REGRESSION: index volume $src is not per-project\"; exit 1 ;; esac; cache=$(grep -A1 'fn forge_tool_cache_volume' crates/tillandsias-headless/src/main.rs | sed -n 's/.*format!(\"\\([^\"]*\\)\").*/\\1/p'); test \"$src\" != \"$cache\" || { echo \"REGRESSION: the index shares the READ-WRITE tool cache volume $cache\"; exit 1; }; echo \"ok: spec-index-named-volume=$src\""
+    timeout_ms: 10000
+    expected_behavior: "ok: spec-index-named-volume="
+
+  - step: "CARVE-OUT 2: the mount target and the injected FORGE_SPEC_INDEX_ROOT are the SAME constant"
+    # If the env var and the mount target drift, the in-forge reader looks at an
+    # empty directory and reports a cold index while a fully built one is
+    # mounted centimetres away — absent, not wrong, and therefore silent. Both
+    # sites must reference the one const rather than repeating a literal.
+    command: "c=$(sed -n 's/^const FORGE_SPEC_INDEX_MOUNT: &str = \"\\([^\"]*\\)\";/\\1/p' crates/tillandsias-headless/src/main.rs); test -n \"$c\" || { echo 'REGRESSION: FORGE_SPEC_INDEX_MOUNT const is gone'; exit 1; }; blk=$(awk '/^fn build_forge_agent_run_args_with_vault\\(/,/^}/' crates/tillandsias-headless/src/main.rs); n=$(printf '%s' \"$blk\" | grep -c 'FORGE_SPEC_INDEX_MOUNT'); test \"$n\" -ge 2 || { echo \"REGRESSION: the mount target and the env value do not both use the const (found $n uses)\"; exit 1; }; printf '%s' \"$blk\" | grep -q '\\.env(\"FORGE_SPEC_INDEX_ROOT\", FORGE_SPEC_INDEX_MOUNT)' || { echo 'REGRESSION: FORGE_SPEC_INDEX_ROOT is not injected from the mount const'; exit 1; }; echo \"ok: spec-index-root-matches-mount=$c\""
+    timeout_ms: 10000
+    expected_behavior: "ok: spec-index-root-matches-mount="
+
+  - step: "CARVE-OUT 2 STAYS NARROW: the expert LIVENESS surfaces did NOT move with the index"
+    # The index moved because it carries no working-tree knowledge. state /
+    # started_at / plan-source-hash / project-index DO, and they must still die
+    # with the container. This is the step that keeps 801-a2by from being read
+    # as permission to persist the rest.
+    command: "s=$(sed -n 's#^FORGE_EXPERTS_STATE_DIR=.*:-\\(.*\\)}.*#\\1#p' images/default/lib-common.sh); case \"$s\" in /dev/shm/*) : ;; *) echo \"REGRESSION: expert liveness state left tmpfs: $s\"; exit 1 ;; esac; mnt=$(sed -n 's/^const FORGE_SPEC_INDEX_MOUNT: &str = \"\\([^\"]*\\)\";/\\1/p' crates/tillandsias-headless/src/main.rs); case \"$s\" in \"$mnt\"*) echo \"REGRESSION: liveness state $s is under the durable index mount $mnt\"; exit 1 ;; esac; grep -q 'local index_dir=\"$FORGE_EXPERTS_STATE_DIR/project-index\"' images/default/lib-common.sh || { echo 'REGRESSION: the generic project index left tmpfs'; exit 1; }; grep -q 'stamp=\"$FORGE_EXPERTS_STATE_DIR/plan-source-hash\"' images/default/lib-common.sh || { echo 'REGRESSION: the source-hash stamp left tmpfs'; exit 1; }; echo 'ok: liveness-surfaces-still-ephemeral'"
+    timeout_ms: 10000
+    expected_behavior: "ok: liveness-surfaces-still-ephemeral"
+
+  - step: "CARVE-OUT 2: producer and readers resolve ONE index location (delegates to the standing guard)"
+    # The durable root is resolved independently by the producer and two
+    # readers. If they drift, the index is built where nobody looks and the
+    # system reports a MISSING index rather than a misconfigured one — silent by
+    # construction, which is how the whole embedding step hid for weeks (552).
+    command: "out=$(bash scripts/check-spec-index-resolution-agreement.sh 2>&1 | tail -1); case \"$out\" in ok:spec-index-resolution-agreement:*) printf '%s\\n' \"$out\" ;; *) echo \"REGRESSION: $out\"; exit 1 ;; esac"
+    timeout_ms: 30000
+    expected_behavior: "ok:spec-index-resolution-agreement:"
 
   - step: "the state READER only ever reads the ephemeral surface"
     # A renderer that falls back to a persisted copy would resurrect dead

@@ -12389,6 +12389,48 @@ fn forge_tool_cache_volume(project_name: &str) -> String {
     format!("tillandsias-forge-cache-{project_name}")
 }
 
+/// In-container mount point of the DURABLE spec-index tier (order 801-a2by).
+/// Injected as `FORGE_SPEC_INDEX_ROOT` so nothing inside the enclave ever
+/// shells out to podman to find it.
+const FORGE_SPEC_INDEX_MOUNT: &str = "/opt/tillandsias/spec-index";
+
+/// Name of the podman named volume holding the spec RAG index — the DURABLE
+/// tier, sibling to `tillandsias-mirror-{project}` (order 801-a2by).
+///
+/// THE LIFECYCLE SPLIT THIS IMPLEMENTS. The index used to live in the forge's
+/// `/dev/shm`, which is tmpfs: it died with the container, so every relaunch
+/// re-paid a ~12-minute embedding pass (measured: 9910 chunks) for a corpus
+/// that had not changed, and N concurrent forges each paid it separately. But
+/// the index's validity is a function of the CORPUS, and the corpus is whatever
+/// the mirror's refs say it is — so the index belongs with the mirror in the
+/// durable tier, not with the forge in the ephemeral one. The forge keeps every
+/// idempotence and ephemerality guarantee it has; it stops OWNING state that
+/// outlives it. Its expert LIVENESS state stays in tmpfs and is still pinned
+/// there by litmus:forge-experts-ephemerality-shape.
+///
+/// A NAMED VOLUME, NOT A HOST BIND-MOUNT. The forge is enclave-only by spec
+/// (forge-offline); the host-checkout bind mount is a deliberate opt-in guard
+/// (order 437) and must not become the default fast path. A named volume is
+/// container-managed with ZERO host-$HOME reference — the same reasoning
+/// `forge_tool_cache_volume` already uses, and the same reasoning 801-kqme
+/// gives for refusing to bind-mount the nix store.
+///
+/// MOUNTED READ-ONLY, which is the concurrency discipline. Several forges plus
+/// bare-metal harnesses read this while a host builder writes it. Only the
+/// durable tier writes; the ephemeral tier physically cannot, because that is a
+/// mount mode rather than a convention. Entries are content-addressed by the
+/// corpus+model fingerprint and immutable once published, so readers need no
+/// lock at all — they open a directory that is either wholly absent or wholly
+/// complete.
+///
+/// NOT YET SAFE TO TRUST BLINDLY: a shared index proves an entry describes
+/// corpus X, never that corpus X is the caller's checkout. Order 801-g9nn adds
+/// the per-citation commit and caller_relation that closes that gap.
+/// @trace spec:git-mirror-service, spec:forge-offline
+fn forge_spec_index_volume(project_name: &str) -> String {
+    format!("tillandsias-spec-index-{project_name}")
+}
+
 pub(crate) fn build_forge_agent_run_args(
     project_path: &Path,
     project_name: &str,
@@ -12467,8 +12509,22 @@ fn build_forge_agent_run_args_with_vault(
             forge_tool_cache_volume(project_name),
             "/home/forge/.cache/tillandsias-project".to_string(),
             MountMode::ReadWrite,
+        )
+        // Order 801-a2by: the DURABLE spec-index tier, READ-ONLY. See
+        // forge_spec_index_volume for why this is a named volume rather than a
+        // host bind-mount, and why read-only is the concurrency discipline
+        // rather than a precaution.
+        .volume(
+            forge_spec_index_volume(project_name),
+            FORGE_SPEC_INDEX_MOUNT.to_string(),
+            MountMode::ReadOnly,
         );
     let mut spec = apply_proxy_env(spec)
+        // Order 801-a2by: name the durable root explicitly so the in-forge
+        // readers resolve it without probing for podman (which the enclave does
+        // not have) and without an existence heuristic that would silently
+        // degrade to a cold cache path the moment the mount was missing.
+        .env("FORGE_SPEC_INDEX_ROOT", FORGE_SPEC_INDEX_MOUNT)
         .env("PATH", "/usr/local/bin:/usr/bin")
         .env("HOME", "/home/forge")
         .env("USER", "forge")
@@ -17071,6 +17127,73 @@ mod tests {
         assert!(
             joined.contains("tillandsias-forge-cache-alpha:/home/forge/.cache/tillandsias-project"),
             "forge must mount the persistent tool-cache named volume (order 179); got: {joined}"
+        );
+    }
+
+    #[test]
+    fn forge_agent_mounts_durable_spec_index_volume_read_only() {
+        // Order 801-a2by. The spec RAG index is the DURABLE tier: a named
+        // volume, sibling to tillandsias-mirror-<project>, so a relaunched
+        // forge lands on a fingerprint HIT instead of re-paying the measured
+        // ~12-minute cold build for a corpus that did not change.
+        //
+        // THREE PROPERTIES, and each one is load-bearing:
+        //   1. it is a NAMED VOLUME, not a host path — the forge is enclave-only
+        //      and the host bind-mount is an opt-in guard (order 437) that must
+        //      not become the default fast path;
+        //   2. it is READ-ONLY — several forges and bare-metal harnesses read
+        //      while a host builder writes, and only the durable tier may write.
+        //      `:ro` makes that a mount mode rather than a convention;
+        //   3. FORGE_SPEC_INDEX_ROOT names the mount, so the in-forge readers
+        //      never probe for podman (absent in the enclave) and never fall
+        //      back to a cold host cache path when the mount is missing.
+        let argv = build_forge_agent_run_argv(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            None,
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeAgentMode::Claude,
+            false,
+        );
+        let joined = argv.join(" ");
+        assert!(
+            argv.iter()
+                .any(|a| a == "tillandsias-spec-index-alpha:/opt/tillandsias/spec-index:ro"),
+            "forge must mount the durable spec-index named volume READ-ONLY (801-a2by); got: {joined}"
+        );
+        assert!(
+            argv.iter()
+                .any(|a| a == "FORGE_SPEC_INDEX_ROOT=/opt/tillandsias/spec-index"),
+            "forge must be told the durable index root explicitly (801-a2by); got: {joined}"
+        );
+        // NEGATIVE CONTROL: a `:rw` spelling would satisfy a substring check on
+        // the volume name while quietly handing the ephemeral tier write access
+        // to the durable one. Assert the writable form is absent outright.
+        assert!(
+            !joined.contains("tillandsias-spec-index-alpha:/opt/tillandsias/spec-index:rw"),
+            "the ephemeral tier must never get write access to the durable index; got: {joined}"
+        );
+    }
+
+    #[test]
+    fn durable_spec_index_volume_is_per_project_and_distinct_from_the_cache_volume() {
+        // The index must not share the tool-cache volume: that one is READ-WRITE
+        // by design (cargo/npm write to it), and litmus:forge-experts-teardown-
+        // ephemeral scans it for expert artifacts. Putting the index there would
+        // both hand the forge write access and turn that scan red.
+        assert_eq!(
+            forge_spec_index_volume("alpha"),
+            "tillandsias-spec-index-alpha"
+        );
+        assert_ne!(
+            forge_spec_index_volume("alpha"),
+            forge_tool_cache_volume("alpha")
+        );
+        assert_ne!(
+            forge_spec_index_volume("alpha"),
+            forge_spec_index_volume("beta"),
+            "index volumes must be per-project so corpora never cross project boundaries"
         );
     }
 

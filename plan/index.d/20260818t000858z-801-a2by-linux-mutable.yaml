@@ -1,0 +1,282 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18, fork on 801-a2by.
+#
+# The index is now durable and content-addressed, and a relaunched forge lands
+# on a fingerprint hit. The headline number in the packet did NOT survive
+# measurement, though: the cold build on this host is 43 SECONDS, not twelve
+# minutes, because the GPU lane reached the dev inference container after the
+# packet's note was written. The work is still right; its stated motivation was
+# an order of magnitude stale, and that correction is recorded below.
+status:
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    field: status
+    value: implemented
+    ts: "2026-08-18T00:08:58Z"
+    host: linux_mutable
+
+events:
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    event:
+      type: progress
+      ts: "2026-08-18T00:08:58Z"
+      agent_id: fork-801a2by-20260818T0008Z
+      host: linux_mutable
+      summary: >
+        DELIVERED — the spec index moved from tmpfs to a podman NAMED VOLUME
+        (tillandsias-spec-index-<project>, sibling to tillandsias-mirror-<project>),
+        content-addressed by the corpus+model fingerprint the ensure script
+        already computed, mounted READ-ONLY into every forge at
+        /opt/tillandsias/spec-index. LAYOUT: <root>/<fingerprint>/{chunks,
+        vectors,.fingerprint} plus a `current` pointer file written last and
+        renamed into place; entries are IMMUTABLE once published, so readers
+        take no lock at all. THE ORDERING CHANGE THAT IS THE PACKET: chunk
+        (25ms) and compare the fingerprint BEFORE taking the build lock. The old
+        order (lock, then chunk, then compare) handed a forge launching during a
+        build `skip:already-building` and no index whatsoever, even when its own
+        corpus was already published and sitting right there. MEASURED on
+        macuahuitl, all with the exit code captured on its own line: cold build
+        43s for 9910 chunks -> ok:spec-index:built:9910; warm 82ms and 83ms ->
+        ok:spec-index:fresh:9910; warm WHILE a live-pid builder holds the lock
+        82ms -> still ok:spec-index:fresh (the old code could not do this).
+        DURABLE->EPHEMERAL HANDOFF PROVEN against the real forge image: with the
+        volume mounted the capability line reads spec_index=present resolving to
+        the fingerprint dir, and `tillandsias-plan spec-retrieve` run inside a
+        --network none container against the read-only mount returned six
+        correct citations (forge-offline:45-49, enclave-network:43-47,
+        security-privacy-isolation:66-70 among them) — the same citations 552
+        recorded for a good answer. Without the volume the identical container
+        reads absent and the identical retrieve fails with ENOENT, so the mount
+        is load-bearing and not decorative. FINGERPRINT DETERMINISM confirmed the
+        hard way: the pristine entry was deleted by a retention test and rebuilt
+        from scratch to the byte-identical fingerprint 035c9398..., which is what
+        makes "a relaunch is a hit" true at all rather than merely hoped.
+      evidence_refs:
+        - "scripts/spec-index-ensure.sh — durable root, content-addressed publish, hit-before-lock, read-only-root hit path, retention ceiling, --where"
+        - "crates/tillandsias-headless/src/main.rs — forge_spec_index_volume + FORGE_SPEC_INDEX_MOUNT, .volume(:ro) + .env(FORGE_SPEC_INDEX_ROOT), 2 unit tests green"
+        - "images/default/config-overlay/mcp/forge-plan.sh + images/default/lib-expert-capability.sh — byte-identical resolver block, resolved per call"
+        - "scripts/check-spec-index-resolution-agreement.sh (new, wired into scripts/local-ci.sh) -> ok:spec-index-resolution-agreement:carriers=3-scenarios=4"
+        - "litmus:forge-experts-ephemerality-shape 15/15 PASS incl. 5 new carve-out boundary steps"
+        - "audit-guard-activation: total=48 active=48 orphan=0 verdict=ok"
+        - "cold 43s ok:spec-index:built:9910; warm 82ms/83ms ok:spec-index:fresh:9910; warm-under-held-lock 82ms ok:spec-index:fresh:9910"
+        - "in-container --network none spec-retrieve against the :ro mount -> 6 correct citations; same command without the volume -> ENOENT"
+        - "./build.sh --check rc=0, gate stamp recorded"
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    event:
+      type: note
+      ts: "2026-08-18T00:08:59Z"
+      agent_id: fork-801a2by-20260818T0008Z
+      host: linux_mutable
+      summary: |
+        CONCURRENCY DISCIPLINE, MUTATION CONTROLS, AND THE HOLD REASON.
+
+        DISCIPLINE CHOSEN, and why each half is what it is.
+          * READERS TAKE NO LOCK. Published entries are content-addressed and
+            immutable, assembled in a staging dir and RENAMED into their
+            fingerprint name, so a reader resolves a directory that is either
+            wholly absent or wholly complete. There is nothing to lock against
+            because nothing is ever rewritten in place. This is the property
+            that makes N concurrent forges plus bare-metal harnesses free.
+          * WRITERS ARE SERIALISED BY ONE GLOBAL LOCK, deliberately not one lock
+            per fingerprint. Two builders on different corpora are still two
+            builders hammering one single-threaded embedding endpoint, which is
+            the measured reason the lock exists. Per-fingerprint locking would
+            have looked more parallel and been slower.
+          * THE HIT IS CHECKED BEFORE THE LOCK, so serialising writers never
+            starves a reader. That reordering is the whole packet.
+          * THE FORGE MOUNT IS READ-ONLY, so the ephemeral tier physically
+            cannot corrupt the durable tier. That is a mount mode, not a
+            convention — verified from inside a real forge container, where a
+            touch fails with "Read-only file system".
+
+        MUTATION CONTROLS — each one broke it, showed red, restored, showed green,
+        and the restored file was cmp'd byte-identical to its backup.
+          1. Resolution-agreement guard, two directions. (a) Drifted ONE
+             carrier's XDG fallback by six characters -> violation:...:block-drift
+             naming the file with a diff, rc=1. (b) Deleted the block from one
+             carrier entirely -> violation:...:no-resolution-block, rc=1. (b) is
+             the one that matters: an extractor that silently matched nothing
+             would make all three carriers "agree" vacuously forever.
+          2. Litmus carve-out pins, three targeted mutations. Flipping the mount
+             to MountMode::ReadWrite reddened step 10; drifting the injected env
+             off FORGE_SPEC_INDEX_MOUNT reddened step 12; moving the liveness
+             state dir out of tmpfs reddened step 1.
+          3. Step 13's DISTINCTIVE arm, proven separately because mutation 2c was
+             caught by the PRE-EXISTING step 1 and therefore proved nothing about
+             the new step. Pointing FORGE_SPEC_INDEX_MOUNT at
+             /dev/shm/tillandsias-experts leaves step 1 satisfied (the state dir
+             is still a /dev/shm path) and only step 13 can see it: it reported
+             "liveness state ... is under the durable index mount". Without this
+             the arm would have been an unproven no-op.
+          4. Rust unit test. MountMode::ReadWrite -> the rendered-argv assertion
+             FAILED, 1 passed 1 failed. This is the net the structural litmus
+             cannot provide, because the litmus reads source text and the test
+             reads the argv podman would actually receive.
+          5. Retention ceiling. Seeded four synthetic stale entries; a build
+             pruned 6 -> 3 keeping `current`. Then seeded four more and ran with
+             TILLANDSIAS_SPEC_INDEX_KEEP=1 -> exactly 1 entry left, which proves
+             the prune really deletes rather than being a no-op that happened to
+             match a small store.
+          6. Handoff proof negative arm. The same container without the volume
+             reads absent and the same retrieve fails, so "present" is caused by
+             the mount.
+          7. Lock liveness. The warm-caller-served-under-lock result would be
+             meaningless if the lock were dead, so the same held lock was hit
+             with an UNPUBLISHED corpus: skip:spec-index:already-building. The
+             lock still dedups real builders.
+
+        A DEFECT I INTRODUCED AND THEN CLOSED, recorded because shipping it would
+        have been worse than not doing the packet. Content-addressing removed the
+        old layout's in-place overwrite, so the store grew by 96 MiB every time
+        the corpus moved — and the post-commit hook publishes on every
+        corpus-touching commit. A week of spec work would have filled the volume
+        and the failure would have landed on whoever built next. There is now a
+        retention ceiling (keep `current` plus the newest two,
+        TILLANDSIAS_SPEC_INDEX_KEEP), pruning only after a successful publish so
+        a failed build can never take the working index down with it.
+
+        HOLD REASON — why implemented and not completed. The two in-forge readers
+        are IMAGE content (images/default/), and I did not bake a forge image:
+        the operator's constraint was explicit that other work depends on this
+        host's podman, and the destructive e2e is blocked on 809-w2xy anyway.
+        The handoff proof therefore ran the CURRENT image with the two scripts
+        bind-mounted in, which proves the scripts work in the real image
+        environment but not that the shipped image carries them. A live forge
+        lands warm only after the next forge-image bake plus a tray rebuild and
+        install. This is the 743-y5wh bake-timing class, the same hold 767-es4w
+        took.
+
+        BOTH VERSION SKEWS WERE MEASURED RATHER THAN ASSUMED, because both halves
+        will exist in the fleet during the roll-out and neither may answer
+        WRONGLY:
+          new readers + old tray (no volume, no root) -> state=absent, rc=0,
+            resolved to /home/forge/.cache/tillandsias/spec-index
+          old readers + new tray (volume mounted, readers ignore it) ->
+            state=absent, rc=0, resolved to /dev/shm/tillandsias-experts/spec-index
+          new + new -> state=present resolving into the mounted fingerprint dir
+        Every skew degrades to the typed `absent` the system already handles.
+        None errors and none claims a present index it cannot read.
+
+        WHAT I DELIBERATELY LEFT.
+          * No in-forge BUILDER. The forge reads; it never writes. Adding a
+            builder would put the expensive path back in the ephemeral tier,
+            which is the thing this packet exists to stop.
+          * No fallback to the legacy /dev/shm index. A host with a warm tmpfs
+            index pays one rebuild. A fallback would have been a second serving
+            surface and a second staleness story for a one-time cost.
+          * lib-common.sh UNTOUCHED. The expert liveness surfaces (state,
+            started_at, plan-source-hash, project-index) stay in tmpfs. Only the
+            index moved, and litmus step 13 now refuses to let the rest follow.
+          * No cross-project sharing. The volume is per-project, matching
+            tillandsias-mirror-* and tillandsias-forge-cache-*.
+          * The forge image is not rebuilt (see the hold reason).
+      evidence_refs:
+        - "mutation 1a/1b: block-drift and no-resolution-block both rc=1; restored rc=0 and cmp byte-identical"
+        - "mutation 2/3: litmus steps 10, 12 and 1 reddened by targeted edits; step 13's distinctive arm reddened by a mount const pointed into tmpfs"
+        - "mutation 4: cargo test spec_index 1 passed 1 FAILED under MountMode::ReadWrite; restored 2 passed"
+        - "mutation 5: 6 entries -> 3 with default keep; -> 1 with TILLANDSIAS_SPEC_INDEX_KEEP=1"
+        - "control 7: held lock + unpublished corpus -> skip:spec-index:already-building (the lock is alive)"
+        - "skew matrix: new/old absent rc=0, old/new absent rc=0, new/new present rc=0"
+  - packet_id: expert-index-lifecycle-belongs-to-the-mirror-not-the-forge
+    event:
+      type: note
+      ts: "2026-08-18T00:09:00Z"
+      agent_id: fork-801a2by-20260818T0008Z
+      host: linux_mutable
+      summary: |
+        CORRECTION TO THIS PACKET'S OWN MEASURED FACTS. Whoever reads the
+        "~12 minutes" motivation should not repeat it for this host.
+
+        OBSERVED, macuahuitl 2026-08-17T23:56Z: a full cold rebuild of the same
+        9910-chunk corpus took 43 SECONDS wall, rc=0, verdict
+        ok:spec-index:built:9910. The packet records ~12 minutes for the same
+        host and the same corpus, written 2026-08-17T18:46Z.
+
+        OBSERVED, same session, and this is the cause rather than a guess: the
+        dev inference container's HostConfig.Devices now carries /dev/nvidia0,
+        /dev/nvidiactl, /dev/nvidia-uvm, /dev/nvidia-modeset,
+        /dev/nvidia-uvm-tools and two /dev/dri nodes, and the ollama API reports
+        nomic-embed-text:latest with size_vram == size == 323150151, i.e. the
+        embedding model is FULLY RESIDENT IN VRAM on the RTX A5000. The GPU is
+        doing the embedding.
+
+        WHY THIS IS WORTH A CORRECTION RATHER THAN A SHRUG: the note filed at
+        18:46Z in the very same ledger fragment as this packet states that the
+        dev inference container's HostConfig.Devices is [] and that the stack is
+        doing nothing with the card. That is no longer true, so any reasoning
+        that starts from it — including 406's "the fleet has no HIGH-tier
+        reference measurement at all" — should be re-checked against the live
+        container before being acted on. I did not make this change and do not
+        know which packet did.
+
+        WHAT SURVIVES THE CORRECTION, because the packet is still worth having:
+        the twelve-minute class is what a CPU-embedding host pays, and most of
+        the fleet is that case (yoga measured 12m19s for 9909 chunks). More to
+        the point, the durability argument never depended on the number. An
+        index in tmpfs dies on every container teardown and every reboot no
+        matter how fast it rebuilds; concurrent harnesses on different commits
+        used to evict each other's single directory and each pay full price; and
+        43 seconds of GPU time per forge relaunch, times N forges, times every
+        reboot, is still pure waste. The right summary is that this packet buys
+        durability and share-ability first and wall-clock second, and its
+        wall-clock saving on THIS host is 43s rather than 12min.
+
+        LOAD-BEARING INFERENCE, NAMED AS THE PROMPT ASKS: I attribute the 17x gap
+        to the GPU. I did NOT run a controlled CPU-vs-GPU comparison on this
+        host. A competing explanation that fits the same evidence is that the
+        ~12min figure was carried into this packet from yoga's 9909-chunk
+        measurement rather than measured on macuahuitl (the chunk counts differ
+        by one, which is a hint in that direction). Either way the 43s number is
+        directly measured and the 12min number should not be quoted for this
+        host. Whoever wants certainty should re-run with the devices detached.
+  - packet_id: expert-citations-must-carry-a-version-the-caller-can-compare
+    event:
+      type: note
+      ts: "2026-08-18T00:09:01Z"
+      agent_id: fork-801a2by-20260818T0008Z
+      host: linux_mutable
+      summary: >
+        801-a2by HAS LANDED AND THE SHARING IS NOW REAL, so this packet's hazard
+        is live rather than prospective. Read this before treating a shared warm
+        index as safe. The fingerprint proves an entry describes corpus X; it
+        proves NOTHING about whether corpus X is what the asking agent has
+        checked out. As of this change one durable, content-addressed index is
+        mounted read-only into every forge on the host and read by bare-metal
+        harnesses too, so an expert can legitimately answer a caller from a
+        commit that caller has never fetched — exactly the "citation in the
+        caller's future" case this packet was written around, except it is now
+        the normal case rather than a thought experiment. Citations still carry
+        {path, line_start, line_end} and one top-level freshness, so an agent
+        handed openspec/specs/forge-offline/spec.md:45-49 still opens line 45 in
+        its own tree and reads whatever is there. The packets were supposed to
+        land in this order or together; they did not, and the gap is stated in
+        the litmus header, in the ensure script's header and here so that nobody
+        concludes from a green ephemerality litmus that shared answers are
+        caller-safe. The suggested first rung (per-citation commit +
+        caller_relation) is unchanged and is now the highest-value thing in this
+        milestone.
+  - packet_id: inference-gpu-passthrough-fat-host-thinnest-rung
+    event:
+      type: note
+      ts: "2026-08-18T00:09:02Z"
+      agent_id: fork-801a2by-20260818T0008Z
+      host: linux_mutable
+      summary: >
+        DRIVE-BY OBSERVATION, not a claim on this packet's deliverable. The
+        18:46Z note on this packet records that the dev inference container's
+        HostConfig.Devices is [] and that the GPU sits idle. On 2026-08-17T23:56Z
+        that is no longer the state of this host: `podman inspect
+        tillandsias-dev-inference` shows Devices carrying /dev/nvidia0,
+        /dev/nvidiactl, /dev/nvidia-uvm, /dev/nvidia-modeset,
+        /dev/nvidia-uvm-tools, /dev/dri/card1 and /dev/dri/renderD128, and
+        http://127.0.0.1:11434/api/ps reports nomic-embed-text:latest with
+        size_vram == size == 323150151 — fully VRAM-resident. Measured effect on
+        a real workload while doing 801-a2by: a 9910-chunk spec-index embedding
+        pass that the ledger records at ~12 minutes completed in 43 seconds.
+        I did not make this change and I am NOT claiming this packet is done —
+        the entrypoint tier logic, the TILLANDSIAS_INFERENCE_TIER wiring in
+        scripts/dev-inference-ensure.sh and the model-choice decision the 18:46Z
+        note reserved for the operator were all untouched by me. What this note
+        supplies is the HIGH-tier reference measurement the 18:46Z note said the
+        fleet lacked, plus a warning that the "Devices is []" premise underneath
+        it has expired and should be re-read from the live container before
+        anyone plans work on it.

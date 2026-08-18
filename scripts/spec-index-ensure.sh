@@ -2,7 +2,7 @@
 # @trace spec:forge-environment-discoverability
 #
 # spec-index-ensure.sh — build the spec RAG index so `spec_answer` can answer
-# on a DEV host (orders 552 and 760-hzi4).
+# on a DEV host (orders 552 and 760-hzi4), into the DURABLE tier (801-a2by).
 #
 # WHAT WAS ACTUALLY MISSING. `tillandsias-plan spec-index` (the chunker) has
 # existed since order 547 and produces chunks.jsonl in 25ms. `spec-retrieve`
@@ -17,20 +17,74 @@
 #   -> POST each chunk's text to the SAME /v1/embeddings the query path uses
 #   -> vectors.jsonl, one JSON float array per line, index-aligned with chunks
 #
-# RESOLUTION IS COPIED FROM THE CONSUMER ON PURPOSE. The directory, endpoint
-# and model are resolved exactly as images/default/config-overlay/mcp/
-# forge-plan.sh resolves them. A producer that writes where the reader does not
-# look, or embeds with a model the query path does not use, builds an index
-# that is silently wrong rather than absent — and an index that answers WRONGLY
-# is far worse than one that refuses, because the refusal is typed and this
-# would not be. The dev/runtime model split those variables encode is already
-# settled (lib-dev-env.sh, checked by check-dev-embed-model-agreement.sh).
+# ── ORDER 801-a2by: THE INDEX BELONGS TO THE DURABLE TIER ────────────────────
+#
+# It used to build into ${FORGE_EXPERTS_STATE_DIR}/spec-index — i.e. /dev/shm,
+# which is TMPFS. In-forge that dies with the container; on bare metal it dies
+# on reboot. Measured on macuahuitl: 9910 chunks, ~12 minutes cold, 0.048s warm
+# (the fingerprint short-circuit below). So the EXPENSIVE path was being paid,
+# over and over, for a cache that was thrown away — while the cheap path had
+# existed all along and simply never had anything to hit.
+#
+# The operator's decomposition, which is the right one:
+#   durable   : git-mirror, inference, expert index   <- outlives any forge
+#   ephemeral : forge containers, N concurrent, freely destroyed
+# The forge keeps every idempotence and ephemerality guarantee it has today. It
+# simply stops OWNING state that outlives it. Its expert LIVENESS state (state,
+# started_at, plan-source-hash, project-index) stays in tmpfs and is still
+# pinned there by litmus:forge-experts-ephemerality-shape. Only the index — a
+# pure function of the corpus, carrying no working-tree knowledge — moves.
+#
+# WHY A PODMAN NAMED VOLUME AND NOT A HOST BIND-MOUNT. The forge is enclave-only
+# by spec (forge-offline); the host-checkout bind mount is a deliberate opt-in
+# guard (order 437) and must not become the default fast path. A named volume is
+# container-managed storage with ZERO host-$HOME reference — the same reasoning
+# and the same mechanism `tillandsias-forge-cache-<project>` already uses, and
+# the same reasoning 801-kqme gives for refusing to bind-mount the nix store.
+# The forge mounts it READ-ONLY, so the ephemeral tier structurally cannot
+# corrupt the durable tier: that is a mount mode, not a convention.
+#
+# CONTENT-ADDRESSED, SO CONCURRENCY IS THE NORMAL CASE AND NOT A HAZARD. The
+# layout is keyed by the fingerprint this script already computed:
+#   <root>/<fingerprint>/{chunks.jsonl,vectors.jsonl,.fingerprint}
+#   <root>/current      -- a one-line file naming the last published fingerprint
+# A published entry is IMMUTABLE. Readers therefore need NO lock: they resolve a
+# fingerprint directory that is either wholly absent or wholly complete, and
+# nothing ever rewrites one in place. Two harnesses on different commits get two
+# entries instead of evicting each other — the old single-directory layout made
+# them thrash, each rebuild costing the full twelve minutes.
+#
+# THE HIT IS CHECKED BEFORE THE LOCK IS TAKEN, which is the whole point of the
+# packet. The old order (lock, then chunk, then compare) meant a forge launching
+# while a builder held the lock got `skip:already-building` and no index AT ALL,
+# even when its own corpus was already published and sitting right there. Now
+# chunking (25ms) and the fingerprint comparison happen first, so a relaunch is
+# a fingerprint HIT rather than a twelve-minute rebuild or an empty skip.
+#
+# NOT A BLANK CHEQUE ON SHARING — READ THIS BEFORE TRUSTING A SHARED INDEX.
+# The fingerprint proves an entry describes corpus X. It does NOT prove corpus X
+# is what the ASKING agent has checked out. Citations still carry no commit, so
+# a caller at a different commit can read `path:45-49` in its own tree and get
+# different bytes. Order 801-g9nn is that fix (per-citation commit +
+# caller_relation). Until it lands, this script makes the sharing REAL while the
+# staleness signal is still missing; that is a deliberate, recorded gap.
+#
+# RESOLUTION IS COPIED FROM THE CONSUMER ON PURPOSE. The root, endpoint and
+# model are resolved exactly as images/default/config-overlay/mcp/forge-plan.sh
+# and images/default/lib-expert-capability.sh resolve them. A producer that
+# writes where the reader does not look, or embeds with a model the query path
+# does not use, builds an index that is silently wrong rather than absent — and
+# an index that answers WRONGLY is far worse than one that refuses, because the
+# refusal is typed and this would not be. The dev/runtime model split those
+# variables encode is already settled (lib-dev-env.sh, checked by
+# check-dev-embed-model-agreement.sh); the ROOT/serving-dir resolution is kept
+# in step by check-spec-index-resolution-agreement.sh for the same reason.
 #
 # ORDER ALIGNMENT IS THE CORRECTNESS PROPERTY. vectors.jsonl line N must be the
 # embedding of chunks.jsonl line N; spec-retrieve pairs them by position and
 # refuses outright if the counts differ. Every batch is therefore checked for
-# arity, and the file is published ATOMICALLY (built in a temp dir, moved into
-# place) so no reader can ever observe a half-written index.
+# arity, and the entry is published ATOMICALLY (built in a staging dir, renamed
+# into place) so no reader can ever observe a half-written index.
 #
 # Grammar (exactly one line on stdout):
 #   ok:spec-index:fresh:<n>
@@ -40,12 +94,102 @@
 #
 # `skip:` exits 0 by design: a host with no inference endpoint is degraded, not
 # broken, and the consumer already refuses in a typed, self-describing way.
+#
+# Usage:
+#   scripts/spec-index-ensure.sh
+#   scripts/spec-index-ensure.sh --where     # print the resolved tier, no build
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-FORGE_EXPERTS_STATE_DIR="${FORGE_EXPERTS_STATE_DIR:-/dev/shm/tillandsias-experts}"
-INDEX_DIR="${FORGE_SPEC_INDEX_DIR:-$FORGE_EXPERTS_STATE_DIR/spec-index}"
+# ── DURABLE ROOT RESOLUTION ──────────────────────────────────────────────────
+# The PROJECT NAME is an INPUT to the shared resolver below, and the builder is
+# the one side that can derive it properly. The launcher names the volume from
+# the project directory, so a git WORKTREE must resolve to its MAIN checkout's
+# name or the host builder would fill `tillandsias-spec-index-<worktree-hash>`
+# while every forge mounted `tillandsias-spec-index-tillandsias`. `git rev-parse
+# --git-common-dir` is what distinguishes them: it points at the main
+# checkout's .git from inside any linked worktree.
+if [ -z "${TILLANDSIAS_PROJECT:-}" ]; then
+    _gcd="$(git -C "$ROOT" rev-parse --git-common-dir 2>/dev/null)" || _gcd=""
+    case "$_gcd" in
+        /*) TILLANDSIAS_PROJECT="$(basename "$(dirname "$_gcd")")" ;;
+        *)  TILLANDSIAS_PROJECT="$(basename "$ROOT")" ;;
+    esac
+    export TILLANDSIAS_PROJECT
+fi
+
+# >>> BEGIN spec-index resolution (801-a2by) — BYTE-IDENTICAL in three files:
+#       scripts/spec-index-ensure.sh                     (the producer)
+#       images/default/config-overlay/mcp/forge-plan.sh  (spec_answer)
+#       images/default/lib-expert-capability.sh          (the capability line)
+#     A producer that writes where the reader does not look builds an index that
+#     is silently ABSENT rather than loudly missing, which is how the embedding
+#     step stayed unwritten on every host for weeks. Agreement is proven
+#     BEHAVIOURALLY — the block is extracted from each file and executed under
+#     one env — by scripts/check-spec-index-resolution-agreement.sh. Edit all
+#     three together or that guard goes red.
+#
+#     Precedence, highest first:
+#       1. FORGE_SPEC_INDEX_DIR   — an EXACT serving directory, honoured
+#          verbatim so the 789-nc2s stale-override diagnostics keep working.
+#       2. FORGE_SPEC_INDEX_ROOT  — an explicit durable root. The forge launcher
+#          injects this (/opt/tillandsias/spec-index, the read-only volume
+#          mount), so nothing inside the enclave ever shells out to podman.
+#       3. The project's podman named volume — what makes the host builder and
+#          every forge share ONE store. INSPECT only: creating it is the
+#          producer's job, never a reader's.
+#       4. $XDG_CACHE_HOME/tillandsias/spec-index — durable, podman-free, for
+#          hosts and harnesses with no podman (macOS/Windows bare metal).
+#     Every podman step is fail-soft: a hiccup degrades to (4), never to an
+#     error. POSIX sh — lib-expert-capability.sh is not bash.
+_tillandsias_spec_index_paths() {
+    _tsi_root="${FORGE_SPEC_INDEX_ROOT:-}"
+    if [ -z "$_tsi_root" ] && [ "${TILLANDSIAS_SPEC_INDEX_NO_PODMAN:-0}" != "1" ] \
+       && command -v podman >/dev/null 2>&1; then
+        _tsi_vol="${TILLANDSIAS_SPEC_INDEX_VOLUME:-tillandsias-spec-index-${TILLANDSIAS_PROJECT:-tillandsias}}"
+        _tsi_root="$(podman volume inspect -f '{{.Mountpoint}}' "$_tsi_vol" 2>/dev/null)" || _tsi_root=""
+        if [ -z "$_tsi_root" ] || [ ! -d "$_tsi_root" ]; then _tsi_root=""; fi
+    fi
+    if [ -z "$_tsi_root" ]; then
+        _tsi_root="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/spec-index"
+    fi
+    _tsi_dir="${FORGE_SPEC_INDEX_DIR:-}"
+    if [ -z "$_tsi_dir" ]; then
+        # `current` is written last and RENAMED into place, so it never names a
+        # half-published entry. With no pointer yet, name the ROOT so a refusal
+        # points at a real directory a human can inspect.
+        _tsi_fp="$(cat "$_tsi_root/current" 2>/dev/null | tr -d '[:space:]')"
+        if [ -n "$_tsi_fp" ]; then _tsi_dir="$_tsi_root/$_tsi_fp"; else _tsi_dir="$_tsi_root"; fi
+    fi
+    printf '%s\n%s\n' "$_tsi_root" "$_tsi_dir"
+}
+# <<< END spec-index resolution (801-a2by)
+
+# PRODUCER-ONLY: create the volume before resolving, so the first host build and
+# the first forge land on the SAME store. A forge mounting a not-yet-created
+# volume auto-creates an empty one, which would sit beside a populated cache dir
+# and look exactly like a cold index. Readers never do this.
+SPEC_INDEX_VOLUME="${TILLANDSIAS_SPEC_INDEX_VOLUME:-tillandsias-spec-index-${TILLANDSIAS_PROJECT:-tillandsias}}"
+if [ -z "${FORGE_SPEC_INDEX_ROOT:-}" ] \
+   && [ "${TILLANDSIAS_SPEC_INDEX_NO_PODMAN:-0}" != "1" ] \
+   && command -v podman >/dev/null 2>&1; then
+    podman volume inspect "$SPEC_INDEX_VOLUME" >/dev/null 2>&1 \
+        || podman volume create "$SPEC_INDEX_VOLUME" >/dev/null 2>&1 || true
+fi
+
+INDEX_ROOT="$(_tillandsias_spec_index_paths | sed -n 1p)"
+
+if [ "${1:-}" = "--where" ]; then
+    printf 'spec-index:project=%s\n' "$TILLANDSIAS_PROJECT"
+    printf 'spec-index:volume=%s\n' "$SPEC_INDEX_VOLUME"
+    printf 'spec-index:root=%s\n' "$INDEX_ROOT"
+    printf 'spec-index:serving=%s\n' "$(_tillandsias_spec_index_paths | sed -n 2p)"
+    printf 'spec-index:entries=%s\n' "$(ls -1 "$INDEX_ROOT" 2>/dev/null | grep -cv '^current$')"
+    printf 'spec-index:keep=%s\n' "${TILLANDSIAS_SPEC_INDEX_KEEP:-3}"
+    exit 0
+fi
+
 EMBED_EP="${TILLANDSIAS_EMBED_ENDPOINT:-}"
 EMBED_MODEL="${TILLANDSIAS_EMBED_MODEL:-nomic-embed-text}"
 BATCH="${TILLANDSIAS_SPEC_INDEX_BATCH:-64}"
@@ -73,40 +217,41 @@ PLAN_BIN="$(resolve_plan_binary)" || { echo "skip:spec-index:no-plan-binary"; ex
 # session started before that commit keeps the stale value until it restarts).
 # The refusal was correct and the ordering was not. A destination check costs
 # one mkdir; discovering it last costs the whole build.
-if ! mkdir -p "$INDEX_DIR" 2>/dev/null || [ ! -w "$INDEX_DIR" ]; then
-    echo "blocked:spec-index:destination-unwritable:$INDEX_DIR"
+#
+# 801-a2by refines WHEN it is fatal rather than weakening it. The durable root
+# is now a SHARED tier that a reader may legitimately hold read-only, so an
+# unwritable root must still serve a fingerprint HIT. The refusal therefore
+# fires at the point a BUILD is required — which is still before the first
+# embedding call, so the expensive lesson above is fully preserved.
+ROOT_WRITABLE=1
+if ! mkdir -p "$INDEX_ROOT" 2>/dev/null || [ ! -w "$INDEX_ROOT" ]; then
+    ROOT_WRITABLE=0
+fi
+
+_refuse_unwritable() {
+    echo "blocked:spec-index:destination-unwritable:$INDEX_ROOT"
     {
-        echo "Cannot write the spec index to '$INDEX_DIR'."
-        echo "If that path belongs to another machine, FORGE_SPEC_INDEX_DIR is"
-        echo "set in this environment (789-nc2s). Unset it, or point it at a"
-        echo "directory on THIS host, and re-run."
+        echo "Cannot write the spec index to '$INDEX_ROOT'."
+        echo "If that path belongs to another machine, FORGE_SPEC_INDEX_DIR or"
+        echo "FORGE_SPEC_INDEX_ROOT is set in this environment (789-nc2s). Unset"
+        echo "it, or point it at a directory on THIS host, and re-run."
     } >&2
     exit 1
-fi
-
-# ONE BUILDER AT A TIME. The post-commit hook fires this on every commit, and a
-# cold build takes ~12 minutes here — so without a lock a burst of commits
-# during a spec change would start several concurrent full builds, each
-# hammering the same single-threaded embedding endpoint and making all of them
-# slower. `mkdir` is the atomic test-and-set that works on every filesystem
-# this project runs on.
-LOCK_DIR="${INDEX_DIR}.lock"
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    # A stale lock from a killed builder must not wedge the index forever.
-    if [ -f "$LOCK_DIR/pid" ] && ! kill -0 "$(cat "$LOCK_DIR/pid" 2>/dev/null)" 2>/dev/null; then
-        rm -rf "$LOCK_DIR"
-        mkdir "$LOCK_DIR" 2>/dev/null || { echo "skip:spec-index:locked"; exit 0; }
-    else
-        echo "skip:spec-index:already-building"
-        exit 0
-    fi
-fi
-printf '%s\n' "$$" > "$LOCK_DIR/pid"
+}
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/spec-index-ensure.XXXXXX")" || {
-    rm -rf "$LOCK_DIR"; echo "blocked:spec-index:no-tmpdir"; exit 1; }
-trap 'rm -rf "$work" "$LOCK_DIR"' EXIT
+    echo "blocked:spec-index:no-tmpdir"; exit 1; }
+LOCK_DIR=""
+_cleanup() {
+    rm -rf "$work"
+    [ -n "$LOCK_DIR" ] && rm -rf "$LOCK_DIR"
+    return 0
+}
+trap _cleanup EXIT
 
+# ── CHUNK AND FINGERPRINT FIRST, LOCK ONLY IF WE MUST BUILD ──────────────────
+# 25ms of chunking buys the ability to answer "already published?" without
+# serialising behind a twelve-minute builder. This ordering IS the packet.
 "$PLAN_BIN" spec-index --root "$ROOT" --out "$work" >/dev/null 2>&1 || {
     echo "blocked:spec-index:chunker-failed"; exit 1; }
 [ -s "$work/chunks.jsonl" ] || { echo "blocked:spec-index:no-chunks"; exit 1; }
@@ -119,10 +264,102 @@ n_chunks="$(wc -l < "$work/chunks.jsonl" | tr -d '[:space:]')"
 fingerprint="$(
     { sha256sum < "$work/chunks.jsonl"; printf '%s\n' "$EMBED_MODEL"; } | sha256sum | cut -d' ' -f1
 )"
-if [ -f "$INDEX_DIR/.fingerprint" ] \
-   && [ "$(cat "$INDEX_DIR/.fingerprint" 2>/dev/null)" = "$fingerprint" ] \
-   && [ -s "$INDEX_DIR/vectors.jsonl" ] \
-   && [ "$(wc -l < "$INDEX_DIR/vectors.jsonl" | tr -d '[:space:]')" = "$n_chunks" ]; then
+INDEX_DIR="$INDEX_ROOT/$fingerprint"
+
+# _entry_complete <dir> — the same predicate the readers use, plus the arity
+# check. An entry is only ever observed complete because it is renamed into
+# place; this re-checks anyway, because a half-copied entry restored from a
+# backup, or one truncated by a full disk, must be rebuilt rather than served.
+_entry_complete() {
+    [ -s "$1/vectors.jsonl" ] || return 1
+    [ -s "$1/chunks.jsonl" ] || return 1
+    [ "$(wc -l < "$1/vectors.jsonl" | tr -d '[:space:]')" = "$n_chunks" ] || return 1
+    return 0
+}
+
+# _publish_current — point `current` at $fingerprint. Written to a temp name and
+# renamed, because rename(2) is atomic: a reader either sees the old pointer or
+# the new one, never a truncated fingerprint naming a directory that is not
+# there. Silent no-op on a read-only root — a reader is allowed to hold one.
+_publish_current() {
+    [ "$ROOT_WRITABLE" = "1" ] || return 0
+    [ "$(cat "$INDEX_ROOT/current" 2>/dev/null | tr -d '[:space:]')" = "$fingerprint" ] && return 0
+    printf '%s\n' "$fingerprint" > "$INDEX_ROOT/.current.$$" 2>/dev/null || return 0
+    mv -f "$INDEX_ROOT/.current.$$" "$INDEX_ROOT/current" 2>/dev/null || rm -f "$INDEX_ROOT/.current.$$"
+    return 0
+}
+
+# RETENTION CEILING. Content-addressing is what stops concurrent harnesses on
+# different commits from evicting each other, but it also means the store GROWS
+# instead of being overwritten in place: this corpus is 96 MiB per entry, and the
+# post-commit hook publishes a new one every time the corpus moves. Unbounded, a
+# week of spec work would fill the volume and the failure would land on whoever
+# was next to build. So keep the newest few and drop the rest — the same "pin +
+# ceiling" shape 795-h8er gave the nix store.
+#
+# WHAT IS NEVER PRUNED: whatever `current` names, regardless of its age. And
+# pruning happens only AFTER a successful publish, so a failed build can never
+# take the working index down with it. A reader that resolved a fingerprint one
+# instant before it was pruned gets ENOENT and refuses in the typed way — the
+# open file it already holds survives unlink, so nothing is read half-deleted.
+_prune_entries() {
+    [ "$ROOT_WRITABLE" = "1" ] || return 0
+    _pe_keep="${TILLANDSIAS_SPEC_INDEX_KEEP:-3}"
+    case "$_pe_keep" in '' | *[!0-9]*) _pe_keep=3 ;; esac
+    [ "$_pe_keep" -ge 1 ] || _pe_keep=1
+    _pe_cur="$(cat "$INDEX_ROOT/current" 2>/dev/null | tr -d '[:space:]')"
+    _pe_n=0
+    # Newest first. Entry names are hex fingerprints, so word-splitting is safe.
+    for _pe_d in $(ls -1t "$INDEX_ROOT" 2>/dev/null); do
+        case "$_pe_d" in
+            current | .*) continue ;;
+        esac
+        [ -d "$INDEX_ROOT/$_pe_d" ] || continue
+        [ "$_pe_d" = "$_pe_cur" ] && continue
+        _pe_n=$((_pe_n + 1))
+        if [ "$_pe_n" -ge "$_pe_keep" ]; then
+            rm -rf "$INDEX_ROOT/$_pe_d"
+        fi
+    done
+    return 0
+}
+
+if _entry_complete "$INDEX_DIR"; then
+    _publish_current
+    echo "ok:spec-index:fresh:$n_chunks"
+    exit 0
+fi
+
+# From here we are going to BUILD, so the destination must be writable.
+[ "$ROOT_WRITABLE" = "1" ] || _refuse_unwritable
+
+# ONE BUILDER AT A TIME. The post-commit hook fires this on every commit, and a
+# cold build takes ~12 minutes here — so without a lock a burst of commits
+# during a spec change would start several concurrent full builds, each
+# hammering the same single-threaded embedding endpoint and making all of them
+# slower. `mkdir` is the atomic test-and-set that works on every filesystem
+# this project runs on. The lock is GLOBAL to the root rather than per
+# fingerprint, deliberately: two builders on different corpora are still two
+# builders on one endpoint, which is exactly what this exists to prevent.
+LOCK_DIR="$INDEX_ROOT/.build.lock"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    # A stale lock from a killed builder must not wedge the index forever.
+    if [ -f "$LOCK_DIR/pid" ] && ! kill -0 "$(cat "$LOCK_DIR/pid" 2>/dev/null)" 2>/dev/null; then
+        rm -rf "$LOCK_DIR"
+        mkdir "$LOCK_DIR" 2>/dev/null || { LOCK_DIR=""; echo "skip:spec-index:locked"; exit 0; }
+    else
+        LOCK_DIR=""
+        echo "skip:spec-index:already-building"
+        exit 0
+    fi
+fi
+printf '%s\n' "$$" > "$LOCK_DIR/pid"
+
+# DOUBLE-CHECK UNDER THE LOCK. Another builder may have published this exact
+# fingerprint between our miss above and our acquisition here; re-embedding it
+# would be twelve minutes spent reproducing bytes that already exist.
+if _entry_complete "$INDEX_DIR"; then
+    _publish_current
     echo "ok:spec-index:fresh:$n_chunks"
     exit 0
 fi
@@ -170,18 +407,29 @@ if [ "$n_vecs" != "$n_chunks" ]; then
     exit 1
 fi
 
-# ATOMIC PUBLISH. Stage a complete index beside the live one and swap, so a
-# concurrent spec_answer either sees the whole old index or the whole new one.
-mkdir -p "$INDEX_DIR" || { echo "blocked:spec-index:cannot-mkdir"; exit 1; }
-stage="$INDEX_DIR/.staging.$$"
+# ATOMIC PUBLISH, CONTENT-ADDRESSED. The entry is assembled in a staging dir on
+# the same filesystem and RENAMED to its fingerprint name, so a concurrent
+# reader resolving that name sees either nothing or a complete entry — never a
+# partial one, and never a directory being rewritten under it.
+stage="$INDEX_ROOT/.staging.$$"
 rm -rf "$stage"; mkdir -p "$stage" || { echo "blocked:spec-index:cannot-stage"; exit 1; }
 cp "$work/chunks.jsonl" "$stage/chunks.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
 cp "$work/vectors.jsonl" "$stage/vectors.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
 printf '%s\n' "$fingerprint" > "$stage/.fingerprint"
-mv -f "$stage/chunks.jsonl" "$INDEX_DIR/chunks.jsonl"
-mv -f "$stage/vectors.jsonl" "$INDEX_DIR/vectors.jsonl"
-mv -f "$stage/.fingerprint" "$INDEX_DIR/.fingerprint"
-rmdir "$stage" 2>/dev/null || true
+# World-readable: the forge reads this volume as a different uid through a
+# read-only mount, so a 0600 entry would be a permission refusal that looks
+# exactly like a missing index.
+chmod 0755 "$stage" 2>/dev/null || true
+chmod 0644 "$stage/chunks.jsonl" "$stage/vectors.jsonl" "$stage/.fingerprint" 2>/dev/null || true
+if [ -d "$INDEX_DIR" ]; then
+    # Lost a race we hold the lock against, or a partial entry survived. Never
+    # `mv` onto an existing directory: that NESTS the staging dir inside it.
+    rm -rf "$stage"
+else
+    mv "$stage" "$INDEX_DIR" || { rm -rf "$stage"; echo "blocked:spec-index:publish-failed"; exit 1; }
+fi
+_publish_current
+_prune_entries
 
 echo "ok:spec-index:built:$n_chunks"
 exit 0
