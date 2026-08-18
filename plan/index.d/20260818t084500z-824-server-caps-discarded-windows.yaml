@@ -73,6 +73,24 @@ packets:
       - "handshake_succeeds_against_fake_unix_server asserts CAP_EXEC_ARGV_VECTOR is readable; capabilities_are_absent_before_handshake pins fail-closed"
 
 events:
+  - packet_id: handshake-discarded-the-capability-list-the-wire-exists-to-advertise
+    event:
+      type: completed
+      ts: "2026-08-18T08:45:00Z"
+      agent_id: windows-yolanda-opus5-20260818t0819z
+      host: windows
+      evidence_refs:
+        - "crates/tillandsias-host-shell/src/vsock_client.rs — server_caps field, capture in handshake(), server_caps()/supports() accessors"
+        - "handshake_succeeds_against_fake_unix_server asserts CAP_EXEC_ARGV_VECTOR readable after handshake"
+        - "capabilities_are_absent_before_handshake pins the fail-closed behaviour"
+        - "cargo test -p tillandsias-host-shell --lib vsock_client: 8 passed / 0 failed"
+        - "./build.sh --check gate_exit=0"
+      summary: >
+        Client::handshake() discarded HelloAck.server_caps, so the rule
+        CAP_EXEC_ARGV_VECTOR states in its own doc — read server_caps, never
+        compare wire versions — had no API behind it. The client now records the
+        list and exposes server_caps()/supports(cap), failing closed before
+        handshake. Non-breaking: 16 callers keep their signature.
   - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
     event:
       type: note
