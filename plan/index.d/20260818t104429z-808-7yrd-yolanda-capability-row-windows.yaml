@@ -11,6 +11,9 @@
 capabilities:
   - ts: "2026-08-18T10:44:29Z"
     host: windows
+    # The context that made this observation (808-7yrd). Without it a
+    # Windows-side contribution for the same machine would overwrite this row.
+    locus: in-guest
     document:
       {
         "schema_version": 2,

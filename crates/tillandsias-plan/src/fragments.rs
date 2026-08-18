@@ -1335,6 +1335,11 @@ impl Ledger {
 pub struct CapabilityEntry {
     /// The machine this row describes — `HostInfo.host_id` (order 808-43mw).
     pub host_id: String,
+    /// WHICH EXECUTION CONTEXT observed it, e.g. `in-guest`, `windows-host`.
+    ///
+    /// Half of the fold key, and the half that is easy to think unnecessary.
+    /// See [`fold_capabilities`] for the collision it prevents.
+    pub locus: String,
     /// LWW timestamp, and with `host` the deterministic tiebreak.
     pub ts: String,
     /// The writing host kind, matching every other channel's `host:` field.
@@ -1343,6 +1348,17 @@ pub struct CapabilityEntry {
     pub document: Value,
     /// Fragment this row came from, so a reader can cite it.
     pub source: String,
+}
+
+/// A `capabilities:` row that could not be folded, and why.
+///
+/// Returned rather than dropped: a row silently discarded is indistinguishable
+/// from a host that never contributed, which is the failure mode this whole
+/// channel exists to avoid one level up.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SkippedCapabilityRow {
+    pub source: String,
+    pub reason: String,
 }
 
 /// Fold the `capabilities:` channel into the fleet matrix (order 808-7yrd).
@@ -1357,33 +1373,63 @@ pub struct CapabilityEntry {
 /// this rides the SAME fragment files and the SAME ordering, and differs only
 /// in its keyspace.
 ///
-/// # Keyed by host_id, which is why 808-43mw had to land first
+/// # The key is `(host_id, locus)`, and the second half is not decoration
 ///
-/// The register is `host_id -> document`. Before 808-43mw a `CapabilityDocument`
-/// could not say which machine it described, so there was no key to fold on —
-/// `kernel_release` is not a substitute, two WSL2 guests report the same one.
+/// 808-43mw had to land first: before it a `CapabilityDocument` could not say
+/// which machine it described, and `kernel_release` is not a substitute because
+/// two WSL2 guests report the same one.
+///
+/// But `host_id` ALONE is not enough, and the reason was found by trying to
+/// implement 809-7e4m on top of this channel rather than by reasoning about it.
+/// On Windows a single machine is observed from TWO execution contexts: the
+/// WSL2 guest sees the CPU and the paravirtual GPU; Windows sees the NPU, the
+/// true GPU name and the machine's real RAM (the guest reports its 7.3 GB VM
+/// slice against 15.2 GB installed). Both contributions describe machine
+/// `yolanda`, so both carry the same `host_id`.
+///
+/// Keyed on `host_id` alone, the second contribution SILENTLY REPLACES the
+/// first — measured, not hypothesised: contributing a Windows-side row erased
+/// the CPU and the GPU from the matrix entirely, leaving a machine that appeared
+/// to have one unusable NPU and nothing else. That is data loss dressed as an
+/// update.
+///
+/// 808-7yrd's premise — "single writer per key by construction, so LWW never
+/// arbitrates a real conflict" — is TRUE, but only once the key includes the
+/// locus. With `(host_id, locus)` each key really does have one writer: the
+/// guest owns `(yolanda, in-guest)`, Windows owns `(yolanda, windows-host)`,
+/// and neither can clobber the other. Assembling a machine's complete row from
+/// its several loci is then the consumer's job, done with everything present,
+/// rather than a merge that happens to run in the right order.
 ///
 /// # LWW here is a backstop, not the mechanism
 ///
-/// Each host writes only its OWN row, so under normal operation there is a
-/// single writer per key and LWW never arbitrates a real conflict. It decides
-/// exactly one thing: which of a host's own successive contributions is
-/// current. That is why plain `(ts, host)` is right here and the status
-/// channel's monotone closure ladder is NOT — capability rows have no ranking,
-/// a later probe simply describes the machine as it is now.
+/// Within one key there is one writer, so LWW decides exactly one thing: which
+/// of that writer's successive probes is current. That is why plain `(ts, host)`
+/// is right and the status channel's monotone closure ladder is NOT — capability
+/// rows have no ranking, a later probe simply describes the machine as it is
+/// now.
 ///
-/// Rows with no `host_id` are SKIPPED rather than folded under a blank key,
-/// which would collect every unidentifiable contribution into one row and
-/// present as a host whose hardware kept changing.
+/// # Nothing is dropped in silence
+///
+/// A row missing `host_id` or `locus` cannot be keyed, and is returned in the
+/// skipped list rather than discarded or folded under a blank key. Folding
+/// under a blank key would collect every unidentifiable contribution into one
+/// row presenting as a host whose hardware kept changing; discarding it quietly
+/// would make a misfiled contribution look exactly like a host that never
+/// contributed. Both are the failure this channel exists to prevent.
 ///
 /// Separate from [`fold`] deliberately: a capability row is not a packet, and
 /// merging it into the packet document would put hardware state in a ledger
 /// whose every other entry is work.
 pub fn fold_capabilities(
     fragments: &[Fragment],
-) -> std::collections::BTreeMap<String, CapabilityEntry> {
-    let mut matrix: std::collections::BTreeMap<String, CapabilityEntry> =
+) -> (
+    std::collections::BTreeMap<(String, String), CapabilityEntry>,
+    Vec<SkippedCapabilityRow>,
+) {
+    let mut matrix: std::collections::BTreeMap<(String, String), CapabilityEntry> =
         std::collections::BTreeMap::new();
+    let mut skipped: Vec<SkippedCapabilityRow> = Vec::new();
 
     for frag in fragments {
         let Some(rows) = frag.doc.get("capabilities").and_then(Value::as_sequence) else {
@@ -1391,6 +1437,10 @@ pub fn fold_capabilities(
         };
         for row in rows {
             let Some(document) = row.get("document") else {
+                skipped.push(SkippedCapabilityRow {
+                    source: frag.name.clone(),
+                    reason: "row carries no `document:`".to_string(),
+                });
                 continue;
             };
             // host_id is read from the DOCUMENT, not from a sibling key that
@@ -1401,6 +1451,26 @@ pub fn fold_capabilities(
                 .and_then(Value::as_str)
                 .filter(|s| !s.is_empty())
             else {
+                skipped.push(SkippedCapabilityRow {
+                    source: frag.name.clone(),
+                    reason: "document has no `host.host_id` (predates 808-43mw?)".to_string(),
+                });
+                continue;
+            };
+            // The locus is on the ROW, not in the document: it describes the
+            // OBSERVATION, and one probe binary can be run from either side.
+            let Some(locus) = row
+                .get("locus")
+                .and_then(Value::as_str)
+                .filter(|s| !s.is_empty())
+            else {
+                skipped.push(SkippedCapabilityRow {
+                    source: frag.name.clone(),
+                    reason: format!(
+                        "row for host_id `{host_id}` has no `locus:` — refusing to key it, \
+                         because a second context observing the same machine would overwrite it"
+                    ),
+                });
                 continue;
             };
             let ts = row
@@ -1414,14 +1484,16 @@ pub fn fold_capabilities(
                 .unwrap_or("")
                 .to_string();
 
+            let key = (host_id.to_string(), locus.to_string());
             let incoming = CapabilityEntry {
                 host_id: host_id.to_string(),
+                locus: locus.to_string(),
                 ts,
                 host,
                 document: document.clone(),
                 source: frag.name.clone(),
             };
-            let better = match matrix.get(host_id) {
+            let better = match matrix.get(&key) {
                 None => true,
                 Some(prev) => {
                     (incoming.ts.as_str(), incoming.host.as_str())
@@ -1429,12 +1501,12 @@ pub fn fold_capabilities(
                 }
             };
             if better {
-                matrix.insert(host_id.to_string(), incoming);
+                matrix.insert(key, incoming);
             }
         }
     }
 
-    matrix
+    (matrix, skipped)
 }
 
 /// The schedulable unit of the matrix: `(device_class, lane, engine)`
@@ -2729,10 +2801,15 @@ mod capability_matrix_tests {
     /// A contribution as a host actually writes it: the whole document under
     /// `document:`, identity read from inside it.
     fn row(host_id: &str, ts: &str, host: &str, tier: &str) -> String {
+        row_at(host_id, ts, host, tier, "in-guest")
+    }
+
+    fn row_at(host_id: &str, ts: &str, host: &str, tier: &str, locus: &str) -> String {
         let mut s = String::new();
         s.push_str("capabilities:\n");
         s.push_str(&format!("  - ts: \"{ts}\"\n"));
         s.push_str(&format!("    host: {host}\n"));
+        s.push_str(&format!("    locus: {locus}\n"));
         s.push_str("    document:\n");
         s.push_str("      schema_version: 2\n");
         s.push_str(&format!("      legacy_tier: {tier}\n"));
@@ -2764,10 +2841,10 @@ mod capability_matrix_tests {
                 &row("yolanda", "2026-08-18T10:00:00Z", "windows", "cpu"),
             ),
         ];
-        let m = fold_capabilities(&frags);
+        let (m, _skipped) = fold_capabilities(&frags);
         assert_eq!(m.len(), 2, "one row per host_id");
-        assert!(m.contains_key("yoga"));
-        assert!(m.contains_key("yolanda"));
+        assert!(m.contains_key(&("yoga".to_string(), "in-guest".to_string())));
+        assert!(m.contains_key(&("yolanda".to_string(), "in-guest".to_string())));
     }
 
     /// Two WSL2 guests share a kernel release exactly. They must NOT collapse.
@@ -2783,11 +2860,11 @@ mod capability_matrix_tests {
                 &row("esmeraldinha", "2026-08-18T10:00:00Z", "windows", "cpu"),
             ),
         ];
-        let m = fold_capabilities(&frags);
+        let (m, _skipped) = fold_capabilities(&frags);
         assert_eq!(m.len(), 2);
         assert_eq!(
-            m["yolanda"].document["host"]["kernel_release"],
-            m["esmeraldinha"].document["host"]["kernel_release"],
+            m[&("yolanda".to_string(), "in-guest".to_string())].document["host"]["kernel_release"],
+            m[&("esmeraldinha".to_string(), "in-guest".to_string())].document["host"]["kernel_release"],
             "the kernel collision is real"
         );
     }
@@ -2807,10 +2884,10 @@ mod capability_matrix_tests {
                 &row("yolanda", "2026-08-18T11:00:00Z", "windows", "gpu-rocm"),
             ),
         ];
-        let m = fold_capabilities(&frags);
+        let (m, _skipped) = fold_capabilities(&frags);
         assert_eq!(m.len(), 1);
         assert_eq!(
-            m["yolanda"].document["legacy_tier"],
+            m[&("yolanda".to_string(), "in-guest".to_string())].document["legacy_tier"],
             Value::String("gpu-rocm".into())
         );
     }
@@ -2828,8 +2905,8 @@ mod capability_matrix_tests {
             "b.yaml",
             &row("yolanda", "2026-08-18T11:00:00Z", "windows", "gpu-rocm"),
         );
-        let forward = fold_capabilities(&[a.clone(), b.clone()]);
-        let backward = fold_capabilities(&[b, a]);
+        let (forward, _) = fold_capabilities(&[a.clone(), b.clone()]);
+        let (backward, _) = fold_capabilities(&[b, a]);
         assert_eq!(forward, backward);
     }
 
@@ -2839,11 +2916,12 @@ mod capability_matrix_tests {
         let ts = "2026-08-18T10:00:00Z";
         let linux = frag("a.yaml", &row("shared", ts, "linux", "cpu"));
         let windows = frag("b.yaml", &row("shared", ts, "windows", "gpu-rocm"));
-        let forward = fold_capabilities(&[linux.clone(), windows.clone()]);
-        let backward = fold_capabilities(&[windows, linux]);
+        let (forward, _) = fold_capabilities(&[linux.clone(), windows.clone()]);
+        let (backward, _) = fold_capabilities(&[windows, linux]);
         assert_eq!(forward, backward, "the tiebreak must not depend on order");
         assert_eq!(
-            forward["shared"].host, "windows",
+            forward[&("shared".to_string(), "in-guest".to_string())].host,
+            "windows",
             "the higher host string wins, deterministically"
         );
     }
@@ -2863,7 +2941,8 @@ mod capability_matrix_tests {
         yaml.push_str("      host:\n");
         yaml.push_str("        is_battery_present: false\n");
         yaml.push_str("        kernel_release: 6.18.33.2-microsoft-standard-WSL2\n");
-        let m = fold_capabilities(&[frag("v1.yaml", &yaml)]);
+        let (m, skipped) = fold_capabilities(&[frag("v1.yaml", &yaml)]);
+        assert_eq!(skipped.len(), 1, "the unkeyable row must be reported");
         assert!(m.is_empty(), "a v1 document has no key to fold on");
     }
 
@@ -2872,9 +2951,114 @@ mod capability_matrix_tests {
     #[test]
     fn fragments_without_the_channel_are_ignored() {
         let yaml = "packets:\n  - packet_id: alpha\n    order: 999-zzzz\n    status: ready\n";
-        assert!(fold_capabilities(&[frag("plain.yaml", yaml)]).is_empty());
+        assert!(fold_capabilities(&[frag("plain.yaml", yaml)]).0.is_empty());
     }
 
+    /// THE REGRESSION THIS KEY EXISTS FOR, and it was found by implementing
+    /// 809-7e4m on top of the channel rather than by reasoning about it.
+    ///
+    /// On Windows one machine is observed from TWO contexts: the WSL2 guest
+    /// sees the CPU and the paravirtual GPU, Windows sees the NPU. Both
+    /// describe machine `yolanda`, so both carry the same host_id. Keyed on
+    /// host_id alone the second contribution silently replaced the first and
+    /// the CPU and GPU vanished from the matrix — data loss dressed as an
+    /// update. Keyed on (host_id, locus) both survive.
+    #[test]
+    fn two_contexts_observing_one_machine_do_not_overwrite_each_other() {
+        let guest = frag(
+            "guest.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T10:00:00Z",
+                "windows",
+                "cpu",
+                "in-guest",
+            ),
+        );
+        let win = frag(
+            "windows.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T11:00:00Z",
+                "windows",
+                "cpu",
+                "windows-host",
+            ),
+        );
+        let (m, skipped) = fold_capabilities(&[guest, win]);
+
+        assert!(skipped.is_empty(), "both rows are keyable");
+        assert_eq!(
+            m.len(),
+            2,
+            "one machine, two loci, two rows — the LATER row must not replace the earlier"
+        );
+        assert!(m.contains_key(&("yolanda".to_string(), "in-guest".to_string())));
+        assert!(m.contains_key(&("yolanda".to_string(), "windows-host".to_string())));
+        assert_eq!(
+            m[&("yolanda".to_string(), "in-guest".to_string())].host_id,
+            m[&("yolanda".to_string(), "windows-host".to_string())].host_id,
+            "and a consumer can still tell they are the same machine"
+        );
+    }
+
+    /// Within ONE locus, a host's later probe still wins — the locus key must
+    /// not accidentally disable the LWW that keeps a row current.
+    #[test]
+    fn the_locus_key_does_not_disable_lww_within_a_locus() {
+        let old = frag(
+            "a.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T09:00:00Z",
+                "windows",
+                "cpu",
+                "in-guest",
+            ),
+        );
+        let new = frag(
+            "b.yaml",
+            &row_at(
+                "yolanda",
+                "2026-08-18T11:00:00Z",
+                "windows",
+                "gpu-rocm",
+                "in-guest",
+            ),
+        );
+        let (m, _) = fold_capabilities(&[old, new]);
+        assert_eq!(m.len(), 1, "same key, so one survives");
+        assert_eq!(
+            m[&("yolanda".to_string(), "in-guest".to_string())].document["legacy_tier"],
+            Value::String("gpu-rocm".into())
+        );
+    }
+
+    /// A row that cannot be keyed is REPORTED, never dropped in silence: a
+    /// discarded row is indistinguishable from a host that never contributed,
+    /// and "the matrix looks empty" is exactly the symptom a misfiled row
+    /// produces.
+    #[test]
+    fn an_unlocated_row_is_reported_rather_than_dropped() {
+        let mut yaml = String::new();
+        yaml.push_str("capabilities:\n");
+        yaml.push_str("  - ts: \"2026-08-18T10:00:00Z\"\n");
+        yaml.push_str("    host: windows\n");
+        yaml.push_str("    document:\n");
+        yaml.push_str("      schema_version: 2\n");
+        yaml.push_str("      legacy_tier: cpu\n");
+        yaml.push_str("      host:\n");
+        yaml.push_str("        host_id: yolanda\n");
+        let (m, skipped) = fold_capabilities(&[frag("nolocus.yaml", &yaml)]);
+        assert!(m.is_empty(), "an unlocated row must not be keyed");
+        assert_eq!(skipped.len(), 1, "and must be reported");
+        assert_eq!(skipped[0].source, "nolocus.yaml");
+        assert!(
+            skipped[0].reason.contains("locus"),
+            "the reason must name the missing field, got: {}",
+            skipped[0].reason
+        );
+    }
     // ---- the schedulable unit ----
 
     fn doc_with_devices(devices: &str) -> Value {

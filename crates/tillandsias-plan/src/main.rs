@@ -2530,11 +2530,11 @@ fn main() {
             // string cannot express "GPU present, no lane", which is the state
             // every WSL2 host is in.
             let frags = tillandsias_plan::fragments::load_all(&index);
-            let matrix = tillandsias_plan::fragments::fold_capabilities(&frags);
+            let (matrix, skipped) = tillandsias_plan::fragments::fold_capabilities(&frags);
             if matrix.is_empty() {
-                println!("capability-matrix: 0 hosts (no `capabilities:` rows in any fragment)");
+                println!("capability-matrix: 0 rows (no `capabilities:` rows in any fragment)");
             }
-            for (host_id, entry) in &matrix {
+            for ((host_id, locus), entry) in &matrix {
                 let kind = entry.document["host"]["host_kind"]
                     .as_str()
                     .unwrap_or("unknown");
@@ -2543,7 +2543,7 @@ fn main() {
                     .unwrap_or("unknown");
                 let tier = entry.document["legacy_tier"].as_str().unwrap_or("unknown");
                 println!(
-                    "host:{host_id}\tkind:{kind}\tid_source:{source}\tderived_tier:{tier}\tts:{}\twriter:{}\tfrom:{}",
+                    "host:{host_id}\tlocus:{locus}\tkind:{kind}\tid_source:{source}\tderived_tier:{tier}\tts:{}\twriter:{}\tfrom:{}",
                     entry.ts, entry.host, entry.source
                 );
                 let triples = tillandsias_plan::fragments::schedulable_triples(&entry.document);
@@ -2569,6 +2569,13 @@ fn main() {
                         }
                     }
                 }
+            }
+            // Reported, never silent: a row that could not be keyed is
+            // indistinguishable from a host that never contributed unless the
+            // reader is told, and "the matrix looks empty" is exactly the
+            // symptom a misfiled row produces.
+            for s in &skipped {
+                println!("skipped: {} ({})", s.source, s.reason);
             }
         }
         "fragments" => {
