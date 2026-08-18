@@ -1,0 +1,131 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T04:20:00Z.
+#
+# The destructive e2e's build gate went red. Every one of the six failures was
+# introduced TONIGHT — five by me, one by the 797-p2xa fork — and none was the
+# pre-existing class they were reported as. Filed and closed together.
+packets:
+  - packet_id: fragment-subcommands-load-the-whole-ledger-they-never-read
+    order: 816-kq2z
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "the three fragment-* subcommands parse ONE small file but sat behind the full ledger load — 132ms of their 133ms — costing ~40s per build and silently blowing a litmus step's 30s budget"
+    deliverable: "the fragment-only subcommands dispatch before the ledger load, and the litmus step that timed out passes on its merits"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [plan-tooling, ci-gates, performance]
+    estimated_hours: 2
+    context: |
+      OBSERVED 2026-08-18 on macuahuitl, while running the destructive e2e's
+      Step 1 (`./build.sh --ci-full --install`), which exited 1.
+
+      MEASURED, not reasoned about:
+        tillandsias-plan capabilities                 1ms   (returns before the load)
+        tillandsias-plan fragment-terminal-events X   133ms (arm sits after it)
+
+      `Ledger::load_with_fragments` reads plan/index.yaml (60,192 lines) plus
+      all 102 fragments, at main.rs:2163. The three `fragment-*` arms were at
+      2676-2927 and none of them touches `ledger` — each reads `args.get(1)`
+      and parses that one file. check-fragment-status-loss.sh calls all three
+      once per fragment, so the cost was 3 x 102 x 132ms of pure waste on
+      EVERY `./build.sh --check`, on every host in the fleet.
+
+      WHY IT SURFACED NOW rather than at 752-pst5. With one channel the phase
+      took ~14s. 797-qm4t added a second and 812-d45t a third — both mine,
+      earlier tonight — taking it to 41s and past
+      litmus:fragment-status-loss-attribution-shape's 30s step budget. So the
+      symptom was a TIMEOUT, not a wrong answer, and `./build.sh --check` (no
+      per-phase budget) reported the phase at "41.0s" and stayed green while
+      `--ci-full` went red. I read that 41s twice tonight without registering
+      it as a number that had changed.
+
+      FIXED by dispatching the three before the load, on the precedent already
+      in the file: `capabilities` (order 569) returns first and touches
+      nothing. 133ms -> 1ms, guard wall time 41s -> 1s, verdict byte-identical
+      (121 checked, all three advisories still named).
+
+      A CONTRACT DETAIL THAT MATTERED: the arms fall off their own end rather
+      than exiting, so moving them into a function would have returned into the
+      main dispatch and hit the unknown-subcommand arm. The extracted function
+      returns bool and main returns on true. `std::process::exit` would have
+      been the obvious alternative and is wrong here — it skips the stdout
+      flush and can truncate piped output, which is exactly how these are
+      consumed.
+events:
+  - packet_id: fragment-subcommands-load-the-whole-ledger-they-never-read
+    event:
+      type: completed
+      ts: "2026-08-18T04:20:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T033600Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. Three arms moved ahead of the ledger load;
+        measured 133ms -> 1ms each, guard 41s -> 1s, output byte-identical including all
+        three live advisories. Contracts preserved and re-measured: unparseable fragment
+        still exit 3, unknown subcommand still exit 2 (proving the new early dispatch falls
+        through correctly rather than swallowing everything). Crate tests 176 + 17 green.
+        litmus:fragment-status-loss-attribution-shape PASS in 1.5s, having TIMED OUT at 30s
+        before. Fixing the timeout unmasked a SECOND failure in the same litmus that the
+        timeout had been hiding: step 7 captured `2>&1` and prefix-matched the merged text
+        against the verdict glob, which silently required the guard's stderr to be EMPTY —
+        true only until the advisory channels landed. Three real advisories made the merged
+        output start with "  advisory: ..." and a working gate read as an unexpected
+        verdict. The step now reads stdout and stderr separately from one run, honouring the
+        guard's actual contract, and still reads stderr because the stale-binary skip note
+        lives there. Both non-vacuity controls re-proved: a garbage verdict fails it, and a
+        guard that SKIPS fails it.
+      evidence_refs:
+        - "crates/tillandsias-plan/src/main.rs: dispatch_fragment_only() before Ledger::load_with_fragments"
+        - "measured: capabilities 1ms vs fragment-terminal-events 133ms; guard 41s -> 1s"
+        - "openspec/litmus-tests/litmus-fragment-status-loss-attribution-shape.yaml step 7: channels read separately"
+        - "controls: exit 3 unparseable, exit 2 unknown subcommand, garbage-verdict FAILS, skipping-guard FAILS"
+  - packet_id: fragment-subcommands-load-the-whole-ledger-they-never-read
+    event:
+      type: note
+      ts: "2026-08-18T04:20:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T033600Z
+      host: linux_mutable
+      summary: |
+        I ASSERTED A GREEN I HAD NOT CHECKED, and it cost four litmus tests.
+
+        The 812-d45t closure event says "Crate tests 176 pass." That was the LIB
+        suite. The BIN suite was RED at the time and stayed red: I had inserted
+        `fragment-misplaced-definitions` into capabilities.txt ABOVE
+        `fragment-event-packets`, and
+        `the_capability_manifest_is_a_sorted_unique_shell_safe_token_list`
+        fails on exactly that. I read one "test result: ok" line and reported
+        it as the whole suite.
+
+        THE BLAST RADIUS was not one test. Four litmus tests under
+        forge-environment-discoverability — plan-answer-envelope-citability,
+        methodology-path-query-citability, citation-frame-and-caller-relation,
+        expert-groundtruth-harness — each end with a step of the form "the
+        crate's own unit pins are GREEN". All four went red in `--ci-full` on
+        that single mis-sorted line.
+
+        THE MISATTRIBUTION IS THE PART WORTH KEEPING. The 797-p2xa fork
+        reported these as "five reds, identical in both runs, none podman: one
+        ci-release fragment gate (808-euam class), four forge-environment
+        expert harness" — reasonably read as a pre-existing standing red. They
+        were not pre-existing. They were both mine, from earlier the same
+        night, and the fork's two runs were both AFTER my changes landed, so
+        "identical in both runs" was true and still misleading. A red that is
+        stable across two runs is not thereby old.
+
+        NO GATE RUNS THAT TEST. `--ci-full` never executed
+        the_capability_manifest_... (zero occurrences in its log); it only saw
+        the four litmus tests that run the suite themselves. So the direct
+        signal was absent and only the indirect one fired, four times, in a
+        place that pointed away from the cause.
+
+        The sixth failure was the fork's: scripts/test-podman-mock-refusal.sh
+        used `localhost/tillandsias-git:latest` as a MOCK ARGUMENT. It pulls
+        nothing, but check-container-bases.sh greps scripts/ for that pattern
+        and cannot tell an argument from a reference. `--check` does not run
+        that policy and `--ci-full` does, which is how it reached linux-next
+        green. Pinned to a fixture tag.
+
+        SO: six failures in the e2e's build gate, all six introduced tonight,
+        none of them the standing class they looked like.
