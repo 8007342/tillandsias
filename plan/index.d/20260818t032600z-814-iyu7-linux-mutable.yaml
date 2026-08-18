@@ -1,0 +1,104 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T03:26:00Z.
+#
+# Two hosts implemented 798-tk7b independently on the same night. This files
+# the reconciliation packet and records the coordination failure that produced
+# it, and lands the grammar convergence that could be done without a decision.
+packets:
+  - packet_id: two-implementations-of-the-enclave-service-report
+    order: 814-iyu7
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: chore
+    title: "798-tk7b was implemented twice the same night — in the product (yoga) and as a host script (macuahuitl); the grammars are now converged but the two surfaces are not"
+    deliverable: "one decision, recorded: which surface owns the enclave service report, and what the other becomes — deleted, a caller of the first, or a documented fallback with a stated reason"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [runtime-diagnostics, multi-host, fail-loud]
+    estimated_hours: 2
+    context: |
+      OBSERVED 2026-08-18. Two implementations of one packet, roughly six
+      minutes apart, neither host holding a lease:
+
+        yoga (linux_immutable), 8071b647b, 2026-08-17T20:01:07-0700
+          format_enclave_service_line in crates/tillandsias-headless/src/main.rs,
+          surfaced by `tillandsias --diagnostics`, routed through
+          PodmanClient::list_containers. No new podman call: ps JSON already
+          carried ExitCode, ExitedAt and Restarts, and ContainerListEntry simply
+          never surfaced them.
+
+        macuahuitl (linux_mutable), 8071b647b's sibling in this range,
+        2026-08-17T19:55:48-0700
+          scripts/check-enclave-service-health.sh, wired into
+          scripts/cycle-preflight.sh, with a hermetic fixture and a litmus.
+
+      ALREADY DONE, because it needed no decision: the script now emits yoga's
+      spellings — fail:enclave-service-dead, note:enclave-service-stopped,
+      signal=SIGKILL, shared keys in yoga's order — with its own extra facts
+      appended. Shipping two dialects for the packet that asked for ONE
+      vocabulary would have been a self-inflicted violation of the thing it
+      closed.
+
+      WHAT STILL NEEDS A DECISION is which surface owns this, and the honest
+      answer is not obvious, which is why it is a packet and not a unilateral
+      deletion:
+
+        - yoga's reaches END USERS inside the enclave; the script does not.
+          On that ground alone it is the canonical surface.
+        - the script needs no product build and runs in cycle-preflight, which
+          is where the measured blind spot actually was — five hours of CYCLES,
+          not five hours of end users. A report living only in a binary that
+          must first compile does not cover a broken build.
+        - the script names `health=stale-healthy` (podman advertising a
+          healthcheck result for a container that is not running) and can be
+          told what to EXPECT so a NEVER-CREATED service is reported absent.
+          yoga's has neither; it does carry `restarts` and a full per-service
+          listing including healthy ones.
+
+      Plausible resolutions, in the order I would try them: (1) cycle-preflight
+      calls `tillandsias --diagnostics` when the binary exists and falls back to
+      the script otherwise, with the script keeping only what the product lacks;
+      (2) port stale-healthy and --expect into the product and delete the
+      script; (3) keep both, documented, with the split stated. Someone should
+      pick one rather than letting the tree answer by accretion.
+
+      THE COORDINATION FAILURE IS THE MORE USEFUL FINDING. The ledger has a
+      lease mechanism for exactly this and NEITHER host took one. The packet sat
+      `ready` with `lease: null` and two hosts read it as available within the
+      same hour. This is the first observed duplicate-implementation collision
+      in this fleet, and it happened on the night host parallelism went up. A
+      second instance means the lease is not merely unused but unusable, and
+      that would be its own packet.
+
+      Cost: roughly four hours of duplicated effort. Value: two independent
+      implementations agreed on the diagnosis, the vocabulary, and the
+      stale-healthy observation without conferring — which is real convergence
+      evidence, just expensively bought.
+events:
+  - packet_id: two-implementations-of-the-enclave-service-report
+    event:
+      type: progress
+      ts: "2026-08-18T03:26:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T023700Z
+      host: linux_mutable
+      summary: >
+        Filed with the grammar half already landed. scripts/check-enclave-service-health.sh
+        now speaks yoga's dialect exactly where the two overlap — fail:enclave-service-dead
+        for a fatal exit, note:enclave-service-stopped for rc=0 (yoga's distinction, adopted:
+        conflating an operator's `podman stop` with a crash makes the report noisy enough to
+        ignore, which is how the blind spot survived five hours), signal spelled SIGKILL /
+        SIGTERM / SIGSEGV rather than 9 / 15 / 11, and restarts carried from the same
+        `podman ps` round trip that already had it. Shared keys are emitted in yoga's order
+        so one grep spans both implementations AND the two in-container supervisors; this
+        script's extra facts (health, origin, age_s) follow. Fixture 12/12 with a new
+        clean-stop scenario pinning the dead-vs-stopped split; live reads
+        `fail:enclave-service-dead:service=tillandsias-nix:...:signal=SIGTERM:age=2d22h:restarts=0`.
+        NOT DECIDED, and deliberately left open: which surface owns the report. Deleting a
+        sibling's just-landed product code, or my own wired guard, is not a call one host
+        makes at 20:30 on the strength of having written one of them.
+      evidence_refs:
+        - "yoga 8071b647b: format_enclave_service_line, crates/tillandsias-headless/src/main.rs:981"
+        - "macuahuitl: scripts/check-enclave-service-health.sh converged onto that grammar"
+        - "scripts/test-enclave-service-health.sh 12/12 incl. the clean-stop split"
+        - "collision: two implementations ~6 minutes apart, lease: null on both sides"
