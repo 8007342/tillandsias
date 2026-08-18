@@ -42,11 +42,13 @@
 # slow".
 #
 # Usage:
-#   scripts/bench-accel-lane.sh --lane cpu [--endpoint http://127.0.0.1:11434]
+#   scripts/bench-accel-lane.sh --lane cpu [--record] [--endpoint http://127.0.0.1:11434]
 #                               [--chunks <chunks.jsonl>] [--n 40] [--reps 3]
 #                               [--embed-model nomic-embed-text]
 #                               [--gen-model qwen2.5:0.5b]
 set -uo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 LANE=""
 ENDPOINT="${TILLANDSIAS_BENCH_ENDPOINT:-http://127.0.0.1:11434}"
@@ -80,6 +82,7 @@ GEN_TOKENS=64
 while [ $# -gt 0 ]; do
     case "$1" in
         --lane) LANE="${2:-}"; shift 2 ;;
+        --record) RECORD=1; shift ;;
         --endpoint) ENDPOINT="${2:-}"; shift 2 ;;
         --chunks) CHUNKS="${2:-}"; shift 2 ;;
         --n) N="${2:-}"; shift 2 ;;
@@ -189,6 +192,45 @@ if ps_json="$(curl -fsS --max-time 10 "$ENDPOINT/api/ps" 2>/dev/null)"; then
         ''|0) observed="cpu-or-unloaded" ;;
         *) observed="gpu-resident:${vram}" ;;
     esac
+fi
+
+# ORDER 805-wgbb. With --record, the numbers land in the capability document
+# instead of only on stdout. The mapping is deliberately partial and says so:
+# MeasurementRecord has prefill_tps/decode_tps/joules_per_token and NO latency
+# or workload field, so the embed ms-per-chunk -- the statistic that decides the
+# embed lane -- has nowhere to live in it yet. That gap is the open half of
+# 805-wgbb; recording the half that fits beats recording nothing, and pretending
+# ms/chunk is a tps would be worse than both.
+if [ "${RECORD:-0}" = "1" ]; then
+    # RESOLVE THE CHECKOUT BUILD FIRST. `tillandsias` on PATH is the INSTALLED
+    # release, and --record-measurement lives in the checkout until the next
+    # release ships — so calling PATH here fails with "Unsupported option" on
+    # every host, which is exactly what happened the first time this ran. Same
+    # class as 783-6rik: a checkout-side caller reaching for a release-side
+    # binary. The fresh artifact outranks the stale install, and if neither has
+    # the flag the caller still gets its numbers on stdout.
+    _bench_tillandsias="$ROOT_DIR/target/release/tillandsias"
+    [ -x "$_bench_tillandsias" ] || _bench_tillandsias="$ROOT_DIR/target/debug/tillandsias"
+    [ -x "$_bench_tillandsias" ] || _bench_tillandsias="$(command -v tillandsias 2>/dev/null || echo tillandsias)"
+    _bench_decode="$(printf '%s' "$gen_tps" | tr ',' '\n' | sort -n | awk '{a[NR]=$1} END{if (NR>0) print a[int(NR/2)+1]; else print 0}')"
+    _bench_prefill="$(printf '%s' "$gen_ptps" | tr ',' '\n' | sort -n | awk '{a[NR]=$1} END{if (NR>0) print a[int(NR/2)+1]; else print 0}')"
+    # The arm is labelled by what the lane REPORTED, so a run that silently fell
+    # back is recorded degraded rather than as a clean number for a lane it
+    # never used.
+    _bench_degraded=false
+    _bench_reason=null
+    case "$LANE:$observed" in
+        gpu:cpu-or-unloaded)
+            _bench_degraded=true
+            _bench_reason='"requested gpu but the runner reported no VRAM-resident model"'
+            ;;
+    esac
+    jq -nc --arg d "$LANE" --arg e "ollama" \
+        --argjson p "${_bench_prefill:-0}" --argjson dec "${_bench_decode:-0}" \
+        --argjson deg "$_bench_degraded" --argjson reason "$_bench_reason" \
+        '{device:$d, engine:$e, prefill_tps:$p, decode_tps:$dec, joules_per_token:null, degraded:$deg, degraded_reason:$reason}' \
+        | "$_bench_tillandsias" --record-measurement - >&2 || \
+        echo "note:bench-accel-lane:record-failed (numbers still on stdout)" >&2
 fi
 
 jq -nc \

@@ -280,6 +280,55 @@ fn main() {
     // Order 480 follow-up: make the capability probe observable from the host.
     // Until this flag existed the probe had no caller at all, so there was no
     // way to falsify what it reports without reading its source.
+    // ORDER 805-wgbb. The on-demand measurement path run_probe's comment
+    // promised and nothing implemented. Takes a MeasurementRecord as JSON on a
+    // path (or `-` for stdin) and merges it into the capability document, so
+    // 802-2536's "record into the existing MeasurementRecord" is something a
+    // host can actually do.
+    if let Some(i) = user_args.iter().position(|a| a == "--record-measurement") {
+        let src = user_args.get(i + 1).cloned().unwrap_or_default();
+        if src.is_empty() || src.starts_with("--") {
+            eprintln!("blocked:record-measurement:no-input (pass a path, or - for stdin)");
+            std::process::exit(2);
+        }
+        let text = if src == "-" {
+            let mut buf = String::new();
+            match std::io::Read::read_to_string(&mut std::io::stdin(), &mut buf) {
+                Ok(_) => buf,
+                Err(e) => {
+                    eprintln!("blocked:record-measurement:stdin:{e}");
+                    std::process::exit(2);
+                }
+            }
+        } else {
+            match std::fs::read_to_string(&src) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("blocked:record-measurement:read {src}: {e}");
+                    std::process::exit(2);
+                }
+            }
+        };
+        let rec: accel_probe::MeasurementRecord = match serde_json::from_str(&text) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("blocked:record-measurement:not-a-measurement-record: {e}");
+                std::process::exit(2);
+            }
+        };
+        let key = format!("{}:{}", rec.device, rec.engine);
+        match accel_probe::record_measurement(rec) {
+            Ok(()) => {
+                println!("ok:measurement-recorded:{key}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("blocked:record-measurement:{e}");
+                std::process::exit(1);
+            }
+        }
+    }
+
     let capabilities = user_args.iter().any(|a| a == "--capabilities");
     let github_login = user_args.iter().any(|a| a == "--github-login");
     let with_token = user_args.iter().any(|a| a == "--with-token");
@@ -477,6 +526,7 @@ fn main() {
         "--init",
         "--inference-tier",
         "--capabilities",
+        "--record-measurement",
         "--status-check",
         "--github-login",
         "--with-token",
