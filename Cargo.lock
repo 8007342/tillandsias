@@ -3388,6 +3388,7 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tillandsias-control-wire",
+ "tillandsias-core",
  "tokio",
  "toml 0.8.2",
  "tracing",
