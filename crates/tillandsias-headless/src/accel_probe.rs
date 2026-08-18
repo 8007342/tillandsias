@@ -120,6 +120,51 @@ pub fn load_or_probe(effective_tier: &str) -> CapabilityDocument {
     doc
 }
 
+/// Merge one measurement into the persisted capability document (order 805-wgbb).
+///
+/// `run_probe` hard-codes `measurements = Vec::new()` under a comment saying
+/// microbenchmarks "run on demand" — and no on-demand path existed anywhere in
+/// the tree, so `measurements: []` meant NOTHING WRITES rather than nothing has
+/// run. 802-2536 asks every host to record cpu/npu/gpu numbers "into the
+/// existing MeasurementRecord", which no host could do. This is that path.
+///
+/// KEYED BY (device, engine), replacing in place. A second run of the same
+/// workload on the same lane is a NEW measurement of the same thing, not an
+/// additional data point — appending would grow an unbounded log whose newest
+/// entry a reader has to find by scanning, and the router reads this document
+/// as its input surface, not as history.
+///
+/// NOTE ON LIFETIME, because it is easy to be surprised by: `load_or_probe`
+/// re-probes and overwrites the cache when the schema version or the legacy
+/// tier changes. Measurements are dropped then, and that is correct — a tier
+/// change means the numbers describe a configuration that no longer exists —
+/// but it does mean a measurement is not durable across a tier flip.
+pub fn record_measurement(m: MeasurementRecord) -> Result<(), String> {
+    let cache_file = capabilities_cache_path();
+    let mut doc: CapabilityDocument = match fs::read_to_string(&cache_file) {
+        Ok(content) => serde_json::from_str(&content).map_err(|e| {
+            format!("capabilities cache is unreadable ({e}); re-run --capabilities")
+        })?,
+        // No cache yet: probe rather than refuse, so the first thing a fresh
+        // host does can be to record a measurement.
+        Err(_) => run_probe(crate::effective_inference_tier()),
+    };
+    match doc
+        .measurements
+        .iter_mut()
+        .find(|e| e.device == m.device && e.engine == m.engine)
+    {
+        Some(slot) => *slot = m,
+        None => doc.measurements.push(m),
+    }
+    if let Some(parent) = cache_file.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    let json = serde_json::to_string_pretty(&doc).map_err(|e| format!("serialize: {e}"))?;
+    fs::write(&cache_file, json).map_err(|e| format!("write {}: {e}", cache_file.display()))?;
+    Ok(())
+}
+
 // @trace spec:accel-capability-probe
 pub fn run_probe(effective_tier: &str) -> CapabilityDocument {
     let devices = enumerate_devices(effective_tier);
