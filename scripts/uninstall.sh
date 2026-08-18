@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tillandsias Uninstaller
 # @trace spec:app-lifecycle
+# freshness: auditor=windows-yolanda-opus5-20260818t1119z date=2026-08-18 verdict=updated scope=standing FRESHNESS audit (top unstamped, seed=20260818). Still MEANINGFUL and USEFUL, and its destructive paths are SOUND (804-bpke seams keep the macOS arm testable without deleting a real binary; 804-wfcu documents the userdel -r overlap). NOT COMPLETE, and that is what was fixed: install.sh appends a MARKED PATH block to ~/.profile and ~/.bashrc, adds ~/.zprofile and ~/.zshrc under zsh, and writes ~/.config/fish/conf.d/tillandsias.fish outright — and this script removed none of them, so every uninstall left the shells exporting a PATH entry for a directory it had just deleted. The markers existed only for install-side idempotency and nothing ever used them for removal. Symmetric removal added with scripts/test-uninstall-path-block.sh 5/5. Cache coverage re-checked against this cycle's new capabilities.json artifact: already covered by CACHE_DIR under --wipe, no change needed.
 set -euo pipefail
 
 # Seams, for the fixture only (804-bpke). Both default to the shipped values, so
@@ -137,6 +138,74 @@ fi
 
 # ── Remove logs ───────────────────────────────────────────────
 rm -rf "$LOG_DIR"
+
+# ── Remove the shell PATH integration install.sh added ────────
+#
+# FRESHNESS AUDIT 2026-08-18 (order 372 class): install.sh appends a marked
+# PATH block to ~/.profile and ~/.bashrc, adds ~/.zprofile and ~/.zshrc under
+# zsh, and WRITES A WHOLE FILE at ~/.config/fish/conf.d/tillandsias.fish. This
+# script removed none of them, so an uninstall left every shell still exporting
+# a PATH entry for a directory it had just deleted, plus an orphan fish config.
+#
+# The markers exist precisely so the block can be found again — install.sh uses
+# them for idempotency (it returns early when BEGIN is present) and nothing
+# ever used them for removal. An installer that leaves a marker and an
+# uninstaller that ignores it is a half-finished handshake, not a design.
+#
+# The strings MUST match install.sh's PATH_MARKER_BEGIN/END byte for byte.
+PATH_MARKER_BEGIN="# >>> tillandsias PATH >>>"
+PATH_MARKER_END="# <<< tillandsias PATH <<<"
+
+# awk, not sed -i: this edits USER dotfiles that predate us and will outlive
+# us, and `sed -i` on macOS takes a mandatory backup suffix that GNU sed does
+# not, so the portable spelling is a temp file we control. Only the marked span
+# is dropped; every other line is copied through byte for byte.
+strip_path_block() {
+    _spb_file="$1"
+    [ -f "$_spb_file" ] || return 0
+    grep -F "$PATH_MARKER_BEGIN" "$_spb_file" >/dev/null 2>&1 || return 0
+
+    _spb_tmp="$_spb_file.tillandsias-uninstall.$$"
+    if awk -v b="$PATH_MARKER_BEGIN" -v e="$PATH_MARKER_END" '
+        index($0, b) == 1 { skip = 1; next }
+        skip && index($0, e) == 1 { skip = 0; next }
+        !skip { print }
+    ' "$_spb_file" > "$_spb_tmp" 2>/dev/null; then
+        # Preserve the original mode: a dotfile that comes back 0644 when it was
+        # 0600 is a quiet permission downgrade on a file we were only editing.
+        if command -v chmod >/dev/null 2>&1; then
+            chmod --reference="$_spb_file" "$_spb_tmp" 2>/dev/null || true
+        fi
+        mv "$_spb_tmp" "$_spb_file"
+        echo "  Removed PATH block from $_spb_file"
+    else
+        # NEVER leave a truncated dotfile behind. A failed rewrite must leave
+        # the user's shell config exactly as it was.
+        rm -f "$_spb_tmp"
+        echo "  WARNING: could not edit $_spb_file; its PATH block was left in place" >&2
+    fi
+}
+
+for _profile in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zprofile" "$HOME/.zshrc"; do
+    strip_path_block "$_profile"
+done
+
+# The fish block lives in a file install.sh created outright, so removing the
+# whole file is correct — but only if it is OURS. A user who put their own
+# lines in it keeps the file and loses just the block.
+FISH_CONF="$HOME/.config/fish/conf.d/tillandsias.fish"
+if [ -f "$FISH_CONF" ]; then
+    if [ -n "$(awk -v b="$PATH_MARKER_BEGIN" -v e="$PATH_MARKER_END" '
+        index($0, b) == 1 { skip = 1; next }
+        skip && index($0, e) == 1 { skip = 0; next }
+        !skip && NF { print }
+    ' "$FISH_CONF" 2>/dev/null)" ]; then
+        strip_path_block "$FISH_CONF"
+    else
+        rm -f "$FISH_CONF"
+        echo "  Removed $FISH_CONF"
+    fi
+fi
 
 # ── Remove service account runtime ────────────────────────────
 if [[ "$IS_ROOT" == true ]]; then
