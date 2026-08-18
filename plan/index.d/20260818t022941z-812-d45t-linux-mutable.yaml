@@ -1,0 +1,110 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T02:29:41Z.
+#
+# Filed and closed together. Found by the 801-kqme fork, which filed three
+# follow-up packets under the wrong key, watched every gate pass, and caught it
+# only by asking for the packets back afterwards.
+packets:
+  - packet_id: packet-definitions-under-events-are-dropped-in-silence
+    order: 812-d45t
+    status: completed
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "a packet DEFINITION written under `events:` instead of `packets:` passes every gate and is dropped entirely by the fold — no packet_id is claimed, so even the unknown-packet check cannot see it"
+    deliverable: "the fold's silence becomes a named advisory: file, packet_id, and the remedy"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [plan-tooling, fail-loud, ledger]
+    estimated_hours: 3
+    context: |
+      OBSERVED 2026-08-18, on a real closure. The 801-kqme fork filed three
+      follow-up packets (801-x1nx, 801-vm4p, 801-7tqe) as entries under the
+      top-level `events:` key rather than `packets:`. Every signal was green:
+      `./build.sh --check` rc=0, `plan check` rc=0, the fragment's own status
+      transition folded correctly, and `closure-evidence-check` was satisfied.
+      All three packets simply did not exist. The fork found out by asking for
+      them back rather than trusting the green, and filed a corrective fragment.
+
+      WHY THE EXISTING CHECKS CANNOT SEE IT. 797-qm4t closed three channels —
+      a status block, a terminal event, and (tonight) any non-terminal event —
+      that name a packet_id the fold does not know. This entry names no
+      packet_id as an event at all. It is a well-formed DEFINITION sitting
+      under the wrong key, so there is nothing for those passes to compare
+      against. Verified in a sandbox before writing any code: `plan check`
+      rc=0, `plan status 901` -> "no packet matches", and
+      check-fragment-status-loss.sh -> `ok:no-fragment-status-loss:1 checked`.
+
+      THE SIGNATURE IS UNAMBIGUOUS: an `events:` entry with NO `event:` key
+      that DOES carry definition fields (order / title / kind / deliverable).
+      A real event always nests `event:`; a real definition never appears here.
+      Requiring a definition field, rather than merely "no event key", keeps a
+      malformed-but-intended event from being misreported as a lost packet.
+
+      ADVISORY, NOT VIOLATION, on the same terms as 797-qm4t's non-terminal
+      channel: the three live instances sit in an append-only fragment nobody
+      may rewrite, and 699-dycj forbids making one host's past mistake every
+      host's red build. The silence was the defect.
+events:
+  - packet_id: packet-definitions-under-events-are-dropped-in-silence
+    event:
+      type: completed
+      ts: "2026-08-18T02:29:41Z"
+      agent_id: linux-macuahuitl-opus5-20260818T022000Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence. New subcommand
+        `tillandsias-plan fragment-misplaced-definitions` parses the fragment as YAML —
+        not a line grep, for the 752-pst5 reason — and prints the packet_ids of `events:`
+        entries that carry definition fields but no `event:` key, with the same exit-3
+        unparseable contract as its two siblings. Wired into
+        check-fragment-status-loss.sh in the SAME per-fragment loop, so an unparseable
+        fragment is still counted once. On the live corpus it names all three real
+        instances by file and id while the verdict stays ok:no-fragment-status-loss:114
+        checked. Fixture 28 -> 31 scenarios, including a cross-control that the SAME
+        definition under the correct `packets:` key draws no advisory — without it the
+        message would fire on every well-formed fragment in the tree. Mutation: disable
+        the capability probe and the new scenario FAILS; restore is byte-identical by cmp
+        and the suite returns 31/31. Crate tests 176 pass.
+      evidence_refs:
+        - "crates/tillandsias-plan/src/main.rs: fragment-misplaced-definitions; capabilities.txt entry"
+        - "scripts/check-fragment-status-loss.sh: M channel collected in the existing loop, reported as advisory"
+        - "scripts/test-fragment-status-loss.sh: 28 -> 31, with the correctly-filed cross-control"
+        - "live corpus: 3 instances named (801-x1nx, 801-vm4p, 801-7tqe in 20260818t020740z), verdict still ok"
+  - packet_id: packet-definitions-under-events-are-dropped-in-silence
+    event:
+      type: note
+      ts: "2026-08-18T02:29:41Z"
+      agent_id: linux-macuahuitl-opus5-20260818T022000Z
+      host: linux_mutable
+      summary: |
+        TWO SELF-INFLICTED INSTANCES OF THE SAME FAILURE WHILE BUILDING THIS,
+        both caught, both worth recording because the subject of this packet is
+        silence and I produced it twice in the act of removing it.
+
+        1. THE AUDIT THAT REPORTED CLEAN. My first corpus scan was a ruby
+           one-liner containing `d = YAML.load_file(f) rescue exit 0`, run in a
+           shell loop with `2>/dev/null`. `rescue exit 0` is a SyntaxError in
+           this ruby, so EVERY invocation died before parsing anything, stderr
+           was discarded, the loop printed nothing, and I read the empty output
+           as "corpus clean". It is not clean; there are three. This is exactly
+           the defect I filed against spec-index-ensure.sh two cycles ago
+           (`curl ... 2>/dev/null`, so a 400 became "refused" with no cause) —
+           committed by me, in an audit, for the same class of bug.
+
+        2. THE ADVISORY THAT PRINTED NOTHING. The first wiring joined file and
+           id with "\\t" inside double quotes — a literal backslash-t, not a
+           tab — and the reader split on a real tab. Nothing ever split, every
+           line hit `continue`, and the block printed nothing while the guard
+           reported ok. Removed the separator entirely: each id is prefixed
+           with its file at collection time.
+
+        WHAT CAUGHT BOTH was refusing to accept a negative result from a thing
+        I had not seen succeed. The scan "found nothing" on a corpus I had just
+        been told contained three; the advisory "worked" on a corpus where I
+        knew three instances existed. In both cases the check was cheap:
+        run it against a case that MUST produce output.
+
+        The general rule this session keeps re-deriving, now for the fourth
+        time in different clothes: a checker that has never been observed to
+        fire is not evidence of absence. Silence has to be earned.

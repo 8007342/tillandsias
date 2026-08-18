@@ -72,6 +72,7 @@ const DISPATCH_ARMS: &[&str] = &[
     "dependencies-of",
     "expire-claims",
     "fragment-event-packets",
+    "fragment-misplaced-definitions",
     "fragment-terminal-events",
     "fragments",
     "grade",
@@ -140,6 +141,11 @@ const USAGE: &str = concat!(
     "           closure-evidence-check <fragment.yaml>\n",
     "                                     exit 1 if the fragment sets a closure rung\n",
     "                                     (completed/verified/done) with no evidence event (686-7qcm)\n",
+    "           fragment-misplaced-definitions <fragment.yaml>\n",
+    "                                     ORDER 812-d45t. Print the packet_ids of `events:`\n",
+    "                                     entries that carry DEFINITION fields but no `event:` —\n",
+    "                                     a packet written under the wrong key, which every gate\n",
+    "                                     accepts and the fold then drops entirely.\n",
     "           fragment-event-packets <fragment.yaml>\n",
     "                                     ORDER 797-qm4t. Print EVERY packet_id an events block\n",
     "                                     addresses, whatever the event type, one per line, exit 0.\n",
@@ -2665,6 +2671,74 @@ fn main() {
                     "  A closure (completed/verified/done) must carry an event with evidence_refs (or type completed/verified/falsified). Use set-field --evidence, or add the event (686-7qcm)."
                 );
                 std::process::exit(1);
+            }
+        }
+        "fragment-misplaced-definitions" => {
+            // ORDER 812-d45t. A PACKET DEFINITION written under the top-level
+            // `events:` key instead of `packets:` is accepted by every gate and
+            // then dropped entirely. Measured 2026-08-18: a closure fragment
+            // filed three follow-up packets that way; `./build.sh --check` was
+            // rc=0, the fragment's own status transition folded correctly, and
+            // all three packets simply did not exist. The author found it only
+            // by asking for the packets back afterwards.
+            //
+            // It is a different hole from 797-qm4t. There the packet_id named
+            // nothing; here the entry is a well-formed definition sitting under
+            // the wrong key, so no packet_id is even claimed — the
+            // unknown-packet check cannot see it, and neither can the
+            // terminal-event or status-block checks, because it declares
+            // neither.
+            //
+            // THE SIGNATURE IS UNAMBIGUOUS: an entry under `events:` that has
+            // NO `event:` key but DOES carry definition fields (order, title,
+            // kind, deliverable). A real event entry always nests `event:`; a
+            // real definition never appears here. Requiring a definition field
+            // rather than merely "no event key" keeps a malformed-but-intended
+            // event from being reported as a lost packet.
+            const EXIT_FRAGMENT_UNPARSEABLE: i32 = 3;
+            let Some(path) = args.get(1) else {
+                eprintln!("usage: tillandsias-plan fragment-misplaced-definitions <fragment.yaml>");
+                std::process::exit(2);
+            };
+            let raw = match std::fs::read_to_string(path) {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: read {path}: {e}");
+                    std::process::exit(2);
+                }
+            };
+            let doc: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "unparseable:{path}: {e} — the misplaced-definition pass cannot read this fragment, so any packet it drops is UNEXAMINED (812-d45t)"
+                    );
+                    std::process::exit(EXIT_FRAGMENT_UNPARSEABLE);
+                }
+            };
+            let mut ids: Vec<String> = Vec::new();
+            if let Some(evs) = doc.get("events").and_then(serde_yaml::Value::as_sequence) {
+                for e in evs {
+                    if e.get("event").is_some() {
+                        continue;
+                    }
+                    let looks_like_definition = ["order", "title", "kind", "deliverable"]
+                        .iter()
+                        .any(|k| e.get(*k).is_some());
+                    if !looks_like_definition {
+                        continue;
+                    }
+                    let pid = e
+                        .get("packet_id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .unwrap_or("<no packet_id>");
+                    ids.push(pid.to_string());
+                }
+            }
+            ids.sort_unstable();
+            ids.dedup();
+            for id in ids {
+                emit(&id);
             }
         }
         "fragment-event-packets" => {
