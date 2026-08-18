@@ -61,6 +61,21 @@ live_runtime_is_present() {
   if ! command -v podman >/dev/null 2>&1; then
     return 1
   fi
+  # 723-fndi criterion 1: REACHABILITY BEFORE INFERENCE. `podman ps` erroring
+  # used to mean PRESENT, which is only sound when the error means "the daemon
+  # is there and unhappy". On macOS podman is a client for a machine VM that is
+  # usually NOT running, so `podman ps` errors on a host with no containers at
+  # all — and the leak-not-destroy convention then reported a live runtime that
+  # does not exist. Measured on this host 2026-08-17: podman installed,
+  # `podman-machine-default` LAST UP Never, and the verdict was
+  # skip:live-runtime-present with nothing running.
+  #
+  # An UNREACHABLE runtime is ABSENT, not present: there is nothing to leak. The
+  # leak-not-destroy convention still applies once the runtime ANSWERS — that is
+  # the case it was written for, and the `|| return 0` below preserves it.
+  if ! podman info >/dev/null 2>&1; then
+    return 1
+  fi
   # an errored listing counts as PRESENT (leak-not-destroy, 443-review convention)
   ps_out="$(podman ps --format '{{.Names}}' 2>/dev/null)" || return 0
   [ -z "$ps_out" ] && return 1
@@ -73,6 +88,31 @@ live_runtime_is_present() {
   # every dev host permanently (order 769-g2wr).
   printf '%s\n' "$ps_out" | grep -viE '^tillandsias-dev-' | grep -qiE '^tillandsias-|git-service' && return 0
   return 1
+}
+
+# 723-fndi criterion 2. Is a Virtualization.framework guest live RIGHT NOW?
+#
+# The signal is an open file handle on the VM's backing disk. That is the one
+# thing that is true if and only if a VM is actually running, and it was
+# measured directly: during a live `--exec-guest` boot on 2026-08-17,
+# `lsof rootfs.img` showed `com.apple ... 268435456000 .../rootfs.img`, and
+# nothing held it before or after.
+#
+# NOT `pgrep -f tillandsias-tray`, which is the obvious choice and is WRONG:
+# `-f` matches the whole command line, so it fires on ANY process that merely
+# mentions the string — an editor, a grep, a CI shell, or the agent command
+# that is running this very check. That is not hypothetical: the first draft of
+# this probe reported PRESENT against its own invoking shell during the same
+# 2026-08-17 boot, before the lsof arm was consulted.
+#
+# TILLANDSIAS_VZ_IMAGE_OVERRIDE exists so the fixture can point this at a file
+# it controls; it defaults to the real path, so a real run is unchanged.
+vz_guest_is_live() {
+  local img
+  img="${TILLANDSIAS_VZ_IMAGE_OVERRIDE:-$HOME/Library/Application Support/tillandsias/rootfs.img}"
+  [ -f "$img" ] || return 1
+  command -v lsof >/dev/null 2>&1 || return 1
+  lsof -- "$img" >/dev/null 2>&1
 }
 
 e2e_eligibility_verdict() {
@@ -135,7 +175,14 @@ e2e_eligibility_verdict() {
     fi
     # Fail safe: refuse to wipe a live forge/shared stack the smoke run
     # did not launch, unless the operator FORCES it for THIS invocation.
-    if live_runtime_is_present && [ "${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-}" != "1" ]; then
+    #
+    # 723-fndi criterion 2: on Darwin the runtime substrate is the
+    # Virtualization.framework guest, NOT podman — podman here is a client for a
+    # machine VM this project does not use. Asking podman produced a verdict that
+    # carried NO INFORMATION: measured on this host 2026-08-17, `eligibility`
+    # printed skip:live-runtime-present BOTH with nothing running AND with a live
+    # VM. A constant is not a probe.
+    if vz_guest_is_live && [ "${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-}" != "1" ]; then
       echo "skip:live-runtime-present"
       return 0
     fi
@@ -177,6 +224,59 @@ e2e_eligibility_verdict() {
 if [ "${1:-}" = "eligibility" ]; then
   e2e_eligibility_verdict
   exit 0
+fi
+
+# 723-fndi fixture. Pins the property the packet actually cares about: the
+# Darwin probe must CARRY INFORMATION. Before this fix it printed
+# skip:live-runtime-present in BOTH states — with nothing running and with a
+# live VM — measured on this host 2026-08-17 during a real --exec-guest boot.
+# A constant verdict is not a probe, and "it no longer says skip" is satisfiable
+# by a probe that is constant the other way, which would silently disarm the
+# guard that stops an e2e wiping a live stack. So all three transitions are
+# asserted, not just the one the packet's criterion 3 names.
+if [ "${1:-}" = "fixture" ]; then
+  _fx_fail=0
+  _fx_dir="$(mktemp -d)"
+  _fx_img="$_fx_dir/rootfs.img"
+  echo x > "$_fx_img"
+
+  _fx_expect() {
+    _n="$1"; _want="$2"
+    _got="$(TILLANDSIAS_VZ_IMAGE_OVERRIDE="$_fx_img" bash "$0" eligibility 2>/dev/null)"
+    if [ "$_got" = "$_want" ]; then
+      echo "ok: $_n ($_got)"
+    else
+      echo "FAIL: $_n expected '$_want', got '$_got'"
+      _fx_fail=1
+    fi
+  }
+
+  # 1. A backing image with NOTHING holding it is not a live runtime.
+  _fx_expect "unheld-image-is-not-a-live-runtime" "eligible"
+
+  # 2. THE SAFETY PROPERTY. A held image IS a live runtime and must refuse —
+  #    without this, a probe hard-wired to "eligible" passes every other case
+  #    while disarming the guard that keeps an e2e from wiping a live stack.
+  ( exec 9< "$_fx_img"; sleep 6 ) &
+  _fx_holder=$!
+  sleep 1
+  _fx_expect "held-image-refuses" "skip:live-runtime-present"
+  wait "$_fx_holder" 2>/dev/null
+
+  # 3. And it must RECOVER — a probe that latches PRESENT once would pass 1+2.
+  _fx_expect "released-image-is-eligible-again" "eligible"
+
+  # 4. No image at all is not a live runtime (a fresh host, never provisioned).
+  rm -f "$_fx_img"
+  _fx_expect "absent-image-is-not-a-live-runtime" "eligible"
+
+  rm -rf "$_fx_dir"
+  if [ "$_fx_fail" -eq 0 ]; then
+    echo "ok: e2e-preflight-darwin-liveness 4/4"
+    exit 0
+  fi
+  echo "FAIL: e2e-preflight-darwin-liveness had failures"
+  exit 1
 fi
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
