@@ -1,0 +1,155 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18.
+#
+# 797-p2xa was worked by two hosts on the same day without either seeing the
+# other. yoga closed the TOP-LEVEL `case` in 97cb255a9 and put the packet's
+# negative control in the hermetic fixture. This fragment closes the three
+# NESTED fall-throughs that arm structurally could not see, and pays the
+# full-litmus bill the packet asked for by name and the first pass did not.
+status:
+  - packet_id: podman-mock-unrecognized-subcommand-exits-zero-silently
+    field: status
+    value: completed
+    ts: "2026-08-18T03:14:56Z"
+    host: linux_mutable
+
+events:
+  - packet_id: podman-mock-unrecognized-subcommand-exits-zero-silently
+    event:
+      type: completed
+      ts: "2026-08-18T03:14:56Z"
+      agent_id: linux-macuahuitl-claude-20260818t030000z
+      host: linux_mutable
+      summary: >
+        status 'completed' with evidence, closing the NESTED half on top of
+        97cb255a9. THE OUTER ARM WAS NOT THE CLASS. That commit made the
+        top-level `case` refuse and exit 97, which was right; the identical
+        fail-open stayed reachable one level down, where an INNER `case`
+        matches nothing, leaves its arm having printed nothing, and lands on
+        the file's trailing `exit 0` WITHOUT ever reaching the outer `*)`.
+        Three sites, each verified fail-open on the merged tree before this
+        change and refusing after it - (1) `podman image <not
+        exists|inspect|prune>`, which is the `image ls` / `image rm` shape the
+        product issues; (2) `podman secret <not create|rm|inspect|ls>`; (3)
+        `podman image inspect <img>` with no --format, whose branch printed
+        nothing at all. All three answered SUCCESS with EMPTY output after
+        97cb255a9 landed, which is the class the packet was filed for, not a
+        smaller cousin of it. A fourth line, a dead `if [[ "${3:-}" ==
+        "--format" ]]`, was removed - the loop above it already matches
+        --format in any position, so it could never fire.
+        REFUSAL GRAMMAR - one mock_refuse() function, four call sites,
+        EXTENDING the landed wording rather than inventing a second dialect -
+        `[podman-mock] REFUSED: unrecognized <kind>: <subject>` on stderr with
+        stdout left EMPTY, <kind> in {subcommand, image subcommand, secret
+        subcommand, image inspect form}, then `full argv: podman <argv>` and
+        the remedy. Exit stays 97, deliberately not a second code - a class is
+        easier to grep for with one status than with two. The argv line now
+        quotes argv captured BEFORE the global-flag skip loop; the landed arm
+        printed the post-shift "$*", which drops exactly the global flags the
+        original incident was about.
+        BLAST RADIUS, measured rather than assumed, and this is what the packet
+        budgeted for - FULL pre-build litmus at EVERY size (`--phase pre-build
+        --size all`), 98 specs, not the instant tier. BEFORE (merged
+        origin/linux-next with my edits reverted, restore verified
+        byte-identical by sha256) - 309 PASS / 6 FAIL / 115 SKIP, 315 executed.
+        AFTER - 311 PASS / 5 FAIL / 115 SKIP, 316 executed. The +2/-1 is fully
+        accounted for - +1 is the new test itself, and +1/-1 is
+        litmus:added-fragment-parse-gate-shape step 7, which was red in the
+        BEFORE run because my new litmus file was present and NOT YET BOUND, so
+        check-litmus-pin-claims correctly refused a claim naming an unbound
+        test. Registering the binding resolves it. Five reds remain, identical
+        in both runs, none touching podman - one is the ci-release
+        fragment-status-loss-attribution gate (the 808-euam class), four are
+        the forge-environment expert harness.
+        THE HEADLINE MEASUREMENT - the refusal fired ZERO times across the
+        entire corpus, in BOTH runs. The packet's open question was "some
+        callers may depend on the permissive tail - that is exactly what a
+        fail-open default makes unknowable without running everything". Run
+        everything - NONE do. ZERO silent passes had to be converted into
+        explicit arms; three fall-through SITES were converted from silent
+        success into loud refusal. That the count is zero is now a measured
+        fact rather than a hope, which is the whole reason the packet asked for
+        the run. The one live verb with no arm, `volume` (seen in
+        target/litmus-podman/calls.log as `podman volume rm -f ...`), reaches
+        the mock only in REAL mode and never in fake - which is precisely why
+        nothing refused, and is a conclusion the zero-refusal count establishes
+        rather than assumes.
+        ACTIVATION - the negative control the packet demanded now has a
+        dedicated instant-tier home instead of riding inside a hermeticity
+        suite - scripts/test-podman-mock-refusal.sh, 12 scenarios, wired as
+        litmus:podman-mock-refuses-unknown-invocations and bound to
+        litmus-framework. 5/5 steps green in the AFTER run; guard-activation
+        audit 52/52 active, 0 orphan.
+        MUTATION CONTROLS, seven, each break -> red -> restore -> green with a
+        sha256 byte-identity check on every restore (all seven identical) -
+        MC1 nested image arm removed -> red; MC2 nested secret arm removed ->
+        red; MC3 bare image-inspect refusal removed -> red; MC4b the refusal
+        stops interpolating its subject (syntactically valid, still exits 97)
+        -> red; MC5 the refusal exits 0 -> red; MC6 the deliberate no-op arm
+        made to refuse -> red; MC7 the litmus spec's own steps executed against
+        the PRE-change mock -> the fixture step reports "fail:
+        podman-mock-refusal scenarios failed", so the activation surface is
+        proven sensitive rather than merely present.
+        ONE FIRST-DRAFT CONTROL WAS VACUOUS AND IS RECORDED BECAUSE OF IT.
+        Scenario 2 originally grepped ALL of stderr for the subcommand name.
+        MC4b replaced the interpolated subject with the constant
+        "an-unrecognized-subcommand" and the scenario STAYED GREEN - because
+        the `full argv:` line echoes the invocation, so the verb was present in
+        stderr no matter what the REFUSED line said. The assertion was reaching
+        its subject by a path the mutation did not break. It now reads only the
+        REFUSED line, and MC4b turns it red. Worth recording separately - the
+        same mutation left the exit status at 97, so a fixture asserting only
+        "non-zero" would have passed a mock that reported every refusal by the
+        same name.
+      evidence_refs:
+        - "scripts/test-support/podman-mock.sh: mock_refuse() + PODMAN_MOCK_ARGV; *) arms under image) and secret); the --format-less image inspect branch"
+        - "scripts/test-podman-mock-refusal.sh: 12 scenarios, verdict 'ok: all podman-mock-refusal scenarios passed'"
+        - "openspec/litmus-tests/litmus-podman-mock-refuses-unknown-invocations.yaml, bound to litmus-framework in openspec/litmus-bindings.yaml; 5/5 steps green"
+        - "full pre-build litmus --size all: before 309 PASS/6 FAIL/115 SKIP (315 executed); after 311 PASS/5 FAIL/115 SKIP (316 executed); 0 podman-mock refusals reached in either run"
+        - "mutation controls MC1-MC7, restore byte-identical by sha256 each time; MC4b falsified the first draft of scenario 2"
+
+packets:
+  - packet_id: podman-mock-secret-arm-reads-the-subcommand-as-the-secret-name
+    order: 813-frih
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "podman-mock's `secret rm` and `secret inspect` read the SUB-SUBCOMMAND as the secret name, so removal is a no-op that reports success and inspection always reports absent"
+    deliverable: "`secret rm <name>` removes the secret the mock created and `secret inspect <name>` finds it; both read the name from its actual argv position, with a fixture that creates, inspects, removes and re-inspects so a no-op removal cannot pass"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [fail-loud, testing, podman, litmus, secrets]
+    estimated_hours: 2
+    context: |
+      OBSERVED on macuahuitl 2026-08-18 while auditing the same file for
+      797-p2xa. Reproduces in four lines against the tracked mock:
+
+        export LITMUS_PODMAN_STATE_DIR=/tmp/probe
+        printf 'hunter2' | scripts/test-support/podman-mock.sh secret create my-secret -
+        scripts/test-support/podman-mock.sh secret inspect my-secret   # rc=1  (WRONG: it exists)
+        scripts/test-support/podman-mock.sh secret rm my-secret        # rc=0, file SURVIVES
+
+      MECHANISM. `create` extracts the name by scanning argv for the token
+      after `create`. `rm` and `inspect` do not - both do
+      `secret_name="${2:-}"`, and with `secret` as the subcommand at $1, $2 is
+      the SUB-SUBCOMMAND. So `rm` deletes a file literally named `rm` (never
+      the secret) and `inspect` stats a file named `inspect` (never present).
+      The name is at $3.
+
+      WHY THIS IS THE 797-p2xa CLASS AND NOT A TYPO. `rm` exits 0 having done
+      nothing, so any test that asserts "the secret was removed" by checking
+      the exit status passes while the secret is still on disk - a silent pass,
+      one arm over from the three just closed. `inspect` is the mirror image:
+      it always answers "absent", so a test asserting absence passes without
+      the mock ever having looked. The consumers reaching this arm are
+      litmus:credential-isolation and the secret-lifecycle architecture in
+      methodology/event/016-secret-lifecycle-litmus-architecture.yaml.
+
+      NOT FIXED UNDER 797-p2xa DELIBERATELY. Flipping `secret inspect` from
+      always-absent to sometimes-present changes what the credential-isolation
+      tests observe, and the lesson of 797-p2xa itself is that a mock's
+      behaviour change needs its own measured blast radius, not a drive-by
+      inside someone else's packet. Budget one full pre-build litmus at
+      --size all (about 25 minutes on macuahuitl, 316 executed tests) and
+      expect any movement to show up in the secret-lifecycle specs.
