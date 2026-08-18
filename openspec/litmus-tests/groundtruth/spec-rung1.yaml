@@ -70,3 +70,52 @@ cases:
         # indicate the ranking had collapsed.
         - path: plan/index.yaml
         - path: openspec/specs/i18n-localization/spec.md
+
+  - id: spec-inference-tier-mechanism-is-in-code
+    engine: spec.answer
+    query: "how is the inference accelerator tier selected, and what makes it fall back to CPU?"
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/inference-tier.json
+    why: >
+      803-su4n's scorecard graded this PARTIAL: the specs describe the tier
+      architecture correctly and cannot state the MECHANISM, because the
+      mechanism is code. It is the case that justified putting crates/ in the
+      corpus, so it is the case that should go red if code ever falls back out.
+    expect:
+      confidence: retrieved
+      min_citations: 3
+      citations_include:
+        # The FALLBACK ITSELF, re-read from disk. Asserting the match arm rather
+        # than the file means a citation that lands on the right file and the
+        # wrong function goes red — and line numbers move constantly in this
+        # file, which is exactly why the assertion is on text.
+        - path: crates/tillandsias-headless/src/main.rs
+          kind: code
+          span_contains:
+            - "fn effective_inference_tier"
+            - "if !nvidia_cdi_available()"
+      citations_exclude:
+        - path: plan/index.yaml
+
+  - id: spec-podman-reset-what-survives
+    engine: spec.answer
+    query: "what does podman system reset delete, and what survives it?"
+    query_vec: openspec/litmus-tests/groundtruth/query-vectors/podman-reset.json
+    why: >
+      803-su4n's scorecard graded this a MISS with a specific shape worth
+      pinning: retrieval reached the right FILE and the WRONG SPAN — it cited
+      podman.md's Troubleshooting block, and the corpus contains exactly ONE
+      authoritative line about what a reset destroys. A reader following that
+      citation learned nothing and had no signal they had been sent to the
+      wrong place. This case exists so that regression is loud rather than
+      quiet: it demands the span that actually contains the rule.
+    expect:
+      confidence: retrieved
+      min_citations: 3
+      citations_include:
+        - path: cheatsheets/runtime/podman-logging.md
+          kind: cheatsheet
+          span_contains:
+            - "Destructive host reset"
+            - "wipes Podman state"
+      citations_exclude:
+        - path: plan/index.yaml
