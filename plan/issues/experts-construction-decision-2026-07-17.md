@@ -151,3 +151,60 @@ llama-server-aarch64-image-variant packet (657-6s4a) as its build recipe.
 Quality: coherent answers observed across the seeded runs and the earlier
 methodology-expert probe; formal ground-truth grading rides the deterministic
 engine per this doc's construction decision.
+
+---
+
+### 402 (2026-08-18T00:3xZ): Windows/WSL2 lane tier verification — yolanda
+
+Closes packet 402's three exit criteria on the Windows lane. Host: yolanda, AMD
+Ryzen AI 7 350 (Zen5, 8C/16T, avx512f + avx512_vnni + avx512_bf16 + avx_vnni),
+guest allocated 7.3 GB of the machine's 15.2 GB. ollama 0.32.9.
+
+**(1) Tier probe verdict, inside the inference container.** The 2026-07-17 event
+on this packet covered the BARE guest (`tier:cpu`). The criterion's unmet half
+was the nested case, and the packet was right to anticipate it: device
+availability DOES differ across the container boundary.
+
+| where | /dev/dxg | /dev/dri | /dev/kfd | /dev/nvidia0 | probe |
+|---|---|---|---|---|---|
+| bare WSL2 guest | **PRESENT** | absent | absent | absent | `tier:cpu` |
+| inference container | **absent** | absent | absent | absent | `tier:cpu` |
+
+The paravirtual GPU device does not cross into the container. Both verdicts are
+`tier:cpu` in the pinned grammar and both match reality, but they are the same
+answer for DIFFERENT reasons — the guest has an unusable GPU, the container has
+no GPU at all. `TILLANDSIAS_INFERENCE_TIER=cpu` was what the launcher passed,
+so the input and the corroboration agree.
+
+**(2) Measurements on the landed (cpu) tier.** Modelfile expert built via
+`/api/create` (`FROM qwen2.5:0.5b` + SYSTEM) — **32 ms**, `{"status":"success"}`
+(macOS's comparable figure was "<1s"). Warm generation on it: **93 tok/s decode**,
+load 129 ms, prompt 781 tok/s, 286 eval tokens, answered coherently. Cross-host
+context for the same model on the same engine family: macOS VZ guest measured
+warm ~52 tok/s (402's macOS sibling), linux/yoga measured 98–121 tok/s on the
+802-2536-v1 suite.
+
+Quality caveat, stated because "coherent" is not "correct": one probe answer was
+well-formed and on-topic but factually wrong ("CPU and GPU resources should be
+equally utilized"). A 0.5b model is not an authority; the criterion asked for
+coherence on the landed tier, which it demonstrated.
+
+Suite-level numbers for this host live in
+`plan/issues/accel-bench-yolanda-cpu-in-guest-2026-08-17.json` (802-2536-v1,
+locus=in-guest): embed 58/55/57 ms per chunk, decode 83.9/91.6/87.5 tok/s,
+prefill 570/3874/4255 tok/s. See 810-jeg7 for why the locus is recorded — the
+same host measured through the wslrelay mirror reads 5–10 % slower on embed.
+
+**(3) cpu fallback proven, no wedge, honest report.** The container is healthy
+and serving throughout; the probe returns `tier:cpu` rather than hanging or
+claiming a GPU; `_engine_wanted_backends` requests core-only, which is correct
+because a gpu-cuda tier here would be corroborated against a `/dev/nvidia0` that
+does not exist. No wedge observed. Probe models were deleted after measurement;
+only `nomic-embed-text` and `qwen2.5:0.5b` remain cached.
+
+**Lane verdict: cpu-ollama on Windows/WSL2, and the gpu-cuda branch is N/A on
+this machine** — it is an AMD iGPU host, so exercising nvidia-in-WSL2 needs a
+different Windows host. The AMD path is not merely unexercised but unreachable
+from the guest today: no `/dev/dri` (so no Vulkan/Mesa dzn) and no `/dev/kfd`
+(so no ROCm), with only `/dev/dxg` + the WSL D3D12 userspace present. That is
+recorded as a present-unusable device record by 806-2r4s rather than as absence.
