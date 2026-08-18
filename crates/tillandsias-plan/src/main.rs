@@ -2369,8 +2369,20 @@ fn main() {
                 }
                 let query = read_query_vec(&qv);
                 let top = spec::top_k(&query, &vectors, k);
-                let selected: Vec<&spec::Chunk> =
-                    top.iter().map(|(idx, _)| &chunks[*idx]).collect();
+                // ORDER 821-73es. The score used to be dropped here, which is
+                // why nothing downstream could tell "the corpus covers this"
+                // from "the corpus was searched": cosine top-k always returns
+                // k, so an out-of-corpus question yields k confident-looking
+                // citations. Carrying the similarity is the prerequisite for
+                // any refusal — a threshold cannot be applied to a number that
+                // was thrown away.
+                let selected: Vec<spec::ScoredChunk> = top
+                    .iter()
+                    .map(|(idx, score)| spec::ScoredChunk {
+                        chunk: chunks[*idx].clone(),
+                        score: *score,
+                    })
+                    .collect();
                 match serde_json::to_string_pretty(&selected) {
                     Ok(s) => println!("{s}"),
                     Err(e) => {
