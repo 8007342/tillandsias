@@ -61,13 +61,15 @@
 # chunking (25ms) and the fingerprint comparison happen first, so a relaunch is
 # a fingerprint HIT rather than a twelve-minute rebuild or an empty skip.
 #
-# NOT A BLANK CHEQUE ON SHARING — READ THIS BEFORE TRUSTING A SHARED INDEX.
+# NOT A BLANK CHEQUE ON SHARING — WHAT MAKES A SHARED INDEX SAFE TO TRUST.
 # The fingerprint proves an entry describes corpus X. It does NOT prove corpus X
-# is what the ASKING agent has checked out. Citations still carry no commit, so
-# a caller at a different commit can read `path:45-49` in its own tree and get
-# different bytes. Order 801-g9nn is that fix (per-citation commit +
-# caller_relation). Until it lands, this script makes the sharing REAL while the
-# staleness signal is still missing; that is a deliberate, recorded gap.
+# is what the ASKING agent has checked out, so a caller at a different commit can
+# read `path:45-49` in its own tree and get different bytes. Order 801-g9nn
+# closes that: every published entry now records the commit it was built at in
+# `.commit`, `spec-envelope --corpus-commit` stamps it onto each citation, and
+# `verify-answer` re-reads the span at that commit — so a citation the caller
+# cannot resolve is reported as `stale` with a fetch instruction instead of being
+# indistinguishable from a fabrication.
 #
 # RESOLUTION IS COPIED FROM THE CONSUMER ON PURPOSE. The root, endpoint and
 # model are resolved exactly as images/default/config-overlay/mcp/forge-plan.sh
@@ -416,6 +418,31 @@ rm -rf "$stage"; mkdir -p "$stage" || { echo "blocked:spec-index:cannot-stage"; 
 cp "$work/chunks.jsonl" "$stage/chunks.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
 cp "$work/vectors.jsonl" "$stage/vectors.jsonl" || { echo "blocked:spec-index:copy-failed"; exit 1; }
 printf '%s\n' "$fingerprint" > "$stage/.fingerprint"
+# ORDER 801-g9nn — THE FRAME THIS ENTRY DESCRIBES.
+#
+# The fingerprint proves an entry describes corpus X. It says nothing about
+# WHICH COMMIT X was read at, and a citation is `path:45-49` — a line range that
+# only means anything relative to a version of the file. A reader on a different
+# commit opens line 45 in its own tree and, since 803-su4n put CODE in this
+# corpus, may edit it. Recording the commit here is what lets `verify-answer`
+# ask "does this span hold at the frame it was read in?" instead of guessing.
+#
+# ONE COMMIT IS ENOUGH EVEN THOUGH MANY PRODUCE THIS CORPUS. Entries are keyed
+# by a hash OVER chunks.jsonl, which carries every chunk's path, line range and
+# text; so if two commits map to this fingerprint, every cited span is
+# byte-identical at both, and any of them is a sound frame for every citation
+# the entry can produce. An existing entry is never rewritten, so the recorded
+# commit is the first publisher's — older than a later caller's HEAD, which
+# reports honestly as `behind` with an empty drift list.
+#
+# NOT PART OF `_entry_complete`. Every entry published before this line existed
+# is still perfectly servable, just frameless; demanding the file would condemn
+# the whole shared volume to a twelve-minute rebuild apiece to gain a field that
+# is additive by design.
+if _sie_commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null)" && [ -n "$_sie_commit" ]; then
+    printf '%s\n' "$_sie_commit" > "$stage/.commit"
+    chmod 0644 "$stage/.commit" 2>/dev/null || true
+fi
 # World-readable: the forge reads this volume as a different uid through a
 # read-only mount, so a 0600 entry would be a permission refusal that looks
 # exactly like a missing index.

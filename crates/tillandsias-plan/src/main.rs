@@ -218,7 +218,11 @@ const USAGE: &str = concat!(
     "           burndown <milestone>      release-target children with statuses\n",
     "           answer <question...>      the CITED answer envelope as JSON (order 394b)\n",
     "           verify-answer [--root D]  read an envelope on stdin; exit 1 if any citation\n",
-    "                                     does not resolve or its span does not contain the claim\n",
+    "                                     does not resolve or its span does not contain the claim.\n",
+    "                                     ORDER 801-g9nn: also derives caller-relation\n",
+    "                                     (same|behind|ahead|diverged|unfetched|unknown) between D's\n",
+    "                                     HEAD and the answer's commit, and exits 3 — not 1 — when a\n",
+    "                                     citation is SOUND at its own commit but stale here.\n",
     "           methodology [--root D] [--file S] <yaml.path>\n",
     "                                     ORDER 394c. YAML path query over methodology.yaml and\n",
     "                                     methodology/**/*.yaml. Prints the 394b envelope: the\n",
@@ -246,8 +250,10 @@ const USAGE: &str = concat!(
     "           spec-retrieve --index-dir <dir> --query-vec <f> [--k N]\n",
     "                                     network-free cosine top-k over caller-supplied embeddings\n",
     "           spec-envelope --chunks-json <f> [--answer-file F] [--root D]\n",
+    "                         [--corpus-commit SHA]\n",
     "                                     build a VERIFIED envelope keeping only the citations the\n",
-    "                                     answer actually used\n",
+    "                                     answer actually used. --corpus-commit stamps the frame the\n",
+    "                                     INDEX was built at onto every citation (order 801-g9nn)\n",
     "           fragments                 report the append-only plan/index.d/ overlay: which\n",
     "                                     fragments are live, which are malformed, and whether\n",
     "                                     compaction is eligible\n",
@@ -351,7 +357,7 @@ fn unknown_subcommand(name: &str) -> ! {
 fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[PathBuf]) {
     // Stamped AFTER self-verification: `self_verified` may replace the envelope
     // with a fresh refusal, and the corpus was still partial either way.
-    let verified = self_verified(envelope, root)
+    let verified = stamp_frame(self_verified(envelope, root), root)
         .with_skipped_sources(skipped.iter().map(|p| citation_path(p, root)).collect());
     match serde_json::to_string_pretty(&verified) {
         Ok(json) => println!("{json}"),
@@ -360,6 +366,54 @@ fn emit_verified_envelope(envelope: answer::Envelope, root: &Path, skipped: &[Pa
             std::process::exit(1);
         }
     }
+}
+
+/// The environment variable a caller uses to tell the expert where it stands.
+///
+/// AN EXPERT CANNOT SEE ITS CALLER. The MCP server answers out of the checkout
+/// it was launched in; the asking agent may be in a linked worktree several
+/// commits away, or in a forge whose repo was seeded at a different sha. There
+/// is no ambient way to learn the reader's HEAD, so the reader supplies it — and
+/// when it does not, the field is OMITTED rather than defaulted, because a
+/// `caller_relation: same` invented from the emitter's own self-consistency is
+/// the precise false assurance order 801-g9nn exists to remove.
+const CALLER_HEAD_ENV: &str = "TILLANDSIAS_CALLER_HEAD";
+
+/// ORDER 801-g9nn — stamp the answer's FRAME onto the envelope on its way out.
+///
+/// Two stamps, and they answer different questions:
+///
+/// * every citation gets the commit its span was read at, defaulting to the
+///   checkout HEAD already in `freshness.source_commit` — correct for the
+///   deterministic layer, which reads the corpus out of the working tree at
+///   query time. A retrieved answer served from an index built elsewhere sets
+///   its own per-citation commit first and this leaves it alone.
+/// * `caller_relation` is stamped ONLY when the reader identified itself. See
+///   [`CALLER_HEAD_ENV`].
+///
+/// A refusal is stamped too. `unsupported` carries no citations, but it does
+/// carry a freshness block, and "which frame refused you" is worth as much as
+/// "which frame answered you" when two harnesses disagree about whether a packet
+/// exists.
+fn stamp_frame(envelope: answer::Envelope, root: &Path) -> answer::Envelope {
+    let commit = envelope.freshness().source_commit().to_string();
+    let envelope = envelope.with_default_citation_commit(&commit);
+    let Ok(caller_head) = std::env::var(CALLER_HEAD_ENV) else {
+        return envelope;
+    };
+    let caller_head = caller_head.trim();
+    if !tillandsias_plan::gitref::looks_like_sha(caller_head) {
+        // A malformed hint is dropped in silence rather than stamped: an
+        // envelope that reported `caller_head: HEAD` would look answered and be
+        // unusable, which is worse than an absent field.
+        return envelope;
+    }
+    let view = tillandsias_plan::gitref::GitView::new(root);
+    envelope.with_caller_relation(answer::CallerRelation::ancestry_only(
+        &view,
+        caller_head,
+        &commit,
+    ))
 }
 
 /// The pure half of [`emit_verified_envelope`], split out so the downgrade is
@@ -1769,19 +1823,57 @@ fn main() {
         if !root_explicit && let Some(r) = envelope.citation_root() {
             root = PathBuf::from(r);
         }
-        let violations = answer::verify(&envelope, &root);
-        if violations.is_empty() {
+        // ORDER 801-g9nn. The reader-side audit, not the frame-blind `verify`:
+        // this is the ONE place that knows both the envelope's frame and the
+        // reader's, so it is the only place that can tell a fabricated citation
+        // from a citation the reader has simply not fetched yet.
+        let audit = answer::audit(&envelope, &root);
+        if audit.violations.is_empty() && audit.stale.is_empty() {
+            // FIRST LINE IS PINNED. Litmus steps and MCP wrappers grep
+            // '^ok: envelope verified'; the relation is additive below it.
             println!(
                 "ok: envelope verified — {} citation(s) resolve, confidence={:?}",
                 envelope.citations().len(),
                 envelope.confidence()
             );
+            println!("{}", audit.relation.render());
+            // RESOLVING HERE IS NOT THE SAME AS HAVING BEEN READ HERE. Every
+            // span matched, but if the answer's frame is one this checkout
+            // cannot reach, that match is unconfirmed: the line numbers may
+            // land on a DIFFERENT passage that happens to contain the same key.
+            // The `ok:` prefix stays pinned for the consumers that grep it; the
+            // caution is what stops it being read as "safe to open".
+            if audit.relation.relation().may_differ() {
+                println!(
+                    "caution: the spans matched here, but this checkout is NOT the frame they were read in"
+                );
+            }
             return;
         }
-        eprintln!("REFUSED: {} citation violation(s):", violations.len());
-        for v in &violations {
+        if audit.violations.is_empty() {
+            // SOUND THERE, WRONG HERE. Exit 3, deliberately neither 0 nor 1: a
+            // reader that treats this as a pass opens stale line numbers, and a
+            // reader that treats it as a refusal throws away a correct answer
+            // plus the fetch instruction that would fix it. It needs its own
+            // code because it needs its own response.
+            println!(
+                "stale: envelope is sound at its own frame but NOT in this checkout — {} citation(s) moved",
+                audit.stale.len()
+            );
+            println!("{}", audit.relation.render());
+            for s in &audit.stale {
+                println!("  stale: {s}");
+            }
+            std::process::exit(3);
+        }
+        eprintln!("REFUSED: {} citation violation(s):", audit.violations.len());
+        for v in &audit.violations {
             eprintln!("  violation: {v}");
         }
+        for s in &audit.stale {
+            eprintln!("  stale: {s}");
+        }
+        eprintln!("{}", audit.relation.render());
         std::process::exit(1);
     }
 
@@ -1879,6 +1971,13 @@ fn main() {
         let mut query_vec: Option<PathBuf> = None;
         let mut chunks_json: Option<PathBuf> = None;
         let mut answer_file: Option<PathBuf> = None;
+        // ORDER 801-g9nn — the commit the INDEX was built at, which for a
+        // retrieved answer is the frame the spans were read in and is NOT this
+        // process's HEAD. A shared, mirror-backed index (801-a2by) is routinely
+        // built by another harness at another commit; without this flag the
+        // envelope would stamp the reader's own HEAD onto spans it never read
+        // there, which is a worse lie than no stamp at all.
+        let mut corpus_commit: Option<String> = None;
         let mut k = 8usize;
         let mut i = 1;
         while i < args.len() {
@@ -1908,6 +2007,10 @@ fn main() {
                 "--answer-file" => {
                     i += 1;
                     answer_file = args.get(i).map(PathBuf::from);
+                }
+                "--corpus-commit" => {
+                    i += 1;
+                    corpus_commit = args.get(i).cloned();
                 }
                 "--k" => {
                     i += 1;
@@ -2005,7 +2108,14 @@ fn main() {
                         buf
                     }
                 };
-                let envelope = spec::build_envelope(answer.trim(), &chunks, &root);
+                let mut envelope = spec::build_envelope(answer.trim(), &chunks, &root);
+                // ORDER 801-g9nn. Applied BEFORE `emit_verified_envelope`, whose
+                // own default stamp only fills citations that still have no
+                // frame — so the index's commit wins over this process's HEAD
+                // wherever the two differ, which is the whole point.
+                if let Some(sha) = corpus_commit.as_deref() {
+                    envelope = envelope.with_default_citation_commit(sha.trim());
+                }
                 // Spec corpus, not the ledger: nothing skipped to report here.
                 emit_verified_envelope(envelope, &root, &[]);
                 return;

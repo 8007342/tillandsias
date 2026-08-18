@@ -867,15 +867,30 @@ ${ctx}"
         { echo; echo "Sources: $keys"; } >> "$synth"
     }
     [ "$ok" = 1 ] || retrieval_only
+    # ORDER 801-g9nn — THE FRAME THIS ANSWER WAS READ IN, not the frame this
+    # process is standing in. The durable index is content-addressed and SHARED:
+    # a warm entry mounted read-only into this forge was very likely built by a
+    # different harness at a different commit (801-a2by). Stamping our own HEAD
+    # onto spans we did not read here would be a confident lie, so the commit
+    # comes from the entry itself and the flag is simply omitted when an older,
+    # frameless entry is being served.
+    _sa_frame=()
+    if [ -s "$SPEC_INDEX_DIR/.commit" ]; then
+        _sa_commit="$(tr -d '[:space:]' < "$SPEC_INDEX_DIR/.commit" 2>/dev/null)"
+        case "$_sa_commit" in
+            *[!0-9a-fA-F]* | '') : ;;
+            *) _sa_frame=(--corpus-commit "$_sa_commit") ;;
+        esac
+    fi
     # 4) build a VERIFIED envelope (keeps only citations the answer used). If the
     #    synthesized prose grounded in NO key (small model paraphrased away the
     #    section names), the envelope comes back unsupported — fall back to the
     #    cited digest so good retrieval still yields a verifiable cited answer,
     #    rather than refusing a question we actually found spec sections for.
-    "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" > "$env" 2>/dev/null || true
+    "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" "${_sa_frame[@]+"${_sa_frame[@]}"}" > "$env" 2>/dev/null || true
     if [ "$ok" = 1 ] && { [ ! -s "$env" ] || [ "$(jq -r '.confidence // "unsupported"' "$env" 2>/dev/null)" = "unsupported" ]; }; then
         retrieval_only
-        "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" > "$env" 2>/dev/null || true
+        "$PLAN_BIN" spec-envelope --chunks-json "$top" --answer-file "$synth" --root "${TILLANDSIAS_REPO_ROOT:-.}" "${_sa_frame[@]+"${_sa_frame[@]}"}" > "$env" 2>/dev/null || true
     fi
     if [ -s "$env" ]; then
         cat "$env"
