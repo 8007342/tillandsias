@@ -214,6 +214,29 @@ fn main() {
         }
     }
 
+    // Order 823-u5zf: guarantee XDG_RUNTIME_DIR exists at mode 0700 before any
+    // subsystem derives a path under it.
+    //
+    // This lived in the host-composed shell preamble as
+    // `install -d -m 0700 "$XDG_RUNTIME_DIR"`, which is the last thing keeping
+    // the lane launch tied to `/bin/bash -lc <string>`. The guest exec
+    // allowlist already accepts a verbatim argv and the wire already carries
+    // `env`, so the ONLY reason a shell remained in the chain was this one
+    // side effect. Moving it into the binary that depends on it removes that
+    // reason — and is the better home regardless: the process needing the
+    // directory is the one that should assert it.
+    //
+    // The MODE is the point, not existence. `create_dir_all` further down
+    // (control_socket_host_dir and friends) would happily create the parent at
+    // 0755-minus-umask; XDG_RUNTIME_DIR holds control sockets and must be
+    // user-private, which is why the shell said `-m 0700`.
+    //
+    // Best-effort by design: a caller that did not set XDG_RUNTIME_DIR, or a
+    // read-only path, must not stop the binary starting — every consumer here
+    // already has a fallback for an absent runtime dir.
+    #[cfg(unix)]
+    ensure_xdg_runtime_dir();
+
     let version = VERSION.trim();
 
     // Parse CLI arguments
@@ -1090,6 +1113,50 @@ fn format_diagnostics_envelope_line(
     )
 }
 
+/// Create `$XDG_RUNTIME_DIR` at mode 0700 if it does not already exist.
+///
+/// Order 823-u5zf. Replaces `install -d -m 0700 "$XDG_RUNTIME_DIR"` from the
+/// host-composed shell preamble — the last side effect keeping a shell in the
+/// lane-launch chain.
+///
+/// Returns the path it ensured, or `None` when `XDG_RUNTIME_DIR` is unset or
+/// the directory could not be created. Never fails the caller: every consumer
+/// of the runtime dir in this binary already falls back when it is absent, so
+/// refusing to start here would break the working case to report on the
+/// broken one.
+///
+/// `create_dir_all` is deliberately NOT used alone: it would create the
+/// directory at 0755-minus-umask, and XDG_RUNTIME_DIR holds control sockets
+/// that must be user-private. The mode is set explicitly afterwards so an
+/// existing directory with wrong permissions is corrected too.
+#[cfg(unix)]
+fn ensure_xdg_runtime_dir() -> Option<PathBuf> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let raw = std::env::var_os("XDG_RUNTIME_DIR")?;
+    let dir = PathBuf::from(raw);
+    if dir.as_os_str().is_empty() {
+        return None;
+    }
+
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!(
+            "[tillandsias] XDG_RUNTIME_DIR {} could not be created ({e}); \
+             continuing with per-consumer fallbacks",
+            dir.display()
+        );
+        return None;
+    }
+
+    if let Err(e) = std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)) {
+        eprintln!(
+            "[tillandsias] XDG_RUNTIME_DIR {} could not be set to 0700 ({e})",
+            dir.display()
+        );
+    }
+
+    Some(dir)
+}
 fn print_usage(version: &str) {
     println!("Tillandsias v{}", version);
     println!("Usage: tillandsias [--headless|--tray] [config_path]");
@@ -3471,6 +3538,67 @@ fn report_seed_staleness(project_path: &Path, seed: &str) {
              operator ruling pending on packet 763-munc."
         );
         std::process::exit(1);
+    }
+}
+
+/// Order 823-u5zf: the runtime dir must land at 0700, because that mode is the
+/// whole reason the shell preamble said `install -d -m 0700` rather than
+/// relying on the `create_dir_all` every consumer already does.
+#[cfg(all(test, unix))]
+mod xdg_runtime_dir_tests {
+    use super::ensure_xdg_runtime_dir;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// Serialised: these mutate the process-wide XDG_RUNTIME_DIR.
+    fn with_env<T>(value: Option<&std::path::Path>, f: impl FnOnce() -> T) -> T {
+        let prev = std::env::var_os("XDG_RUNTIME_DIR");
+        match value {
+            Some(p) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", p) },
+            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+        }
+        let out = f();
+        match prev {
+            Some(v) => unsafe { std::env::set_var("XDG_RUNTIME_DIR", v) },
+            None => unsafe { std::env::remove_var("XDG_RUNTIME_DIR") },
+        }
+        out
+    }
+
+    #[test]
+    fn creates_a_missing_runtime_dir_at_0700() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("run-user-0");
+        assert!(!target.exists());
+
+        let got = with_env(Some(&target), ensure_xdg_runtime_dir);
+
+        assert_eq!(got.as_deref(), Some(target.as_path()));
+        assert!(target.is_dir(), "the directory must exist afterwards");
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        assert_eq!(
+            mode, 0o700,
+            "XDG_RUNTIME_DIR holds control sockets and must be user-private, got {mode:o}"
+        );
+    }
+
+    #[test]
+    fn corrects_the_mode_of_an_existing_runtime_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let target = tmp.path().join("already-there");
+        std::fs::create_dir_all(&target).unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        with_env(Some(&target), ensure_xdg_runtime_dir);
+
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700, "a pre-existing 0755 dir must be tightened");
+    }
+
+    /// Never fails the caller: an unset variable is a no-op, because every
+    /// consumer of the runtime dir already falls back when it is absent.
+    #[test]
+    fn unset_variable_is_a_noop() {
+        assert!(with_env(None, ensure_xdg_runtime_dir).is_none());
     }
 }
 
