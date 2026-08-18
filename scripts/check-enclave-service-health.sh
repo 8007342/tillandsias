@@ -40,6 +40,21 @@
 # `<class>:<subject>:key=value:...` with the same `service`, `rc`, `signal`
 # keys — so one grep spans all three.
 #
+# A FOURTH ARRIVED ANYWAY, CONCURRENTLY, and this file now follows it. The yoga
+# host implemented the same packet the same night, inside the product:
+# `format_enclave_service_line` in crates/tillandsias-headless/src/main.rs,
+# surfaced through `tillandsias --diagnostics`. Neither of us held a lease.
+# That implementation reaches end users inside the enclave and this one does
+# not, so it is the canonical surface and its spellings win here:
+# `fail:enclave-service-dead` / `note:enclave-service-stopped` /
+# `signal=SIGKILL`, shared keys emitted in ITS order, with this script's extra
+# facts (health, origin, age_s) appended after them. Shipping two dialects for
+# the packet that asked for one vocabulary would have been a self-inflicted
+# violation of the thing it closed. What remains genuinely different — this
+# script needs no product build, runs in cycle-preflight where the dev-loop
+# blind spot actually was, names the stale-healthy corpse, and can be told what
+# to EXPECT — is the open reconciliation question, filed as 814-iyu7.
+#
 # REPORT BY DEFAULT, GATE ON DEMAND. A host with no stack running has every
 # service down, and that is the normal state of a laptop that just booted; a
 # reporter that fails the build there would be turned off within a day. So the
@@ -56,7 +71,7 @@
 # ladder; this script does not duplicate it.
 #
 # GRAMMAR — exactly one line on stdout:
-#   ^(ok|degraded):enclave-service-health:services=[0-9]+:up=[0-9]+:down=[0-9]+:absent=[0-9]+$
+#   ^(ok|degraded):enclave-service-health:services=[0-9]+:up=[0-9]+:down=[0-9]+:dead=[0-9]+:absent=[0-9]+$
 #   ^blocked:enclave-service-health:(no-podman|unreadable)$
 # Per-service detail is stderr, one line each, in the supervisors' grammar.
 
@@ -98,7 +113,7 @@ now="$(date -u +%s 2>/dev/null || echo 0)"
 # podman's template vocabulary, which is why this needs no `date -d` and works
 # where GNU date does not.
 ps_out="$(_run podman ps -a --format \
-    '{{.Names}}|{{.State}}|{{.ExitCode}}|{{.StartedAt}}|{{.ExitedAt}}' 2>/dev/null)"
+    '{{.Names}}|{{.State}}|{{.ExitCode}}|{{.StartedAt}}|{{.ExitedAt}}|{{.Restarts}}' 2>/dev/null)"
 ps_rc=$?
 if [ "$ps_rc" -ne 0 ]; then
     echo "blocked:enclave-service-health:unreadable"
@@ -119,12 +134,13 @@ _age() { # <seconds>
 names=""
 up=0
 down=0
+dead=0
 absent=0
 total=0
 details=""
 saw_stale_healthy=0
 
-while IFS='|' read -r name state exitcode started exited; do
+while IFS='|' read -r name state exitcode started exited restarts; do
     [ -n "$name" ] || continue
     # Only enclave services. The cross-control for this line is a foreign
     # container in the store (`modest_proskuriakova`, live on macuahuitl):
@@ -143,11 +159,26 @@ while IFS='|' read -r name state exitcode started exited; do
 
     down=$((down + 1))
 
+    # Signal SPELLING is yoga's (crates/tillandsias-headless format_enclave_service_line,
+    # same order, same night): 128+N is the shell/OCI convention, and the NAME is
+    # what a reader acts on. Two implementations of one packet must not ship two
+    # dialects of its vocabulary — see the reconciliation note in this cycle's
+    # fragment.
     sig="none"
     case "$exitcode" in
         ''|*[!0-9]*) exitcode="unknown" ;;
-        *) [ "$exitcode" -gt 128 ] && sig=$((exitcode - 128)) ;;
+        *)
+            if [ "$exitcode" -gt 128 ] && [ "$exitcode" -lt 192 ]; then
+                case $((exitcode - 128)) in
+                    9) sig="SIGKILL" ;;
+                    15) sig="SIGTERM" ;;
+                    11) sig="SIGSEGV" ;;
+                    *) sig="SIG$((exitcode - 128))" ;;
+                esac
+            fi
+            ;;
     esac
+    case "$restarts" in ''|*[!0-9]*) restarts=0 ;; esac
 
     age_s=-1
     case "$exited" in
@@ -189,7 +220,17 @@ while IFS='|' read -r name state exitcode started exited; do
         saw_stale_healthy=1
     fi
 
-    details="${details}fail:enclave-service-down:service=${name}:state=${state}:rc=${exitcode}:signal=${sig}:age_s=${age_s}:age=$(_age "$age_s"):health=${health}:origin=${origin}
+    # SHARED KEYS FIRST, in yoga's order, so one grep spans both implementations
+    # and the two supervisors; this script's extra facts follow. A clean stop is
+    # not a fault: conflating it with a crash makes the report noisy enough to
+    # ignore, which is how the original blind spot survived five hours.
+    if [ "$exitcode" = "0" ]; then
+        _class="note:enclave-service-stopped"
+    else
+        _class="fail:enclave-service-dead"
+        dead=$((dead + 1))
+    fi
+    details="${details}${_class}:service=${name}:state=${state}:rc=${exitcode}:signal=${sig}:age=$(_age "$age_s"):restarts=${restarts}:health=${health}:origin=${origin}:age_s=${age_s}
 "
 done <<EOF
 $ps_out
@@ -206,7 +247,7 @@ if [ -n "$EXPECTED" ]; then
         done
         if [ "$found" -eq 0 ]; then
             absent=$((absent + 1))
-            details="${details}fail:enclave-service-absent:service=${want}:state=absent:rc=none:signal=none:age_s=-1:age=unknown:health=none:origin=unknown
+            details="${details}fail:enclave-service-absent:service=${want}:state=absent:rc=none:signal=none:age=unknown:restarts=0:health=none:origin=unknown:age_s=-1
 "
         fi
     done <<EOF
@@ -224,10 +265,10 @@ if [ -n "$details" ]; then
 fi
 
 if [ "$down" -gt 0 ] || [ "$absent" -gt 0 ]; then
-    echo "degraded:enclave-service-health:services=${total}:up=${up}:down=${down}:absent=${absent}"
+    echo "degraded:enclave-service-health:services=${total}:up=${up}:down=${down}:dead=${dead}:absent=${absent}"
     [ "$STRICT" -eq 1 ] && exit 1
     exit 0
 fi
 
-echo "ok:enclave-service-health:services=${total}:up=${up}:down=0:absent=0"
+echo "ok:enclave-service-health:services=${total}:up=${up}:down=0:dead=0:absent=0"
 exit 0
