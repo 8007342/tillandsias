@@ -44,6 +44,23 @@ pub struct Chunk {
     pub text: String,
 }
 
+/// A chunk plus its cosine similarity to the query (order 821-73es).
+///
+/// A WRAPPER rather than a field on [`Chunk`], for two reasons. `Chunk` derives
+/// `Eq`, which `f32` cannot satisfy — and more importantly a similarity is a
+/// property of one RETRIEVAL, not of the passage, so storing it on the passage
+/// would put a query-dependent number into chunks.jsonl where it means nothing.
+///
+/// `serde(flatten)` keeps the emitted JSON shape identical to a bare chunk with
+/// one extra key, so `spec-envelope`, which deserializes `Vec<Chunk>`, still
+/// reads this output unchanged: serde ignores the unknown `score` key.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScoredChunk {
+    #[serde(flatten)]
+    pub chunk: Chunk,
+    pub score: f32,
+}
+
 /// A dependency-free, non-cryptographic content hash for change detection.
 fn hash_hex(s: &str) -> String {
     let mut h = DefaultHasher::new();
@@ -857,6 +874,46 @@ pub fn answer_cheatsheet_query(root: &Path, chunks: &[Chunk], query: &str) -> En
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 821-73es. The score rides on a wrapper, and `spec-envelope`
+    /// deserializes `Vec<Chunk>` from the SAME bytes — so the flattened shape
+    /// must stay readable as a plain chunk. If this breaks, retrieval keeps
+    /// working and the envelope silently loses every citation, which is the
+    /// quietest possible regression.
+    #[test]
+    fn a_scored_chunk_still_deserializes_as_a_plain_chunk() {
+        let c = Chunk {
+            id: 7,
+            path: "openspec/specs/x/spec.md".into(),
+            line_start: 3,
+            line_end: 9,
+            kind: "spec".into(),
+            key: "Requirement: X".into(),
+            content_hash: "abc".into(),
+            text: "body".into(),
+        };
+        let scored = ScoredChunk {
+            chunk: c.clone(),
+            score: 0.71,
+        };
+        let json = serde_json::to_string(&scored).expect("serialize");
+        assert!(json.contains("\"score\":0.71"), "score is emitted: {json}");
+        let back: Chunk = serde_json::from_str(&json).expect("reads as a plain Chunk");
+        assert_eq!(back, c, "the chunk half round-trips unchanged");
+    }
+
+    /// The index must NOT gain a score column: a similarity is a property of
+    /// one retrieval, not of the passage, and writing it into chunks.jsonl
+    /// would make the stored corpus query-dependent.
+    #[test]
+    fn the_index_record_carries_no_score() {
+        let chunks = chunk_markdown("openspec/specs/x/spec.md", "spec", "## H\nbody\n");
+        let json = serde_json::to_string(&chunks[0]).expect("serialize");
+        assert!(
+            !json.contains("score"),
+            "index record gained a score: {json}"
+        );
+    }
 
     /// The invariant `answer::verify` rests on, asserted for CODE: every chunk's
     /// key must appear verbatim in the span it names. This is the test that
