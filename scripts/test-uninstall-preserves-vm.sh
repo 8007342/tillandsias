@@ -114,8 +114,26 @@ out="$(run_uninstall "$d" linux)"
 check "linux-default-still-removes-bundled-data" "$?"
 rm -rf "$d"
 
+# 804-wfcu. The Linux closing line gained a branch: when the ROOT path removed
+# $SERVICE_HOME (which holds the packaged service account's model cache) the
+# script must stop claiming "Cache preserved". This asserts the branch did not
+# hijack the COMMON path — a non-root run removes no service home, so the
+# original line must survive verbatim.
+#
+# NOT COVERED HERE, and said plainly rather than implied: the root branch
+# itself. Exercising it needs a script that runs `userdel -r` and
+# `rm -rf $SERVICE_HOME` to believe it is root, and a fixture that can be wrong
+# about that is a fixture that can delete a real account. The reporting change
+# is one branch on a variable set immediately beside the deletion it describes;
+# the deletion is unchanged.
+d="$(make_sandbox linux)"
+out="$(run_uninstall "$d" linux)"
+printf '%s' "$out" | grep -Fq "Cache preserved. Use --wipe to remove everything."
+check "linux-non-root-keeps-the-original-cache-preserved-line" "$?"
+rm -rf "$d"
+
 if [ "$fail" -eq 0 ]; then
-    echo "ok: uninstall-preserves-vm 6/6"
+    echo "ok: uninstall-preserves-vm 7/7"
     exit 0
 fi
 echo "FAIL: uninstall-preserves-vm had failures"
