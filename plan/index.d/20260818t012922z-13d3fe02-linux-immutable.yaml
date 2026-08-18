@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: upstream-auth-refs-blocked-by-absent-mirror-not-stale-image
+    event:
+      type: progress
+      ts: "2026-08-18T01:29:22Z"
+      agent_id: linux-yoga-claude-20260818t012922z
+      host: linux-immutable
+      summary: >
+        THE LANE NOW NAMES ITS OWN PRECONDITION, and the message it replaces was mine. check-credential-channel.sh read only 'podman ps' -- RUNNING containers -- so a host with no mirror container at all fell into the arm that says 'could not inspect the mirror image ... check whether the image carries probe-upstream-auth before rebuilding anything'. That sent the reader to the one link in the chain that was fine: on macuahuitl the image was two days NEWER than the probe that introduced it and carried it byte-for-byte, while no tillandsias-git container existed in the stack. Rebuilding cannot affect any link in 'no container -> no service -> no probe run -> no refs'. The block now classifies which of the three preconditions is unmet and says so with a PRECONDITION number: 1 image built, 2 container created, 3 service healthy. Six states, each with its own remedy and each verified. VERIFICATION, hermetic and live. Live: this host is in EXACTLY macuahuitl's state -- 6 tillandsias-git images, zero containers -- and the ladder classifies it image-only, where the old code would have said 'could not inspect'. Hermetic, by extracting the script's OWN ladder (not a reimplementation) and running it against a scripted podman: no-podman -> no-podman; no images -> no-image; images but no container -> image-only; a container reported Exited(137) -> container-stopped; running with probe-upstream-auth in the image -> running-probe-present; running without it -> running-probe-absent. All six correct. Two notes worth keeping. The 'podman ps -a' distinction is the whole packet: an ABSENT container and a STOPPED one are different faults and used to produce the same silence. And the no-podman control initially failed on MY harness rather than the code -- PATH=/nonexistent strips the tools the ladder itself needs -- which is the same trap that cost me a fixture earlier in this fleet's history; re-run with a PATH carrying grep/head/bash it classifies correctly. Stdout grammar untouched (every message is stderr): litmus meta-orchestration 15/15, build --check green. NOT CLAIMED, exactly as the packet withholds it: that the lane WORKS once the mirror runs. That still needs the stack up under the destructive e2e, which this host can do but did not do this cycle.

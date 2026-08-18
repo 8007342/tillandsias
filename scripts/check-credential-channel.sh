@@ -109,28 +109,66 @@ forge_upstream_auth_verdict() {
     # just failed.
     #
     # So probe the image directly and say which case this host is in.
-    _ccc_probe_present="unknown"
-    if command -v podman >/dev/null 2>&1; then
-      _ccc_img="$(podman ps --filter 'name=tillandsias-git' --format '{{.Image}}' 2>/dev/null | head -1)"
-      if [ -n "$_ccc_img" ]; then
-        if podman run --rm --entrypoint ls "$_ccc_img" /usr/local/share/git-service/ 2>/dev/null |
+    # ORDER 798-c4mq. Publishing a verdict has THREE preconditions — image
+    # built, container created, service healthy — and this block used to
+    # collapse the last two: it read only `podman ps` (RUNNING containers), so
+    # a host with no mirror container at all fell into the "could not inspect
+    # the image" arm and was told to go look at the image. On macuahuitl that
+    # was actively wrong: the image was two days NEWER than the probe that
+    # introduced it and carried the probe byte-for-byte, while there was no
+    # tillandsias-git container in the stack at all. Rebuilding the image
+    # cannot affect any link in "no container -> no service -> no probe run ->
+    # no refs", so the advice sent the reader to the one place that was fine.
+    #
+    # Report which precondition is unmet, in order, rather than letting every
+    # absence look like the last one somebody debugged.
+    _ccc_state="unknown"
+    _ccc_detail=""
+    if ! command -v podman >/dev/null 2>&1; then
+      _ccc_state="no-podman"
+    else
+      _ccc_running="$(podman ps --filter 'name=tillandsias-git' --format '{{.Image}}' 2>/dev/null | head -1)"
+      # -a: an ABSENT container and a STOPPED one are different faults, and the
+      # difference is the whole point of this packet.
+      _ccc_any="$(podman ps -a --filter 'name=tillandsias-git' --format '{{.Names}} {{.Status}}' 2>/dev/null | head -1)"
+      _ccc_img_any="$(podman images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -m1 'tillandsias-git' || true)"
+      if [ -n "$_ccc_running" ]; then
+        if podman run --rm --entrypoint ls "$_ccc_running" /usr/local/share/git-service/ 2>/dev/null |
             grep -q '^probe-upstream-auth'; then
-          _ccc_probe_present="yes"
+          _ccc_state="running-probe-present"
         else
-          _ccc_probe_present="no"
+          _ccc_state="running-probe-absent"
         fi
+      elif [ -n "$_ccc_any" ]; then
+        _ccc_state="container-stopped"; _ccc_detail="$_ccc_any"
+      elif [ -n "$_ccc_img_any" ]; then
+        _ccc_state="image-only"; _ccc_detail="$_ccc_img_any"
+      else
+        _ccc_state="no-image"
       fi
     fi
     echo "[check-credential-channel] The git mirror is reachable but publishes NO upstream write-authorization verdict (refs/tillandsias/upstream-auth/*). Authorization is UNPROVEN, so worker drain must not start (order 756-2jnj)." >&2
-    case "$_ccc_probe_present" in
-      no)
+    case "$_ccc_state" in
+      running-probe-absent)
         echo "[check-credential-channel] CAUSE: the running mirror image carries NO probe-upstream-auth, so it CANNOT publish a verdict. If this host runs a published release older than the probe, rebuilding the container does NOT help — the tray rebuilds the image from the assets embedded in the installed binary and overwrites any hand-built image (order 783-6rik). Remedy: install a build/release that contains images/git/probe-upstream-auth.sh. Note the mirror relay still ACCEPTS pushes, so this blocks worker drain, not fail-loud bookkeeping." >&2
         ;;
-      yes)
-        echo "[check-credential-channel] CAUSE: the running mirror image HAS probe-upstream-auth, so the probe is present but not publishing — it is failing or has not run. Remedy: restart the tillandsias-git container and inspect its logs; if it still publishes nothing, repair the mirror's Vault GitHub token." >&2
+      running-probe-present)
+        echo "[check-credential-channel] CAUSE: PRECONDITION 3 (service). The mirror container is RUNNING and its image HAS probe-upstream-auth, so the probe exists and is not publishing — it is failing or has not run. Remedy: inspect the tillandsias-git container logs; if it still publishes nothing, repair the mirror's Vault GitHub token. Do NOT rebuild the image; it is not the missing link." >&2
+        ;;
+      container-stopped)
+        echo "[check-credential-channel] CAUSE: PRECONDITION 2 (container). A tillandsias-git container EXISTS but is not running: ${_ccc_detail}. A stopped service publishes nothing. Remedy: start it and read its exit reason; rebuilding the image will not start a container." >&2
+        ;;
+      image-only)
+        echo "[check-credential-channel] CAUSE: PRECONDITION 2 (container). The image ${_ccc_detail} exists but there is NO tillandsias-git container in this stack, running or exited. The chain is: no container -> no service -> no probe run -> no refs, and rebuilding the image cannot affect any link in it (order 798-c4mq, measured on macuahuitl where the image was two days NEWER than the probe and carried it byte-for-byte). Remedy: bring the stack up so the mirror service is created." >&2
+        ;;
+      no-image)
+        echo "[check-credential-channel] CAUSE: PRECONDITION 1 (image). No tillandsias-git image exists on this host at all, so no mirror container can be created. Remedy: build or install one, then bring the stack up." >&2
+        ;;
+      no-podman)
+        echo "[check-credential-channel] CAUSE: podman is not on PATH here, so none of the three preconditions (image built / container created / service healthy) can be inspected. This says nothing about the mirror." >&2
         ;;
       *)
-        echo "[check-credential-channel] CAUSE: could not inspect the mirror image (no podman, or no running tillandsias-git). Check whether the image carries images/git/probe-upstream-auth.sh before rebuilding anything (order 783-6rik)." >&2
+        echo "[check-credential-channel] CAUSE: could not determine which precondition is unmet (image built / container created / service healthy). Inspect podman state directly rather than assuming staleness." >&2
         ;;
     esac
     echo "blocked:upstream-auth-unpublished"
