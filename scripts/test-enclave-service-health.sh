@@ -8,6 +8,12 @@
 # `healthy`, which is the state the packet was filed about and the state most
 # likely to be quietly dropped by a future edit. Scenario 4 pins it and the
 # mutation control proves scenario 4 can fail.
+#
+# The expected strings here are the CONVERGED grammar: yoga implemented the
+# same packet the same night inside the product (format_enclave_service_line,
+# crates/tillandsias-headless/src/main.rs) and its spellings are canonical —
+# fail:enclave-service-dead / note:enclave-service-stopped / signal=SIGKILL,
+# shared keys in its order, this script's extra facts appended.
 
 set -uo pipefail
 
@@ -22,8 +28,9 @@ fail=0
 ok()   { echo "ok: $1"; pass=$((pass + 1)); }
 bad()  { echo "FAIL: $1"; fail=$((fail + 1)); }
 
-# A scripted podman. PS_OUT is the `ps -a --format` body; HEALTH_<name> gives
-# that container's inspected health string. PS_RC forces a failed reading.
+# A scripted podman. PS_OUT is the `ps -a --format` body (name|state|exitcode|
+# started|exited|restarts); HEALTH_<name> and LABEL_<name> feed inspect. PS_RC
+# forces a failed reading.
 make_podman() { # <dir>
     mkdir -p "$1"
     cat > "$1/podman" <<'FAKE'
@@ -82,31 +89,48 @@ fi
 
 # ---------------------------------------------------------------- scenario 2
 # Everything up.
-export PS_OUT="tillandsias-vault|running|0|${now}|0
-tillandsias-proxy|running|0|${now}|0
-tillandsias-router|running|0|${now}|0"
+export PS_OUT="tillandsias-vault|running|0|${now}|0|0
+tillandsias-proxy|running|0|${now}|0|0
+tillandsias-router|running|0|${now}|0|0"
 out="$(run)"; rc=$?
-if [ "$out" = "ok:enclave-service-health:services=3:up=3:down=0:absent=0" ] && [ "$rc" -eq 0 ]; then
+if [ "$out" = "ok:enclave-service-health:services=3:up=3:down=0:dead=0:absent=0" ] && [ "$rc" -eq 0 ]; then
     ok "all running -> ok, 3/3 up, rc=0"
 else
     bad "all running: got '$out' rc=$rc"
 fi
 
 # ---------------------------------------------------------------- scenario 3
-# One dead of SIGTERM two days ago: exit code, DERIVED SIGNAL, and age.
+# One dead of SIGTERM two days ago. Signal is spelled as yoga spells it.
 exited=$((now - 250492))
-export PS_OUT="tillandsias-vault|running|0|${now}|0
-tillandsias-nix|exited|143|$((now - 300000))|${exited}"
+export PS_OUT="tillandsias-vault|running|0|${now}|0|0
+tillandsias-nix|exited|143|$((now - 300000))|${exited}|0"
 out="$(run)"; rc=$?
 err="$(cat "$TMP/err")"
-if [ "$out" = "degraded:enclave-service-health:services=2:up=1:down=1:absent=0" ] && [ "$rc" -eq 0 ]; then
+if [ "$out" = "degraded:enclave-service-health:services=2:up=1:down=1:dead=1:absent=0" ] && [ "$rc" -eq 0 ]; then
     case "$err" in
-        *"fail:enclave-service-down:service=tillandsias-nix:state=exited:rc=143:signal=15:age_s=250492:age=2d21h:health=none:origin=unlabelled"*)
-            ok "exited(143) -> degraded + rc/signal=15/age=2d21h/origin named, rc still 0 (report, not gate)" ;;
+        *"fail:enclave-service-dead:service=tillandsias-nix:state=exited:rc=143:signal=SIGTERM:age=2d21h:restarts=0:health=none:origin=unlabelled:age_s=250492"*)
+            ok "exited(143) -> dead, signal=SIGTERM, age=2d21h, restarts+origin+age_s; rc still 0 (report, not gate)" ;;
         *) bad "exited(143): detail line wrong: $err" ;;
     esac
 else
     bad "exited(143): got '$out' rc=$rc"
+fi
+
+# --------------------------------------------------------------- scenario 3a
+# A CLEAN STOP IS NOT A FAULT (yoga's distinction, adopted). Conflating an
+# operator's `podman stop` with a crash makes the report noisy enough to
+# ignore, which is how the original blind spot survived five hours of cycles.
+export PS_OUT="tillandsias-proxy|exited|0|$((now - 800))|$((now - 700))|2"
+out="$(run)"
+err="$(cat "$TMP/err")"
+if [ "$out" = "degraded:enclave-service-health:services=1:up=0:down=1:dead=0:absent=0" ]; then
+    case "$err" in
+        *"note:enclave-service-stopped:service=tillandsias-proxy:state=exited:rc=0:signal=none:age=11m:restarts=2"*)
+            ok "clean stop (rc=0) -> note:...stopped, dead=0, restarts carried" ;;
+        *) bad "clean stop: detail wrong: $err" ;;
+    esac
+else
+    bad "clean stop: got '$out'"
 fi
 
 # --------------------------------------------------------------- scenario 3b
@@ -114,15 +138,15 @@ fi
 # the name prefix. Both are REPORTED — the annotation must never become a
 # filter, or a real service built outside the labelled path (tillandsias-nix-cache,
 # live on macuahuitl 2026-08-18) disappears from the one place that lists it.
-export PS_OUT="tillandsias-vault|exited|1|$((now - 500))|$((now - 400))
-tillandsias-scratch|exited|1|$((now - 500))|$((now - 400))"
+export PS_OUT="tillandsias-vault|exited|1|$((now - 500))|$((now - 400))|0
+tillandsias-scratch|exited|1|$((now - 500))|$((now - 400))|0"
 export LABEL_tillandsias_vault="vault"
 out="$(run)"
 err="$(cat "$TMP/err")"
 lab=0; unlab=0
 case "$err" in *"service=tillandsias-vault:"*":origin=product-vault"*) lab=1 ;; esac
 case "$err" in *"service=tillandsias-scratch:"*":origin=unlabelled"*) unlab=1 ;; esac
-if [ "$lab" -eq 1 ] && [ "$unlab" -eq 1 ] && [ "$out" = "degraded:enclave-service-health:services=2:up=0:down=2:absent=0" ]; then
+if [ "$lab" -eq 1 ] && [ "$unlab" -eq 1 ] && [ "$out" = "degraded:enclave-service-health:services=2:up=0:down=2:dead=2:absent=0" ]; then
     ok "origin: labelled -> product-vault, unlabelled -> unlabelled, BOTH still reported"
 else
     bad "origin: labelled=$lab unlabelled=$unlab out='$out'"
@@ -131,16 +155,16 @@ unset LABEL_tillandsias_vault
 
 # ---------------------------------------------------------------- scenario 4
 # THE PACKET'S CASE. Stopped, SIGKILLed, and podman still says healthy.
-export PS_OUT="tillandsias-vault|exited|137|$((now - 20000))|$((now - 18000))"
+export PS_OUT="tillandsias-vault|exited|137|$((now - 20000))|$((now - 18000))|0"
 export HEALTH_tillandsias_vault="healthy"
 out="$(run)"
 err="$(cat "$TMP/err")"
 stale_ok=0
-case "$err" in *":signal=9:"*":health=stale-healthy"*) stale_ok=1 ;; esac
+case "$err" in *":signal=SIGKILL:"*":health=stale-healthy"*) stale_ok=1 ;; esac
 note_ok=0
 case "$err" in *"podman's stale record, not a reading"*) note_ok=1 ;; esac
-if [ "$stale_ok" -eq 1 ] && [ "$note_ok" -eq 1 ] && [ "$out" = "degraded:enclave-service-health:services=1:up=0:down=1:absent=0" ]; then
-    ok "Exited(137) + recorded 'healthy' -> health=stale-healthy, signal=9, explanatory NOTE"
+if [ "$stale_ok" -eq 1 ] && [ "$note_ok" -eq 1 ] && [ "$out" = "degraded:enclave-service-health:services=1:up=0:down=1:dead=1:absent=0" ]; then
+    ok "Exited(137) + recorded 'healthy' -> health=stale-healthy, signal=SIGKILL, explanatory NOTE"
 else
     bad "stale-healthy: stale=$stale_ok note=$note_ok out='$out' err='$err'"
 fi
@@ -149,11 +173,11 @@ unset HEALTH_tillandsias_vault
 # ---------------------------------------------------------------- scenario 5
 # A running container that is genuinely healthy must NOT be called stale --
 # the cross-control without which scenario 4 would pass on a healthy stack.
-export PS_OUT="tillandsias-proxy|running|0|${now}|0"
+export PS_OUT="tillandsias-proxy|running|0|${now}|0|0"
 export HEALTH_tillandsias_proxy="healthy"
 out="$(run)"
 err="$(cat "$TMP/err")"
-if [ "$out" = "ok:enclave-service-health:services=1:up=1:down=0:absent=0" ] && [ -z "$err" ]; then
+if [ "$out" = "ok:enclave-service-health:services=1:up=1:down=0:dead=0:absent=0" ] && [ -z "$err" ]; then
     ok "running + healthy -> ok, silent, NOT reported as stale-healthy"
 else
     bad "running healthy: out='$out' err='$err'"
@@ -162,10 +186,10 @@ unset HEALTH_tillandsias_proxy
 
 # ---------------------------------------------------------------- scenario 6
 # Declared-but-absent: enumeration cannot see it, a declaration can.
-export PS_OUT="tillandsias-proxy|running|0|${now}|0"
+export PS_OUT="tillandsias-proxy|running|0|${now}|0|0"
 out="$(run --expect tillandsias-git,tillandsias-proxy)"
 err="$(cat "$TMP/err")"
-if [ "$out" = "degraded:enclave-service-health:services=1:up=1:down=0:absent=1" ]; then
+if [ "$out" = "degraded:enclave-service-health:services=1:up=1:down=0:dead=0:absent=1" ]; then
     case "$err" in
         *"fail:enclave-service-absent:service=tillandsias-git:state=absent"*)
             ok "--expect names a missing service -> absent=1, service named" ;;
@@ -179,10 +203,10 @@ fi
 # A foreign container in the same store is not an enclave service. Without the
 # prefix test this reads down=1 on a perfectly healthy stack; `created` is the
 # live shape on macuahuitl (`modest_proskuriakova`).
-export PS_OUT="tillandsias-proxy|running|0|${now}|0
-modest_proskuriakova|created|0|0|0"
+export PS_OUT="tillandsias-proxy|running|0|${now}|0|0
+modest_proskuriakova|created|0|0|0|0"
 out="$(run)"
-if [ "$out" = "ok:enclave-service-health:services=1:up=1:down=0:absent=0" ]; then
+if [ "$out" = "ok:enclave-service-health:services=1:up=1:down=0:dead=0:absent=0" ]; then
     ok "foreign container ignored -> services=1, no false alarm"
 else
     bad "foreign container: got '$out'"
@@ -190,9 +214,9 @@ fi
 
 # ---------------------------------------------------------------- scenario 8
 # --strict is the opt-in gate, and only on a degraded reading.
-export PS_OUT="tillandsias-nix|exited|139|$((now - 900))|$((now - 600))"
+export PS_OUT="tillandsias-nix|exited|139|$((now - 900))|$((now - 600))|0"
 run --strict >/dev/null; rc_deg=$?
-export PS_OUT="tillandsias-proxy|running|0|${now}|0"
+export PS_OUT="tillandsias-proxy|running|0|${now}|0|0"
 run --strict >/dev/null; rc_ok=$?
 if [ "$rc_deg" -eq 1 ] && [ "$rc_ok" -eq 0 ]; then
     ok "--strict: degraded -> rc=1, ok -> rc=0"
@@ -227,7 +251,7 @@ chmod +x "$MUT"
 if cmp -s "$GUARD" "$MUT"; then
     bad "mutation: the branch was not removed — control is vacuous"
 else
-    export PS_OUT="tillandsias-vault|exited|137|$((now - 20000))|$((now - 18000))"
+    export PS_OUT="tillandsias-vault|exited|137|$((now - 20000))|$((now - 18000))|0"
     export HEALTH_tillandsias_vault="healthy"
     mut_err="$(PATH="$BIN:$REALPATH_DIRS" bash "$MUT" 2>&1 >/dev/null)"
     # Assert the POSITIVE fact — the mutant's detail line passes podman's word
