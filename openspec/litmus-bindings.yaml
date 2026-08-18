@@ -591,8 +591,9 @@ specs:
   litmus_tests:
   - litmus:fake-podman-direct-invocation-safety
   - litmus:litmus-podman-preflight-diagnosis-shape
+  - litmus:podman-mock-refuses-unknown-invocations
   coverage_ratio: 100
-  last_verified: '2026-08-17'
+  last_verified: '2026-08-18'
 - spec_id: macos-native-tray
   status: active
   litmus_tests:
