@@ -1,0 +1,113 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T07:45Z.
+#
+# 795-zshi is HALF DONE and its packet text does not say so. Establishing that
+# — and the one linkage nobody had drawn — is this cycle's reduction. The
+# Windows rung is filed rather than started: 30 minutes is not enough for a
+# change whose own packet says "do NOT leave two code paths for the same
+# thing", and a rushed half is exactly the failure mode it warns about.
+
+packets:
+  - packet_id: windows-lane-sends-a-verbatim-argv-and-drops-its-escaping-workarounds
+    order: 823-u5zf
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "the Windows half of 795-zshi: the guest already accepts a verbatim argv and advertises it, but the tray still flattens into `bash -lc` — which is the sole reason every project lane falls to conhost and cannot paste"
+    deliverable: "the Windows tray feature-detects CAP_EXEC_ARGV_VECTOR and sends PtyOpen{argv, env} verbatim; argv_survives_wt_reparse and wt_safe_title are DELETED and every lane opens in Windows Terminal"
+    pickup_role: windows
+    release_target: architecture-audit-epic
+    capability_tags: [windows, tray, rust, vsock, ux]
+    context: |
+      THE STATE OF 795-zshi, measured this cycle, because the packet reads as
+      though none of it exists:
+
+        GUEST SIDE: DONE. crates/tillandsias-headless/src/exec_allowlist.rs
+        carries the verbatim-argv arm — `other if other.starts_with('/') =>
+        verbatim_argv_is_allowed(argv)` — gated on VERBATIM_ARGV_PREFIXES
+        (/usr/local/bin/, /usr/bin/, /bin/) and VERBATIM_ARGV_FORBIDDEN (bash,
+        sh, dash, zsh, ksh, fish, env). Its own note argues correctly that this
+        is not a widening of authority: the `/bin/bash -l|-lc <string>` arm
+        never inspects the script, so everything reachable through the new arm
+        was already reachable through the old one — what changes is only HOW the
+        request is expressed.
+
+        WIRE SIDE: DONE. CAP_EXEC_ARGV_VECTOR = "ExecArgvVector"
+        (control-wire/src/lib.rs:99), with the version-skew rule stated: hosts
+        MUST feature-detect on HelloAck.server_caps, never compare wire
+        versions, "because this fleet routinely runs a host newer than the guest
+        binary staged beside it".
+
+        HOST SIDE: UNTOUCHED. argv_survives_wt_reparse 7 occurrences,
+        wt_safe_title 4, build_exec_guest_shell_cmd 9 (the last is macOS's and
+        belongs to a separate rung).
+
+      THE LINKAGE NOBODY HAD DRAWN, and the reason this is p1 rather than
+      tidying. 805-ek9e records that EVERY project lane opens in a legacy
+      conhost window with no clickable links and no working paste, which made
+      the operator's Claude and Antigravity device-code logins impossible to
+      complete on 2026-08-17. Its proposed remedy was an injected wrapper
+      script. That remedy becomes unnecessary here: `argv_survives_wt_reparse`
+      only exists to decide whether a FLATTENED `bash -lc "..."` string can
+      survive wt.exe's re-parse. Send a verbatim argv and there is no string to
+      re-parse, the predicate has nothing to guard, and every lane can open in
+      Windows Terminal. One change closes an architecture packet and a
+      field-reported UX failure.
+
+      IT IS MECHANICAL, NOT A DESIGN PROBLEM — checked, because the obvious
+      objection is that the flattened script also sets up environment.
+      ControlMessage::PtyOpen already carries `env: Vec<(String, String)>` and
+      `cwd`, documented as "env REPLACES the in-VM process environment (no
+      host-env inheritance)". So
+        bash -lc "export HOME=... && export XDG_RUNTIME_DIR=... && export
+                  TILLANDSIAS_VAULT_API_BASE_URL=... && exec
+                  tillandsias-headless --cloud 'owner/repo' --claude"
+      becomes
+        argv = ["/usr/local/bin/tillandsias-headless", "--cloud",
+                "owner/repo", "--claude"]
+        env  = [("HOME","/root"), ("XDG_RUNTIME_DIR","/run/user/0"), ...]
+      with no quoting layer anywhere in the chain.
+
+      THE ONE WRINKLE, named so the next agent does not discover it late: the
+      current script also runs `install -d -m 0700 "$XDG_RUNTIME_DIR"`, a side
+      effect the verbatim arm cannot express because it forbids a shell. Either
+      the guest creates that directory when it honours `env`, or the lane binary
+      does it itself on startup. Decide that before deleting the flattening
+      path, not after.
+
+      SEQUENCING, from the wire's own rule: the guest must accept and ADVERTISE
+      the capability before any host sends the shape. It already does, so the
+      Windows rung is unblocked today — but the tray must still read
+      HelloAck.server_caps and keep the flattened path for a guest that lacks
+      the capability, because a staged guest binary can be older than the tray.
+
+      DO NOT widen anything to start this. 795-zshi's own note: "Widening
+      without deleting the five workarounds leaves two code paths for the same
+      thing, which is how this subsystem got here." The deletion of
+      argv_survives_wt_reparse and wt_safe_title is part of THIS rung, not a
+      follow-up.
+    verifiable_closure: "a source scan finds no argv_survives_wt_reparse and no wt_safe_title, and a Windows lane launch is observed opening in Windows Terminal rather than conhost"
+
+events:
+  - packet_id: project-lanes-always-fall-back-to-legacy-conhost-losing-paste-and-clickable-links
+    event:
+      type: note
+      ts: "2026-08-18T07:46:00Z"
+      agent_id: windows-yolanda-opus5-20260818t0719z
+      host: windows
+      summary: >
+        ROOT CAUSE IDENTIFIED UPSTREAM, and this packet's proposed remedy is
+        probably the wrong one. 805-ek9e proposed an injected guest wrapper
+        script so the lane argv would be quote-free and pass
+        argv_survives_wt_reparse. That works, but it treats the predicate as a
+        fixed constraint. It is not: `argv_survives_wt_reparse` exists ONLY to
+        decide whether a FLATTENED `bash -lc "<script>"` string survives
+        wt.exe's re-parse, and the flattening exists only because the guest exec
+        allowlist used to admit nothing but `/bin/bash -l|-lc <string>`
+        (795-zshi). That constraint is already gone on the guest side: the
+        verbatim-argv arm and CAP_EXEC_ARGV_VECTOR both exist today. Sending a
+        verbatim argv removes the string entirely — no re-parse, no predicate,
+        no conhost fallback, and paste and clickable links return without a
+        wrapper script to maintain. Filed as 823-u5zf. Keep 805-ek9e open as the
+        UX statement of the defect, but prefer 823-u5zf's fix over the wrapper.
