@@ -50,7 +50,26 @@ set -uo pipefail
 
 LANE=""
 ENDPOINT="${TILLANDSIAS_BENCH_ENDPOINT:-http://127.0.0.1:11434}"
-CHUNKS="${TILLANDSIAS_BENCH_CHUNKS:-/dev/shm/tillandsias-experts/spec-index/chunks.jsonl}"
+# Order 801-a2by moved the index out of tmpfs into the durable, content-
+# addressed tier, so the old /dev/shm literal now names a path nothing writes.
+# Ask the PRODUCER where it publishes rather than carrying a fourth copy of the
+# resolution chain — `--where` is exactly that question and needs no endpoint.
+# The tmpfs path stays as the last resort so a host with a warm legacy index,
+# or one where the producer is absent, still benchmarks instead of refusing.
+CHUNKS="${TILLANDSIAS_BENCH_CHUNKS:-}"
+if [ -z "$CHUNKS" ]; then
+    _bal_root="$(cd "$(dirname "$0")/.." && pwd)"
+    _bal_dir=""
+    if [ -x "$_bal_root/scripts/spec-index-ensure.sh" ]; then
+        _bal_dir="$(bash "$_bal_root/scripts/spec-index-ensure.sh" --where 2>/dev/null \
+            | sed -n 's/^spec-index:serving=//p')"
+    fi
+    if [ -n "$_bal_dir" ] && [ -s "$_bal_dir/chunks.jsonl" ]; then
+        CHUNKS="$_bal_dir/chunks.jsonl"
+    else
+        CHUNKS="/dev/shm/tillandsias-experts/spec-index/chunks.jsonl"
+    fi
+fi
 N=40
 REPS=3
 EMBED_MODEL="nomic-embed-text"
