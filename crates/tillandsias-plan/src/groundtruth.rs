@@ -607,13 +607,20 @@ impl Harness {
                 // took the tree to 19485 chunks against 19483 stored vectors.
                 let (chunks, vectors) = self.spec_index()?;
                 let top = crate::spec::top_k(&qvec, vectors, 6);
-                let picked: Vec<crate::spec::Chunk> =
-                    top.iter().map(|(i, _)| chunks[*i].clone()).collect();
+                let picked: Vec<crate::spec::ScoredChunk> = top
+                    .iter()
+                    .map(|(i, sc)| crate::spec::ScoredChunk {
+                        chunk: chunks[*i].clone(),
+                        score: *sc,
+                    })
+                    .collect();
                 // The retrieval-only answer is the documented zero-token floor
                 // and is what makes this deterministic. What is graded is the
                 // citation set, not the prose (this packet's own criterion).
-                let answer = crate::spec::retrieval_only_answer(&picked);
-                Ok(crate::spec::build_envelope(&answer, &picked, &root))
+                let plain: Vec<crate::spec::Chunk> =
+                    picked.iter().map(|p| p.chunk.clone()).collect();
+                let answer = crate::spec::retrieval_only_answer(&plain);
+                Ok(crate::spec::build_envelope_scored(&answer, &picked, &root))
             }
             "cheatsheet.ask" => {
                 let root = self.root.clone();

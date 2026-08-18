@@ -731,6 +731,42 @@ pub fn top_k(query: &[f32], vectors: &[Vec<f32>], k: usize) -> Vec<(usize, f32)>
 /// (non-decorative) — the same falsifiability the deterministic layer enforces.
 /// If no citation survives, the result is [`Envelope::unsupported`], never a
 /// guess. `source` drives the freshness block.
+/// Build an envelope from chunks that carry their retrieval score.
+///
+/// Additive sibling of [`build_envelope`] (order 821-73es): existing callers —
+/// the cheatsheet path, the deterministic experts — have no similarity to
+/// report and keep using the unscored form, which omits the field rather than
+/// inventing 1.0.
+pub fn build_envelope_scored(answer: &str, scored: &[ScoredChunk], source: &Path) -> Envelope {
+    let freshness = Freshness::for_source(source);
+    let mut citations = Vec::new();
+    for sc in scored {
+        let c = &sc.chunk;
+        if !answer.contains(&c.key) {
+            continue;
+        }
+        let mut authority = BTreeMap::new();
+        authority.insert("key".to_string(), c.key.clone());
+        citations.push(
+            Citation::new(
+                c.path.clone(),
+                c.line_start,
+                c.line_end,
+                citation_kind_of(&c.kind),
+                authority,
+            )
+            .with_score(sc.score),
+        );
+    }
+    if citations.is_empty() {
+        return Envelope::unsupported(
+            "no retrieved chunk was actually used by the answer",
+            freshness,
+        );
+    }
+    Envelope::supported(answer, citations, Confidence::Retrieved, freshness)
+}
+
 pub fn build_envelope(answer: &str, chunks: &[Chunk], source: &Path) -> Envelope {
     let freshness = Freshness::for_source(source);
     let mut citations = Vec::new();
@@ -874,6 +910,78 @@ pub fn answer_cheatsheet_query(root: &Path, chunks: &[Chunk], query: &str) -> En
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Order 821-73es. The score has to reach the CITATION, not just the
+    /// retrieval output — a number that stops at the CLI is a number no
+    /// consumer of the envelope can threshold on.
+    #[test]
+    fn a_scored_envelope_puts_the_score_on_its_citations() {
+        let c = Chunk {
+            id: 0,
+            path: "openspec/specs/x/spec.md".into(),
+            line_start: 1,
+            line_end: 2,
+            kind: "spec".into(),
+            key: "Requirement: X".into(),
+            content_hash: "h".into(),
+            text: "Requirement: X\nbody".into(),
+        };
+        let scored = vec![ScoredChunk {
+            chunk: c.clone(),
+            score: 0.7196,
+        }];
+        let env = build_envelope_scored("uses Requirement: X", &scored, Path::new("."));
+        let json = serde_json::to_string(&env).expect("serialize");
+        assert!(
+            json.contains("\"score\""),
+            "citation carries a score: {json}"
+        );
+        assert!(
+            json.contains("0.7196"),
+            "the measured value survives: {json}"
+        );
+
+        // The UNSCORED builder must omit the field rather than invent one. A
+        // deterministic expert has no similarity to report, and writing 1.0
+        // would read as a perfect match instead of "not applicable".
+        let plain = build_envelope("uses Requirement: X", &[c], Path::new("."));
+        let pjson = serde_json::to_string(&plain).expect("serialize");
+        assert!(
+            !pjson.contains("score"),
+            "unscored envelope invented one: {pjson}"
+        );
+    }
+
+    /// A similarity outside [-1, 1] is not a similarity. Storing it would hand
+    /// a future threshold a number that cannot mean what it claims.
+    #[test]
+    fn an_impossible_score_is_dropped_not_recorded() {
+        let c = Chunk {
+            id: 0,
+            path: "openspec/specs/x/spec.md".into(),
+            line_start: 1,
+            line_end: 2,
+            kind: "spec".into(),
+            key: "Requirement: X".into(),
+            content_hash: "h".into(),
+            text: "Requirement: X".into(),
+        };
+        for bad in [3.0f32, -2.0, f32::NAN, f32::INFINITY] {
+            let env = build_envelope_scored(
+                "uses Requirement: X",
+                &[ScoredChunk {
+                    chunk: c.clone(),
+                    score: bad,
+                }],
+                Path::new("."),
+            );
+            let json = serde_json::to_string(&env).expect("serialize");
+            assert!(
+                !json.contains("\"score\""),
+                "kept an impossible score {bad}: {json}"
+            );
+        }
+    }
 
     /// Order 821-73es. The score rides on a wrapper, and `spec-envelope`
     /// deserializes `Vec<Chunk>` from the SAME bytes — so the flattened shape
