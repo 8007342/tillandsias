@@ -22,7 +22,7 @@
 //! trade a real capability for tidiness, so `no_window_*` is offered here but
 //! never applied by the constructors.
 //!
-//! @trace spec:cross-platform, spec:windows-wsl-runtime, spec:no-terminal-flicker
+//! @trace spec:cross-platform, spec:no-terminal-flicker
 
 /// `CREATE_NO_WINDOW`. Suppresses the console a Windows child would otherwise
 /// allocate — the operator-reported "terminals popping open and closing"
