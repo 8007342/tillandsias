@@ -1476,10 +1476,38 @@ impl VmRuntime for VzRuntime {
         // 10-core Mac — see the 2026-08-17 note on that discrepancy.
         //
         // Baseline record: cheatsheets/runtime/macos-vz-guest-boot-baseline.md
+        // MEASUREMENT SEAM — NOT a scaling knob (798-q4m9 criterion 3).
+        //
+        // The sizing above stays PINNED; this does not reopen that. It exists
+        // because criterion 3 demands a bind-latency measurement on a guest
+        // constrained to ONE vCPU and explicitly refuses a multi-vCPU pass as
+        // evidence — and without a seam, producing that number requires a full
+        // signed-bundle rebuild for every measurement, which is enough friction
+        // that the honest answer becomes "not measured".
+        //
+        // Deliberately NOT read from a config file or a menu: it is unset in
+        // every normal launch, and a value outside 1..=the pinned count is
+        // ignored rather than honoured, so it can only ever CONSTRAIN the guest
+        // for a measurement — never grow it, and never make the default
+        // host-dependent (which is the property the pinned decision protects).
+        let pinned_cpu_count = std::thread::available_parallelism()
+            .map(|n| n.get().min(4))
+            .unwrap_or(2);
+        let cpu_count = std::env::var("TILLANDSIAS_VZ_CPU_COUNT_FOR_MEASUREMENT")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|n| (1..=pinned_cpu_count).contains(n))
+            .inspect(|n| {
+                eprintln!(
+                    "[tillandsias-vz] MEASUREMENT OVERRIDE: cpu_count={n} (pinned default is \
+                     {pinned_cpu_count}). This is a 798-q4m9 measurement seam, not a supported \
+                     configuration."
+                );
+            })
+            .unwrap_or(pinned_cpu_count);
+
         let spec = boot::VzBootConfig {
-            cpu_count: std::thread::available_parallelism()
-                .map(|n| n.get().min(4))
-                .unwrap_or(2),
+            cpu_count,
             memory_bytes: 4 * 1024 * 1024 * 1024,
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),

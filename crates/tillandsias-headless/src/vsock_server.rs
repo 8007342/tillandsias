@@ -674,6 +674,26 @@ pub async fn run_vsock_listener(
         port,
     };
     let mut listener = bind(&transport).await?;
+    // 798-q4m9 criterion 3: THE BIND MOMENT MUST BE OBSERVABLE, or the packet's
+    // own exit criterion cannot be met by anyone.
+    //
+    // The `info!` below has no subscriber in the guest — measured 2026-08-18:
+    // there is no `tillandsias.log` anywhere in the guest filesystem and no
+    // vsock-transport line in `journalctl -u tillandsias-headless`. So the one
+    // event the criterion asks to time left no trace at all, and an attempt to
+    // measure it instead timed the vsock PREFLIGHT line, which marks when the
+    // listener task was SPAWNED. That is the wrong quantity: `tokio::spawn`
+    // only enqueues, so issuing five spawns costs microseconds and the before/
+    // after readings were 6.624 ms and 6.605 ms — indistinguishable, and
+    // measuring nothing about when the listener actually became reachable.
+    //
+    // eprintln! rather than fixing the tracing subscriber: stderr from this
+    // unit demonstrably reaches the journal with a monotonic timestamp (the
+    // preflight line proves the path), so this is the smallest change that
+    // makes the criterion measurable. Deliberately one line, at the exact
+    // instant `bind` returns, so the timestamp means the listener is reachable
+    // and nothing else.
+    eprintln!("[tillandsias] vsock listener bound port={port}");
     info!(
         spec = "vsock-transport",
         port = port,
