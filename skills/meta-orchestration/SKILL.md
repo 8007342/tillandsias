@@ -257,8 +257,12 @@ On a durable bare-metal DEVELOPMENT host (not an ephemeral forge):
    superseded versioned images,
    the nix-lane guards on hosts with nix (`scripts/test-nix-toolbox.sh`,
    `scripts/check-nix-deps-stability.sh` — daily, not per-commit: each is a
-   flake evaluation), reap defunct delegate handles (`delegate-outcome.sh
-   sweep`), and verify the
+   flake evaluation), the enclave nix binary cache on Linux hosts with a
+   running enclave (`scripts/nix-cache-service.sh ensure` then
+   `scripts/test-nix-cache-service.sh` — order 801-kqme; serves the persistent
+   795-h8er store to the enclave so a disposable forge lands warm without any
+   host path being mounted into it), reap defunct delegate handles
+   (`delegate-outcome.sh sweep`), and verify the
    dev-environment expert containers are up + fresh (`dev_environment_experts` —
    the same ephemeral RAG experts + commit-hook RAG retraining the forge runs).
 3. Stamp the marker, NAMING what actually ran — the stamp is refused without
