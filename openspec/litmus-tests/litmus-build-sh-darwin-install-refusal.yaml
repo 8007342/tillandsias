@@ -1,0 +1,58 @@
+# @trace spec:dev-build
+# @trace order:723-whrx
+#
+# Pins build.sh's macOS host branch (order 723-whrx). Before it,
+# `grep -niE 'darwin|uname|OSTYPE'` over build.sh matched NOTHING — the file had
+# no host branch at all. On macOS `--install` built an x86_64 Linux musl
+# launcher and tried to EXECUTE it while the readiness guard reported the host
+# as ready, and `--ci-full --install` — the phased gate the release and
+# meta-orchestration runbooks treat as the strong evidence path — was therefore
+# not merely unsupported but unsupported SILENTLY. Separately `--init` executed
+# target/debug/tillandsias without ever building it, so from a clean tree it
+# failed on ANY platform, and only after require_podman had run and
+# _bump_build_version had dirtied VERSION.
+#
+# PLACEMENT IS THE PROPERTY, not the wording, which is why the ordering steps
+# carry the weight here: a refusal that fires after the version bump still
+# dirties the tree that build.sh then tells the operator not to commit.
+name: litmus:build-sh-darwin-install-refusal
+spec: dev-build
+phase: pre-build
+description: >
+  Pin build.sh: on Darwin `--install` (and `--ci-full --install`) refuses with a
+  message naming scripts/build-macos-tray.sh and leaves VERSION/Cargo.* clean;
+  the refusal is conjoined with a Darwin test so it cannot fire on Linux; and
+  `--init` builds the binary it then executes BEFORE the podman gate and the
+  version bump.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains build.sh
+  - workspace contains scripts/test-build-sh-darwin-install-refusal.sh
+  - shell utilities (bash, grep, awk) are available in PATH
+
+critical_path:
+  - step: "build.sh and the fixture parse and the fixture is executable"
+    command: "bash -n build.sh && bash -n scripts/test-build-sh-darwin-install-refusal.sh && test -x scripts/test-build-sh-darwin-install-refusal.sh && echo 'ok: parses'"
+    timeout_ms: 5000
+    expected_behavior: "ok: parses"
+
+  - step: "all fixture assertions pass (ordering everywhere; behavioural install refusal on Darwin)"
+    command: "scripts/test-build-sh-darwin-install-refusal.sh >/dev/null 2>&1 && echo 'ok: scenarios-pass' || { scripts/test-build-sh-darwin-install-refusal.sh; exit 1; }"
+    timeout_ms: 120000
+    expected_behavior: "ok: scenarios-pass"
+
+  - step: "THE REGRESSION SHAPE: the refusal precedes the first version bump, so refusing cannot leave a dirty tree"
+    command: "r=$(grep -n 'Error: --install is not supported on macOS.' build.sh | head -1 | cut -d: -f1); b=$(grep -n '^    _bump_build_version' build.sh | head -1 | cut -d: -f1); if [ -n \"$r\" ] && [ -n \"$b\" ] && [ \"$r\" -lt \"$b\" ]; then echo 'ok: refusal-before-bump'; else echo \"FAIL: refusal=$r bump=$b\"; fi"
+    timeout_ms: 8000
+    expected_behavior: "ok: refusal-before-bump"
+
+  - step: "NEGATIVE CONTROL: the refusal is conjoined with a Darwin test, so it cannot fire on Linux and strand every other host in the fleet"
+    command: "grep -q 'uname -s.*Darwin.*FLAG_INSTALL' build.sh && echo 'ok: darwin-scoped' || echo 'FAIL: refusal is not gated on Darwin AND --install'"
+    timeout_ms: 8000
+    expected_behavior: "ok: darwin-scoped"
+
+evidence:
+  artifact: "build.sh + scripts/test-build-sh-darwin-install-refusal.sh"
+  measured_on: "macOS Mac17,3 2026-08-18 — --install exit 2, no VERSION dirt; --check still exit 0"

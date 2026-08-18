@@ -264,7 +264,9 @@ test ! -e "$VM_DIR"   # the whole VM state dir (rootfs.img lives at its top leve
 
 ```powershell
 # Mirrors scripts/install-windows.ps1 -Purge (the canonical destructive path).
-& wsl --shutdown 2>$null
+& wsl --terminate tillandsias 2>$null   # NOT --shutdown: that stops every distro,
+#   including tillandsias-build, this host's Linux-artifact lane (order 802-bajv).
+#   --unregister only needs the TARGET distro stopped.
 & wsl --unregister tillandsias *>&1 | Tee-Object "$LOG_DIR/02-wsl-unregister.log"
 # Tolerate "no distro" — that just means it was already clean.
 $registered = (& wsl --list --quiet 2>$null) -contains 'tillandsias'

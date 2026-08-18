@@ -243,6 +243,7 @@ specs:
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape
   - litmus:sidecar-staleness-stamp-shape
+  - litmus:build-sh-darwin-install-refusal
   coverage_ratio: 100
   last_verified: '2026-08-16'
 - spec_id: direct-podman-calls
@@ -814,8 +815,9 @@ specs:
   - litmus:runtime-diagnostics-shape
   - litmus:runtime-diagnostics-emitter-shape
   - litmus:runtime-diagnostics-spec-mapping-shape
+  - litmus:enclave-service-health-shape
   coverage_ratio: 75
-  last_verified: '2026-05-29'
+  last_verified: '2026-08-18'
 - spec_id: runtime-diagnostics-stream
   status: active
   litmus_tests:

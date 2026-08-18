@@ -439,6 +439,45 @@ if [[ -n "$CI_SPEC_LIST" ]]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 723-whrx: --install has no macOS meaning, so say so instead of half-doing it
+# ---------------------------------------------------------------------------
+# Before this, `grep -niE 'darwin|uname|OSTYPE'` over this whole file matched
+# nothing: build.sh had no host branch at all. On macOS `--install` therefore
+# built an x86_64 Linux musl launcher and tried to EXECUTE it, while the
+# readiness guard reported the host as ready. `--ci-full --install` is the
+# phased gate the release and meta-orchestration runbooks treat as the strong
+# evidence path, so on macOS that path was not merely unsupported — it was
+# unsupported SILENTLY, which is the part that lets a "builds from scratch on
+# macOS" claim get made.
+#
+# PLACEMENT IS THE POINT, and it is why this sits here rather than beside the
+# install block. Three things downstream mutate state before the install work
+# begins: `_bump_build_version` and `_check_trace_coverage` (the FLAG_INSTALL
+# pre-gate), `_prepare_ci_full_install_inputs` on the --ci-full --install path,
+# and the main install block. Refusing at any of those still dirties VERSION
+# first, and build.sh then tells the operator not to commit the dirt it just
+# made. Refusing HERE — flags parsed, nothing done — is the only position where
+# "no Linux binary was built" and "the tree is clean" are both true.
+#
+# Deliberately NOT gated on --check/--test: those are the paths that DO work on
+# macOS and this must not touch them.
+if [[ "$(uname -s)" == "Darwin" ]] && [[ "$FLAG_INSTALL" == true ]]; then
+    cat >&2 <<'DARWIN_INSTALL_REFUSAL'
+Error: --install is not supported on macOS.
+
+  It builds an x86_64 Linux musl launcher and then tries to run it, which
+  cannot work on this host. (--ci-full --install is the same path.)
+
+  The macOS build is a signed .app bundle, not a musl binary:
+
+      scripts/build-macos-tray.sh
+
+  What DOES work here: ./build.sh --check and ./build.sh --test.
+DARWIN_INSTALL_REFUSAL
+    exit 2
+fi
+
+# ---------------------------------------------------------------------------
 # Git hooks: install them, do not merely ship them
 # ---------------------------------------------------------------------------
 # scripts/install-hooks.sh has existed for months and .git/hooks/ was EMPTY on
@@ -860,6 +899,34 @@ _stage_router_sidecar_if_compiling
 # ---------------------------------------------------------------------------
 
 if [[ "$FLAG_INIT" == true ]]; then
+    # 723-whrx: build the binary BEFORE the podman gate and the VERSION bump.
+    #
+    # This block used to execute target/debug/tillandsias without ever building
+    # it, so from a clean tree --init failed on ANY platform — but only AFTER
+    # require_podman had run and _bump_build_version had dirtied VERSION, and
+    # build.sh then tells the operator not to commit that dirt. The failure was
+    # therefore both avoidable and expensive: a missing artifact reported as a
+    # podman problem or a bare "no such file", with a dirty tree left behind.
+    #
+    # Ordering is the property being fixed, not the message. Everything that
+    # mutates state or gates on external services now happens only once the
+    # thing we are about to run is known to exist.
+    if [[ ! -x "$SCRIPT_DIR/target/debug/tillandsias" ]]; then
+        _step "target/debug/tillandsias is absent — building it first (723-whrx)..."
+        if ! cargo build -p tillandsias-headless 2>&1; then
+            _error "--init needs target/debug/tillandsias and the build failed."
+            _error "Nothing was changed: no VERSION bump, no podman calls."
+            exit 1
+        fi
+    fi
+    if [[ ! -x "$SCRIPT_DIR/target/debug/tillandsias" ]]; then
+        # Built without error yet still absent: refuse rather than fall through
+        # to a confusing exec failure three steps later.
+        _error "--init: target/debug/tillandsias is still absent after a successful build."
+        _error "Nothing was changed: no VERSION bump, no podman calls."
+        exit 1
+    fi
+
     # The only build.sh flag with a genuine, unconditional Podman need
     # (it builds every container image). Fail fast with a clear message
     # here rather than a possibly-confusing downstream Rust error.

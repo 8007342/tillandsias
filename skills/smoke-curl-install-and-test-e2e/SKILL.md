@@ -191,8 +191,27 @@ If the reset errors or leaves residue → file a finding (capability: `podman`,
 > and advisory on the other, and this is the path that tests PUBLISHED releases.
 
 On macOS, stop the tray and remove `~/Library/Application Support/tillandsias`
-and `~/Library/Caches/tillandsias`. On Windows, run `wsl --shutdown` and
+and `~/Library/Caches/tillandsias`.
+
+On Windows, stop the tray, then run `wsl --terminate tillandsias` followed by
 `wsl --unregister tillandsias`, tolerating an already-absent distro.
+
+**Use `--terminate`, NOT `wsl --shutdown` (order 802-bajv).** `--shutdown` stops
+EVERY WSL2 distro on the host, while `--unregister` only requires the target
+distro to be stopped. A Windows host commonly also runs `tillandsias-build` —
+the lane that builds Linux-target artifacts, kept deliberately separate so the
+smoke cannot wipe a toolchain mid-cycle — and a global shutdown kills it for no
+test benefit.
+
+**This step DESTROYS the model cache, and that is not a footnote (order
+806-a4tu).** On Windows the weights live at `/root/.cache/tillandsias/models`
+INSIDE the distro's `ext4.vhdx`, so `--unregister` deletes them along with the
+disk. Measured on yolanda 2026-08-17: ~447 MB of `nomic-embed-text` plus
+`qwen2.5:0.5b` had to be re-pulled after the reset. Every Windows run of this
+smoke therefore starts cold BY CONSTRUCTION. Do not describe a Windows result as
+a warm-cache run, and do not treat warm-vs-cold as a variable on this lane — it
+has exactly one value. Budget the re-pull into the run, and note that a host on a
+metered or slow link pays it every time.
 
 ---
 
