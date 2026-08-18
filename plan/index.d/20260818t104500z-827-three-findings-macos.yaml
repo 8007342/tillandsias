@@ -1,0 +1,186 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-18T10:45:00Z.
+#
+# Three findings this loop kept observing and never filed. An unfiled finding is
+# a lost finding; two of these have been reported in a handoff every cycle for
+# half a day without ever becoming a packet.
+events:
+  - packet_id: podman-sync-wait-bounded-busy-polls-two-detached-threads
+    event:
+      type: note
+      ts: "2026-08-18T10:45:00Z"
+      agent_id: macos-opus5-metal-20260818T102300Z
+      host: macos
+      summary: >
+        PREMISE CHECK BEFORE CLAIMING — the exit criterion as written cannot be
+        satisfied, and the next claimant should know before starting.
+        The criterion says wait_bounded/status_bounded must be "implemented in
+        terms of timeout(budget, cmd.output()) with kill_on_drop(true)", citing
+        backend.rs:166 as the correct shape 750 lines away. But backend.rs:166 is
+        `tokio::time::timeout(budget, cmd.output()).await` on a
+        tokio::process::Command — it is ASYNC. SyncPodmanCommand is
+        deliberately SYNC (std::process), and being sync is its entire reason for
+        existing: its own doc says it withholds output/status/spawn so "a call
+        site that forgets the deadline does not compile", which is the guarantee
+        the sync call sites get.
+        So adopting the cited shape needs a tokio runtime the API does not have.
+        The two routes both carry cost the packet does not price: introducing
+        block_on inside these helpers PANICS if any caller is reached from within
+        a runtime ("cannot start a runtime from within a runtime"), and proving
+        the whole call graph safe is itself the task — the consumers are sync fns
+        (vault_bootstrap.rs is_github_key_present, metrics container.rs
+        sample_containers, remote_projects.rs) whose own callers were not traced
+        here. The alternative, migrating those call sites to async, is a far
+        larger change than this packet's scope.
+        WORTH KNOWING TOO: the hand-rolled loop is not naive. Its comment records
+        that the threads are ABANDONED rather than joined on purpose, because
+        killing the child does not close a pipe a grandchild still holds, and
+        "the first version of this code did exactly that and hung its own test".
+        Any replacement must keep that property.
+        NOT A REFUSAL of the packet — the three hazards it names (unbounded
+        read_to_end, unreaped threads, a 20ms busy-poll) are real. It is the
+        REMEDY that needs restating: either a sync-native bound (a reader thread
+        with a capped buffer plus a parked wait, no poll loop) or an explicit
+        decision to move these call sites async. Recorded so the third pass over
+        this surface — which the packet says it wants to be the last — starts
+        from the right question.
+
+packets:
+  - packet_id: project-info-expert-down-for-thirteen-hours-unfiled
+    order: 827-rjc9
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "the project-info MCP expert has been down for 12 consecutive probes over 13 hours on macOS while forge-plan stayed up — reported every cycle, never filed"
+    deliverable: "root cause for project-info's tool-call-stage failure on macOS (or a recorded honest reason it cannot serve here), so the degraded read path is either repaired or expected"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [mcp, experts, macos, observability]
+    estimated_hours: 3
+    context: |
+      MEASURED from the health log this probe writes (order 737-zcj5), not from
+      impression:
+
+        project-info : 12 records, 12 state=down, 0 up
+        forge-plan   : 12 records,  0 state=down
+        span         : 2026-08-17T21:00:45Z -> 2026-08-18T10:23:45Z (~13.4h)
+        stage        : "tool-call" (not launch, not handshake)
+
+      Registered in .mcp.json as `images/default/config-overlay/mcp/
+      project-info.sh`. Live confirmation on the first call of the first cycle:
+      `find_files` returned "Connection closed", and the deferred-tool surface
+      then withdrew every mcp__project-info__* tool for the rest of the session.
+
+      WHY THIS IS FILED AS ITS OWN PACKET RATHER THAN LEFT IN HANDOFFS. Every
+      cycle since 2026-08-17T21:00Z has reported `mcp: health=down:project-info`
+      and emitted the `mcp_outage:` line, so the outage HAS been reaching the
+      ledger exactly as 737-zcj5 designed. But a signal that repeats identically
+      for thirteen hours stops reading as a defect and starts reading as
+      furniture — the loop's own summaries began saying "no longer a blip" and
+      then simply listing the count. The mechanism 737-zcj5 built makes an outage
+      VISIBLE; it was never meant to be where an outage LIVES. This packet is the
+      difference between observed and owned.
+
+      NOT FLEET-WIDE, WHICH NARROWS IT SHARPLY: forge-plan is served by the same
+      registration mechanism, from the same checkout, in the same sessions, and
+      has zero down records across the identical window. So this is specific to
+      project-info's own launch/serve path on macOS, not to MCP or to this host's
+      configuration in general.
+
+      DEGRADED, NOT BLOCKED — and that is why it survived unfiled. Every read
+      falls back to ./target/release/tillandsias-plan (the same binary the MCP
+      wrapper wraps) plus direct filesystem reads, both of which work, so no
+      cycle ever failed because of it. The cost is real but diffuse: the
+      mcp_first_read_path rule exists because filesystem fallback burns
+      orchestrator context, and this host has paid that on every read for half a
+      day.
+
+  - packet_id: literal-source-pins-break-correct-refactors
+    order: 827-d3dc
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: research
+    title: "survey the literal source-window pins already in the tree — three turned a CORRECT refactor red in one session, and the enforcement gate only stops NEW ones"
+    deliverable: "an inventory of source-window/literal-expression pins, each classified as (a) repairable upward to a behavioural assertion, (b) legitimately source-shaped (absence scans), or (c) obsolete; plus a recommendation, NOT a sweep"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [tests, litmus, maintainability, cross-host]
+    estimated_hours: 4
+    context: |
+      THREE INSTANCES IN ONE SESSION, all on this host, all where the CODE was
+      correct and the TEST was wrong:
+
+        1. 701-iu9b — vz_cloud_init_headless_fetch_unit_is_idempotent pinned the
+           literal `if [[ -x "$DEST" ]]; then exit 0; fi`. Growing that line into
+           a diagnostic failed the test.
+        2. 795-zshi slice 5 — github_login_preamble_pins_the_shared_lock_namespace
+           grepped the SOURCE WINDOW of github_login_main for an export literal
+           that had just moved into a shared builder.
+        3. 795-zshi slice 5 — guest_ca_preflight_never_widens_the_private_key did
+           the same for the CA chmod, across two windows.
+
+      Each was repaired UPWARD — re-expressed against the BUILT value — and each
+      repair is strictly stronger than what it replaced, because a source-window
+      grep passes on a literal that is present but never reaches the guest. That
+      is the pattern worth generalising: these pins do not merely break on
+      refactors, they were ALREADY weaker than the assertion that replaced them.
+
+      THE GAP: `litmus:litmus-expression-pinning-enforcement-shape` (order
+      634-39ik) fires on NEWLY-ADDED litmus steps that pin a literal source
+      expression without a negative control. It says nothing about the pins
+      already in the tree, and nothing about Rust unit tests using
+      include_str!/source_window at all — which is where all three of these were.
+
+      SCOPE THIS DELIBERATELY AS A SURVEY, NOT A SWEEP. Some source pins are
+      correct and must stay: the CA test's whole-file NEGATIVE scan (no path may
+      chmod the key to 644/755/…) asserts ABSENCE across a file, which cannot be
+      expressed behaviourally and does not depend on where a literal lives. A
+      blind conversion would delete real guards. The value is the classification;
+      acting on it is a separate, operator-visible decision — bar_raise_governance
+      applies, so this proposes and stops.
+
+  - packet_id: build-cache-sweep-marker-can-only-be-satisfied-by-sweeping
+    order: 827-hakc
+    status: ready
+    desired_release: v0.5
+    priority: p3
+    kind: enhancement
+    title: "build_cache_hygiene's marker arm reads 'due' forever on a host that has never swept, so the only way to satisfy it is a destructive clean the size trigger does not want"
+    deliverable: "a bootstrap path for .last-build-cache-sweep — stamp-on-evaluation when the size trigger did not fire, or an explicit first-run rule — so 'due' means something a host can act on"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [methodology, build-cache, macos]
+    estimated_hours: 2
+    context: |
+      OBSERVED EVERY CYCLE ON THIS HOST for a full day. methodology.yaml
+      build_cache_hygiene triggers a sweep on "whichever first: target/ exceeds
+      40 GiB, OR a .last-build-cache-sweep marker under the cache dir is older
+      than 14 days."
+
+      This host has NO marker at all and target/ has sat between 23.7 and
+      25.4 GiB — 40% under the size trigger — across every cycle. An absent
+      marker reads as older than 14 days, so the marker arm is TRUE
+      unconditionally and stays true until something writes the marker. But the
+      only thing the policy describes writing it is a completed `cargo clean`.
+
+      SO THE RULE, ON A NEVER-SWEPT HOST, REDUCES TO: perform a destructive clean
+      you do not need, in order to stop being told you need one. Every cycle here
+      honestly recorded `cargo-gc:deferred-end-of-cycle` or
+      `skipped-under-threshold`, which is the right call each time and also means
+      the condition never clears — a standing "due" that no correct action
+      resolves.
+
+      THE COST IS NOT THE DISK, IT IS THE SIGNAL. A daily-maintenance step that
+      is permanently due trains the reader to skip it, which is precisely the
+      failure 801-qasc built the marker to prevent one level up ("an unobservable
+      gate is indistinguishable from one that never runs, and the cheapest way to
+      satisfy it is to skip it"). A gate that can never go green teaches the same
+      lesson by the opposite route.
+
+      SMALLEST FIX SHAPE (not prescribed — the policy is the operator's):
+      stamp the marker when the trigger is EVALUATED and the size arm did not
+      fire, so the 14-day clock starts from a real evaluation rather than from a
+      clean nobody needed. That keeps both arms meaningful and makes the first
+      run on a fresh host resolve honestly.
