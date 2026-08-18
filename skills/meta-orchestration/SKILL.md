@@ -54,6 +54,29 @@ Hard rules:
    `git fetch --dry-run` reachability, the targets' named verifiable
    closures). Skip anything that builds, launches containers, or exceeds
    the budget.
+2a. **WHAT DECIDES THE VERDICT** (order 822-4vwa). Rule 2's last sentence and
+   its first are in tension INSIDE A FORGE, because a large fraction of
+   pre-build litmus needs vault, podman or vsock — none of which a forge has.
+   An agent that runs the unscoped suite there gets a near-total failure that
+   says nothing about the lane. So:
+
+   - The VERDICT is the forge SUBSTRATE: the checkout resolves and is on the
+     expected branch, the plan ledger parses, the plan/methodology experts
+     answer, and the harness came up. If those hold, the lane is healthy.
+   - Litmus results in a forge are a **REPORT**, on the same footing as the
+     credential verdict in 3a. Quote the pass rate; do NOT convert it into
+     `MO-SMOKE: FAIL` on its own.
+   - When the invoking prompt NAMES targets, their scoped closures ARE part of
+     the verdict — that is the whole point of a targeted verify.
+
+   MEASURED on macuahuitl 2026-08-18, the same prompt on the same host 25
+   minutes apart with a verified-fresh seed, disagreeing with itself:
+   run 20260818T053811Z returned `MO-SMOKE: PASS` (post-build 11/11), and run
+   20260818T063931Z returned `MO-SMOKE: FAIL litmus pre-build 0% pass rate
+   (1/252); infrastructure-dependent failures expected but unconfirmed`. The
+   second agent was right to refuse to bless what it could not confirm; the
+   first agent's PASS is the one that should worry you. A gate whose result
+   depends on how much the agent chose to run is not a gate.
 3. Budget: finish well inside ~5 minutes of wall time.
 3a. The **Credential Channel Guard is a REPORT here, never a gate** (order
    818-cgpn). That guard is a precondition for COMMITTABLE work, and rule 1
