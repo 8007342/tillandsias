@@ -8,7 +8,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Schema version for capabilities.json per spec:accel-capability-probe
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// 2 (order 808-43mw) adds host identity to `HostInfo` and workload/locus
+/// labels to `MeasurementRecord`. Bumped rather than added silently because
+/// `load_or_probe` uses this to decide a cached document is still describable
+/// — a v1 cache has no `host_id`, and re-probing is cheaper than reasoning
+/// about a document that cannot name itself.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Derived document describing host execution devices, engine availability, and measurements.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -67,6 +73,37 @@ pub struct MeasurementRecord {
     pub joules_per_token: Option<f64>,
     pub degraded: bool,
     pub degraded_reason: Option<String>,
+
+    /// Which workload produced these numbers (order 808-43mw).
+    ///
+    /// `scripts/bench-accel-lane.sh` ALREADY KNOWS this — it stamps
+    /// `workload_suite: "802-2536-v1"` onto its own stdout JSON — and then
+    /// drops it when it pipes a record to `--record-measurement`, because
+    /// this struct had nowhere to put it. The label existed upstream and
+    /// downstream and was discarded in the middle, so every number in a
+    /// capability document was unattributable to the workload that produced
+    /// it. Comparing two such numbers is not a comparison.
+    ///
+    /// `Option` + `serde(default)`, NOT required: `--record-measurement`
+    /// must keep accepting the payload the bench sends TODAY, or a host
+    /// running this binary against the current script silently stops
+    /// recording. Widening the reader is the compatible half of the change;
+    /// teaching the writer to send it is the other half, and belongs with
+    /// the script, not here.
+    #[serde(default)]
+    pub workload_suite: Option<String>,
+
+    /// WHERE the measurement ran, e.g. `in-guest`, `host-side-via-mirror`
+    /// (order 808-43mw; motivated by the measurement in 810-jeg7).
+    ///
+    /// This host measured the same suite at two loci and the hop cost 5-10%
+    /// on the embed arm — the same order as the cross-host differences the
+    /// fleet matrix exists to detect. It did not merely add noise: it
+    /// INVERTED a reported conclusion, because two errors happened to
+    /// cancel. A row without a locus is not under-annotated, it is
+    /// potentially wrong in a way no consumer can see.
+    #[serde(default)]
+    pub locus: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -74,7 +111,75 @@ pub struct MeasurementRecord {
 pub struct HostInfo {
     pub is_battery_present: bool,
     pub kernel_release: String,
+
+    /// WHICH MACHINE this document describes (order 808-43mw).
+    ///
+    /// Without it a CapabilityDocument cannot say whose capabilities it
+    /// reports, which blocks the fleet matrix outright: 808-7yrd folds
+    /// `host_id -> LWW-Register(document)`, so this is the FOLD KEY. There is
+    /// no matrix without it.
+    ///
+    /// `kernel_release` is not a substitute and the reason is measurable: two
+    /// WSL2 guests share `6.18.33.2-microsoft-standard-WSL2` exactly. Keying
+    /// on it would silently merge two machines' rows into one, and LWW would
+    /// then arbitrate between hosts that are not in conflict — turning a
+    /// design whose whole point is "single writer per key by construction"
+    /// into one that quietly drops half the fleet.
+    ///
+    /// NOT A NEW NAMING SCHEME. This is the identifier the fleet already
+    /// uses: `scripts/agent-identity.sh`'s `tillandsias_node_name` (short
+    /// hostname, lowercased), the same string that names
+    /// `plan/mo-full-attestations.d/<host>.md`. Minting a second name for a
+    /// machine that already has one would mean the matrix and the ledger
+    /// disagree about who a host is.
+    pub host_id: String,
+
+    /// How `host_id` was determined: `input` or `node-name`.
+    ///
+    /// The packet's complaint is SILENT collision, so a consumer must be able
+    /// to distinguish a host that was NAMED from one whose name was inferred
+    /// and might collide. Recording only the value would reproduce the
+    /// original defect one level up.
+    ///
+    /// Measured on this host: WSL2 inherits the Windows machine name, so the
+    /// guest's `uname -n` is `Yolanda` — the derived chain agrees with the
+    /// Windows side for free. That is a DEFAULT, not a guarantee:
+    /// `/etc/wsl.conf`'s `network.hostname` can override it, at which point
+    /// a guest-produced row would file itself under a second key for the same
+    /// machine. `input` is how an operator forecloses that.
+    pub host_id_source: String,
+
+    /// OS family of the EXECUTION CONTEXT that produced this document:
+    /// `linux` | `windows` | `macos`. A consumer folding the matrix reads
+    /// documents produced elsewhere, so it cannot use its own `cfg!` to tell
+    /// what it is looking at.
+    ///
+    /// READ THE NAME CAREFULLY — this is the context, not the machine, and on
+    /// Windows those differ. Measured on yolanda 2026-08-18: the probe runs
+    /// inside the WSL2 guest and reports `host_kind: "linux"` on a machine
+    /// whose hardware spec is a Windows laptop's. That is not a defect in this
+    /// field; it is 809-7e4m's two-execution-context finding arriving in the
+    /// schema, and the field's value is that it now makes the split VISIBLE
+    /// instead of leaving a Windows row indistinguishable from a Linux one.
+    ///
+    /// Deliberately NOT resolved here by inventing a `windows-wsl2` term. The
+    /// guest could detect WSL2 from `kernel_release` and relabel itself, but a
+    /// guess made by the context that cannot see the NPU or the machine's real
+    /// RAM (the guest reports its 7.3 GB VM slice against 15.2 GB installed)
+    /// would be a confident half-answer. The correct fix is the host-side
+    /// contribution 809-7e4m specifies, which knows rather than infers.
+    pub host_kind: String,
 }
+
+/// The env INPUT that names this machine, overriding the derived chain.
+///
+/// Deliberately the same shape as `TILLANDSIAS_INFERENCE_TIER`: identity, like
+/// the tier, is an input corroborated against the machine rather than derived
+/// from it. On Windows a single capability row spans two execution contexts
+/// (809-7e4m), and the context that can see the NPU is not the one that runs
+/// this probe — so the two contributions must agree on a name that neither is
+/// solely entitled to invent.
+pub const HOST_ID_ENV: &str = "TILLANDSIAS_HOST_ID";
 
 // @trace spec:accel-capability-probe
 pub fn capabilities_cache_path() -> PathBuf {
@@ -560,10 +665,86 @@ fn enumerate_host() -> HostInfo {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
+    let (host_id, host_id_source) = resolve_host_id();
+
     HostInfo {
         is_battery_present: battery,
         kernel_release: kernel,
+        host_id,
+        host_id_source,
+        host_kind: host_kind().to_string(),
     }
+}
+
+// @trace spec:accel-capability-probe
+/// Map the compile target onto the fleet's host vocabulary (order 808-43mw).
+///
+/// The ledger already speaks `linux` / `windows` / `macos`, so the matrix uses
+/// those rather than Rust's `macos`-vs-`darwin` spelling of the same idea.
+fn host_kind() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "macos"
+    } else if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "linux") {
+        "linux"
+    } else {
+        std::env::consts::OS
+    }
+}
+
+// @trace spec:accel-capability-probe
+/// Normalise a node name the way the fleet's shell probe does (order 808-43mw).
+///
+/// Strip the domain and lowercase — the same two steps `tillandsias_node_name`
+/// applies with bash builtins. Kept as a pure function so the agreement with
+/// the shell chain is testable without a matching hostname.
+fn normalize_node_name(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    let short = trimmed.split('.').next().unwrap_or("");
+    if short.is_empty() {
+        return None;
+    }
+    Some(short.to_ascii_lowercase())
+}
+
+// @trace spec:accel-capability-probe
+/// Resolve `(host_id, host_id_source)` — the input first, then the fleet chain.
+///
+/// The fallback order mirrors `scripts/agent-identity.sh` deliberately:
+/// `hostname` -> `uname -n` -> `/etc/hostname`. It is NOT a fresh guess at how
+/// to name a machine; agreeing with the shell probe is the point, because the
+/// matrix key and the attestation ledger's filename must be the same string.
+///
+/// Returns `unknown` rather than an empty string when nothing answers. An empty
+/// host_id would fold as a legitimate key and silently collect every
+/// unidentifiable host into one row — the exact collision this field exists to
+/// prevent, reintroduced through the error path.
+fn resolve_host_id() -> (String, String) {
+    if let Ok(v) = std::env::var(HOST_ID_ENV)
+        && let Some(id) = normalize_node_name(&v)
+    {
+        return (id, "input".to_string());
+    }
+
+    // `hostname -s` is deliberately NOT tried: order 743-mgf3 measured it
+    // rejected under MSYS, and the shell probe dropped it for that reason.
+    for (prog, args) in [("hostname", &[][..]), ("uname", &["-n"][..])] {
+        if let Ok(out) = Command::new(prog).args(args).output()
+            && out.status.success()
+            && let Some(id) = normalize_node_name(&String::from_utf8_lossy(&out.stdout))
+        {
+            return (id, "node-name".to_string());
+        }
+    }
+
+    if let Ok(content) = fs::read_to_string("/etc/hostname")
+        && let Some(id) = normalize_node_name(&content)
+    {
+        return (id, "node-name".to_string());
+    }
+
+    ("unknown".to_string(), "unknown".to_string())
 }
 
 // @trace spec:accel-capability-probe
@@ -775,6 +956,9 @@ mod tests {
             host: HostInfo {
                 is_battery_present: false,
                 kernel_release: "test".to_string(),
+                host_id: "test-host".to_string(),
+                host_id_source: "input".to_string(),
+                host_kind: "linux".to_string(),
             },
             timestamp: "1970-01-01T00:00:00Z".to_string(),
         }
@@ -1108,5 +1292,246 @@ mod tests {
         };
         assert!(!metal_device.lanes.contains(&"container".to_string()));
         assert!(metal_device.lanes.contains(&"host-native".to_string()));
+    }
+
+    // ---- order 808-43mw: host identity and measurement labelling ----
+
+    /// THE COMPATIBILITY GUARD, and the reason the new fields are optional.
+    ///
+    /// This is byte-for-byte the payload `scripts/bench-accel-lane.sh` pipes
+    /// into `--record-measurement` today (its `jq -nc` object, same key order).
+    /// That script belongs to another host. If widening this struct made the
+    /// current payload unparseable, the first host to run a new binary against
+    /// the unchanged script would stop recording measurements — and would do it
+    /// QUIETLY, because the script's own `|| echo note:...record-failed` arm
+    /// keeps the bench exiting 0.
+    #[test]
+    fn todays_bench_payload_still_deserializes() {
+        let payload = r#"{"device":"cpu","engine":"ollama","prefill_tps":1024.5,
+            "decode_tps":87.2,"joules_per_token":null,"degraded":false,
+            "degraded_reason":null}"#;
+
+        let rec: MeasurementRecord =
+            serde_json::from_str(payload).expect("the CURRENT bench payload must still parse");
+
+        assert_eq!(rec.device, "cpu");
+        assert_eq!(rec.engine, "ollama");
+        assert_eq!(
+            rec.workload_suite, None,
+            "an unlabelled record must read as UNLABELLED, never as a default suite"
+        );
+        assert_eq!(rec.locus, None, "same for locus: absent is not a value");
+    }
+
+    /// And a labelled payload round-trips, so the writer has something to aim at.
+    #[test]
+    fn a_labelled_measurement_round_trips() {
+        let rec = MeasurementRecord {
+            device: "cpu".to_string(),
+            engine: "ollama".to_string(),
+            prefill_tps: Some(1024.5),
+            decode_tps: Some(87.2),
+            joules_per_token: None,
+            degraded: false,
+            degraded_reason: None,
+            workload_suite: Some("802-2536-v1".to_string()),
+            locus: Some("in-guest".to_string()),
+        };
+        let json = serde_json::to_string(&rec).expect("serializes");
+        let back: MeasurementRecord = serde_json::from_str(&json).expect("round-trips");
+        assert_eq!(back, rec);
+    }
+
+    /// A v1 document has no host_id, so it must be REJECTED rather than read
+    /// as a host whose name happens to be empty. `load_or_probe` treats a parse
+    /// failure as "re-probe", which is the correct outcome: a document that
+    /// cannot name itself is not a row the matrix can accept.
+    #[test]
+    fn a_v1_document_without_host_identity_is_refused() {
+        let v1 = r#"{"schema_version":1,"legacy_tier":"cpu","devices":[],
+            "engines":[],"measurements":[],
+            "host":{"is_battery_present":false,"kernel_release":"6.18.33.2-microsoft-standard-WSL2"},
+            "timestamp":"1970-01-01T00:00:00Z"}"#;
+        assert!(
+            serde_json::from_str::<CapabilityDocument>(v1).is_err(),
+            "a document with no host_id must not deserialize into one with a blank host_id"
+        );
+    }
+
+    /// Two WSL2 guests share a kernel release EXACTLY — measured, not assumed:
+    /// this host's guest reports `6.18.33.2-microsoft-standard-WSL2`, and so
+    /// does any other guest on the same WSL kernel. This test states why
+    /// `kernel_release` could not have been the fold key.
+    #[test]
+    fn kernel_release_does_not_distinguish_two_wsl2_hosts() {
+        let shared = "6.18.33.2-microsoft-standard-WSL2".to_string();
+        let a = HostInfo {
+            is_battery_present: false,
+            kernel_release: shared.clone(),
+            host_id: "yolanda".to_string(),
+            host_id_source: "node-name".to_string(),
+            host_kind: "linux".to_string(),
+        };
+        let b = HostInfo {
+            host_id: "esmeraldinha".to_string(),
+            ..a.clone()
+        };
+        assert_eq!(a.kernel_release, b.kernel_release, "the collision is real");
+        assert_ne!(a.host_id, b.host_id, "and host_id is what separates them");
+    }
+
+    #[test]
+    fn node_names_are_shortened_and_lowercased() {
+        assert_eq!(normalize_node_name("Yolanda").as_deref(), Some("yolanda"));
+        assert_eq!(
+            normalize_node_name("YOGA.localdomain\n").as_deref(),
+            Some("yoga"),
+            "the domain is stripped, matching the shell probe"
+        );
+        assert_eq!(normalize_node_name("  \n ").as_deref(), None);
+        assert_eq!(normalize_node_name(".leading-dot").as_deref(), None);
+    }
+
+    /// The INPUT wins over the derived chain, and is normalised on the way in —
+    /// otherwise `TILLANDSIAS_HOST_ID=Yolanda` and a derived `yolanda` would be
+    /// two keys for one machine, which is the defect this field exists to fix.
+    #[test]
+    fn the_input_overrides_the_derived_name_and_is_normalised() {
+        let prev = std::env::var_os(HOST_ID_ENV);
+        unsafe { std::env::set_var(HOST_ID_ENV, "Esmeraldinha.LOCAL") };
+        let (id, source) = resolve_host_id();
+        match prev {
+            Some(v) => unsafe { std::env::set_var(HOST_ID_ENV, v) },
+            None => unsafe { std::env::remove_var(HOST_ID_ENV) },
+        }
+        assert_eq!(id, "esmeraldinha");
+        assert_eq!(source, "input");
+    }
+
+    /// Whatever this machine is, the probe must produce a usable key: never
+    /// empty, always lowercase, and always with a source that says how it was
+    /// obtained.
+    #[test]
+    fn the_probe_always_yields_a_foldable_key() {
+        let prev = std::env::var_os(HOST_ID_ENV);
+        unsafe { std::env::remove_var(HOST_ID_ENV) };
+        let (id, source) = resolve_host_id();
+        if let Some(v) = prev {
+            unsafe { std::env::set_var(HOST_ID_ENV, v) }
+        }
+        assert!(
+            !id.is_empty(),
+            "an empty key would fold every unknown host into one row"
+        );
+        assert_eq!(id, id.to_ascii_lowercase());
+        assert!(
+            ["input", "node-name", "unknown"].contains(&source.as_str()),
+            "unexpected host_id_source {source}"
+        );
+    }
+
+    /// `host_kind` speaks the ledger's vocabulary, not Rust's — the ledger says
+    /// `macos`, `std::env::consts::OS` says `macos` too but only by luck of
+    /// spelling, and a consumer folding the matrix must not have to know which.
+    #[test]
+    fn host_kind_uses_the_ledgers_vocabulary() {
+        assert!(
+            ["linux", "windows", "macos"].contains(&host_kind()),
+            "host_kind() returned {} which is not a fleet host vocabulary term",
+            host_kind()
+        );
+    }
+
+    /// PINS THE KNOWN GAP so it cannot be mistaken for a bug later, and so the
+    /// day someone fixes it the test says what changed.
+    ///
+    /// A document produced inside a WSL2 guest carries `host_kind: "linux"`
+    /// while describing a machine whose spec is a Windows laptop's. The pair
+    /// (kernel_release says WSL2, host_kind says linux) is currently the ONLY
+    /// in-document signal that a row was observed from a guest — it is not a
+    /// substitute for the host-side contribution 809-7e4m specifies, and this
+    /// test asserts the gap rather than pretending it is closed.
+    #[test]
+    fn a_wsl2_row_cannot_yet_say_its_machine_is_windows() {
+        let guest_row = HostInfo {
+            is_battery_present: true,
+            kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
+            host_id: "yolanda".to_string(),
+            host_id_source: "node-name".to_string(),
+            host_kind: "linux".to_string(),
+        };
+        assert!(
+            guest_row.kernel_release.contains("microsoft-standard-WSL2"),
+            "the kernel is the only hint the context is a guest"
+        );
+        assert_eq!(
+            guest_row.host_kind, "linux",
+            "KNOWN GAP (809-7e4m): the context is linux, the machine is windows"
+        );
+    }
+
+    /// 808-43mw's `verifiable_closure`, executed rather than asserted:
+    /// "a capability document round-trips a host_id, and a measurement carries
+    /// suite + locus; two documents from different loci are machine-
+    /// distinguishable without reading any prose".
+    #[test]
+    fn closure_808_43mw_documents_are_machine_distinguishable_by_host_and_locus() {
+        let measured_at = |host: &str, locus: &str| CapabilityDocument {
+            schema_version: SCHEMA_VERSION,
+            legacy_tier: "cpu".to_string(),
+            devices: Vec::new(),
+            engines: Vec::new(),
+            measurements: vec![MeasurementRecord {
+                device: "cpu".to_string(),
+                engine: "ollama".to_string(),
+                prefill_tps: Some(1024.0),
+                decode_tps: Some(87.0),
+                joules_per_token: None,
+                degraded: false,
+                degraded_reason: None,
+                workload_suite: Some("802-2536-v1".to_string()),
+                locus: Some(locus.to_string()),
+            }],
+            host: HostInfo {
+                is_battery_present: true,
+                kernel_release: "6.18.33.2-microsoft-standard-WSL2".to_string(),
+                host_id: host.to_string(),
+                host_id_source: "node-name".to_string(),
+                host_kind: "linux".to_string(),
+            },
+            timestamp: "1970-01-01T00:00:00Z".to_string(),
+        };
+
+        // (a) the document round-trips its host_id through JSON
+        let yolanda = measured_at("yolanda", "in-guest");
+        let json = serde_json::to_string(&yolanda).expect("serializes");
+        let back: CapabilityDocument = serde_json::from_str(&json).expect("round-trips");
+        assert_eq!(back, yolanda);
+        assert_eq!(back.host.host_id, "yolanda");
+
+        // (b) the measurement carries suite AND locus
+        let m = &back.measurements[0];
+        assert_eq!(m.workload_suite.as_deref(), Some("802-2536-v1"));
+        assert_eq!(m.locus.as_deref(), Some("in-guest"));
+
+        // (c) two documents at different loci differ in a MACHINE-READABLE
+        //     field — not merely in a comment a human has to notice.
+        let mirrored = measured_at("yolanda", "host-side-via-mirror");
+        assert_eq!(
+            yolanda.host.host_id, mirrored.host.host_id,
+            "same machine, so the fold key must agree"
+        );
+        assert_ne!(
+            yolanda.measurements[0].locus, mirrored.measurements[0].locus,
+            "and the locus is what tells a consumer these are not comparable"
+        );
+
+        // (d) and two machines sharing a kernel remain separable
+        let esmeraldinha = measured_at("esmeraldinha", "in-guest");
+        assert_eq!(
+            yolanda.host.kernel_release,
+            esmeraldinha.host.kernel_release
+        );
+        assert_ne!(yolanda.host.host_id, esmeraldinha.host.host_id);
     }
 }
