@@ -65,7 +65,9 @@ critical_path:
   - step: "the citation is kind=methodology and carries a resolvable line range"
     # A citation without a LINE RANGE is unverifiable — file-level citations
     # are the classic way a citation system becomes unfalsifiable.
-    command: "test \"$(jq -r '.citations[0] | keys | join(\",\")' /tmp/.litmus-394c-env.json)\" = 'authority,kind,line_end,line_start,path' && test \"$(jq -r '.citations[0].kind' /tmp/.litmus-394c-env.json)\" = 'methodology' && jq -e '.citations[0].line_start >= 1 and .citations[0].line_end >= .citations[0].line_start' /tmp/.litmus-394c-env.json >/dev/null && test \"$(jq -r '.confidence' /tmp/.litmus-394c-env.json)\" = 'exact' && echo 'ok: methodology-citation-shape'"
+    # ORDER 801-g9nn added `commit` — the frame the span was read in, without
+    # which a line range is only meaningful to whoever produced it.
+    command: "test \"$(jq -r '.citations[0] | keys | join(\",\")' /tmp/.litmus-394c-env.json)\" = 'authority,commit,kind,line_end,line_start,path' && test \"$(jq -r '.citations[0].kind' /tmp/.litmus-394c-env.json)\" = 'methodology' && jq -e '.citations[0].line_start >= 1 and .citations[0].line_end >= .citations[0].line_start' /tmp/.litmus-394c-env.json >/dev/null && test \"$(jq -r '.citations[0].commit' /tmp/.litmus-394c-env.json)\" = \"$(git rev-parse HEAD)\" && test \"$(jq -r '.confidence' /tmp/.litmus-394c-env.json)\" = 'exact' && echo 'ok: methodology-citation-shape'"
     timeout_ms: 15000
     expected_behavior: "ok: methodology-citation-shape"
 

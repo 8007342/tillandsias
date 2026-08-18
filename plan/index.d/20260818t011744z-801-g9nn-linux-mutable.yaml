@@ -1,0 +1,208 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18, fork on 801-g9nn.
+#
+# Citations now name the frame they were read in, and the reader's position is
+# DERIVED from the commit graph rather than assumed. The packet's own premise
+# about a mirror-maintained monotonic epoch did not survive checking, and that
+# correction is recorded below — it is the reason no epoch was carried.
+status:
+  - packet_id: expert-citations-must-carry-a-version-the-caller-can-compare
+    field: status
+    value: completed
+    ts: "2026-08-18T01:17:44Z"
+    host: linux_mutable
+
+events:
+  - packet_id: expert-citations-must-carry-a-version-the-caller-can-compare
+    event:
+      type: completed
+      ts: "2026-08-18T01:17:44Z"
+      agent_id: fork-801g9nn-20260818T0117Z
+      host: linux_mutable
+      summary: >
+        DELIVERED — every citation carries `commit`, the commit whose blob its
+        span was extracted from; `verify-answer` DERIVES the reader's position
+        from the commit DAG and reports it from a closed vocabulary
+        same | behind | ahead | diverged | unfetched | unknown; and a citation
+        the reader cannot resolve is now separated from a fabricated one by
+        re-reading its span AT THE COMMIT IT NAMES. THE SHAPE. New module
+        crates/tillandsias-plan/src/gitref.rs owns the DAG plumbing (GitView,
+        Relation, classify) and is fail-soft everywhere — no git, no repository,
+        or an unfetched object yields Unknown/Unfetched and never a plausible
+        guess. answer.rs gains Citation.commit (additive, absent when unknown),
+        Envelope.caller_relation {caller_head, answer_commit, relation, drifted,
+        absent_here}, and `audit()`, which is `verify()` plus the frame. verify()
+        itself is UNCHANGED in behaviour and stays subprocess-free: the emitter
+        answers out of the tree it just read and needs no DAG. THE RESCUE IS THE
+        POINT: a citation whose path is missing, or whose range runs past EOF, or
+        whose span says something else, is reported as STALE with the commit at
+        which it verifies instead of as FABRICATED — measured on this repository,
+        a real plan_answer envelope read from a checkout 400 commits back went
+        from "REFUSED: FABRICATED citation" to "stale ... caller-relation: behind
+        ... but the span VERIFIES at 471b277f0afb", rc 1 -> 3. Exit 3 is its own
+        code deliberately: 0 lets a reader open line numbers that are not there,
+        1 throws away a correct answer along with the fetch instruction that
+        fixes it. THE SHARED-INDEX HALF: spec-index-ensure.sh now records the
+        build commit in each published entry's `.commit`, forge-plan.sh passes it
+        as `spec-envelope --corpus-commit`, and that frame BEATS the reading
+        process's HEAD — proven end to end, index commit 51dbb6d8 stamped onto a
+        citation while the process sat at 471b277f0. 801-a2by's closure said this
+        packet's hazard was live; it is now labelled.
+      evidence_refs:
+        - "crates/tillandsias-plan/src/gitref.rs (new) — GitView/Relation/classify; 7 unit tests over REAL temp repos with a real DAG"
+        - "crates/tillandsias-plan/src/answer.rs — Citation.commit, CallerRelation, relate(), frame_holds(), audit(); 176 lib tests green"
+        - "crates/tillandsias-plan/src/main.rs — verify-answer runs audit(), exit 3 for stale; spec-envelope --corpus-commit; TILLANDSIAS_CALLER_HEAD stamp"
+        - "scripts/spec-index-ensure.sh — publishes .commit with each entry; header gap note replaced with what now closes it"
+        - "images/default/config-overlay/mcp/forge-plan.sh — reads $SPEC_INDEX_DIR/.commit, hostile values dropped not passed"
+        - "openspec/litmus-tests/litmus-citation-frame-and-caller-relation.yaml (new, bound under forge-environment-discoverability)"
+        - "openspec/specs/forge-environment-discoverability/spec.md — new Requirement + 4 scenarios"
+        - "litmus forge-environment-discoverability pre-build/quick: PASS 22, FAIL 0 (was 21 before this packet)"
+        - "10 mutation controls, each red-then-green with the restored file byte-identical"
+        - "LIVE on this repo: envelope from 471b277f0 verified at 679e4925 -> rc=3 stale/behind; same envelope with the frame stripped -> rc=1 FABRICATED"
+        - "worked relations against real commits: same rc=0, behind rc=3, ahead rc=3, diverged rc=3, unfetched rc=0+caution"
+        - "./build.sh --check rc=0, gate stamp recorded; audit-guard-activation total=51 active=51 orphan=0"
+  - packet_id: expert-citations-must-carry-a-version-the-caller-can-compare
+    event:
+      type: note
+      ts: "2026-08-18T01:17:45Z"
+      agent_id: fork-801g9nn-20260818T0117Z
+      host: linux_mutable
+      summary: |
+        CORRECTION TO THIS PACKET'S OWN PREMISE, and it is the reason no epoch
+        was carried. Do not re-file the epoch on the stated grounds.
+
+        THE PACKET SAYS: "a mirror-maintained monotonic EPOCH ... is not a new
+        invention here: the mirror already publishes
+        refs/tillandsias/upstream-auth/<state>/<epoch> (756-2jnj), so a
+        monotonic counter over ref updates is established practice in this
+        codebase."
+
+        OBSERVED, by reading the producer: that is wrong on both counts.
+          * The <epoch> is a WALL CLOCK, not a counter. Its single producer is
+            images/git/probe-upstream-auth.sh:78 — `EPOCH="$(date -u +%s)"` —
+            assigned once at process start and never incremented.
+          * It counts NOTHING about refs. It is a credential-authorization
+            verdict stamp, scoped to <state> ∈ authorized | denied |
+            no-credential | local-only | error. publish() at :83-98 writes the
+            new ref and then DELETES every older one, so exactly one exists at a
+            time and there is no sequence to count over even by accident. Its
+            only consumer, scripts/check-credential-channel.sh:139-141, uses it
+            purely as an age bound (now - best_epoch > 900s -> stale).
+
+        AND THERE IS NO OTHER ONE. Swept scripts/, images/ and crates/ for a
+        monotonic counter describing the repo corpus or mirror ref generation:
+        relay-refs.sh's "generation" is a Vault token generation;
+        post-receive-hook.sh counts refs per push and discards the number;
+        control-wire's `seq` is per-connection request correlation;
+        spec-index-ensure.sh's fingerprint is content-addressed and explicitly
+        NOT monotonic. The git daemon advertises refs/heads/*, refs/tags/* and
+        the single verdict ref — a client can only ls-remote and compare shas
+        itself. The observability surface that would carry an ordering position
+        is documented as unbuilt in
+        cheatsheets/concurrent-git/git-mirror-managed-alternatives.md:37,101-106.
+
+        SO THE EPOCH WAS DELIBERATELY NOT CARRIED. Reading a ref no producer
+        writes is a dead mechanism with a live intent, and reusing the
+        credential verdict's timestamp as a corpus version would put a number in
+        the envelope that means something else entirely. The honest substitute
+        is already in this change and is strictly stronger: the exact commit,
+        plus a relationship derived from the graph. A human-readable monotonic
+        version still wants a WRITER in the mirror; that is a separate packet
+        with a real deliverable, not a field this one could have filled.
+      evidence_refs:
+        - "images/git/probe-upstream-auth.sh:78 EPOCH=$(date -u +%s); :83-98 publish() writes then prunes every older ref"
+        - "images/git/probe-upstream-auth.sh:25-27 — <epoch> documented as the probe's unix time for staleness bounding"
+        - "scripts/check-credential-channel.sh:139-141 — the only consumer, uses it as an age bound"
+        - "cheatsheets/concurrent-git/git-mirror-managed-alternatives.md:37,101-106 — per-ref ordering observability is proposed, not implemented"
+  - packet_id: expert-citations-must-carry-a-version-the-caller-can-compare
+    event:
+      type: note
+      ts: "2026-08-18T01:17:46Z"
+      agent_id: fork-801g9nn-20260818T0117Z
+      host: linux_mutable
+      summary: |
+        MUTATION CONTROLS, THE ONE THAT WAS VACUOUS, AND WHAT I LEFT.
+
+        TEN CONTROLS. Each broke one claim, showed red, restored, and the
+        restored file was sha256-identical to its backup before the green re-run.
+          1. Swap Behind/Ahead in classify -> the four-relation DAG test red.
+          2. Delete the has_commit(answer) test -> the unfetched test red. This
+             is the one that keeps "you never fetched this" from silently
+             becoming "diverged", a verdict git never computed.
+          3. frame_holds -> always Some(true) -> the laundering control red.
+          4. frame_holds -> always None -> the future-citation test red.
+          5. Measure drift against the reader's HEAD commit instead of the
+             working tree -> the uncommitted-edit test red.
+          6. Disable the stamped-relation cross-check -> the tamper test red.
+          7. Serialize `commit` unconditionally -> the byte-compatibility test
+             red (this is what protects six exact-key-set pins elsewhere).
+          8. frame_holds returns Some(true) for an out-of-range span -> the
+             past-EOF-at-its-own-commit test red.
+          9. Disable the shrank-file rescue -> the shrank test red.
+         10. Make freshness take .parent() unconditionally -> the nested-checkout
+             test red.
+
+        CONTROL 8 IS RECORDED BECAUSE IT SURVIVED THE FIRST TIME, exactly the
+        trap the prompt warned about. My laundering control cited lines 1-2 of a
+        two-line file, so the out-of-range branch INSIDE the rescue was never
+        reached: I could flip it to "any span git cannot slice is fine" with the
+        whole suite green. Two tests were added to reach it — a range past EOF at
+        the commit it names (must stay a violation) and a file that genuinely
+        shrank (must be rescued) — and only then did the mutation bite. A rescue
+        is only as strong as its narrowest untested path.
+
+        A PRE-EXISTING BUG FOUND BY RUNNING IT RATHER THAN READING IT.
+        Freshness::for_source() took .parent() unconditionally, so a CHECKOUT
+        ROOT resolved one directory above itself. For spec::build_envelope, which
+        passes the root, that meant `unknown` in the ordinary case — and, here,
+        the WRONG REPOSITORY's HEAD: running in a linked worktree nested under
+        its main checkout, the spec expert stamped freshness.source_commit with
+        the main checkout's b2bb9cfd while sitting at 471b277f0. Nothing was red;
+        the sha was real and named another repository. Fixed, with a test that
+        builds a genuinely nested repo. This matters to this packet directly:
+        the per-citation frame falls back to freshness.source_commit, so a wrong
+        source_commit would have made the new relation confidently wrong.
+
+        OBSERVED VS INFERRED. Observed: every relation above, on real commits,
+        with rc captured on its own line; the .commit round trip through
+        spec-envelope; the 400-commit live case on this repository. Inferred and
+        NOT yet tested — name it first if this is picked up: that a forge's
+        in-image forge-plan.sh will pass --corpus-commit correctly once baked. I
+        exercised the reader's flag-assembly logic directly (good sha, trailing
+        newline, "not-a-sha; rm -rf /", "--upload-pack=/bin/sh", empty — only the
+        first two produce flags) but did NOT bake an image or run a full
+        spec-index publish, because a cold publish is an embedding pass against
+        an endpoint 811-28eh reports as intermittently dying mid-workload, and
+        the existing entries are fingerprint hits that never re-enter the publish
+        path.
+
+        WHAT I DELIBERATELY LEFT.
+          * NO EPOCH, and not for lack of effort — see the correction note. It
+            needs a writer in the mirror, which is a separate packet.
+          * caller_relation is NOT injected into the answer PROSE. The structural
+            field plus verify-answer's rendered line carry it. Rewriting the
+            answer text would perturb envelopes that several litmus steps pin by
+            content, for a benefit the reader already gets.
+          * verify() keeps its old, frame-blind, subprocess-free behaviour. Only
+            the reader-side audit() consults git. This is what let every existing
+            envelope test and all six shell-built envelopes stay green.
+          * The emitter stamps caller_relation ONLY when the reader supplies
+            TILLANDSIAS_CALLER_HEAD, and omits the field otherwise rather than
+            defaulting to `same`. An expert cannot see its caller; a default
+            would manufacture the exact false assurance this packet removes.
+          * The emitter's stamp carries ancestry only, with both file lists
+            empty. Drift is a property of the READER's working tree, which the
+            emitter has never seen; filling those lists from its own tree would
+            produce an empty, reassuring, meaningless answer.
+          * No forge image bake. forge-plan.sh's --corpus-commit pass-through is
+            image content and lands with the next bake (743-y5wh timing class,
+            the same hold 801-a2by took). The deliverable itself — the envelope
+            contract in tillandsias-plan — is live on every host now, and an
+            un-baked forge simply omits the flag and serves a frameless entry
+            exactly as it did before.
+      evidence_refs:
+        - "10/10 mutation controls PASS: mutated_rc=101 restored_rc=0 byte_identical=yes for each"
+        - "control 8 survived its first draft; two tests added to reach the branch, then it reddened"
+        - "Freshness bug: nested worktree stamped b2bb9cfd (main checkout) while HEAD was 471b277f0; fixed + regression test"
+        - "reader flag assembly over 5 inputs incl. 'not-a-sha; rm -rf /' and '--upload-pack=/bin/sh' -> flags=[] for all hostile values"
+        - "gitref::looks_like_sha refuses ref names, the literal 'unknown', and anything non-hex before it can become an argv"
