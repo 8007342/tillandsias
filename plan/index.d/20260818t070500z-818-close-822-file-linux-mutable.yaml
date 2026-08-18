@@ -1,0 +1,99 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T07:05:00Z.
+#
+# Closes 818-cgpn on the live evidence it was held open for, and files the
+# failure mode that removing that gate revealed underneath it.
+packets:
+  - packet_id: forge-smoke-verdict-depends-on-how-much-the-agent-chose-to-run
+    order: 822-4vwa
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "the forge smoke lane's verdict is not reproducible — the same prompt on the same host passed once and failed at 1/252 the next time, because 'keep it small' does not name a set"
+    deliverable: "the smoke runbook names an EXACT verification set that is passable inside a forge, so two runs of the same prompt cannot disagree"
+    pickup_role: any
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [meta-orchestration, ci-gates, fail-loud]
+    estimated_hours: 3
+    context: |
+      OBSERVED 2026-08-18, macuahuitl, seven consecutive e2e Step 1 runs. Two
+      of them reached a working smoke lane (i.e. after 818-cgpn stopped the
+      credential guard from ending the run early). They disagreed:
+
+        20260818T053811Z  post-build PASSED 11/11, forge lane MO-SMOKE: PASS
+        20260818T063931Z  FORGE_EXIT=126,
+                          MO-SMOKE: FAIL litmus pre-build 0% pass rate (1/252);
+                          infrastructure-dependent failures expected but unconfirmed
+
+      Same launcher, same prompt ("Use the /meta-orchestration skill in smoke
+      mode (verify-only)"), same host, ~25 minutes apart, seed verified fresh
+      both times (`seed-staleness: ... behind=0 fetch-age-h=0 verdict=fresh`).
+
+      THE SECOND AGENT DID NOTHING WRONG. It ran the pre-build litmus suite,
+      got 1/252, and refused to call that a pass, saying so precisely: "most
+      failures are likely infrastructure-dependent (vault, podman, vsock
+      unavailable in this forge), but the core forge substrate is healthy" —
+      and then failed BECAUSE it could not confirm that. That is exactly the
+      fail-loud discipline this milestone is about. The first agent's PASS is
+      the one that should worry us: it presumably ran a smaller set and never
+      met the wall.
+
+      THE ROOT IS THE RUNBOOK, not either agent. Smoke Mode rule 2 says
+      "prefer `scripts/run-litmus-test.sh --size instant --phase pre-build
+      --compact` scoped with a spec filter when targets are named, plus cheap
+      direct checks ... Skip anything that builds, launches containers, or
+      exceeds the budget." Inside a forge, a large fraction of pre-build litmus
+      DOES need containers (vault, podman, vsock), so an agent that follows the
+      first clause literally collides with the third, and how it resolves that
+      decides the verdict. A gate whose result depends on how much the agent
+      chose to run is not a gate.
+
+      WHAT IT COSTS: this is the LAST thing standing between this host and the
+      destructive e2e (§2/§3), which has now been unreachable for four days.
+      Seven Step 1 attempts tonight each failed for a DIFFERENT real reason;
+      six are fixed, and this is the seventh.
+
+      PROPOSED, not implemented, because a second unverified skill change on
+      one night is how this kind of thing compounds: name the in-forge
+      verification set explicitly — an enumerated list of spec filters known to
+      pass without vault/podman/vsock — and have the runbook say that a
+      container-dependent litmus inside a forge is SKIPPED with a named reason,
+      never counted as a failure. The enumeration must be checked by something,
+      or it rots the first time a test gains a container dependency.
+
+      HISTORICAL NOTE, for whoever wonders whether this ever worked:
+      20260806T085959Z is a Step 1 run with rc=0 and post-build passed. So the
+      lane is not perpetually broken — it regressed since 2026-08-06.
+status:
+  - packet_id: smoke-mode-blocked-by-a-credential-it-never-uses
+    field: status
+    value: completed
+    ts: "2026-08-18T07:05:00Z"
+    host: linux_mutable
+
+events:
+  - packet_id: smoke-mode-blocked-by-a-credential-it-never-uses
+    event:
+      type: completed
+      ts: "2026-08-18T07:05:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T033600Z
+      host: linux_mutable
+      summary: >
+        status 'completed' with the LIVE evidence this packet was explicitly held open for.
+        The deliverable asked for "a live forge smoke lane returning MO-SMOKE: PASS while
+        upstream-auth is stale". Run 20260818T053811Z delivered exactly that: the in-forge
+        agent read the amended rule 3a, the forge log records
+        `| Credential channel | blocked:upstream-auth-stale (report only — order 818-cgpn) |`
+        — the agent citing the order by number — and the lane returned MO-SMOKE: PASS while
+        the mirror's upstream-auth verdict was still stale. The whole post-build phase then
+        passed 11/11 including litmus:opencode-prompt-e2e-shape, the first time that phase
+        has been green on this host in this campaign. The amended skill reached the agent
+        via the seed-branch clone, not the image's /opt/skills copy, which is checked and
+        filed separately as 819-s92y. 809-w2xy is untouched and still the root blocker for
+        the FULL lane, which remains correctly blocked because it would push.
+      evidence_refs:
+        - "run 20260818T053811Z: postbuild_passed=1, forge lane MO-SMOKE: PASS with auth stale"
+        - "forge log: '| Credential channel | blocked:upstream-auth-stale (report only — order 818-cgpn) |'"
+        - "post-build 11/11 incl. litmus:opencode-prompt-e2e-shape (131s)"
+        - "counter-evidence retained: the NEXT smoke run failed at 1/252 for an unrelated reason — filed as 822-4vwa, not as a regression of this fix"
