@@ -1131,6 +1131,49 @@ run_litmus_test_file() {
         if [[ $exit_code -eq 124 ]]; then
             printf ' %b[TIMEOUT]%b\n' "${RED}" "${NC}" >&2
             log_warn "Test timeout after ${timeout_sec}s in step: ${step_name:-step-${step_index}}"
+            # ORDER 820-c8q8. A TIMEOUT has two causes that read identically,
+            # and both happened on macuahuitl on 2026-08-18 within one hour:
+            #   * fragment-status-loss step 5 — the guard genuinely took 41s
+            #     against a 30s budget (a real regression, 816-kq2z).
+            #   * forge-standard-gitconfig-path step 1 — the SAME fixture exits
+            #     0 in ZERO seconds when run alone, and had passed in the
+            #     previous full run. The box was saturated.
+            # In the first the answer was to fix code; in the second, to re-run.
+            # Nothing on the line distinguished them, so the verdict named a
+            # suspect it had not convicted.
+            #
+            # ELAPSED TIME CANNOT DISCRIMINATE — a killed step always elapses
+            # its budget, by construction. Load at kill time can: a runqueue
+            # longer than the core count means other work was competing for the
+            # CPU this step was being timed on. Reported, never used to change
+            # the verdict: the step still FAILS, because a step that cannot
+            # finish inside its budget on this host has not passed.
+            _lt_load="unknown"; _lt_cpus="unknown"
+            if [ -r /proc/loadavg ]; then
+                _lt_load="$(cut -d' ' -f1 < /proc/loadavg 2>/dev/null)"
+            elif command -v sysctl >/dev/null 2>&1; then
+                _lt_load="$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | awk '{print $1}')"
+            fi
+            if command -v nproc >/dev/null 2>&1; then
+                _lt_cpus="$(nproc 2>/dev/null)"
+            elif command -v sysctl >/dev/null 2>&1; then
+                _lt_cpus="$(sysctl -n hw.ncpu 2>/dev/null)"
+            fi
+            case "${_lt_load}:${_lt_cpus}" in
+                unknown:*|*:unknown|:*|*:)
+                    log_warn "  load at kill time: unavailable on this host — cause UNCLASSIFIED (slow step vs starved step)" ;;
+                *)
+                    # Scaled integer compare; bash 3.2 has no floats and bc is
+                    # not guaranteed present.
+                    _lt_l100="$(printf '%s' "$_lt_load" | awk '{printf "%d", $1 * 100}' 2>/dev/null)"
+                    _lt_c100=$(( _lt_cpus * 100 ))
+                    if [ -n "$_lt_l100" ] && [ "$_lt_l100" -gt "$_lt_c100" ] 2>/dev/null; then
+                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host SATURATED at kill time; a step that is fast when idle can be starved here, so re-run before treating this as a regression"
+                    else
+                        log_warn "  load1=${_lt_load} over ${_lt_cpus} cpus — host NOT saturated at kill time; this step is genuinely too slow for its ${timeout_sec}s budget"
+                    fi
+                    ;;
+            esac
             return 1
         fi
 
