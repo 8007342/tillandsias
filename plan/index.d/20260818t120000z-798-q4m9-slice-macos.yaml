@@ -1,0 +1,80 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by macos (osx-next), 2026-08-18T12:00:00Z.
+#
+# 798-q4m9 criteria 1, 2 and 4 land. Criterion 3 needs a 1-vCPU cold boot the
+# packet explicitly refuses to let anything else stand in for.
+events:
+  - packet_id: vsock-listener-is-spawned-last-behind-blocking-startup-tasks
+    event:
+      type: progress
+      ts: "2026-08-18T12:00:00Z"
+      agent_id: macos-opus5-metal-20260818T112400Z
+      host: macos
+      host_note: criteria 1+2+4 done; criterion 3 (1-vCPU measured bind latency) NOT done and cannot be faked
+      summary: |
+        CRITERION 1 — the vsock listener is now the FIRST thing on the runtime's
+        injection queue. It was spawned LAST, behind five background spawns. The
+        bind was already first in PROGRAM ORDER inside its own task (the only
+        `.await` before run_vsock_listener), which is exactly what refuted
+        795-jeym's stated mechanism — but spawn order is what decides on a
+        1-vCPU guest, where the single worker drains the injection queue in
+        order. The order-620-duta vsock_loopback preflight moved WITH it, since
+        that line exists to print before the bind.
+
+        CRITERION 2 — both offenders now use `spawn_blocking`, named
+        individually as the criterion asks:
+          * run_disk_usage_check was `tokio::spawn(async move { f() })`. Wrapping
+            a sync fn in an async block does not make it async; it parks a
+            blocking `Command::output()` — plus, on first boot, materializing
+            every embedded runtime asset — on a WORKER thread. That was the most
+            expensive thing queued ahead of the bind.
+          * run_trace_budget_enforcement was an `async fn` whose ONLY `.await`
+            was the log read; everything after it serde_json-parses every line
+            with no yield points. Converted to sync (`std::fs::read_to_string`)
+            and spawn_blocking'd. Deliberately NOT fixed with `yield_now()`
+            sprinkled through the loop: that would leave the same CPU-bound work
+            on a worker, merely interruptible. A startup one-shot doing a
+            blocking read on a blocking thread is what spawn_blocking is for.
+
+        CRITERION 4 — readiness-clock origin, stated: the ordering fixed here
+        affects bind latency measured from DAEMON START. It does not touch the
+        other contributor the packet names — the unit's
+        Requires=/After=tillandsias-headless-fetch.service with
+        TimeoutStartSec=300s, which on the download variant of
+        fetch-headless.sh can add up to ~135s of retry plus transfer BEFORE the
+        binding process is even launched. A clock started at
+        `systemctl enable --now` therefore measures fetch + daemon start + bind
+        and must not be reported as bind latency. Both numbers are legitimate;
+        they are not the same number.
+
+        CRITERION 3 IS NOT DONE, AND NOTHING HERE SUBSTITUTES FOR IT. It demands
+        a MEASURED before/after bind latency on a guest constrained to ONE vCPU,
+        cold boot, and explicitly rejects a multi-vCPU pass as evidence — "that
+        is the exact 'verified where it was written' shape 757-4hdt filed against
+        itself". This host's guest is capped at 4 vCPU
+        (vz.rs available_parallelism().min(4)), so producing the measurement
+        means editing the boot spec to 1, cold-booting, timing the bind, and
+        restoring — with a BEFORE run against the pre-change binary as well.
+        That is two cold boots plus a guest-binary swap, and it was not
+        attempted in the ~1.5h left before this loop's stop rather than
+        half-measured. The packet's own framing applies to its closure as much
+        as to its diagnosis: an unmeasured pass here would be the failure it
+        names.
+
+        PINNED BY SOURCE ORDER, with its limit stated in the test itself: the
+        property IS an ordering inside one function, so there is no runtime value
+        to read. FALSIFIED BOTH WAYS — reverting run_disk_usage_check to
+        `spawn(async move { … })` fails both tests, and moving the vsock spawn
+        back to last fails the ordering test with "the vsock listener must be
+        queued BEFORE the metrics retention task". Restored: 442 headless tests
+        pass, 0 failed.
+
+        NOT DONE, per the packet's own note: the five background tasks were NOT
+        deleted. They are wanted and were merely mis-scheduled.
+      evidence_refs:
+        - "crates/tillandsias-headless/src/main.rs — vsock preflight + maybe_spawn_vsock_listener moved above the five background spawns"
+        - "crates/tillandsias-headless/src/main.rs — spawn_blocking(run_disk_usage_check), spawn_blocking(run_trace_budget_enforcement); the latter converted async->sync"
+        - "tests: vsock_listener_is_spawned_before_the_background_tasks, the_two_blocking_startup_tasks_do_not_occupy_worker_threads"
+        - "falsified: async-block wrapper restored -> both fail; vsock spawn moved back to last -> ordering test fails with the intended message"
+        - "cargo test -p tillandsias-headless --features listen-vsock,vault: 442 passed 0 failed"
+        - "criterion 3 OPEN: needs a 1-vCPU cold-boot before/after bind measurement; guest is capped at 4 vCPU here (vz.rs .min(4))"
