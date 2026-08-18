@@ -1434,6 +1434,48 @@ impl VmRuntime for VzRuntime {
             None
         };
 
+        // GUEST SIZING: PINNED ON PURPOSE, and here is the measurement (689-eux9).
+        //
+        // MEASURED on macOS Mac17,3 / Apple M5 / 10 logical cores / 16 GiB,
+        // 2026-08-18, two cold `--exec-guest` runs (full cycle: stage, start,
+        // phase Ready, guest exec, stop):
+        //
+        //     VZ start          0.008 / 0.021 s
+        //     phase Ready       8.444 / 8.454 s
+        //     total wall        9.562 / 9.573 s
+        //
+        // In-guest at idle: nproc=4, Mem 3889 MiB total / 3240 MiB available,
+        // and SWAP 3888 MiB total with 0 USED. That zero is the decisive number:
+        // the guest has never touched swap, so it has never been under memory
+        // pressure. The operator question of 2026-08-11 — "is the 4 GiB ceiling
+        // behind the slowness, would 8 GiB help?" — is answered NO by that,
+        // twice over: boot is ~9.5 s end to end, and the slowness had a wholly
+        // different cause (two unbounded waits; in the wedged runs the VM
+        // process did not exist at all — 689-stig).
+        //
+        // WHY PINNED RATHER THAN SCALED TO THE HOST. Two reasons, and the second
+        // is the one that would not be obvious:
+        //   1. No measured pressure to relieve — see the swap figure above.
+        //   2. SCALING WOULD MAKE EVERY CROSS-HOST MEASUREMENT INCOMPARABLE.
+        //      "The guest" has to mean the same thing on every machine or the
+        //      fleet cannot compare numbers taken on different ones. This is not
+        //      hypothetical: 798-q4m9's exit criteria demand a bind-latency
+        //      measurement on a guest constrained to ONE vCPU and explicitly
+        //      refuse a multi-vCPU pass as evidence, and 807-bjjv exists because
+        //      a shared benchmark is worthless when hosts do not run the same
+        //      workload. A host-derived guest size would silently reintroduce
+        //      exactly that variance into every future measurement.
+        //
+        // HONEST LIMIT of the evidence: the memory figures are IDLE. Nothing
+        // here measures the guest under a full forge + container-stack load, so
+        // this justifies keeping the default, not a claim that 4 GiB suffices
+        // for every workload. Revisit with a loaded measurement, not an opinion.
+        //
+        // The `.min(4)` also caps a 10-core host at 4 vCPU, which is what makes
+        // `accel_cpu_cores=4` appear in the guest's capability envelope on a
+        // 10-core Mac — see the 2026-08-17 note on that discrepancy.
+        //
+        // Baseline record: cheatsheets/runtime/macos-vz-guest-boot-baseline.md
         let spec = boot::VzBootConfig {
             cpu_count: std::thread::available_parallelism()
                 .map(|n| n.get().min(4))
