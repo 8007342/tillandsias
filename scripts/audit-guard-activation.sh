@@ -47,7 +47,22 @@ find_invoker() { # find_invoker <basename>
     [ -e "$s" ] || continue
     # grep the surface for the guard's basename; exclude the guard file itself
     # and this auditor from counting as an invoker.
-    hit="$(grep -rl -- "$name" "$s" 2>/dev/null \
+    # -R, not -r: the skill surfaces are SYMLINK FARMS by construction. There is
+    # one canonical skills/<name>/ and each runtime (.claude, .opencode, .codex,
+    # .gemini, .github) reaches it through a symlink, so there is exactly one
+    # source of truth. `grep -r` does not follow symlinks found during traversal,
+    # so it read `.claude/skills` as empty and every guard invoked ONLY from a
+    # skill was reported "shipped but never invoked".
+    #
+    # Measured 2026-08-17: check-daily-maintenance.sh (order 801-qasc, windows)
+    # is referenced twice in skills/meta-orchestration/SKILL.md and was still
+    # counted an ORPHAN, failing ./build.sh --ci-full. `grep -rl` over
+    # .claude/skills returned nothing; `grep -Rl` returned
+    # .claude/skills/meta-orchestration/SKILL.md. The guard was wired correctly
+    # and the auditor could not see it — a false accusation that blocks a gate
+    # is worse than no audit, because the fix it demands is to re-wire something
+    # that is already wired.
+    hit="$(grep -Rl -- "$name" "$s" 2>/dev/null \
             | grep -vE "scripts/${name}$|scripts/audit-guard-activation.sh$" \
             | head -1)"
     if [ -n "$hit" ]; then printf '%s' "$hit"; return 0; fi

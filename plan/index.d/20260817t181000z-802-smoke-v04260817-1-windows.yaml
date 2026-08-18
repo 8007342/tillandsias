@@ -1,0 +1,142 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-17, meta-orchestration FULL cycle.
+# Intake: /smoke-curl-install-and-test-e2e against PUBLISHED release v0.4.260817.1.
+#
+# The smoke itself PASSED — the published Windows artifact bootstraps the whole
+# enclave from a wiped substrate in 67s and lands --diagnose exit 0 HEALTHY.
+# Full run record: plan/issues/smoke-e2e-findings-v0.4.260817.1-2026-08-17.md
+#
+# ONE STORY: all three findings are instructions that are wrong about the host
+# shell they are read in. The tray's help prescribes the one capture pattern
+# that returns nothing in PowerShell; the smoke runbook's Windows lane
+# prescribes a global WSL shutdown on hosts that run more than one distro, and
+# omits the tray launch that decides its own verdict. None of the three is a
+# defect in the released product's BEHAVIOUR — every one is a defect in what the
+# project tells an operator or an unattended cycle to DO, and each one produced
+# a concrete false reading during this run before it was caught.
+
+packets:
+  - packet_id: tray-help-prescribes-the-one-capture-pattern-that-silently-fails
+    order: 802-fbkg
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: bug
+    title: "tillandsias-tray --help tells support scripts to redirect to a file and branch on the exit code; in PowerShell that pattern yields a 0-byte file and NO exit code, while the pipeline it calls unreliable works"
+    deliverable: "corrected OUTPUT NOTE in crates/tillandsias-windows-tray/src/notify_icon.rs naming the cmd.exe /c or Start-Process -Wait wrapper, plus help_text_documents_all_cli_modes strengthened to pin the note's CONTENT (the wrapper token) rather than only the section header"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [windows, tray, rust, docs, testing, fail-loud]
+    context: |
+      MEASURED on the installed, published v0.4.260817.1 binary
+      (tillandsias-tray 0.4.260817.1 (0bba6525f)), four probes, one host, one
+      minute:
+
+        A  & $exe --diagnose --json > out.json 2>$null   -> $LASTEXITCODE EMPTY, 0 bytes
+        B  & $exe --diagnose --json | Out-String          -> exit 0, 2848 chars, valid JSON
+        C  Start-Process -Wait -PassThru -Redirect...     -> exit 0, output present
+        D  & cmd.exe /c "$exe --diagnose --json > f 2>nul" -> exit 0, output present
+
+      A is the pattern the shipped help text says support scripts MUST use. B is
+      the pattern it says is unreliable. The advice is exactly inverted for the
+      shell the entire Windows lane is written in.
+
+      ROOT CAUSE: the binary is linked GUI-subsystem, so PowerShell does not
+      wait on it. A pipeline incidentally forces a wait (PowerShell reads to
+      EOF), which is why B works. A bare file redirect does not, so PowerShell
+      returns before the child writes anything and never records an exit status.
+      The note is sound only under cmd.exe — which its `2>nul` (cmd syntax, not
+      PowerShell's `2>$null`) silently assumes, while its own first sentence
+      names PowerShell.
+
+      THIS IS NOT HYPOTHETICAL. This smoke ran the prescribed pattern first and
+      recorded a provision that never executed: provision_exit= (empty),
+      provision_seconds=0, a 0-byte log, and no distro created. The run read as
+      completed-in-zero-seconds rather than as failed. It was caught only
+      because the distro's absence contradicted the exit code.
+
+      THE KNOWLEDGE ALREADY EXISTS IN-TREE AND DID NOT REACH THE OPERATOR.
+      scripts/tray-diagnose.ps1:81-86 — described in the cheatsheet as "the
+      canonical PowerShell consumer" — carries the correct comment and wraps in
+      cmd.exe /c. The help text, which is what an operator actually reads, never
+      mentions the wrapper.
+
+      WHY THE PIN DID NOT CATCH IT: help_text_documents_all_cli_modes
+      (notify_icon.rs:4745) asserts the "OUTPUT NOTE:" section header is
+      PRESENT. Nothing asserts it is CORRECT. A pinned-but-wrong note is
+      indistinguishable from a pinned-and-right one, which is the order-531
+      shape in documentation form.
+
+      Distinct from plan/issues/optimization/install-windows-local-exit-code-leak-2026-07-12.md
+      (a build script leaking a real exit 2 as its own). Here there is no exit
+      code at all to leak.
+    verifiable_closure: "a test asserting the help text's OUTPUT NOTE contains a wrapper token (cmd.exe /c or Start-Process) — red against today's text, green after the fix"
+    evidence:
+      - "target/smoke-e2e/03-provision-exit.txt (first attempt: provision_exit= , provision_seconds=0)"
+      - "plan/issues/smoke-e2e-findings-v0.4.260817.1-2026-08-17.md (probe table A-D)"
+
+  - packet_id: windows-substrate-reset-uses-global-wsl-shutdown
+    order: 802-bajv
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "both e2e smoke runbooks tell the Windows lane to run `wsl --shutdown`, which stops every distro on the host — including the tillandsias-build lane that builds Linux-target artifacts"
+    deliverable: "Windows §2 in skills/smoke-curl-install-and-test-e2e and skills/build-install-and-smoke-test-e2e changed to `wsl --terminate tillandsias`, with the reason stated in one clause"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [windows, testing, docs]
+    context: |
+      `wsl --unregister` only requires the TARGET distro to be stopped, so
+      `wsl --terminate tillandsias` is sufficient and has no blast radius.
+      `wsl --shutdown` stops every WSL2 distro on the host.
+
+      On this host `tillandsias-build` — the lane for Linux-target artifacts
+      (and the reason native cargo work and Linux builds coexist here) — was
+      RUNNING at reset time. Following the runbook verbatim would have killed
+      it mid-flight for no test benefit.
+
+      This run used the targeted form; Step 2 passed unchanged (unregister exit
+      0, tillandsias absent from wsl -l -v, tillandsias-build still Running).
+
+      The judgment has been made ad hoc before rather than encoded: the
+      2026-08-16 report records "tillandsias-build untouched" as an observation
+      while the skill still prescribed the global form. An unattended cycle
+      following the text has no such judgment.
+    verifiable_closure: "grep of both skill files finds no `wsl --shutdown` in a Windows destructive-reset step"
+
+  - packet_id: windows-e2e-lane-underspecifies-provision-then-diagnose
+    order: 802-ckch
+    status: ready
+    desired_release: v0.5
+    priority: p2
+    kind: bug
+    title: "the smoke runbook's Windows re-provision cell is four words and omits the tray launch, so a literal reading records a false FAIL against a healthy release"
+    deliverable: "Windows lane spelled out as an ordered sequence (provision -> launch tray -> poll --status-once to Ready -> --diagnose --json as the post-condition), stating that the health check must follow the tray launch because that is the last mutating step"
+    pickup_role: windows
+    release_target: fail-loud-diagnosis-milestone
+    capability_tags: [windows, testing, docs]
+    context: |
+      The Host Matrix's Windows re-provision cell reads "installed tray
+      provision/diagnose". Followed literally that is: --provision-once, then
+      --diagnose.
+
+      --provision-once reaches Ready and EXITS, by documented contract. Nothing
+      then holds the WSL utility VM up, so WSL idles it down. A --diagnose in a
+      separate process therefore reports distro_running=false, wire
+      WSA_ERROR(10060) on vsock 42420, exit 2 = degraded — against a release
+      that is healthy.
+
+      This run hit exactly that reading before launching the tray. After the
+      launch: phase=Ready, podman_ready=true on the FIRST poll, --diagnose exit
+      0, guest_version == tray version.
+
+      The 2026-08-10 rule (a post-condition belongs after the last MUTATING
+      step, not the last interesting one) is what saves this: the tray launch is
+      the last mutating step, so the verdict must be taken after it. The runbook
+      does not say so, and the four-word cell reads as though provision were
+      the last step.
+
+      Consider also whether --provision-once's own help should note that the VM
+      does not stay up after it exits.
+    verifiable_closure: "the Windows lane in the skill names the tray launch as a step between provision and the health check"

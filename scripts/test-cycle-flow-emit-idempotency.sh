@@ -24,10 +24,17 @@ set -uo pipefail
 #   3. a different cycle on the same host still appends
 #   4. the same cycle id on a DIFFERENT host still appends (the key is the pair;
 #      hosts run their own cycle numbering and must not evict each other)
-#   5. omitting cycle= warns on stderr and appends -- the old behaviour, kept
-#      deliberately, because silently bucketing by clock hour would DROP genuine
-#      records to cover a caller's omission
+#   5. omitting cycle= MINTS `<host>-<utc>` (order 801-tpxd), announces it, and
+#      appends. Deriving beats demanding: the id was always derivable by the
+#      callee, and requiring it from the caller shipped two `-` rows. This is
+#      not the bucket-by-clock-hour heuristic that was rightly refused before --
+#      that MERGES distinct cycles and drops genuine records, while a
+#      second-resolution mint is injective, so an unlabelled retry still appends
 #   6. the log is never left truncated: a replace writes via a temp file
+#   8. `"cycle":"-"` is UNREACHABLE -- the negative control for 801-tpxd. A
+#      sentinel that cannot be written cannot be mistaken for a cycle id, nor
+#      invite the global sed that clobbered a historical row while "repairing"
+#      one
 #
 # Nothing here touches the real flow log; TILLANDSIAS_CYCLE_FLOW_LOG is
 # redirected into a throwaway dir.
@@ -71,13 +78,18 @@ check "4 other host appends" "3" "$(lines)"
 check "4 windows row intact" "1" \
     "$(grep '"host":"windows","cycle":"c2"' "$LOG" | sed -n 's/.*"completed":\([0-9]*\).*/\1/p')"
 
-# 5. No cycle= -> warns loudly and falls back to append. Not silently bucketed.
-warn="$(TILLANDSIAS_CYCLE_FLOW_LOG="$LOG" "$METRICS" --emit-flow host=windows batch_epic=e 2>&1 >/dev/null | head -1)"
-case "$warn" in
-    warn:*cycle=*) echo "PASS  5 missing cycle warns" ;;
-    *) echo "FAIL  5 missing cycle warns: got [$warn]"; failures+=("5") ;;
+# 5. No cycle= -> the id is MINTED from host+UTC and announced (order 801-tpxd),
+#    and the record still appends. The pre-801-tpxd behaviour wrote the sentinel
+#    `-` and warned; the warning did not prevent two windows cycles from shipping
+#    a `-` row, so the sentinel is now unreachable instead of merely discouraged.
+note="$(TILLANDSIAS_CYCLE_FLOW_LOG="$LOG" "$METRICS" --emit-flow host=windows batch_epic=e 2>&1 >/dev/null | head -1)"
+case "$note" in
+    note:*minted\ cycle=windows-*) echo "PASS  5 missing cycle mints an id" ;;
+    *) echo "FAIL  5 missing cycle mints an id: got [$note]"; failures+=("5") ;;
 esac
 check "5 missing cycle still appends" "4" "$(lines)"
+check "5 minted id has the host+UTC shape" "1" \
+    "$(grep -cE '"host":"windows","cycle":"windows-[0-9]{8}T[0-9]{6}Z"' "$LOG")"
 
 # 6. Every line is still parseable JSON with both key fields. A replace that
 #    left a half-written log would show up here as a short or empty file.
@@ -93,9 +105,19 @@ TILLANDSIAS_CYCLE_FLOW_LOG="$work/nonexistent-dir/flow.jsonl" \
     "$METRICS" --emit-flow host=windows cycle=c9 >/dev/null 2>&1 || rc=$?
 check "7 unwritable log still exits 0" "0" "$rc"
 
+# 8. THE NEGATIVE CONTROL for order 801-tpxd: no path may write `"cycle":"-"`.
+#    Every emit above ran without cycle= at least once, and an explicit `-` is
+#    also rewritten, so a single sentinel anywhere in the log fails this. This
+#    is the property, not the warning text: a broken record that the caller was
+#    warned about is still a broken record, and the one in the real windows log
+#    was "repaired" with a global sed that took a historical row with it.
+check "8 no sentinel cycle row is reachable" "0" "$(grep -c '"cycle":"-"' "$LOG" 2>/dev/null | head -1)"
+TILLANDSIAS_CYCLE_FLOW_LOG="$LOG" "$METRICS" --emit-flow host=windows cycle=- completed=1 >/dev/null 2>&1
+check "8 explicit cycle=- is rewritten, not stored" "0" "$(grep -c '"cycle":"-"' "$LOG" 2>/dev/null | head -1)"
+
 if [ "${#failures[@]}" -gt 0 ]; then
     echo "FAIL: ${#failures[@]} scenario(s): ${failures[*]}"
     exit 1
 fi
-echo "ok:cycle-flow-emit-idempotency:7"
+echo "ok:cycle-flow-emit-idempotency:8"
 exit 0

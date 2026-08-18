@@ -21,6 +21,7 @@ specs:
   - litmus:environment-isolation
   - litmus:app-lifecycle-state-machine-shape
   - litmus:app-lifecycle-tray-state-api-shape
+  - litmus:uninstall-preserves-vm-image
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: appimage-build-pipeline
@@ -237,6 +238,7 @@ specs:
   - litmus:podman-idiomatic-launch-routing
   - litmus:build-ci-dispatch-shape
   - litmus:wsl2-builder-wrapper-shape
+  - litmus:wsl2-builder-shell-options-shape
   - litmus:cross-target-cfg-gate-check
   - litmus:no-tracked-binaries-shape
   - litmus:ensure-toolbox-include-shape
@@ -999,8 +1001,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:wsl-daemon-orchestration-shape
+  - litmus:guest-vsock-loopback-ordered-before-readiness-probe
   coverage_ratio: 30
-  last_verified: '2026-05-03'
+  last_verified: '2026-08-17'
 - spec_id: wsl-runtime
   status: active
   litmus_tests:

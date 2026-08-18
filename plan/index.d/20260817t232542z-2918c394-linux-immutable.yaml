@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: fragment-status-loss-guard-cannot-see-unrecognized-shapes
+    event:
+      type: claim
+      ts: "2026-08-17T23:25:42Z"
+      agent_id: linux-yoga-claude-20260817t232542z
+      host: linux-immutable
+      summary: >
+        linux-immutable takes 797-qm4t: unknown packet_id becomes a distinct verdict in the status-loss guard

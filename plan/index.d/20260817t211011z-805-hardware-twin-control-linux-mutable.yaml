@@ -1,0 +1,93 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-17T21:10:11Z.
+#
+# ADDRESSED TO YOLANDA (windows) AND YOGA (linux-immutable) IN PARTICULAR.
+# Operator disclosure, 2026-08-17: your two hosts have NEAR-IDENTICAL HARDWARE.
+# That turns a pair of anecdotes into a controlled experiment, and it corrects
+# an assumption I put in writing a few minutes earlier.
+packets:
+  - packet_id: hardware-fingerprint-makes-the-twin-hosts-a-substrate-control
+    order: 805-r98w
+    status: ready
+    desired_release: v0.5
+    priority: p1
+    kind: enhancement
+    title: "the capability document cannot prove two hosts have the same hardware, so the yolanda/yoga twin pair cannot be used as the substrate control it actually is — add a derived hardware fingerprint and key the tier matrix on (hardware, substrate)"
+    deliverable: "a stable hardware fingerprint derived from the probe (CPU model, GPU model + VRAM, NPU vendor + node, RAM class) recorded in the capability document, so two hosts can be shown identical rather than asserted identical; and an accel matrix keyed on (fingerprint, substrate) so same-fingerprint rows isolate the OS/container substrate as the only free variable"
+    pickup_role: any
+    release_target: convergence-velocity-milestone
+    capability_tags: [accel, fleet, matrix, methodology, npu, gpu]
+    estimated_hours: 6
+    context: |
+      OPERATOR DISCLOSURE, 2026-08-17: the Windows host (yolanda) and the
+      Silverblue host (yoga) have NEAR-IDENTICAL HARDWARE. More hosts are
+      coming, so the tier/model/hardware configuration has to be right rather
+      than merely working on the three machines that exist today.
+
+      WHY THIS IS THE MOST VALUABLE FACT IN THE FLEET RIGHT NOW. Accelerator
+      findings are normally confounded: every host differs in hardware AND
+      operating system AND container substrate at once, so when two hosts
+      disagree about whether the NPU is usable, nothing tells you which
+      difference caused it. A twin pair removes the confound. Hold the
+      hardware fixed and the ONLY free variables are the OS and the container
+      substrate — WSL2 + podman on one side, native Silverblue + podman on the
+      other. Any divergence in accel_gpu / accel_npu / accel_reason between
+      them is then attributable, not guessed at.
+
+      That is a negative control that already exists in the fleet and nobody
+      has been using. It is the difference between "the NPU is unusable on
+      Windows" and "the NPU is unusable THROUGH WSL2, on hardware where it is
+      usable natively" — which is a completely different finding with a
+      completely different fix.
+
+      WHAT BLOCKS USING IT. The capability document has no hardware identity.
+      accel_probe.rs:74 — HostInfo carries exactly is_battery_present and
+      kernel_release. DeviceRecord carries vendor/name/driver per device, which
+      is most of the raw material, but nothing derives a comparable key. So
+      "these two hosts are the same hardware" is currently an operator
+      assertion that a reader cannot verify from the artifacts, and if the two
+      machines turn out to differ in some respect that matters (VRAM, NPU
+      stepping, RAM), every conclusion drawn from the comparison silently
+      inherits that difference. A control you cannot verify is not a control.
+
+      SHAPE: derive a fingerprint from the fields the probe already collects —
+      CPU model string, GPU model + VRAM MiB, NPU vendor + device node, RAM
+      rounded to a class — and record it in the document. Two hosts printing
+      the same fingerprint are comparable BY EVIDENCE. Then key the matrix on
+      (fingerprint, substrate) rather than on hostname, so the twin rows sit
+      adjacent and the substrate delta is readable directly. Note what NOT to
+      include: kernel release, driver version, hostname, anything that differs
+      legitimately between the twins. The fingerprint answers "is this the same
+      machine model", not "is this the same installation".
+
+      A CORRECTION I OWE YOGA. In the bootstrap prompt written minutes before
+      this disclosure I told yoga it was "the immutable / no-discrete-GPU
+      reference and the LOW tier of the matrix". If it is yolanda's twin that
+      is wrong — it is not the low tier, and the interesting thing about it is
+      not that it is weak but that it is a CONTROLLED COMPARISON against a
+      Windows host with the same silicon. Yoga should ignore the LOW-tier
+      framing and read its result against yolanda's instead. I inferred a tier
+      from a host's OS, which is the same class of error as inferring a podman
+      mode from the presence of a socket file (797-r6tc).
+
+      WHAT THE TWINS SHOULD DO FIRST, and it is cheap: both run
+      `tillandsias --capabilities` and commit the envelope plus
+      capabilities.json. If the two documents agree on hardware and disagree on
+      accel_gpu / accel_npu / accel_reason, that disagreement IS the finding —
+      publish it before designing anything. macuahuitl's line for comparison:
+        accel_class=workstation-gpu accel_gpu=usable accel_gpu_name=NVIDIA_RTX_A5000
+        accel_npu=present-unusable accel_npu_name=Intel_NPU accel_reason=engine-missing
+        accel_cpu_cores=20 accel_ram_gb=62
+
+      RELATION TO 802-2536, which asks for a cross-host cpu/npu/gpu benchmark:
+      that packet said the numbers "only mean something as a matrix". The twin
+      pair is what makes the matrix interpretable — otherwise it is a table of
+      hosts, not an experiment. Land the fingerprint first or the benchmark
+      rows cannot be grouped.
+
+      CONVERGENCE, since the operator named it as the method: several hosts
+      running meta-orchestration against one ledger converge only if they are
+      measuring the same quantity. Identical workload, identical record shape,
+      and a key that says which rows are comparable — those three are the
+      preconditions. Without them the fleet produces more data and less
+      agreement, which is the failure mode worth naming before more hosts join.

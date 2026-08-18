@@ -171,10 +171,18 @@ fi
 
 POSTCOMMIT_SOURCE="$REPO_ROOT/scripts/hooks/post-commit-dashboard-refresh.sh"
 POSTCOMMIT_TARGET="$GIT_HOOKS_DIR/post-commit"
-POSTCOMMIT_MARKER="# tillandsias-post-commit-v3"
-POSTCOMMIT_MARKER_OLD_RE="# (dashboard-refresh-hook(-v2)?)"
+POSTCOMMIT_MARKER="# tillandsias-post-commit-v4"
+# Any hook THIS installer generated in the past, so a marker bump upgrades
+# rather than stranding the host. The version-number alternative is deliberate:
+# matching only the specific predecessors meant every bump turned every
+# existing install into "an unrecognized post-commit hook — leaving it alone",
+# so the installer could install fresh but never upgrade itself. Found on the
+# v3 -> v4 bump, 2026-08-17: the regenerated dispatcher was silently declined
+# on the host that had asked for it.
+POSTCOMMIT_MARKER_OLD_RE="# (dashboard-refresh-hook(-v2)?|tillandsias-post-commit-v[0-9]+)"
 POSTCOMMIT_REL="scripts/hooks/post-commit-dashboard-refresh.sh"
 EXPERT_REFRESH_REL="scripts/hooks/post-commit-expert-refresh.sh"
+DEV_HOST_EXPERTS_REL="scripts/dev-host-experts.sh"
 
 if [[ ! -f "$POSTCOMMIT_SOURCE" ]]; then
     echo "error: $POSTCOMMIT_SOURCE not found" >&2
@@ -197,6 +205,17 @@ bash "\$HOOK_ROOT/$POSTCOMMIT_REL"
 # Expert index refresh (685-yidq) — ONLY on hosts that opt in via
 # TILLANDSIAS_HOST_EXPERTS. Absent => bounded no-op, never rebuilds on CI or a
 # plain checkout. Best-effort like the body itself; never fails the commit.
+#
+# The declaration is RESOLVED here rather than inherited. A git hook runs with
+# whatever environment the committing process had, so gating on an inherited
+# variable meant the refresh had never once fired on either dev host — measured
+# independently on macuahuitl and yoga, 2026-08-17. Sourcing the resolver makes
+# the hook ask the host instead of hoping the caller was configured.
+# The resolver refuses inside a forge and sets nothing without a host-local
+# declaration, so CI and plain checkouts are unchanged.
+if [ -f "\$HOOK_ROOT/$DEV_HOST_EXPERTS_REL" ]; then
+    . "\$HOOK_ROOT/$DEV_HOST_EXPERTS_REL"
+fi
 if [ -n "\${TILLANDSIAS_HOST_EXPERTS:-}" ]; then
     bash "\$HOOK_ROOT/$EXPERT_REFRESH_REL" || true
 fi
@@ -208,7 +227,7 @@ if [[ -f "$POSTCOMMIT_TARGET" ]] && grep -qF "$POSTCOMMIT_MARKER" "$POSTCOMMIT_T
     echo "✓ post-commit hook (dashboard + env-gated expert refresh) already installed"
 elif [[ -f "$POSTCOMMIT_TARGET" ]] && grep -qE "$POSTCOMMIT_MARKER_OLD_RE" "$POSTCOMMIT_TARGET" 2>/dev/null; then
     install_postcommit
-    echo "✓ post-commit hook upgraded to v3 (dashboard + env-gated expert refresh, 685-yidq)"
+    echo "✓ post-commit hook upgraded to v4 (dashboard + env-gated expert refresh, 685-yidq)"
 elif [[ -f "$POSTCOMMIT_TARGET" ]]; then
     echo "⚠ an unrecognized post-commit hook exists — leaving it alone" >&2
 else

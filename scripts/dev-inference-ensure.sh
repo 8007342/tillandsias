@@ -140,15 +140,64 @@ ensure_container() {
     # endpoint is for the agent on this machine, bound to loopback only.
     _ec_cache="$HOME/.cache/tillandsias/models"
     mkdir -p "$_ec_cache" 2>/dev/null || true
+
+    # ACCELERATOR TIER (orders 406/408). The DEV endpoint used to launch with no
+    # devices and no tier, so it ran CPU-only on every host — including the one
+    # with a 24 GiB RTX A5000, whose `spec_answer` synthesis therefore degraded
+    # to the retrieval-only floor for want of two arguments.
+    #
+    # ASK THE PRODUCT rather than re-deriving. `effective_inference_tier()`
+    # already resolves the tier AND downgrades gpu-cuda -> cpu when no CDI spec
+    # exists, and the runtime container path is already wired and unit-tested
+    # against it (order 433). A second detection here would be a second thing to
+    # drift — the mistake 704-zcgi centralised the podman probe to stop making.
+    # The probe is cached (capabilities.json), so this is cheap.
+    #
+    # Absent binary, unreadable answer, or any surprise => cpu. A dev endpoint
+    # that is merely slow beats one that fails to start.
+    bash "$(dirname "${BASH_SOURCE[0]}")/nvidia-cdi-ensure.sh" >>"$LOG" 2>&1 || true
+    _ec_tier="cpu"
+    if command -v tillandsias >/dev/null 2>&1; then
+        _ec_probe="$(tillandsias --capabilities 2>/dev/null \
+            | grep -m1 -o '"legacy_tier"[[:space:]]*:[[:space:]]*"[^"]*"' \
+            | sed 's/.*"\([^"]*\)"$/\1/')"
+        [ -n "$_ec_probe" ] && _ec_tier="$_ec_probe"
+    fi
+    _ec_accel=""
+    if [ "$_ec_tier" = "gpu-cuda" ]; then
+        _ec_accel="--device=nvidia.com/gpu=all"
+    fi
+
+    # shellcheck disable=SC2086 # _ec_accel is one optional flag or empty
     podman run --detach --name "$DEV_CONTAINER" \
         --publish "${ENDPOINT_HOST}:${ENDPOINT_PORT}:11434" \
         --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable \
         --userns=keep-id --pids-limit=128 \
+        $_ec_accel \
         --env OLLAMA_DEBUG=1 \
+        --env TILLANDSIAS_INFERENCE_TIER="$_ec_tier" \
         --env OLLAMA_KEEP_ALIVE="${TILLANDSIAS_DEV_INFERENCE_KEEP_ALIVE:-30m}" \
         -v "$_ec_cache:/home/ollama/.ollama/models:rw" \
-        "$_ec_img" >>"$LOG" 2>&1 || return 1
-    return 0
+        "$_ec_img" >>"$LOG" 2>&1 && return 0
+
+    # The accelerated launch failed. Retry on CPU rather than leave the host
+    # without an endpoint, and say so — a silent downgrade here would recreate
+    # exactly the condition this change exists to remove.
+    if [ -n "$_ec_accel" ]; then
+        echo "degraded:dev-inference:accel-launch-failed:retrying-cpu" >>"$LOG"
+        podman rm -f "$DEV_CONTAINER" >>"$LOG" 2>&1 || true
+        podman run --detach --name "$DEV_CONTAINER" \
+            --publish "${ENDPOINT_HOST}:${ENDPOINT_PORT}:11434" \
+            --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable \
+            --userns=keep-id --pids-limit=128 \
+            --env OLLAMA_DEBUG=1 \
+            --env TILLANDSIAS_INFERENCE_TIER=cpu \
+            --env OLLAMA_KEEP_ALIVE="${TILLANDSIAS_DEV_INFERENCE_KEEP_ALIVE:-30m}" \
+            -v "$_ec_cache:/home/ollama/.ollama/models:rw" \
+            "$_ec_img" >>"$LOG" 2>&1 || return 1
+        return 0
+    fi
+    return 1
 }
 
 install_runtime() {

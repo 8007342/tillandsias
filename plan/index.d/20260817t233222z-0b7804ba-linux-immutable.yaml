@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: fragment-status-loss-guard-cannot-see-unrecognized-shapes
+    event:
+      type: progress
+      ts: "2026-08-17T23:32:22Z"
+      agent_id: linux-yoga-claude-20260817t233222z
+      host: linux-immutable
+      summary: >
+        UNKNOWN PACKET_ID IS NOW A VERDICT, on the two channels where it can actually happen -- and my first attempt was on the channel where it cannot. THE CORRECTION IS THE FINDING. I first added the unknown-pid check to the D path (the 'packets:' declaration join), which is where the packet's suggested fix reads most naturally. A control proved it unreachable: a 'packets:' entry CREATES the packet in the fold, so the declaration is self-consistent and 'pid in st' always holds -- my phantom control raised checked from 87 to 88 and produced no violation, correctly. I removed that addition rather than leave a branch no control can exercise, which is the 599-4wzr rule applied to my own change. THE CHANNELS THAT DECLARE WITHOUT CREATING are the LWW 'status:' block and the events block, and both were silent. (1) EVENTS: a 'completed' event for a pid the fold has never heard of now emits 'has a completed EVENT but NO SUCH PACKET is in the fold (typo, or filed against a deleted packet)' and exits 1. That is exactly the case recorded on this packet -- fragment-terminal-events printed the phantom id as if it had found a closure. (2) LWW STATUS BLOCK: previously not scanned at all, deliberately, because loss on that channel does not happen and the comment saying so is right. But a TERMINAL status declared there for a packet that does not exist creates nothing and records nothing, which is the same harm from the third side. It is now scanned for the unknown-pid question ONLY, section-scoped because '  - packet_id:' also appears under packets: and events:. CONTROLS, both directions: a phantom pid in an LWW status block -> violation naming it, rc 1 (this exact shape was silent before); the SAME shape with a real packet_id -> ok, rc 0, so the check is not simply refusing everything. Live tree: ok:no-fragment-status-loss:90 checked (87 before, the rise being the LWW declarations now counted), no false positives across the real fragment corpus. Pinned grammar unchanged -- the new line is still 'violation:fragment-status-loss:<n>'. litmus ci-release 19/20, and the single failure is added-fragment-parse-gate-shape STEP 3, which I verified pre-existing last cycle by stashing and filed as 808-euam.

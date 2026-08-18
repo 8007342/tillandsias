@@ -1,0 +1,28 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan set-field (order 636-9m79).
+#
+# The LWW channel below is named `status:` for historical reasons but
+# corrects ANY field (642-fedr). Re-declaring the packet under
+# `packets:` would be a G-Set no-op and would silently do nothing.
+status:
+  - packet_id: wsl2-builder-wrapper-rewrites-sourcer-shell-options
+    field: status
+    value: completed
+    ts: "2026-08-17T21:17:34Z"
+    host: windows
+
+events:
+  - packet_id: wsl2-builder-wrapper-rewrites-sourcer-shell-options
+    event:
+      type: completed
+      ts: "2026-08-17T21:17:34Z"
+      host: windows
+      summary: >
+        status 'completed' with evidence_refs: e3ad944b7d9c456d2e5adbc6810b5df4d6817a1b litmus:wsl2-builder-shell-options-shape ok:wsl2-builder-shell-options:4 cases (red 2/4 against pre-764 via TILLANDSIAS_WSL2_WRAPPER_UNDER_TEST); ./build.sh --check gate_exit=0
+  - packet_id: wsl2-builder-wrapper-rewrites-sourcer-shell-options
+    event:
+      type: note
+      ts: "2026-08-17T21:17:34Z"
+      host: windows
+      summary: >
+        with-wsl2-builder.sh no longer rewrites a sourcer's shell options; executable constraint registered under spec dev-build
