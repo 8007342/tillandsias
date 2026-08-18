@@ -1,0 +1,75 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by windows (yolanda), 2026-08-18T00:40Z.
+#
+# 402's three exit criteria are evidenced on the Windows lane. No status
+# transition is declared here — `packets:` is a G-Set and re-declaring is a
+# silent no-op; the transition goes through `tillandsias-plan set-field
+# --evidence` citing this cycle's commit.
+
+events:
+  - packet_id: windows-inference-tier-verification
+    event:
+      type: note
+      ts: "2026-08-18T00:40:00Z"
+      agent_id: windows-yolanda-opus5-20260818t0019z
+      host: windows
+      summary: >
+        ALL THREE EXIT CRITERIA EVIDENCED. Numbers recorded in the 393 decision
+        doc (plan/issues/experts-construction-decision-2026-07-17.md), as
+        criterion 2 requires.
+        (1) TIER PROBE INSIDE THE INFERENCE CONTAINER — the half the 2026-07-17
+        event left open, since that one covered the bare guest. The packet
+        anticipated that "CDI/device availability may differ from the bare
+        guest", and it DOES: /dev/dxg is PRESENT in the bare WSL2 guest and
+        ABSENT inside the container, with /dev/dri, /dev/kfd and /dev/nvidia0
+        absent in both. Both layers answer `tier:cpu` in the pinned grammar and
+        both match reality — but for DIFFERENT reasons, which is the part worth
+        recording: the guest has an unusable GPU, the container has no GPU at
+        all. TILLANDSIAS_INFERENCE_TIER=cpu is what the launcher passed, so the
+        INPUT and the corroboration agree rather than the input being trusted.
+        (2) MEASURED ON THE LANDED TIER. Modelfile expert via /api/create
+        (FROM qwen2.5:0.5b + SYSTEM) in 32 ms, {"status":"success"} — macOS's
+        comparable figure was "<1s". Warm generation: 93 tok/s decode, load
+        129 ms, prompt 781 tok/s, 286 eval tokens, coherent answer. Cross-host:
+        macOS ~52 tok/s, linux/yoga 98-121 tok/s on 802-2536-v1. Suite numbers
+        for this host are in accel-bench-yolanda-cpu-in-guest-2026-08-17.json.
+        Quality caveat stated rather than glossed: one probe answer was
+        well-formed and on-topic but factually WRONG ("CPU and GPU resources
+        should be equally utilized"). A 0.5b model is not an authority; the
+        criterion asked for coherence on the landed tier and got it.
+        (3) CPU FALLBACK PROVEN, NO WEDGE. Container healthy and serving
+        throughout; the probe returns tier:cpu rather than hanging or claiming a
+        GPU; _engine_wanted_backends requests core-only, correct because a
+        gpu-cuda tier would be corroborated against a /dev/nvidia0 that does not
+        exist. Probe models deleted after measurement — only nomic-embed-text
+        and qwen2.5:0.5b remain cached, so the host is left as found.
+        LANE VERDICT: cpu-ollama on Windows/WSL2. The gpu-cuda branch is N/A on
+        this machine (AMD iGPU), so nvidia-in-WSL2 still needs a different
+        Windows host to exercise. The AMD path is not merely unexercised but
+        UNREACHABLE from the guest today: no /dev/dri (no Vulkan/Mesa dzn), no
+        /dev/kfd (no ROCm), only /dev/dxg + the WSL D3D12 userspace.
+  - packet_id: windows-capability-document-cannot-be-produced-by-the-guest-probe-alone
+    event:
+      type: note
+      ts: "2026-08-18T00:41:00Z"
+      agent_id: windows-yolanda-opus5-20260818t0019z
+      host: windows
+      summary: >
+        NEW EVIDENCE, and it strengthens this packet's case one layer deeper
+        than filed. 809-7e4m argued the Windows capability row spans two
+        execution contexts because the NPU is invisible from the guest. Measured
+        while verifying 402: the boundary bites AGAIN, one level further in.
+        /dev/dxg is PRESENT in the bare WSL2 guest and ABSENT inside the
+        inference container. So the same machine yields THREE different device
+        views depending on where the probe runs — Windows sees a Radeon 860M and
+        an NPU both Status=OK; the guest sees only /dev/dxg; the container sees
+        nothing at all. With 806-2r4s's fix in place, a probe run in the guest
+        emits a present-unusable gpu record while the identical probe run in the
+        container emits none, and both are correct about their own context.
+        That is decisive for the schema question this packet raised: provenance
+        cannot live only on MeasurementRecord, because the disagreement is about
+        DEVICES, not measurements. `locus` (or an equivalently-named field)
+        belongs on DeviceRecord too, and 808-43mw should settle both in ONE
+        bump. It also means the fleet matrix must say which context a row's
+        devices came from, or two honest rows from one machine will look like
+        two different machines.
