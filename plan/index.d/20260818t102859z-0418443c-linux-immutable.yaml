@@ -1,0 +1,15 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Written by: tillandsias-plan append-event (order 699-usxc).
+#
+# The target packet is declared only in an uncompacted fragment, so the
+# BASE ledger has no block to append into. Recording the event here keeps
+# it visible to the fold, which is what every reader consults.
+events:
+  - packet_id: npu-lane-has-no-engine-so-the-tier-can-never-be-chosen
+    event:
+      type: progress
+      ts: "2026-08-18T10:28:59Z"
+      agent_id: linux-yoga-claude-20260818t102859z
+      host: linux-immutable
+      summary: >
+        THIS HOST'S FULL MATRIX IS NOW PUBLISHED, all three lanes, with reasons for the two that cannot run -- which is what the packet asked for when it said the numbers only mean something as a matrix. In capabilities.json measurements: cpu/ollama decode_tps 95.77 from a live run (degraded=false); gpu/ollama degraded, reason 'vulkan userspace absent from the inference image (805-3egx)'; npu/none degraded, reason below. Before 805-wgbb's writer, measurements was [] on every host and an empty array could not distinguish 'unmeasurable' from 'not measured yet'. THE NPU FINDING, and it changes this packet's shape rather than adding a number. Measured on yoga, the only fleet host with an NPU: /dev/accel/accel0 exists at mode 666 (world-accessible, no group needed), the amdxdna driver IS loaded (241664 bytes, PCI 1022:17F0, subsystem 17AA:3823, fw 1.1.2.64) and has ZERO users. So the hardware and kernel half are ready. What is missing is entirely userspace and it is not one package: XRT is absent (/opt/xilinx/xrt, /usr/lib64/libxrt_coreutil.so, /usr/local/xrt all absent), there is no onnxruntime on the host, and -- the decisive part -- the capability document's engines registry contains exactly ONE engine, ollama/llama-server, whose supported_device_classes are cpu and gpu. ollama has no XDNA backend at all. So the NPU lane is NOT the GPU lane's shape. The GPU lane is a driver package away (805-3egx: mesa vulkan userspace into the inference image, and the backend is already compiled in). The NPU lane needs a SECOND INFERENCE ENGINE with a different model format -- ONNX Runtime with the Ryzen AI/VitisAI execution provider, plus models compiled for XDNA -- which means a second inference path in the product, not a flag on the existing one. That is a materially larger commitment than this packet's 10h estimate implies, and it should be decided as such rather than discovered by whoever picks it up. WHAT THAT MEANS FOR THE ORIGINAL QUESTION. The packet exists because the fleet cannot choose a cpu/npu/gpu balance it has never measured. On this host the honest answer is now recorded: the CPU lane is measured, the GPU lane is one image change away, and the NPU lane is a second engine away. A dynamic three-way router has nothing to route to here and will not until that engine exists -- so the near-term routing decision is two-way (cpu vs igpu, and 284513c22 already says route by workload shape), with the NPU as a later capability rather than a tier the router should currently model.
