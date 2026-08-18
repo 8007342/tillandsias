@@ -1,0 +1,47 @@
+# Ledger fragment — append-only, IMMUTABLE once written.
+# Filed by linux_mutable (macuahuitl), 2026-08-18T12:47:00Z.
+#
+# Advancing 819-s92y with the evidence its own context said to gather first.
+# NOT closing it: the deletion it asks for still needs a forge lane to verify.
+events:
+  - packet_id: forge-image-bakes-a-skills-copy-nothing-reads
+    event:
+      type: progress
+      ts: "2026-08-18T12:47:00Z"
+      agent_id: linux-macuahuitl-opus5-20260818T123700Z
+      host: linux_mutable
+      summary: |
+        THE ABSENCE NOW COVERS THE BUILT IMAGE, not just the repository.
+
+        When I filed this I could say only that nothing in the TREE references
+        /opt/skills, and I wrote that deleting the COPY on that basis would be
+        the same mistake in the other direction. So I looked inside the image
+        that the destructive e2e rebuilt from scratch hours earlier:
+
+          /opt/skills                      present, populated (advance-work-from-plan,
+                                           build-install-and-smoke-test-e2e, ...)
+          grep -rl /opt/skills in
+            /home/forge/.config
+            /home/forge/.config-overlay
+            /etc                           NOTHING
+
+        opencode's own config lives at /home/forge/.config/opencode
+        (config.json, instructions, tui.json) and none of it names the path.
+        There is no skills directory under that config either. So the image
+        carries a populated tree that neither the repo, nor the agent's
+        briefing (lib-common.sh:4024 points at .claude/skills/ and
+        .opencode/skills/), nor opencode's own configuration mentions.
+
+        WHAT IS STILL NOT EXCLUDED, and it is the whole reason this stays open:
+        an opencode BUILT-IN default that scans /opt/skills with no
+        configuration entry at all. I could not test that here — the binary is
+        not on PATH in a bare `sh` in the image (it resolves for the forge user
+        at lane start), so asking it directly needs a real lane, and a lane at
+        05:47 on the last cycle of the night is not a good trade.
+
+        THE TEST THAT SETTLES IT, for whoever picks this up: remove the COPY,
+        rebuild the forge image, run one lane, and ask the agent to invoke a
+        skill by name. If it resolves, the layer was dead and 2026-06-13's
+        release-smoke failure at that exact COPY step was paid for nothing. If
+        it does not, the layer is load-bearing and undocumented, which is a
+        more interesting finding than the one I filed.
